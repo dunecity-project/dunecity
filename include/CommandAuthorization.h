@@ -142,11 +142,12 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_WINDTRAP_POWER_UPGRADE:
         case CMD_SCOUTPOST_SLOWPOST_UPGRADE:
         case CMD_RADAR_RESEARCH:
+        case CMD_RESEARCH_TECH_LEVEL:
             return true;
 
         // No acting object: pause/resume and the sync probe carry only the issuer, the city
-        // commands act on map state and are authorized separately, and auto-repair applies to
-        // the issuer's own house.
+        // commands act on map state and are authorized separately, and auto-repair and the AI
+        // partner's role apply to the issuer's own house.
         case CMD_NONE:
         case CMD_PLAYER_PAUSE:
         case CMD_PLAYER_RESUME:
@@ -156,6 +157,7 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_CITY_SET_BUDGET:
         case CMD_CITY_TOOL:
         case CMD_HOUSE_AUTO_REPAIR:
+        case CMD_AI_SUPPORT_ROLE:
         case CMD_CAMPAIGN_SKIP:
         case CMD_MATCH_PAUSE:
         case CMD_MAX:

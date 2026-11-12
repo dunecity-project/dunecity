@@ -39,6 +39,7 @@
 #include <structures/ZoneStructure.h>
 #include <structures/ConstructionYard.h>
 #include <players/QuantBotBuildPolicy.h>
+#include <players/QuantBotBuildPass.h>
 #include <players/QuantBotSpendingPolicy.h>
 
 void runGrowthInstallmentProbe(Game& game) {
@@ -55,6 +56,15 @@ void runGrowthInstallmentProbe(Game& game) {
     const int houseID=static_cast<int>(house->getHouseID());
     game.gameType=GameType::CustomGame;bot->gameMode=QuantBot::GameMode::Custom;
     bot->role=AIRole::Both;bot->difficulty=QuantBot::Difficulty::Brutal;
+    if (const char* style=std::getenv("BALANCE_SCENARIO_STYLE")) {
+        const char* directory=std::getenv("BALANCE_STYLE_DIR");
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        require(directory && config->applyOverrides(std::string(directory)+"/"+style+".ini"),
+            "Growth installment switch control could not be applied");
+        bot->configOverride=config;
+        SDL_Log("GROWTH_INSTALLMENT: switch_control=%s config_hash=%s",
+            style,config->getConfigHash().c_str());
+    }
     game.gameCycleCount=MILLI2CYCLES(600000);
     require(!game.getGameInitSettings().getGameOptions().instantBuild,
         "Instant build would bypass the installment accounting under test");
@@ -194,7 +204,7 @@ void runGrowthInstallmentProbe(Game& game) {
     // own tax tables. Every scenario below is deliberately outside it.
     auto fourMinuteForecast=[&]() {
         const auto& hs=sim->getHouseState(houseID);
-        const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue));
+        const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,hs.taxRate,hs.avgLandValue));
         const int upkeep=house->getPowerRequirement()/8+DuneCity::annualPerMinute(hs.lastPoliceExpense);
         return (annualTax-upkeep)*QuantBotSpendingPolicy::horizonMinutes;
     };
@@ -246,7 +256,16 @@ void runGrowthInstallmentProbe(Game& game) {
     };
     auto setItemEnabled=[&](Uint32 item,bool on) {
         game.objectData.data[item][houseID].enabled=on;
-        for(auto* builder:{yard,secondYard})builder->updateBuildList();
+        // The map's original yard also participates in the inventory scan.
+        // Refresh every owned producer after mutating shared ObjectData, not
+        // just the two yards placed by this fixture.
+        for(auto* structure:structureList) {
+            if(structure->getOwner()!=house || !structure->isABuilder())continue;
+            auto* builder=static_cast<BuilderBase*>(structure);
+            builder->updateBuildList();
+            require(on || !builder->isAvailableToBuild(item),
+                "A disabled fixture item survived in an owned producer's build list");
+        }
     };
     // Highest crime on any of this house's own city-role buildings. The service
     // evaluation calls >=192 dangerous and >=128 moderate, so this is how the
@@ -406,6 +425,43 @@ void runGrowthInstallmentProbe(Game& game) {
     const bool priorityOnly=std::getenv("BALANCE_CIVIC_PRIORITY_ONLY")!=nullptr;
 
     auto runPrerequisiteAndFundingCases=[&]() {
+    // The reported T2 city has positive income and legal land, but R/C demand
+    // is capped by civics above its current technology. Money planning must not
+    // bypass that human rule or mistake the cap for a lack of placement space.
+    // Use this real populated district, then restore its original technology
+    // before the paid prerequisite/placement cases below.
+    {
+        const int oldGameTech=game.techLevel, oldHouseTech=house->researchedTechLevel;
+        const int stadiumTech=game.objectData.data[Structure_Stadium][houseID].techLevel;
+        require(stadiumTech>2,"Civic technology case requires the DuneCity T2 lock");
+        setCredits(stadiumPrice+airportPrice);
+        auto civicAtTech=[&](int tech) {
+            game.techLevel=tech;house->researchedTechLevel=tech;
+            refreshYards();
+            QuantBot::BuildPass pass(bot->militaryUnitValue());
+            bot->resetBuildPass();bot->planBuildInventory(pass);bot->planBuildBudget(pass);
+            bot->planCityState(pass);bot->planStrategicReserve(pass);bot->planSpiceEconomy(pass);
+            bot->planPowerAndYards(pass);bot->planCityPopulation(pass);bot->planCivicNeedAndTrips(pass);
+            require(pass.civicStructuralNeed&DuneCity::NeedStadium,
+                "A real populated district did not retain its structural Stadium need");
+            bot->planningBuilder=yard->getObjectID();bot->clearPlacementCache(false,true);
+            return bot->planCivicForYard(pass,yard);
+        };
+        const auto locked=civicAtTech(2);
+        require(locked.order==NONE_ID && !locked.upgrade && !locked.pending
+                && std::string_view(locked.reason)=="civic_not_in_mod_or_tech",
+            "A T2 city bypassed the civic technology lock despite ample cash");
+        const auto unlocked=civicAtTech(stadiumTech);
+        require(unlocked.civic==Structure_Stadium && unlocked.order==withheldPrerequisite,
+            "Reaching Stadium technology did not expose the real missing prerequisite");
+        game.techLevel=oldGameTech;house->researchedTechLevel=oldHouseTech;
+        refreshYards();
+        bot->planningBuilder=NONE_ID;bot->clearPlacementCache(false,true);
+        SDL_Log("CITY_ZONING_CIVIC_TECH_PASS: locked_tech=2 unlock_tech=%d res_pop=%d "
+                "com_pop=%d prerequisite=%u cash=%d",
+            stadiumTech,sim->getHouseState(houseID).resPop,sim->getHouseState(houseID).comPop,
+            withheldPrerequisite,house->getCredits());
+    }
     // ---- 0. Prerequisite repair. The district is over the Stadium threshold and
     // the yard cannot build a Stadium at all, which is where the reported match's
     // other capped AIs were. The yard must buy the missing prerequisite rather
@@ -835,6 +891,8 @@ void runGrowthInstallmentProbe(Game& game) {
     SDL_Log("GROWTH_INSTALLMENT: reactor AI selection queued=%d cash=%d forecast=%d",
         queuedAnywhere(Structure_NuclearPlant),house->getCredits(),fourMinuteForecast());
     require(queuedAnywhere(Structure_NuclearPlant)==1,"The AI did not select a needed reactor below full price");
+    require(queuedAnywhere(Structure_WOR)==0,
+        "First WOR consumed a recovery yard without its required current power headroom");
     bot->planningBuilder=secondYard->getObjectID();bot->clearPlacementCache();
     bot->build(0);
     require(queuedAnywhere(Structure_NuclearPlant)==1,"A second yard ordered a duplicate reactor");

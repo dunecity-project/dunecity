@@ -40,7 +40,7 @@
 
 namespace {
 
-bool isEnabledTechCenterVehicle(int itemID, int house) {
+bool isEnabledTechCenterVehicle(int itemID, int house, int techLevel) {
     if(currentGame == nullptr || !isSpecialVehicleSelectionCandidate(itemID)) {
         return false;
     }
@@ -50,15 +50,15 @@ bool isEnabledTechCenterVehicle(int itemID, int house) {
         return false;
     }
 
-    if(data.techLevel >= 0 && currentGame->techLevel < data.techLevel) {
+    if(data.techLevel >= 0 && techLevel < data.techLevel) {
         return false;
     }
 
     return true;
 }
 
-bool isTechCenterSpawnCandidate(int itemID, int house) {
-    return isEnabledTechCenterVehicle(itemID, house)
+bool isTechCenterSpawnCandidate(int itemID, int house, int techLevel) {
+    return isEnabledTechCenterVehicle(itemID, house, techLevel)
         && currentGame->objectData.data[itemID][house].prerequisiteStructuresSet[Structure_IX];
 }
 
@@ -142,7 +142,7 @@ bool TechCenter::houseHasIxUnlocked() const {
     // The Tech Center itself provides the IX-style vehicle spawn. It should
     // not require a separate House IX building, otherwise maps that grant or
     // build a Tech Center still hide the command button.
-    return currentGame != nullptr && getOwner() != nullptr && currentGame->techLevel >= 9;
+    return currentGame != nullptr && getOwner() != nullptr && getOwner()->getTechLevel() >= 9;
 }
 
 int TechCenter::spawnRandomVehicles(int count) {
@@ -169,8 +169,8 @@ int TechCenter::spawnRandomVehicles(int count) {
     std::vector<int> vehiclePool;
     for(const auto candidate : specialVehiclePool) {
         const bool candidateEnabled = useGenericCustomFallback
-            ? isEnabledTechCenterVehicle(candidate, technology)
-            : isTechCenterSpawnCandidate(candidate, technology);
+            ? isEnabledTechCenterVehicle(candidate, technology, getOwner()->getTechLevel())
+            : isTechCenterSpawnCandidate(candidate, technology, getOwner()->getTechLevel());
         if(candidateEnabled) {
             vehiclePool.push_back(candidate);
         }

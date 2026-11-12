@@ -110,7 +110,7 @@ protected:
         }
         for(int kind = 0; kind < radar::Count; ++kind) {
             auto& button = researchButtons[kind];
-            button.setVisible(family && currentGame->techLevel >= radar::level(kind));
+            button.setVisible(family && pOwner->getTechLevel() >= radar::level(kind));
             button.setEnabled(currentGame->canControlHouse(pOwner) && pOwner->canStartRadarResearch(kind));
             const int progress = pOwner->hasRadarResearch(kind) ? 100
                 : pOwner->getRadarResearchActive() == kind

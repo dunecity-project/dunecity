@@ -268,14 +268,16 @@ void DirectRoomTransport::pumpSignaling(std::uint32_t nowMs) {
             http_->cancel();
             inFlight_ = InFlight::None;
             if(haveInFlightSignal_) {
-                // Whatever was in flight was never delivered, and the peer it was for is still
-                // waiting for it. It goes back at the front rather than being forgotten.
+                // A timed-out POST may already have reached the service. Retry only while
+                // this negotiation still has a live link; retirement must not advertise it again.
                 haveInFlightSignal_ = false;
-                if(inFlightSignal_.attempts < kMaxSignalAttempts) {
-                    outgoing_.push_front(inFlightSignal_);
-                } else {
-                    dropLink(inFlightSignal_.to,
-                             "Could not exchange connection details through the game service.");
+                if(findLink(inFlightSignal_.to) != nullptr) {
+                    if(inFlightSignal_.attempts < kMaxSignalAttempts) {
+                        outgoing_.push_front(inFlightSignal_);
+                    } else {
+                        dropLink(inFlightSignal_.to,
+                                 "Could not exchange connection details through the game service.");
+                    }
                 }
             }
             if(stage_ == SignalingStage::OpeningSession) {
@@ -636,9 +638,11 @@ void DirectRoomTransport::handlePostResult(const BoundedHttpClient::Result& resu
     }
 
     haveInFlightSignal_ = false;
+    Link* link = findLink(inFlightSignal_.to);
+    if(link == nullptr) return; // A retired negotiation cannot be resumed by its HTTP completion.
     if(succeeded) {
         if(inFlightSignal_.kind != P2PSignal::SignalKind::Candidate) {
-            if(auto* link = findLink(inFlightSignal_.to)) link->localDescriptionPublished = true;
+            link->localDescriptionPublished = true;
         }
         return;
     }
@@ -1448,6 +1452,10 @@ void DirectRoomTransport::deliverQueuedValues(std::uint32_t peerId, std::uint32_
 
 void DirectRoomTransport::dropLink(std::uint32_t peerId, const std::string& reason) {
     if(peerId <= 65535) retiredPeerIds_.set(peerId);
+    // Unsent details belong to this link, not merely to the room. Keep an in-flight POST
+    // tagged as a signal until it completes: it cannot be unsent or become a phase response.
+    outgoing_.erase(std::remove_if(outgoing_.begin(), outgoing_.end(),
+        [peerId](const OutgoingSignal& signal) { return signal.to == peerId; }), outgoing_.end());
     const bool observer=isSpectatorPeer(peerId);
     // The peer's own details are read before anything is erased, because the lobby and the
     // running game identify a departing player by name, not by id.

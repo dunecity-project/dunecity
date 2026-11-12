@@ -19,6 +19,9 @@
 // turrets, batteries and battery clearance.
 
 #include "QuantBotInternal.h"
+#include <players/RocketTurretPolicy.h>
+
+#include <array>
 
 using QuantBotInternal::rocketCoverageTier;
 using QuantBotInternal::cityRoadImpact;
@@ -707,23 +710,96 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         cache.sensitive=newSensitive; cache.polluter=newPolluter;
     };
 
+    const bool cityRefineryLogistics = botConfig().force.cityRefineryLogistics
+        && (itemID == Structure_Refinery
+            || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive()))
+        && citySpiceFfaScope(4);
+    const CitySpiceShare* ownSpiceShare = cityRefineryLogistics ? &citySpiceShare() : nullptr;
+    const int ownSpiceRadius = cityRefineryLogistics ? botConfig().force.cityRefinerySiteTiles : 0;
+    const size_t ownSpiceStride = static_cast<size_t>(mapW) + 1;
+    std::vector<int64_t> ownSpicePrefix;
+    CityDistanceField nearestOwnSpice(mapW, mapH);
+    if (cityRefineryLogistics) {
+        // Doubled spice keeps a tied tile's half share exact until the score division.
+        // One summed-area table per search answers footprint-radius mass in O(1).
+        const auto& share = *ownSpiceShare;
+        ownSpicePrefix.assign(ownSpiceStride * (static_cast<size_t>(mapH) + 1), 0);
+        for (int y = 0; y < mapH; ++y) {
+            int64_t row = 0;
+            for (int x = 0; x < mapW; ++x) {
+                const auto owner = share.owner[static_cast<size_t>(y) * mapW + x];
+                if (owner == 1 || owner == 2) {
+                    const int64_t amount = getMap().getTile(x, y)->getSpice().lround();
+                    row += owner == 1 ? amount * 2 : amount;
+                    nearestOwnSpice.add(x, y);
+                }
+                ownSpicePrefix[static_cast<size_t>(y + 1) * ownSpiceStride + x + 1]
+                    = ownSpicePrefix[static_cast<size_t>(y) * ownSpiceStride + x + 1] + row;
+            }
+        }
+        nearestOwnSpice.build();
+    }
+    auto ownSpiceWithin = [&](int x, int y) -> int64_t {
+        const int x0 = std::max(0, x - ownSpiceRadius), y0 = std::max(0, y - ownSpiceRadius);
+        const int x1 = std::min(mapW, x + newSizeX + ownSpiceRadius);
+        const int y1 = std::min(mapH, y + newSizeY + ownSpiceRadius);
+        return ownSpicePrefix[static_cast<size_t>(y1) * ownSpiceStride + x1]
+            - ownSpicePrefix[static_cast<size_t>(y0) * ownSpiceStride + x1]
+            - ownSpicePrefix[static_cast<size_t>(y1) * ownSpiceStride + x0]
+            + ownSpicePrefix[static_cast<size_t>(y0) * ownSpiceStride + x0];
+    };
+
 	// Pre-collect spice tile positions for refinery placement (avoids O(N^2) inner loop)
 	std::vector<Coord> spiceTiles;
-    if (itemID == Structure_Refinery || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive())) {
+    int spStartX = 0, spStartY = 0, spEndX = -1, spEndY = -1;
+    if (!cityRefineryLogistics && (itemID == Structure_Refinery
+        || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive()))) {
 		// Only scan spice in a wider area around the base (no need for full map)
 		int spiceRadius = searchRadius + 30;
-		int spStartX = std::max(0, baseCenter.x - spiceRadius);
-		int spStartY = std::max(0, baseCenter.y - spiceRadius);
-		int spEndX = std::min(mapW - 1, baseCenter.x + spiceRadius);
-		int spEndY = std::min(mapH - 1, baseCenter.y + spiceRadius);
+		spStartX = std::max(0, baseCenter.x - spiceRadius);
+		spStartY = std::max(0, baseCenter.y - spiceRadius);
+		spEndX = std::min(mapW - 1, baseCenter.x + spiceRadius);
+		spEndY = std::min(mapH - 1, baseCenter.y + spiceRadius);
+        // Map::spiceTileBits() is clear exactly where hasSpice() is false, so a clear bit
+        // skips the tile without reading it; the same tiles in the same order.
+        const Uint64* spiceBits = &getMap() == currentGameMap ? currentGameMap->spiceTileBits() : nullptr;
 		for (int sx = spStartX; sx <= spEndX; sx++) {
 			for (int sy = spStartY; sy <= spEndY; sy++) {
+                if (spiceBits && getMap().tileExists(sx, sy) && !Map::tileBit(spiceBits, getMap().tileIndex(sx, sy))) continue;
 				if (getMap().tileExists(sx, sy) && getMap().getTile(sx, sy)->hasSpice()) {
 					spiceTiles.emplace_back(sx, sy);
 				}
 			}
 		}
 	}
+    // The refinery score below wants min over spiceTiles of lround(blockDistance(origin, spice)),
+    // which is lround of the smallest blockDistance (lround is monotone). octilePasses() yields
+    // that smallest blockDistance exactly, in raw FixPoint units, for every cell of a box that
+    // holds the sources and the origin: one transform per search instead of a walk over every
+    // spice tile per candidate. The spice box holds every origin of the first search pass; an
+    // origin outside it (the whole-map pass) rebuilds the field over the map. Built on first use.
+    const int64_t octileOrth = FixPoint(1).getRawValue();
+    const int64_t octileDiag = octileOrth + (FixPt_SQRT2 - 1).getRawValue();
+    std::vector<int64_t> nearestSpice;
+    int nearestSpiceX = 0, nearestSpiceY = 0, nearestSpiceW = 0, nearestSpiceH = 0;
+    auto nearestSpiceRaw = [&](int x, int y) {
+        if (nearestSpiceW == 0 || x < nearestSpiceX || y < nearestSpiceY
+            || x >= nearestSpiceX + nearestSpiceW || y >= nearestSpiceY + nearestSpiceH) {
+            const bool inSpiceBox = x >= spStartX && x <= spEndX && y >= spStartY && y <= spEndY;
+            nearestSpiceX = inSpiceBox ? spStartX : 0;
+            nearestSpiceY = inSpiceBox ? spStartY : 0;
+            nearestSpiceW = inSpiceBox ? spEndX - spStartX + 1 : mapW;
+            nearestSpiceH = inSpiceBox ? spEndY - spStartY + 1 : mapH;
+            nearestSpice.assign(static_cast<size_t>(nearestSpiceW) * static_cast<size_t>(nearestSpiceH),
+                DuneCity::kOctileFar);
+            for (const Coord& spice : spiceTiles)
+                nearestSpice[static_cast<size_t>(spice.y - nearestSpiceY) * nearestSpiceW
+                    + static_cast<size_t>(spice.x - nearestSpiceX)] = 0;
+            DuneCity::octilePasses(nearestSpice, nearestSpiceW, nearestSpiceH, octileOrth, octileDiag);
+        }
+        return nearestSpice[static_cast<size_t>(y - nearestSpiceY) * nearestSpiceW
+            + static_cast<size_t>(x - nearestSpiceX)];
+    };
 
     // A cramped city keeps legal ground that no longer suits the road grid.
     // Roads are a layout preference; production capacity is not. Factories,
@@ -1027,20 +1103,30 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 			    locationScore -= lround(blockDistance(squadRallyLocation, Coord(placeLocationX, placeLocationY)));
 			locationScore -= lround(blockDistance(baseCenter, Coord(placeLocationX, placeLocationY)));
         } else if (itemID == Structure_Refinery || (itemID == Structure_Doublefinery && ModManager::instance().isTornieFamilyContentActive())) {
-			// Refineries prefer being close to spice deposits
-			int closestSpiceDistance = 10000;
-			for (const auto& spiceCoord : spiceTiles) {
-				int spiceDistance = lround(blockDistance(Coord(placeLocationX, placeLocationY), spiceCoord));
-				if (spiceDistance < closestSpiceDistance) {
-					closestSpiceDistance = spiceDistance;
-				}
-			}
-			if (closestSpiceDistance < 10000) {
-				locationScore += 50 - closestSpiceDistance * 2; // Strong bonus for being closer to spice
-			}
+            if (cityRefineryLogistics) {
+                // Native spice preference peaks at +50 and loses 2 points per tile.
+                // Keep that range: +1 per full 700-spice cargo of our nearby mass,
+                // capped at +50; only ours/tied spice supplies mass or distance.
+                const int massScore = static_cast<int>(std::min<int64_t>(50,
+                    ownSpiceWithin(placeLocationX, placeLocationY) / (2 * HARVESTERMAXSPICE)));
+                locationScore += massScore;
+                const int distance = nearestOwnSpice.footprint(
+                    placeLocationX, placeLocationY, newSizeX, newSizeY);
+                if (distance != CityDistanceField::missing) locationScore -= distance * 2;
+            } else {
+                // Refineries prefer being close to spice deposits: the nearest spiceTiles entry
+                // by blockDistance, rounded (see nearestSpiceRaw above).
+                int closestSpiceDistance = 10000;
+                if (!spiceTiles.empty())
+                    closestSpiceDistance = std::min(closestSpiceDistance,
+                        lround(FixPoint::FromRawValue(nearestSpiceRaw(placeLocationX, placeLocationY))));
+                if (closestSpiceDistance < 10000) {
+                    locationScore += 50 - closestSpiceDistance * 2; // Strong bonus for being closer to spice
+                }
+            }
 
 			// Bonus for adjacent sand tiles (harvester access)
-			// Double bonus if the sand has spice
+			// Logistics keeps sand access, but only our/tied spice earns the extra bonus.
 			Coord structureSize = getStructureSize(itemID);
 			for (int adjX = placeLocationX - 1; adjX <= placeLocationX + structureSize.x; adjX++) {
 				for (int adjY = placeLocationY - 1; adjY <= placeLocationY + structureSize.y; adjY++) {
@@ -1052,7 +1138,9 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 					if (getMap().tileExists(adjX, adjY)) {
 						const Tile* pTile = getMap().getTile(adjX, adjY);
 						if (pTile->isSand()) {
-							if (pTile->hasSpice()) {
+							if (pTile->hasSpice() && (!cityRefineryLogistics
+                                || ownSpiceShare->owner[static_cast<size_t>(adjY) * mapW + adjX] == 1
+                                || ownSpiceShare->owner[static_cast<size_t>(adjY) * mapW + adjX] == 2)) {
 								locationScore += 6; // Double bonus for sand with spice
 							} else {
 								locationScore += 3; // Base bonus for sand
@@ -1380,21 +1468,87 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         "ai.anchor.field_hits",static_cast<int64_t>(anchorFieldCache.hits),-1,false);
     anchorFieldCache.builds = anchorFieldCache.hits = 0;
     placementScoreDetails[itemID] = bestQuality;
+    if (cityRefineryLogistics) {
+        auto& lastSite = refinerySpiceSiteTrace[itemID == Structure_Refinery ? 0 : 1];
+        if (bestLocation != lastSite) {
+            lastSite = bestLocation;
+            if (bestLocation.isValid())
+                traceDecision("refinery_site_own_spice", AITelemetry::Record()
+                    .set("x", bestLocation.x).set("y", bestLocation.y)
+                    .set("own_spice_within", ownSpiceWithin(bestLocation.x, bestLocation.y) / 2));
+        }
+    }
 	return bestLocation;
 }
 
 Coord QuantBot::findSlabPlaceLocation(Uint32 itemID) {
-	int slabSizeX = getStructureSize(itemID).x;
-	int slabSizeY = getStructureSize(itemID).y;
+	const int slabSizeX = getStructureSize(itemID).x;
+	const int slabSizeY = getStructureSize(itemID).y;
+    const Map& map = getMap();
+    const int mapW = map.getSizeX(), mapH = map.getSizeY();
+    const House* house = getHouse();
 
 	int bestLocationScore = -10000;
 	Coord bestLocation = Coord::Invalid();
 
+    // Map::okayToPlaceStructure(x,y,w,h,false,house) is, for every footprint tile, "no city
+    // zone, rock, not blocked", and over the footprint an OR of Map::isWithinBuildRange(): an
+    // anchor tile (one this house owns, or allied land canBuildOnAlliedLand() opens to it)
+    // within BUILDRANGE, +2 with Base Expansion, off-map probes skipped. Every part is a pure
+    // test of tile state, and the union of those squares around a footprint is the footprint
+    // grown by the range, so the tile test below plus one clipped box query on an anchor field
+    // accept exactly the origins the engine check accepts. The field is anchorField() (rebuilt
+    // only when this house's tile ownership changes) unless allied land counts too; then it is
+    // marked here from the same tile owners. The scan order, the scoring and the tie rule
+    // (first strictly better origin, x-major) are unchanged.
+    const int range = BUILDRANGE + (house->hasRadarResearch(radar::BaseExpansion) ? 2 : 0);
+    std::array<bool, NUM_HOUSES> alliedLand{};
+    bool anyAlliedLand = false;
+    for (int landHouse = 0; landHouse < NUM_HOUSES; ++landHouse) {
+        alliedLand[landHouse] = currentGame->canBuildOnAlliedLand(house, landHouse);
+        anyAlliedLand = anyAlliedLand || alliedLand[landHouse];
+    }
+    DuneCity::BoxAnyField alliedAnchors;
+    if (anyAlliedLand) {
+        const int houseID = house->getHouseID();
+        std::vector<uint8_t> anchor(static_cast<size_t>(mapW)*mapH, 0);
+        for (int x = 0; x < mapW; ++x)
+            for (int y = 0; y < mapH; ++y) {
+                const int owner = map.getTile(x,y)->getOwner();
+                anchor[static_cast<size_t>(y)*mapW+x] = DuneCity::isConstructionAnchor(owner,houseID)
+                    || (owner >= 0 && owner < NUM_HOUSES && alliedLand[owner]);
+            }
+        alliedAnchors.build(mapW,mapH,[&](int x,int y) { return anchor[static_cast<size_t>(y)*mapW+x] != 0; });
+    }
+    const DuneCity::BoxAnyField& anchors = anyAlliedLand ? alliedAnchors : anchorField();
+
 	// Check all map tiles for valid slab placement
-	for (int x = 0; x <= getMap().getSizeX() - slabSizeX; x++) {
-		for (int y = 0; y <= getMap().getSizeY() - slabSizeY; y++) {
+	for (int x = 0; x <= mapW - slabSizeX; x++) {
+        // Origins are first tested in blocks along the column: when no anchor lies near the
+        // union of a block's footprints, no origin of the block is within build range.
+        constexpr int kGateBlock = 32;
+        int gateBlockEnd = -1;
+		for (int y = 0; y <= mapH - slabSizeY; y++) {
+            if (y > gateBlockEnd) {
+                const int blockEnd = std::min(mapH - slabSizeY, y + kGateBlock - 1);
+                if (!anchors.anyNearFootprint(x, y, slabSizeX, blockEnd - y + slabSizeY, range)) {
+                    y = blockEnd;
+                    continue;
+                }
+                gateBlockEnd = blockEnd;
+            }
 			// Check if this location is valid for slab placement
-			if (getMap().okayToPlaceStructure(x, y, slabSizeX, slabSizeY, false, getHouse())) {
+            if (!anchors.anyNearFootprint(x, y, slabSizeX, slabSizeY, range)) continue;
+            bool placeable = true;
+            for (int i = x; i < x + slabSizeX && placeable; i++)
+                for (int j = y; j < y + slabSizeY; j++) {
+                    const Tile* tile = map.getTile(i, j);
+                    if (tile->hasCityZone() || !tile->isRock() || tile->isBlocked()) {
+                        placeable = false;
+                        break;
+                    }
+                }
+			if (placeable) {
 
 				int locationScore = 0;
 				bool hasExistingSlab = false;
@@ -1536,6 +1690,187 @@ QuantBot::BatteryGeometry QuantBot::batteryGeometry(Coord anchor, Coord forward)
         getHouse()->getNumItems(Structure_HeavyFactory),
         getHouse()->getNumItems(Structure_RepairYard)));
     return geometry;
+}
+
+Coord QuantBot::findThreatTurretPlaceLocation(Coord asset, Coord approach) {
+    AITelemetry::PerformanceScope perfScope("ai.findThreatTurretPlaceLocation",getGameCycleCount(),getHouse()->getHouseID());
+    if (asset.isInvalid() || approach.isInvalid()) return Coord::Invalid();
+    const Uint32 item=Structure_RocketTurret;
+    const int range=std::max(1,currentGame->objectData.data[item][getHouse()->getHouseID()].weaponrange-1);
+    const int clusterRadius=FrontBatteryPolicy::clusterRadius(range+1);
+    std::vector<Coord> turrets;
+    turrets.reserve(getHouse()->getNumItems(Structure_RocketTurret)
+        +getHouse()->getNumItems(Structure_GunTurret)+reservedStructures.size());
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && (structure->getItemID()==Structure_RocketTurret || structure->getItemID()==Structure_GunTurret))
+            turrets.push_back(structure->getLocation());
+    for (const auto& entry:reservedStructures)
+        if (entry.first!=planningBuilder
+            && (entry.second.item==Structure_RocketTurret || entry.second.item==Structure_GunTurret))
+            turrets.push_back(entry.second.location);
+    Coord best=Coord::Invalid();
+    using Rank=std::tuple<int64_t,int64_t,int,int>;
+    Rank bestRank{};
+    // Only sites that can fire across this threatened asset. A new reaction
+    // does not trigger another whole-map placement sweep for every builder.
+    for (int y=std::max(0,asset.y-range);y<=std::min(getMap().getSizeY()-1,asset.y+range);++y)
+        for (int x=std::max(0,asset.x-range);x<=std::min(getMap().getSizeX()-1,asset.x+range);++x) {
+            const Coord at(x,y);
+            if (blockDistance(at,asset)>range
+                || !placeableAmongOwnUnits(x,y,1,1,item)
+                || overlapsReservedStructure(x,y,1,1)
+                || !preservesGroundAccess(item,at)
+                || !cityRoadImpact(getMap(),x,y,1,1,item).preservesConnections
+                || (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(),getHouse()->getHouseID(),x,y,1,1))) continue;
+            int nearest=-1,cluster=0;
+            for (const Coord turret:turrets) {
+                const int d=std::max(std::abs(turret.x-x),std::abs(turret.y-y));
+                if (nearest<0 || d<nearest) nearest=d;
+                if (d<=clusterRadius) ++cluster;
+            }
+            if (!FrontBatteryPolicy::spacedEnough(nearest)
+                || !FrontBatteryPolicy::withinClusterLimit(cluster)) continue;
+            int exits=0;
+            for (int dy=-1;dy<=1;++dy) for (int dx=-1;dx<=1;++dx) {
+                if ((!dx && !dy) || !getMap().tileExists(x+dx,y+dy)) continue;
+                const auto* tile=getMap().getTile(x+dx,y+dy);
+                if (!tile->isMountain() && !tile->hasAStructure()) ++exits;
+            }
+            if (!FrontBatteryPolicy::keepsCorridor(exits)) continue;
+            int64_t firingValue=0,exposure=0;
+            for (const auto& contact:visibleGroundTurretThreats) {
+                const FixPoint distance=blockDistance(at,contact.at);
+                if (distance<=range) firingValue+=contact.value;
+                if (distance<=contact.weaponRange+1) exposure+=contact.value;
+            }
+            if (firingValue<=0) continue;
+            // Buying the spot that hits the whole horde put each new turret
+            // inside the quads' guns, where it died before the next one stood.
+            // First minimize observed return fire, then maximize our firing
+            // cover. This permits a supporting stand-off line behind the raid.
+            const int approachDistance=blockDistance(at,approach).lround();
+            const Rank rank{-exposure,firingValue,-std::abs(approachDistance-5),-blockDistance(at,asset).lround()};
+            if (best.isInvalid() || rank>bestRank) { bestRank=rank;best=at; }
+        }
+    return best;
+}
+
+Coord QuantBot::findVanillaCoreTurretPlaceLocation(Uint32 item, const CoreDefenceCore& core) {
+    AITelemetry::PerformanceScope perfScope("ai.findVanillaCoreTurretPlaceLocation",getGameCycleCount(),getHouse()->getHouseID(),item);
+    if (core.at.isInvalid()) return Coord::Invalid();
+    const auto& data=currentGame->objectData.data;
+    // Every site keeps the core's centre inside the emplacement's own reach, so the
+    // search is one bounded window, never a whole-map sweep.
+    const int range=std::max(1,data[item][getHouse()->getHouseID()].weaponrange-1);
+    const int clusterRadius=FrontBatteryPolicy::clusterRadius(range+1);
+    std::vector<Coord> turrets;
+    turrets.reserve(getHouse()->getNumItems(Structure_RocketTurret)
+        +getHouse()->getNumItems(Structure_GunTurret)+reservedStructures.size());
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && (structure->getItemID()==Structure_RocketTurret || structure->getItemID()==Structure_GunTurret))
+            turrets.push_back(structure->getLocation());
+    for (const auto& entry:reservedStructures)
+        if (entry.first!=planningBuilder
+            && (entry.second.item==Structure_RocketTurret || entry.second.item==Structure_GunTurret))
+            turrets.push_back(entry.second.location);
+    // Return fire from the true live attackers (no visibility filter): a turret
+    // started inside their guns dies before it stands.
+    struct Contact { Coord at; int reach; int64_t value; };
+    std::vector<Contact> contacts;
+    for (const auto* unit:getUnitList()) {
+        if (!unit->isActive() || unit->getHealth()<=0 || !unit->getOwner() || !unit->canAttack()
+            || unit->getOwner()->getTeamID()==getHouse()->getTeamID()) continue;
+        const int reach=std::max(0,unit->getWeaponRange())+1;
+        if (blockDistance(unit->getLocation(),core.at).lround()>range+reach) continue;
+        const int price=std::max(0,data[unit->getItemID()][unit->getProductionHouseID()].price);
+        contacts.push_back({unit->getLocation(),reach,
+            std::max<int64_t>(1,(FixPoint(price)*unit->getHealth()/unit->getMaxHealth()).lround())});
+    }
+    Coord best=Coord::Invalid();
+    using Rank=std::tuple<int64_t,int,int>;
+    Rank bestRank{};
+    for (int y=std::max(0,core.at.y-range);y<=std::min(getMap().getSizeY()-1,core.at.y+range);++y)
+        for (int x=std::max(0,core.at.x-range);x<=std::min(getMap().getSizeX()-1,core.at.x+range);++x) {
+            const Coord at(x,y);
+            if (blockDistance(at,core.at)>range
+                || !placeableAmongOwnUnits(x,y,1,1,item)
+                || overlapsReservedStructure(x,y,1,1)
+                || !preservesGroundAccess(item,at)
+                || !cityRoadImpact(getMap(),x,y,1,1,item).preservesConnections) continue;
+            int nearest=-1,cluster=0;
+            for (const Coord turret:turrets) {
+                const int d=std::max(std::abs(turret.x-x),std::abs(turret.y-y));
+                if (nearest<0 || d<nearest) nearest=d;
+                if (d<=clusterRadius) ++cluster;
+            }
+            if (!FrontBatteryPolicy::spacedEnough(nearest)
+                || !FrontBatteryPolicy::withinClusterLimit(cluster)) continue;
+            int exits=0;
+            for (int dy=-1;dy<=1;++dy) for (int dx=-1;dx<=1;++dx) {
+                if ((!dx && !dy) || !getMap().tileExists(x+dx,y+dy)) continue;
+                const auto* tile=getMap().getTile(x+dx,y+dy);
+                if (!tile->isMountain() && !tile->hasAStructure()) ++exits;
+            }
+            if (!FrontBatteryPolicy::keepsCorridor(exits)) continue;
+            int64_t exposure=0;
+            for (const auto& contact:contacts)
+                if (blockDistance(at,contact.at).lround()<=contact.reach) exposure+=contact.value;
+            // Least return fire first, then the side facing the attack, then the core.
+            const Rank rank{-exposure,
+                core.approach.isValid() ? -blockDistance(at,core.approach).lround() : 0,
+                -blockDistance(at,core.at).lround()};
+            if (best.isInvalid() || rank>bestRank) { bestRank=rank;best=at; }
+        }
+    return best;
+}
+
+Coord QuantBot::findCoveredDefencePlaceLocation(Uint32 item, Coord home) {
+    AITelemetry::PerformanceScope perfScope("ai.findCoveredDefencePlaceLocation",getGameCycleCount(),getHouse()->getHouseID(),item);
+    const Coord size=getStructureSize(item);
+    const int range=std::max(0,currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].weaponrange
+        -size.x-size.y+1);
+    std::array<Coord,RocketTurretPolicy::threatTurretTotalCap> turrets;
+    size_t count=0;
+    for (const auto* structure:getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && structure->getItemID()==Structure_RocketTurret) {
+            turrets[count++]=structure->getLocation();
+            if (count==turrets.size()) break;
+        }
+    Coord best=Coord::Invalid();
+    using Rank=std::tuple<int64_t,int,int>;
+    Rank bestRank{};
+    // A Radar outside its own battery repeatedly died before the next rocket
+    // could finish. Search only small, overlapping windows beside real covers.
+    for (size_t i=0;i<count;++i)
+        for (int y=std::max(0,turrets[i].y-3);y<=std::min(getMap().getSizeY()-size.y,turrets[i].y+3);++y)
+            for (int x=std::max(0,turrets[i].x-3);x<=std::min(getMap().getSizeX()-size.x,turrets[i].x+3);++x) {
+                bool seen=false;
+                for (size_t j=0;j<i && !seen;++j)
+                    seen=std::abs(turrets[j].x-x)<=3 && std::abs(turrets[j].y-y)<=3;
+                if (seen) continue;
+                const Coord at(x,y);
+                if (!placeableAmongOwnUnits(x,y,size.x,size.y,item)
+                    || overlapsReservedStructure(x,y,size.x,size.y)
+                    || !preservesGroundAccess(item,at)
+                    || !cityRoadImpact(getMap(),x,y,size.x,size.y,item).preservesConnections
+                    || (currentGame->isCitySimEnabled()
+                        && wouldLandlockNeighbouringZone(getMap(),getHouse()->getHouseID(),x,y,size.x,size.y))) continue;
+                int cover=0;
+                for (size_t j=0;j<count;++j) cover+=blockDistance(at,turrets[j])<=range;
+                if (!cover) continue;
+                int64_t exposure=0;
+                for (const auto& contact:visibleGroundTurretThreats) {
+                    const Coord near(std::clamp(contact.at.x,x,x+size.x-1),std::clamp(contact.at.y,y,y+size.y-1));
+                    if (blockDistance(near,contact.at)<=contact.weaponRange+1) exposure+=contact.value;
+                }
+                const Rank rank{-exposure,cover,-blockDistance(at,home).lround()};
+                if (best.isInvalid() || rank>bestRank) { bestRank=rank;best=at; }
+            }
+    return best.isValid() ? best : findPlaceLocation(item);
 }
 
 Coord QuantBot::findTurretPlaceLocation(Uint32 itemID) {
@@ -1813,7 +2148,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
     bool coreReady=true;
     if (gameMode==GameMode::Custom && !builderOnly())
     for (Uint32 item:{Structure_HeavyFactory,Structure_HighTechFactory,Structure_RepairYard})
-        if (prices[item][house].enabled && prices[item][house].techLevel<=currentGame->techLevel
+        if (prices[item][house].enabled && prices[item][house].techLevel<=getHouse()->getTechLevel()
             && getHouse()->getNumItems(item)==0) coreReady=false;
     const bool rocketOpeningReady=coreReady || getHouse()->getNumItems(Structure_RocketTurret)<2;
     for (unsigned i=0;i<serviceItems.size();++i)
@@ -1825,6 +2160,21 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
     const unsigned mode = landValueOnly ? 2 : emergency ? 1 : 0;
     // A yard with its own reservation excludes that plan from marginal gains.
     const Uint32 key = reservedStructures.count(planningBuilder) ? planningBuilder : NONE_ID;
+    const bool servicePlan=cityLandValueServiceScope();
+    const bool firstPoliceAllocation=servicePlan && cityFirstPoliceAllocationReady();
+    CityLandValueBudget policeBudget;
+    if (servicePlan) {
+        int nominalMilli=0;
+        for (Uint32 item:{Structure_PoliceStation,Structure_GunTurret,Structure_RocketTurret})
+            nominalMilli+=getHouse()->getNumItems(item)
+                *DuneCity::annualPerMinute((DuneCity::getPoliceAnnualCost(item)*1000).lround());
+        for (const auto& plan:reservedStructures)
+            if (plan.first!=planningBuilder)
+                nominalMilli+=DuneCity::annualPerMinute((DuneCity::getPoliceAnnualCost(plan.second.item)*1000).lround());
+        nominalMilli+=DuneCity::annualPerMinute((DuneCity::getPoliceAnnualCost(Structure_PoliceStation)*1000).lround());
+        policeBudget=cityLandValueBudget(std::max(0,getHouse()->getCredits()
+            -prices[Structure_PoliceStation][house].price),(nominalMilli+999)/1000);
+    }
     auto selectResult = [&](const CityServiceResults& results) {
         const CityServiceSite* best = nullptr;
         for (unsigned i=0;i<serviceItems.size();++i) {
@@ -1833,7 +2183,11 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
             // Routine coverage belongs to multipurpose turrets. Buy the
             // stronger station when occupied buildings face dangerous crime.
             if (serviceItems[i]==Structure_PoliceStation) {
-                if (candidate.value.dangerousRelief<32) continue;
+                if ((!servicePlan || emergency) && candidate.value.dangerousRelief<32) continue;
+                // Cached sites may predate another yard's accepted first station.
+                // Only the still-missing first service may use the finite subsidy.
+                if (servicePlan && !emergency && !firstPoliceAllocation
+                    && !candidate.value.useful(false)) continue;
                 const auto& hs=sim->getHouseState(house);
                 const bool stationCommitted=getHouse()->getNumItems(Structure_PoliceStation)>0
                     || std::any_of(reservedStructures.begin(),reservedStructures.end(),[](const auto& plan) {
@@ -1843,18 +2197,19 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 // that buys replacement coverage with still more permanent bills.
                 // Grow income before adding another station to an underfunded city.
                 if (gameMode==GameMode::Custom && !builderOnly() && stationCommitted
-                    && hs.policeFundingPercent<100) continue;
-                const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,sim->getCityTax(),hs.avgLandValue));
+                    && hs.policeFundingPercent<(servicePlan ? policeBudget.targetFunding : 100)) continue;
+                const int annualTax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(hs.taxBaseEighths,hs.taxRate,hs.avgLandValue));
                 const int annualPower=getHouse()->isPowerRequired() ? getHouse()->getPowerRequirement()/8 : 0;
                 int committedCost=hs.nominalPoliceCost;
                 for (const auto& plan:reservedStructures)
                     if (plan.first!=planningBuilder)
                         committedCost+=DuneCity::getPoliceAnnualCost(plan.second.item).lround();
                 committedCost=DuneCity::annualPerMinute(committedCost);
-                const bool overBudget=gameMode==GameMode::Custom && !builderOnly()
-                    && committedCost+DuneCity::annualPerMinute(DuneCity::getPoliceAnnualCost(Structure_PoliceStation).lround())
-                    > CityServiceInvestmentPolicy::policingAllowance(annualTax,annualPower,
-                        CityServiceInvestmentPolicy::policingBudgetPercent(getHouse()->getCredits(),annualTax,annualPower,committedCost));
+                const bool overBudget=servicePlan ? policeBudget.funding<policeBudget.targetFunding
+                    : gameMode==GameMode::Custom && !builderOnly()
+                        && committedCost+DuneCity::annualPerMinute(DuneCity::getPoliceAnnualCost(Structure_PoliceStation).lround())
+                        > CityServiceInvestmentPolicy::policingAllowance(annualTax,annualPower,
+                            CityServiceInvestmentPolicy::policingBudgetPercent(getHouse()->getCredits(),annualTax,annualPower,committedCost));
                 // Prefer cheaper useful relief before accepting another permanent
                 // station bill. Accept an otherwise unaffordable full-strength
                 // station only for danger a turret cannot treat; its actual
@@ -1914,7 +2269,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
     std::vector<const UnitBase*> threats;
     for (const auto* unit : getUnitList()) {
         if (unit->getOwner() && unit->getOwner()->getTeamID() != getHouse()->getTeamID()
-            && unit->getHealth() > 0 && unit->isVisible(getHouse()->getTeamID())
+            && unit->getHealth() > 0 && (servicePlan || unit->isVisible(getHouse()->getTeamID()))
             && data[unit->getItemID()][unit->getOwner()->getHouseID()].weapondamage > 0)
             threats.push_back(unit);
     }
@@ -2010,7 +2365,7 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
         // upgrades/reserve. Each caller applies its own affordability and tech
         // checks when selecting. Otherwise an early low-tech yard can starve
         // every later upgraded yard's rocket search.
-        if (!data[item][house].enabled || data[item][house].techLevel > currentGame->techLevel) continue;
+        if (!data[item][house].enabled || data[item][house].techLevel > getHouse()->getTechLevel()) continue;
         Value itemBest;
         Coord itemSite = Coord::Invalid();
         const Coord size = getStructureSize(item);
@@ -2019,7 +2374,11 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
         // stamps marked).
         std::vector<int> candidates(static_cast<size_t>(w+1)*(h+1), 0);
         for (const auto& p : properties) {
-            if (p.crime < 60 && (item != Structure_RocketTurret || (p.value >= 250 && p.threat == 0))) continue;
+            const bool rciCatchment=servicePlan && item==Structure_PoliceStation
+                && DuneCity::isCityZoneStructure(p.item)
+                && (p.population>0 || (p.demand>0 && p.nextPopulation>p.population));
+            if (!rciCatchment && p.crime < 60
+                && (item != Structure_RocketTurret || (p.value >= 250 && p.threat == 0))) continue;
             const int y0=std::max(scan.begin/w,p.p.y-23), y1=std::min({h-size.y,p.p.y+23,(scan.end-1)/w});
             const int x0=std::max(0,p.p.x-23), x1=std::min(w-size.x,p.p.x+23);
             if (y0>y1 || x0>x1) continue;
@@ -2062,7 +2421,12 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                 / std::max(1,-data[Structure_WindTrap][house].power);
             const auto source = DuneCity::policeSource(getMap(),x,y,size.x,size.y,
                 DuneCity::getPoliceCoverage(item),state.policeFundingPercent,powered);
+            const auto catchmentSource=servicePlan && item==Structure_PoliceStation
+                ? DuneCity::policeSource(getMap(),x,y,size.x,size.y,DuneCity::getPoliceCoverage(item),
+                    policeBudget.funding,powered) : source;
             int valueGainSum = 0, neighbourhoodGainSum = 0, growthTax = 0;
+            Value catchmentValue;
+            int catchmentProperties=0, catchmentGainSum=0, catchmentNeighbourhoodGainSum=0;
             propertyIndex.visit(x,y,23,[&](size_t propertyID) {
                 const auto& p=properties[propertyID];
                 const int distance = std::max(std::abs(x-p.p.x),std::abs(y-p.p.y));
@@ -2092,24 +2456,71 @@ bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money
                     && (p.item == Structure_ZoneResidential || p.item == Structure_ZoneCommercial)
                     && p.pollution < 128 && gain > 0)
                     growthTax += DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(DuneCity::taxablePopulationEighths(p.item,p.nextPopulation-p.population,0),
-                        sim->getCityTax(),std::max(1,state.avgLandValue)) * std::min(gain,64) / (4*64));
+                        state.taxRate,std::max(1,state.avgLandValue)) * std::min(gain,64) / (4*64));
+                if (servicePlan && item==Structure_PoliceStation
+                    && DuneCity::isCityZoneStructure(p.item)
+                    && (p.population>0 || (p.demand>0 && p.nextPopulation>p.population))) {
+                    ++catchmentProperties;
+                    const int catchmentAdded=DuneCity::policeCoverageAt(catchmentSource.x,catchmentSource.y,
+                        p.p.x,p.p.y,2,catchmentSource.strength,w,h);
+                    const int catchmentReduction=DuneCity::marginalCrimeReduction(p.baseCrime,p.coverage,catchmentAdded);
+                    const int catchmentGain=std::min(250-p.value,park
+                        +(p.crime>190 && p.crime-catchmentReduction<=190 ? 20 : 0));
+                    catchmentValue.crime+=catchmentReduction;
+                    catchmentValue.crimeUtility+=CityServiceInvestmentPolicy::underservedUtility(
+                        CityServiceInvestmentPolicy::crimeHarm(p.crime,p.item,p.population)
+                        -CityServiceInvestmentPolicy::crimeHarm(p.crime-catchmentReduction,p.item,p.population),p.coverage);
+                    catchmentValue.dangerousRelief+=CityServiceInvestmentPolicy::reliefAboveBand(
+                        p.crime,catchmentReduction,CityServiceInvestmentPolicy::dangerousBand);
+                    catchmentValue.preOutbreakRelief+=CityServiceInvestmentPolicy::reliefAboveBand(
+                        p.crime,catchmentReduction,CityServiceInvestmentPolicy::preOutbreakBand);
+                    if (p.value>0) {
+                        catchmentGainSum+=catchmentGain;
+                        if (role==DuneCity::CityRole::Residential || role==DuneCity::CityRole::Commercial)
+                            catchmentNeighbourhoodGainSum+=catchmentGain;
+                    }
+                    // The same native, bounded demanded-growth estimate as above;
+                    // never inflate it to make the first station appear to repay.
+                    if (powered && p.demand>0 && p.population>0 && p.nextPopulation>p.population
+                        && (p.item==Structure_ZoneResidential || p.item==Structure_ZoneCommercial)
+                        && p.pollution<128 && catchmentGain>0)
+                        catchmentValue.growthTax+=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+                            DuneCity::taxablePopulationEighths(p.item,p.nextPopulation-p.population,0),
+                            state.taxRate,std::max(1,state.avgLandValue))*std::min(catchmentGain,64)/(4*64));
+                }
                 if (powered && item == Structure_RocketTurret && distance <= data[item][house].weaponrange)
                     value.defense += p.threat;
             });
-            value.tax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(totalTaxBaseEighths,sim->getCityTax(),valueGainSum,sampleCount));
+            value.tax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(totalTaxBaseEighths,state.taxRate,valueGainSum,sampleCount));
             value.growthTax = growthTax;
             if (item == Structure_RocketTurret) {
                 if (value.crime <= 0) continue; // Civic turrets must reduce actual crime.
                 value.neighbourhoodTax = DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(
-                    totalTaxBaseEighths,sim->getCityTax(),neighbourhoodGainSum,sampleCount));
+                    totalTaxBaseEighths,state.taxRate,neighbourhoodGainSum,sampleCount));
+            }
+            if (servicePlan && item==Structure_PoliceStation) {
+                catchmentValue.buildCost=value.buildCost;
+                catchmentValue.upkeep=DuneCity::annualPerMinute(
+                    (DuneCity::getPoliceAnnualCost(item)*policeBudget.funding/100).lround());
+                catchmentValue.powerCost=value.powerCost;catchmentValue.overlapPenalty=value.overlapPenalty;
+                catchmentValue.tax=DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(
+                    totalTaxBaseEighths,state.taxRate,catchmentGainSum,sampleCount));
+                catchmentValue.neighbourhoodTax=DuneCity::annualPerMinute(CityServiceInvestmentPolicy::annualTaxGain(
+                    totalTaxBaseEighths,state.taxRate,catchmentNeighbourhoodGainSum,sampleCount));
             }
             for (unsigned resultMode=0;resultMode<results.size();++resultMode) {
-                if (!value.useful(resultMode == 1)) continue;
-                if (resultMode == 2 && (item != Structure_RocketTurret || !value.landValueTurretEligible())) continue;
+                const bool catchmentPlan=servicePlan && item==Structure_PoliceStation && resultMode==0;
+                const Value& scored=catchmentPlan ? catchmentValue : value;
+                // One finite construction allocation may buy real growth/crime
+                // relief before it repays. It is not a made-up income forecast.
+                const bool allocated=catchmentPlan && firstPoliceAllocation && catchmentProperties>0
+                    && scored.crime>0 && scored.benefit()>0;
+                if (!allocated && !scored.useful(resultMode == 1)) continue;
+                if (resultMode == 2 && (item != Structure_RocketTurret || !scored.landValueTurretEligible())) continue;
                 auto& result = results[resultMode][itemIndex];
-                if (result.site.isInvalid() || (item == Structure_PoliceStation
-                    ? value.betterPoliceSiteThan(result.value) : value.betterThan(result.value)))
-                    result = {Coord(x,y),value};
+                if (result.site.isInvalid() || (item == Structure_PoliceStation && !catchmentPlan
+                    ? scored.betterPoliceSiteThan(result.value) : scored.betterThan(result.value)))
+                    result = {Coord(x,y),scored};
             }
             itemSite = results[mode][itemIndex].site;
             itemBest = results[mode][itemIndex].value;

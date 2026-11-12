@@ -324,9 +324,10 @@ void runStructureDegradationProbe(Game& game) {
     migrated.reset();
     game.loadedSavegameVersion=savedVersion;
 
-    // Real city scan: every city-only building loses local land value from
-    // damage, including services with no health-scaled production mechanic.
+    // Real city scan: damage leaves land value unchanged by default. Opting
+    // into the old condition rule scales every footprint, including services.
     if (auto* sim=game.getCitySimulation()) {
+        const bool keepDamageRule=mutableOptions.damageLowersLandValue;
         for (Uint32 item : {Structure_ZoneResidential,Structure_ZoneCommercial,
                 Structure_ZoneIndustrial,Structure_PoliceStation,Structure_NuclearPlant,
                 Structure_Stadium,Structure_Airport,Structure_Wall}) {
@@ -339,12 +340,20 @@ void runStructureDegradationProbe(Game& game) {
                 sim->runEffectsScans();
                 return sim->getLandValueMap().worldGet(at.x,at.y);
             };
-            const int full=valueAtCondition(building->getMaxHealth());
-            require(full>1,"City condition fixture needs developed land");
-            const int damaged=valueAtCondition(FixPoint(building->getMaxHealth())/2);
-            require(damaged==std::max(1,full/2),"Half-health city building did not halve its local land value");
-            require(valueAtCondition(building->getMaxHealth())==full,"Repair did not restore city land value");
+            for (bool damageRule : {false,true}) {
+                mutableOptions.damageLowersLandValue=damageRule;
+                const int full=valueAtCondition(building->getMaxHealth());
+                require(full>1,"City condition fixture needs developed land");
+                const int damaged=valueAtCondition(FixPoint(building->getMaxHealth())/2);
+                require(damaged==(damageRule ? std::max(1,full/2) : full),
+                    "Building damage did not follow Damage Lowers Land Value");
+                const int repaired=valueAtCondition(building->getMaxHealth());
+                require(repaired==full,"Repair did not restore city land value");
+                SDL_Log("LAND_VALUE_CONDITION: item=%u rule=%d full=%d damaged=%d repaired=%d",
+                    item,damageRule ? 1 : 0,full,damaged,repaired);
+            }
         }
+        mutableOptions.damageLowersLandValue=keepDamageRule;
     }
 
     mutableOptions.concreteRequired=concreteRequired;

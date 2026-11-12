@@ -527,6 +527,8 @@ public:
     inline bool isMoving() const { return moving; }
 
     inline bool wasDeviated() const { return (owner->getHouseID() != originalHouseID); }
+    /// Remaining simulation cycles of temporary ownership; INVALID when not deviated.
+    inline Sint32 getDeviationTimeRemaining() const { return deviationTimer; }
 
     /**
         A temporarily deviated unit is never repaired by the house that converted it: no automatic
@@ -548,6 +550,12 @@ public:
     inline ATTACKMODE getAttackMode() const { return attackMode; }
 
     inline const Coord& getGuardPoint() const { return guardPoint; }
+
+    /// The ground position this unit was ordered to fire at (doAttackPos); invalid when none.
+    inline const Coord& getAttackPos() const { return attackPos; }
+
+    /// The projectile type of this unit's primary weapon.
+    inline int getBulletType() const { return bulletType; }
 
     virtual void playAttackSound();
 

@@ -1,7 +1,10 @@
+#include <dunecity/CityConstants.h>
+#include <dunecity/CitySimulation.h>
 #include <structures/Refinery.h>
 #include <units/Harvester.h>
 #include <players/QuantBotBuildPolicy.h>
 #include <players/QuantBotPowerInvestmentPolicy.h>
+#include <array>
 #include <set>
 
 // Drive real build decisions on All against Atreides, with its empty market.
@@ -454,13 +457,44 @@ void runOpeningEconomyProbe(Game& game) {
         if(!house->getNumItems(item))place(item);
     while(house->getNumItems(Structure_Refinery)<4)place(Structure_Refinery);
     bot->militaryValueLimit=5100;
+    // These assertions isolate market support, not the independent city
+    // population prerequisite. Establish an eligible census for the market
+    // cases, and separately prove that supported imports cannot bypass it.
+    auto* marketCity=game.isCitySimEnabled() ? game.getCitySimulation() : nullptr;
+    require(!game.isCitySimEnabled() || marketCity,"Market fixture needs its active city census");
+    std::array<int,3> savedMarketPopulation{};
+    const int starportPopulation=(DuneCity::kStarportPopulation
+        +DuneCity::CitySimulation::kPopDisplayMultiplier-1)/DuneCity::CitySimulation::kPopDisplayMultiplier;
+    if(marketCity) {
+        auto& state=marketCity->getHouseStateMut(house->getHouseID());
+        savedMarketPopulation={state.resPop,state.comPop,state.indPop};
+        state.resPop=starportPopulation;state.comPop=0;state.indPop=0;
+        yard->updateBuildList();
+        require(house->meetsStarportPopulation(),"Market fixture did not meet the Starport population prerequisite");
+    }
     require(build(1800)!=Structure_StarPort,"Heavy factory bypassed absent-market check");
     house->getChoam().addItem(Unit_Harvester,0);
+    const bool populationGate=marketCity && game.gameInitSettings.gameOptions.starportPopulation
+        && !isCampaignGameType(game.gameType);
+    if(populationGate) {
+        auto& state=marketCity->getHouseStateMut(house->getHouseID());
+        state.resPop=starportPopulation-1;yard->updateBuildList();
+        require(!house->meetsStarportPopulation(),"Below-threshold market fixture already qualifies for a Starport");
+        require(build(1800)!=Structure_StarPort,"Supported imports bypassed the Starport population prerequisite");
+        state.resPop=starportPopulation;yard->updateBuildList();
+    }
     require(build(1800)==Structure_StarPort,"Sold-out supported imports incorrectly treated as disabled");
     auto& worker=game.objectData.data[Unit_Harvester][HOUSE_ATREIDES];
     const bool enabled=worker.enabled;worker.enabled=false;
     require(build(1800)!=Structure_StarPort,"All disabled imports still caused Starport construction");
     worker.enabled=enabled;clearOrders();
+    if(marketCity) {
+        auto& state=marketCity->getHouseStateMut(house->getHouseID());
+        state.resPop=savedMarketPopulation[0];state.comPop=savedMarketPopulation[1];state.indPop=savedMarketPopulation[2];
+        yard->updateBuildList();
+    }
+    SDL_Log("OPENING_MARKET_PASS: population_gate=%d threshold=%d absent_market=0 sold_out_supported=1 disabled_imports=0",
+        int(populationGate),DuneCity::kStarportPopulation);
 
     const auto probeDifficulty=bot->difficulty;
     // Condition policy across the whole base. Three quarters of health is above
@@ -684,6 +718,12 @@ void runOpeningEconomyProbe(Game& game) {
 
     // Mature bases must relieve a full earned-income bank before continuing
     // optional expansion. Exercise the real order path at every difficulty.
+    // A standing lift is part of this mature-base premise. Otherwise the first
+    // Carryall spends 800 earned credits before the yard runs: the three-worker
+    // progression case forecasts only 525 receipts over the Silo's lead time,
+    // so a near-full bank is not actually at risk after that mandatory purchase.
+    if(!house->getNumItems(Unit_Carryall))
+        require(house->createUnit(Unit_Carryall,true),"Mature storage fixture needs its real transport");
     const auto savedDifficulty=bot->difficulty;
     for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,
             QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal,QuantBot::Difficulty::Defend}) {
@@ -709,7 +749,9 @@ void runOpeningEconomyProbe(Game& game) {
         if(order.itemID==Structure_Silo)++silos;
     require(silos==1,"Parallel yards duplicated or omitted the storage order");
     clearOrders();
-    // Losing core infrastructure re-establishes its priority over storage.
+    // A safe bank leaves missing core infrastructure ahead of optional storage.
+    // StorageCapacity deliberately overrides the former core gate only when
+    // earned receipts would overflow; retain both hashed policy arms.
     auto destroyCore=[&](Uint32 item) {
         StructureBase* victim=nullptr;
         for(auto* structure:structureList)
@@ -717,13 +759,28 @@ void runOpeningEconomyProbe(Game& game) {
         require(victim,"Missing core fixture building");
         victim->destroy();
     };
-    if(game.isCitySimEnabled()) {
-        destroyCore(Structure_HighTechFactory);
-        require(storageBuild(35025,35023,0)!=Structure_Silo,"Storage displaced missing high-tech core");
+    {
+        const auto savedConfig=bot->configOverride;
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;
+        try {
+            for(Uint32 item:{Structure_HighTechFactory,Structure_HeavyFactory}) {
+                if(item==Structure_HighTechFactory && !game.isCitySimEnabled())continue;
+                destroyCore(item);
+                config->force.storageCapacity=false;
+                require(storageBuild(35025,35023,0)!=Structure_Silo,
+                    "Storage-off control displaced missing production core");
+                config->force.storageCapacity=true;
+                require(storageBuild(999999,35023,0)!=Structure_Silo,
+                    "Spare storage displaced missing production core");
+                require(storageBuild(35025,35023,0)==Structure_Silo,
+                    "Earned-income overflow waited for missing production core");
+            }
+        } catch(...) {bot->configOverride=savedConfig;throw;}
+        bot->configOverride=savedConfig;
     }
-    destroyCore(Structure_HeavyFactory);
-    require(storageBuild(35025,35023,0)!=Structure_Silo,"Storage displaced missing heavy factory/core infrastructure");
-    SDL_Log("STORAGE_PRIORITY_PASS: core first, all difficulties, spice/tax capacity, pending orders and absolute ceiling");
+    SDL_Log("STORAGE_PRIORITY_PASS: spare banks retain core priority, overflow bypasses core only with StorageCapacity, "
+        "all difficulties, spice/tax capacity, pending orders and absolute ceiling");
 
     // Vanilla and Dune2R progression. An enemy wing elsewhere on the map buys
     // the baseline emplacements and then waits behind the production core and
@@ -813,27 +870,44 @@ void runOpeningEconomyProbe(Game& game) {
         house->numItem[Unit_Harvester]=3;
         require(build(4000)!=Structure_Refinery,"Empty bays kept expanding without workers to fill them");
 
-        // A queued bay brings its own storage. Count that pending capacity
-        // rather than cancelling every silo a growing refinery base still needs.
+        // A pending bay delivers its vault before another storage project starts.
+        // Keep the former proportional-capacity rule as an explicit off control,
+        // then verify default-on deduplication and a genuinely full unserved bank.
         const int bayCapacity=game.objectData.data[Structure_Refinery][HOUSE_ATREIDES].capacity;
         require(bayCapacity>0,"Fixture needs refinery storage capacity");
-        auto storageWithPendingBay=[&](int capacity,int stored) {
+        auto storageWithBay=[&](int capacity,int stored,bool pending) {
             clearOrders();
             house->capacity=capacity;house->startingCredits=0;
             house->storedCredits=stored;house->cityCredits=0;
             house->producedPower=10000;bot->lastCalculatedSpice=1300000;
-            secondYard->doProduceItem(Structure_Refinery);
-            require(secondYard->getProductionQueueSize()>0,"Fixture could not queue the pending bay");
+            if(pending) {
+                secondYard->doProduceItem(Structure_Refinery);
+                require(secondYard->getProductionQueueSize()>0,"Fixture could not queue the pending bay");
+            }
             bot->build(5100);
             int silos=0;
             for(auto* builder:{yard,secondYard})for(const auto& order:builder->currentProductionQueue)
                 if(order.itemID==Structure_Silo)++silos;
             return silos;
         };
-        require(storageWithPendingBay(20000,19000)==1,
-            "A queued refinery cancelled the storage the bank still needed");
-        require(storageWithPendingBay(20000,(20000+bayCapacity)*79/100)==0,
-            "Pending refinery capacity was not counted before ordering another silo");
+        {
+            const auto savedConfig=bot->configOverride;
+            auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=config;
+            try {
+                config->force.storageCapacity=false;
+                require(storageWithBay(20000,19000,true)==1,
+                    "Storage-off control lost the bank's unmet capacity after a queued refinery");
+                config->force.storageCapacity=true;
+                require(storageWithBay(20000,19999,false)==1,
+                    "A genuinely overflowing bank without pending capacity failed to order storage");
+                require(storageWithBay(20000,19999,true)==0,
+                    "A pending refinery vault was duplicated by another storage order");
+                require(storageWithBay(20000,(20000+bayCapacity)*79/100,true)==0,
+                    "Pending refinery capacity was not counted before ordering another silo");
+            } catch(...) {bot->configOverride=savedConfig;throw;}
+            bot->configOverride=savedConfig;
+        }
 
         // Parallel yards share one power package. Every generator already on
         // order counts as capacity, so the idle yard fills what is still

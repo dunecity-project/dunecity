@@ -12,7 +12,10 @@
 #include <players/QuantBot.h>
 #include <players/SimpleArmyPolicy.h>
 #include <FileClasses/INIFile.h>
+#include "genome-phases.inc"
 
+#include <array>
+#include <fstream>
 #include <memory>
 
 #include <sstream>
@@ -21,22 +24,6 @@
 
 namespace FormationDuel {
 
-struct Side {
-    int house = HOUSE_INVALID;
-    int shape = QuantBotConfig::kWaveFormationNone;
-    std::string label;          ///< as given: shape[+flags][/retreat|/noretreat][/weak][/k<percent>]
-    int retreat = -1;           ///< QuantBot::tacticalRetreatOverride: -1 the game's (on with Blob)
-    int variant = 0;            ///< QuantBot::blobVariantOverride bits from +v (vehicle pace), +r (real fight), +k (keep damaged),
-                                ///< +s (stage near the enemy), +e (stage only with local superiority)
-    int force = 0;              ///< QuantBot::forceVariantOverride bits from the uppercase flags (+F, +C, +P, +H, +M, +L, +Q,
-                                ///< +N, +B, +O, +W, +S, +T, +D, +E, +G, +A, +R, +X, +Y, +U, +I)
-    int strengthBps = 10000;    ///< QuantBot::forceStrengthBps from /k<percent> (A's k)
-    bool weak = false;          ///< /weak: half of the starting army is removed (the defence scenario)
-    bool aiPlayer = false;      ///< label "ai": the classic AI Player controls this house (vanilla matches only)
-    bool configured = false;    ///< shape "default": the configured rules (no force or formation override)
-    std::string style;          ///< @style: tests/ai/play-styles/<style>.ini (docs/ai-play-styles.md)
-    std::string strategy;       ///< #strategy: "random" or "<Mix>-<Tempo>[-fixed]" (applyStrategy)
-};
 
 /// "house:shape[+flags][@style][#strategy][/variant...],house:...", houses by number, shapes by INI
 /// name (None, Blob or a kept shape) or "default" (the configured rules as the game plays them: no
@@ -263,6 +250,7 @@ inline void applyStrategy(QuantBot& bot, const std::string& text) {
     SDL_Log("PLAY_STRATEGY: house=%d strategy=%s mode=%s fixed=%d", bot.getHouse()->getHouseID(), text.c_str(),
             QuantBotStrategy::modeText(config->strategy).c_str(), int(fixed));
 }
+
 
 /// Gives each side's QuantBot its wave shape and its ablations (test-only), its play style, and
 /// halves a /weak side's starting army: every second ground fighter by object id is removed

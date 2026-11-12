@@ -383,7 +383,7 @@ void ConstructionYard::moveUnitsOffPlot(Uint32 itemID, int x, int y, bool idleOn
                     moveOff(static_cast<UnitBase*>(pObject));
                 }
             } else if(pTile->hasInfantry()) {
-                const std::list<Uint32> infantryList = pTile->getInfantryList();
+                const auto infantryList = pTile->getInfantryList();
                 for(Uint32 objectID : infantryList) {
                     moveOff(dynamic_cast<InfantryBase*>(currentGame->getObjectManager().getObject(objectID)));
                 }
@@ -624,7 +624,7 @@ void ConstructionYard::updateReservedPlacement() {
 void ConstructionYard::updateStructureSpecificStuff() {
     if(!ModManager::instance().isTornieFamilyContentActive()
        || currentGame == nullptr || getOwner() == nullptr || !getOwner()->isAI()
-       || currentGame->techLevel < 9
+       || getOwner()->getTechLevel() < 9
        || getOwner()->getNumItems(Structure_LoveFactory) > 0
        || getProductionQueueSize() > 0
        || getCurrentProducedItem() != ItemID_Invalid

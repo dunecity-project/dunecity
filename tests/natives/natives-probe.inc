@@ -25,6 +25,8 @@
 #include <GUI/dune/ObservedHouseSelector.h>
 #include <GUI/ObjectInterfaces/DefaultObjectInterface.h>
 #include <Network/GameInitSettingsPolicy.h>
+#include <Network/WorkshopGameContent.h>
+#include <misc/IFileStream.h>
 #include <dunecity/CitySimulation.h>
 #include <units/AmbientAirplane.h>
 #endif
@@ -45,6 +47,20 @@ std::string nOut(const std::string& name) { return std::string(std::getenv("NATI
 std::string houseName(int h) { return getHouseNameByNumber(static_cast<HOUSETYPE>(h)); }
 
 std::unique_ptr<Game> nStart(const GameInitSettings& init) {
+#ifndef NATIVES_BASELINE
+    if(WorkshopGameContent::isSave(init)) {
+        // A missing exact revision must fail, not wait in an unattended download dialog.
+        IFileStream stream;
+        nRequire(stream.open(init.getFilename()), "Could not open save " + init.getFilename());
+        GameInitSettings::HouseInfoList houses;
+        auto saved = GameInitSettings::readSaveSetup(stream, houses);
+        try { WorkshopGameContent::resolveMod(saved, false); }
+        catch(const std::exception& e) {
+            nRequire(false, "Save needs unavailable mod revision " + saved.getModRevisionHash()
+                     + " of '" + saved.getModName() + "': " + e.what());
+        }
+    }
+#endif
     auto game = std::make_unique<Game>();
     currentGame = game.get();
     game->bReplay = true;   // no briefing / analytics at setup
@@ -935,6 +951,10 @@ void runLockstepInteractions() {
         const auto troops = game->getCitySimulation()->raiseCrimeTroopers(baseOf(ai[0]), 3);
         nRequire(!troops.units.empty() && troops.natives == nativesHouse, peer.name + ": crime raised no Natives troopers");
         AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(HOUSE_ORDOS), baseOf(ai[1])->getLocation() + Coord(1, 1));
+        // As in the campaign crash fixture, two rockets finish an already damaged plane.
+        // This checks shooting/crash lockstep, not whether two troopers survive a defended
+        // base long enough to remove all 100 HP (they can die after dealing only 90).
+        plane->setHealth(10);
         const Uint32 planeID = plane->getObjectID();
         nativesAttack(*game, plane, 2, baseOf(ai[1])->getLocation() + Coord(4, 2));
         for(int i = 0; i < 6000 && game->getObjectManager().getObject(planeID); ++i) step(1);

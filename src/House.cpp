@@ -44,6 +44,7 @@
 #include <structures/Refinery.h>
 #include <structures/HarvesterDropoff.h>
 #include <structures/ConstructionYard.h>
+#include <structures/ResearchLab.h>
 #include <units/Carryall.h>
 
 #include <limits>
@@ -210,6 +211,55 @@ House::House(InputStream& stream) : choam(this) {
         saleCredits = stream.readUint32();
         loadRadarResearch(stream);
     }
+    if(currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_RESEARCH_LAB) {
+        researchedTechLevel = stream.readSint32();
+        techResearchTarget = stream.readSint32();
+        techResearchRemaining = stream.readSint32();
+        techResearchLabID = stream.readUint32();
+        // Paid timers survive policy changes and resaves; today's quote is not
+        // an upper bound on an already-running study.
+        if(researchedTechLevel < 1 || researchedTechLevel > 9
+           || techResearchTarget < 0 || techResearchTarget > 9
+           || techResearchRemaining < 0
+           || (techResearchTarget == 0 && (techResearchRemaining != 0 || techResearchLabID != NONE_ID))
+           || (techResearchTarget != 0
+               && (techResearchTarget != researchedTechLevel + 1 || techResearchLabID == NONE_ID
+                   || techResearchRemaining == 0))) {
+            THROW(std::runtime_error, "Invalid house technology research state");
+        }
+        if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_RESEARCH_INSTALLMENTS) {
+            techResearchInstallment = stream.readBool();
+            techResearchTotalCost = stream.readSint32();
+            techResearchTotalCycles = stream.readSint32();
+            techResearchPaid = stream.readFixPoint();
+            if(!isTechResearchActive()) {
+                if(techResearchInstallment || techResearchTotalCost != 0
+                   || techResearchTotalCycles != 0 || techResearchPaid != 0)
+                    THROW(std::runtime_error, "Invalid idle technology research payment state");
+            } else {
+                if(techResearchTotalCost <= 0 || techResearchTotalCycles < techResearchRemaining
+                   || techResearchPaid < 0 || techResearchPaid > FixPoint(techResearchTotalCost))
+                    THROW(std::runtime_error, "Invalid active technology research payment state");
+                if(techResearchInstallment) {
+                    const auto funded = FixPoint::FromRawValue(TechResearch::cumulativeDueRaw(
+                        FixPoint(techResearchTotalCost).getRawValue(),
+                        techResearchTotalCycles - techResearchRemaining, techResearchTotalCycles));
+                    if(techResearchPaid < funded || techResearchPaid > nextTechResearchDue())
+                        THROW(std::runtime_error, "Invalid technology research installment progress");
+                } else if(techResearchPaid != FixPoint(techResearchTotalCost)) {
+                    THROW(std::runtime_error, "Invalid prepaid technology research state");
+                }
+            }
+        } else if(isTechResearchActive()) {
+            // Old formats only saved a prepaid countdown, not its original terms.
+            // Keep every remaining cycle and mark the study fully paid, even if
+            // a continuation later opts into installments or a different pace.
+            const auto pace = currentGame->getGameInitSettings().getGameOptions().researchPace;
+            techResearchTotalCost = TechResearch::cost(techResearchTarget, pace);
+            techResearchTotalCycles = std::max(techResearchRemaining, techResearchCycles(techResearchTarget));
+            techResearchPaid = techResearchTotalCost;
+        }
+    }
 }
 
 
@@ -217,6 +267,14 @@ House::House(InputStream& stream) : choam(this) {
 
 void House::init() {
     ai = true;
+    researchedTechLevel = std::clamp(currentGame ? currentGame->techLevel : 1, 1, 9);
+    techResearchTarget = 0;
+    techResearchRemaining = 0;
+    techResearchLabID = NONE_ID;
+    techResearchInstallment = false;
+    techResearchTotalCost = 0;
+    techResearchTotalCycles = 0;
+    techResearchPaid = 0;
 
     numUnits = 0;
     numStructures = 0;
@@ -300,6 +358,14 @@ void House::save(OutputStream& stream) const {
     stream.writeUint32(structuresSold);
     stream.writeUint32(saleCredits);
     saveRadarResearch(stream);
+    stream.writeSint32(researchedTechLevel);
+    stream.writeSint32(techResearchTarget);
+    stream.writeSint32(techResearchRemaining);
+    stream.writeUint32(techResearchLabID);
+    stream.writeBool(techResearchInstallment);
+    stream.writeSint32(techResearchTotalCost);
+    stream.writeSint32(techResearchTotalCycles);
+    stream.writeFixPoint(techResearchPaid);
 }
 
 
@@ -594,8 +660,9 @@ static void checkQuotaWin(House& house) {
     if((currentGame->winFlags & WINLOSEFLAGS_QUOTA) == 0 || house.getQuota() == 0) return;
     // A player only ends on its own house's quota (original rule). An observer has no house:
     // any house that meets its quota wins the match for its team.
-    const bool observing = currentGame->isObserving();
-    if(&house != pLocalHouse && !observing) return;
+    const House* outcomeHouse = currentGame->getOutcomeHouse();
+    const bool observing = currentGame->isObserving() && outcomeHouse == nullptr;
+    if(&house != outcomeHouse && !observing) return;
     const FixPoint banked = currentGame->isCitySimEnabled() ? house.getEarnedCredits() : house.getStoredCredits();
     if(banked < house.getQuota()) return;
     if(observing) currentGame->setWatchedGameOver(house.getTeamID());
@@ -683,9 +750,15 @@ FixPoint House::takeCredits(FixPoint amount) {
 
 
 House::CreditPayment House::payCredits(FixPoint amount) {
+    // Existing construction/upkeep callers retain their displayed-credit gate.
+    return payCreditsExact(getCredits() >= 1 ? amount : FixPoint(0));
+}
+
+
+House::CreditPayment House::payCreditsExact(FixPoint amount) {
     CreditPayment payment;
 
-    if(getCredits() >= 1) {
+    if(amount > 0) {
         if(cityCredits >= amount) {
             cityCredits -= amount;
             AITelemetry::log().account(houseID, "spent_total", amount.getRawValue());
@@ -749,6 +822,105 @@ void House::printStat() const {
 
 
 
+int House::getTechLevel() const {
+    return currentGame && currentGame->getGameInitSettings().getGameOptions().researchLab
+        ? researchedTechLevel : currentGame ? currentGame->techLevel : researchedTechLevel;
+}
+
+int House::getTechResearchCost() const {
+    if(!currentGame) return TechResearch::cost(getTechLevel() + 1, TechResearch::Pace::Normal);
+    const auto& rules = currentGame->getGameInitSettings().getGameOptions();
+    return TechResearch::cost(getTechLevel() + 1, rules.researchPace);
+}
+
+int House::techResearchCycles(int target) const {
+    if(!currentGame) return TechResearch::cycles(target, TechResearch::Pace::Normal);
+    const auto& rules = currentGame->getGameInitSettings().getGameOptions();
+    return TechResearch::cycles(target, rules.researchPace);
+}
+
+FixPoint House::nextTechResearchDue() const {
+    return FixPoint::FromRawValue(TechResearch::cumulativeDueRaw(
+        FixPoint(techResearchTotalCost).getRawValue(),
+        techResearchTotalCycles - techResearchRemaining + 1, techResearchTotalCycles));
+}
+
+bool House::isTechResearchPaused() const {
+    return isTechResearchActive() && techResearchInstallment
+        && storedCredits + startingCredits + cityCredits < nextTechResearchDue() - techResearchPaid;
+}
+
+bool House::canStartTechResearch(Uint32 labObjectID) const {
+    if(!currentGame || !currentGame->getGameInitSettings().getGameOptions().researchLab
+       || isNatives() || isTechResearchActive() || getTechLevel() >= 9) return false;
+    if(!currentGame->getGameInitSettings().getGameOptions().technologyInstallments
+       && storedCredits + startingCredits + cityCredits < FixPoint(getTechResearchCost())) return false;
+    const auto* lab = dynamic_cast<const ResearchLab*>(currentGame->getObjectManager().getObject(labObjectID));
+    return lab && lab->getOwner() == this && lab->isActive() && lab->getHealth() > 0;
+}
+
+bool House::startTechResearch(Uint32 labObjectID) {
+    if(!canStartTechResearch(labObjectID)) return false;
+    techResearchInstallment = currentGame->getGameInitSettings().getGameOptions().technologyInstallments;
+    techResearchTotalCost = getTechResearchCost();
+    techResearchTarget = researchedTechLevel + 1;
+    techResearchTotalCycles = techResearchCycles(techResearchTarget);
+    techResearchRemaining = techResearchTotalCycles;
+    techResearchLabID = labObjectID;
+    techResearchPaid = techResearchInstallment ? FixPoint(0) : takeCredits(techResearchTotalCost);
+    if(AITelemetry::log().enabled())
+        AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_started",
+            AITelemetry::Record().set("from", researchedTechLevel).set("to", techResearchTarget)
+                .set("cost", techResearchTotalCost).set("cycles", techResearchTotalCycles).set("lab", labObjectID));
+    return true;
+}
+
+void House::cancelTechResearch(Uint32 labObjectID) {
+    if(!isTechResearchActive() || techResearchLabID != labObjectID) return;
+    if(currentGame && AITelemetry::log().enabled())
+        AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_cancelled",
+            AITelemetry::Record().set("target", techResearchTarget).set("remaining", techResearchRemaining)
+                .set("lab", labObjectID));
+    techResearchTarget = 0;
+    techResearchRemaining = 0;
+    techResearchLabID = NONE_ID;
+    techResearchInstallment = false;
+    techResearchTotalCost = 0;
+    techResearchTotalCycles = 0;
+    techResearchPaid = 0;
+}
+
+void House::updateTechResearch() {
+    if(!currentGame->getGameInitSettings().getGameOptions().researchLab || !isTechResearchActive()) return;
+    const auto* lab = dynamic_cast<const ResearchLab*>(currentGame->getObjectManager().getObject(techResearchLabID));
+    if(!lab || lab->getOwner() != this || !lab->isActive() || lab->getHealth() <= 0) {
+        cancelTechResearch(techResearchLabID);
+        return;
+    }
+    if(techResearchInstallment) {
+        // Only the next cycle is due. A partial payment is retained, but
+        // unfunded work never advances and a pause cannot accumulate debt.
+        const FixPoint due = nextTechResearchDue();
+        if(techResearchPaid < due)
+            techResearchPaid += payCreditsExact(due - techResearchPaid).total;
+        if(techResearchPaid < due) return;
+    }
+    if(--techResearchRemaining > 0) return;
+    researchedTechLevel = techResearchTarget;
+    techResearchTarget = 0;
+    techResearchRemaining = 0;
+    techResearchLabID = NONE_ID;
+    techResearchInstallment = false;
+    techResearchTotalCost = 0;
+    techResearchTotalCycles = 0;
+    techResearchPaid = 0;
+    updateBuildLists();
+    if(AITelemetry::log().enabled())
+        AITelemetry::log().write(currentGame->getGameCycleCount(), houseID, -1, "tech_research_completed",
+            AITelemetry::Record().set("tech_level", researchedTechLevel));
+    if(this == pLocalHouse) currentGame->addToNewsTicker(_("Technology level ") + std::to_string(researchedTechLevel));
+}
+
 void House::updateBuildLists() {
     for(StructureBase* pStructure : structureList) {
         if(pStructure->isABuilder() && (pStructure->getOwner() == this)) {
@@ -757,12 +929,25 @@ void House::updateBuildLists() {
     }
 }
 
-
-
+bool House::meetsStarportPopulation() const {
+    if(!currentGame->getGameInitSettings().getGameOptions().starportPopulation
+       || isCampaignGameType(currentGame->gameType)
+       || !currentGame->isCitySimEnabled()) return true;
+    const auto* sim = currentGame->getCitySimulation();
+    if(sim == nullptr || !sim->isInitialized() || houseID < 0 || houseID >= DuneCity::kMaxCityHouses) return true;
+    return sim->getHouseState(houseID).getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier
+        >= DuneCity::kStarportPopulation;
+}
 
 void House::update() {
     enforceCreditCapacity();
+    updateTechResearch();
     updateRadarResearch();
+    // The Starport appears in (or leaves) the yard's list when the city crosses the threshold.
+    if(const bool met = meetsStarportPopulation(); met != starportPopulationMet) {
+        starportPopulationMet = met;
+        updateBuildLists();
+    }
     if(ModManager::instance().isTornieFamilyContentActive() && !isNatives()
        && isAI() && radarResearch.active < 0 && getCredits() >= 2000) {
         for(int kind = 0; kind < radar::Count; ++kind)
@@ -1156,7 +1341,10 @@ AITelemetry::Record House::deviationRewardStats() const {
 }
 
 void House::win() {
-    if(getTeamID() == pLocalHouse->getTeamID()) {
+    const House* outcomeHouse = currentGame->getOutcomeHouse();
+    if(outcomeHouse == nullptr) {
+        currentGame->setWatchedGameOver(getTeamID());
+    } else if(getTeamID() == outcomeHouse->getTeamID()) {
         currentGame->setGameWon();
     } else {
         currentGame->setGameLost();
@@ -1175,20 +1363,21 @@ void House::lose(bool bSilent) {
         }
     }
 
-    if((getTeamID() == pLocalHouse->getTeamID()) && ((currentGame->winFlags & WINLOSEFLAGS_HUMAN_HAS_BUILDINGS) != 0)) {
+    const House* outcomeHouse = currentGame->getOutcomeHouse();
+    if(outcomeHouse && (getTeamID() == outcomeHouse->getTeamID()) && ((currentGame->winFlags & WINLOSEFLAGS_HUMAN_HAS_BUILDINGS) != 0)) {
 
         bool finished = true;
 
         for(int i=0; i < NUM_HOUSES; i++) {
             House* pHouse = currentGame->getHouse(i);
-            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() == pLocalHouse->getTeamID()) {
+            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() == outcomeHouse->getTeamID()) {
                 finished = false;
                 break;
             }
         }
 
         if(finished) {
-            // pLocalHouse is destroyed and this is a game finish condition
+            // The objective house's team is destroyed and this is a game finish condition.
             if((currentGame->loseFlags & WINLOSEFLAGS_HUMAN_HAS_BUILDINGS) != 0) {
                 // house has won
                 currentGame->setGameWon();
@@ -1198,13 +1387,13 @@ void House::lose(bool bSilent) {
             }
         }
 
-    } else if((currentGame->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0) {
-        //if the only players left are on the thisPlayers team, pLocalHouse has won
+    } else if(outcomeHouse && (currentGame->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0) {
+        // If only the objective house's team remains, its native victory rule applies.
         bool finished = true;
 
         for(int i=0; i < NUM_HOUSES; i++) {
             House* pHouse = currentGame->getHouse(i);
-            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != pLocalHouse->getTeamID()) {
+            if(pHouse != nullptr && pHouse->isAlive() && pHouse->getTeamID() != 0 && !pHouse->isNatives() && pHouse->getTeamID() != outcomeHouse->getTeamID()) {
                 finished = false;
                 break;
             }

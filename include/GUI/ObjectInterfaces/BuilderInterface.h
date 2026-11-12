@@ -34,6 +34,9 @@
 #include <structures/StarPort.h>
 #include <structures/ChaosFactory.h>
 
+#include <algorithm>
+#include <cstdint>
+
 class BuilderInterface : public DefaultStructureInterface {
 public:
     static BuilderInterface* create(int objectID) {
@@ -61,12 +64,21 @@ protected:
         upgradeButton.setTooltipText(_("Upgrade this structure (Hotkey: U)"));
         upgradeButton.setOnClick(std::bind(&BuilderInterface::onUpgrade, this));
 
-        upgradeProgressBar.setText(_("Upgrade"));
+        upgradeProgressBar.setText("0 %");
         upgradeProgressBar.setTextColor(color);
         upgradeProgressBar.setVisible(false);
         const int upgradeWidth = ModManager::instance().isTornieFamilyContentActive() ? 75 : 83;
         topBox.addWidget(&upgradeButton,Point(18,2),Point(upgradeWidth,18));
-        topBox.addWidget(&upgradeProgressBar,Point(18,2),Point(upgradeWidth,18));
+        topBox.addWidget(&upgradeProgressBar,Point(24,2),Point(upgradeWidth - 6,18));
+        int upgradeRow = 20;
+        for(Label* label : {&upgradeStatusLabel, &upgradeTotalLabel, &upgradePaidLabel}) {
+            label->setTextFontSize(11);
+            label->setTextColor(color);
+            label->setAlignment(Alignment_HCenter);
+            label->setVisible(false);
+            topBox.addWidget(label, Point(0, upgradeRow), Point(SIDEBARWIDTH - 25, 20));
+            upgradeRow += 20;
+        }
 
         mainHBox.addWidget(Spacer::create());
 
@@ -95,7 +107,7 @@ protected:
     void onUpgrade() {
         ObjectBase* pObject = currentGame->getObjectManager().getObject(objectID);
         BuilderBase* pBuilder = dynamic_cast<BuilderBase*>(pObject);
-        if(pBuilder != nullptr && !pBuilder->isUpgrading()) {
+        if(pBuilder != nullptr && currentGame->canControlHouse(pBuilder->getOwner()) && pBuilder->canStartUpgrade()) {
             pBuilder->handleUpgradeClick();
         }
     }
@@ -130,43 +142,65 @@ protected:
                 }
             }
 
-            // An observer reads the owner's real production and upgrade progress, but is
-            // offered no Upgrade button. This has to be decided on every update, not once at
-            // construction, because the branches below re-show it as the building's state
-            // changes. DefaultStructureInterface::update does the same for Repair and Destroy.
-            const bool observing = currentGame->isObserving();
-
-            upgradeProgressBar.setVisible(pBuilder->isUpgrading());
-            upgradeButton.setVisible(!observing && !pBuilder->isUpgrading());
-            upgradeButton.setEnabled(!observing && !pBuilder->isUpgrading());
-
-            if(pBuilder->isUpgrading()) {
-                upgradeProgressBar.setProgress( ((pBuilder->getUpgradeProgress() * 100)/pBuilder->getUpgradeCost()).toDouble() );
-            }
-
-            if(pBuilder->getHealth() >= pBuilder->getMaxHealth()) {
-                repairButton.setVisible(false);
-                if(!observing && pBuilder->isAllowedToUpgrade()) {
-                    upgradeButton.setVisible(true);
-                } else {
-                    upgradeButton.setVisible(false);
-                }
+            const bool canControl = currentGame->canControlHouse(pBuilder->getOwner());
+            const bool upgrading = pBuilder->isUpgrading();
+            const bool healthy = pBuilder->getHealth() >= pBuilder->getMaxHealth();
+            const int cost = pBuilder->getUpgradeCost();
+            upgradeProgressBar.setVisible(upgrading);
+            upgradeButton.setVisible(canControl && healthy && !upgrading && pBuilder->isAllowedToUpgrade());
+            upgradeButton.setEnabled(canControl && healthy && pBuilder->canStartUpgrade());
+            upgradeStatusLabel.setVisible(upgrading);
+            upgradeTotalLabel.setVisible(upgrading);
+            upgradePaidLabel.setVisible(upgrading);
+            // Use the portrait's existing space: no build-list rows are lost at 640x480.
+            objPicture.setVisible(!upgrading);
+            starportTimerLabel.setVisible(!upgrading);
+            if(upgrading) {
+                const FixPoint percent = cost > 0 ? pBuilder->getUpgradeProgress() * 100 / cost : FixPoint(0);
+                upgradeProgressBar.setProgress(percent.toDouble());
+                upgradeProgressBar.setText(std::to_string(std::clamp(percent.floor(), 0, 100)) + " %");
+                upgradeStatusLabel.setText(pBuilder->isUpgradePaused() ? _("Paused: no credits") : _("Upgrading"));
+                upgradeTotalLabel.setText(_("Total: ") + std::to_string(cost) + _(" cr"));
+                upgradePaidLabel.setText(_("Paid: ") + upgradeCreditText(pBuilder->getUpgradeProgress()));
             } else {
-                repairButton.setVisible(!observing);
-                upgradeButton.setVisible(false);
-                repairButton.setToggleState(pBuilder->isRepairing());
+                upgradeProgressBar.setProgress(0);
+                upgradeStatusLabel.setText("");
+                upgradeTotalLabel.setText("");
+                upgradePaidLabel.setText("");
             }
+            const bool installments = currentGame->getGameInitSettings().getGameOptions().technologyInstallments;
+            if(displayedUpgradeCost != cost || displayedTechnologyInstallments != installments) {
+                displayedUpgradeCost = cost;
+                displayedTechnologyInstallments = installments;
+                upgradeButton.setTooltipText(_("Upgrade: ") + std::to_string(cost)
+                    + (installments ? _(" cr, paid per tick. No full balance needed. (U)")
+                                    : _(" cr balance needed to start; paid per tick. (U)")));
+            }
+            repairButton.setVisible(canControl && !healthy);
+            repairButton.setToggleState(pBuilder->isRepairing());
         }
 
         return true;
     }
 
 
+    static std::string upgradeCreditText(FixPoint value) {
+        const auto unit = FixPoint(1).getRawValue();
+        const auto raw = std::max<std::int64_t>(0, value.getRawValue());
+        const auto cents = (raw / unit) * 100 + (raw % unit) * 100 / unit;
+        return std::to_string(cents / 100) + "." + (cents % 100 < 10 ? "0" : "") + std::to_string(cents % 100);
+    }
+
 
     TextButton      upgradeButton;
     TextProgressBar upgradeProgressBar;
+    Label           upgradeStatusLabel;
+    Label           upgradeTotalLabel;
+    Label           upgradePaidLabel;
     Label           starportTimerLabel;
     BuilderList*    pBuilderList;
+    int displayedUpgradeCost = -1;
+    bool displayedTechnologyInstallments = false;
 };
 
 #endif // BUILDERINTERFACE_H

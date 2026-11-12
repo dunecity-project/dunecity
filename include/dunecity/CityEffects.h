@@ -56,6 +56,7 @@ namespace DuneCity {
 //   Rocket Turret     -> one park terrain source, 15% police coverage
 //   Wall               -> Park bonus only
 //   Sand (terrain)     -> Water (land-value bonus)
+//   Mountain (terrain) -> Forest (Micropolis terrain bonus, Mountain Scenery rule)
 // =============================================================================
 
 // --- Radii (in tiles, distances measured Chebyshev / square) -----------------
@@ -102,9 +103,16 @@ constexpr int kPoliceCoverageRocketTurret = kPoliceCoverageFull * 15 / 100;  // 
 
 constexpr int kMaxLandValue = 250;
 
-/// Damage devalues a developed building's own land proportionally. Applied
-/// after amenity bonuses; repairs restore value on the next effects scan.
-inline int conditionLandValue(int value, FixPoint health, int maxHealth) {
+/// Micropolis natural terrain below RUBBLE (water/trees) contributes +15 per tile.
+/// Reuse the park terrain grid/kernel, not sand's separately tuned long-range stamp.
+inline int mountainScenerySource(bool mountain, bool enabled) {
+    return mountain && enabled ? kParkLandValueBonus : 0;
+}
+
+/// With Damage Lowers Land Value on, damage devalues a building's own land
+/// proportionally after amenity bonuses; repairs restore it on the next scan.
+inline int conditionLandValue(int value, FixPoint health, int maxHealth, bool damageLowersLandValue) {
+    if (!damageLowersLandValue) return value;
     if (value <= 0) return 0;
     if (maxHealth <= 0) return value;
     return std::clamp((FixPoint(value) * std::max(FixPoint(0), health) / maxHealth).floor(), 1, value);

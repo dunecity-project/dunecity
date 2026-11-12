@@ -9,7 +9,8 @@ param(
     [switch]$BuildNative,
     [ValidateRange(1, 8)]
     [int]$NativeBuildJobs = 1,
-    [switch]$BuildApk
+    [switch]$BuildApk,
+    [switch]$ReleaseBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -386,6 +387,7 @@ if ($BuildNative) {
         "-DANDROID_PLATFORM=android-28",
         "-DANDROID_STL=c++_shared",
         "-DCMAKE_BUILD_TYPE=Release",
+        "-DDUNECITY_RELEASE_BUILD=$(if ($ReleaseBuild) { 'ON' } else { 'OFF' })",
         "-DDUNECITY_BUILD_TESTS=OFF"
     )
     [ordered]@{

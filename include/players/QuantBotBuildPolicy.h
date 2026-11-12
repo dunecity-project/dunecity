@@ -4,11 +4,50 @@
 #include <data.h>
 #include <SDL_stdinc.h>
 #include <Definitions.h>
+#include <players/QuantBotSpendingPolicy.h>
 #include <algorithm>
 #include <array>
 #include <limits>
 
 namespace QuantBotBuildPolicy {
+
+// Compare rates without division: level 1 needs income per minute of at least
+// the cost, level 2 at least twice the cost. The earlier cost-per-5-minutes
+// rule never bound in Vanilla (median realised income 885/min, screen24).
+// No cash balance masquerades as continuing income.
+inline bool incomeTechnologyAdmitted(int level, int incomePerMinute, int cost) {
+    return level == 0 || (cost > 0 && incomePerMinute > 0
+        && int64_t(incomePerMinute) >= int64_t(cost) * (level == 2 ? 2 : 1));
+}
+inline bool incomeTechnologySafe(int64_t ownArmy, int64_t largestRival, bool localThreat) {
+    return !localThreat && ownArmy >= largestRival;
+}
+inline bool incomeTechnologyProject(Uint32 item, bool upgrade, int owned) {
+    if (upgrade) return item == Structure_HeavyFactory || item == Structure_HighTechFactory
+        || item == Structure_ResearchLab;
+    return owned == 0 && (item == Structure_RepairYard || item == Structure_HighTechFactory
+        || item == Structure_IX || item == Structure_Palace || item == Structure_ResearchLab);
+}
+
+// Batch3 City economy levels (docs/ai-scenario-matrix.md, "Batch3 City economy
+// experiments"). CityTechRefineries/CityYardRefineries hold optional capital
+// until 3 (level 1) or 5 (level 2) refinery bays stand, but never ask for more
+// bays than the house's own spice plan (one bay per three planned workers), so a
+// spice-poor base is not starved of technology or yards. 0 = no gate.
+inline int cityRefineryGateBays(int level, int plannedWorkers) {
+    if (level <= 0) return 0;
+    return std::min(level == 1 ? 3 : 5, std::max(1, (std::max(0, plannedWorkers) + 2) / 3));
+}
+// CityFleetRatios: EconomicFleetRatios with a fixed treatment. Level 1 is the
+// EconRatios City survivor h3-cq1-r1, level 2 its tied-best generated DuneCity
+// efficiency partner h4-cq1-r1 (workers per bay, carryalls per four workers,
+// repair-yard ceiling).
+struct FleetRatioLevel { int harvestersPerBay, carryallQuarters, repairYards; };
+inline FleetRatioLevel cityFleetRatioLevel(int level) {
+    return level == 2 ? FleetRatioLevel{4, 1, 1} : FleetRatioLevel{3, 1, 1};
+}
+// CityWorkerReplacement: the City FFA replacement floor's payback horizon.
+inline int cityWorkerReplacementMinutes(int level) { return level == 2 ? 15 : 10; }
 
 // Zero disables the reservation; otherwise one service order per N orders.
 // An outbreak only needs one dangerous district and a six-minute buildup, so
@@ -39,8 +78,41 @@ inline bool militaryItem(Uint32 item) {
         && item != Unit_CapacityHarvester && item != Unit_FastHarvester
         && item != Unit_MCV && item != Unit_Sandworm;
 }
+inline QuantBotSpendingPolicy::Bucket spendingBucket(Uint32 item) {
+    using Bucket = QuantBotSpendingPolicy::Bucket;
+    if (militaryItem(item) || item == Structure_GunTurret || item == Structure_RocketTurret
+        || item == Structure_Scoutpost || item == Structure_Slowpost
+        || item == Structure_Flamepost || item == Structure_Chemipost) return Bucket::Military;
+    switch (item) {
+    case Structure_LightFactory: case Structure_HeavyFactory: case Structure_HighTechFactory:
+    case Structure_ChaosFactory: case Structure_Barracks: case Structure_WOR:
+    case Structure_Radar: case Structure_IX: case Structure_StarPort: case Structure_Palace:
+    case Structure_RepairYard: case Structure_ResearchLab:
+        return Bucket::Production;
+    default:
+        return Bucket::Economy;
+    }
+}
 inline int fundedArmyTarget(int committed, int limit, int spendable) {
     return int(std::min<int64_t>(limit, int64_t(committed) + std::max(0, spendable)));
+}
+
+inline bool rocketInfantry(Uint32 item) {
+    return item == Unit_Trooper || item == Unit_Troopers || item == Unit_Troopers5;
+}
+inline int rocketInfantrySize(Uint32 item) {
+    return item == Unit_Troopers5 ? 5 : item == Unit_Troopers ? 3 : item == Unit_Trooper ? 1 : 0;
+}
+// A paid standing squad must not depend on already owning a large vehicle army.
+// Extra anti-armour troops retain the infantry share; the bounded anti-air floor
+// can answer a visible wing even when that current-army share is already full.
+inline constexpr int kStandingTroopers = 6;
+inline int trooperSupportFloor(int hostileAircraft) {
+    return std::max(kStandingTroopers, std::min(18, std::clamp(hostileAircraft, 0, 4) * 5));
+}
+inline int trooperSupportTarget(int hostileAircraft, int hostileArmourValue) {
+    const int armour = int(std::min<int64_t>(9, (int64_t(std::max(0, hostileArmourValue)) + 599) / 600));
+    return std::max(trooperSupportFloor(hostileAircraft), armour);
 }
 // Banked credits buy army past the configured cap (docs/ai-scenario-matrix.md, "Difficulty
 // ladder"): what lies above `reserve` raises the planning budget, by at most `maxPercent` of the
@@ -201,6 +273,60 @@ inline int palaceTarget(bool onlyOnePalace, bool citySim, int displayedPopulatio
 
 inline int spendableCredits(int credits, int strategicCost) {
     return std::max(0, credits - std::max(0, strategicCost));
+}
+
+// Research is optional capital: neither expected income nor cash already
+// committed to another queue is permission to spend the working reserve.
+struct TechInvestment {
+    bool enabled = false, economyReady = false, powerReady = false, emergency = false;
+    int cash = 0, cost = 0;
+    int64_t projectedCash = 0, orderedCost = 0, reserve = 0;
+};
+inline bool canFundTechInvestment(const TechInvestment& state) {
+    return state.enabled && state.economyReady && state.powerReady && !state.emergency
+        && state.cost > 0 && int64_t(state.cash) - state.cost >= state.reserve
+        && state.projectedCash - state.orderedCost - state.cost >= state.reserve;
+}
+
+// This gates new commitments, never cancels an already paid/active study.
+inline bool cityResearchOrderAdmits(int level, int tech, int planTech, int netIncome, int productionBurn) {
+    return level == 0 || (tech < planTech
+        && (level < 2 || netIncome >= std::max(1000, productionBurn + 500)));
+}
+
+// A tech-1 lane start cannot field factory workers yet. Two Refinery gifts
+// fund research; growing the whole map-share fleet first delays technology
+// behind dozens of bays. Expand again after heavy production and the first wave.
+inline int civWarsWorkerTarget(int sustainable, int tech, bool firstWave, int difficulty) {
+    const int target = tech < 4 ? 2
+        : !firstWave ? (difficulty >= 3 ? 10 : difficulty >= 2 ? 8 : 6)
+        : difficulty >= 3 ? 16 : difficulty >= 2 ? 12 : 8;
+    return std::clamp(sustainable, 0, target);
+}
+
+inline int civWarsResearchSaving(int cost, int workingReserve, int forecastFunding) {
+    const int64_t needed = int64_t(cost) + std::max(300,workingReserve);
+    // A tiny tax-only start must be able to compound its city instead of
+    // reserving every receipt for a payment outside the normal forecast.
+    return cost > 0 && needed <= forecastFunding ? static_cast<int>(needed) : 0;
+}
+
+inline bool civWarsResearchPacing(int tech, bool firstWave, int groundValue, int minimumGround) {
+    return tech < 4 || (firstWave && groundValue >= minimumGround);
+}
+
+inline int civWarsZoneTarget(bool firstWave, int difficulty) {
+    return !firstWave ? 24 : difficulty >= 3 ? 60 : difficulty >= 2 ? 48 : 36;
+}
+
+// Starting cash is deliberately absent: only earned credits occupy storage.
+// Confirmed production burn and orders made earlier in this pass get their
+// spending first; theoretical factory capacity is not a promise to spend.
+inline bool storageCapacityNeeded(int earned, int capacity, int receipts,
+                                  int productionSpend, int orderedSpend) {
+    const int64_t surplus = int64_t(receipts) - std::max(0,productionSpend);
+    return capacity > 0 && surplus > 0
+        && std::max<int64_t>(0,int64_t(earned)-std::max(0,orderedSpend)) + surplus >= capacity;
 }
 
 // Keep city construction first; then fund air before ground factories can
@@ -490,8 +616,48 @@ inline int desiredSpiceRefineries(int harvesterTarget, int harvestersIncludingQu
 inline int openingSpiceRefineries(int sustainableHarvesters) {
     return std::clamp(sustainableHarvesters, 1, 3);
 }
+// The opening ladders build this many refineries before they unlock the
+// worker supplier (starport or heavy factory).
+inline constexpr int kOpeningSupplierRefineries = 4;
+// A fixed fleet ratio refuses refineries beyond its target, so a ladder that
+// holds the yard for one must stop at that target instead of waiting forever.
+inline int supplierRefineryGoal(int goal, bool fleetRatios, int fleetRefineryTarget) {
+    return fleetRatios ? std::min(goal, std::max(0, fleetRefineryTarget)) : goal;
+}
 inline int fundedSpiceHarvesters(int sustainable, int refineries) {
     return std::max(0, std::min(sustainable, std::max(0, refineries) * 3));
+}
+struct FleetTargets {
+    int sustainable = 0;
+    int workers = 0;
+    int refineries = 0;
+    int carryalls = 0;
+    int repairYards = 0;
+};
+// Fixed factorial levels, not an optimiser. Capacity advances one bay at a time,
+// only after the fleet fills its current ratio. Remaining shared spice must cover
+// the normal-price worker, its bay share and its requested transport share.
+// Without a harvester-capable heavy factory a refinery is the only source of a
+// worker, and the opening ladders hold every other structure until they own
+// kOpeningSupplierRefineries; the ratio cap must not refuse those refineries.
+inline FleetTargets economicFleetTargets(int spiceShare, int limit, int bays, int workers,
+        int perBay, int carryallQuarters, int repairYards,
+        int workerPrice, int bayPrice, int carryallPrice, bool workerFactory) {
+    FleetTargets result;
+    perBay = std::clamp(perBay, 2, 4);
+    carryallQuarters = std::clamp(carryallQuarters, 0, 2);
+    const int capitalPerWorker = std::max(2000, std::max(0, workerPrice)
+        + (std::max(0, bayPrice) + perBay - 1) / perBay
+        + (std::max(0, carryallPrice) * carryallQuarters + 3) / 4);
+    result.sustainable = std::min(std::max(0, limit), std::max(0, spiceShare) / capitalPerWorker);
+    result.workers = std::min(result.sustainable, std::max(1, bays) * perBay);
+    result.refineries = std::min((result.sustainable + perBay - 1) / perBay,
+        1 + std::max(0, workers) / perBay);
+    if (!workerFactory && result.sustainable > 0)
+        result.refineries = std::max(result.refineries, kOpeningSupplierRefineries);
+    result.carryalls = (std::min(result.sustainable, std::max(0, workers)) * carryallQuarters + 3) / 4;
+    result.repairYards = result.sustainable > 0 ? std::clamp(repairYards, 0, 1) : 0;
+    return result;
 }
 // Compare useful capacity, available space and the ability to fund a larger
 // reserve. Small starts keep cheap wind; rich cities and blackout recovery

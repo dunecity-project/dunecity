@@ -289,13 +289,12 @@ final class Rooms
     /**
      * One page of the public directory, rendered entirely from the cache.
      *
-     * Only public rooms that are still in the lobby, still have a seat and match the caller's own
-     * protocol and content are listed. Private rooms are not filtered out of a full list - they
-     * are never in it - so a caller cannot learn that a private room exists, let alone its code.
-     * A stale count can hide a joinable room or offer a full one; the join itself is authoritative
-     * either way.
+     * Only public rooms with a seated host, available capacity and the caller's exact executable
+     * version and protocol are offered. Content may differ only for an all-mods discovery request;
+     * admission still verifies the selected revision. Private rooms are never enumerated.
+     * A stale count can hide a joinable room or offer a full one; the join itself is authoritative.
      */
-    public function listPublic(int $gameProtocol, string $contentHash, int $offset, bool $allMods = false, bool $details = false): array
+    public function listPublic(string $appVersion, int $gameProtocol, string $contentHash, int $offset, bool $allMods = false, bool $details = false): array
     {
         $now = $this->store->now();
         $result = $this->store->withLock('index.json', function (array $state) use ($now): array {
@@ -318,6 +317,7 @@ final class Rooms
                 && ($room['hostSeated'] ?? false) === true
                 && (string)$room['hostName'] !== ''
                 && (int)$room['peers'] + (int)$room['outstanding'] < (int)$room['maxPeers']
+                && (string)($room['appVersion'] ?? '') === $appVersion
                 && (int)$room['gameProtocol'] === $gameProtocol
                 && ($allMods || (string)$room['contentHash'] === $contentHash)) {
                 $eligible[] = $room;

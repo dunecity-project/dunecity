@@ -129,7 +129,7 @@ CityBudgetWindow::CityBudgetWindow()
     auto* citySim = currentGame ? currentGame->getCitySimulation() : nullptr;
     if (citySim && citySim->isInitialized()) {
         pendingPolicePercent = citySim->getPoliceFundingPercent(selectedHouseID);
-        pendingTaxRate       = citySim->getCityTax();
+        pendingTaxRate       = citySim->getCityTax(selectedHouseID);
     }
     // Reading another house's budget must not offer any way to change it. The
     // adjustments and Apply are withheld, and onConfirm() refuses as well.
@@ -243,7 +243,7 @@ void CityBudgetWindow::updateDisplay() {
     const House* house = ObservedHouse::resolve(selectedHouseID);
     if (house != nullptr) selectedHouseID = house->getHouseID();
     if (isReadOnly()) {
-        pendingTaxRate = citySim->getCityTax();
+        pendingTaxRate = citySim->getCityTax(selectedHouseID);
         pendingPolicePercent = citySim->getPoliceFundingPercent(selectedHouseID);
     }
     const auto& houseState = citySim->getHouseState(selectedHouseID);

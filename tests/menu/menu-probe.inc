@@ -13,6 +13,7 @@
 #include <mod/Dune2RAssetManager.h>
 #include <Menu/CrossplayMenu.h>
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CivWarsMenu.h>
 #include <Menu/OptionsMenu.h>
 #include <Menu/AboutMenu.h>
 #include <Menu/HowToPlayMenu.h>
@@ -29,9 +30,11 @@
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/OMemoryStream.h>
+#include <misc/IMemoryStream.h>
 #include <SpiceIncome.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <players/PlayerFactory.h>
+#include <misc/MenuPalette.h>
 
 std::unique_ptr<MenuBase> createExtrasMenu(bool workshop);
 
@@ -52,12 +55,87 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
 }
 #include "user-map-list-probe.inc"
 #include "tornie-family-menu-probe.inc"
+#include "campaign-map-library-probe.inc"
+
+SDL_Rect researchMenuBounds(Window& menu, Widget& control) {
+    Point position = menu.getPosition();
+    for(Widget* current = &control; current != &menu;) {
+        auto* parent = current->getParent();
+        menuRequire(parent != nullptr, "Research control has no menu parent");
+        if(auto* box = dynamic_cast<StaticContainer*>(parent)) position = position + box->getWidgetPosition(current);
+        else if(auto* box = dynamic_cast<HBox*>(parent)) position = position + box->getWidgetPosition(current);
+        else if(auto* box = dynamic_cast<VBox*>(parent)) position = position + box->getWidgetPosition(current);
+        else menuRequire(parent == &menu, "Research control has an unknown container");
+        current = parent;
+    }
+    return SDL_Rect{position.x, position.y, control.getSize().x, control.getSize().y};
+}
+
+void requireResearchMenuBounds(Window& menu, Widget& control) {
+    const auto bounds = researchMenuBounds(menu, control);
+    menuRequire(control.isVisible() && bounds.w > 0 && bounds.h > 0
+                && bounds.x >= 0 && bounds.y >= 0
+                && bounds.x + bounds.w <= getRendererWidth()
+                && bounds.y + bounds.h <= getRendererHeight(),
+                "Research control is hidden, clipped or outside the viewport");
+    const SDL_Rect crests[] = {{11, 11, 53, 54}, {getRendererWidth() - 64, 11, 53, 54},
+        {11, getRendererHeight() - 65, 53, 54},
+        {getRendererWidth() - 64, getRendererHeight() - 65, 53, 54}};
+    for(const auto& crest : crests)
+        menuRequire(!SDL_HasIntersection(&bounds, &crest), "Research control overlaps a corner crest");
+}
+
+void chooseResearchMenuPace(Window& menu, DropDownBox& box, TechResearch::Pace pace,
+                            const std::string& capture) {
+    const char* names[] = {"Fast", "Normal", "Slow", "Very slow"};
+    const TechResearch::Pace paces[] = {TechResearch::Pace::Fast, TechResearch::Pace::Normal,
+        TechResearch::Pace::Slow, TechResearch::Pace::VerySlow};
+    menuRequire(box.getNumEntries() == 4, "Research Pace does not offer all four choices");
+    int selected = -1;
+    for(int i = 0; i < 4; ++i) {
+        menuRequire(box.getEntry(i) == _(names[i]) && box.getEntryIntData(i) == static_cast<int>(paces[i]),
+                    "Research Pace labels and enum data disagree");
+        if(paces[i] == pace) selected = i;
+    }
+    menuRequire(selected >= 0 && !box.getTooltipText().empty(), "Research Pace choice or explanation is missing");
+    requireResearchMenuBounds(menu, box);
+    menuRequire(box.getSize().x >= static_cast<int>(pFontManager->getTextWidth(_("Very slow"), 14)) + 20,
+                "Research Pace clips its longest choice");
+    box.handleMouseLeft(3, box.getSize().y / 2, true);
+    menuRequire(box.bShowListBox, "Research Pace click did not open the dropdown");
+    menuCapture(menu, capture, true);
+    const auto bounds = researchMenuBounds(menu, box);
+    const auto popupSize = box.listBox.getSize();
+    const int popupY = box.bListBoxAbove ? bounds.y - popupSize.y : bounds.y + bounds.h;
+    menuRequire(popupY >= 0 && popupY + popupSize.y <= getRendererHeight(),
+                "Research Pace dropdown extends outside the viewport");
+    const int entryHeight = GUIStyle::getInstance().getListBoxEntryHeight();
+    menuRequire(popupSize.y >= 4 * entryHeight + 2, "Research Pace hides choices in its dropdown");
+    const int rowY = 1 + selected * entryHeight + entryHeight / 2;
+    box.handleMouseLeftOverlay(3, rowY + (box.bListBoxAbove ? -popupSize.y : box.getSize().y), true);
+    menuRequire(box.getSelectedEntryIntData() == static_cast<int>(pace) && !box.bShowListBox,
+                "Research Pace mouse selection did not reach the requested rule");
+}
+
+void requireResearchPaceStream(const GameInitSettings& init, TechResearch::Pace pace) {
+    menuRequire(init.getGameOptions().researchPace == pace, "Match initialization lost Research Pace");
+    OMemoryStream output;
+    output.open();
+    init.save(output);
+    IMemoryStream input(output.getData(), output.getDataLength());
+    GameInitSettings received(input);
+    menuRequire(received.getGameOptions().researchPace == pace,
+                "Saved/network initialization lost Research Pace");
+}
 
 struct OnlineRandomProbeState {
     bool cancel = false;
+    bool civWars = false;
     bool publicGame = true;
     bool generated = false;
     bool playersShown = false;
+    TechResearch::Pace pace = TechResearch::Pace::Slow;
+    bool requireInitialPace = false;
     std::string path;
 };
 OnlineRandomProbeState* onlineRandomProbe = nullptr;
@@ -67,6 +145,29 @@ OnlineRandomProbeState* onlineRandomProbe = nullptr;
 bool driveOnlineRandomSkirmishProbe(MenuBase& menu) {
     if(!onlineRandomProbe) return false;
     auto& state = *onlineRandomProbe;
+    if(auto* generator = dynamic_cast<CivWarsMenu*>(&menu)) {
+        menuRequire(state.civWars && generator->multiplayer,
+                    "CivWars online did not open its generic-start generator");
+        if(state.requireInitialPace)
+            menuRequire(generator->getMatchRules().researchPace == state.pace,
+                        "Civilization Wars Host Online lost its selected Research Pace");
+        chooseResearchMenuPace(*generator, generator->researchPaceBox, state.pace,
+                              "online-civilization-wars-research-pace-" + std::to_string(static_cast<int>(state.pace)));
+        generator->onGameRules();
+        auto* options = dynamic_cast<GameOptionsWindow*>(generator->pChildWindow);
+        menuRequire(options && options->researchPaceDropDownBox.getSelectedEntryIntData() == static_cast<int>(state.pace),
+                    "Civilization Wars direct pace did not reach Game Rules");
+        options->onOK();
+        generator->processChildWindowOpenCloses();
+        generator->seedBox.setText("20261102");
+        generator->fixedSeedBox.setChecked(true);
+        generator->onCreateMap();
+        state.path = generator->getCreatedMap();
+        menuRequire(generator->isQuiting() && !state.path.empty() && existsFile(state.path),
+                    "CivWars online generator did not save a map");
+        state.generated = true;
+        return true;
+    }
     if(auto* generator = dynamic_cast<RandomSkirmishMenu*>(&menu)) {
         menuRequire(generator->multiplayer && generator->hostMod == "vanilla",
                     "Online random skirmish did not open the active mod's multiplayer generator");
@@ -81,6 +182,19 @@ bool driveOnlineRandomSkirmishProbe(MenuBase& menu) {
             if(generator->sizeBox.getEntryIntData(i)==96) generator->sizeBox.setSelectedItem(i);
         for(int i=0; i<generator->startsBox.getNumEntries(); ++i)
             if(generator->startsBox.getEntryIntData(i)==2) generator->startsBox.setSelectedItem(i);
+        if(state.requireInitialPace)
+            menuRequire(generator->getMatchRules().researchPace == state.pace,
+                        "Custom Game's generator lost the host's Research Pace");
+        requireResearchMenuBounds(*generator, generator->rulesButton);
+        generator->rulesButton.handleMouseLeft(3, 3, true);
+        generator->rulesButton.handleMouseLeft(3, 3, false);
+        auto* options = dynamic_cast<GameOptionsWindow*>(generator->pChildWindow);
+        menuRequire(options != nullptr, "Online Random Skirmish cannot open Game Rules");
+        chooseResearchMenuPace(*options, options->researchPaceDropDownBox, state.pace,
+            "online-random-research-pace-" + std::to_string(static_cast<int>(state.pace))
+            + (state.publicGame ? "-public" : "-private"));
+        options->onOK();
+        generator->processChildWindowOpenCloses();
         generator->seedBox.setText("20261101");
         generator->fixedSeedBox.setChecked(true);
         generator->nextButton.handleMouseLeft(10,10,true);
@@ -102,14 +216,421 @@ bool driveOnlineRandomSkirmishProbe(MenuBase& menu) {
         menuRequire(setup.publicGame==state.publicGame
                     && players->setupVisibility.getSelectedIndex()==(state.publicGame ? 1 : 0),
                     "Online random skirmish lost Play Online's public/private choice");
+        menuRequire(setup.rules.researchPace == state.pace, "Generated online player setup lost Research Pace");
+        requireResearchPaceStream(players->gameInitSettings, state.pace);
+        if(state.civWars) {
+            menuRequire(players->gameInitSettings.getModName() == "CivWars"
+                && players->gameInitSettings.isCivilizationWars()
+                && setup.rules.researchLab && setup.rules.sandwormsRespawn,
+                "CivWars online lost the mode/mod/rules in player setup");
+            for(int slot = 0; slot < players->numHouses; ++slot)
+                menuRequire(players->houseInfo[slot].teamDropDown.getSelectedEntryIntData()
+                    == (slot < players->numHouses / 2 ? 1 : 2),
+                    "CivWars online lost its left/right teams");
+        }
         state.playersShown = true;
-        menuCapture(*players,state.publicGame ? "online-random-public-players" : "online-random-private-players");
+        menuCapture(*players, std::string(state.civWars ? "online-civilization-wars-players"
+            : state.publicGame ? "online-random-public-players" : "online-random-private-players")
+            + "-pace-" + std::to_string(static_cast<int>(state.pace)));
         players->quit(MENU_QUIT_GAME_FINISHED);
         return true;
     }
     menuRequire(false,"Online random skirmish detoured through a map chooser or unexpected menu");
     return true;
 }
+
+void verifyResearchPaceMenus(const CustomPlaySetup& fixture) {
+    const auto previousMod = ModManager::instance().getActiveModName();
+    const auto previousOptions = effectiveGameOptions;
+    const auto previousCustomMod = settings.general.customGameMod;
+    const auto previousSkin = settings.general.duneCityCampaignSkin;
+    INIFile previousConfig(getConfigFilepath());
+    menuRequire(RandomSkirmish::activateMod("vanilla"), "Cannot activate Research Pace fixture");
+    SettingsClass::GameOptionsClass defaults;
+    menuRequire(defaults.researchPace == TechResearch::Pace::Normal, "Research Pace must default to Normal");
+    {
+        GameOptionsWindow initial(defaults);
+        menuRequire(initial.researchPaceDropDownBox.getSelectedEntryIntData() == static_cast<int>(TechResearch::Pace::Normal),
+                    "Game Rules does not initially show Normal Research Pace");
+    }
+    for(const auto pace : {TechResearch::Pace::Fast, TechResearch::Pace::Normal,
+                           TechResearch::Pace::Slow, TechResearch::Pace::VerySlow}) {
+        auto expected = defaults;
+        expected.researchPace = pace;
+        GameOptionsWindow options(defaults);
+        requireResearchMenuBounds(options, options.researchPaceLabel);
+        chooseResearchMenuPace(options, options.researchPaceDropDownBox, pace,
+                              "game-rules-research-pace-" + std::to_string(static_cast<int>(pace)));
+        options.onOK();
+        menuRequire(options.getGameOptions() == expected, "Research Pace editing changed another game rule");
+        auto chosen = options.getGameOptions();
+        GameOptionsWindow reopened(chosen);
+        menuRequire(reopened.researchPaceDropDownBox.getSelectedEntryIntData() == static_cast<int>(pace),
+                    "Game Rules lost Research Pace on reopening");
+        INIFile config(false, "Research Pace fixture");
+        for(const auto* section : {"Game Options", "Game Options dunecity", "Game Options CivWars"}) {
+            writeGameOptionsToConfig(config, section, chosen);
+            SettingsClass::GameOptionsClass loaded;
+            applyGameOptionsFromConfig(config, section, loaded);
+            menuRequire(loaded.researchPace == pace, "Research Pace preference did not round-trip through INI");
+        }
+    }
+    for(const bool online : {false, true}) {
+        auto setup = fixture;
+        setup.online = online;
+        setup.rules = defaults;
+        CustomGameMenu browser(false, false, &setup);
+        browser.onGameOptions();
+        auto* options = dynamic_cast<GameOptionsWindow*>(browser.pChildWindow);
+        menuRequire(options != nullptr, "Custom Game cannot open Research Pace rules");
+        const auto pace = online ? TechResearch::Pace::Slow : TechResearch::Pace::Fast;
+        chooseResearchMenuPace(*options, options->researchPaceDropDownBox, pace,
+                              online ? "custom-online-research-pace" : "custom-offline-research-pace");
+        options->onOK();
+        browser.processChildWindowOpenCloses();
+        browser.onNext();
+        menuRequire(browser.retVal == MENU_SETUP_PLAYERS && setup.rules.researchPace == pace,
+                    "Custom Game Next lost Research Pace");
+        GameInitSettings init(getBasename(setup.maps[setup.map], true),
+                              readCompleteFile(setup.maps[setup.map]), false, setup.rules);
+        requireResearchPaceStream(init, pace);
+    }
+    {
+        RandomSkirmishMenu menu;
+        for(size_t i = 0; i < menu.availableMods.size(); ++i)
+            if(menu.availableMods[i].name == "vanilla") menu.modBox.setSelectedItem(static_cast<int>(i));
+        menu.onModChanged();
+        menu.seedBox.setText("20261103");
+        menu.fixedSeedBox.setChecked(true);
+        menu.onGameRules();
+        auto* options = dynamic_cast<GameOptionsWindow*>(menu.pChildWindow);
+        menuRequire(options != nullptr, "Random Skirmish cannot open Research Pace rules");
+        chooseResearchMenuPace(*options, options->researchPaceDropDownBox, TechResearch::Pace::VerySlow,
+                              "random-skirmish-research-pace");
+        options->onOK();
+        menu.processChildWindowOpenCloses();
+        GameInitSettings init;
+        menuRequire(menu.prepareStart(init), "Random Skirmish could not prepare its Research Pace match");
+        requireResearchPaceStream(init, TechResearch::Pace::VerySlow);
+    }
+    {
+        CivWarsMenu menu(false, &defaults);
+        menuRequire(menu.researchPaceBox.getSelectedEntryIntData() == static_cast<int>(TechResearch::Pace::Normal),
+                    "Civilization Wars does not initially show Normal Research Pace");
+        chooseResearchMenuPace(menu, menu.researchPaceBox, TechResearch::Pace::Slow,
+                              "civilization-wars-research-pace");
+        menu.onGameRules();
+        auto* options = dynamic_cast<GameOptionsWindow*>(menu.pChildWindow);
+        menuRequire(options && options->researchPaceDropDownBox.getSelectedEntryIntData() == static_cast<int>(TechResearch::Pace::Slow),
+                    "Civilization Wars direct pace and Game Rules disagree");
+        chooseResearchMenuPace(*options, options->researchPaceDropDownBox, TechResearch::Pace::VerySlow,
+                              "civilization-wars-rules-research-pace");
+        options->onOK();
+        menu.processChildWindowOpenCloses();
+        menuRequire(menu.researchPaceBox.getSelectedEntryIntData() == static_cast<int>(TechResearch::Pace::VerySlow),
+                    "Civilization Wars Game Rules did not update its direct pace");
+        menu.seedBox.setText("20261104");
+        menu.fixedSeedBox.setChecked(true);
+        GameInitSettings init;
+        menuRequire(menu.prepareStart(init), "Civilization Wars could not prepare its Research Pace match");
+        requireResearchPaceStream(init, TechResearch::Pace::VerySlow);
+        OnlineRandomProbeState state;
+        state.civWars = true;
+        state.pace = TechResearch::Pace::VerySlow;
+        state.requireInitialPace = true;
+        onlineRandomProbe = &state;
+        menu.onHost();
+        onlineRandomProbe = nullptr;
+        menuRequire(state.generated && state.playersShown && !pNetworkManager,
+                    "Civilization Wars Host Online did not retain pace through player setup");
+        std::filesystem::remove(state.path);
+    }
+    for(const bool civWars : {false, true}) {
+        const std::string mod = civWars ? "CivWars" : "vanilla";
+        menuRequire(RandomSkirmish::activateMod(mod), "Cannot activate generated-map Research Pace fixture");
+        auto setup = fixture;
+        setup.online = true;
+        setup.rules = effectiveGameOptions;
+        setup.rules.researchPace = TechResearch::Pace::Fast;
+        for(size_t i = 0; i < setup.mods.size(); ++i)
+            if(setup.mods[i].name == mod) setup.mod = static_cast<int>(i);
+        CustomGameMenu browser(false, false, &setup);
+        OnlineRandomProbeState state;
+        state.civWars = civWars;
+        state.pace = TechResearch::Pace::Fast;
+        state.requireInitialPace = true;
+        onlineRandomProbe = &state;
+        browser.onRandomMap();
+        onlineRandomProbe = nullptr;
+        menuRequire(state.generated && browser.retVal == MENU_SETUP_PLAYERS
+                    && setup.rules.researchPace == state.pace && browser.currentGameOptions.researchPace == state.pace,
+                    "Custom Game's generated-map handoff lost Research Pace");
+        GameInitSettings init(getBasename(state.path, true), readCompleteFile(state.path), false, setup.rules);
+        requireResearchPaceStream(init, state.pace);
+        std::filesystem::remove(state.path);
+    }
+    {
+        // Every Tornie-family edition uses the same taller Game Rules layout.
+        menuRequire(RandomSkirmish::activateMod("Tornie"), "Cannot activate family Research Pace geometry fixture");
+        GameOptionsWindow options(defaults);
+        menuRequire(options.vbox.getMinimumSize().x <= options.getSize().x
+                    && options.vbox.getMinimumSize().y <= options.getSize().y
+                    && options.getSize().x <= getRendererWidth() && options.getSize().y <= getRendererHeight(),
+                    "Family Game Rules no longer fit the viewport");
+        requireResearchMenuBounds(options, options.damageLowersLandValueCheckbox);
+        requireResearchMenuBounds(options, options.mountainSceneryCheckbox);
+        requireResearchMenuBounds(options, options.unpoweredZonesVacateCheckbox);
+        chooseResearchMenuPace(options, options.researchPaceDropDownBox, TechResearch::Pace::Normal,
+                              "family-research-pace-Tornie");
+    }
+    menuRequire(previousConfig.saveChangesTo(getConfigFilepath()), "Cannot restore the Research Pace fixture profile");
+    settings.general.customGameMod = previousCustomMod;
+    settings.general.duneCityCampaignSkin = previousSkin;
+    menuRequire(RandomSkirmish::activateMod(previousMod), "Cannot restore the Research Pace fixture mod");
+    effectiveGameOptions = previousOptions;
+    SDL_Log("RESEARCH_PACE_MENUS: all four choices, single/custom/generated-online propagation, streams and crest-safe geometry");
+}
+
+namespace TerrainMixMenuProbe {
+
+void requireButtonFit(const TextButton& button, const SDL_Rect& bounds) {
+    auto text = button.getText();
+    if(MenuTheme::isDesertUISkin())
+        for(char& c : text) if(c >= 'a' && c <= 'z') c -= 'a' - 'A';
+    const bool retro = MenuTheme::isClassicDesert();
+    const bool display = MenuTheme::isLapisEnamel() && bounds.h >= 28;
+    auto& style = GUIStyle::getInstance();
+    const auto width = [&](int size) {
+        return retro ? pFontManager->getRetroTextWidth(text, size)
+            : display ? pFontManager->getDisplayTextWidth(text, size)
+            : static_cast<int>(style.getTextWidth(text, size));
+    };
+    const auto height = [&](int size) {
+        return retro ? pFontManager->getRetroTextHeight(text, size)
+            : display ? pFontManager->getDisplayTextHeight(text, size)
+            : static_cast<int>(style.getTextHeight(size));
+    };
+    int size = bounds.h >= 48 ? 22 : bounds.h >= 38 ? 20 : bounds.h >= 30 ? 18 : bounds.h >= 24 ? 16 : 14;
+    if(display) size += 4;
+    while(size > 8 && (width(size) + 12 > bounds.w || height(size) + 4 > bounds.h)) --size;
+    menuRequire(size >= 10 && width(size) + 12 <= bounds.w && height(size) + 4 <= bounds.h,
+                "Random Skirmish button caption does not fit");
+}
+
+void requireGeometry(RandomSkirmishMenu& menu) {
+    menuRequire(menu.getSize() == Point(640, 480) && menu.rowHeight >= 18 && menu.rowHeight <= menu.rowPitch,
+                "Terrain controls do not use the compact 640x480 layout");
+    if(!menu.multiplayer) menuRequire(menu.rowPitch == 18, "Random Skirmish no longer fits twenty compact rows");
+    const auto mapHeader = researchMenuBounds(menu, menu.captions[0]);
+    const auto keepSeed = researchMenuBounds(menu, menu.fixedSeedBox);
+    menuRequire(keepSeed.y == mapHeader.y && keepSeed.x >= mapHeader.x + mapHeader.w,
+                "Keep this seed does not share the Map header's control slot");
+    std::vector<SDL_Rect> leaves;
+    leaves.reserve(menu.windowWidget.containedWidgets.size() + 8);
+    auto& style = GUIStyle::getInstance();
+    const auto collect = [&](auto&& self, Widget* widget) -> void {
+        if(!widget->isVisible()) return;
+        if(auto* row = dynamic_cast<HBox*>(widget)) {
+            for(const auto& data : row->containedWidgets) self(self, data.pWidget);
+            return;
+        }
+        const auto bounds = researchMenuBounds(menu, *widget);
+        menuRequire(bounds.w > 0 && bounds.h > 0 && bounds.x >= 0 && bounds.y >= 0
+                    && bounds.x + bounds.w <= 640 && bounds.y + bounds.h <= 480,
+                    "Random Skirmish control or caption is clipped outside 640x480");
+        SDL_Rect ink = bounds;
+        if(auto* label = dynamic_cast<Label*>(widget)) {
+            if(label->getText().empty()) ink.w = ink.h = 0;
+            else {
+                const int font = label->getTextFontSize();
+                const auto lines = greedyWordWrap(label->getText(), bounds.w, [&](const std::string& text) {
+                    return style.getMinimumLabelSize(text, font).x - 4;
+                });
+                int width = 0;
+                for(const auto& line : lines) width = std::max(width, static_cast<int>(style.getTextWidth(line, font)));
+                const int height = static_cast<int>(style.getTextHeight(font)) * static_cast<int>(lines.size())
+                    + 2 * (static_cast<int>(lines.size()) - 1);
+                // As in the existing UI gallery: font metrics include up to three empty descent pixels.
+                menuRequire(width + 3 <= bounds.w + 1 && height <= bounds.h + 3,
+                            "Random Skirmish caption wraps or clips within its row");
+                ink.w = std::min(bounds.w, width + 6);
+                ink.h = std::min(bounds.h, height + 4);
+                const int alignment = label->getAlignment();
+                if(alignment & Alignment_Right) ink.x += bounds.w - ink.w;
+                else if(!(alignment & Alignment_Left)) ink.x += (bounds.w - ink.w) / 2;
+                if(alignment & Alignment_Bottom) ink.y += bounds.h - ink.h;
+                else if(!(alignment & Alignment_Top)) ink.y += (bounds.h - ink.h) / 2;
+            }
+        } else if(auto* checkbox = dynamic_cast<Checkbox*>(widget)) {
+            menuRequire(style.getMinimumCheckboxSize(checkbox->getText()).x <= bounds.w
+                        && static_cast<int>(style.getTextHeight(14)) <= bounds.h + 3,
+                        "Random Skirmish checkbox caption does not fit");
+        } else if(auto* dropdown = dynamic_cast<DropDownBox*>(widget)) {
+            menuRequire(static_cast<int>(style.getTextWidth(dropdown->getSelectedEntry(), 14)) + 20 <= bounds.w
+                        && static_cast<int>(style.getTextHeight(14)) <= bounds.h + 3,
+                        "Random Skirmish AI or choice caption does not fit");
+        } else if(auto* slider = dynamic_cast<Slider*>(widget)) {
+            for(const auto& entry : slider->entries)
+                menuRequire(static_cast<int>(style.getTextWidth(entry.first, 12)) + 3 <= slider->textWidth(),
+                            "Random Skirmish slider cannot show one of its values");
+            menuRequire(static_cast<int>(style.getTextHeight(12)) <= bounds.h + 3,
+                        "Random Skirmish slider value is too tall");
+        } else if(auto* text = dynamic_cast<TextBox*>(widget)) {
+            menuRequire(static_cast<int>(style.getTextWidth(text->getText(), text->fontSize)) + 6 <= bounds.w
+                        && static_cast<int>(style.getTextHeight(text->fontSize)) <= bounds.h + 3,
+                        "Random Skirmish seed does not fit");
+        } else if(auto* button = dynamic_cast<TextButton*>(widget)) {
+            requireButtonFit(*button, bounds);
+        }
+        leaves.push_back(ink);
+    };
+    for(const auto& data : menu.windowWidget.containedWidgets) collect(collect, data.pWidget);
+    const SDL_Rect crests[] = {{11, 11, 53, 54}, {640 - 11 - 53, 11, 53, 54},
+        {11, 480 - 11 - 54, 53, 54}};
+    for(size_t i = 0; i < leaves.size(); ++i) {
+        if(MenuTheme::isDesertUISkin())
+            for(const auto& crest : crests)
+                menuRequire(!SDL_HasIntersection(&leaves[i], &crest),
+                            "Random Skirmish control or caption covers an original 53x54 corner crest");
+        for(size_t j = i + 1; j < leaves.size(); ++j)
+            menuRequire(!SDL_HasIntersection(&leaves[i], &leaves[j]),
+                        "Random Skirmish controls or captions overlap");
+    }
+    SDL_Log("TERRAIN_MIX_GEOMETRY: mod=%s multiplayer=%d visible=%zu rowPitch=%d rowHeight=%d crests=53x54 inset=11",
+            menu.selectedMod().c_str(), menu.multiplayer, leaves.size(), menu.rowPitch, menu.rowHeight);
+}
+
+using Shares = std::array<int, 3>;
+
+void requireShares(RandomSkirmishMenu& menu, const Shares& expected) {
+    const Shares actual{menu.sandBox.getSelectedEntryIntData(), menu.rockBox.getSelectedEntryIntData(),
+                        menu.mountainBox.getSelectedEntryIntData()};
+    for(int share : actual)
+        menuRequire(share >= 0 && share <= 100 && share % 5 == 0, "Terrain slider left the 0..100 step-five range");
+    menuRequire(actual[0] + actual[1] + actual[2] == 100 && actual == expected,
+                "Terrain slider rebalance is not deterministic or does not total 100");
+    const auto params = menu.readParams();
+    menuRequire(params.sandPercent == actual[0] && params.rockPercent == actual[1] && params.mountainPercent == actual[2],
+                "Terrain controls do not reach the generated-map parameters");
+}
+
+void click(RandomSkirmishMenu& menu, Widget& widget, int localX = -1) {
+    const auto bounds = researchMenuBounds(menu, widget);
+    const int x = bounds.x + (localX >= 0 ? localX : bounds.w / 2), y = bounds.y + bounds.h / 2;
+    menuRequire(menu.handleMouseLeft(x, y, true), "Terrain fixture click did not reach a real menu control");
+    menu.handleMouseLeft(x, y, false);
+}
+
+void verify() {
+    menuRequire(getRendererWidth() == 640 && getRendererHeight() == 480 && MenuTheme::isDesertUISkin(),
+                "Terrain fixture requires the real 640x480 desert UI and its original crests");
+    for(const std::string mod : {"vanilla", "dunecity"}) {
+        menuRequire(RandomSkirmish::activateMod(mod), "Cannot activate the terrain menu fixture mod");
+        SkirmishGenerator::Params params;
+        params.mod = mod;
+        params.mode = RandomSkirmish::modeForMod(mod);
+        params.seed = 20261103;
+        params.fixedSeed = true;
+        params.techLevel = 8;
+        params.researchLab = true;
+        params.allies = 1;
+        params.enemies = 2;
+        params.spectate = true;
+        params.playerSide.playerClass = "qBotMedium";
+        params.playerSide.city = params.allySide.city = params.enemySide.city = params.startSide.city = 3;
+        INIFile config(getConfigFilepath());
+        params.save(config);
+        menuRequire(config.saveChangesTo(getConfigFilepath()), "Cannot write isolated last-used terrain choices");
+        const std::string name = mod == "vanilla" ? "desert" : "city";
+        Shares expected{75, 20, 5};
+        {
+            RandomSkirmishMenu menu;
+            Slider* sliders[] = {&menu.sandBox, &menu.rockBox, &menu.mountainBox};
+            for(Slider* slider : sliders) {
+                menuRequire(slider->getNumEntries() == 21 && !slider->getTooltipText().empty(),
+                            "A terrain percentage slider or its explanation is missing");
+                for(int i = 0; i < 21; ++i)
+                    menuRequire(slider->getEntryIntData(i) == i * 5, "Terrain percentages do not advance by five");
+            }
+            requireShares(menu, expected);
+            requireGeometry(menu);
+            menuCapture(menu, "terrain-mix-" + name);
+            const auto show = [&](const Shares& shares) {
+                params.sandPercent = shares[0];
+                params.rockPercent = shares[1];
+                params.mountainPercent = shares[2];
+                menu.showParams(params);
+                expected = shares;
+                requireShares(menu, expected);
+            };
+            // A full programmatic triplet must not be rebalanced while its widgets are selected.
+            show({60, 25, 15});
+            show({75, 20, 5});
+            const int partners[3][2] = {{1, 2}, {0, 2}, {1, 0}};
+            const auto expectMove = [&](int moved, int target) {
+                int delta = target - expected[moved];
+                expected[moved] = target;
+                for(int other : partners[moved]) {
+                    const int next = std::clamp(expected[other] - delta, 0, 100);
+                    delta -= expected[other] - next;
+                    expected[other] = next;
+                }
+                menuRequire(delta == 0, "Terrain fixture could not balance a legal percentage");
+            };
+            // Visit every step in a fixed, non-monotonic order, through the menu's real click
+            // routing and wheel routing. This crosses both 0/100 boundaries for every share.
+            for(int moved = 0; moved < 3; ++moved) {
+                auto& slider = *sliders[moved];
+                for(int step = 0; step < 21; ++step) {
+                    const int target = (step * 8 % 21) * 5;
+                    expectMove(moved, target);
+                    click(menu, slider, slider.stepPosition(target / 5));
+                    requireShares(menu, expected);
+                    const auto bounds = researchMenuBounds(menu, slider);
+                    for(bool up : {true, false}) {
+                        expectMove(moved, std::clamp(expected[moved] + (up ? 5 : -5), 0, 100));
+                        menuRequire(menu.handleMouseWheel(bounds.x + slider.trackStart(), bounds.y + bounds.h / 2, up),
+                                    "Terrain fixture wheel did not reach the real percentage slider");
+                        requireShares(menu, expected);
+                    }
+                }
+            }
+            show({65, 20, 15});
+            click(menu, menu.fixedSeedBox);
+            menuRequire(!menu.fixedSeedBox.isChecked(), "Keep this seed cannot be clicked in the Map header");
+            click(menu, menu.fixedSeedBox);
+            menuRequire(menu.fixedSeedBox.isChecked(), "Keep this seed did not toggle back on");
+            click(menu, menu.backButton);
+            menuRequire(menu.isQuiting(), "Terrain fixture Back did not remember the real menu choices");
+        }
+        INIFile saved(getConfigFilepath());
+        menuRequire(saved.getIntValue("Random Skirmish", "Sand Percent", -1) == expected[0]
+                    && saved.getIntValue("Random Skirmish", "Rock Percent", -1) == expected[1]
+                    && saved.getIntValue("Random Skirmish", "Mountain Percent", -1) == expected[2]
+                    && !saved.hasKey("Random Skirmish", "Rock"),
+                    "Last-used terrain percentages were not saved under the explicit keys");
+        {
+            RandomSkirmishMenu reopened;
+            requireShares(reopened, expected);
+            menuRequire(reopened.fixedSeedBox.isChecked() && reopened.seedBox.getText() == "20261103",
+                        "Reopening last-used terrain lost the fixed seed");
+            requireGeometry(reopened);
+            menuCapture(reopened, "terrain-mix-" + name + "-reopened");
+        }
+        {
+            RandomSkirmishMenu multiplayer(mod);
+            requireShares(multiplayer, expected);
+            requireGeometry(multiplayer);
+            menuRequire(multiplayer.rulesButton.isVisible() && multiplayer.rulesButton.getParent() == &multiplayer.windowWidget,
+                        "Terrain controls displaced multiplayer Game Rules");
+            menuCapture(multiplayer, "terrain-mix-" + name + "-multiplayer");
+        }
+    }
+}
+
+}
+
+#include "save-as-map-probe.inc"
 
 // Captured MBA metrics, substituted only in the diagnostic OptionsMenu object.
 extern "C" int SDLCALL retinaProbeDisplayBounds(int, SDL_Rect* bounds) {
@@ -183,13 +704,26 @@ int runRetinaResolutionProbe() {
             " window preserves aspect and mouse mapping, and fullscreen returns without losing HD");
     return MENU_QUIT_DEFAULT;
 }
+#ifdef DUNECITY_NATIVE_POINTER_PROBE
+#include "pointer-mapping-probe.inc"
+#endif
+
 
 int runMenuProbe() {
+#ifdef DUNECITY_NATIVE_POINTER_PROBE
+    if(std::getenv("MENU_POINTER_MAPPING"))return runPointerMappingProbe();
+#endif
     if(std::getenv("MENU_RETINA_RESOLUTION"))return runRetinaResolutionProbe();
     menuRequire(getRendererWidth()==std::atoi(std::getenv("MENU_PROBE_WIDTH"))
                 && getRendererHeight()==std::atoi(std::getenv("MENU_PROBE_HEIGHT")),
                 "Probe did not render at the requested dimensions");
     settings.general.playerName = "Menu tester";
+    if(std::getenv("MENU_TERRAIN_MIX")) {
+        TerrainMixMenuProbe::verify();
+        SDL_Log("MENU_PROBE_PASS: 640x480 Sand/Rock/Mountain real clicks and wheels, deterministic totals,"
+                " last-used reopening, desert/city screenshots and non-overlapping crest-safe controls");
+        return MENU_QUIT_DEFAULT;
+    }
     if(std::getenv("MENU_TORNIE_FAMILY")) {
         settings.network.directDevelopmentEndpoint = "";
         verifyTornieFamilyMenus();
@@ -197,6 +731,8 @@ int runMenuProbe() {
         return MENU_QUIT_DEFAULT;
     }
     verifySavedUserMapLists();
+    verifyCampaignMapLibrary();
+    verifySaveAsMap();
     settings.network.relayUseDevelopmentEndpoint = true;
     // Disable online discovery in this fixture; admission and transport have separate tests.
     settings.network.directDevelopmentEndpoint = "";
@@ -223,8 +759,22 @@ int runMenuProbe() {
         for(const auto& name : OnlineModPolicy::approvedMods()) {
             menuRequire(mods.setActiveMod(name), "Approved mod is not installed");
             const bool family = mods.isTornieFamilyContentActive();
-            menuRequire(family == (name != "vanilla" && name != "dunecity" && name != "Dune2R"),
+            menuRequire(family == (name != "vanilla" && name != "dunecity" && name != "Dune2R" && name != "CivWars"),
                         "Family capability leaked across mod activation");
+            if(name == "CivWars") {
+                const auto choices = mods.listModChoices();
+                menuRequire(std::any_of(choices.begin(), choices.end(), [](const auto& choice) {
+                    return choice.name == "CivWars" && choice.displayName == "Civilization Wars";
+                }), "Civilization Wars is missing from the mod selector");
+                const auto options = mods.loadEffectiveGameOptions(settings.gameOptions);
+                menuRequire(mods.getContentBase(name) == "dunecity" && mods.isCityModeActive()
+                    && mods.isDuneCityContentActive() && options.cityEffects
+                    && options.researchLab && options.trooperAntiAir && options.sandwormsRespawn,
+                    "CivWars did not inherit the DuneCity economy and required rules");
+                GameInitSettings own("Own scenario", "[BASIC]\nTechLevel=5\n[Atreides]\nCredits=123\n", false, options);
+                menuRequire(!own.isCivilizationWars() && own.getFiledata().find("TechLevel=5") != std::string::npos,
+                    "Rules-only CivWars changed an authored scenario or enabled generated lane respawns");
+            }
             if(family) {
                 const bool lite = name.size() >= 4 && name.compare(name.size() - 4, 4, "Lite") == 0;
                 const auto& roster = mods.getPlayableHouses();
@@ -252,7 +802,7 @@ int runMenuProbe() {
                                 "Edition metadata changed canonical DuneCity faction identities");
                 }
             }
-            if(name == "vanilla" || name == "dunecity" || name == "Dune2R") {
+            if(name == "vanilla" || name == "dunecity" || name == "Dune2R" || name == "CivWars") {
                 // Exercise the installed mod path and real fixed-point loader:
                 // Dune2R inherits Vanilla, while Dune City has a seeded copy.
                 ObjectData units;
@@ -591,8 +1141,14 @@ int runMenuProbe() {
     }
     {
         MainMenu menu;
+        menuRequire(menu.modVersionLabel.getText() == std::string("App v") + DUNECITY_DISPLAY_VERSION,
+                    "Home does not display the configured release/development version");
+        SDL_Log("MENU_VERSION_PASS: %s", menu.modVersionLabel.getText().c_str());
         menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.randomSkirmishButton.isVisible()
-            && menu.onlineButton.isVisible(), "Home play actions missing");
+            && menu.civWarsButton.isVisible() && menu.onlineButton.isVisible(), "Home play actions missing");
+        menuRequire(menu.windowWidget.getWidgetPosition(&menu.civWarsButton).y
+            > menu.windowWidget.getWidgetPosition(&menu.randomSkirmishButton).y,
+            "Civilization Wars is not below Random Skirmish");
         menuRequire(!menu.displayButton.isVisible(),"Duplicate Display entry remains");
         menuRequire(menu.editorsButton.isVisible() && menu.editorsButton.getText()=="Editors"
             && menu.modesButton.getText()=="Extras", "Workshop and Extras destinations are not distinct");
@@ -602,7 +1158,7 @@ int runMenuProbe() {
         menuCapture(menu,"home-continue");
         menu.canContinue=false; menu.refreshContextButtons();
         SDL_Event tab{}; tab.type=SDL_KEYDOWN; tab.key.keysym.sym=SDLK_TAB;
-        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
+        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.civWarsButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
 #if defined(DUNECITY_DESKTOP_UPDATER)
         tabOrder.push_back(&menu.updateButton);
 #endif
@@ -1565,6 +2121,21 @@ int runMenuProbe() {
                         "Online random skirmish cancel/setup opened a connection or left Play Online");
             if(!state.path.empty()) std::filesystem::remove(state.path);
         }
+        {
+            OnlineRandomProbeState state;
+            state.civWars = true;
+            state.publicGame = false;
+            onlineRandomProbe = &state;
+            menuRequire(RandomSkirmish::activateMod("CivWars"), "Cannot activate CivWars for online hosting");
+            menu.visibilityChoice.setSelectedItem(0);
+            menu.hostRandomSkirmishButton.handleMouseLeft(10,10,true);
+            menu.hostRandomSkirmishButton.handleMouseLeft(10,10,false);
+            onlineRandomProbe = nullptr;
+            menuRequire(state.generated && state.playersShown && !pNetworkManager,
+                        "CivWars online flow did not reach preconnection player setup");
+            std::filesystem::remove(state.path);
+            RandomSkirmish::activateMod("vanilla");
+        }
         settings.general.customGameMod = preferredMod;
         menu.stage = CrossplayMenu::Stage::Requesting; menu.refreshControls();
         menuRequire(!menu.hostRandomSkirmishButton.isEnabled(),"Random hosting stays enabled while joining");
@@ -1641,12 +2212,16 @@ int runMenuProbe() {
             "Public join accepted an obsolete partial-content fingerprint");
         menu.publicGames[1].contentHash=OnlineModPolicy::fingerprint();
         settings.network.directDevelopmentEndpoint="http://127.0.0.1:1";
+        menu.directoryPending=true;
+        menu.refreshControls();
+        menuRequire(menu.joinPublicButton.isEnabled(),"A background refresh disables cached public joining");
         menu.joinPublicGame();
         menu.processChildWindowOpenCloses();
         menuRequire(menu.pChildWindow==nullptr && menu.stage==CrossplayMenu::Stage::Requesting,
             "Running join should request admission without a mode prompt");
         menuRequire(menu.joiningRunning && menu.joiningAsSpectator,
             "Running join must enter as a passive spectator");
+        menuRequire(!menu.directoryPending,"Public admission did not cancel the background directory refresh");
         menu.admission.cancel();
         menu.stage=CrossplayMenu::Stage::Choosing;
         settings.network.directDevelopmentEndpoint="";
@@ -2408,6 +2983,20 @@ int runMenuProbe() {
                 if(item.id == revision.id) fs::remove_all(Workshop::store().root() / "revisions" / item.hash);
         }};
         menuRequire(Workshop::activateModRevision(revision.hash), "Cannot activate LAN source snapshot");
+        const auto* activeSurface = pGFXManager->objPic[ObjPic_Tank_Base][HOUSE_HARKONNEN][0].get();
+        menuRequire(activeSurface != nullptr, "Immutable activation fixture has no resident tank surface");
+        menuRequire(Workshop::activateModRevision(revision.hash)
+                    && pGFXManager->objPic[ObjPic_Tank_Base][HOUSE_HARKONNEN][0].get() == activeSurface,
+                    "Reactivating the same verified immutable revision rebuilt its object graphics");
+        { std::ofstream file(installed / assetPath, std::ios::binary); file << "altered installed asset"; }
+        const bool rejectedActiveTamper = !Workshop::activateModRevision(revision.hash);
+        { std::ofstream file(installed / assetPath, std::ios::binary); file << assetBytes; }
+        menuRequire(rejectedActiveTamper && manager.getActiveModName() == alias,
+                    "An already-active immutable revision bypassed installed-byte verification");
+        menuRequire(Workshop::activateModRevision(revision.hash)
+                    && pGFXManager->objPic[ObjPic_Tank_Base][HOUSE_HARKONNEN][0].get() == activeSurface,
+                    "Verified reactivation after tamper restoration rebuilt object graphics");
+        SDL_Log("MENU_PROBE_IMMUTABLE_REACTIVATION_PASS: resident graphics retained and active tampering rejected");
         const auto legacyChecksum = manager.getEffectiveChecksums().combined;
         INIFile pointer((installed / "workshop-revision.ini").string());
         menuRequire(Workshop::unhex(pointer.getStringValue("Workshop", "Manifest", "")) == revision.manifest,
@@ -2623,6 +3212,9 @@ int runMenuProbe() {
         auto rules=settings.gameOptions;
         GameOptionsWindow menu(rules);
         menuRequire(!menu.originalUnitDamageCheckbox.isChecked(), "Original damage must default off");
+        menuRequire(!menu.damageLowersLandValueCheckbox.isChecked(), "Damage Lowers Land Value must default off");
+        menuRequire(menu.mountainSceneryCheckbox.isChecked(), "Mountain Scenery must default on");
+        menuRequire(menu.unpoweredZonesVacateCheckbox.isChecked(), "Unpowered Zones Vacate must default on");
         menuRequire(menu.planBuildingSitesCheckbox.isChecked(), "Plan building sites must default on");
         menuRequire(menu.vbox.getMinimumSize().x <= menu.getSize().x && menu.vbox.getMinimumSize().y <= menu.getSize().y
                     && menu.getSize().x <= getRendererWidth() && menu.getSize().y <= getRendererHeight(),
@@ -2633,6 +3225,9 @@ int runMenuProbe() {
         menu.maxConstructionYardsOverrideTextBox.setValue(2);
         menuCapture(menu,"game-rules");
         menu.originalUnitDamageCheckbox.setChecked(true);
+        menu.damageLowersLandValueCheckbox.setChecked(true);
+        menu.mountainSceneryCheckbox.setChecked(false);
+        menu.unpoweredZonesVacateCheckbox.setChecked(false);
         menu.planBuildingSitesCheckbox.setChecked(false);
         menu.originalUnitDamageCheckbox.bHover = true;
         menu.originalUnitDamageCheckbox.tooltipLastMouseMotion = SDL_GetTicks() - 1000;
@@ -2647,10 +3242,16 @@ int runMenuProbe() {
                     "Damage explanation overlay extends outside the viewport");
         menu.onOK();
         menuRequire(menu.getGameOptions().originalUnitDamage, "Original damage checkbox did not save selection");
+        menuRequire(menu.getGameOptions().damageLowersLandValue, "Damage Lowers Land Value checkbox did not save selection");
+        menuRequire(!menu.getGameOptions().mountainScenery, "Mountain Scenery checkbox did not save selection");
+        menuRequire(!menu.getGameOptions().unpoweredZonesVacate, "Unpowered Zones Vacate checkbox did not save selection");
         menuRequire(!menu.getGameOptions().planBuildingSites, "Plan building sites checkbox did not save selection");
         auto savedRules = menu.getGameOptions();
         GameOptionsWindow reopened(savedRules);
         menuRequire(reopened.originalUnitDamageCheckbox.isChecked(), "Original damage selection lost on reopening");
+        menuRequire(reopened.damageLowersLandValueCheckbox.isChecked(), "Damage Lowers Land Value selection lost on reopening");
+        menuRequire(!reopened.mountainSceneryCheckbox.isChecked(), "Mountain Scenery selection lost on reopening");
+        menuRequire(!reopened.unpoweredZonesVacateCheckbox.isChecked(), "Unpowered Zones Vacate selection lost on reopening");
         menuRequire(!reopened.planBuildingSitesCheckbox.isChecked(), "Plan building sites selection lost on reopening");
         INIFile config(false, "Damage rule fixture");
         for(const auto* section : {"Game Options", "Game Options dunecity", "Game Options dune2r"}) {
@@ -2658,19 +3259,32 @@ int runMenuProbe() {
             SettingsClass::GameOptionsClass loaded;
             applyGameOptionsFromConfig(config, section, loaded);
             menuRequire(loaded.originalUnitDamage, "Original damage preference did not round-trip through INI");
+            menuRequire(loaded.damageLowersLandValue, "Damage Lowers Land Value preference did not round-trip through INI");
+            menuRequire(!loaded.mountainScenery, "Mountain Scenery preference did not round-trip through INI");
+            menuRequire(!loaded.unpoweredZonesVacate, "Vacancy preference did not round-trip through INI");
             menuRequire(!loaded.planBuildingSites, "Plan building sites preference did not round-trip through INI");
             loaded.originalUnitDamage = false;
+            loaded.damageLowersLandValue = false;
+            loaded.mountainScenery = true;
+            loaded.unpoweredZonesVacate = true;
             loaded.planBuildingSites = true;
             writeGameOptionsToConfig(config, section, loaded);
             applyGameOptionsFromConfig(config, section, savedRules);
             menuRequire(!savedRules.originalUnitDamage, "Original damage preference could not be cleared");
+            menuRequire(!savedRules.damageLowersLandValue, "Damage Lowers Land Value preference could not be cleared");
+            menuRequire(savedRules.mountainScenery, "Mountain Scenery preference could not be restored");
+            menuRequire(savedRules.unpoweredZonesVacate, "Vacancy preference could not be restored");
             menuRequire(savedRules.planBuildingSites, "Plan building sites preference could not be restored");
             savedRules.originalUnitDamage = true;
+            savedRules.damageLowersLandValue = true;
+            savedRules.mountainScenery = false;
+            savedRules.unpoweredZonesVacate = false;
             savedRules.planBuildingSites = false;
         }
         menuRequire(!menu.getGameOptions().concreteRequired,"Concrete checkbox did not disable requirements");
         menuRequire(menu.getGameOptions().maximumNumberOfConstructionYardsOverride == 2, "Yard limit UI did not save selection");
     }
+    verifyResearchPaceMenus(setup);
     {
         auto& mods = ModManager::instance();
         const auto previousActive = mods.getActiveModName();

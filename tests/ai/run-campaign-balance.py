@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real campaign AI with a fixed seed, isolated profile and no human commands.
+"""Run real campaign AI with a fixed seed, isolated profile and no human commands by default.
 
 Uses the existing Ninja build (macOS: clang; Windows: MSVC objects, with the probe's
 main compiled by clang-cl). Access-control relaxation is restricted to
@@ -10,6 +10,15 @@ and structured AI decision logs remain in --output-dir; when the run ends
 (passed or failed) the profile's regenerated bulk (bundled mods, captured
 workshop revisions) is deleted unless --keep-profile-assets. This is a simulation
 comparison, not a substitute for the browser playtest or human playtesting.
+
+--civ-wars uses the real Civilization Wars generator and spectator initialization;
+--partner-difficulty/--enemy-difficulty select its left/right QuantBots. Its strategy
+defaults off; explicit --civ-strategy off/on also supplies ordinary-game digest controls.
+
+--civ-air-probe lab/yard injects one real early enemy aircraft into a canonical start,
+bounded by two covering starter rocket turrets. A registered enemy HumanPlayer
+issues its attack via normal shared-house authority; the defended bot is unmodified.
+tests/ai/civ-wars-gates.py schedules repeat/off-on air and ordinary digest controls.
 """
 import argparse
 import atexit
@@ -27,12 +36,161 @@ import subprocess
 import sys
 import tempfile
 WINDOWS = sys.platform == 'win32'
+MACOS = sys.platform == 'darwin'
 if not WINDOWS:
     import fcntl
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import copy_revisions, discard_profile_assets, prune_runs  # noqa: E402
+from probe_profile import copy_revisions, discard_profile_assets, prune_runs, remove_tree, shared_headless_mods  # noqa: E402
+
+
+def run_strategy_processes(command, runs, workers, timeout):
+    """Independent native processes; every run owns its profile, cwd and log.
+
+    The canonical CTest reserves three scheduler slots. Failed or timed-out
+    children stop and reap their siblings before the exception reaches CTest.
+    """
+    import concurrent.futures
+    import threading
+    lock = threading.Lock()
+    active = set()
+    stopping = False
+
+    def run(case):
+        case['cwd'].mkdir(parents=True, exist_ok=True)
+        with case['log'].open('w') as log:
+            with lock:
+                if stopping:
+                    raise RuntimeError('Strategy batch cancelled after another seed failed')
+                process = subprocess.Popen(command, cwd=case['cwd'], env=case['env'],
+                                           stdout=log, stderr=subprocess.STDOUT)
+                active.add(process)
+            try:
+                try:
+                    code = process.wait(timeout=timeout)
+                except BaseException:
+                    process.kill()
+                    process.wait()
+                    raise
+                if code:
+                    raise subprocess.CalledProcessError(code, command)
+            finally:
+                with lock:
+                    active.discard(process)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = []
+        try:
+            for case in runs:
+                futures.append(pool.submit(run, case))
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+        except BaseException:
+            with lock:
+                stopping = True
+                siblings = list(active)
+            for process in siblings:
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
+            for process in siblings:
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            for future in futures:
+                future.cancel()
+            raise
+
+
+def run_controls_process(command, cwd, env, log_path, timeout):
+    """Bound the native input fixture well inside CTest's 600-second deadline.
+
+    A timed-out child is sampled before killing only its private process group.
+    Keep the original nonzero exit/TimeoutExpired and all logs; never retry.
+    """
+    from collections import deque
+    import signal
+
+    timeout = min(timeout, 120)
+    diagnostic_path = log_path.with_name(log_path.stem + '-timeout.log')
+    sample_path = log_path.with_name(log_path.stem + '-sample.txt')
+
+    def report(message):
+        print(f'mouse_controls_probe: {message}; log retained at {log_path}', file=sys.stderr)
+        try:
+            with log_path.open(errors='replace') as saved:
+                print('Last probe log lines:\n' + ''.join(deque(saved, maxlen=40)), file=sys.stderr)
+        except OSError as error:
+            print(f'Unable to read probe log: {error}', file=sys.stderr)
+
+    with log_path.open('w') as log:
+        options = (dict(creationflags=subprocess.CREATE_NEW_PROCESS_GROUP) if WINDOWS
+                   else dict(start_new_session=True))
+        process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                                   stdout=log, stderr=subprocess.STDOUT, **options)
+        try:
+            code = process.wait(timeout=timeout)
+        except BaseException as error:
+            try:
+                if isinstance(error, subprocess.TimeoutExpired):
+                    with diagnostic_path.open('w') as diagnostic:
+                        diagnostic.write(f'mouse_controls_probe exceeded {timeout:g}s child wall deadline\n'
+                                         f'pid={process.pid}\ncwd={cwd}\ncommand={command!r}\n'
+                                         f'probe_log={log_path}\n')
+                        sampler = shutil.which('sample') if sys.platform == 'darwin' else None
+                        debugger = shutil.which('gdb') if sys.platform.startswith('linux') else None
+                        if sampler:
+                            capture = [sampler, str(process.pid), '1', '1', '-file', str(sample_path)]
+                        elif debugger:
+                            capture = [debugger, '--batch', '-ex', 'set pagination off',
+                                       '-ex', 'thread apply all bt', '-p', str(process.pid)]
+                        else:
+                            capture = None
+                        if capture:
+                            diagnostic.write(f'Stack capture (5s maximum): {capture!r}\n')
+                            diagnostic.flush()
+                            try:
+                                result = subprocess.run(capture, stdout=diagnostic, stderr=subprocess.STDOUT,
+                                                        check=False, timeout=5)
+                                diagnostic.write(f'Stack capture exit code: {result.returncode}\n')
+                            except (OSError, subprocess.TimeoutExpired) as capture_error:
+                                diagnostic.write(f'Stack capture failed: {capture_error}\n')
+                        else:
+                            diagnostic.write('No supported stack sampler found (macOS sample / Linux gdb).\n')
+                    report(f'deadline exceeded ({timeout:g}s); diagnostics at {diagnostic_path}; '
+                           f'native sample, if captured, at {sample_path}')
+            except OSError as diagnostic_error:
+                report(f'unable to save timeout diagnostics: {diagnostic_error}')
+            finally:
+                # start_new_session gives this child a private POSIX group. Do
+                # not signal the runner, CTest, or unrelated game sessions.
+                if WINDOWS:
+                    try:
+                        subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
+                                       check=False, timeout=5)
+                    except (OSError, subprocess.TimeoutExpired) as cleanup_error:
+                        print(f'Probe tree cleanup failed: {cleanup_error}', file=sys.stderr)
+                    if process.poll() is None:
+                        process.kill()
+                else:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f'Probe pid {process.pid} did not reap within 5s after kill', file=sys.stderr)
+            raise
+        if code:
+            report(f'exited with status {code}')
+            raise subprocess.CalledProcessError(code, command)
+        return code
 
 
 def windows_argv(command):
@@ -132,15 +290,19 @@ parser.add_argument('--mod', default='vanilla', help='Installed mod folder (vali
 parser.add_argument('--house', choices=house_names, default='harkonnen')
 parser.add_argument('--roster', help='Explicit custom-map house:team slots in lobby order, comma-separated')
 parser.add_argument('--local-spectator', action='store_true',
-                    help='Run a custom-map all-AI match through the real detached spectator setup')
+                    help='Run an all-AI map or generated Civilization Wars match through the real detached spectator setup')
 parser.add_argument('--harvester-limit', type=int, choices=range(-1,101), default=-1)
 parser.add_argument('--rocket-turrets-need-power', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--concrete-required', action=argparse.BooleanOptionalAction, default=None)
 parser.add_argument('--require-win', action='store_true', help='Fail a full-match run on defeat or time limit')
+parser.add_argument('--expect-digest', help='Require this exact final PROBE_DIGEST (cross-platform regression pin)')
 parser.add_argument('--game-options', type=Path,
                     help='Apply this INI file\'s [Game Options] section (a player\'s Dune City.ini format) last')
 parser.add_argument('--elimination-match', action='store_true',
                     help='Play until one team is left (also as a local spectator) and log per-minute house samples')
+parser.add_argument('--army-deploys-regression-observer', action='store_true',
+                    help='Only for the mandatory army-deploys regression: retain historical non-pure role '
+                         'evaluation; never use this mode for A/B or digest comparisons')
 parser.add_argument('--ffa-screenshot', type=Path,
                     help='With --elimination-match or --match-sides: save a rendered PNG of --house\'s army (centred '
                          'between its assembly point and its forward bundle) at the first sample, at --viewport')
@@ -153,6 +315,23 @@ parser.add_argument('--enemy-ai', choices=('quantbot','ai-player','campaign'), d
                     help='Enemy controller family; AI Player has Easy/Medium/Hard; campaign = CampaignAIPlayer '
                          '(the campaign menu\'s "scenario settings" enemy, any --enemy-difficulty)')
 parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
+parser.add_argument('--civ-wars', type=int, choices=range(1, 4), metavar='TEAMSIZE',
+                    help='Real generated Civilization Wars 1v1/2v2/3v3; needs --mod CivWars --local-spectator')
+parser.add_argument('--civ-size', type=int, choices=range(4), default=0, metavar='INDEX',
+                    help='Civilization Wars map-size index, 0–3 (default 0)')
+parser.add_argument('--civ-worms', type=int, choices=range(11), default=1, metavar='COUNT',
+                    help='Civilization Wars worms per lane, 0–10 (default 1)')
+parser.add_argument('--civ-spice', type=int, choices=range(5), default=2, metavar='INDEX',
+                    help='Civilization Wars spice index, 0–4 (default 2)')
+parser.add_argument('--civ-strategy', choices=('off', 'on', 'left', 'right'),
+                    help='Civ Wars strategy (default off for --civ-wars); off/on is a hashed global switch '
+                         'before game init, also on ordinary games; left/right is a test-only unhashed team override')
+parser.add_argument('--civ-air-probe', choices=('lab', 'yard'),
+                    help='Canonical Civ Wars: single ornithopter, real human attack authority, 30-second core strike')
+parser.add_argument('--civ-air-team', type=int, choices=(1, 2), default=1,
+                    help='--civ-air-probe: defended generated team (default 1); the attacker must be Hard/Brutal')
+parser.add_argument('--civ-ordinary-gate', choices=('no-research', 'research'),
+                    help='Observe an ordinary DuneCity scenario init for civ-wars-gates.py (requires off/on)')
 parser.add_argument('--shared-spending-probe', action='store_true')
 parser.add_argument('--controls-probe', action='store_true')
 parser.add_argument('--achievements-probe', action='store_true',
@@ -203,12 +382,23 @@ parser.add_argument('--recovery-probe', action='store_true',
 parser.add_argument('--battery-clearance-probe', action='store_true',
                     help='Verify crowded-city rocket batteries replace eligible R/I/C lots through real production')
 parser.add_argument('--air-defense-probe', action='store_true')
+parser.add_argument('--trooper-support-probe', action='store_true',
+                    help='Verify QuantBot WOR and troop queue completion, bounded support and real anti-air defence')
+parser.add_argument('--research-lab-ai-probe', action='store_true',
+                    help='Verify tech-1 QuantBot lab legality, paid placement and Normal research '
+                         'completion with hashed progression off/on, Builder and Defend controls')
 parser.add_argument('--police-placement-probe', action='store_true')
 parser.add_argument('--police-budget-probe', action='store_true')
 parser.add_argument('--police-reinforcement-probe', action='store_true',
                     help='Verify police reinforcements follow the selected unit limit, not a police-local ceiling')
 parser.add_argument('--city-growth-probe', action='store_true',
                     help='Verify continuous city growth while proactive defence/supplier goals are unmet')
+parser.add_argument('--zone-power-probe', action='store_true',
+                    help='Verify city zone vacancy, power restoration, status and legacy-rule compatibility')
+parser.add_argument('--zone-power-continuation', choices=('saved','off','on'),
+                    help='Observe every zone while continuing --load-save for --minutes additional minutes')
+parser.add_argument('--zone-power-save', type=Path,
+                    help='With --zone-power-continuation on: write a current-version opted-in save before continuing')
 parser.add_argument('--no-spice-city-probe', action='store_true',
                     help='Verify a city map with no usable spice seeds demanded R/C/I out of its '
                          'starting grant instead of refinery/port/transport capital, across power '
@@ -230,12 +420,19 @@ parser.add_argument('--blob-wave-probe', action='store_true',
                     help='Verify QuantBot hunt parties (WaveFormation Blob) gather, march, release, reform and fall back')
 parser.add_argument('--force-probe', action='store_true',
                     help='Verify the QuantBot force-concentration defaults: focus fire, converging on a fight, 60%% waves')
+parser.add_argument('--spice-bloom-probe', action='store_true',
+                    help='Verify SpiceBloomHarvest: the cheapest idle ranged unit bursts an open bloom, a wasteful one is skipped')
 parser.add_argument('--strategy-probe', action='store_true',
                     help='Verify QuantBot strategies: peers and reloads agree on the pick, mixes follow their priors '
                          '(needs --custom-map, a multi-house map, for the lockstep and save/load checks)')
 parser.add_argument('--strategy-margin-seeds', default='11,22',
                     help='Strategy probe: further seeds whose mix-production section (3) is played too; each fixed '
                          'mix\'s lead-slot margin over the Learned game must be positive on the mean over --seed and these')
+parser.add_argument('--strategy-trike-margin-seeds', default='',
+                    help='Further predeclared TrikeSwarm calibration seeds; play its unchanged TankMass opponent '
+                         'and Learned reference only, extending that mix mean without repeating unrelated games')
+parser.add_argument('--strategy-workers', type=int, choices=range(1, 4), default=1,
+                    help='Independent strategy seed processes (CTest uses 3 and reserves 3 cluster slots)')
 parser.add_argument('--duel-map-size', type=int, choices=(64, 96, 128, 160, 192, 256),
                     help='Formation duel: a generated mirrored Random Skirmish 1v1 of this size, Fortress bases and '
                          '20,000-credit armies, two QuantBots (--enemy-difficulty) until one is eliminated')
@@ -253,12 +450,18 @@ parser.add_argument('--skirmish-ffa-size', type=int, choices=(64, 96, 128, 160, 
 parser.add_argument('--skirmish-map-seed', type=int, default=1, help='--skirmish-ffa-size: the Random Skirmish map seed')
 parser.add_argument('--prebuilt-probe', type=Path,
                     help='Run this balance-probe binary (from an earlier run of this tree) instead of building one')
+parser.add_argument('--build-only', action='store_true', help='Prepare the private probe binary without playing a game')
+parser.add_argument('--genome-phase-dir', type=Path,
+                    help='Internal genome-match inputs: per-house resolved phase INIs and schedule.ini (probe only)')
 parser.add_argument('--no-ai-telemetry', action='store_true',
                     help='Batch measurement: no AI decision log (DUNECITY_AI_TELEMETRY=0), so no events.jsonl, no '
                          'telemetry in summary.json and no telemetry-based wave-budget check. The simulation is the '
                          'same; formation-duel.py and headless-bench.py use it (docs/headless-performance.md). '
                          'Otherwise DUNECITY_AI_TELEMETRY=1 turns the log on: games default to [General] AI Decision '
                          'Log = false')
+parser.add_argument('--headless-assets', action=argparse.BooleanOptionalAction,
+                    default=os.environ.get('DUNECITY_HEADLESS_ASSETS') == '1',
+                    help='Simulation-only graphics/audio assets; rendered and fixture probes keep full assets')
 parser.add_argument('--factory-recovery-probe', action='store_true')
 parser.add_argument('--strategic-site-probe', action='store_true',
                     help='Continue the stalled-city fixture with its overdue Palace timer restored')
@@ -269,6 +472,9 @@ parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy wo
 parser.add_argument('--scenario', action='store_true',
                     help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
                          'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
+parser.add_argument('--campaign-ai-only', action='store_true',
+                    help='Campaign scenario: sole QuantBot on the player house, authored CampaignAIPlayer enemies, '
+                         'no registered human; retain native mission victory including quotas')
 parser.add_argument('--scenario-sides',
                     help='Scenario match: house:team:class per house (class as PlayerFactory names it, e.g. '
                          'atreides:2:qBotBrutal,harkonnen:1:AIPlayerHard); on --custom-map one per map slot')
@@ -281,19 +487,42 @@ parser.add_argument('--scenario-style',
                          '(tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
                          'e.g. a candidate config switch (test-only: not saved or hashed)')
 parser.add_argument('--mission', type=int, choices=range(1, 23),
-                    help='Campaign mission number instead of the --level\'s first (levels 2-8 have three each)')
+                    help='Campaign mission number instead of the --level\'s first (all real IDs 1–22)')
 parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
 args = parser.parse_args()
+if args.army_deploys_regression_observer and args.scenario:
+    parser.error('--army-deploys-regression-observer is forbidden for scenario/A/B/AAA games.')
+if args.civ_wars:
+    if args.mod != 'CivWars' or not args.local_spectator:
+        parser.error('--civ-wars needs --mod CivWars and --local-spectator.')
+    if (args.scenario or args.custom_map or args.roster or args.skirmish or args.duel_map_size
+            or args.skirmish_ffa_size or args.match_sides or args.load_save or args.free_for_all
+            or args.elimination_match or args.formation_measure or args.strategy_probe or args.scenario_style):
+        parser.error('--civ-wars supplies its own generated map, named-house roster and elimination loop.')
+    if args.enemy_ai != 'quantbot':
+        parser.error('--civ-wars uses QuantBots on both teams.')
+    args.civ_strategy = args.civ_strategy or 'off'
+if args.civ_strategy in ('left', 'right') and not args.civ_wars:
+    parser.error('--civ-strategy left/right needs --civ-wars; ordinary games accept off/on.')
+if args.civ_air_probe:
+    attacker_difficulty = args.enemy_difficulty if args.civ_air_team == 1 else args.partner_difficulty
+    if not args.civ_wars or args.minutes < 2 or attacker_difficulty not in ('hard', 'brutal'):
+        parser.error('--civ-air-probe needs --civ-wars, at least two minutes and a Hard/Brutal attacker.')
+    if args.civ_strategy not in ('off', 'on'):
+        parser.error('--civ-air-probe requires the hashed --civ-strategy off/on comparison.')
+if args.civ_ordinary_gate and (args.civ_wars or args.mod != 'dunecity' or not args.scenario
+                              or not args.local_spectator or args.civ_strategy not in ('off', 'on')):
+    parser.error('--civ-ordinary-gate needs an ordinary --mod dunecity --scenario observer and --civ-strategy off/on.')
 if not 1 <= args.minutes <= 120 or not 0 <= args.seed <= 0xffffffff:
     parser.error('Use 1–120 minutes and a 32-bit unsigned seed.')
 if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
     parser.error('--free-for-all requires --custom-map.')
-if args.local_spectator and not (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or args.skirmish):
-    parser.error('--local-spectator requires --custom-map, --duel-map-size, --skirmish-ffa-size or --skirmish.')
+if args.local_spectator and not (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or args.skirmish or args.civ_wars):
+    parser.error('--local-spectator requires --custom-map, --duel-map-size, --skirmish-ffa-size, --skirmish or --civ-wars.')
 if args.load_save and (args.custom_map or args.duel_map_size or args.skirmish_ffa_size or not args.load_save.is_file()):
     parser.error('--load-save needs an existing savegame and no --custom-map, --duel-map-size or --skirmish-ffa-size.')
 if args.game_options and not args.game_options.is_file():
@@ -304,6 +533,9 @@ if args.skirmish_ffa_size and (args.custom_map or args.duel_map_size or not args
     parser.error('--skirmish-ffa-size needs --match-sides and no --custom-map or --duel-map-size.')
 if args.match_sides and (not (args.custom_map or args.skirmish_ffa_size) or args.roster or args.free_for_all):
     parser.error('--match-sides needs --custom-map or --skirmish-ffa-size and replaces --roster/--free-for-all.')
+if args.genome_phase_dir and (not (args.match_sides or args.load_save or (args.scenario and args.scenario_sides))
+                              or not (args.genome_phase_dir / 'schedule.ini').is_file()):
+    parser.error('--genome-phase-dir needs --match-sides, --load-save or --scenario-sides and an existing schedule.ini.')
 if args.quantbot_object and not all(path.is_file() for path in args.quantbot_object):
     parser.error('--quantbot-object must name existing object files.')
 if args.enemy_ai == 'ai-player' and args.enemy_difficulty == 'brutal':
@@ -349,6 +581,9 @@ if args.scenario:
                      'a campaign scenario neither.')
     if args.mission and args.scenario_sides:
         parser.error('--mission is for campaign scenarios.')
+if args.campaign_ai_only and (not args.scenario or args.scenario_sides or args.local_spectator
+                             or args.enemy_ai != 'campaign'):
+    parser.error('--campaign-ai-only needs a campaign --scenario and --enemy-ai campaign, without --local-spectator.')
 
 
 def team_number(brain, default):
@@ -431,6 +666,12 @@ try:
                                                    stderr=subprocess.DEVNULL).strip())
 except subprocess.CalledProcessError:
     source_commit, source_modified = 'unavailable', None
+try:
+    from source_provenance import source_fingerprint
+    source_fingerprint_value = source_fingerprint(root, build, out)
+    source_fingerprint_error = ''
+except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+    source_fingerprint_value, source_fingerprint_error = None, str(error)
 if args.repeatable:
     out.mkdir(parents=True, exist_ok=True)
     # CTest reruns used to accumulate every run (~80 MB each) forever.
@@ -458,7 +699,7 @@ else:
     main = main.replace(needle,'int menuResult = runQuantBotStrategyProbe();' if args.strategy_probe
                         else 'int menuResult = runCampaignBalanceProbe();')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
-    if args.stats_ui_probe or args.sidebar_grid_probe:
+    if args.stats_ui_probe or args.sidebar_grid_probe or args.controls_probe:
         # Exercise the requested logical viewport even on a smaller/headless host.
         # Only this private probe bypasses the ordinary desktop-fit clamp; the
         # shipped application retains it. SDL still supplies the real renderer.
@@ -469,16 +710,27 @@ else:
         main = main.replace('                              videoFlags);',
                             '                              videoFlags | SDL_WINDOW_HIDDEN);')
     position = main.index('int main(')
-    probe_includes = ['tests/ai/windows-probe-compat.inc'] if WINDOWS else []
+    # Windows' shim includes robustlist-iterator-traits.inc itself; Linux (libstdc++) needs only that.
+    probe_includes = (['tests/ai/windows-probe-compat.inc'] if WINDOWS else
+                      [] if MACOS else ['tests/ai/robustlist-iterator-traits.inc'])
     probe_includes.append('tests/ai/campaign-balance-probe.inc')
+    native_trackpad_probe = sys.platform == 'darwin' and args.controls_probe and args.real_video
+    if native_trackpad_probe:
+        focus_hint = '    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");'
+        if main.count(focus_hint) != 1:
+            raise RuntimeError('Native input probe background-window hook changed.')
+        main = main.replace(focus_hint, '    SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, "1");\n' + focus_hint)
     if args.strategy_probe: probe_includes.append('tests/ai/strategy-probe.inc')
     main = main[:position] + ''.join('#include "'+(root/name).as_posix()+'"\n' for name in probe_includes) + main[position:]
     # Placeholders keep the commands, and so the cache key below, independent of --output-dir.
+    native_compile_command = None
     if WINDOWS:
         compile_command, link, game_dir = windows_probe_commands(build)
         object_suffix, link_inputs = '.obj', ('.obj', '.lib')
     else:
-        target = 'bin/dunecity.app/Contents/MacOS/dunecity'
+        # macOS links an app bundle; Linux links bin/dunecity beside its copied game data.
+        target = 'bin/dunecity.app/Contents/MacOS/dunecity' if MACOS else 'bin/dunecity'
+        game_dir = build/'bin'
         commands = subprocess.check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
         compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
         for option in ('-include','-MT','-MF'):
@@ -490,12 +742,26 @@ else:
         compile_command[compile_command.index('-o')+1] = '@OBJECT@'
         compile_command[compile_command.index('-c')+1] = '@SOURCE@'
         compile_command.append('-fno-access-control')
+        if native_trackpad_probe:
+            compile_command.append('-DMAC_TRACKPAD_PROBE=1')
+            # Keep Cocoa's global Point/FileInfo types out of the game's C++ TU.
+            native_compile_command = [arg.replace('@SOURCE@', str(root/'tests/ai/mac-trackpad-events.mm'))
+                                      .replace('@OBJECT@', '@NATIVE_OBJECT@') for arg in compile_command]
+            position = native_compile_command.index('-c')
+            native_compile_command[position:position] = ['-x', 'objective-c++', '-fobjc-arc']
+        if not MACOS:
+            # Linux links through a response file (@CMakeFiles/dunecity.rsp) that ninja deletes after
+            # the build; its compilation database expands it (-x) into the full link command.
+            commands = [entry['command'] for entry in json.loads(subprocess.check_output(
+                ['ninja','-C',str(build),'-t','compdb','-x'],text=True))]
         link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
         link = link[link.index('&&')+1:]
         link = link[:link.index('&&')]
         link[link.index('-o')+1] = '@BINARY@'
         link = ['@OBJECT@' if arg.endswith('/main.cpp.o') else arg for arg in link]
-        object_suffix, link_inputs = '.o', ('.o', '.a', '.dylib', '.tbd')
+        object_suffix, link_inputs = '.o', ('.o', '.a', '.so', '.dylib', '.tbd')
+        if native_compile_command:
+            link.insert(link.index('@OBJECT@') + 1, '@NATIVE_OBJECT@')
     if args.quantbot_object:
         # QuantBot.cpp and its subsystem files implement one class. The preserved
         # object(s), from a build before or after that split, replace all of them.
@@ -527,16 +793,17 @@ else:
             return False
     cache = build/'balance-probe-cache'
     cache.mkdir(exist_ok=True)
-    entry = cache/hashlib.sha256(json.dumps([main, compile_command, link]).encode()).hexdigest()[:24]
+    entry = cache/hashlib.sha256(json.dumps([main, compile_command, link, native_compile_command]).encode()).hexdigest()[:24]
     executable = 'balance-probe.exe' if WINDOWS else 'balance-probe'
     with open(cache/'.lock', 'w') as lock:
         lock_exclusive(lock)   # concurrent probes build one binary, once
         rebuilt = False
         if not current(entry/'manifest.json'):
-            shutil.rmtree(entry, ignore_errors=True)
+            remove_tree(entry)
             staging = Path(tempfile.mkdtemp(prefix='staging-', dir=cache))
             names = {'@SOURCE@': str(staging/'balance-main.cpp'), '@OBJECT@': str(staging/('balance-main'+object_suffix)),
-                     '@BINARY@': str(staging/executable), '@STAGING@': str(staging)}
+                     '@BINARY@': str(staging/executable), '@STAGING@': str(staging),
+                     '@NATIVE_OBJECT@': str(staging/'mac-trackpad-events.o')}
             def fill(arg):
                 for placeholder, value in names.items():
                     arg = arg.replace(placeholder, value)
@@ -558,11 +825,18 @@ else:
                     else:
                         subprocess.run([fill(arg) for arg in compile_command] + ['-MD', '-MF', str(staging/'deps.d')],
                                        cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+                        if native_compile_command:
+                            subprocess.run([fill(arg) for arg in native_compile_command]
+                                           + ['-MD', '-MF', str(staging/'native-deps.d')],
+                                           cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
                     subprocess.run([fill(arg) for arg in link],
                                    cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
                 if not WINDOWS:
                     depfile = (staging/'deps.d').read_text().replace('\\\n', ' ').split(':', 1)[1]
                     headers = [path for path in shlex.split(depfile) if Path(path).name != 'balance-main.cpp']
+                    if native_compile_command:
+                        native_deps = (staging/'native-deps.d').read_text().replace('\\\n', ' ').split(':', 1)[1]
+                        headers += shlex.split(native_deps)
                 inputs = [Path(build, path).resolve() for path in headers]
                 inputs += [Path(build, arg).resolve() for arg in link
                            if arg.lower().endswith(link_inputs) and Path(build, arg).is_file()]
@@ -570,23 +844,24 @@ else:
                 os.rename(staging, entry)
                 rebuilt = True
             finally:
-                shutil.rmtree(staging, ignore_errors=True)
+                remove_tree(staging)
         else:
             (out/'build.log').write_text(f'Reused {entry}\n')
         os.utime(entry)
         # Keep the four most recently used binaries (other configurations, e.g. --stats-ui-probe).
         stale_entries = sorted((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)[:-4]
         for stale in stale_entries:
-            shutil.rmtree(stale, ignore_errors=True)
-        if WINDOWS:
-            # Windows finds the game data beside the executable (SDL_GetBasePath), so the probe
-            # runs from the game's own output directory rather than a per-run copy.
+            remove_tree(stale)
+        if not MACOS:
+            # Windows and Linux find the game data beside the executable (SDL_GetBasePath), so the
+            # probe runs from the game's own output directory rather than a per-run copy.
+            suffix = '.exe' if WINDOWS else ''
             for stale in stale_entries:
-                (game_dir/f'balance-probe-{stale.name}.exe').unlink(missing_ok=True)
-            binary = game_dir/f'balance-probe-{entry.name}.exe'
+                (game_dir/f'balance-probe-{stale.name}{suffix}').unlink(missing_ok=True)
+            binary = game_dir/f'balance-probe-{entry.name}{suffix}'
             if rebuilt or not binary.is_file():
                 shutil.copy2(entry/executable, binary)
-    if WINDOWS:
+    if not MACOS:
         (out/'balance-probe-path.txt').write_text(str(binary) + '\n')
     else:
         app = out/'balance-probe.app/Contents'
@@ -595,10 +870,37 @@ else:
         binary = app/'MacOS/balance-probe'
         shutil.copy2(entry/'balance-probe', binary)
     (out/'balance-main.cpp').write_text(main, encoding='utf-8')
+if args.build_only:
+    print(binary)
+    sys.exit(0)
 env = dict(os.environ,DUNECITY_USERDIR=str(out/'profile'),SDL_AUDIODRIVER='dummy',
            BALANCE_MOD=args.mod,BALANCE_LEVEL=str(args.level),BALANCE_PARTNER=args.partner_difficulty,BALANCE_SEED=str(args.seed),BALANCE_MINUTES=str(args.minutes),
            BALANCE_ATTACK_PERCENT=str(args.attack_percent),BALANCE_ENEMY=args.enemy_difficulty,BALANCE_ENEMY_AI=args.enemy_ai,
            BALANCE_HOUSE=str(house_names.index(args.house)),BALANCE_HARVESTER_LIMIT=str(args.harvester_limit))
+# Never inherit the regression's non-pure observer into an ordinary probe.
+env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
+if args.army_deploys_regression_observer:
+    env['BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER'] = '1'
+assert args.army_deploys_regression_observer or 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
+# A batch's inherited asset mode must never turn a renderer/UI assertion into
+# a null-texture test. Direct CTests remain full-asset by default.
+headless_assets = args.headless_assets and not (
+    args.real_video or args.ffa_screenshot
+    or any(value is True for name, value in vars(args).items() if name.endswith('_probe')))
+env['DUNECITY_HEADLESS_ASSETS'] = '1' if headless_assets else '0'
+env.pop('DUNECITY_SHARED_MODS', None)
+if args.civ_wars:
+    env['BALANCE_CIV_WARS'] = str(args.civ_wars)
+    env['BALANCE_CIV_SIZE'] = str(args.civ_size)
+    env['BALANCE_CIV_WORMS'] = str(args.civ_worms)
+    env['BALANCE_CIV_SPICE'] = str(args.civ_spice)
+if args.civ_strategy is not None:
+    env['BALANCE_CIV_STRATEGY'] = args.civ_strategy
+if args.civ_air_probe:
+    env['BALANCE_CIV_AIR_PROBE'] = args.civ_air_probe
+    env['BALANCE_CIV_AIR_TEAM'] = str(args.civ_air_team)
+if args.civ_ordinary_gate:
+    env['BALANCE_CIV_ORDINARY_GATE'] = args.civ_ordinary_gate
 if not args.real_video:
     env['SDL_VIDEODRIVER'] = 'dummy'
 env['BALANCE_CAPTURE_MIB'] = str(args.capture_mib)
@@ -639,6 +941,10 @@ if args.preplace_probe:
     fixture = out/'preplace-9854.sav'
     fixture.write_bytes(gzip.decompress((root/'tests/ai/preplace-9854.sav.gz').read_bytes()))
     env['BALANCE_PREPLACE_9854_SAVE'] = str(fixture)
+    # This checksum-only save predates immutable pins. Its legacy subcase restores
+    # these exact historical rules, then reinstates today's fixture files.
+    env['BALANCE_PREPLACE_LEGACY_MOD'] = str(root / 'tests/saves/data/workshop/revisions' /
+        '778e1475a215b4a7c0d74695aca55e23b4d6a8f717199acdfaa200266d977c57/files')
 if args.sidebar_grid_probe: env['BALANCE_SIDEBAR_GRID_PROBE'] = '1'
 if args.ffa_screenshot:
     # A rendered game view (dummy video driver, software renderer) of one house's army at the
@@ -651,7 +957,7 @@ if args.ffa_screenshot:
 if args.real_video and not args.viewport:
     args.viewport = '1440x900'
 if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe
-        or args.achievements_probe or args.real_video or args.ffa_screenshot):
+        or args.achievements_probe or args.zone_power_probe or args.real_video or args.ffa_screenshot):
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
@@ -667,6 +973,8 @@ if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args
     (profile/'Dune City.ini').write_text(f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\nInterface Height = {interface_height}\nFullscreen = false\n[General]\nPlay Intro = false\n')
 if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
+if args.trooper_support_probe: env['BALANCE_TROOPER_SUPPORT_PROBE'] = '1'
+if args.research_lab_ai_probe: env['BALANCE_RESEARCH_LAB_AI_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:
     env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'
 if args.civic_priority_probe: env['BALANCE_CIVIC_PRIORITY_ONLY'] = '1'
@@ -685,6 +993,9 @@ if args.police_placement_probe: env['BALANCE_POLICE_PLACEMENT_PROBE'] = '1'
 if args.police_budget_probe: env['BALANCE_POLICE_BUDGET_PROBE'] = '1'
 if args.police_reinforcement_probe: env['BALANCE_POLICE_REINFORCEMENT_PROBE'] = '1'
 if args.city_growth_probe: env['BALANCE_CITY_GROWTH_PROBE'] = '1'
+if args.zone_power_probe: env['BALANCE_ZONE_POWER_PROBE'] = '1'
+if args.zone_power_continuation: env['BALANCE_ZONE_POWER_CONTINUATION'] = args.zone_power_continuation
+if args.zone_power_save: env['BALANCE_ZONE_POWER_SAVE'] = str(args.zone_power_save.resolve())
 if args.no_spice_city_probe: env['BALANCE_NO_SPICE_CITY_PROBE'] = '1'
 if args.mcv_deployment_probe: env['BALANCE_MCV_DEPLOYMENT_PROBE'] = '1'
 if args.custom_attack_probe: env['BALANCE_CUSTOM_ATTACK_PROBE'] = '1'
@@ -694,8 +1005,11 @@ if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
 if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
 if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
 if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
+if args.spice_bloom_probe: env['BALANCE_SPICE_BLOOM_PROBE'] = '1'
 # Play styles (label suffix @style, docs/ai-play-styles.md) are read from here by the probe.
 env['BALANCE_STYLE_DIR'] = str(root / 'tests/ai/play-styles')
+if args.genome_phase_dir:
+    env['BALANCE_GENOME_PHASE_DIR'] = str(args.genome_phase_dir.resolve())
 if args.match_sides:
     env['BALANCE_MATCH_SIDES'] = ','.join(f'{house}:{label}' for house, label in sides)
 if args.skirmish_ffa_size:
@@ -730,14 +1044,51 @@ if args.scenario:
                                                  for house, team, player_class in scenario_sides)
     if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
     if args.mission: env['BALANCE_MISSION'] = str(args.mission)
+    if args.campaign_ai_only: env['BALANCE_CAMPAIGN_AI_ONLY'] = '1'
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
-with (out/'run.log').open('w') as log:
-    subprocess.run([str(binary),'--window','--showlog'],cwd=out,env=env,
-                   stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
-results = [line for line in (out/'run.log').read_text(errors='replace').splitlines() if 'CAMPAIGN_BALANCE_RESULT:' in line]
+if (headless_assets and args.mod in ('vanilla', 'dunecity')
+        and not (args.custom_map or args.load_save or args.save_profile or args.game_options or args.genome_phase_dir)):
+    shared_mods = shared_headless_mods(binary, build, env, source_fingerprint_value, lock_exclusive)
+    if shared_mods is not None:
+        env['DUNECITY_SHARED_MODS'] = str(shared_mods)
+if args.strategy_probe:
+    extra_seeds = [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]
+    trike_seeds = [int(seed) for seed in args.strategy_trike_margin_seeds.split(',') if seed.strip()]
+    all_seeds = [args.seed] + extra_seeds + trike_seeds
+    if len(set(all_seeds)) != len(all_seeds):
+        raise ValueError('Strategy seeds must be distinct for independent samples and isolated profiles')
+    strategy_runs = [dict(cwd=out, env=env, log=out/'run.log')]
+    for extra, trikes_only in [(seed, False) for seed in extra_seeds] + [(seed, True) for seed in trike_seeds]:
+        profile = out/f'profile-seed{extra}'
+        atexit.register(discard_profile_assets, profile)
+        strategy_runs.append(dict(cwd=out/f'strategy-seed{extra}', log=out/f'run-seed{extra}.log',
+            env=dict(env, DUNECITY_USERDIR=str(profile), BALANCE_SEED=str(extra), BALANCE_STRATEGY_SECTIONS='3',
+                     BALANCE_STRATEGY_MARGIN_ONLY='1', BALANCE_STRATEGY_TRIKES_ONLY=str(int(trikes_only)))))
+    run_strategy_processes([str(binary), '--window', '--showlog', '--non-interactive'], strategy_runs,
+                           args.strategy_workers, args.wall_timeout)
+elif args.controls_probe:
+    run_controls_process([str(binary), '--window', '--showlog', '--non-interactive'],
+                         out, env, out/'run.log', args.wall_timeout)
+elif env.get('DUNECITY_SIM_MEASURE'):
+    from simulation_measure import measure_process
+    measure_process([str(binary), '--window', '--showlog', '--non-interactive'], cwd=out, env=env,
+                    log=out/'run.log', timeout=args.wall_timeout,
+                    output=Path(env['DUNECITY_SIM_MEASURE']),
+                    sample_seconds=float(env.get('DUNECITY_SIM_SAMPLE_SECONDS', '0')))
+else:
+    with (out/'run.log').open('w') as log:
+        subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
+                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
+run_lines = (out/'run.log').read_text(errors='replace').splitlines()
+results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
+if args.expect_digest:
+    digests = [dict(part.split('=', 1) for part in line.split('PROBE_DIGEST:', 1)[1].split() if '=' in part)
+               for line in run_lines if 'PROBE_DIGEST:' in line and 'final=1' in line]
+    if len(digests) != 1 or digests[0].get('digest') != args.expect_digest:
+        raise RuntimeError(f'Final simulation digest differs: expected {args.expect_digest}, got {digests}')
 events = None if args.no_ai_telemetry else next((out/'profile').rglob('events.jsonl'))
 metadata, attacks, final = None, [], []
 for line in events.open() if events else ():
@@ -745,53 +1096,64 @@ for line in events.open() if events else ():
     if row['event'] == 'session_start': metadata = row['data']
     if row['event'] == 'ground_hunt': attacks.append(row)
     if row['event'] == 'game_summary': final.append(row)
-    # The pressure fixture switches difficulty in-engine and checks each tier
-    # itself; its Hard/Brutal waves must not inherit the CLI's default Easy cap.
-    if not args.pressure_probe and row['event']=='ground_hunt' and row['data'].get('campaign_limited') and args.enemy_difficulty in ('easy','medium','hard'):
+    # The pressure fixture switches difficulty in-engine and checks each tier itself.
+    # Otherwise use the sending controller's recorded bounds, not the CLI enemy
+    # difficulty: an AI-only campaign also has a player-side QuantBot. Negative
+    # bounds mean unlimited (Brutal), not a cap already exceeded by every wave.
+    if not args.pressure_probe and row['event']=='ground_hunt' and row['data'].get('campaign_limited'):
         d=row['data']
+        unit_cap, value_cap, budget = d['alliance_unit_cap'], d['alliance_value_cap'], d['attack_budget']
         # Caps apply to this dispatch. Surviving units from older waves are
         # deliberately allowed alongside it after the repeat timer expires.
-        if (d['members']>d['alliance_unit_cap']
-                or d['value']>d['alliance_value_cap']
-                or d['alliance_units']>d['alliance_unit_cap']
-                or d['alliance_value']>d['alliance_value_cap']
-                or d['alliance_value']>d['attack_budget']):
+        if ((unit_cap >= 0 and max(d['members'], d['alliance_units']) > unit_cap)
+                or (value_cap >= 0 and max(d['value'], d['alliance_value']) > value_cap)
+                or (budget >= 0 and d['alliance_value'] > budget)):
             raise RuntimeError('Automatic campaign force exceeded its wave budget')
 summary = {'result':results[0],'sourceCommit':source_commit,
            'workingTreeModified':source_modified,
+           'sourceFingerprint':source_fingerprint_value,
+           'sourceFingerprintError':source_fingerprint_error,
            'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,'enemy_controller':args.enemy_ai,'harvester_limit':args.harvester_limit}
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')
+if args.civ_air_probe:
+    air_results = [line for line in (out/'run.log').read_text(errors='replace').splitlines()
+                   if 'CIV_AIR_RESULT:' in line]
+    if len(air_results) != 1 or 'pass=1 ' not in air_results[0]:
+        raise RuntimeError('Early Civ Wars aircraft strike was not defeated with the original core surviving.')
+if args.civ_ordinary_gate:
+    ordinary_setups = [dict(part.split('=', 1) for part in line.split('CIV_ORDINARY_SETUP:', 1)[1].split()
+                           if '=' in part)
+                       for line in (out/'run.log').read_text(errors='replace').splitlines()
+                       if 'CIV_ORDINARY_SETUP:' in line]
+    if (len(ordinary_setups) != 1 or ordinary_setups[0].get('civ_wars') != '0'
+            or ordinary_setups[0].get('city_sim') != '1'
+            or ordinary_setups[0].get('research_lab') != str(int(args.civ_ordinary_gate == 'research'))):
+        raise RuntimeError('Ordinary DuneCity digest control did not execute its configured research option.')
 
 if args.strategy_probe:
     # Mix production (section 3) on further seeds: one 12-minute game per mix is one trajectory, so a
     # fixed mix's lead-slot margin over the Learned game is required on the mean over the seeds
     # (tests/ai/strategy-probe.inc, the note above checkMix).
     margins = defaultdict(list)
-    def read_margins(log_path):
+    def read_margins(log_path, only_mix=None):
         for line in log_path.read_text(errors='replace').splitlines():
             if 'STRATEGY_PROBE: check=lead_margin' in line:
                 fields = dict(part.split('=', 1) for part in line.split('check=lead_margin', 1)[1].split() if '=' in part)
-                margins[fields['mix']].append(int(fields['margin_bps']))
+                if only_mix is None or fields['mix'] == only_mix:
+                    margins[fields['mix']].append(int(fields['margin_bps']))
     read_margins(out/'run.log')
-    for extra in [int(seed) for seed in args.strategy_margin_seeds.split(',') if seed.strip()]:
-        profile = out/f'profile-seed{extra}'
-        atexit.register(discard_profile_assets, profile)
-        extra_log = out/f'run-seed{extra}.log'
-        with extra_log.open('w') as log:
-            subprocess.run([str(binary),'--window','--showlog'],cwd=out,
-                           env=dict(env,DUNECITY_USERDIR=str(profile),BALANCE_SEED=str(extra),BALANCE_STRATEGY_SECTIONS='3',
-                                    BALANCE_STRATEGY_MARGIN_ONLY='1'),
-                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
-        read_margins(extra_log)
-    seeds = 1 + len([seed for seed in args.strategy_margin_seeds.split(',') if seed.strip()])
+    for extra, trikes_only in [(seed, False) for seed in extra_seeds] + [(seed, True) for seed in trike_seeds]:
+        read_margins(out/f'run-seed{extra}.log', 'TrikeSwarm' if trikes_only else None)
+    seeds = 1 + len(extra_seeds)
     weak = []
     for mix, values in sorted(margins.items()):
         mean = sum(values) / len(values)
         print(f'STRATEGY_LEAD_MARGIN: mix={mix} seeds={len(values)} mean_bps={mean:+.0f} '
               + ' '.join(f'{v:+d}' for v in values))
-        if len(values) != seeds or mean < 1:
+        expected = seeds + (len(trike_seeds) if mix == 'TrikeSwarm' else 0)
+        if len(values) != expected or mean < 1:
             weak.append(mix)
     if not margins or weak:
         raise RuntimeError('Strategy probe: the lead slots got no larger share of the built value than in the Learned game '

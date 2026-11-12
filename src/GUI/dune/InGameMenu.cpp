@@ -33,6 +33,8 @@
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/InGameSettingsMenu.h>
 #include <GUI/dune/LoadSaveWindow.h>
+#include <GUI/dune/SaveMapWindow.h>
+#include <INIMap/MatchMapExport.h>
 #include <misc/MenuPalette.h>
 
 
@@ -44,8 +46,10 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
  : Window(0,0,0,0), bMultiplayer(bMultiplayer), color(color) {
     const bool canSkip = currentGame->canSkipMission();
     const bool canJoin=pNetworkManager && pNetworkManager->isServer() && pNetworkManager->getDirectTransport() && pNetworkManager->getDirectTransport()->allowsLateJoin();
-    const bool canRequest=currentGame->isSpectating() && pNetworkManager->getDirectTransport();
-    const int buttons = ((canJoin || canRequest) ? 4 : 3) + (bMultiplayer ? 2 : 3) + (canSkip ? 1 : 0);
+    const bool canRequest=currentGame->isSpectating() && pNetworkManager && pNetworkManager->getDirectTransport();
+    const bool canSaveMap=MatchMapExport::available(*currentGame);
+    const int buttons = 3 + (canJoin ? 1 : 0) + (canRequest ? 1 : 0) + (bMultiplayer ? 2 : 3)
+        + (canSkip ? 1 : 0) + (canSaveMap ? 1 : 0);
     const int width = std::min(440,getRendererWidth()-32);
     const int height = 92 + buttons*40 + (buttons-1)*6;
     auto background = GUIStyle::getInstance().createBackground(width, height);
@@ -84,7 +88,7 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
     if(canRequest) {
         auto* direct=pNetworkManager->getDirectTransport();
         const bool pending=direct->playRequestState()=="pending";
-        gap(); addButton(joinRequestsButton,pending ? "Cancel request to play" : "Request to play",[this,pending]() {
+        gap(); addButton(requestPlayButton,pending ? "Cancel request to play" : "Request to play",[this,pending]() {
             auto* direct=pNetworkManager->getDirectTransport();
             if(direct->requestToPlay(pending)) currentGame->resumeGame();
         });
@@ -93,6 +97,10 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
         gap();addButton(skipMissionButton,_("Skip mission..."),std::bind(&InGameMenu::onSkipMission,this));
     }
     gap();addButton(saveGameButton,_("Save Game"),std::bind(&InGameMenu::onSave,this));
+    saveMapButton.setVisible(canSaveMap);saveMapButton.setEnabled(canSaveMap);
+    if(canSaveMap) {
+        gap();addButton(saveMapButton,_("Save as Map"),std::bind(&InGameMenu::onSaveMap,this));
+    }
     loadGameButton.setVisible(!bMultiplayer);loadGameButton.setEnabled(!bMultiplayer);
 
     restartGameButton.setVisible(!bMultiplayer);restartGameButton.setEnabled(!bMultiplayer);
@@ -231,6 +239,11 @@ void InGameMenu::onSave()
     fnkdat(bMultiplayer ? "mpsave/" : "save/", tmp, FILENAME_MAX, FNKDAT_USER | FNKDAT_CREAT);
     std::string savepath(tmp);
     openWindow(LoadSaveWindow::create(true, _("Save Game"), savepath, "dls", "", color));
+}
+
+void InGameMenu::onSaveMap() {
+    if(MatchMapExport::available(*currentGame))
+        openWindow(SaveMapWindow::create(*currentGame, color));
 }
 
 void InGameMenu::onLoad()

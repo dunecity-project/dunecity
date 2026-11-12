@@ -16,7 +16,8 @@ Links a diagnostic copy of the game whose main menu is replaced by tests/natives
              every unit ends nothing; a spectated free-for-all ends naming the last real team
   save9868   tests/natives/data/worms-9868.dls.gz (Gamma Sector, worms owned by a played house)
              loads with every worm the Natives' (on NATIVES_TEAM); re-saved as the current version
-             it stays so
+             it stays so. Its exact 1.0.850 Vanilla revision is restored from the shared
+             tests/saves/data/workshop store, independent of today's bundled rules.
   followup   (save 9873) a custom map's unlisted unit owner is an anonymous team-0 house that the
              Natives fight (NATIVES_TEAM), neither deciding the match; a worm a reinforcement brings
              for a house (Sandworm::spares) never targets or bites that house's side, also after a
@@ -33,8 +34,10 @@ Release 1.0.852 interactions with the spectated game end and the city airplane's
              is credited to the Natives, decides nothing and does not provoke the campaign AI; a
              crash on the last building wins or loses the mission as any other kill would
   lockstep-interactions   host, guest and spectator of one DuneCity simulation with worms, crime
-             troopers and a plane the Natives shoot down agree at every 750-cycle checkpoint, and
-             the spectator's game ends at the guest's winning cycle
+             troopers and a damaged plane the Natives shoot down agree at every 750-cycle checkpoint,
+             and the spectator's game ends at the guest's winning cycle. As in the campaign fixture,
+             two rockets finish the plane: this tests crash determinism, not trooper survival against
+             the AI base's defence.
 
 --baseline links against a tree without the Natives house (e.g. a worktree at afb2315c) and runs
 the case that writes the 9868 fixture: make-save.
@@ -46,9 +49,13 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import restore_fixture_revisions  # noqa: E402
+
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
@@ -118,6 +125,8 @@ summary, failed = [], []
 for case in args.cases.split(','):
     profile = work / ('profile-' + case)
     profile.mkdir()
+    if case == 'save9868':
+        restore_fixture_revisions(profile, [fixture])
     (profile / 'Dune City.ini').write_text(
         '[Video]\nPhysical Width = 1024\nPhysical Height = 768\nWidth = 1024\nHeight = 768\n'
         'Interface Height = 768\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Natives tester\n')

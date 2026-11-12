@@ -13,9 +13,47 @@ inline bool needsRefineryRefuge(bool returning,bool full,bool hasCargo,bool safe
     return hasCargo && (returning || full || !safeField);
 }
 
-inline int harvesterThreatRadius(int item, int range) {
+// A worker job must be nearer its own base than a hostile base. The stronger
+// level leaves an inward buffer; equality is deterministic and remains legal.
+inline bool homeFieldAllowed(int homeDistance, int enemyDistance, int level) {
+    return level <= 0 || homeDistance + (level >= 2 ? 4 : 0) <= enemyDistance;
+}
+
+// Inventory is deliberately absent: losing a legal Heavy Factory cannot turn
+// the low-tech opening restriction back on. Unknown initial maps stay outside.
+inline bool homeFieldOpeningScope(int initialSpicePermille, bool heavyEnabled,
+                                  int heavyRequiredTech, int matchTech) {
+    return initialSpicePermille > 0 && (!heavyEnabled || heavyRequiredTech > matchTech);
+}
+
+inline int campaignWorkerRescueCoverage(int level) {
+    return level == 1 ? 100 : level == 2 ? 150 : 0;
+}
+
+// Inactive worms have no usable map position. Keep visibility ahead of the
+// location read, so neither sleeping nor hidden enemies contribute observations.
+template<class Object>
+bool observedThreat(const Object* object, int team, bool active) {
+    return active && object && object->getOwner() && object->getHealth() > 0
+        && object->getOwner()->getTeamID() != team && object->isVisible(team)
+        && !object->getLocation().isInvalid();
+}
+
+// Only callers that have observed an active, visible enemy use these radii.
+// Civ Wars worms need enough warning for the two-second harvester check.
+inline int tacticalThreatRadius(int item, int range, bool civWars = false) {
+    return civWars && isSandwormUnit(item) ? 8 : std::max(1,range)+2;
+}
+
+inline int harvesterThreatRadius(int item, int range, bool civWars = false) {
+    if (civWars && isSandwormUnit(item)) return 8;
     if (isInfantryUnit(item)) return -1; // Harvesters can crush foot troops.
     return std::max(1,range)+(item==Unit_Launcher ? 3 : 0);
+}
+
+// Tile::isRock() includes concrete and mountains. Other threats still reach it.
+inline bool threatReachesRock(int item, bool civWars = false) {
+    return !civWars || !isSandwormUnit(item);
 }
 
 inline bool productionFactory(int type) {
@@ -95,6 +133,33 @@ bool escapeCorridor(int x, int y, int tx, int ty, Danger danger) {
         previous = next;
     }
     return previous == 0;
+}
+
+// Generated lane maps can put nearby spice across an impassable mountain ridge.
+// Supercover the straight corridor, including corner-touching cells, with at most
+// dx+dy integer steps and no path search. Refinery returns must not use this
+// conservative spice-only filter: their path can detour around the ridge's end.
+template<class Mountain>
+bool spiceCorridor(int x, int y, int tx, int ty, Mountain mountain, bool generatedCivWars = false) {
+    if (!generatedCivWars) return true;
+    const int dx = std::abs(tx-x), dy = std::abs(ty-y);
+    const int sx = (tx>x)-(tx<x), sy = (ty>y)-(ty<y);
+    int ix = 0, iy = 0;
+    if (mountain(x,y)) return false;
+    while (ix < dx || iy < dy) {
+        const int nextX = (1+2*ix)*dy, nextY = (1+2*iy)*dx;
+        if (nextX == nextY) {
+            if (mountain(x+sx,y) || mountain(x,y+sy)) return false;
+            x += sx; y += sy;
+            ++ix; ++iy;
+        } else if (nextX < nextY) {
+            x += sx; ++ix;
+        } else {
+            y += sy; ++iy;
+        }
+        if (mountain(x,y)) return false;
+    }
+    return true;
 }
 
 /// The candidate this sequential sweep picks, with far fewer route tests:

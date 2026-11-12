@@ -67,7 +67,9 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
     bool sharedHouse = false;
     for(const HouseSetup& house : result.houses)
         sharedHouse = sharedHouse || (house.role == Role::Human && PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr);
-    GameInitSettings init(result.name, result.ini, sharedHouse, rules);
+    auto matchOptions = rules;
+    matchOptions.researchLab = params.techLevel < 9 && params.researchLab;
+    GameInitSettings init(result.name, result.ini, sharedHouse, matchOptions);
     // Custom Game's offline Spectate: the human seat goes to an AI and the local player only
     // watches. Local to this machine; never serialized or sent anywhere.
     init.setLocalSpectator(params.spectate);
@@ -113,8 +115,8 @@ std::string saveMap(const Result& result) {
 namespace {
 
 constexpr int kRowGap = 3;
-constexpr int kLeftColumnRows = 18;   ///< Map (8) + Game (6) + You start with (4)
-constexpr int kMultiplayerRows = 13;  ///< Map (8) + Game (4), and a row of slack
+constexpr int kLeftColumnRows = 20;   ///< Map (9) + Game (7) + You start with (4)
+constexpr int kMultiplayerRows = 15;  ///< Includes the Research Lab row and one row of slack.
 
 constexpr int kNoPartner = 0;         ///< the partner selector's "None" entry
 constexpr int kMaxContentWidth = 800;
@@ -176,12 +178,19 @@ void fillSide(Slider& base, Slider& army, Slider& city) {
 
 }
 
-RandomSkirmishMenu::RandomSkirmishMenu() : RandomSkirmishMenu(false, std::string()) {}
+RandomSkirmishMenu::RandomSkirmishMenu() : RandomSkirmishMenu(false, std::string(), nullptr) {}
 
-RandomSkirmishMenu::RandomSkirmishMenu(const std::string& hostMod) : RandomSkirmishMenu(true, hostMod) {}
+RandomSkirmishMenu::RandomSkirmishMenu(const std::string& hostMod,
+                                     const SettingsClass::GameOptionsClass* initialRules)
+ : RandomSkirmishMenu(true, hostMod, initialRules) {}
 
-RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& hostMod)
+RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& hostMod,
+                                     const SettingsClass::GameOptionsClass* initialRules)
  : MenuBase(), multiplayer(multiplayer), hostMod(hostMod) {
+    if(initialRules) {
+        rules = *initialRules;
+        rulesChosen = true;
+    }
     SDL_Texture* background = pGFXManager->getUIGraphic(UI_MenuBackground);
     setBackground(background);
     resize(getTextureSize(background));
@@ -195,13 +204,24 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     const int width = getSize().x, height = getSize().y;
     // Rows fit between the title and the status line, however short the window.
     rowPitch = std::clamp((height - 44 - 70) / (multiplayer ? kMultiplayerRows : kLeftColumnRows), 18, 25);
+    rowHeight = std::max(18, rowPitch - kRowGap);
     title.setText(multiplayer ? _("Random Map") : _("Random Skirmish"));
     title.setTextFontSize(22);
     title.setAlignment(Alignment_HCenter);
     windowWidget.addWidget(&title, Point(0, 8), Point(width, 30));
 
     for(int size : kMapSizes) sizeBox.addEntry(std::to_string(size) + " x " + std::to_string(size), size);
-    for(int i = 0; i < static_cast<int>(kRockPercent.size()); ++i) rockBox.addEntry(std::to_string(kRockPercent[i]) + "%", i);
+    for(Slider* box : {&sandBox, &rockBox, &mountainBox})
+        for(int percent = 0; percent <= 100; percent += 5) box->addEntry(std::to_string(percent) + "%", percent);
+    sandBox.setOnSelectionChange([this](bool interactive) { if(interactive) onTerrainChanged(sandBox); });
+    rockBox.setOnSelectionChange([this](bool interactive) { if(interactive) onTerrainChanged(rockBox); });
+    mountainBox.setOnSelectionChange([this](bool interactive) { if(interactive) onTerrainChanged(mountainBox); });
+    sandBox.setTooltipText(_("Sand includes dunes and spice. Adjusting Sand trades with Rock first, keeping Mountain where possible. "
+                              "Mandatory starting rock and ground paths override impossible targets."));
+    rockBox.setTooltipText(_("Passable, buildable rock. Adjusting Rock trades with Sand first, keeping Mountain where possible. "
+                              "Mandatory starting rock and ground paths override impossible targets."));
+    mountainBox.setTooltipText(_("Impassable mountain. Adjusting Mountain trades with Rock first, then Sand. "
+                                  "Mandatory starting rock and ground paths override impossible targets."));
     for(int i = 0; i < 5; ++i) spiceBox.addEntry(_(kSpiceNames[i]), i);
     for(int worms : kWormChoices) wormsBox.addEntry(worms == 0 ? std::string(_("None")) : std::to_string(worms), worms);
     symmetricBox.setText(_("Mirrored starts"));
@@ -212,22 +232,26 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     fixedSeedBox.setText(_("Keep this seed"));
     for(int credits : kCreditPresets) creditsBox.addEntry(withThousands(credits), credits);
     for(int level = 1; level <= 9; ++level) techBox.addEntry(std::to_string(level), level);
+    researchLabBox.setText(_("Research Lab"));
+    researchLabBox.setTooltipText(_("Build a Research Lab to research your house's next tech level. No lab is granted at the start."));
+    techBox.setOnSelectionChange([this](bool) { researchLabBox.setVisible(techBox.getSelectedEntryIntData() < 9); });
 
     int row = 0;
-    addHeader(0, row++, _("Map"));
+    addHeader(0, row++, _("Map"), &fixedSeedBox);
     addRow(0, row++, _("Size"), &sizeBox);
+    addRow(0, row++, _("Sand"), &sandBox);
     addRow(0, row++, _("Rock"), &rockBox);
+    addRow(0, row++, _("Mountain"), &mountainBox);
     addRow(0, row++, _("Spice"), &spiceBox);
     addRow(0, row++, _("Sandworms"), &wormsBox);
     addRow(0, row++, _("Layout"), &symmetricBox);
     const int seedRow = row;        // the "New" button joins this row below
     addRow(0, row++, _("Seed"), &seedBox);
-    addRow(0, row++, "", &fixedSeedBox);
     addHeader(0, row++, _("Game"));
 
     if(multiplayer) {
-        // The host's game: its mod (chosen in the map list) and Game Rules stay there. Who plays
-        // each start, their houses and teams are the lobby's; every start begins the same.
+        // The host chooses the mod in the map list and can refine Game Rules here.
+        // Who plays each start, their houses and teams are the lobby's; every start begins the same.
         std::string modLabel = hostMod;
         for(const ModInfo& mod : ModManager::instance().listModChoices())
             if(mod.matchesSelectionName(hostMod)) modLabel = mod.selectionLabel();
@@ -236,6 +260,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(0, row++, _("Mod"), &hostModLabel);
         addRow(0, row++, _("Credits"), &creditsBox);
         addRow(0, row++, _("Tech level"), &techBox);
+        addRow(0, row++, "", &researchLabBox);
 
         for(int starts = kMinStarts; starts <= std::max(kMinStarts, maxStarts(houseCount, tornieFamily)); ++starts)
             startsBox.addEntry(std::to_string(starts), starts);
@@ -294,6 +319,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         addRow(0, row++, _("Your house"), &houseBox);
         addRow(0, row++, _("Credits"), &creditsBox);
         addRow(0, row++, _("Tech level"), &techBox);
+        addRow(0, row++, "", &researchLabBox);
         addRow(0, row++, _("City skin"), &skinBox);
         skinCaption = &captions[usedCaptions - 1];
         addHeader(0, row++, _("You start with"));
@@ -312,7 +338,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         // only while watching.
         addRow(1, row, "", &spectateAIBox);
         windowWidget.addWidget(&spectateBox, Point(columnX(width, 1) + 8, 44 + row * rowPitch),
-                               Point(columnSpan(width) * 2 / 5 - 8, rowPitch - kRowGap));
+                               Point(columnSpan(width) * 2 / 5 - 8, rowHeight));
         ++row;
         // The partner shares the player's house; its AI and Difficulty are as wide as the Allies' and Enemies'.
         addRow(1, row++, _("AI partner"), &partnerBox);
@@ -336,8 +362,8 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
     const int controlX = columnX(width, 0) + columnWidth * 2 / 5;
     const int top = 44;
     windowWidget.setWidgetGeometry(&seedBox, Point(controlX, top + seedRow * rowPitch),
-                                   Point(columnWidth - columnWidth * 2 / 5 - 64, rowPitch - kRowGap));
-    windowWidget.addWidget(&newSeedButton, Point(columnX(width, 0) + columnWidth - 58, top + seedRow * rowPitch), Point(58, rowPitch - kRowGap));
+                                   Point(columnWidth - columnWidth * 2 / 5 - 64, rowHeight));
+    windowWidget.addWidget(&newSeedButton, Point(columnX(width, 0) + columnWidth - 58, top + seedRow * rowPitch), Point(58, rowHeight));
 
     statusLabel.setTextFontSize(12);
     statusLabel.setAlignment(Alignment_HCenter);
@@ -348,6 +374,8 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
 
     backButton.setText(_("Back"));
     backButton.setOnClick([this]() { onCancel(); });
+    rulesButton.setText(_("Game rules..."));
+    rulesButton.setOnClick([this]() { onGameRules(); });
     const int left = columnX(width, 0) + crestInset, span = contentWidth(width) - 2 * crestInset;
     const int buttonWidth = std::min(160, (span - 3 * 16) / 4);
     const int gap = (span - 4 * buttonWidth) / 3;
@@ -356,11 +384,10 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         nextButton.setText(_("Next"));
         nextButton.setOnClick([this]() { onCreateMap(); });
         windowWidget.addWidget(&backButton, Point(left, height - 38), Point(buttonWidth, 28));
+        windowWidget.addWidget(&rulesButton, Point(left + (span - buttonWidth) / 2, height - 38), Point(buttonWidth, 28));
         windowWidget.addWidget(&nextButton, Point(left + 3 * (buttonWidth + gap), height - 38), Point(buttonWidth, 28));
         nextButton.setActive();
     } else {
-        rulesButton.setText(_("Game rules..."));
-        rulesButton.setOnClick([this]() { onGameRules(); });
         saveButton.setText(_("Save map"));
         saveButton.setOnClick([this]() { onSaveMap(); });
         startButton.setText(_("Start"));
@@ -401,7 +428,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
 
 RandomSkirmishMenu::~RandomSkirmishMenu() = default;
 
-void RandomSkirmishMenu::addHeader(int column, int row, const std::string& caption) {
+void RandomSkirmishMenu::addHeader(int column, int row, const std::string& caption, Widget* control) {
     if(usedCaptions >= static_cast<int>(captions.size())) return;
     Label& label = captions[usedCaptions++];
     label.setText(caption);
@@ -411,7 +438,9 @@ void RandomSkirmishMenu::addHeader(int column, int row, const std::string& capti
     int x = columnX(getSize().x, column);
     // Desert skins: the first header sits beside the background's top-left crest (53x54, 11 px in).
     if(MenuTheme::isDesertUISkin() && column == 0 && y < 11 + 54) x = std::max(x, 11 + 53 + 6);
-    windowWidget.addWidget(&label, Point(x, y), Point(columnWidth - (x - columnX(getSize().x, column)), rowPitch - kRowGap));
+    const int right = columnX(getSize().x, column) + (control ? columnWidth * 2 / 5 : columnWidth);
+    windowWidget.addWidget(&label, Point(x, y), Point(right - x, rowHeight));
+    if(control != nullptr) addRow(column, row, "", control);
 }
 
 void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption, Widget* control) {
@@ -431,14 +460,18 @@ void RandomSkirmishMenu::addRow(int column, int row, const std::string& caption,
         Label& label = captions[usedCaptions++];
         label.setText(caption);
         label.setTextFontSize(13);
-        windowWidget.addWidget(&label, Point(captionX, y), Point(x + captionWidth - captionX, rowPitch - kRowGap));
+        windowWidget.addWidget(&label, Point(captionX, y), Point(x + captionWidth - captionX, rowHeight));
     }
-    windowWidget.addWidget(control, Point(controlX, y), Point(controlWidth, rowPitch - kRowGap));
+    windowWidget.addWidget(control, Point(controlX, y), Point(controlWidth, rowHeight));
 }
 
 void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(sizeBox, params.mapSize);
-    selectData(rockBox, static_cast<int>(params.rock));
+    terrainMixUpdating = true;
+    selectData(sandBox, params.sandPercent);
+    selectData(rockBox, params.rockPercent);
+    selectData(mountainBox, params.mountainPercent);
+    terrainMixUpdating = false;
     selectData(spiceBox, static_cast<int>(params.spice));
     selectData(wormsBox, params.worms);
     symmetricBox.setChecked(params.symmetric);
@@ -447,6 +480,8 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(houseBox, params.house);
     selectData(creditsBox, params.credits);
     selectData(techBox, params.techLevel);
+    researchLabBox.setChecked(params.researchLab);
+    researchLabBox.setVisible(params.techLevel < 9);
     enemiesAlliedBox.setChecked(params.enemiesAllied);
     for(auto [side, ai, base, army, city] : {std::tuple{&params.allySide, &allyAI, &allyBaseBox, &allyArmyBox, &allyCityBox},
                                              std::tuple{&params.enemySide, &enemyAI, &enemyBaseBox, &enemyArmyBox, &enemyCityBox}}) {
@@ -482,6 +517,29 @@ void RandomSkirmishMenu::showParams(const Params& params) {
     selectData(enemiesBox, params.enemies);
     onPlayersChanged(false);
     onModChanged();
+}
+
+void RandomSkirmishMenu::onTerrainChanged(Slider& changed) {
+    if(terrainMixUpdating) return;
+    terrainMixUpdating = true;
+    int sand = sandBox.getSelectedEntryIntData();
+    int rock = rockBox.getSelectedEntryIntData();
+    int mountain = mountainBox.getSelectedEntryIntData();
+    // Sand and Rock trade with each other first. A growing Mountain spends Rock, then Sand.
+    if(&changed == &sandBox) {
+        rock = std::max(0, 100 - sand - mountain);
+        mountain = 100 - sand - rock;
+    } else if(&changed == &rockBox) {
+        sand = std::max(0, 100 - rock - mountain);
+        mountain = 100 - sand - rock;
+    } else {
+        rock = std::max(0, 100 - sand - mountain);
+        sand = 100 - rock - mountain;
+    }
+    selectData(sandBox, sand);
+    selectData(rockBox, rock);
+    selectData(mountainBox, mountain);
+    terrainMixUpdating = false;
 }
 
 void RandomSkirmishMenu::onPlayersChanged(bool alliesMoved) {
@@ -567,6 +625,12 @@ void RandomSkirmishMenu::onModChanged() {
     enemyCityBox.setEnabled(city);
     playerCityBox.setEnabled(city);
     startCityBox.setEnabled(city);
+    // HBox keeps fixed-height drop-downs at their minimum height. Use their public resize
+    // API after the row/roster layout so compact menus do not paint into the following row.
+    for(AIPlayerSelector* selector : {&allyAI, &enemyAI, &spectateAI, &partnerAI}) {
+        selector->aiBox.resize(selector->aiBox.getSize().x, rowHeight);
+        selector->difficultyBox.resize(selector->difficultyBox.getSize().x, rowHeight);
+    }
 }
 
 void RandomSkirmishMenu::onSpectateChanged() {
@@ -588,7 +652,9 @@ Params RandomSkirmishMenu::readParams() const {
     // Starts from the last-used choices, so the ones this mode does not show are kept as they were.
     Params params = loaded;
     params.mapSize = sizeBox.getSelectedEntryIntData();
-    params.rock = static_cast<Rock>(rockBox.getSelectedEntryIntData());
+    params.sandPercent = sandBox.getSelectedEntryIntData();
+    params.rockPercent = rockBox.getSelectedEntryIntData();
+    params.mountainPercent = mountainBox.getSelectedEntryIntData();
     params.spice = static_cast<Spice>(spiceBox.getSelectedEntryIntData());
     params.worms = wormsBox.getSelectedEntryIntData();
     params.symmetric = symmetricBox.isChecked();
@@ -602,6 +668,7 @@ Params RandomSkirmishMenu::readParams() const {
     params.mod = selectedMod();
     params.mode = RandomSkirmish::modeForMod(params.mod);
     params.techLevel = techBox.getSelectedEntryIntData();
+    params.researchLab = researchLabBox.isChecked();
     if(multiplayer) {
         params.starts = startsBox.getSelectedEntryIntData();
         params.startSide.base = static_cast<BaseSize>(startBaseBox.getSelectedEntryIntData());
@@ -680,7 +747,7 @@ bool RandomSkirmishMenu::prepareStart(GameInitSettings& init) {
         config.setIntValue("General", "DuneCity Campaign Skin", skin);
         if(config.saveChangesTo(getConfigFilepath())) WebRuntime::syncPersistentFiles();
     }
-    init = RandomSkirmish::makeInit(result, matchRules(), params, GameInitSettings::sanitizeGraphicsSkin(skin));
+    init = RandomSkirmish::makeInit(result, getMatchRules(), params, GameInitSettings::sanitizeGraphicsSkin(skin));
     if(!params.fixedSeed) {
         // The next visit offers a new map; this one stays reproducible from its name.
         params.seed = freshSeed();
@@ -737,8 +804,10 @@ void RandomSkirmishMenu::onCancel() {
     quit();
 }
 
-const SettingsClass::GameOptionsClass& RandomSkirmishMenu::matchRules() const {
-    return rulesChosen ? rules : effectiveGameOptions;
+SettingsClass::GameOptionsClass RandomSkirmishMenu::getMatchRules() const {
+    auto options = rulesChosen ? rules : effectiveGameOptions;
+    options.researchLab = techBox.getSelectedEntryIntData() < 9 && researchLabBox.isChecked();
+    return options;
 }
 
 void RandomSkirmishMenu::onGameRules() {
@@ -750,6 +819,7 @@ void RandomSkirmishMenu::onGameRules() {
         }
         rules = effectiveGameOptions;
     }
+    rules.researchLab = researchLabBox.isChecked();
     openWindow(GameOptionsWindow::create(rules));
 }
 
@@ -757,5 +827,6 @@ void RandomSkirmishMenu::onChildWindowClose(Window* pChildWindow) {
     if(auto* pRulesWindow = dynamic_cast<GameOptionsWindow*>(pChildWindow)) {
         rules = pRulesWindow->getGameOptions();
         rulesChosen = true;
+        researchLabBox.setChecked(rules.researchLab);
     }
 }

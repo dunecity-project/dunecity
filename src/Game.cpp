@@ -23,6 +23,7 @@
 #include <misc/OMemoryStream.h>
 #include <misc/Dune2RPresentation.h>
 #include <misc/GameActivity.h>
+#include <misc/MacTrackpad.h>
 #include <misc/WatchedResultLayout.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
@@ -272,6 +273,7 @@ bool getTornieStructurePlacementPreview(int itemID, StructurePlacementPreview& p
             return true;
 
         case Structure_TechCenter:
+        case Structure_ResearchLab:
             preview = { ObjPic_TechCenter, 4, 1, TornieStructureFrame_BuildSite, -1 };
             return true;
 
@@ -652,6 +654,7 @@ void Game::reconcileTransportContainment() {
     The destructor frees up all the used memory.
 */
 Game::~Game() {
+    MacTrackpad::setMapArea(nullptr);
     achievements::AchievementManager::instance().end();
     // No path task can be outstanding here -- runBatch joins before returning --
     // but the threads themselves must not outlive the match, so they are stopped
@@ -750,7 +753,7 @@ void Game::initPerformanceLog() {
         std::strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", std::localtime(&nowTime));
         
         performanceLogFile << "=== Dune City Performance Log Started " << timeStr << " ===" << std::endl;
-        performanceLogFile << "Version: " << VERSION << std::endl;
+        performanceLogFile << "Version: " << DUNECITY_DISPLAY_VERSION << std::endl;
         performanceLogFile << "Platform: " << SDL_GetPlatform() << std::endl;
         performanceLogFile << std::endl;
         performanceLogFile.flush();
@@ -1195,8 +1198,10 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
                 << ",\"player_class\":" << AITelemetry::Record::quote(playerClass)
                 << ",\"shared_house_players\":" << players.size();
             if (std::string(controller) == "ai" || qbot) {
+                // A QuantBot's role can be switched in game (CMD_AI_SUPPORT_ROLE): report its live one.
                 const auto* playerData = PlayerFactory::getByPlayerClass(playerClass);
-                const AIRole role = playerData != nullptr ? playerData->getRole() : AIRole::Both;
+                const AIRole role = qbot ? qbot->getRole()
+                    : playerData != nullptr ? playerData->getRole() : AIRole::Both;
                 row << ",\"ai_type\":" << AITelemetry::Record::quote(aiType)
                     << ",\"ai_support\":" << (role == AIRole::Builder ? "true" : "false")
                     << ",\"ai_role\":" << AITelemetry::Record::quote(aiRoleName(role));
@@ -1204,6 +1209,10 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
                     row << ",\"ai_difficulty\":" << AITelemetry::Record::quote(aiDifficulty);
             }
             if (qbot) row << ",\"qbot_difficulty\":" << AITelemetry::Record::quote(aiDifficulty);
+            if(gameInitSettings.getGameOptions().researchLab)
+                row << ",\"tech_level\":" << currentHouse->getTechLevel()
+                    << ",\"research_target\":" << currentHouse->getTechResearchTarget()
+                    << ",\"research_remaining\":" << currentHouse->getTechResearchRemaining();
 
             if (finishedMatch) {
                 row << ",\"result\":\"" << (winningTeam >= 0 && currentHouse->getTeamID() == winningTeam ? "winner" : currentHouse->isAlive() ? "alive" : "defeated") << '"'
@@ -1315,6 +1324,13 @@ void Game::initReplay(const std::string& filename) {
     cmdManager.load(fs);
 
     initGame(loadedGameInitSettings);
+    // The local-only Spectate setting is deliberately absent from serialized settings.
+    // An all-AI replay therefore has no local human seat to restore.
+    if(!pLocalPlayer) {
+        localObserver = true;
+        gameInitSettings.setLocalSpectator(true);
+        setupSpectatorView();
+    }
 }
 
 
@@ -3006,8 +3022,9 @@ void Game::drawScreen()
     const auto* actionTile=actionTarget && currentGameMap->tileExists(actionTarget->getLocation())
         ? currentGameMap->getTile(actionTarget->getLocation()) : nullptr;
     const bool showTarget=actionTarget && actionTile && !SDL_TICKS_PASSED(SDL_GetTicks(),actionIndicatorUntil)
-        && actionTarget->isVisible(pLocalHouse->getTeamID()) && actionTile->isExploredByTeam(pLocalHouse->getTeamID())
-        && !actionTile->isFoggedByTeam(pLocalHouse->getTeamID());
+        && (isObserving() || (pLocalHouse && actionTarget->isVisible(pLocalHouse->getTeamID())
+            && actionTile->isExploredByTeam(pLocalHouse->getTeamID())
+            && !actionTile->isFoggedByTeam(pLocalHouse->getTeamID())));
     if(showTarget && (SDL_GetTicks()/100)%2==0) actionTarget->drawSelectionBox();
     if(!showTarget && (indicatorFrame != NONE_ID) && (screenborder->isInsideScreen(indicatorPosition, Coord(TILESIZE,TILESIZE)) == true)) {
         SDL_Texture* pUIIndicator = pGFXManager->getUIGraphic(UI_Indicator);
@@ -3131,10 +3148,13 @@ void Game::drawScreen()
 void Game::doInput()
 {
     SDL_Event event;
-    while(SDL_PollEvent(&event)) {
-        updateCursorVisibilityForInput(event);
+    for(;;) {
         const bool mapTouchEnabled = !pInGameMenu && !pInGameMentat
             && !pWaitingForOtherPlayers && !pInterface->hasChildWindow();
+        MacTrackpad::setMapArea(mapTouchEnabled ? &screenborder->getScreenRect() : nullptr,
+                               mapTouchEnabled ? &pInterface->getMapViewControlsRect() : nullptr);
+        if(!SDL_PollEvent(&event)) break;
+        updateCursorVisibilityForInput(event);
         if(TouchInput::translateTouchEvent(event,
                 mapTouchEnabled ? &screenborder->getScreenRect() : nullptr,
                 mapTouchEnabled ? &pInterface->getMapViewControlsRect() : nullptr)) {
@@ -3168,6 +3188,11 @@ void Game::doInput()
                                cursorManager.isInitialized() ? "yes" : "no");
                 lastCursorLog = now;
             }*/
+        }
+
+        if(screenborder->handleMiddlePan(event, mapTouchEnabled)) {
+            selectionMode = false;
+            continue;
         }
 
         if(pNetworkManager && pNetworkManager->lateJoinPaused() && event.type!=SDL_QUIT && dynamic_cast<JoinProgressWindow*>(pInGameMenu.get())==nullptr) continue;
@@ -3214,13 +3239,14 @@ void Game::doInput()
                 } break;
 
                 case SDL_MOUSEWHEEL: {
-                    if (event.wheel.y != 0) {
-                        const bool wheelHandled = pInterface->handleMouseWheel(
-                            drawnMouseX, drawnMouseY, event.wheel.y > 0);
-                        // The wheel zooms only in Dune2R; elsewhere it stays free for lists.
-                        if(!wheelHandled && dune2RContentActive()) {
-                            setZoomStep(zoomStep + (event.wheel.y > 0 ? 1 : -1), drawnMouseX, drawnMouseY, true);
-                        }
+                    const bool wheelHandled = event.wheel.y != 0 && pInterface->handleMouseWheel(
+                        drawnMouseX, drawnMouseY, event.wheel.y > 0);
+                    if(!wheelHandled && mapTouchEnabled
+                       && screenborder->isScreenCoordInsideMap(drawnMouseX, drawnMouseY)) {
+                        const int step = screenborder->mouseWheelZoom(event.wheel);
+                        if(step) setZoomStep(zoomStep + step, drawnMouseX, drawnMouseY, true);
+                    } else {
+                        screenborder->resetMouseWheelZoom();
                     }
                 } break;
 
@@ -3502,9 +3528,14 @@ case CursorMode_Heal: {
         }
     }
 
+    if(screenborder->isMousePanning() && (pInGameMenu || pInGameMentat
+       || pWaitingForOtherPlayers || pInterface->hasChildWindow())) {
+        screenborder->handleMiddlePan(SDL_Event{}, false);
+    }
     const bool touchPointer = pointerIsTouch();
     if((pInGameMenu == nullptr) && (pInGameMentat == nullptr) && (pWaitingForOtherPlayers == nullptr)
        && !pInterface->hasChildWindow()
+       && !screenborder->isMousePanning()
        && (touchPointer || (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS))) {
 
         const Uint8 *keystate = SDL_GetKeyboardState(nullptr);
@@ -3598,7 +3629,7 @@ std::vector<PlacementReservation::Footprint> Game::pendingReservationFootprints(
 
 void Game::drawReservationGhosts()
 {
-    // Owner-only: pLocalHouse is the player's house, or the house an observer is viewing.
+    // Planned construction belongs to the local participant, never an observer.
     if(pLocalHouse == nullptr) {
         return;
     }
@@ -3745,7 +3776,7 @@ void Game::runMainLoop() {
     initializeGameLoop();
     
     // Update Discord Rich Presence for in-game status
-    std::string houseName = pLocalHouse ? getHouseNameByNumber(static_cast<HOUSETYPE>(pLocalHouse->getHouseID())) : "Unknown";
+    std::string houseName = isObserving() ? "Spectating" : pLocalHouse ? getHouseNameByNumber(static_cast<HOUSETYPE>(pLocalHouse->getHouseID())) : "Unknown";
     std::string mapName = gameInitSettings.getFilename();
     // Extract just the map name from the path
     size_t lastSlash = mapName.find_last_of("/\\");
@@ -4844,7 +4875,7 @@ void Game::onOptions()
             toggleMatchPause();
         }
         if(menuPause) menuPause->closed = false;
-        Uint32 color = getHouseColorRGB(getHouseVisualHouse(pLocalHouse->getHouseID()), 3);
+        Uint32 color = getHouseColorRGB(getHouseVisualHouse(getInterfaceHouseID()), 3);
         pInGameMenu = std::make_unique<InGameMenu>((isNetworkGameType(gameType)), color);
         bMenu = true;
         pauseGame("options");
@@ -4998,7 +5029,7 @@ bool Game::setZoomStep(int step, int screenX, int screenY, bool announce) {
 
 void Game::onMentat()
 {
-    pInGameMentat = std::make_unique<MentatHelp>(pLocalHouse->getHouseID(), techLevel, gameInitSettings.getMission());
+    pInGameMentat = std::make_unique<MentatHelp>(getInterfaceHouseID(), techLevel, gameInitSettings.getMission());
     bMenu = true;
     pauseGame("mentat");
 }
@@ -5552,10 +5583,10 @@ bool Game::loadSaveGame(InputStream& stream) {
     else if(spectatorViewPlayer) {
         // A network observer that has been promoted to a real controller reloads into this same
         // Game. The seat search above has already attached the real human, so drop the detached
-        // UI identity rather than leaving a second HumanPlayer pointing at the view house.
+        // UI identity rather than leaving a second HumanPlayer after promotion.
         spectatorViewPlayer.reset();
     }
-    if(!pLocalPlayer || !pLocalHouse) THROW(std::runtime_error, "Cannot assign the local co-op player.");
+    if(!pLocalPlayer || (!isObserving() && !pLocalHouse)) THROW(std::runtime_error, "Cannot assign the local co-op player.");
 
     debug = stream.readBool();
     bCheatsEnabled = stream.readBool();
@@ -5652,7 +5683,8 @@ bool Game::loadSaveGame(InputStream& stream) {
     if(bMultiplayerLoad) {
         unselectAll(selectedList);
         selectedList.clear();
-        screenborder->setNewScreenCenter(pLocalHouse->getCenterOfMainBase()*TILESIZE);
+        if(pLocalHouse) screenborder->setNewScreenCenter(pLocalHouse->getCenterOfMainBase()*TILESIZE);
+        else setupView();
     }
 
     // load city simulation state (version 9807+)
@@ -6138,27 +6170,35 @@ void Game::endObservationWithoutHost() {
 }
 
 void Game::setGameWon() {
-    // An observer takes no side: its view house winning or losing is not the end of its game.
-    // It ends once the whole match is decided (checkWatchedGameDecided, setWatchedGameOver).
-    if(isObserving()) return;
+    // A campaign's authored objective is independent of who is watching it. Network viewers
+    // follow the host; only a local campaign observer ends on the mission's native rules.
+    const bool observing = isObserving();
+    if(observing && !(localObserver && gameType == GameType::Campaign)) return;
     if(!bQuitGame && !finished) {
-        AchievementEvents::finish(true);
+        if(!observing) AchievementEvents::finish(true);
         won = true;
         finished = true;
         finishedLevelCycle = gameCycleCount;  // MULTIPLAYER FIX (Issue #9): Use cycle count
-        soundPlayer->playVoice(YourMissionIsComplete,pLocalHouse->getHouseID());
+        if(observing) {
+            const House* objective = getOutcomeHouse();
+            watchedWinnerTeam = objective ? objective->getTeamID() : 0;
+        } else {
+            soundPlayer->playVoice(YourMissionIsComplete,pLocalHouse->getHouseID());
+        }
     }
 }
 
 
 void Game::setGameLost() {
-    if(isObserving()) return;
+    const bool observing = isObserving();
+    if(observing && !(localObserver && gameType == GameType::Campaign)) return;
     if(!bQuitGame && !finished) {
-        AchievementEvents::finish(false);
+        if(!observing) AchievementEvents::finish(false);
         won = false;
         finished = true;
         finishedLevelCycle = gameCycleCount;  // MULTIPLAYER FIX (Issue #9): Use cycle count
-        soundPlayer->playVoice(YouHaveFailedYourMission,pLocalHouse->getHouseID());
+        if(observing) watchedWinnerTeam = 0;
+        else soundPlayer->playVoice(YouHaveFailedYourMission,pLocalHouse->getHouseID());
     }
 }
 
@@ -6217,6 +6257,10 @@ void Game::setWatchedGameOver(int winningTeam, bool timeUp) {
 }
 
 std::string Game::watchedResultText() const {
+    if(localObserver && gameType == GameType::Campaign && finished) {
+        const std::string name = getHouseNameByNumber(gameInitSettings.getHouseID());
+        return fmt::sprintf(won ? _("House %s completed its mission") : _("House %s failed its mission"), name);
+    }
     if(watchedWinnerTeam <= 0) return watchedTimeUp ? _("Time is up - no winner") : _("No house is left standing");
     // The houses that took part (a player each); a map's spare houses only as a fallback.
     std::vector<int> members;
@@ -7014,7 +7058,7 @@ bool Game::handleSelectedObjectsAttackClick(int xPos, int yPos) {
     const bool queued = (mod & KMOD_SHIFT) != 0;
     const Tile* pTile = currentGameMap->tileExists(xPos, yPos) ? currentGameMap->getTile(xPos, yPos) : nullptr;
     const ObjectBase* pClicked = (pTile != nullptr && pTile->hasAnObject()) ? pTile->getObject() : nullptr;
-    const bool bloom = pClicked == nullptr && pTile != nullptr && pTile->isSpiceBloom()
+    const bool bloom = pLocalHouse && pClicked == nullptr && pTile != nullptr && pTile->isSpiceBloom()
         && pTile->isExploredByTeam(pLocalHouse->getTeamID());
     const bool fireAtGround = (mod & KMOD_CTRL) != 0 || bloom;
     UnitBase* pResponder = nullptr;
@@ -7129,7 +7173,7 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
     }
 
     StructureBase* pStructure = dynamic_cast<StructureBase*>(pTile->getGroundObject());
-    if((pStructure != nullptr) && (pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())) {
+    if(pLocalHouse && (pStructure != nullptr) && (pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())) {
         InfantryBase* pResponder = nullptr;
         const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
 
@@ -7667,12 +7711,10 @@ void Game::drawCityOverlay(int x1, int y1, int x2, int y2) {
 
     switch (currentCityOverlay_) {
         case DuneCity::CityOverlayMode::PowerGrid: {
-            // The per-tile city power grid (CitySimulation::getPowerGridMap)
-            // is stubbed — every cell reads 0.  Instead, show a simple
-            // house-level power status: green overlay on zone/conductive tiles
-            // when the house has power, red when it doesn't.
-            bool housePower = pLocalHouse->hasPower();
-            uint8_t level = housePower ? 200 : 200;
+            // Zones use their owning house's live growth predicate. A neutral observer's
+            // roads read the grid instead of borrowing another faction's power.
+            const bool housePower = pLocalHouse && pLocalHouse->hasPower();
+            constexpr uint8_t level = 200;
             int rOn = 0, gOn = 255, bOn = 0;     // green = powered
             int rOff = 255, gOff = 0, bOff = 0;  // red   = no power
             const auto& powerMap = citySimulation_->getPowerGridMap();
@@ -7682,7 +7724,10 @@ void Game::drawCityOverlay(int x1, int y1, int x2, int y2) {
                     if (!currentGameMap->tileExists(x, y)) continue;
                     Tile* t = currentGameMap->getTile(x, y);
                     if (t->hasCityZone() || t->isRoad()) {
-                        if (housePower)
+                        const auto* zone = dynamic_cast<const ZoneStructure*>(t->getNonInfantryGroundObject());
+                        const bool powered = zone ? zone->hasCityPower()
+                            : (pLocalHouse ? housePower : powerMap.worldGet(x, y) != 0);
+                        if (powered)
                             drawOverlayBlock(x, y, blockSize, level, rOn, gOn, bOn, rOn, gOn, bOn);
                         else
                             drawOverlayBlock(x, y, blockSize, level, rOff, gOff, bOff, rOff, gOff, bOff);
@@ -7854,7 +7899,7 @@ void Game::drawCityRoads(int x1, int y1, int x2, int y2) {
             return;
         }
 
-        if (!debug && !tile.isExploredByTeam(pLocalHouse->getTeamID())) {
+        if (!debug && !isObserving() && !tile.isExploredByTeam(pLocalHouse->getTeamID())) {
             return;
         }
 
@@ -8291,9 +8336,23 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         // disagree about a house's delivery rate must be told so at the next digest, rather
         // than at whatever later cycle the difference first reaches a refinery.
         houses.mixUint32(pHouse->getSpiceIncomeMultiplier());
+        if(gameInitSettings.getGameOptions().researchLab || pHouse->isTechResearchActive()) {
+            houses.mixInt32(pHouse->getTechLevel());
+            houses.mixInt32(pHouse->getTechResearchTarget());
+            houses.mixInt32(pHouse->getTechResearchRemaining());
+            houses.mixUint32(pHouse->getTechResearchLabID());
+            houses.mixUint8(pHouse->isTechResearchInstallment() ? 1 : 0);
+            houses.mixInt32(pHouse->getTechResearchTotalCost());
+            houses.mixInt32(pHouse->getTechResearchTotalCycles());
+            houses.mixInt64(pHouse->getTechResearchPaid().getRawValue());
+            houses.mixUint8(pHouse->isTechResearchPaused() ? 1 : 0);
+        }
     }
     digest.houseHash = houses.value();
 
+    // An installment upgrade can pause on a sub-credit payment that changes no displayed
+    // balance. Only that rule mixes the builders' exact upgrade state; legacy digests stay as they were.
+    const bool installments = gameInitSettings.getGameOptions().technologyInstallments;
     GameStateDigest::Hasher objects;
     Uint32 objectCount = 0;
     objectManager.forEachObject([&](Uint32 objectID, const ObjectBase* pObject) {
@@ -8309,6 +8368,12 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         objects.mixInt64(static_cast<std::int64_t>(pObject->getHealth().getRawValue()));
         objects.mixInt32(pObject->getLocation().x);
         objects.mixInt32(pObject->getLocation().y);
+        if(installments && pObject->isABuilder()) {
+            const auto* pBuilder = static_cast<const BuilderBase*>(pObject);
+            objects.mixUint8(pBuilder->isUpgrading() ? 1 : 0);
+            objects.mixInt32(pBuilder->getCurrentUpgradeLevel());
+            objects.mixInt64(pBuilder->getUpgradeProgress().getRawValue());
+        }
     });
     digest.objectHash  = objects.value();
     digest.objectCount = objectCount;
@@ -8543,12 +8608,23 @@ void Game::toggleMovementPaths() {
 
 bool Game::isSpectating() const { return pNetworkManager && pNetworkManager->isSpectating(); }
 
+int Game::getInterfaceHouseID() const {
+    return pLocalHouse ? pLocalHouse->getHouseID() : HOUSE_NEUTRAL;
+}
+
+House* Game::getOutcomeHouse() const {
+    if(pLocalHouse) return pLocalHouse;
+    if(isObserving() && (gameType == GameType::Campaign || gameType == GameType::CampaignCoop))
+        return house[gameInitSettings.getHouseID()].get();
+    return nullptr;
+}
+
 bool Game::localHumanImmortalityApplies() const {
     if(!gameInitSettings.getGameOptions().immortalHumanPlayer) return false;
     const GameType type = gameInitSettings.getGameType();
     if(isNetworkGameType(type) || type == GameType::LoadMultiplayer) return false;
-    // An observer has no human controller: pLocalPlayer is the detached view identity and
-    // pLocalHouse belongs to an AI. Require a real, registered human controller on that house.
+    // Observation never supplies a human controller. A participant's house must actually
+    // have a registered human before the option can protect it.
     if(isObserving() || pLocalHouse == nullptr) return false;
     for(const auto& player : pLocalHouse->getPlayerList()) {
         if(dynamic_cast<const HumanPlayer*>(player.get()) != nullptr
@@ -8560,17 +8636,12 @@ bool Game::localHumanImmortalityApplies() const {
 }
 
 void Game::setupSpectatorView() {
-    // Observation has no simulation player, controller slot or ownership. The UI's
-    // legacy non-null HumanPlayer pointer uses a detached, unregistered view object.
+    // Observation has no simulation player, controller slot or house. The detached identity
+    // only stores local selection groups and chat identity; it owns no faction's objects.
     pLocalHouse=nullptr;
-    for(const auto& h : house) if(h && !h->getPlayerList().empty()) { pLocalHouse=h.get(); break; }
-    if(!pLocalHouse) THROW(std::runtime_error,"There is no house to observe.");
-    spectatorViewPlayer=std::make_unique<HumanPlayer>(pLocalHouse,getLocalPlayerName());
-    // The view object is attached to a real house so the sidebar, minimap and cursor keep a
-    // non-null anchor, which means Player::doXxx-style ownership checks would pass for that
-    // house. Stamp the reserved controller id instead: it is never registered, so every
-    // Command this identity emits is refused by Command::executeCommand, without touching
-    // the command queue shared by the AI's city tools.
+    spectatorViewPlayer=std::make_unique<HumanPlayer>(nullptr,getLocalPlayerName());
+    // Keep the reserved id as a second boundary: a view callback must never enqueue an
+    // authorized command, including city commands that do not carry an acting object.
     spectatorViewPlayer->playerID=Player::OBSERVER_PLAYER_ID;
     pLocalPlayer=spectatorViewPlayer.get();
 }

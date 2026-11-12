@@ -584,6 +584,72 @@ non-launcher hunter may be given as an unforced attack (focus fire) but nothing 
 fixes the launcher's facing at the start of the escape section for both difficulties (a 180-degree turn
 costs two of its eight passes).
 
+**2026-11-04 launcher spacing accepted ON (unreleased).** Hashed and INI-round-tripped
+`[Force Concentration] LauncherKiteExtraDistance=2` increases only Launcher/EliteLauncher
+spacing: the per-order movement cap is **2 → 4 tiles**, while the Hunt stand-off is
+`enemy weapon range + 2 → +4`, still capped at the launcher's own firing range.
+`=0` is the exact previous spacing policy; `=1` is also supported, and INI input is
+bounded to 0..2. The too-close trigger, deterministic fixed-point direction, Hunt
+restoration, service/human authority and non-launcher kiting are unchanged. No saved
+AI state or protocol change is needed. The real-engine launcher probe now pairs
+both launcher types on Hard/Brutal against a genuinely approaching tank, completes
+the escape through pathfinding and requires an extra two tiles plus a landed rocket.
+`launcher-kite-off` / `launcher-kite-on` isolate the candidate for same-build audits.
+The final default is **2 (ON)** by the integrator's pooled-outcome decision below.
+
+Real-engine receipt `20261104T220858-launcher-kite-clean-pair-d117fc`, source
+`9e106339`, passed both CTests on the Pro (DuneCity98.0s, Tornie97.5s).
+Each arm starts with the same tank actually approaching to the unchanged five-tile
+close-band edge. A passive allied scout supplies equal vision beyond launcher sight;
+the real pathfinding move finishes before measuring the gap. Actors are fully
+unregistered between arms, not left as dead tile occupants. EliteLaunchers run with
+their legal Tornie content, never fabricated DuneCity products.
+
+| Content / unit | Difficulty | Final gap OFF → ON (tiles) | Rocket damage OFF → ON | ON cycles until hit after move |
+|---|---|---:|---:|---:|
+| DuneCity Launcher | Hard | 6 → 8 | 9 → 7 | 34 |
+| DuneCity Launcher | Brutal | 6 → 8 | 7 → 7 | 18 |
+| Tornie Launcher | Hard | 6 → 8 | 9 → 7 | 40 |
+| Tornie Launcher | Brutal | 6 → 8 | 4 → 4 | 91 |
+| Tornie EliteLauncher | Hard | 6 → 8 | 23 → 7 | 86 |
+| Tornie EliteLauncher | Brutal | 6 → 8 | 5 → 7 | 75 |
+
+The ordinary close-band/force-focus/human/service/other-unit regressions also pass.
+At production source `7495ec73`, all eight mandatory unit/AI/performance gates passed:
+unit suite (1,271 passed/3 skipped,13,338,419 assertions), vanilla and Dune2R AAA,
+scenario smoke, FFA dispatch, custom attack, army recovery and performance. Mini ran
+seven gates; Pro ran performance. The extra strategy probe failed its Infantry versus
+Learned production comparison; QuantTroopers owns the separately identified standing-
+troop-cap interaction. That extra failure is not represented as passing.
+
+**Paired audit:** source `7495ec73`,128×128, Medium base/small army, no prebuilt city,
+None/Medium spice,1v1/2v2,Hard/Brutal,20-minute cap. First seeds9101/148680876 and
+independent confirmation12345/76543 give32games/96house histories per arm. Inputs pair
+exactly; each arm ran17games on mini,13on Windows PC,2on Pro. Air was held by Stefan's
+own running game. Actual launcher kiting occurred in27/32games in both arms
+(1,563 OFF /1,343 ON recorded launcher events; one untyped ON kite excluded).
+
+| Pooled metric | OFF | ON |
+|---|---:|---:|
+| Economy-stall houses / exposed | 11/95 | 13/95 |
+| Bankrupt/empty-queue houses | 32/96 | 32/96 |
+| Nonempty dispatches per house | 0.8333 | 0.8646 |
+| Winning houses | 6 | 12 |
+| Mean final kill value | 5,624.9 | 5,407.4 |
+| Hard mean final kill value | 4,601.0 | 4,751.9 |
+| Brutal mean final kill value | 6,648.8 | 6,062.9 |
+| Mean game duration (minutes) | 18.40 | 17.74 |
+
+The initial48-house cohort had two extra stalls and bankrupt histories; the second
+cohort had equal stalls and two fewer bankrupt histories. The integrator explicitly
+accepted ON after pooling: wins doubled, bankruptcy stayed flat and dispatches rose,
+so the result is not consistently worse overall. **Brutal final kill value declined
+in both cohorts** (6,646.3→6,217.5 and6,651.3→5,908.3); shorter games partly confound
+raw totals, not proof that the decline is harmless. No statistical improvement claim.
+Evidence: `outputs/launcher-kite-20261104/{off,on}/`, `pooled-acceptance.json` and
+`fixture-pairs.json`; queue receipts retain the exact source and per-host logs.
+
+
 **Bundling made shippable.** Optional `[Force Concentration]` keys `Bundle` and `LaunchFromBundle`
 (code defaults true, hashed; `forceBits()` adds B and W from them). Changes against the round-3 test-only
 rule:
@@ -874,20 +940,33 @@ launched 347-, 324- and 282-unit waves (74,300-82,400) within 1.3 minutes, then 
 every 1.5-3 minutes with 98-185 units; Sardaukar, the weakest, held its perimeter, now outside its city
 (`fix1-m25.png`, `fix-harkonnen-m25-rendered.png`). No house was eliminated in those 20 minutes.
 
-**Harness.** `tests/ai/ffa-army.inc` (`FFA_ARMY_SAMPLE` every game minute in every elimination or
-vanilla match: army inside/outside its base - within 2 tiles of an own building - per QuantBot role,
-at the bundle/perimeter, stuck units, the outnumbered verdict with the remembered enemy summed and per
-team; `BALANCE_FFA_DUMP` map dumps drawn by `tests/ai/ffa-map.py`; `--ffa-screenshot` renders the game
-view). `vanilla-match.py` plays generated FFA maps `rs<size>-dunecity|vanilla` (one Fortress start per
-house, 20,000-credit armies, 40,000 cities, Rock High, Spice Medium, his game options), `--ffa x` (one
-label, one game per seed), `army.csv` and an army-deployment report table.
+**Harness.** `tests/ai/ffa-army.inc` logs `FFA_ARMY_SAMPLE` every game minute in every
+elimination or vanilla match: raw army inside/outside its base and on roads, stored
+points/counters, pure estimates and remembered enemy values. The default path never
+evaluates policy to classify roles. `roles_measured=0` and negative role/free-reserve values
+mean unmeasured, not zero; garrison/held-home verdicts are likewise unmeasured.
+Perimeter/outnumbered caches are read only when already current. `BALANCE_FFA_DUMP`
+map dumps are drawn by `tests/ai/ffa-map.py`; screenshots use stored bundle/rally
+points. `vanilla-match.py` plays generated FFA maps `rs<size>-dunecity|vanilla`
+(one Fortress start per house, 20,000-credit armies, 40,000 cities, Rock High,
+Spice Medium, his game options), `--ffa x` (one label, one game per seed), `army.csv`
+and an army-deployment report table. Missing policy measurements render as
+`n/a (unmeasured)`. The mandatory army-deploys regression explicitly enables its
+historical role/cache evaluation with `--army-deploys-regression-observer`; its
+thresholds stay unchanged. That probe-only mode is deliberately non-pure and must
+never be used for A/B or digest comparisons. A pure/unmeasured reserve sample
+cannot pass its reserve clause.
 
 **Regression test** `quantbot_ffa_army_deploys` (`tests/ai/run-ffa-army-deploys.py`, mandatory, AGENTS.md):
 rs160-dunecity, four QuantBot Brutal; fails without a 30+ unit wave by minute 8 or with a house's idle
 reserve 80%+ inside its base for more than 6 minutes in a row (both on seed 9101), or when none of seeds
-9101, 9103 and 9105 (played three at a time) has a house eliminated by minute 30. Since 2026-10-22 the
-elimination check spans three seeds: one seed finishing by minute 30 is chance (a 12-seed sweep: 6/12 v
-5/12 before/after the city-airplane change, which moved 9101 itself from 26.9 to none). Fixed code (60-minute calibration run, seed 9101): first wave at minute 1.3 (66 units by minute 8),
+9101, 9103 and 9105 (played three at a time) has a house eliminated by minute 35 (minute 30 until
+2026-11-05). Since 2026-10-22 the elimination check spans three seeds: one seed finishing by minute 30
+is chance (a 12-seed sweep: 6/12 v 5/12 before/after the city-airplane change, which moved 9101 itself
+from 26.9 to none). TrooperSupport (2026-11-05) moved the first eliminations to 30.3 (9103) and 30.6
+minutes (9105) with every deploy check passing; OFF/ON on 9105, Ordos dies at 21.2 OFF and holds with
+WOR troopers ON (army 14,200 v 0 at minute 20), so the deadline moved to 35, which a stuck army (no
+elimination in 45) still fails. Fixed code (60-minute calibration run, seed 9101): first wave at minute 1.3 (66 units by minute 8),
 longest inside stretch 1 minute, eliminations at 22.3 and 27.4 minutes, ~10 minutes wall for 60
 game minutes. Probe `quantbot_force_concentration` section 7 adds: two enemy houses' two tanks each on
 different teams do not outnumber our two (sum 1,200 v strongest team 600), allied they do; city

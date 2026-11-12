@@ -18,6 +18,7 @@
 #include <mmath.h>
 
 #include <filesystem>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
@@ -77,8 +78,9 @@ CoopCampaignMenu::CoopCampaignMenu(bool LANServer) : LANServer(LANServer) {
 void CoopCampaignMenu::openLobby(const GameInitSettings& settings) {
     int result;
     if(LANServer) {
-        CustomGamePlayers lobby(settings, true, true);
-        result = lobby.showMenu();
+        // Heap-owned: the lobby (~437 KB on MSVC) stays live for the whole match it starts.
+        const auto lobby = std::make_unique<CustomGamePlayers>(settings, true, true);
+        result = lobby->showMenu();
     } else {
         // The room only admits peers. Every gameplay/control byte uses direct channels.
         result = CrossplayMenu(settings, false, {}, false).showMenu();

@@ -31,6 +31,7 @@
 #include <misc/draw_util.h>
 #include <misc/format.h>
 
+#include <INIMap/CampaignMapLibrary.h>
 #include <INIMap/INIMapPreviewCreator.h>
 
 #include <globals.h>
@@ -75,6 +76,12 @@ LoadMapWindow::LoadMapWindow(Uint32 color) : Window(0,0,0,0), color(color), load
     multiplayerUserMapsButton.setToggleButton(true);
     multiplayerUserMapsButton.setOnClick(std::bind(&LoadMapWindow::onMapTypeChange, this, 1));
     mapTypeButtonsHBox.addWidget(&multiplayerUserMapsButton);
+
+    campaignMapsButton.setText(_("Campaign"));
+    campaignMapsButton.setTextColor(color);
+    campaignMapsButton.setToggleButton(true);
+    campaignMapsButton.setOnClick(std::bind(&LoadMapWindow::onMapTypeChange, this, 2));
+    mapTypeButtonsHBox.addWidget(&campaignMapsButton);
 
     mapTypeButtonsHBox.addWidget(Spacer::create(), 5.0);
     mapList.setColor(color);
@@ -221,6 +228,7 @@ void LoadMapWindow::onMapTypeChange(int buttonID)
 {
     singleplayerUserMapsButton.setToggleState(buttonID == 0);
     multiplayerUserMapsButton.setToggleState(buttonID == 1);
+    campaignMapsButton.setToggleState(buttonID == 2);
 
     switch(buttonID) {
         case 0: {
@@ -232,6 +240,10 @@ void LoadMapWindow::onMapTypeChange(int buttonID)
             char tmp[FILENAME_MAX];
             fnkdat("maps/multiplayer/", tmp, FILENAME_MAX, FNKDAT_USER | FNKDAT_CREAT);
             currentMapDirectory = tmp;
+        } break;
+        case 2: {
+            // The active mod's campaign missions as editable map files.
+            currentMapDirectory = CampaignMapLibrary::exportMaps();
         } break;
     }
 

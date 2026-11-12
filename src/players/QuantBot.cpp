@@ -182,6 +182,8 @@ bool QuantBot::hasExplicitUnitCountOverride() const {
 }
 
 bool QuantBot::ignoresUnitCountLimit() const {
+    // A partner switched off imposes nothing on its house.
+    if (switchedOff()) return false;
     // Hard is unchanged: it always ignores the authored count ceiling.
     if (difficulty == Difficulty::Hard) return true;
     // Brutal honours an explicitly selected override. Override 0 is reported as
@@ -190,7 +192,24 @@ bool QuantBot::ignoresUnitCountLimit() const {
 }
 
 bool QuantBot::overridesMilitaryValueCap() const {
-    return difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
+    return !switchedOff() && difficulty == Difficulty::Brutal && hasExplicitUnitCountOverride();
+}
+
+void QuantBot::setRole(AIRole newRole) {
+    if (newRole == role) return;
+    const bool wasFighting = role == AIRole::Both || role == AIRole::Fighter;
+    role = newRole;
+    if (builderOnly() || switchedOff()) {
+        // As a Builder is constructed and loaded: it never launches a wave.
+        gameMode = GameMode::Custom;
+        attackTimer = std::numeric_limits<Sint32>::max();
+    } else if (!wasFighting) {
+        // Back to commanding the army: the timer a human-allied controller starts with.
+        attackTimer = isCampaignGameType(currentGame->gameType) ? 0
+            : SimpleArmyPolicy::attackDelay(MILLI2CYCLES(botConfig().attackTimerMs),
+                currentGame->getGameInitSettings().getRandomSeed(), getGameCycleCount(), getHouse()->getHouseID());
+    }
+    traceDecision("role_switched", AITelemetry::Record().set("role", aiRoleName(role)));
 }
 
 int QuantBot::configuredCustomHarvesterLimit() const {
@@ -215,7 +234,7 @@ bool QuantBot::openingCombatBudgetActive() const {
         || initialItemCount[Structure_HeavyFactory] > 0 || customWave.launched != 0
         || currentGameMap->getSizeX() * currentGameMap->getSizeY() <= 4096) return false;
     const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
-    return factory.enabled && factory.techLevel <= currentGame->techLevel;
+    return factory.enabled && factory.techLevel <= getHouse()->getTechLevel();
 }
 
 bool QuantBot::campaignCombatBudgetActive() const {
@@ -224,7 +243,7 @@ bool QuantBot::campaignCombatBudgetActive() const {
         || initialMilitaryValue < 0 || initialItemCount[Structure_HeavyFactory] > 0
         || campaignWave.launched != 0) return false;
     const auto& factory = currentGame->objectData.data[Structure_HeavyFactory][getHouse()->getHouseID()];
-    return factory.enabled && factory.techLevel <= currentGame->techLevel;
+    return factory.enabled && factory.techLevel <= getHouse()->getTechLevel();
 }
 
 int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const {
@@ -233,7 +252,8 @@ int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int
                                                           productionCash, largestUnitValue);
     // Custom Medium turns banked credits into army past its cap, so a won economy ends the game
     // (docs/ai-scenario-matrix.md, "Difficulty ladder"); at most half the cap, below Hard's.
-    if (difficulty == Difficulty::Medium && autonomousCustomArmy())
+    // MediumClassic 1-2 (default off) keeps the 1.0.807 Medium at its cap.
+    if (difficulty == Difficulty::Medium && autonomousCustomArmy() && botConfig().force.mediumClassic == 0)
         return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash);
     // M (SpendAtCap, test-only, Custom Hard/Brutal): banked credits above the reserve buy heavy
     // units beyond the limit, up to the limit again (QuantBotBuild.cpp keeps the other producers
@@ -245,7 +265,7 @@ int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int
 }
 
 bool QuantBot::permitsPoliceReinforcement(int unitValue) const {
-    if (difficulty != Difficulty::Brutal) return true;
+    if (switchedOff() || difficulty != Difficulty::Brutal) return true;
     if (!currentGame || militaryValueLimit <= 0) return false;
     int value = 0;
     // Match the production allocator's military valuation, including new batch members.
@@ -265,12 +285,8 @@ void QuantBot::update() {
 		return;
 	}
 
-	// Saves from before the role byte only recorded a builder in its class name.
-	if (role == AIRole::Both && getPlayerclass().rfind("qBotSupport", 0) == 0) {
-		role = AIRole::Builder;
-		gameMode = GameMode::Custom;
-		attackTimer = std::numeric_limits<Sint32>::max();
-	}
+	// Switched off by its human partner: no orders, no building, no planning.
+	if (switchedOff()) return;
 
     // Both co-controllers and separate human-allied houses develop an economy;
     // only opponents use the campaign enemy rebuild/pressure restrictions.
@@ -311,7 +327,7 @@ void QuantBot::update() {
 		// Allow campaign controllers a repair-yard target, except Medium:
         // Medium preserves only the count actually present at mission start.
 		// Note: supportMode sets gameMode to Custom, so check currentGame->gameType instead
-		if (difficulty!=Difficulty::Medium && (initialItemCount[Structure_RepairYard] == 0) && currentGame && isCampaignGameType(currentGame->gameType) && currentGame->techLevel > 4) {
+		if (difficulty!=Difficulty::Medium && (initialItemCount[Structure_RepairYard] == 0) && currentGame && isCampaignGameType(currentGame->gameType) && getHouse()->getTechLevel() > 4) {
 			initialItemCount[Structure_RepairYard] = 1;
 			if (initialItemCount[Structure_Radar] == 0) {
 				initialItemCount[Structure_Radar] = 1;
@@ -857,6 +873,8 @@ void QuantBot::onHostileStructureDestroyed(Uint32 itemID, Uint32 originalHouseID
 }
 
 void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID) {
+	// Switched off: no repairs, no defence response (both would be orders).
+	if (switchedOff()) return;
 	const ObjectBase* pDamager = getObject(damagerID);
 
 	if (pDamager == nullptr || pDamager->getOwner() == getHouse() || pObject->getItemID() == Unit_Sandworm || pObject->getItemID() == Unit_Saboteur) {
@@ -897,6 +915,12 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 		if (pGroundUnit->isAwaitingPickup()) {
 			return;
 		}
+        // Damage must not cancel a saved withdrawal/repair trip before the next
+        // AI pass. Use the same controller and ordinary engine repair command.
+        if (retreatPreserveActive()) {
+            int preservationBudget = 1;
+            if (preserveCombatUnit(pGroundUnit, preservationBudget, assemblyRadius(getHouse()->getNumUnits()))) return;
+        }
         // A hit on a hunt party's member is contact (Blob waves): a gathering, marching or
         // reforming party unblobs into the fight before the per-unit reactions below.
         if (damage>0 && pDamager->getOwner()->getTeamID()!=getHouse()->getTeamID())
@@ -1049,40 +1073,51 @@ void QuantBot::refreshTacticalDanger() {
     lossDanger.assign(w*h, 0);
     visibleEnemyBases.clear();
     visibleHarvestLaunchers.clear();
+    const bool civWars = civWarsRules();
+    const bool preserve = retreatPreserveActive();
     const bool emitSafety = AITelemetry::log().enabled()
         && (lastSafetyTrace == std::numeric_limits<Uint32>::max() || now-lastSafetyTrace >= MILLI2CYCLES(30000));
     AITelemetry::Record threats;
-    auto stamp = [&](std::vector<int>& grid, Coord p, int radius, int strength) {
+    auto stamp = [&](std::vector<int>& grid, Coord p, int radius, int strength, bool reachesRock = true) {
         if (p.isInvalid()) return;
         for (int y = std::max(0, p.y-radius); y <= std::min(h-1, p.y+radius); ++y)
             for (int x = std::max(0, p.x-radius); x <= std::min(w-1, p.x+radius); ++x)
-                grid[y*w+x] = std::min(10000, grid[y*w+x] + strength);
+                if (reachesRock || !getMap().getTile(x,y)->isRock())
+                    grid[y*w+x] = std::min(10000, grid[y*w+x] + strength);
     };
-    auto observe = [&](const ObjectBase* object) {
-        if (!object || !object->getOwner() || object->getHealth() <= 0
-            || object->getOwner()->getTeamID() == getHouse()->getTeamID()
-            || !object->isVisible(getHouse()->getTeamID()) || object->getLocation().isInvalid()) return;
-        if (object->isAStructure()) visibleEnemyBases.push_back(object->getLocation());
+    auto observe = [&](const ObjectBase* object, bool active = true) {
+        const bool observed = TacticalSafetyPolicy::observedThreat(object,getHouse()->getTeamID(),active);
+        if (!observed && !(preserve && active && object && object->getOwner() && object->getHealth() > 0
+            && object->getOwner()->getTeamID() != getHouse()->getTeamID()
+            && object->getLocation().isValid())) return;
+        if (observed && object->isAStructure()) visibleEnemyBases.push_back(object->getLocation());
         // Palace missiles are addressed by spacing, not a permanent map-wide veto.
         if (!object->canAttack() || object->getItemID() == Structure_Palace) return;
         Coord p = object->getLocation();
         if (const auto* structure = dynamic_cast<const StructureBase*>(object))
             p += Coord(structure->getStructureSizeX()/2, structure->getStructureSizeY()/2);
-        const int radius = std::max(1, object->getWeaponRange()) + 2;
-        stamp(tacticalDanger, p, radius, 100);
+        const bool reachesRock = TacticalSafetyPolicy::threatReachesRock(object->getItemID(),civWars);
+        const int radius = TacticalSafetyPolicy::tacticalThreatRadius(object->getItemID(),object->getWeaponRange(),civWars);
+        if (observed) stamp(tacticalDanger, p, radius, 100, reachesRock);
         // Launchers get an early-warning margin: a harvester must turn before missiles arrive.
         // Tracked harvesters can crush foot troops; do not treat them like tanks.
-        const int harvestRadius = TacticalSafetyPolicy::harvesterThreatRadius(object->getItemID(),object->getWeaponRange());
-        if (object->getItemID()==Unit_Launcher) visibleHarvestLaunchers.push_back(object->getObjectID());
+        const int harvestRadius = preserve
+            ? std::max(4, object->getWeaponRange() + 3)
+            : TacticalSafetyPolicy::harvesterThreatRadius(object->getItemID(),object->getWeaponRange(),civWars);
+        // Retain the existing checkpointed threat list; ON includes every mobile
+        // field attacker, even unseen, instead of only visible launchers.
+        if (object->getItemID()==Unit_Launcher || (preserve && object->isAUnit()))
+            visibleHarvestLaunchers.push_back(object->getObjectID());
         for (int y = std::max(0,p.y-harvestRadius); y <= std::min(h-1,p.y+harvestRadius); ++y)
             for (int x = std::max(0,p.x-harvestRadius); x <= std::min(w-1,p.x+harvestRadius); ++x)
-                if ((x-p.x)*(x-p.x)+(y-p.y)*(y-p.y) <= harvestRadius*harvestRadius)
+                if ((x-p.x)*(x-p.x)+(y-p.y)*(y-p.y) <= harvestRadius*harvestRadius
+                    && (reachesRock || !getMap().getTile(x,y)->isRock()))
                     harvesterDanger[y*w+x] += 100;
-        if (emitSafety) threats.set(std::to_string(object->getObjectID()), AITelemetry::Record()
+        if (emitSafety && observed) threats.set(std::to_string(object->getObjectID()), AITelemetry::Record()
             .set("item",object->getItemID()).set("x",p.x).set("y",p.y).set("radius_tiles",radius)
             .set("harvester_radius_tiles",harvestRadius));
     };
-    for (const auto* unit : getUnitList()) if (unit->isActive()) observe(unit);
+    for (const auto* unit : getUnitList()) observe(unit,unit->isActive());
     for (const auto* structure : getStructureList()) observe(structure);
     factoryEnemyClearanceStale = true;
     for (const auto& loss : recentStructureLosses) {
@@ -1201,6 +1236,13 @@ void QuantBot::resetLearningForMeasuredScoring() {
 }
 
 void QuantBot::onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) {
+    if (AITelemetry::log().enabled()) {
+        const auto* source = getObject(attacker);
+        traceDecision("special_weapon_reward", AITelemetry::Record().set("attacker", attacker)
+            .set("target", target).set("item", source ? int(source->getItemID()) : -1)
+            .set("damage_milli", reward.damageMilli).set("hp_milli", reward.hpRemovedMilli)
+            .set("kill_bonus_milli", reward.killBonusMilli).set("hits", reward.hits).set("kills", reward.kills));
+    }
     for (auto& raid : harvesterStrikeTraces) for (auto& member : raid.members) if (member.id==attacker) {
         member.reward.damageMilli += reward.damageMilli;
         member.reward.killBonusMilli += reward.killBonusMilli;

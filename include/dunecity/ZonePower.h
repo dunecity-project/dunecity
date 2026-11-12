@@ -4,6 +4,12 @@
 #include <data.h>
 
 namespace DuneCity {
+/// A vacant lot still needs a live generator before it can grow. The legacy
+/// rule accepted 0/0; keep that only for games saved before the vacancy rule.
+inline bool hasZonePower(int produced, int required, bool unpoweredZonesVacate) {
+    return produced >= required && (!unpoweredZonesVacate || produced > 0);
+}
+
 
 /**
  * Per-density power consumption for city zones (R/C/I).

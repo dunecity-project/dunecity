@@ -43,6 +43,22 @@ also gets this idle fallback. The existing protection against military savings
 now binds the actual yard selection as well as reserving credits. A blackout,
 absent demand, insufficient cash or unavailable land still prevents zoning.
 
+`[Force Concentration] CityGrowthPower=1` (hashed, default on) extends that
+growth allocation to its real generation prerequisite. When a demanded legal
+R/C/I plot has a positive return but less than 24 spare power, the capital
+planner substitutes a legal Windtrap, or an already affordable Nuclear Plant,
+for the plot. Its full price and required concrete are reserved from military
+orders and Starport bargains, including while cash accumulates. A pending
+generator prevents another allocation; after it completes the ordinary zoning
+and military rules resume. Actual air/crime protection and required civics keep
+their existing priority. The switch is inert outside city games; off preserves
+the previous allocation, including the power-starved Starport stall.
+
+The `quantbot_no_spice_city` engine fixture reproduces the four-zone,
+ten-spare-power/cheap-import deadlock from `harkonan doing nothing.dls`, checks
+the off/on queues and exact funded generator, prevents a duplicate pending
+generator, and confirms zoning resumes with power. No saved AI state changes.
+
 Falling cash alone is not a shortage. The four-minute runway comparison is:
 
 `projected cash = cash − unpaid orders + forecast net income − continued production cost`
@@ -72,6 +88,84 @@ Poorer openings retain their income-first progression. Both Starport constructio
 paths require an enabled unit in the map's CHOAM catalogue: zero stock can restock,
 but an absent entry cannot. Owning a heavy factory does not waive this check.
 
+`[Force Concentration] CityStarportSupply=1` (hashed, default on) makes the first
+useful Starport a protected one-off capital project for a city whose seed economy
+is complete and whose tax forecast exceeds upkeep and can fund the building.
+It uses the real CHOAM catalogue, legal site, prerequisites, concrete and queue
+commitments. A pending or standing port ends the claim. Without it, cheap city
+plots and the first-heavy-factory saving repeatedly win before the Starport
+fallback is reached, even when a developed no-spice city earns enough to buy it.
+
+`CityConstructionCapital=1` (hashed, default on) lets Hard/Brutal arbitrate a
+seeded tax city's first legal Heavy Factory against repeated military imports once its Starport
+is standing, the full factory and foundation quote is already affordable, tax
+exceeds upkeep, and standing power leaves the existing 24-power growth floor
+after the factory's draw. It never saves below that quote, runs during active
+defence, duplicates a queued factory, or changes the ordinary MCV ranking.
+This is a bounded purchase, not permission to fund continuous factory operation.
+Easy/Medium retain their original allocation: the broader all-difficulty
+candidate added two economy stalls and one bankruptcy in the 36-game paired
+matrix, all on Medium; Hard/Brutal added neither and preserved first-Starport
+availability. MCV priority is unchanged at every difficulty.
+
+`ThreatTurrets=1` in the same section (hashed, default on) lets Custom Hard/Brutal
+buy local rocket cover against **visible armed ground units near the production,
+income and power core (including Radar)**, rather than chasing every outlying plot.
+The build's existing visible-unit survey supplies contacts; hidden armies, aircraft,
+workers and saboteurs do not increase this goal. Contacts are transient per-pass
+scratch (no unsaved two-second decision cache). With `MoreRocketTurrets=1`, one
+rocket per 175 credits of nearby observed fighters, rounded up, demands 2–8 local
+firing covers, with a 12-rocket reactive house ceiling. Existing and reserved
+local emplacements count. More-off retains the former one-per-200 calculation.
+An active core raid protects the next turret or power/tech prerequisite ahead of
+repeat plots and unit spending, without waiting for two refineries and a
+completed production core. This finite goal and the house-wide cap bound the
+claim. After six real rockets stand with working tech and spare supplier power,
+the first Starport owns its one-off funding even while outlying cover is short.
+That prevents endless replacements starving mobile reinforcement; giving way
+after only two new guns instead lost both supplier and base in the save.
+An import's high return score cannot replace either bounded claim with cheap
+zoning through the military/growth interleave while its price is accumulating.
+The peaceful 8–12 battery and growth interleave stay unchanged. Site search is
+bounded to the threatened asset's weapon-range window, first minimizes observed
+return fire while retaining a hostile target in range, then favours firing cover.
+It preserves spacing, roads and ground access. Once the local goal is met or
+contacts disappear, the claim ends.
+Generation, tech rebuilds and the first supplier prefer legal sites inside the standing
+rocket battery, minimizing observed return fire; a Radar rebuilt outside it can
+otherwise die again before its first replacement rocket finishes.
+Switches off preserve the old paths. No save-format or city-tax-rule change.
+
+`MoreRocketTurrets=0` is hashed and **default off**. The additional tuning did not
+meet its final same-build acceptance gate; it is retained only as an explicit
+opt-in experiment. When enabled, the ordinary pre-core allowance rises from two
+to three rockets in Custom Medium+ bases with at least eight built
+structures, or four for Hard/Brutal bases with at least sixteen. Tax-only cities
+buy toward that small standing battery after the seed economy/worker opening
+once recurring income is positive. Raising permission alone cannot request a
+third overlapping gun, and starting-map turrets do not unlock their yard tech.
+The four-minute income budget must cover all remaining yard upgrades plus the
+next rocket, concrete and working cash; unpriced prerequisites are not rushed.
+Only then may the finite project save its next step, which still needs current
+cash plus the working buffer before production. Mining bases keep their normal
+quiet capital priorities. Existing finite prerequisite/placement
+paths are reused. Income supply, first-factory/expansion capital, emergencies,
+power and the growth interleave keep their priority. Pending rockets close the
+allowance across parallel yards. Mature coverage goals are unchanged (and can
+exceed twelve); the local-eight/reactive-twelve caps remain. The 175-value scale
+adds at most one local cover over the former 200-value scale.
+Idle fleet-ratio Carryall/Hi-Tech savings also yield to a fully budgeted
+standing battery when there is no spice-worker target, busy transport,
+pickup/repair work or MCV. Actual transport demand retains its normal priority;
+this is not permission to divert its savings into quiet-base defences.
+`more-rocket-turrets-on` and `more-rocket-turrets-off` isolate this opt-in tuning
+in same-build comparisons; both retain `ThreatTurrets` and all other fixes.
+The final 88-game paired trial on `b98c698a` raised no-spice joint-alive rockets
+at 20 minutes only 1.89→2.00 (+0.11, below the required +1); bankruptcy was
+unchanged and mean kill value slightly lower. This is not an accepted
+default-on increase. Evidence and complete tables:
+`outputs/more-rocket-turrets-20261104/healthy-tax-final/`.
+
 Funded Dune City custom games use the established parallel factory/repair build
 order when current cash and projected cash cover another heavy factory, four
 minutes of its operation and the working buffer. The city-yard target is never
@@ -91,6 +185,48 @@ override is enforced. Old serialized map-size defaults no longer restrict a
 loaded house. QuantBot still chooses economic targets from remaining spice and
 income/capacity, and campaign enemy/late-mission helper policies still shape its
 own fleet; those decisions no longer impose an engine cap on a shared human house.
+
+## Optional Research Lab policy
+
+`[Force Concentration] ResearchLab=1` is a multiplayer-hashed QuantBot setting,
+on by default even in older configuration files without the key. It acts only
+when the match enables the separate **Research Lab** game option. With that
+option off, no lab planning, research payment or extra random draw is performed;
+the original match technology still supplies the house's build gates.
+
+The normal yard order builds one lab after essential income, power, services,
+basic production and defence, before optional advanced technology and production
+expansion. Campaign reconstruction keeps its authored essentials first. The
+lab uses the same legal-site search, complete foundations, queue acceptance and
+shared cash ledger as other buildings. Pending labs count across every yard.
+If its extra power is not funded by standing generation, a legal generator is
+bought first, retaining funding for both purchases. A destroyed lab is rebuilt
+on the same terms, including at tech 9; research itself stops at level 9.
+Fighter-only and switched-off partners do not spend on either.
+
+Both lab construction and research require delivered spice income or an
+established, bankable tax base, a positive net-income forecast, a funded opening
+fleet, and completed income bootstrap. Neither runs during a visible attack on
+our structures/workers, an engaged air attack, dangerous developed-district
+crime, or a power shortage. Keep at least 1,000 credits of working capital
+(or the larger existing economy/unit buffer), **plus** the largest currently
+protected civic, strategic, worker or capital purchase. Current uncommitted cash
+and the four-minute production forecast, after this pass's accepted spending,
+must both retain that reserve. Forecast receipts never pay an immediate bill.
+
+After ordinary producers have taken their turn, the lowest-object-ID live owned
+lab starts the next level through the House research API. The full price is
+`300 × target tech`; duration is `30 + 10 × target tech` simulated seconds.
+Accepted research charges this pass's shared ledger once. The AI emits
+`research_started` with `from`, `to`, `cost`, `cycles` and `lab`; House events
+record completion or cancellation. Lab destruction cancels its active work
+without a refund, not the levels already completed.
+
+Production gates, prospective unit-mix slots and strategy tech bands use the
+house's researched level. The runtime slot cache and strategy expansion refresh
+when that level changes without drawing a new saved strategy or tempo.
+Campaign mission-stage difficulty and opening timing still use the match's
+authored level, not research progress.
 
 ## Comparison
 
@@ -224,8 +360,13 @@ now emits an explicit marker while retaining room for terminal summaries.
 The engine probe exercises exact worker savings, simultaneous construction,
 depleted spice, cash-starved factories and funded production expansion in both
 mods. It also checks factory upgrades, MCV savings, multiple yards, defensive
-yard unlocks and additional transport. The Starport probe also covers stale market/display quotes and legacy
-campaign/custom bulk-import rules. Tests run against an isolated profile.
+yard unlocks and additional transport. Its Research Lab cases cover the hashed
+policy/match off switches, reserve protection, one real lab order across yards,
+research payment/completion, refreshed factory offers and cached strategy slots,
+cancellation and rebuilding. SQLite and spending-audit tests count the AI
+research charge once, not again from the House lifecycle event. The Starport
+probe also covers stale market/display quotes and legacy campaign/custom
+bulk-import rules. Tests run against an isolated profile.
 
 ```sh
 python3 tests/ai/run-campaign-balance.py --build-dir build-705 \

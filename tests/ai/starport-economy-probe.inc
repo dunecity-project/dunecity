@@ -1,8 +1,13 @@
 // Real-game fixture, included only by the diagnostic main.
+#include <dunecity/CityConstants.h>
+#include <dunecity/CitySimulation.h>
 #include <players/QuantBot.h>
 #include <structures/StarPort.h>
 #include <Choam.h>
 #include <Map.h>
+#include <units/UnitBase.h>
+#include <array>
+#include <limits>
 #include <stdexcept>
 
 void runStarportEconomyProbe(Game& game) {
@@ -218,6 +223,29 @@ void runStarportEconomyProbe(Game& game) {
             openingYard=static_cast<BuilderBase*>(building);
     if(!openingYard) throw std::runtime_error("No yard for carryall priority fixture");
     openingYard->upgrading=false;openingYard->updateBuildList();
+    // The first transport's peaceful savings priority is distinct from an
+    // emergency defence upgrade against the native campaign's visible army.
+    const int team=house->getTeamID();
+    std::vector<UnitBase*> visibleHostiles;
+    for(auto* unit:unitList)
+        if(unit->getOwner() && unit->getOwner()->getTeamID()!=team
+            && unit->canAttack() && unit->isVisible(team)) visibleHostiles.push_back(unit);
+    auto restoreHostiles=[&] {
+        for(auto* unit:visibleHostiles)unit->setVisible(team,true);
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+    };
+    auto buildOpeningTransport=[&] {
+        for(auto* unit:visibleHostiles)unit->setVisible(team,false);
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+        try {
+            for(const auto* unit:unitList)
+                if(unit->getOwner() && unit->getOwner()->getTeamID()!=team
+                    && unit->canAttack() && unit->isVisible(team))
+                    throw std::runtime_error("Peaceful carryall reserve fixture still observes a hostile army");
+            bot->build(4000);
+        }catch(...){restoreHostiles();throw;}
+        restoreHostiles();
+    };
     for(const auto gameType:{GameType::CustomGame,GameType::Campaign}) {
         game.gameType=gameType;bot->gameMode=QuantBot::GameMode::Custom;
         auto* transportPort=dynamic_cast<StarPort*>(place(Structure_StarPort));
@@ -232,12 +260,12 @@ void runStarportEconomyProbe(Game& game) {
         savedStructures=structureList;structureList.clear();
         structureList.push_back(openingYard);structureList.push_back(transportPort);structureList.push_back(secondPort);
         try {
-            bot->build(4000);
+            buildOpeningTransport();
             if(transportPort->getProductionQueueSize() || secondPort->getProductionQueueSize()
                 || openingYard->getProductionQueueSize() || house->getCredits()!=639)
                 throw std::runtime_error("Cheap troops or construction consumed first carryall savings");
             house->addCredits(361);
-            bot->build(4000);
+            buildOpeningTransport();
         }catch(...){structureList=savedStructures;throw;}
         structureList=savedStructures;
         int firstTransports=0;
@@ -369,6 +397,20 @@ void runStarportEconomyProbe(Game& game) {
         if (structure->getOwner()==house && structure->getItemID()==Structure_StarPort) oldPorts.push_back(structure);
     for (auto* structure : oldPorts) structure->destroy();
     market.availableItems.clear();
+    // The late technology cases run as a custom game, unlike the initial
+    // campaign import cases. Supply their independent population prerequisite
+    // without disabling the rule or weakening any empty-market tech assertion.
+    auto* techCity=game.isCitySimEnabled() ? game.getCitySimulation() : nullptr;
+    if(game.isCitySimEnabled() && !techCity) throw std::runtime_error("Tech fixture needs its active city census");
+    std::array<int,3> savedTechPopulation{};
+    if(techCity) {
+        auto& state=techCity->getHouseStateMut(house->getHouseID());
+        savedTechPopulation={state.resPop,state.comPop,state.indPop};
+        state.resPop=(DuneCity::kStarportPopulation+DuneCity::CitySimulation::kPopDisplayMultiplier-1)
+            /DuneCity::CitySimulation::kPopDisplayMultiplier;
+        state.comPop=0;state.indPop=0;
+        if(!house->meetsStarportPopulation()) throw std::runtime_error("Tech fixture did not meet the Starport population prerequisite");
+    }
     for(int y=0;y<currentGameMap->getSizeY();++y) for(int x=0;x<currentGameMap->getSizeX();++x)
         if(!currentGameMap->getTile(x,y)->hasAStructure()) currentGameMap->getTile(x,y)->setType(Terrain_Rock);
     auto* techYard=static_cast<BuilderBase*>(place(Structure_ConstructionYard));
@@ -444,5 +486,9 @@ void runStarportEconomyProbe(Game& game) {
         }
     }
     game.objectData=originalData;
+    if(techCity) {
+        auto& state=techCity->getHouseStateMut(house->getHouseID());
+        state.resPop=savedTechPopulation[0];state.comPop=savedTechPopulation[1];state.indPop=savedTechPopulation[2];
+    }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=starport outcome=passed");
 }

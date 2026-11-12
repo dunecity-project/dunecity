@@ -16,6 +16,7 @@
  */
 
 #include <SoundPlayer.h>
+#include <FileClasses/HeadlessAssets.h>
 
 #include <globals.h>
 
@@ -31,6 +32,10 @@
 
 SoundPlayer::SoundPlayer() {
     sfxVolume = settings.audio.sfxVolume;
+    if(HeadlessAssets::enabled()) {
+        soundOn = false;
+        return; // No mixer device/channel array exists in simulation-only mode.
+    }
 
     Mix_Volume(-1, sfxVolume);
 
@@ -71,7 +76,8 @@ void SoundPlayer::playSoundAt(Sound_enum soundID, const Coord& location)
 {
     if(soundOn) {
         if( !currentGameMap->tileExists(location)
-            || !currentGameMap->getTile(location)->isExploredByTeam(pLocalHouse->getTeamID()) ) {
+            || (!currentGame->isObserving() && (!pLocalHouse
+                || !currentGameMap->getTile(location)->isExploredByTeam(pLocalHouse->getTeamID()))) ) {
             return;
         }
 

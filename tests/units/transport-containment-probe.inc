@@ -141,8 +141,9 @@ int runTransportContainmentProbe() {
         const bool family = ModManager::instance().isTornieFamilyContentActive();
         if(!family) {
             // The same factory path used by maps, reinforcements and production must
-            // reject every appended ID outside the six content families.
-            for(int item = Unit_Troopers5; item <= ItemID_LastID; ++item) {
+            // reject every Tornie 546 ID outside the six content families. Later
+            // all-family additions, such as Research Lab, are not Tornie objects.
+            for(int item = Unit_Troopers5; item <= Unit_TameSandworm; ++item) {
                 if(item == Unit_Troopers5 || item == Unit_Infantry5) continue; // Queue orders, not objects.
                 containmentRequire(ObjectBase::createObject(item, owner, true) == nullptr,
                                    "A Tornie 546 object leaked into another mod");

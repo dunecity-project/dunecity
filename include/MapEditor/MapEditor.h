@@ -349,6 +349,7 @@ private:
 
     void drawScreen();
     void processInput();
+    void setZoomLevel(int level, int screenX, int screenY);
     void drawCursor();
     void drawMap(ScreenBorder* pScreenborder, bool bCompleteMap);
     TERRAINTYPE getTerrain(int x, int y);

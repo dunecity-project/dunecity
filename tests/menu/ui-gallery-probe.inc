@@ -14,6 +14,7 @@
 #include <Menu/MainMenu.h>
 #include <Menu/SinglePlayerMenu.h>
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CivWarsMenu.h>
 #include <Menu/CustomGameMenu.h>
 #include <Menu/CustomGamePlayers.h>
 #include <Menu/CustomGameStatsMenu.h>
@@ -584,6 +585,17 @@ void runMenus() {
         menu.onModChanged();
         require(menu.skinBox.isVisible(), "Random Skirmish shows no City skin choice for DuneCity");
         captureWindow(menu, "menu-random-skirmish-dunecity");
+    });
+    screen("menu-civilization-wars", [] {
+        const auto previous = ModManager::instance().getActiveModName();
+        CivWarsMenu menu;
+        captureWindow(menu, "menu-civilization-wars");
+        menu.spectateBox.setChecked(true);
+        menu.onSpectateChanged();
+        captureWindow(menu, "menu-civilization-wars-spectate");
+        CivWarsMenu host(true);
+        captureWindow(host, "menu-civilization-wars-host");
+        require(RandomSkirmish::activateMod(previous), "Cannot restore mod after Civilization Wars gallery");
     });
     screen("menu-custom-game", [] { CustomGameMenu menu(false, false); captureWindow(menu, "menu-custom-game"); });
     screen("menu-custom-game-players", [] {

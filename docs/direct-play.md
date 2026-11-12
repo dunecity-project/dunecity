@@ -156,19 +156,46 @@ The roster freezes when the host starts the match or when this computer's own si
 whichever happens first. After that, a player the service introduces is refused rather than
 admitted: lockstep has no way to bring a latecomer up to date.
 
+Signaling is owned by its live peer connection. Retiring a link discards its queued offer and
+candidates, without changing another peer's queue order. A signal POST already in flight cannot
+be unsent: its eventual completion or timeout must not retry the retired negotiation, recreate
+the link, or acknowledge a separate pending room-phase update.
+
 Player addresses are visible to the other players in the room - that is what "direct" means, and
 with no TURN it cannot be otherwise. It is a deliberate property of the requested topology, not
 an oversight.
 
 ## 7. Failure is said out loud
 
-A peer that will not connect produces "Could not open a direct connection to <name>. Your network
-blocked the peer-to-peer link." There is no fallback to HTTP or WebSocket gameplay and no TURN
-retry, because a silent fallback is how direct play quietly becomes relayed play.
+A peer that will not connect produces a setup error distinguishing incomplete signaling, an
+explicit ICE failure and a data-channel timeout. Exchanged descriptions alone do not prove that
+ICE succeeded or that a NAT blocked it. There is no HTTP/WebSocket gameplay fallback or TURN
+retry: a silent fallback would quietly turn direct play into relayed play.
 
 Losing the signaling service after the players are connected is a diagnostic, not a disconnect:
 polling stops and the match continues. A `gone` record for a peer whose channel is open is
 ignored - the channel is the truth, the service only knows who stopped polling it.
+
+### Joining and compatibility
+
+The public directory offers only rooms matching the client's exact executable version and
+game protocol, including **In progress / Spectate** entries. **All mods** permits discovering a
+different mod revision; it does not waive executable compatibility. Invite codes and cached
+listings are checked again by admission, with both versions shown on a mismatch. All players
+must update together; a current browser cannot play with an older desktop or mobile build.
+
+A background list refresh does not disable joining a selected cached room. The join cancels
+that refresh and lets admission decide whether the room is still open.
+
+Player names are unique within a room because they identify controllers in the game protocol.
+If another player uses the same name (including the default **Player**), change **Player name**
+in **Settings**, then rejoin. Rejection does not rename you or grant a second controller.
+
+Finding a room, receiving admission and exchanging connection details do not establish a
+working data channel. A failed direct connection is a separate transport failure, not proof of
+a version mismatch or a blocked NAT. The STUN-only policy above remains unchanged; a directory
+or name-guidance fix does not make every WAN peer pair reachable.
+
 
 ## 8. Building and testing
 
@@ -210,3 +237,78 @@ can recover its already committed session, without creating another seat or join
 Normal teardown makes one best-effort bounded leave request (four concurrent requests maximum,
 two-second deadline). The lobby also closes when its host expires. A signaling timeout never
 changes the membership of an established match.
+
+## Joining regression evidence (2026-11-11)
+
+The discovery/name repairs are in `49f6ab537`. They are not a deployment.
+The browser checks below used the **published 1.0.864 executable**, isolated browser
+profiles and the fixed local PHP service. Gameplay remained direct. The selected
+STUN configuration matched production: `stun:stun.l.google.com:19302` and
+`stun:stun1.l.google.com:19302`.
+
+| Guarantee | Enforcement / exercised evidence | Bound or limitation |
+| --- | --- | --- |
+| Different executable versions never gain a seat through discovery | `Rooms::listPublic`, authoritative `Signaling::directorySnapshot`, and the unchanged join/version checks. Real HTTP reproduced the old list-offers/join-refuses inconsistency; regression cases include an old/misleading index cache and running rooms. | Invite codes and stale listings remain subject to authoritative admission and payload compatibility checks. |
+| A selected cached room remains joinable during a list refresh | `CrossplayMenu::joinPublicGame` cancels the directory request when beginning admission; `menu-probe.inc` exercises the enabled button with `directoryPending=true`. | The room can legitimately become full or close before admission. |
+| A duplicate name cannot gain a second controller or pending request | Normal seating and late-join checks retain `name_taken`; a renamed retry can succeed. | The error now explains Settings; it never silently changes identity. |
+| Owned Custom Game reaches lockstep with both humans' orders | Listing → both lobbies → Start → both vehicles moved. **31 shared-cycle byte-identical digests through cycle 6200 (99.2 simulation seconds)**; both direct links remained connected, no refused sends. | Browser↔browser, Vanilla Habbanya-Penny Revised; not a claim about every WAN pair. |
+| A genuinely generated Random Skirmish reaches the same lockstep | 128×128, two mirrored Vanilla starts, Medium bases, 5000-credit armies, tech 9, seed 532178562. Listing → both lobbies → Start → both humans moved a vehicle. **41 matching digests through cycle 8200 (131.2 simulation seconds)**; both links connected, no refused sends. | Browser↔browser; actual generator output, not a fixed-map substitute. |
+
+Sanitized JSON, listing/lobby/start/game screenshots and the encoded matching digests:
+`outputs/multiplayer-join-20261111/controlled/{custom-stun,skirmish-stun}-gameplay.json`
+under the managed project's outputs directory. The JSON identifies the executable and service
+separately; the rebuilt cached-click client was not substituted for the published baseline.
+
+The initial host-only-ICE fixture stalled before gameplay. A bare two-RTCPeerConnection
+control reproduced that limitation without the game, SDK or PHP; production STUN then enabled
+the real matches above. That fixture failure is **not** evidence for a production transport
+patch. A third-party public-room connection also failed during the investigation, but its ICE
+diagnostics were not retained; these successful owned-room checks do not explain or resolve it.
+
+### Retired-handshake regression
+
+`DirectRoomTransportTestCase` holds a poll while two peers queue offers and candidates, retires
+one link, then releases the poll. Only the surviving peer's ordered handshake may be posted,
+and its gameplay channel remains usable. A second scenario retires a link with its offer
+already in flight; success, retryable HTTP failure, transport failure, refusal and request
+deadline expiry must neither resend it nor consume an unrelated pending phase update.
+
+These are deterministic lifecycle regressions for the stale-offer defect, separate from the
+published-client browser evidence above. They do not establish that this ordering caused the
+observed third-party WAN failure, or promise progress while a browser suspends its game loop.
+
+### Native loopback acceptance
+
+`native_multiplayer_join_modes` runs two headless native processes through real PHP
+admission, WebRTC, the committed start barrier and gameplay for Vanilla campaign,
+generated skirmish and custom maps. Each case requires both controllers' movement
+orders and 13 matching state checkpoints through 3,600 cycles.
+
+The fixture privately recompiles the production RTC backend with the SDK's
+`bindAddress=127.0.0.1` configuration; shipping source and objects are unchanged.
+Both selected UDP endpoints must actually be loopback and match the opposite
+peer's reported endpoints. `native-rtc-injection.json` records source hashes,
+the configuration override and replaced link object.
+
+This is deterministic loopback coverage, not a stock desktop UI, default-interface,
+LAN, WAN or browser/native interoperability result. The earlier default-interface,
+host-only ICE failure remains unresolved; this fixture must not be reported as its
+fix. Missing PHP is an explicit skip, not a successful connection check.
+
+Source `f24dd596c` passed this three-mode native check on the mini in 120.93 seconds:
+job `20261111T192850-multiplayer-native-verified-route-20261111-d0ae7b`.
+Each mode completed all 3,600 cycles, 12 executed moves per human and 13 matching
+checkpoints. The retired-signaling unit gate separately passed at `b22376470`.
+
+The stock macOS 1.0.864 application booted, but browser↔stock-native gameplay remains
+**unrun**: Accessibility authorization was absent and debugger attachment was denied.
+Screen capture worked; release provenance was known. Neither permissions nor the
+signed application were changed. The source-built loopback check is not a substitute.
+The exact observations are in `controlled/native-baseline-observation.json` under
+the multiplayer outputs directory.
+
+The fixes remain **undeployed**. PHP discovery/admission changes need the normal
+service deployment; cached-Join and retired-handshake fixes require rebuilt clients.
+Preserve exact executable/content checks and the STUN-only topology. The final
+cross-check receipts and limitations are recorded in
+`outputs/multiplayer-join-20261111/verification/f24dd596c-multiplayer-final.json`.

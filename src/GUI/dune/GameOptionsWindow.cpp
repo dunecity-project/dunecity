@@ -77,7 +77,11 @@ void DamageRulesCheckbox::drawOverlay(Point) {
 
 
 GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGameOptions)
- : Window(50, 50, 626, ModManager::instance().isTornieFamilyContentActive() ? 444 : 370), gameOptions(initialGameOptions) {
+ : Window(50, 50, 626, ModManager::instance().isTornieFamilyContentActive() ? 430 : 410), gameOptions(initialGameOptions) {
+
+    // Family rules need the intrinsic checkbox padding, but no extra row gaps,
+    // to keep every control inside the same crest-safe 430px frame at 640x480.
+    const int ruleGap = ModManager::instance().isTornieFamilyContentActive() ? 0 : 2;
 
     setWindowWidget(&vbox);
     vbox.addWidget(VSpacer::create(6));
@@ -88,6 +92,8 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vbox.addWidget(&captionlabel,32);
     vbox.addWidget(VSpacer::create(3));
     vbox.addWidget(&hbox);
+    vbox.addWidget(VSpacer::create(6));
+    vbox.addWidget(&okHBox, 30);
     vbox.addWidget(VSpacer::create(6));
     hbox.addWidget(Spacer::create());
     hbox.addWidget(&vboxLeft);
@@ -100,31 +106,31 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     startWithExploredMapCheckbox.setTooltipText(_("If checked the complete map is unhidden at the beginning of the game."));
     startWithExploredMapCheckbox.setChecked(gameOptions.startWithExploredMap);
     vboxLeft.addWidget(&startWithExploredMapCheckbox);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     sandwormsRespawnCheckbox.setText(_("Killed Sandworms Respawn"));
     sandwormsRespawnCheckbox.setTooltipText(_("If checked killed sandworms respawn after some time."));
     sandwormsRespawnCheckbox.setChecked(gameOptions.sandwormsRespawn);
     vboxLeft.addWidget(&sandwormsRespawnCheckbox);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     killedSandwormsDropSpiceCheckbox.setText(_("Killed Sandworms Drop Spice"));
     killedSandwormsDropSpiceCheckbox.setTooltipText(_("If checked killed sandworms drop some spice."));
     killedSandwormsDropSpiceCheckbox.setChecked(gameOptions.killedSandwormsDropSpice);
     vboxLeft.addWidget(&killedSandwormsDropSpiceCheckbox);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     manualCarryallDropsCheckbox.setText(_("Manual Carryall Drops"));
     manualCarryallDropsCheckbox.setTooltipText(_("If checked player can request carryall to transport units."));
     manualCarryallDropsCheckbox.setChecked(gameOptions.manualCarryallDrops);
     vboxLeft.addWidget(&manualCarryallDropsCheckbox);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     immortalHumanPlayerCheckbox.setText(_("Immortal Human Player"));
     immortalHumanPlayerCheckbox.setTooltipText(_("God mode / cheat: Human-controlled units and structures are invulnerable to damage. Single-player only."));
     immortalHumanPlayerCheckbox.setChecked(gameOptions.immortalHumanPlayer);
     vboxLeft.addWidget(&immortalHumanPlayerCheckbox);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     maxUnitsOverrideCheckbox.setText(_("Override max. number of units"));
     maxUnitsOverrideCheckbox.setTooltipText(_("If checked the maximum number of units per house can be overridden; otherwise it is map dependent. 0 = unlimited."));
@@ -136,7 +142,7 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     maxUnitsOverrideTextBox.setVisible(gameOptions.maximumNumberOfUnitsOverride >= 0);
     maxUnitsOverrideHBox.addWidget(&maxUnitsOverrideTextBox);
     vboxLeft.addWidget(&maxUnitsOverrideHBox, 24);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     maxHarvestersOverrideCheckbox.setText(_("Override max. number of harvesters"));
     maxHarvestersOverrideCheckbox.setTooltipText(_("Limit harvesters per house. Unchecked or 0 means unlimited; each AI chooses its own economic target."));
@@ -148,7 +154,7 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     maxHarvestersOverrideTextBox.setVisible(gameOptions.maximumNumberOfHarvestersOverride >= 0);
     maxHarvestersOverrideHBox.addWidget(&maxHarvestersOverrideTextBox);
     vboxLeft.addWidget(&maxHarvestersOverrideHBox, 24);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     maxConstructionYardsOverrideCheckbox.setText(_("Limit construction yards per house"));
     maxConstructionYardsOverrideCheckbox.setTooltipText(_("Unchecked or 0 means unlimited. At the limit, MCVs cannot deploy. Existing yards stay."));
@@ -160,84 +166,129 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     maxConstructionYardsOverrideTextBox.setVisible(gameOptions.maximumNumberOfConstructionYardsOverride >= 0);
     maxConstructionYardsOverrideHBox.addWidget(&maxConstructionYardsOverrideTextBox);
     vboxLeft.addWidget(&maxConstructionYardsOverrideHBox, 24);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     planBuildingSitesCheckbox.setText(_("Plan building sites when ordering"));
     planBuildingSitesCheckbox.setTooltipText(_("Construction Yard: pick each building's plot when you order it; the yard builds the queue and places them there. Unchecked: build first, then place."));
     planBuildingSitesCheckbox.setChecked(gameOptions.planBuildingSites);
     vboxLeft.addWidget(&planBuildingSitesCheckbox);
-    vboxLeft.addWidget(VSpacer::create(6));
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
+
+    researchLabCheckbox.setText(_("Research Lab"));
+    researchLabCheckbox.setTooltipText(_("Enable buildable Research Labs and independent house technology, starting at the match's tech level."));
+    researchLabCheckbox.setChecked(gameOptions.researchLab);
+    vboxLeft.addWidget(&researchLabCheckbox);
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
+
+    technologyInstallmentsCheckbox.setText(_("Technology Installments"));
+    technologyInstallmentsCheckbox.setTooltipText(_("Research + yard/factory upgrades: any cash to start; per-tick drain/pause, humans + AI."));
+    technologyInstallmentsCheckbox.setChecked(gameOptions.technologyInstallments);
+    vboxLeft.addWidget(&technologyInstallmentsCheckbox);
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
+
+    researchPaceLabel.setText(_("Research Pace"));
+    researchPaceHBox.addWidget(&researchPaceLabel, 110);
+    researchPaceDropDownBox.addEntry(_("Fast"), static_cast<int>(TechResearch::Pace::Fast));
+    researchPaceDropDownBox.addEntry(_("Normal"), static_cast<int>(TechResearch::Pace::Normal));
+    researchPaceDropDownBox.addEntry(_("Slow"), static_cast<int>(TechResearch::Pace::Slow));
+    researchPaceDropDownBox.addEntry(_("Very slow"), static_cast<int>(TechResearch::Pace::VerySlow));
+    researchPaceDropDownBox.setSelectedItem(static_cast<int>(gameOptions.researchPace));
+    researchPaceDropDownBox.setTooltipText(_("Research cost and time: Fast 1/2, Normal 1x, Slow 2x, Very slow 4x."));
+    researchPaceHBox.addWidget(&researchPaceDropDownBox);
+    vboxLeft.addWidget(&researchPaceHBox, 24);
+    vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     if(ModManager::instance().isTornieFamilyContentActive()) {
         alliedControlCheckbox.setText(_("Allied control"));
         alliedControlCheckbox.setTooltipText(_("Allies may command each other's units and buildings. Ownership and credits remain separate."));
         alliedControlCheckbox.setChecked(gameOptions.alliedControl);
         vboxLeft.addWidget(&alliedControlCheckbox);
-        vboxLeft.addWidget(VSpacer::create(6));
+        vboxLeft.addWidget(VSpacer::create(ruleGap));
         alliedBuildingCheckbox.setText(_("Allied construction"));
         alliedBuildingCheckbox.setTooltipText(_("Extend construction range from allied land without sharing ownership or credits."));
         alliedBuildingCheckbox.setChecked(gameOptions.alliedBuilding);
         vboxLeft.addWidget(&alliedBuildingCheckbox);
-        vboxLeft.addWidget(VSpacer::create(6));
+        vboxLeft.addWidget(VSpacer::create(ruleGap));
     }
-
-    vboxLeft.addWidget(VSpacer::create(14));
-
 
     concreteRequiredCheckbox.setText(_("Concrete is required"));
     /* xgettext:no-c-format */
     concreteRequiredCheckbox.setTooltipText(_("Enable concrete. Missing foundations reduce initial health and cause decay. Unchecked: concrete is disabled and these penalties do not apply."));
     concreteRequiredCheckbox.setChecked(gameOptions.concreteRequired);
     vboxRight.addWidget(&concreteRequiredCheckbox);
-    vboxRight.addWidget(VSpacer::create(6));
+    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     fogOfWarCheckbox.setText(_("Fog of War"));
     fogOfWarCheckbox.setTooltipText(_("If checked explored terrain will become foggy when no unit or structure is next to it."));
     fogOfWarCheckbox.setChecked(gameOptions.fogOfWar);
     vboxRight.addWidget(&fogOfWarCheckbox);
-    vboxRight.addWidget(VSpacer::create(6));
+    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     instantBuildCheckbox.setText(_("Instant Build"));
     instantBuildCheckbox.setTooltipText(_("If checked the building of structures and units does not take any time."));
     instantBuildCheckbox.setChecked(gameOptions.instantBuild);
     vboxRight.addWidget(&instantBuildCheckbox);
-    vboxRight.addWidget(VSpacer::create(6));
+    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     rocketTurretsNeedPowerCheckbox.setText(_("Rocket-Turrets Need Power"));
     rocketTurretsNeedPowerCheckbox.setTooltipText(_("If checked rocket turrets are dysfunctional on power shortage."));
     rocketTurretsNeedPowerCheckbox.setChecked(gameOptions.rocketTurretsNeedPower);
     vboxRight.addWidget(&rocketTurretsNeedPowerCheckbox);
-    vboxRight.addWidget(VSpacer::create(6));
+    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     onlyOnePalaceCheckbox.setText(_("Only One Palace per House"));
     onlyOnePalaceCheckbox.setTooltipText(_("If checked only one palace can be build per house."));
     onlyOnePalaceCheckbox.setChecked(gameOptions.onlyOnePalace);
     vboxRight.addWidget(&onlyOnePalaceCheckbox);
-    vboxRight.addWidget(VSpacer::create(6));
+    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     originalUnitDamageCheckbox.setText(_("Original Dune II damage"));
     originalUnitDamageCheckbox.setChecked(gameOptions.originalUnitDamage);
     originalUnitDamageCheckbox.setExplanation(_("Original Dune II damage and splash"),
         _("Use original Dune II damage against ground units, as reproduced by Dune Dynasty classic. Tank hits rise from 12 to 25; Launcher rockets from 37 to 75. Splash halves every quarter tile and stops at one tile. Unchecked keeps DuneCity balance. Building damage, aircraft hits and special weapons keep their existing rules."));
     vboxRight.addWidget(&originalUnitDamageCheckbox);
-    vboxRight.addWidget(VSpacer::create(6));
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
+    damageLowersLandValueCheckbox.setText(_("Damage Lowers Land Value"));
+    damageLowersLandValueCheckbox.setTooltipText(_("Damaged buildings reduce the land value of their occupied tiles; repairs restore it."));
+    damageLowersLandValueCheckbox.setChecked(gameOptions.damageLowersLandValue);
+    vboxRight.addWidget(&damageLowersLandValueCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
+    mountainSceneryCheckbox.setText(_("Mountain Scenery"));
+    mountainSceneryCheckbox.setTooltipText(_("Mountains and ridges raise nearby land value like forests in Micropolis."));
+    mountainSceneryCheckbox.setChecked(gameOptions.mountainScenery);
+    vboxRight.addWidget(&mountainSceneryCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
+    unpoweredZonesVacateCheckbox.setText(_("Unpowered Zones Vacate"));
+    unpoweredZonesVacateCheckbox.setTooltipText(_("Unpowered city zones lose one population step per city day until empty. Power restoration permits normal growth."));
+    unpoweredZonesVacateCheckbox.setChecked(gameOptions.unpoweredZonesVacate);
+    vboxRight.addWidget(&unpoweredZonesVacateCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
+    trooperAntiAirCheckbox.setText(_("Trooper Anti-Air"));
+    trooperAntiAirCheckbox.setTooltipText(_("DuneCity content: trooper small rockets track aircraft. Other content keeps its original combat."));
+    trooperAntiAirCheckbox.setChecked(gameOptions.trooperAntiAir);
+    vboxRight.addWidget(&trooperAntiAirCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     if(ModManager::instance().isTornieFamilyContentActive()) {
         sellingBuildingsCheckbox.setText(_("Building sales"));
         sellingBuildingsCheckbox.setTooltipText(_("Sell buildings for 50% of their purchase and upgrade costs; Easy campaign allies receive 75%."));
         sellingBuildingsCheckbox.setChecked(gameOptions.sellingBuildings);
         vboxRight.addWidget(&sellingBuildingsCheckbox);
-        vboxRight.addWidget(VSpacer::create(6));
+        vboxRight.addWidget(VSpacer::create(ruleGap));
         easyModeCheckbox.setText(_("Easy campaign"));
         easyModeCheckbox.setTooltipText(_("Start at mission 2, reduce purchase prices by 25 credits and grant 500 extra starting credits in the first mission. Co-op allies share these benefits."));
         easyModeCheckbox.setChecked(gameOptions.easyMode);
         vboxRight.addWidget(&easyModeCheckbox);
-        vboxRight.addWidget(VSpacer::create(6));
+        vboxRight.addWidget(VSpacer::create(ruleGap));
         chaosModeCheckbox.setText(_("Chaos Mode"));
         chaosModeCheckbox.setTooltipText(_("Exchange same-tier building technologies among playable factions. The seeded donor table persists in saves."));
         chaosModeCheckbox.setChecked(gameOptions.chaosMode);
         vboxRight.addWidget(&chaosModeCheckbox);
-        vboxRight.addWidget(VSpacer::create(6));
+        vboxRight.addWidget(VSpacer::create(ruleGap));
     }
 
     gameSpeedMinus.setTextures(pGFXManager->getUIGraphic(UI_Minus), pGFXManager->getUIGraphic(UI_Minus_Pressed));
@@ -256,17 +307,18 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     gameSpeedHBox.addWidget(&gameSpeedPlus);
     gameSpeedHBox.addWidget(HSpacer::create(4));
     vboxRight.addWidget(&gameSpeedHBox, 24);
-    vboxRight.addWidget(VSpacer::create(6));
+    vboxRight.addWidget(VSpacer::create(ruleGap));
 
     rememberDefaults.setText(_("Remember for new games"));
-    vboxRight.addWidget(&rememberDefaults, 22);
-
-    vboxRight.addWidget(VSpacer::create(6));
 
     okbutton.setText(_("OK"));
     okbutton.setOnClick(std::bind(&GameOptionsWindow::onOK, this));
-    vboxRight.addWidget(&okbutton, 30);
-    vboxRight.addWidget(VSpacer::create(6));
+    okHBox.addWidget(Spacer::create());
+    // Keep both controls between the corner crests, without another rules row.
+    okHBox.addWidget(&rememberDefaults, 190);
+    okHBox.addWidget(HSpacer::create(10));
+    okHBox.addWidget(&okbutton, 150);
+    okHBox.addWidget(Spacer::create());
 
 
     int xpos = std::max(0,(getRendererWidth() - getSize().x)/2);
@@ -287,7 +339,14 @@ void GameOptionsWindow::onOK() {
     gameOptions.instantBuild = instantBuildCheckbox.isChecked();
     gameOptions.onlyOnePalace = onlyOnePalaceCheckbox.isChecked();
     gameOptions.originalUnitDamage = originalUnitDamageCheckbox.isChecked();
+    gameOptions.damageLowersLandValue = damageLowersLandValueCheckbox.isChecked();
+    gameOptions.mountainScenery = mountainSceneryCheckbox.isChecked();
+    gameOptions.unpoweredZonesVacate = unpoweredZonesVacateCheckbox.isChecked();
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
+    gameOptions.researchLab = researchLabCheckbox.isChecked();
+    gameOptions.technologyInstallments = technologyInstallmentsCheckbox.isChecked();
+    gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
+    gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();
     gameOptions.sandwormsRespawn = sandwormsRespawnCheckbox.isChecked();
     gameOptions.killedSandwormsDropSpice = killedSandwormsDropSpiceCheckbox.isChecked();

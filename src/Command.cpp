@@ -44,6 +44,7 @@
 #include <structures/TurretBase.h>
 #include <structures/Palace.h>
 #include <structures/TechCenter.h>
+#include <structures/ResearchLab.h>
 #include <structures/Scoutpost.h>
 #include <structures/StarPort.h>
 #include <structures/ConstructionYard.h>
@@ -436,6 +437,13 @@ case CMD_INFANTRY_CAPTURE: {
             auto* building = dynamic_cast<Radar*>(currentGame->getObjectManager().getObject(parameter[0]));
             if(!mayActOnObject(playerID, commandID, parameter[0], building)) return;
             building->getOwner()->startRadarResearch(static_cast<int>(parameter[1]));
+        } break;
+
+        case CMD_RESEARCH_TECH_LEVEL: {
+            if(parameter.size() != 1) return;
+            auto* lab = dynamic_cast<ResearchLab*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], lab)) return;
+            lab->getOwner()->startTechResearch(lab->getObjectID());
         } break;
 
         case CMD_BUILDER_UPGRADE: {
@@ -864,6 +872,19 @@ case CMD_INFANTRY_CAPTURE: {
             if (!issuer || !issuer->getHouse()) return;
             auto* house = currentGame->getHouse(issuer->getHouse()->getHouseID());
             if (house) house->setAutoRepairEnabled(parameter[0] != 0);
+        } break;
+
+        case CMD_AI_SUPPORT_ROLE: {
+            // A human switches the QuantBot partner sharing its own house (docs/ai-roles.md);
+            // the role is decided here, on every peer, from the issuer and the parameter only.
+            if (parameter.size() != 1 || parameter[0] > static_cast<Uint32>(AIRole::Off)) return;
+            const auto* issuer = dynamic_cast<const HumanPlayer*>(currentGame->getPlayerByID(playerID));
+            if (!issuer || !issuer->getHouse()) return;
+            auto* house = currentGame->getHouse(issuer->getHouse()->getHouseID());
+            if (!house) return;
+            for (const auto& player : house->getPlayerList())
+                if (auto* bot = dynamic_cast<QuantBot*>(player.get()))
+                    bot->setRole(static_cast<AIRole>(parameter[0]));
         } break;
 
         default: {

@@ -171,7 +171,7 @@ void runCityIncomeProbe(Game& game) {
     require(police == policeStations, "Requested police stations could not be placed");
     require(house->getProducedPower() >= house->getPowerRequirement(), "Fixture starts power-starved");
 
-    if(taxOverride >= 0) sim->setCityTax(static_cast<int16_t>(taxOverride));
+    if(taxOverride >= 0) sim->setCityTax(houseID, static_cast<int16_t>(taxOverride));
     sim->setPoliceFundingPercent(houseID, 100);
 
     // Fixture cash is an explicit injection: recorded, then excluded from every
@@ -210,7 +210,7 @@ void runCityIncomeProbe(Game& game) {
             "nearest_foreign_structure=%d produced_power=%d required_power=%d "
             "cycles_per_city_year=%u cycles_per_city_day=%u budget_ticks_per_year=%d",
             label.c_str(), mix.c_str(), lots.size(), roadTiles, windtraps, police,
-            plot.x, plot.y, sim->getCityTax(), sim->getPoliceFundingPercent(houseID),
+            plot.x, plot.y, sim->getCityTax(houseID), sim->getPoliceFundingPercent(houseID),
             startCycle, fixtureCash, startCredits, startReceipts.toDouble(),
             removedStructures, removedUnits, nearestForeign,
             house->getProducedPower(), house->getPowerRequirement(),
@@ -241,7 +241,7 @@ void runCityIncomeProbe(Game& game) {
                 "produced_power=%d required_power=%d structures=%d units=%d lots=[%s]",
                 label.c_str(), kind, cycle,
                 double(cycle - startCycle) / double(DuneCity::kCyclesPerMinute),
-                sim->getCityYear(), sim->getCityDay(), sim->getCityTax(),
+                sim->getCityYear(), sim->getCityDay(), sim->getCityTax(houseID),
                 state.taxBaseEighths, state.avgLandValue, state.resPop, state.comPop, state.indPop,
                 zonePopulation, densities[0], densities[1], densities[2], densities[3],
                 state.budget.getLastTaxRevenue(), state.nominalPoliceCost, state.lastPoliceExpense,
@@ -287,7 +287,7 @@ void runCityIncomeProbe(Game& game) {
             "start_credits=%d end_credits=%d fixture_cash=%d structures=%d units=%d "
             "reconciled=%d",
             label.c_str(), mix.c_str(), lots.size(), minutes, endCycle - startCycle,
-            startCycle, endCycle, sim->getCityTax(), grossDelta.toDouble(), policePaid.toDouble(),
+            startCycle, endCycle, sim->getCityTax(houseID), grossDelta.toDouble(), policePaid.toDouble(),
             powerPaid.toDouble(), cityDelta.toDouble(), netCredits,
             grossDelta.toDouble() * DuneCity::kCyclesPerMinute / double(endCycle - startCycle),
             double(netCredits) * DuneCity::kCyclesPerMinute / double(endCycle - startCycle),

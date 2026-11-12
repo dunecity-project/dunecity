@@ -58,7 +58,7 @@ public:
     /**
         Destructor
     */
-    ~ScreenBorder() { }
+    ~ScreenBorder();
 
     /**
         Loads the current position on the map from a stream
@@ -203,6 +203,14 @@ public:
         \param newPosition  the center of the new view in world coordinates
     */
     void setNewScreenCenter(const Coord& newPosition);
+
+    /// Local mouse camera controls, shared by games and the map editor.
+    /// Consumed middle-button events never reach selection, commands or painting.
+    bool handleMiddlePan(const SDL_Event& event, bool enabled);
+    bool isMousePanning() const { return mousePanning; }
+    /// One zoom step per wheel notch; fractional trackpad input is accumulated/rate-limited.
+    int mouseWheelZoom(const SDL_MouseWheelEvent& wheel);
+    void resetMouseWheelZoom() { wheelRemainder = 0; wheelSmooth = false; }
 
     /**
         This method scrolls left
@@ -416,6 +424,13 @@ private:
     }
     int presentationScale = 1;
     SDL_Rect presentationRect{};
+    bool mousePanning = false;
+    int cursorBeforePan = SDL_ENABLE;
+    Coord panAnchor;
+    float wheelRemainder = 0;
+    Uint32 wheelLastEvent = 0;
+    Uint32 wheelLastStep = 0;
+    bool wheelSmooth = false;
     SDL_Rect gameBoardRect;         ///< where the map is drawn: screenRect, or the offscreen board (see setDrawingBoardSize)
     SDL_Rect screenRect;            ///< the map area on the screen
 

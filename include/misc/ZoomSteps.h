@@ -7,7 +7,7 @@
 #include <optional>
 
 /**
-    The in-game zoom steps (pinch, the + and - buttons, F1-F3, the Dune2R wheel).
+    The in-game zoom steps (pinch, the + and - buttons, F1-F3 and the map wheel).
 
     Sprites exist only at the three pre-scaled zoom levels (1x, 2x and 3x of the
     original graphics). A step between or beyond them draws the map at a sprite

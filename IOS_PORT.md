@@ -30,9 +30,19 @@ makes it a two-finger gesture, and by then no click may have happened: it would
 have started a selection box, or issued an Attack or Move cursor's order. That
 is why `main.cpp` turns SDL's own touch-to-mouse events off on mobile. Leaving
 the foreground mid-touch resets the gesture.
+Map pan and zoom require both fingers to begin inside the active map, outside
+its zoom controls. Touches that begin in a sidebar/list cannot become map
+gestures by moving onto it. Menus and modal windows disable map gestures;
+disabling the map also cancels an in-progress gesture until both fingers lift.
+One-finger UI taps/drags and stationary two-finger right-clicks are unchanged.
 
 Each 1.2x change in finger distance is one zoom step, the same steps as the
 `-` and `+` buttons at the top right of the map (`include/misc/ZoomSteps.h`).
+Zoom is anchored at the current midpoint of the two fingers; moving that
+midpoint pans by its travel, including when a pinch and pan happen together.
+Lifting either finger ends the gesture: the remaining finger does not start
+a selection or issue a unit order. Both fingers must lift before another
+gesture or ordinary one-finger tap/drag can begin.
 Steps between the three sprite sizes (100%, 200%, 300%) draw the map with the
 next larger sprites onto an offscreen board scaled to fit, so taps still land
 on what is drawn.
@@ -120,6 +130,7 @@ The first build compiles the vcpkg dependencies for the simulator; later builds
 reuse vcpkg's binary cache and ccache. Useful commands afterwards:
 
 ```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 xcrun simctl launch --console "Dune City iPhone" net.dunecity.DuneCity   # with log output
 xcrun simctl io "Dune City iPhone" screenshot shot.png
 xcrun simctl get_app_container "Dune City iPhone" net.dunecity.DuneCity data   # sandbox
@@ -133,6 +144,17 @@ tap arrives as press and release in the same frame:
 axe touch -x 437 -y 205 --down --up --delay 0.15 --udid <UDID>
 axe swipe --start-x 300 --start-y 360 --end-x 470 --end-y 395 --duration 0.8 --udid <UDID>
 ```
+
+These AXe commands exercise one-finger input, not simultaneous two-finger
+pinch/pan. For two-finger acceptance use Simulator's Option-drag pinch gesture
+(Shift-Option-drag moves the two touch points together), or an iPhone/iPad.
+In a running map, spread and pinch away from its center and check that the
+world point under the midpoint stays there; then move both fingers together
+and check that the map follows without changing zoom or selecting/ordering
+units. Lift either finger, move the remaining finger, then lift it: there
+must be no click or selection. Repeat the gesture and check that a subsequent
+one-finger sidebar tap/drag still works. Simulator input is not physical-device
+evidence.
 
 ## iPhone hardware
 

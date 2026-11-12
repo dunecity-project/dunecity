@@ -18,6 +18,13 @@
 
 namespace ForceConcentrationPolicy {
 
+/// Vulture levels are discrete: the weaker rival must be strictly below this share
+/// of the deployable strike force. No history, floating point or simulation RNG.
+inline bool vultureStrike(int level, int64_t strikeForce, int64_t rivalArmy) {
+    const int percent = level == 1 ? 60 : level == 2 ? 90 : 0;
+    return percent > 0 && strikeForce > 0 && rivalArmy * 100 < strikeForce * percent;
+}
+
 // ---- Focus fire --------------------------------------------------------------------------------
 
 /// What a target is, best first: an enemy fighter shoots back, a turret shoots back but cannot
@@ -49,6 +56,21 @@ inline bool shouldSwitch(bool currentInRange, const TargetKey& current, const Ta
     if (!currentInRange) return true;
     if (best.cls != current.cls) return best.cls > current.cls;
     return best.health * 10000 <= current.health * kSwitchHealthBps;
+}
+
+/// Experimental rankings share the native deterministic HP/id comparator.
+/// Focus removes native class bias; priority overlays only the named classes.
+inline int tunedTargetClass(int nativeClass, int focusLevel, int priorityLevel,
+                            bool artillery, bool harvester) {
+    if (nativeClass == Wall) return Wall;
+    if (priorityLevel >= 2 && harvester) return 6;
+    if (priorityLevel >= 1 && artillery) return 5;
+    return focusLevel > 0 ? 0 : nativeClass;
+}
+
+inline bool tunedShouldSwitch(bool inRange, const TargetKey& current, const TargetKey& best, int level) {
+    return level >= 2 ? (best.id != current.id && (!inRange || betterTarget(best, current)))
+                      : shouldSwitch(inRange, current, best);
 }
 
 /// Attack-value focus fire without overkill (Churchill, Saffidine & Buro 2012, "NOK-AV"): the
@@ -297,6 +319,7 @@ struct TeamStrength {
     int64_t army = 0;
     int turrets = 0;
     int structures = 0;
+    int distance = 0;      ///< nearest known structure from home; used only by the nearby FFA candidate
 };
 
 /// Is \a a the weaker team to finish (army + kKnownTurretValue per turret; ties: fewer known
@@ -307,6 +330,14 @@ inline bool weakerTeam(const TeamStrength& a, const TeamStrength& b) {
     if (sa != sb) return sa < sb;
     if (a.structures != b.structures) return a.structures < b.structures;
     return a.team < b.team;
+}
+
+/// A local opportunity prices a tile of travel as one light vehicle (200 credits), avoiding
+/// a cross-map march to a slightly weaker rival. Existing weakness/id ordering breaks ties.
+inline bool nearerOpportunity(const TeamStrength& a, const TeamStrength& b) {
+    const int64_t sa = a.army + int64_t(kKnownTurretValue) * a.turrets + int64_t(200) * a.distance;
+    const int64_t sb = b.army + int64_t(kKnownTurretValue) * b.turrets + int64_t(200) * b.distance;
+    return sa != sb ? sa < sb : weakerTeam(a, b);
 }
 
 /// K: an objective with at least kFortifiedTurrets known turrets within kFortifiedRadiusTiles is

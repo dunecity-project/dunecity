@@ -56,6 +56,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 
 
 #define PLAYER_HUMAN        0
@@ -1056,6 +1057,7 @@ CustomGamePlayers::~CustomGamePlayers()
         pNetworkManager->setOnPeerDisconnected(std::function<void (const std::string&, bool, int)>());
         pNetworkManager->setGetChangeEventListForNewPlayerCallback(std::function<ChangeEventList (const std::string&)>());
         pNetworkManager->setOnReceiveChangeEventList(std::function<void (const std::string&, const ChangeEventList&)>());
+        pNetworkManager->setOnConfigMismatch(std::function<void (const std::string&)>());
         pNetworkManager->setOnReceiveChatMessage(std::function<void (const std::string&, const std::string&)>());
         pNetworkManager->setOnStartGame(std::function<void (unsigned int)>());
         pNetworkManager->setOnReceiveModInfo(std::function<void (const std::string&, const std::string&)>());
@@ -1078,13 +1080,15 @@ int CustomGamePlayers::showMenu() {
         // House availability, sprites and map preview all depend on the installed mod.
         // Rebuild after the network callback returns, replay the host's buffered setup,
         // and only then acknowledge readiness.
-        CustomGamePlayers restored(gameInitSettings, false);
-        restored.onReceiveChangeEventList(delayedModChanges);
+        // Heap-owned like the pregame roster in playCustomGame: this frame stays on the stack
+        // for the whole nested game (Windows reserves 1 MiB; 1.0.864 overflowed on Start Game).
+        auto restored = std::make_unique<CustomGamePlayers>(gameInitSettings, false);
+        restored->onReceiveChangeEventList(delayedModChanges);
         if(pNetworkManager) {
             pNetworkManager->sendConfigHash(getQuantBotConfig().getConfigHash(), getObjectDataHash(), VERSIONSTRING);
             pNetworkManager->sendModAck(true, ModManager::instance().getEffectiveChecksums().combined);
         }
-        return restored.showMenu();
+        return restored->showMenu();
     }
     if(setup && result == MENU_QUIT_DEFAULT) {
         setup->players = getChangeEventList();

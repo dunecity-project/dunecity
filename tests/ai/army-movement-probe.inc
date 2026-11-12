@@ -56,7 +56,7 @@ void runArmyMovementProbe(Game& game) {
         bot->doSetAttackMode(artillery,HUNT);bot->doAttackObject(artillery,enemyBuilding,false);
         const Coord destination=artillery->getDestination();
         bot->checkAllUnits();
-        require(artillery->getAttackMode()==HUNT && artillery->getTarget()==enemyBuilding
+        require(artillery->getAttackMode()==HUNT && currentGame->getObjectManager().getObject(artillery->target.getObjectID())==enemyBuilding
             && artillery->getDestination()==destination,"Launcher backed away from a building instead of sieging it");
         // Regrouping never replaces a human's order.
         bot->onHumanUnitOrder(artillery->getObjectID());
@@ -72,13 +72,13 @@ void runArmyMovementProbe(Game& game) {
         bot->doMove2Pos(homeGuard,origin.x+15,origin.y,false);
         bot->doSetAttackMode(homeGuard,AREAGUARD);
         bot->defenceResponseCycles.clear();bot->checkAllUnits();
-        require(homeGuard->getTarget()==threat,"Nearby base defender kept regrouping instead of fighting");
+        require(currentGame->getObjectManager().getObject(homeGuard->target.getObjectID())==threat,"Nearby base defender kept regrouping instead of fighting");
         require(bot->defenceAssignments.count(homeGuard->getObjectID()),"In-range defender lost base assignment");
         bot->doMove2Pos(homeGuard,homeGuard->getX(),homeGuard->getY(),false);
         bot->moveToOptimalSquadPosition(homeGuard,1);
         require(homeGuard->getDestination()==homeGuard->getLocation(),"Regroup stole assigned base defender");
         bot->checkAllUnits();
-        require(homeGuard->getTarget()==threat,"Base defender did not reacquire its live attacker");
+        require(currentGame->getObjectManager().getObject(homeGuard->target.getObjectID())==threat,"Base defender did not reacquire its live attacker");
         // Custom raiders retain their offensive slot while dodging a tank.
         game.gameType=GameType::CustomGame;
         bot->difficulty=QuantBot::Difficulty::Easy;

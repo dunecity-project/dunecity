@@ -18,6 +18,7 @@
 #include <data.h>
 
 #include <dunecity/SpatialFields.h>
+#include <mmath.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -1360,6 +1361,34 @@ TEST_CASE("Park terrain counts each source once and uses Micropolis smoothing", 
     CHECK(kParkTerrainBlockSize == 3); // 2-tile zone + unchanged 1-tile road
 }
 
+TEST_CASE("Mountain scenery gives adjacent zones the Micropolis forest terrain bonus",
+          "[city-effects][mountain][regression]") {
+    const SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.mountainScenery);
+    auto zoneValue = [](bool mountain, bool rule) {
+        ParkTerrainPolicy terrain;
+        terrain.init(18,18);
+        // A 2x2 zone at (4,4), immediately west of a mountain tile at (6,4).
+        terrain.addSource(6,4,mountainScenerySource(mountain,rule));
+        return computeBaseLandValue(0,terrain.landValueContribution(4,4),0);
+    };
+    CHECK(zoneValue(false,true) == 136);
+    CHECK(zoneValue(true,true) == 137);
+    CHECK(zoneValue(true,false) == 136);
+    CHECK(mountainScenerySource(false,true) == 0); // rock/sand do not become forest
+    ParkTerrainPolicy forest;
+    forest.init(18,18);
+    for(int y=3;y<6;++y) for(int x=6;x<9;++x)
+        forest.addSource(x,y,mountainScenerySource(true,true));
+    // Nine forest-equivalent tiles: raw135, centre67, cardinal16, diagonal0.
+    CHECK(forest.valueAt(6,4) == 67);
+    CHECK(forest.landValueContribution(4,4) == 16);
+    CHECK(forest.valueAt(6,7) == 16);
+    CHECK(forest.valueAt(4,7) == 0);
+    CHECK(forest.valueAt(12,4) == 0);
+    CHECK(computeBaseLandValue(0,forest.landValueContribution(4,4),0) == 152);
+}
+
 TEST_CASE("Park source boundaries do not alias or wrap at map edges", "[city-effects][park]") {
     ParkTerrainPolicy terrain;
     terrain.init(8,7);
@@ -1515,14 +1544,27 @@ TEST_CASE("Spectator city runtime restores derived state and rejects invalid dim
     }
 }
 
-TEST_CASE("Building condition lowers land value and repairs restore it", "[city-effects][condition]") {
-    REQUIRE(conditionLandValue(200,100,100)==200);
-    REQUIRE(conditionLandValue(200,75,100)==150);
-    REQUIRE(conditionLandValue(200,50,100)==100);
-    REQUIRE(conditionLandValue(200,25,100)==50);
-    REQUIRE(conditionLandValue(200,0,100)==1);
-    REQUIRE(conditionLandValue(0,50,100)==0);
-    REQUIRE(conditionLandValue(200,110,100)==200);
+TEST_CASE("Building damage affects land value only with its match rule on", "[city-effects][condition]") {
+    const SettingsClass::GameOptionsClass defaults;
+    REQUIRE_FALSE(defaults.damageLowersLandValue);
+    SECTION("default off leaves land value unchanged at every condition") {
+        for (int health : {110, 100, 75, 50, 25, 0, -10}) {
+            INFO("health=" << health);
+            REQUIRE(conditionLandValue(200,health,100,defaults.damageLowersLandValue)==200);
+            REQUIRE(conditionLandValue(0,health,100,defaults.damageLowersLandValue)==0);
+        }
+    }
+    SECTION("on preserves proportional damage and repair behavior") {
+        REQUIRE(conditionLandValue(200,100,100,true)==200);
+        REQUIRE(conditionLandValue(200,75,100,true)==150);
+        REQUIRE(conditionLandValue(200,50,100,true)==100);
+        REQUIRE(conditionLandValue(200,25,100,true)==50);
+        REQUIRE(conditionLandValue(200,0,100,true)==1);
+        REQUIRE(conditionLandValue(200,-10,100,true)==1);
+        REQUIRE(conditionLandValue(0,50,100,true)==0);
+        REQUIRE(conditionLandValue(200,110,100,true)==200);
+        REQUIRE(conditionLandValue(200,50,0,true)==200);
+    }
 }
 
 // ============================================================================
@@ -1818,6 +1860,47 @@ TEST_CASE("BoxAnyField equals the build-range probe it replaces", "[spatial-fiel
                         for (int x = -1; x <= w; ++x)
                             REQUIRE(field.anyNearFootprint(x,y,fw,fh,radius)
                                     == bruteAnyNearFootprint(marked,x,y,fw,fh,radius));
+        }
+    }
+}
+
+TEST_CASE("octilePasses equals the nearest-spice blockDistance walk it replaces", "[spatial-fields][refinery]") {
+    // QuantBot::findPlaceLocation's refinery score: lround of the smallest blockDistance from the
+    // origin to any spice tile. The transform must give that smallest raw FixPoint value exactly.
+    const int64_t orth = FixPoint(1).getRawValue();
+    const int64_t diag = orth + (FixPt_SQRT2 - 1).getRawValue();
+
+    SECTION("blockDistance is max*orth + min*(diag-orth) in raw units") {
+        for (int big = 0; big <= 600; ++big)
+            for (int small = 0; small <= big; ++small) {
+                const int64_t expected = big*orth + small*(diag - orth);
+                REQUIRE(blockDistance(Coord(0,0), Coord(big,small)).getRawValue() == expected);
+                REQUIRE(blockDistance(Coord(small,big), Coord(0,0)).getRawValue() == expected);
+            }
+    }
+
+    SECTION("random boxes and source sets agree cell for cell") {
+        uint32_t seed = 0x0c7a11eu;
+        auto next = [&](int lo, int hi) {
+            seed = seed*1664525u + 1013904223u;
+            return lo + static_cast<int>((seed >> 16) % static_cast<uint32_t>(hi - lo + 1));
+        };
+        for (int trial = 0; trial < 400; ++trial) {
+            const int w = next(1,37), h = next(1,29);   // includes non-square and 1xN
+            std::vector<Coord> sources;
+            for (int i = 0, n = next(1, trial % 5 == 0 ? 40 : 5); i < n; ++i)
+                sources.emplace_back(next(0,w-1), next(0,h-1));
+            std::vector<int64_t> field(static_cast<size_t>(w)*h, DuneCity::kOctileFar);
+            for (const Coord& source : sources) field[static_cast<size_t>(source.y)*w + source.x] = 0;
+            DuneCity::octilePasses(field, w, h, orth, diag);
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < w; ++x) {
+                    FixPoint nearest = FixPt_MAX;
+                    for (const Coord& source : sources)
+                        nearest = std::min(nearest, blockDistance(Coord(x,y), source));
+                    REQUIRE(field[static_cast<size_t>(y)*w + x] == nearest.getRawValue());
+                    REQUIRE(lround(FixPoint::FromRawValue(field[static_cast<size_t>(y)*w + x])) == lround(nearest));
+                }
         }
     }
 }

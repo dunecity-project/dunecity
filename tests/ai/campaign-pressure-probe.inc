@@ -74,18 +74,21 @@ void runCampaignPressureProbe(Game& game) {
     enemies[0]->updateCampaignWave();
     require(enemies[0]->campaignWave.opening==UINT32_MAX && !enemies[0]->campaignCanLaunch(),"Missing trigger allowed immediate Brutal attack");
     const auto savedMission=game.gameInitSettings.mission;
-    const auto savedMod=game.gameInitSettings.modName;
+    require(game.gameInitSettings.modName=="vanilla" || ModManager::instance().isDuneCityContentActive(),
+        "Pressure probe requires a real Vanilla or Dune City campaign");
     const auto savedHouse=game.gameInitSettings.houseID;
-    for (const auto* mod:{"vanilla","dunecity"}) for(auto house:{HOUSE_ATREIDES,HOUSE_HARKONNEN,HOUSE_ORDOS})
+    // Both registered mod cases initialize their real content. Changing only a
+    // setup name cannot change ModManager's content family.
+    for(auto house:{HOUSE_ATREIDES,HOUSE_HARKONNEN,HOUSE_ORDOS})
         for(int mission=1;mission<=4;++mission) for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
-            game.gameInitSettings.mission=mission;game.gameInitSettings.modName=mod;game.gameInitSettings.houseID=house;
+            game.gameInitSettings.mission=mission;game.gameInitSettings.houseID=house;
             auto* bot=enemies[0];bot->difficulty=tier;bot->campaignWave={};bot->updateCampaignWave();
             require(bot->campaignWave.opening>=MILLI2CYCLES(4*60000)
                 && bot->campaignWave.opening<=MILLI2CYCLES(6*60000),"Early map opening outside minutes 4–6");
             if(tier==QuantBot::Difficulty::Brutal)
                 require(bot->campaignWave.opening==MILLI2CYCLES(4*60000),"Early Brutal missed start signal");
         }
-    game.gameInitSettings.mission=savedMission;game.gameInitSettings.modName=savedMod;game.gameInitSettings.houseID=savedHouse;
+    game.gameInitSettings.mission=savedMission;game.gameInitSettings.houseID=savedHouse;
     game.getTriggerManager().triggers=std::move(savedTriggers);
     game.gameCycleCount=1000;
     game.techLevel=3; // No repair-yard prerequisite in the controlled wave fixture.

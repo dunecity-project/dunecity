@@ -80,10 +80,15 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
 
     try {
         if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AI_ROLE) {
+            // Off (3) exists from save 9880, when partners could be switched off in game.
+            const AIRole highest = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AI_ROLE_OFF
+                ? AIRole::Off : AIRole::Fighter;
             const Uint8 saved = stream.readUint8();
-            role = saved <= static_cast<Uint8>(AIRole::Fighter) ? static_cast<AIRole>(saved) : AIRole::Both;
+            role = saved <= static_cast<Uint8>(highest) ? static_cast<AIRole>(saved) : AIRole::Both;
         } else {
             role = stream.readBool() ? AIRole::Builder : AIRole::Both;
+            // Saves from before the role byte only recorded a builder in its class name.
+            if (role == AIRole::Both && getPlayerclass().rfind("qBotSupport", 0) == 0) role = AIRole::Builder;
         }
     } catch(const InputStream::eof&) {
         role = AIRole::Both;

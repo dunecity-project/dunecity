@@ -192,11 +192,12 @@ void Harvester::checkPos()
     if(attackMode == STOP) {
         harvestingMode = false;
 
-        // Original/Smart AI rely on this restart after deployment. Only
+        // Original/Smart AI rely on this restart after deployment. Only an active
         // qBot manages safety holds and explicitly resumes safe harvesting.
         const bool managedSafety = std::any_of(getOwner()->getPlayerList().begin(),
             getOwner()->getPlayerList().end(), [](const auto& player) {
-                return dynamic_cast<const QuantBot*>(player.get()) != nullptr;
+                const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+                return bot != nullptr && !bot->switchedOff();
             });
         if (UnitMovementPolicy::resumeStoppedHarvester(getOwner()->isAI(), managedSafety))
             doSetAttackMode(HARVEST);

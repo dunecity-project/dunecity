@@ -44,8 +44,6 @@ class Random;
 */
 namespace SkirmishGenerator {
 
-/// Rock share steps; the first four keep their saved indices from earlier versions.
-enum class Rock { Low, Medium, High, VeryHigh, Mostly, Nearly, AlmostAll, All };
 enum class Spice { None, Low, Medium, High, VeryHigh };
 enum class BaseSize { None, Outpost, Small, Medium, Large, Fortress };
 enum class Mode { Vanilla, DuneCity };
@@ -53,9 +51,12 @@ enum class Mode { Vanilla, DuneCity };
 enum class Role { Human, Ally, Enemy, Open };
 
 constexpr std::array<int, 6> kMapSizes{64, 96, 128, 160, 192, 256};
-/// Target share (percent) of rock + mountain terrain per Rock choice. Spice only grows on sand,
-/// so the higher steps leave less (at 100% none) for harvesting.
-constexpr std::array<int, 8> kRockPercent{15, 25, 35, 50, 65, 80, 90, 100};
+/// Terrain sliders use percentages in five-point steps, summing to 100.
+constexpr int kTerrainStep = 5;
+/// Local expansion room: every start uses the same square berth and ordinary-rock quota.
+constexpr int kStartRockFairnessPercent = 75;
+constexpr int kCityStartRockBerthSide = 32;
+constexpr int kVanillaStartRockBerthSide = 24;
 /// Target share (percent) of spice terrain (thick spice and blooms included) per Spice choice.
 /// Very high matches the map editor's default random map (7 fields, about 24%).
 constexpr std::array<int, 5> kSpicePercent{0, 6, 12, 18, 24};
@@ -118,7 +119,11 @@ struct Side {
 
 struct Params {
     int mapSize = 128;
-    Rock rock = Rock::Medium;
+    /// Requested map shares, summing to 100. Sand includes dunes/spice; start cores and
+    /// connecting lanes take precedence over impossible sand/mountain requests.
+    int sandPercent = 75;
+    int rockPercent = 20;
+    int mountainPercent = 5;
     Spice spice = Spice::Medium;
     int worms = 0;                  ///< one of kWormChoices
     bool symmetric = false;
@@ -137,6 +142,7 @@ struct Params {
     Mode mode = Mode::Vanilla;      ///< DuneCity when the chosen mod runs the city sim
     std::string mod = "vanilla";    ///< menu only: the mod the match is played with
     int techLevel = 9;              ///< everything unlocked by default
+    bool researchLab = false;       ///< below tech 9: buildable labs, no free starting lab
     /// Menu only, single player: watch the match. @a spectateClass plays the player's house
     /// (with its AI partner, base, army and city as configured), every house is AI, and the
     /// local player observes as Custom Game's Spectate does. The generated map is unchanged.
@@ -158,6 +164,9 @@ struct Params {
     /// writes the mod or Spectate, which there are the host's and the lobby's.
     void load(const INIFile& config);
     void save(INIFile& config) const;
+    /// FNV-1a over the normalized terrain shares and terrain algorithm version. Included
+    /// in the map INI, which the existing multiplayer setup and saves carry verbatim.
+    std::string terrainHash() const;
 };
 
 /// What one house may field of one item, taken from ObjectData.
@@ -220,6 +229,8 @@ struct HouseSetup {
     Coord start;
     Rect plateau;
     int skipped = 0;            ///< planned items that did not fit (crowded map)
+    Rect rockBerth;             ///< local area used to assess connected future building room
+    int minimumRock = 0;        ///< ordinary-rock quota within rockBerth, independent of the starting kit
 };
 
 struct Result {
@@ -254,6 +265,9 @@ std::vector<int> armyTypes(int house, int techLevel, const Catalogue& catalogue)
 std::vector<int> buyArmy(int budget, int house, int techLevel, const Catalogue& catalogue, Random& random);
 /// True if every coordinate is reachable from the first by ground (mountains block).
 bool groundConnected(const MapData& map, const std::vector<Coord>& points);
+/// Four-neighbour ordinary rock connected to @a start inside @a bounds (clipped to the map).
+/// Mountains, sand, dunes and spice do not count; an invalid/non-rock start returns zero.
+int contiguousBuildableRock(const MapData& map, const Coord& start, const Rect& bounds);
 /// Displayed city population @a house reports for @a placements (zones at their level,
 /// other city-role buildings at their initial occupancy).
 int displayedPopulation(const std::vector<Placement>& placements, int house);

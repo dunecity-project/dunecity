@@ -119,6 +119,41 @@ inline void chessboardPasses(std::vector<int>& d, int w, int h) {
     }
 }
 
+/// "Unreached" for octilePasses(): far above any octile distance on a map, with room to add steps.
+constexpr int64_t kOctileFar = INT64_MAX / 4;
+
+/// The two raster passes of an octile distance transform, in place over the row-major `w*h`
+/// values in `d` (sources 0, every other cell kOctileFar). Each cell ends at the cheapest
+/// 8-connected path from a source, steps costing `orth` straight and `diag` diagonally
+/// (orth <= diag <= 2*orth): min over sources of max(|dx|,|dy|)*orth + min(|dx|,|dy|)*(diag-orth).
+/// With orth = FixPoint 1 and diag = 1 + (SQRT2 - 1) in raw units that is blockDistance()'s raw
+/// value, exactly (integer sums). Every source/cell pair has such a cheapest staircase inside
+/// its bounding box made of forward-pass steps (right, down, down-left, down-right) followed by
+/// backward-pass steps (left, up, up-left, up-right), so the passes reach the minimum, and they
+/// only ever store real path costs. Each row first takes the neighbouring row, then the run
+/// along the row, exactly as a tile-by-tile raster loop over the same four neighbours.
+inline void octilePasses(std::vector<int64_t>& d, int w, int h, int64_t orth, int64_t diag) {
+    if (w <= 0 || h <= 0 || d.size() < static_cast<size_t>(w) * static_cast<size_t>(h)) return;
+    auto relax = [&](const int64_t* n, int64_t* row) {
+        for (int x = 0; x < w; ++x) {
+            int64_t best = std::min(row[x], n[x] + orth);
+            if (x > 0) best = std::min(best, n[x-1] + diag);
+            if (x + 1 < w) best = std::min(best, n[x+1] + diag);
+            row[x] = best;
+        }
+    };
+    for (int y = 0; y < h; ++y) {
+        int64_t* row = d.data() + static_cast<size_t>(y) * w;
+        if (y > 0) relax(row - w, row);
+        for (int x = 1; x < w; ++x) row[x] = std::min(row[x], row[x-1] + orth);
+    }
+    for (int y = h - 1; y >= 0; --y) {
+        int64_t* row = d.data() + static_cast<size_t>(y) * w;
+        if (y + 1 < h) relax(row + w, row);
+        for (int x = w - 2; x >= 0; --x) row[x] = std::min(row[x], row[x+1] + orth);
+    }
+}
+
 /// "Is any marked tile inside this box?" over a boolean tile indicator.
 ///
 /// Replaces a pointwise `(2R+1)^2` probe such as Map::isWithinBuildRange(),

@@ -34,6 +34,102 @@ The per-minute figures below are for the classic year; halve them with the rule.
 Simulation speed changes both taxes and harvesting; do not use wall-clock FPS to
 compare them.
 
+### Tax rate per house (save 9880, protocol 110)
+
+Each house has its own tax rate, 0-20%, default 7% (`HouseCityState::taxRate`). The budget
+window sends `CMD_CITY_SET_TAX_RATE`, which sets the rate of the issuer's house only, like police
+funding. Before 9880 there was one rate for the whole map, so one player's budget changed every
+house's tax and demand; such a save gives that rate to every house. QuantBot never sets a rate:
+it plans with its own house's rate. The rate also feeds that house's demand valves (Micropolis
+tax table), so it affects only its own growth.
+
+### Land value for tax (match rule `Micropolis Land Value`, default on; MOD14, protocol 110)
+
+Tax multiplies by a house's average land value, so how that average is taken decides who earns
+more from the same city. The rule follows Micropolis (`s_scan.c`, `s_sim.c` CollectTax):
+
+| | Rule on (Micropolis) | Rule off (before 110) |
+|---|---|---|
+| Developed 2x2 block | holds a road or a building | holds a road or any ground object, units included |
+| City centre (per connected city) | centre of mass of its buildings, each counted once at its centre; walls excluded | centroid of its developed blocks |
+| House average land value | mean over every developed block where the house owns a road tile or a building, by area, roads included | mean over one sample per building, at its top-left tile, roads excluded |
+
+Micropolis taxes one city with `TotalPop * LVAverage / 120 * CityTax * FLevels`, where
+`TotalPop = ResPop/8 + ComPop + IndPop` and `LVAverage` is the mean over every developed
+half-resolution block. DuneCity keeps that per house. Industrial is taxed like commercial in
+both. Under the old rule many small buildings (walls, turrets, windtraps) each counted as much
+as a zone, and parked units and roads pulled the centre away from the zones, so a large mixed
+base earned less per citizen than a compact AI city.
+
+The block land value itself is unchanged by the Micropolis rule: `4*(34 - distance/2)` +
+terrain (open sand counts as water; mountains count as forest with Mountain Scenery on),
+including park terrain, - pollution, -20 above crime 190, clamped 1-250, then
+Palace/Stadium bonuses and hostile-unit penalties. Building damage does **not** reduce
+land value by default. The separate **Damage Lowers Land Value** match rule (default off, MOD17)
+restores the old proportional health penalty on occupied blocks after these effects;
+repairs restore that value on the next scan. Shared blocks use the worst building
+condition, not compounded penalties. This rule does not change health-scaled windtrap power.
+The census check is `custom-city-cap-probe.inc` (ctest `quantbot_custom_attack`): a parked
+unit changes neither a block nor the house average with Micropolis on, and still develops
+its block with it off. `structure_degradation_dunecity` checks damaged and repaired
+buildings through real effects scans with Damage Lowers Land Value both off and on.
+
+### Mountain scenery (match rule `Mountain Scenery`, default on; MOD18, protocol 112)
+
+Mountain tiles, including Civilization Wars divider ridges, act like Micropolis forests:
+each contributes **15 raw terrain points**. Sources share the existing park-terrain grid
+and integer smoothing: `(centre + (north + south + east + west)/4)/2`, one pass.
+Micropolis uses 4-tile terrain blocks (3-tile zone + road); DuneCity uses 3-tile blocks
+(2-tile zone + road). The score reaches the source block and its four cardinal neighbours,
+not a radial long-distance stamp. The resulting tile scores are averaged over each
+2x2 land-value block before pollution/crime and clamping. Empty, undeveloped desert stays
+at zero. Mountains remain scenic even with infantry on them.
+
+This reuses the natural-terrain treatment in Micropolis
+[`pollutionTerrainLandValueScan` and `smoothTerrain`](https://github.com/SimHacker/micropolis/blob/master/MicropolisCore/src/MicropolisEngine/src/scan.cpp):
+nonzero terrain below rubble (including trees) adds 15, then one terrain smooth.
+No mountain terrain bonus existed before this rule. Ordinary rock has no scenery bonus.
+Open sand/dunes retain their separate, stronger water-like effect: 40 raw points per
+unoccupied tile smoothed twice on the 2x2 grid, plus a direct 8-point falloff over 5 tiles.
+Switching Mountain Scenery off restores the former terrain calculation; earlier
+settings streams load it off. The option is saved/hashed in MOD18 (save 9883),
+shared with fixed-price research, and can be set in Game Rules, defaults or mod rules.
+Frozen 9882/MOD17 carries no scenery byte; its retired research-area field is consumed
+and ignored rather than changing its layout in place.
+
+### Unpowered zones (match rule `Unpowered Zones Vacate`, default on; MOD18, protocol 112)
+
+R/C/I lots use their owner's produced/required power, with positive generation required even
+when empty lots draw zero. Allied grids and the Rocket-Turrets Need Power setting do not
+power city lots. A shortage prevents growth and removes one population step each city day:
+C/I lose one density level; residential apartments lose eight residents, then the last
+eight individual houses leave one at a time. A level-1 residential lot empties in nine days;
+a full 40-resident lot takes twelve. Empty lots stay placed with zero dynamic power draw,
+zero residents/jobs and density zero. Non-zone Dune buildings retain their level-one floor.
+Sufficient power restores the ordinary growth gates; powered growth is unchanged.
+
+The city day is 78 cycles (1.248 simulated seconds) with a classic year or 156 cycles
+(2.496 seconds) with Slow City Year. No new random rolls, timers or saved per-lot state
+are needed. The zone panel and industrial animation use the same power predicate as growth.
+
+Select **Unpowered Zones Vacate** in the pregame **Game Rules** panel; defaults and mod
+`GameOptions.ini` use the same key. Earlier saves retain the old level-one floor.
+The unfrozen MOD18 final city-rules byte uses bit 0 for Mountain Scenery and bit 1 for this
+rule: MOD18 blocks written earlier with a plain 0/1 scenery bool still load vacancy off,
+and frozen MOD17 is unchanged. The same settings codec carries both bits over protocol 112.
+`city_zone_power` exercises the real engine and zone panel; `[zonepower]` covers grid edges
+and the settings fixtures cover hashing, INI and old/new wire/save round trips.
+
+
+
+### Starport population (match rule `Starport Population`, default on; MOD16, protocol 111)
+
+In non-campaign city games a house can start a Starport only while its displayed city population
+(internal × 20) is at least 5,000 (`DuneCity::kStarportPopulation`). The Construction Yard list
+refreshes when the city crosses the line. A Starport already being built or queued is kept if the
+city later shrinks, and existing Starports keep working. Off, older saves and campaigns: no
+requirement.
+
 ## Income readout
 
 At 7% tax and house-average land value 128, gross credits per simulated minute:
@@ -89,6 +185,30 @@ Police/turret upkeep remains. Separate power charges remain and are not part of
 the city budget panel: `powerRequirement/32` every 15 seconds when enabled, or
 nominally `powerRequirement/8` per city year. Construction, units and repairs
 are also separate from gross tax income.
+
+### QuantBot police funding recovery
+
+In custom city games the full-control QuantBot reviews its own police budget.
+The normal target is the affordable share of recurring tax after power: 33%
+early, or 50% with at least 5,000 **uncommitted** credits or a healthy operating
+margin. A spice windfall is not recurring tax, so cash recovery does not bypass
+that limit. Campaign and human-house helper budgets are not rewritten.
+
+`[General Behavior] PoliceFundingRecovery=true` in `QuantBot Config.ini` is
+default-on and included in the multiplayer config hash. Cuts remain immediate;
+increases of at least five points retain the 30-game-second review. A smaller
+affordable increase now waits two game minutes rather than being rejected
+forever by the smoothing deadband (including the last 96-99% back to 100%).
+Off reproduces the former deadband for same-build comparisons. The existing
+serialized last-change cycle supplies both review intervals; no new save field.
+
+The `quantbot_police_budget` real-engine probe follows one house from fully
+funded to cash-constrained and back to its normal affordable target, then
+checks a small cut followed by full recovery, with an off-switch negative
+control and exact review-boundary checks. AI orders apply to that house
+directly after the command phase; human `CMD_CITY_SET_BUDGET` still uses its
+issuer's house through `CitySimulation::executeCityCommand`.
+
 
 ## Complete harvester cycle
 
@@ -283,3 +403,134 @@ Redundant finished roads are redirected to connected gaps around owned buildings
 excluding queued locations. If none is useful/free, keep the road ready and retry
 with a five-second delay rather than cancelling it. This preserves later building
 orders, although a held road occupies the yard until a site becomes available.
+
+## Rich-AI investigation (2026-11-03, protocol 111 staging)
+
+Ten real 30-minute all-QuantBot city games compared `police-recovery-off/on`
+in the same native build: 160×160 Fortress starts, 20,000-credit armies,
+40,000 starting cities, Medium spice, Hard and Brutal mirrors, seeds 9101 and
+148680876; plus 128×128 Medium-base, 2,500-credit-army, no-prebuilt-city Hard
+mirrors at seed 9101. Every house started with **3,000 credits**, spice factor
+1, the default slow city year and the mod's other defaults. These are ten
+30-minute observations, all time limits, not a win-rate experiment.
+
+Raw per-house minute curves, sources, expenditure, queue fronts and attacks:
+`~/Documents/projects/outputs/ai-rich-police-20261103/{fortress,medium}-{off,on}/`.
+The paired snapshot is source `2456373e6002`; a further full-capture replay of
+the richest Hard game is in `capital-trace/` (commit `f23489918a5c`, no working
+tree edits, no capture limit). Its final balance and original game digest
+reproduce the measured wealthy household.
+
+### Where the credits came from
+
+Hard Atreides, Fortress seed 9101, ended with **37,257** credits:
+
+| Cumulative source or use over 30 game minutes | Credits |
+|---|---:|
+| Starting grant, identical for every house | 3,000 |
+| Refined spice, factor 1 | 159,401 |
+| Gross city tax | 147,294 |
+| Net city credits actually applied, after policing | 123,834 |
+| Withdrawals for construction, units, upgrades, repairs and power | 248,978 |
+| Power, already included in those withdrawals | 16,819 |
+| Posted police charges, separate from withdrawals | 23,466 |
+| Refunds / sales / storage losses | 0 / 0 / 0 |
+| Construction Yard income | **0** |
+
+The exact balance is `3,000 + 159,401 + 123,834 - 248,978 = 37,257`.
+Posted police charges exceed the actual reduction of gross tax by six
+credits: the existing empty-city-treasury floor waives an early deficit
+(`House::addCityCredits`), rather than taking it from starting/spice cash.
+This small floor effect does not explain the large balance.
+
+Its four Yards supply **4,000 of 42,040 storage capacity**, not income.
+`Game.cpp` sets each city Yard's capacity to 1,000; `House::incrementStructures`
+adds capacity, while only refinery delivery and city-budget payout add the
+measured recurring income. No AI-only starting grant or passive Yard payout
+was found.
+
+### Why money accumulates late
+
+Between minutes 20 and 30 the same house banked **31,930** additional credits:
+64,812 spice + 72,384 gross tax - 10,363 police - 94,903 other withdrawals.
+Thus it was still spending **9,490 credits/minute** (779 of that power), not
+forgetting to pay for production; income after police was 12,683/minute.
+Tax supplied 52.8% of this window's gross recurring income.
+
+The construction sink reaches a deliberate difficulty limit. At cycle 96,979
+the full trace records city population **89,860 + 480 pending**, versus Hard's
+90,000 ceiling, **30,927** cash, **59,850** queue-inclusive military versus a
+70,000 target, four idle Yards and available building space. Each yard wants
+another Repair Yard, but `QuantBotBuildProducers.cpp::produceItemWithLogging`
+first calls `QuantBotBuild.cpp::cityAdmitsStructure`. That ceiling includes
+government jobs as well as private lots, so the repair investment cannot be
+admitted; additional population-bearing factories face the same ceiling.
+Zero-population services/power and military production remain available.
+The capital comparison also refuses another production lane when existing
+four-minute nominal military capacity (50,001 credits here) already exceeds
+the remaining army shortfall (`QuantBotSpendingPolicy::additionalProduction`).
+
+This is an **income-versus-deliberate-city/army-cap balance constraint**, not
+uncreated build commands or an extra source of AI cash. All five paired games
+had active production whenever a house retained 5,000+ credits and a Yard;
+none met the audit's four-minute whole-production-idle `unused_credits` flag.
+That detector does not mean every individual yard was busy: the capped city's
+yard-idle period above is explicitly retained in the evidence.
+
+No spending-cap bypass or income rebalance is implemented by this fix.
+**Recommendation:** if smaller mature-city treasuries are desired, A/B the
+private-zone multiplier at 1.5× rather than 2× before choosing a balance
+change; do not remove Yard storage or the 3,000-credit opening grant. At fixed
+population/behaviour, a 25% reduction of this window's tax would remove at most
+18,096 of its 31,930 surplus (Palace is exempt from the private-zone multiplier).
+That is a bounded estimate, not a played result; ordinary starts in this sample
+were cash-constrained, so a universal tax nerf needs wider validation.
+
+### Credit curves and police acceptance
+
+Every Fortress household's OFF/ON credit curve is identical, including final
+game digests: these well-funded cities normally remained at 100% police funding.
+All start at 3,000; each entry below is the balance at the stated game minute.
+
+| Difficulty | Seed | House | 10 min | 20 min | 30 min |
+|---|---:|---|---:|---:|---:|
+| Brutal | 148680876 | Harkonnen | 1,217 | 1,479 | 13,633 |
+| Brutal | 148680876 | Atreides | 463 | 1,037 | 0 |
+| Brutal | 148680876 | Ordos | 1,168 | 518 | 1,267 |
+| Brutal | 148680876 | Sardaukar | 735 | 656 | 655 |
+| Brutal | 9101 | Harkonnen | 381 | 905 | 0 |
+| Brutal | 9101 | Atreides | 7,048 | 2,245 | 5,649 |
+| Brutal | 9101 | Ordos | 899 | 2,465 | 6,472 |
+| Brutal | 9101 | Sardaukar | 1,647 | 577 | 0 |
+| Hard | 148680876 | Harkonnen | 1,998 | 2,175 | 2,164 |
+| Hard | 148680876 | Atreides | 1,140 | 836 | 1,169 |
+| Hard | 148680876 | Ordos | 1,629 | 6,303 | 32,623 |
+| Hard | 148680876 | Sardaukar | 294 | 433 | 0 |
+| Hard | 9101 | Harkonnen | 0 | 0 | 0 |
+| Hard | 9101 | Atreides | 1,103 | 5,327 | 37,257 |
+| Hard | 9101 | Ordos | 2,091 | 5,844 | 860 |
+| Hard | 9101 | Sardaukar | 1,044 | 0 | 0 |
+
+Ordinary Medium-base starts, Hard seed 9101, **OFF / ON**:
+
+| House | 10 min | 20 min | 30 min |
+|---|---:|---:|---:|
+| Harkonnen | 496 / 369 | 1,752 / 945 | 1,184 / 2,208 |
+| Atreides | 715 / 463 | 825 / 1,219 | 350 / 563 |
+| Ordos | 558 / 574 | 2,076 / 1,490 | 713 / 884 |
+| Sardaukar | 947 / 344 | 909 / 248 | 1,205 / 1,026 |
+
+Funding recovery changes this cash-constrained game's subsequent simulation,
+so its differing end balances are not an isolated economic-strength claim.
+The controlled real-engine budget probe proves the exact cause and fix:
+cash 1,000→6,000 takes funding **100→53→81** after the 30-second review;
+a small tax-headroom cut takes **100→97→100** after two minutes with recovery
+on, while off remains at **97**. Immediate cuts, exact review boundaries,
+campaign/helper ownership and actual budget charging all pass unchanged.
+
+Verification on the frozen paired source: `quantbot_police_budget` and the ten
+other selected QuantBot/performance tests pass (cluster job
+`20261103T202057-ctest-daf8f5`); `dunelegacy_tests` passes on the Windows PC
+in `20261103T201949-ctest-746ac5`. The former includes police placement,
+shared spending, no-spice city, growth installments, custom attack, strategic
+site stalls, all-against-Atreides, scenario smoke, FFA deployment and performance.

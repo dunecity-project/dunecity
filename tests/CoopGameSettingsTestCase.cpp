@@ -1,6 +1,10 @@
 #include <catch2/catch_all.hpp>
 #include <GameInitSettings.h>
+#include <FileClasses/FileManager.h>
+#include <MapSeed.h>
+#include <globals.h>
 #include <SpiceIncome.h>
+#include <TechResearch.h>
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 #include <mod/ModManager.h>
@@ -8,16 +12,80 @@
 
 #include <vector>
 #include <sstream>
+#include <limits>
+#include <stdexcept>
 
 namespace {
 std::string activeTestMod = "vanilla";
 constexpr std::size_t Mod12Bytes = 6;
 constexpr std::size_t Mod13Bytes = 1;
-constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes;
+constexpr std::size_t Mod14Bytes = 1;
+constexpr std::size_t Mod15Bytes = 2;
+constexpr std::size_t Mod16Bytes = 1;
+constexpr std::size_t Mod18ResearchBytes = 6; // pace4 + damage1 + city-rule bits1
+constexpr std::size_t CurrentResearchBytes = Mod18ResearchBytes + 1; // MOD19: technology-installment rule
+constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes + CurrentResearchBytes;
 struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
     ~ActiveTestMod() { ModManager::instance().setActiveMod("vanilla"); }
 };
+
+bool isInitialSpiceTile(TERRAINTYPE terrain) {
+    return terrain == Terrain_Spice || terrain == Terrain_ThickSpice;
+}
+
+int countInitialSpiceTiles(const MapData& map) {
+    int count = 0;
+    for(int y = 0; y < map.getSizeY(); ++y) {
+        for(int x = 0; x < map.getSizeX(); ++x) {
+            if(isInitialSpiceTile(map(x, y))) ++count;
+        }
+    }
+    return count;
+}
+
+std::string initialSeededScenario(Uint32 seed, int scale, const std::string& overlays = {}) {
+    return "[BASIC]\nVersion=1\nMapScale=" + std::to_string(scale)
+        + "\n[MAP]\nSeed=" + std::to_string(seed) + "\n" + overlays;
+}
+
+GameInitSettings initialSeededSettings(bool campaign, const std::string& scenario) {
+    GameInitSettings init = campaign
+        ? GameInitSettings(HOUSE_ATREIDES, SettingsClass::GameOptionsClass{})
+        : GameInitSettings(HOUSE_ATREIDES, 8, SettingsClass::GameOptionsClass{});
+    init.setScenarioData(scenario);
+    return init;
+}
+
+std::string initialMapPositions(const std::vector<int>& positions) {
+    std::ostringstream result;
+    for(size_t i = 0; i < positions.size(); ++i) {
+        if(i != 0) result << ',';
+        result << positions[i];
+    }
+    return result.str();
+}
+
+void applyInitialFieldReference(MapData& map, int position, int offset) {
+    const int centerX = position % 64 - offset;
+    const int centerY = position / 64 - offset;
+    // Independent full-map oracle: native fields include a Euclidean radius of five.
+    for(int y = 0; y < map.getSizeY(); ++y) {
+        for(int x = 0; x < map.getSizeX(); ++x) {
+            const int dx = x - centerX;
+            const int dy = y - centerY;
+            if(map(x, y) == Terrain_Sand && dx * dx + dy * dy <= 25)
+                map(x, y) = Terrain_Spice;
+        }
+    }
+}
+
+std::string initialSettingsBytes(const GameInitSettings& init) {
+    OMemoryStream saved;
+    saved.open();
+    init.save(saved);
+    return {saved.getData(), saved.getDataLength()};
+}
 }
 
 // Standalone tests use mod identity and path naming without installing mods.
@@ -48,6 +116,13 @@ char getHouseScenarioLetter(HOUSETYPE house) {
     return house == HOUSE_ATREIDES ? 'A' : (house == HOUSE_ORDOS ? 'O' : 'H');
 }
 
+// This standalone target has no installed campaign assets and keeps pFileManager null.
+// Use the real class layout, but never invent a canonical scenario for fixture tests.
+FileManager::~FileManager() = default;
+sdl2::RWops_ptr FileManager::openCampaignFile(const std::string&) {
+    throw std::runtime_error("Canonical campaign assets are unavailable in standalone settings tests.");
+}
+
 static GameInitSettings makeCoop(bool campaign, bool bot, const std::string& botClass = "qBotSupportBrutal") {
     GameInitSettings init(HOUSE_ATREIDES, 8, SettingsClass::GameOptionsClass{});
     init.enableCoop(campaign, "Test co-op");
@@ -62,6 +137,208 @@ static GameInitSettings makeCoop(bool campaign, bool bot, const std::string& bot
     enemy.addPlayerInfo({"Sardaukar", "qBotHard"});
     init.addHouseInfo(enemy);
     return init;
+}
+
+TEST_CASE("Initial spice density is derived from immutable saved map tiles", "[city][settings][save][initial-spice]") {
+    GameInitSettings init("density.ini",
+        "[BASIC]\nVersion=2\n[MAP]\nSizeX=10\nSizeY=2\n"
+        "000=~+gGrRlLwW\n001=-^%@OQbBix\n[RANDOMSKIRMISH]\nSpice=0\n",
+        false, SettingsClass::GameOptionsClass{});
+    REQUIRE(init.getInitialSpiceTilePermille() == 500);
+    REQUIRE(init.getInitialSpiceTilePermille() == 500);
+    OMemoryStream saved;
+    saved.open();
+    init.save(saved);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    const GameInitSettings restored(input);
+    REQUIRE(restored.getInitialSpiceTilePermille() == 500);
+    REQUIRE(init.networkSnapshot("not an INI: binary checkpoint").getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=----------\n[RANDOMSKIRMISH]\nSpice=3\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == 0);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=~\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSeed=123\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setMapData("[MAP]\nSizeX=10\nSizeY=1\n000=~+--------\nField=0\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == 200); // Explicit-grid Field stays ignored.
+}
+
+TEST_CASE("Initial terrain counts come from the same immutable saved explicit grid",
+          "[settings][save][initial-terrain]") {
+    GameInitSettings init("terrain.ini",
+        "[BASIC]\nVersion=2\n[MAP]\nSizeX=5\nSizeY=4\n000=%%%%~\n001=%%%%+\n002=%%%@-\n003=G~-@L\n",
+        false, SettingsClass::GameOptionsClass{});
+    const auto requireGrid = [](const InitialTerrain& terrain) {
+        REQUIRE(terrain.known);
+        REQUIRE(terrain.tiles == 20);
+        REQUIRE(terrain.spice == 5);
+        REQUIRE(terrain.thickSpice == 3);
+        REQUIRE(terrain.mountain == 2);
+        REQUIRE(terrain.rock == 11);
+        REQUIRE(terrain.rockWindows == 1);
+    };
+    requireGrid(init.getInitialTerrain());
+    requireGrid(init.getInitialTerrain());
+    REQUIRE(init.getInitialSpiceTilePermille() == 250); // The same five spice tiles.
+    OMemoryStream saved;
+    saved.open();
+    init.save(saved);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    const GameInitSettings restored(input);
+    requireGrid(restored.getInitialTerrain());
+    REQUIRE_FALSE(init.networkSnapshot("not an INI: binary checkpoint").getInitialTerrain().known);
+    init.setScenarioData("[MAP]\nSizeX=10\nSizeY=1\n000=~\n");
+    REQUIRE_FALSE(init.getInitialTerrain().known);
+    init.setScenarioData("[MAP]\nSeed=123\nSizeX=1\nSizeY=1\n000=@\n");
+    REQUIRE_FALSE(init.getInitialTerrain().known); // A generator-seeded custom map has no grid.
+    init.setMapData("[MAP]\nSizeX=2\nSizeY=1\n000=@-\n");
+    REQUIRE(init.getInitialTerrain().known);
+    REQUIRE(init.getInitialTerrain().mountain == 1);
+    REQUIRE(init.getInitialTerrain().spice == 0);
+}
+
+TEST_CASE("Original seeded spice density uses the native crop and saved seed",
+          "[settings][campaign][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    const int scale = GENERATE(0, 1, 2);
+    const Uint32 seed = GENERATE(Uint32{0}, Uint32{12345}, std::numeric_limits<Uint32>::max());
+    const auto native = createMapWithSeed(seed, scale);
+    const int expectedSize = scale == 0 ? 62 : (scale == 1 ? 32 : 21);
+    REQUIRE(native.getSizeX() == expectedSize);
+    REQUIRE(native.getSizeY() == expectedSize);
+    const int expected = countInitialSpiceTiles(native) * 1000 / (expectedSize * expectedSize);
+    auto init = initialSeededSettings(campaign, initialSeededScenario(seed, scale));
+    REQUIRE(init.getInitialSpiceTilePermille() == expected);
+    init.setRandomSeed(seed ^ 0x5a5a5a5aU);
+    init.setScenarioData(init.getFiledata()); // Invalidate the cache without changing the map.
+    REQUIRE(init.getInitialSpiceTilePermille() == expected);
+}
+
+TEST_CASE("Seeded blooms remove spice and fields add only native sand",
+          "[settings][campaign][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    constexpr Uint32 seed = 12345;
+    const auto native = createMapWithSeed(seed, 0);
+    std::vector<int> blooms;
+    std::vector<int> specials;
+    std::vector<int> fields;
+    for(int y = 0; y < native.getSizeY(); ++y) {
+        for(int x = 0; x < native.getSizeX(); ++x) {
+            const int position = (y + 1) * 64 + x + 1;
+            if(isInitialSpiceTile(native(x, y))) {
+                if((blooms.size() + specials.size()) % 2 == 0) blooms.push_back(position);
+                else specials.push_back(position);
+            } else if(native(x, y) == Terrain_Sand) {
+                fields.push_back(position);
+            }
+        }
+    }
+    REQUIRE_FALSE(blooms.empty());
+    REQUIRE_FALSE(specials.empty());
+    REQUIRE_FALSE(fields.empty());
+    const auto removals = "Bloom=" + initialMapPositions(blooms)
+        + "\nSpecial=" + initialMapPositions(specials) + "\n";
+    auto init = initialSeededSettings(campaign, initialSeededScenario(seed, 0, removals));
+    REQUIRE(init.getInitialSpiceTilePermille() == 0);
+    const int positive = static_cast<int>(fields.size()) * 1000 / (62 * 62);
+    REQUIRE(positive > 0);
+    init.setMapData(initialSeededScenario(seed, 0, removals
+        + "Field=" + initialMapPositions(fields)
+        + "\nSpiceVariantPercent=15\nSpiceVariantSeed=987\nSpiceVariantVersion=2\n"));
+    REQUIRE(init.getInitialSpiceTilePermille() == positive);
+}
+
+TEST_CASE("Seeded field circles preserve blooms, dunes and rock at cropped edges",
+          "[settings][campaign][initial-spice]") {
+    const int scale = GENERATE(0, 1, 2);
+    constexpr Uint32 seed = 12345;
+    auto expected = createMapWithSeed(seed, scale);
+    const int size = expected.getSizeX();
+    const int offset = scale == 0 ? 1 : (scale == 1 ? 16 : 11);
+    const int middle = size / 2;
+    const int bloom = offset * 64 + offset;
+    const int special = (offset + middle) * 64 + offset + middle;
+    expected(0, 0) = Terrain_SpiceBloom;
+    expected(middle, middle) = Terrain_SpecialBloom;
+    const int beforeFields = countInitialSpiceTiles(expected);
+    const std::vector<int> fields{
+        (offset + middle) * 64 + offset - 2, // Outside the crop, still reaches edge sand.
+        (offset + 2) * 64 + offset + 2,
+        (offset + size - 3) * 64 + offset + size - 3,
+        special, special // Bloom centres stay blooms, repeated fields do not add twice.
+    };
+    for(const int position : fields) applyInitialFieldReference(expected, position, offset);
+    REQUIRE(countInitialSpiceTiles(expected) > beforeFields);
+    auto init = initialSeededSettings(true, initialSeededScenario(seed, scale,
+        "Bloom=" + std::to_string(bloom) + "\nSpecial=" + std::to_string(special)
+        + "\nField=" + initialMapPositions(fields) + "\n"));
+    REQUIRE(init.getInitialSpiceTilePermille() == countInitialSpiceTiles(expected) * 1000 / (size * size));
+}
+
+TEST_CASE("Malformed original seeded settings are unknown rather than zero spice",
+          "[settings][campaign][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    const std::vector<std::string> invalid{
+        "", "[MAP]\nSeed=12345\n", "[BASIC]\nMapScale=0\n[MAP]\n",
+        initialSeededScenario(12345, -1), initialSeededScenario(12345, 3),
+        "[BASIC]\nMapScale=0oops\n[MAP]\nSeed=12345\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=garbage\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=-1\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=4294967296\n",
+        "[BASIC]\nMapScale=0\n[MAP]\nSeed=12345suffix\n",
+        "[BASIC]\nVersion=garbage\nMapScale=0\n[MAP]\nSeed=12345\n",
+        initialSeededScenario(12345, 0, "Bloom=65oops\n"),
+        initialSeededScenario(12345, 0, "Special=2147483648\n"),
+        initialSeededScenario(12345, 0, "Field=65,,66\n"),
+        initialSeededScenario(12345, 0, "Field=+\n"),
+        initialSeededScenario(12345, 0) + std::string("\0checkpoint", 11)
+    };
+    for(const auto& scenario : invalid) {
+        CAPTURE(scenario);
+        const auto init = initialSeededSettings(campaign, scenario);
+        REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    }
+    const GameInitSettings custom("seeded.ini", initialSeededScenario(12345, 0),
+                                  false, SettingsClass::GameOptionsClass{});
+    REQUIRE(custom.getInitialSpiceTilePermille() == -1); // Existing custom-grid contract.
+}
+
+TEST_CASE("Saved original scenario density survives cache invalidation and save load",
+          "[settings][campaign][save][initial-spice]") {
+    const bool campaign = GENERATE(false, true);
+    auto init = initialSeededSettings(campaign, initialSeededScenario(12345, 0, "Field=2080\n"));
+    const auto beforeQuery = initialSettingsBytes(init);
+    const int density = init.getInitialSpiceTilePermille();
+    REQUIRE(density > 0);
+    REQUIRE(init.getInitialSpiceTilePermille() == density);
+    REQUIRE(initialSettingsBytes(init) == beforeQuery); // No cache bytes enter a save.
+    IMemoryStream input(beforeQuery.data(), beforeQuery.size());
+    const GameInitSettings restored(input);
+    REQUIRE(restored.getInitialSpiceTilePermille() == density);
+    REQUIRE(restored.getFiledata() == init.getFiledata());
+    REQUIRE(init.networkSnapshot(beforeQuery).getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[MAP]\nSeed=invalid\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setMapData(initialSeededScenario(12345, 0, "Field=2080\n"));
+    REQUIRE(init.getInitialSpiceTilePermille() == density);
+    REQUIRE(restored.getInitialSpiceTilePermille() == density);
+    const GameInitSettings next(init, 2, 0, 0);
+    REQUIRE(next.getFiledata().empty());
+    REQUIRE(next.getInitialSpiceTilePermille() == -1); // New mission must not inherit the cache.
+}
+
+TEST_CASE("Original scenarios require saved map text or an available canonical asset",
+          "[settings][campaign][initial-spice]") {
+    REQUIRE_FALSE(pFileManager);
+    const bool campaign = GENERATE(false, true);
+    auto init = initialSeededSettings(campaign, {});
+    REQUIRE(init.getInitialSpiceTilePermille() == -1);
+    init.setScenarioData("[BASIC]\nVersion=2\n[MAP]\nSizeX=10\nSizeY=1\n000=~+gGrRlLwW\n");
+    REQUIRE(init.getInitialSpiceTilePermille() == 1000);
+    const auto bytes = initialSettingsBytes(init);
+    IMemoryStream input(bytes.data(), bytes.size());
+    const GameInitSettings restored(input);
+    REQUIRE(restored.getInitialSpiceTilePermille() == 1000);
 }
 
 TEST_CASE("Original damage is a shared rule preserved by setup, saves and campaigns", "[damage][network][save]") {
@@ -82,12 +359,12 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
         // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
         // factor per house, MOD8's plan-sites byte, MOD9's ground-steps byte, MOD10's two
-        // planned-construction bytes, MOD11's city-year byte and the MOD12/MOD13 bytes.
+        // planned-construction bytes, MOD11's city-year byte and the MOD12..MOD14 bytes.
         // Removed so what follows is unmistakably not part of the block.
         bytes.resize(bytes.size() - (PostMod11Bytes + 1 + 4 + 4 * original.getHouseInfoList().size() + 1 + 1 + 2 + 1));
         bytes.append("tail");
@@ -118,10 +395,10 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
     SECTION("MOD7 and older default the rule on without consuming following bytes") {
         const char older = GENERATE('4', '5', '6', '7');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
-        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1;                // MOD13 through MOD8
+        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1;                // MOD14 through MOD8
         if(older < '7') trailing += 4 + 4 * original.getHouseInfoList().size(); // MOD7
         if(older < '6') trailing += 1;                                       // MOD6 rule byte
         if(older < '5') trailing += 4;                                       // MOD5 yard limit
@@ -135,7 +412,7 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
 
     SECTION("an announced MOD8 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - PostMod11Bytes - 5);   // MOD13 through the missing MOD8 byte
+        bytes.resize(bytes.size() - PostMod11Bytes - 5);   // MOD14 through the missing MOD8 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -160,10 +437,10 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("MOD8 streams keep the rule off without consuming following bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '8';
-        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD13 through MOD9, which MOD8 does not own
+        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD14 through MOD9, which MOD8 does not own
         bytes.append("tail");
         IMemoryStream oldInput(bytes.data(), bytes.size());
         GameInitSettings old(oldInput);
@@ -173,7 +450,7 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("an announced MOD9 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD13 through the missing MOD9 byte
+        bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD14 through the missing MOD9 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -212,7 +489,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
         // A save or replay recorded before the rules existed must replay with the legacy behaviour.
         const char older = GENERATE('8', '9');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         bytes.resize(bytes.size() - PostMod11Bytes - (older == '8' ? 4 : 3));
@@ -226,10 +503,10 @@ TEST_CASE("The planned-construction rules participate in match identity and save
 
     SECTION("an announced MOD10 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
-        bytes.resize(bytes.size() - PostMod11Bytes - 2);   // MOD13, MOD12, MOD11 and the missing last MOD10 byte
+        bytes.resize(bytes.size() - PostMod11Bytes - 2);   // MOD14..MOD11 and the missing last MOD10 byte
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -262,7 +539,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
         mod10.setGameOptions(planned);
         OMemoryStream mod10Out; mod10Out.open(); mod10.save(mod10Out);
         std::string bytes(mod10Out.getData(), mod10Out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes);
@@ -277,7 +554,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
 
     SECTION("an announced MOD11 byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'B';
         bytes.resize(bytes.size() - PostMod11Bytes - 1);
@@ -336,11 +613,11 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("DDOM");
+        const auto marker = bytes.rfind("JDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
-        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD13 through MOD7
+        std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1 + 4 + 4 * host.getHouseInfoList().size(); // MOD14 through MOD7
         if(older < '6') trailing += 1;                                   // MOD6 rule byte
         if(older < '5') trailing += 4;                                   // MOD5 yard limit
         bytes.resize(bytes.size() - trailing);
@@ -365,7 +642,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
 
     SECTION("an announced MOD7 block that is not there is a truncated stream, not an old one") {
         std::string bytes(out.getData(), out.getDataLength());
-        bytes.resize(bytes.size() - PostMod11Bytes - 4 - 5);   // MOD13 through MOD8 and the last factor
+        bytes.resize(bytes.size() - PostMod11Bytes - 4 - 5);   // MOD14 through MOD8 and the last factor
         IMemoryStream truncated(bytes.data(), bytes.size());
         REQUIRE_THROWS([&] { GameInitSettings parsed(truncated); }());
     }
@@ -374,7 +651,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
         const Uint32 bad = GENERATE(0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu);
         std::string bytes(out.getData(), out.getDataLength());
         REQUIRE(bytes.size() > PostMod11Bytes + 9);
-        // The final row factor precedes the MOD8..MOD13 rule bytes.
+        // The final row factor precedes the MOD8..MOD14 rule bytes.
         for(int shift = 0; shift < 4; ++shift) {
             bytes[bytes.size() - PostMod11Bytes - 9 + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
         }
@@ -663,16 +940,16 @@ TEST_CASE("Workshop revisions survive game settings and checkpoint copies", "[wo
     REQUIRE(next.getModRevisionHash() == original.getModRevisionHash());
 }
 
-TEST_CASE("Legacy MOD3 remains readable and truncated MOD13 fails closed", "[workshop][save]") {
+TEST_CASE("Legacy MOD3 remains readable and truncated MOD14 fails closed", "[workshop][save]") {
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("DDOM");
+    const auto marker = bytes.find("JDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
         // three strings, two revision integers, yard limit, original damage,
-        // then MOD7's factor count/array and the MOD8..MOD13 rule bytes.
+        // then MOD7's factor count/array and the MOD8..MOD14 rule bytes.
         bytes.resize(bytes.size() - 25 - (4 + 4 * original.getHouseInfoList().size()) - 1 - 1 - 2 - 1 - PostMod11Bytes);
         IMemoryStream in(bytes.data(), bytes.size());
         GameInitSettings restored(in);
@@ -791,10 +1068,10 @@ TEST_CASE("MOD12 is append-only and every announced rule byte is required",
     const auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("DDOM");
+    const auto marker = encoded.rfind("JDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'C';
-    encoded.resize(encoded.size() - Mod13Bytes); // Exercise the actual released MOD12 layout.
+    encoded.resize(encoded.size() - Mod13Bytes - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes); // Released MOD12 layout.
     SECTION("a MOD11 stream consumes none of the six new fields") {
         auto bytes = encoded;
         REQUIRE(bytes[marker] == 'C');
@@ -830,9 +1107,11 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
 
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
-    const std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("DDOM");
+    std::string encoded(out.getData(), out.getDataLength());
+    const auto marker = encoded.rfind("JDOM");
     REQUIRE(marker != std::string::npos);
+    encoded[marker] = 'D';
+    encoded.resize(encoded.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes); // Released MOD13 layout.
 
     SECTION("both switch states round-trip without consuming following bytes") {
         const bool enabled = GENERATE(false, true);
@@ -855,6 +1134,12 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
         GameInitSettings restored(input);
         auto expected = original.getGameOptions();
         expected.sharedFactoryQueue = false;
+        expected.micropolisLandValue = false;
+        expected.trooperAntiAir = false;
+        expected.starportPopulation = false;
+        expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
+        expected.technologyInstallments = false;
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE_FALSE(restored.getGameOptions().sharedFactoryQueue);
         REQUIRE(restored.isChaosCampaignEligible() == original.isChaosCampaignEligible());
@@ -863,6 +1148,379 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
     SECTION("truncating the MOD13 byte is an error, not a legacy save") {
         auto bytes = encoded;
         bytes.resize(bytes.size() - Mod13Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when announced",
+          "[citybudget][network][save]") {
+    SettingsClass::GameOptionsClass current;
+    REQUIRE(current.micropolisLandValue);
+    auto classic = current;
+    classic.micropolisLandValue = false;
+    REQUIRE(classic != current);
+    REQUIRE(classic.getHash() != current.getHash());
+
+    auto original = makeSeparateFactionCoop(false);
+    OMemoryStream out; out.open(); original.save(out);
+    const std::string encoded(out.getData(), out.getDataLength());
+    const auto marker = encoded.rfind("JDOM");
+    REQUIRE(marker != std::string::npos);
+
+    SECTION("both switch states round-trip without consuming following bytes") {
+        const bool enabled = GENERATE(false, true);
+        auto options = original.getGameOptions();
+        options.micropolisLandValue = enabled;
+        original.setGameOptions(options);
+        OMemoryStream saved; saved.open(); original.save(saved); saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a released MOD13 stream keeps every old field and reads the new rule off") {
+        auto bytes = encoded;
+        bytes[marker] = 'D';
+        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        auto expected = original.getGameOptions();
+        expected.micropolisLandValue = false;
+        expected.trooperAntiAir = false;
+        expected.starportPopulation = false;
+        expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
+        expected.technologyInstallments = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
+        REQUIRE_FALSE(restored.getGameOptions().micropolisLandValue);
+        REQUIRE(restored.isChaosCampaignEligible() == original.isChaosCampaignEligible());
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("truncating the MOD14 byte is an error, not a legacy save") {
+        auto bytes = encoded;
+        bytes.resize(bytes.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved rules",
+          "[research][combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE_FALSE(defaults.researchLab);
+    REQUIRE(defaults.trooperAntiAir);
+    auto changed = defaults;
+    changed.researchLab = true;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    changed = defaults;
+    changed.trooperAntiAir = false;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    auto original = makeSeparateFactionCoop(false);
+    auto options = original.getGameOptions();
+    options.researchLab = GENERATE(false, true);
+    options.trooperAntiAir = GENERATE(false, true);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    const auto marker = encoded.rfind("JDOM");
+    REQUIRE(marker != std::string::npos);
+    SECTION("all combinations round-trip without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("released MOD14 streams retain their rules and default both mechanics off") {
+        auto bytes = encoded;
+        bytes[marker] = 'E';
+        bytes.resize(bytes.size() - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.researchLab = false;
+        expected.trooperAntiAir = false;
+        expected.starportPopulation = false;
+        expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
+        expected.technologyInstallments = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("every announced MOD15 byte is required") {
+        const int missing = GENERATE(1, 2);
+        auto bytes = encoded;
+        bytes[marker] = 'F';
+        bytes.resize(bytes.size() - Mod16Bytes - CurrentResearchBytes - missing);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams read off",
+          "[citybudget][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.starportPopulation);
+    auto changed = defaults;
+    changed.starportPopulation = false;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    auto original = makeSeparateFactionCoop(false);
+    auto options = original.getGameOptions();
+    options.starportPopulation = GENERATE(false, true);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    const auto marker = encoded.rfind("JDOM");
+    REQUIRE(marker != std::string::npos);
+    SECTION("both states round-trip without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a MOD15 stream keeps its rules and has no Starport requirement") {
+        auto bytes = encoded;
+        bytes[marker] = 'F';
+        bytes.resize(bytes.size() - Mod16Bytes - CurrentResearchBytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.starportPopulation = false;
+        expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
+        expected.technologyInstallments = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("the announced MOD16 byte is required") {
+        auto bytes = encoded;
+        bytes[marker] = 'G';
+        bytes.resize(bytes.size() - Mod16Bytes - CurrentResearchBytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("Research prices and durations depend only on target and selected pace",
+          "[research][policy]") {
+    using namespace TechResearch;
+    const int target = GENERATE(2,3,4,5,6,7,8,9);
+    const auto pace = GENERATE(Pace::Fast,Pace::Normal,Pace::Slow,Pace::VerySlow);
+    const int units = 1 << static_cast<unsigned>(pace);
+    REQUIRE(cost(target,pace) == 1000 * (target-1) * units / 2);
+    REQUIRE(cycles(target,pace) == MILLI2CYCLES(target * 60000) * units / 2);
+}
+
+TEST_CASE("Normal research has fixed thousand-credit steps and minute durations",
+          "[research][civwars][policy]") {
+    using namespace TechResearch;
+    int totalCost = 0, totalCycles = 0;
+    for(int target=2;target<=9;++target) {
+        REQUIRE(cost(target,Pace::Normal) == 1000 * (target-1));
+        REQUIRE(cycles(target,Pace::Normal) == MILLI2CYCLES(target * 60000));
+        totalCost += cost(target,Pace::Normal);
+        totalCycles += cycles(target,Pace::Normal);
+    }
+    REQUIRE(cost(4,Pace::Normal) == 3000);
+    REQUIRE(cycles(4,Pace::Normal) == 15000);
+    REQUIRE(cost(9,Pace::Normal) == 8000);
+    REQUIRE(cycles(9,Pace::Normal) == 33750);
+    REQUIRE(totalCost == 36000);
+    REQUIRE(totalCycles == 165000);
+    for(int invalid : {-1,0,1,10,std::numeric_limits<int>::max()}) {
+        REQUIRE(cost(invalid,Pace::Normal) == 0);
+        REQUIRE(cycles(invalid,Pace::Normal) == 0);
+    }
+    REQUIRE(sanitize(-1) == Pace::Normal);
+    REQUIRE(sanitize(4) == Pace::Normal);
+    REQUIRE_FALSE(isValid(4));
+}
+
+TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
+          "[research][citybudget][network][save]") {
+    using namespace TechResearch;
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.researchPace == Pace::Normal);
+    REQUIRE_FALSE(defaults.damageLowersLandValue);
+    REQUIRE(defaults.mountainScenery);
+    REQUIRE(defaults.unpoweredZonesVacate);
+    auto changed = defaults;
+    changed.researchPace = Pace::Fast;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    changed = defaults;
+    changed.damageLowersLandValue = true;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    changed = defaults;
+    changed.mountainScenery = false;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    changed = defaults;
+    changed.unpoweredZonesVacate = false;
+    REQUIRE(changed != defaults);
+    REQUIRE(changed.getHash() != defaults.getHash());
+    auto original = makeCoop(false,true);
+    auto options = original.getGameOptions();
+    options.researchPace = GENERATE(Pace::Fast,Pace::Normal,Pace::Slow,Pace::VerySlow);
+    options.damageLowersLandValue = GENERATE(false,true);
+    options.mountainScenery = GENERATE(false,true);
+    options.unpoweredZonesVacate = GENERATE(false,true);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    std::string encoded(saved.getData(),saved.getDataLength());
+    const auto marker = encoded.rfind("JDOM");
+    REQUIRE(marker != std::string::npos);
+    // All frozen-layout sections below start from the released MOD18 bytes.
+    encoded[marker] = 'I';
+    encoded.pop_back();
+    SECTION("released MOD18 preserves every old rule and reads installments off") {
+        auto bytes = encoded;
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(),bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.technologyInstallments = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("every field round-trips without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(),saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("MOD17 reads its exact nine-byte suffix and ignores its obsolete area") {
+        const Uint32 area = GENERATE(0u,12384u,24704u,40800u);
+        // Keep the complete old prefix and pace; replace MOD18's two rule bytes
+        // with the released MOD17 area4 + damage1. There was no city-rules byte.
+        auto bytes = encoded;
+        bytes[marker] = 'H';
+        bytes.resize(bytes.size()-2);
+        for(int shift=0;shift<32;shift+=8) bytes.push_back(static_cast<char>(area >> shift));
+        bytes.push_back(static_cast<char>(options.damageLowersLandValue));
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(),bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
+        expected.technologyInstallments = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("MOD16 keeps its prefix and defaults to Normal and both terrain rules off") {
+        auto bytes = encoded;
+        bytes[marker] = 'G';
+        bytes.resize(bytes.size()-Mod18ResearchBytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(),bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.researchPace = Pace::Normal;
+        expected.damageLowersLandValue = false;
+        expected.mountainScenery = false;
+        expected.unpoweredZonesVacate = false;
+        expected.technologyInstallments = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("every frozen MOD17 suffix byte remains required") {
+        const int missing = GENERATE(1,2,3,4,5,6,7,8,9);
+        auto bytes = encoded;
+        bytes[marker] = 'H';
+        bytes.resize(bytes.size()-2);
+        bytes.append(4,'\0');
+        bytes.push_back(static_cast<char>(options.damageLowersLandValue));
+        bytes.resize(bytes.size()-missing);
+        IMemoryStream input(bytes.data(),bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+    SECTION("every announced MOD18 byte is required") {
+        const int missing = GENERATE(1,2,3,4,5,6);
+        auto bytes = encoded;
+        bytes.resize(bytes.size()-missing);
+        IMemoryStream input(bytes.data(),bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+    SECTION("earlier MOD18 city-rule bytes keep vacancy off and the next record intact") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(options.mountainScenery);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(),bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.unpoweredZonesVacate = false;
+        expected.technologyInstallments = false;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("unknown MOD18 city-rule bits are refused") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(4);
+        IMemoryStream input(bytes.data(),bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+    SECTION("unknown wire pace is refused instead of normalized") {
+        auto bytes = encoded;
+        const auto offset = bytes.size()-Mod18ResearchBytes;
+        for(std::size_t i=0;i<4;++i) bytes[offset+i] = static_cast<char>(0xff);
+        IMemoryStream input(bytes.data(),bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+        options.researchPace = static_cast<Pace>(99);
+        original.setGameOptions(options);
+        OMemoryStream rejected; rejected.open();
+        REQUIRE_THROWS(original.save(rejected));
+    }
+}
+
+TEST_CASE("MOD19 technology installments default off and are hashed, saved and required on the wire",
+          "[research][upgrade][installments][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE_FALSE(defaults.technologyInstallments);
+    auto installments = defaults;
+    installments.technologyInstallments = true;
+    REQUIRE(installments != defaults);
+    REQUIRE(installments.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.researchLab = GENERATE(false, true);
+    options.technologyInstallments = GENERATE(false, true);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    const auto marker = encoded.rfind("JDOM");
+    REQUIRE(marker != std::string::npos);
+    REQUIRE(encoded.back() == static_cast<char>(options.technologyInstallments));
+
+    SECTION("both payment modes round-trip without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+        REQUIRE(input.getRemainingLength() == 0);
+        OMemoryStream resaved; resaved.open(); restored.save(resaved);
+        REQUIRE(std::string(resaved.getData(), resaved.getDataLength()) == encoded);
+    }
+    SECTION("an announced MOD19 stream requires its payment-mode byte") {
+        auto bytes = encoded;
+        bytes.pop_back();
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }

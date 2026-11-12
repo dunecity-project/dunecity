@@ -65,7 +65,7 @@ void Player::save(OutputStream& stream) const {
 
 void Player::logDebug(const char* fmt, ...) const {
 //#ifdef DEBUG_AI
-    std::string house = getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID());
+    const std::string house = pHouse ? getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID()) : "Observer";
     fprintf(stderr, "%s (%s):   ", playername.c_str(), house.c_str());
     va_list arg;
     va_start(arg, fmt);
@@ -76,7 +76,7 @@ void Player::logDebug(const char* fmt, ...) const {
 }
 
 void Player::logWarn(const char* fmt, ...) const {
-    std::string house = getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID());
+    const std::string house = pHouse ? getHouseNameByNumber((HOUSETYPE) pHouse->getHouseID()) : "Observer";
     fprintf(stderr, "%s (%s):   ", playername.c_str(), house.c_str());
     va_list arg;
     va_start(arg, fmt);
@@ -98,7 +98,7 @@ Uint32 Player::getGameCycleCount() const {
 }
 
 int Player::getTechLevel() const {
-    return currentGame->techLevel;
+    return getHouse()->getTechLevel();
 }
 
 const Map& Player::getMap() const {
@@ -251,10 +251,10 @@ bool Player::hasTornieProductionUpgradeGoal(const BuilderBase* pBuilder) const {
         if(!customContent && item != Unit_Troopers5 && item != Unit_Infantry5) continue;
         const auto& spec = currentGame->objectData.data[item][technology];
         if(!spec.enabled || spec.builder != static_cast<int>(pBuilder->getItemID())
-            || spec.techLevel > currentGame->techLevel
+            || spec.techLevel > getHouse()->getTechLevel()
             || spec.upgradeLevel <= currentUpgrade || spec.upgradeLevel > maxUpgrade) continue;
         bool prerequisites = true;
-        for(int prerequisite = Structure_FirstID; prerequisite < Num_ItemID; ++prerequisite)
+        for(Uint32 prerequisite = Structure_FirstID; prerequisite < spec.prerequisiteStructuresSet.size(); ++prerequisite)
             if(isStructure(prerequisite) && spec.prerequisiteStructuresSet[prerequisite]
                 && getHouse()->getNumItems(prerequisite) == 0) prerequisites = false;
         if(prerequisites) return true;

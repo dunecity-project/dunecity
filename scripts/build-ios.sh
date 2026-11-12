@@ -13,8 +13,10 @@
 #                                              Device build uploaded to App Store Connect
 #   scripts/build-ios.sh --ipa [--build-number N]
 #                                              Same, but writes build-ios-device/appstore/*.ipa
+#   scripts/build-ios.sh --device --release-build
+#                                              Official device build (ordinary builds are dev)
 #
-# --testflight and --ipa sign with the team's cloud-managed Apple Distribution
+# --testflight and --ipa select release mode and sign with the team's cloud-managed Apple Distribution
 # certificate through the Apple ID signed into Xcode (team 34X7AYJZ93 by
 # default, TEAM_ID overrides). The build number defaults to a UTC timestamp.
 #
@@ -31,11 +33,12 @@ BUNDLE_ID="net.dunecity.DuneCity"
 INSTALL_DEVICE=""
 APP_STORE=""
 BUILD_NUMBER=""
+RELEASE_BUILD=OFF
 JOBS=${JOBS:-4}
 DEPLOYMENT_TARGET=15.0
 SIMULATOR_NAME="Dune City iPhone"
 
-usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -46,8 +49,9 @@ while [[ $# -gt 0 ]]; do
         --profile) PROFILE=${2:?}; shift ;;
         --bundle-id) BUNDLE_ID=${2:?}; shift ;;
         --install) INSTALL_DEVICE=${2:?}; shift ;;
-        --testflight) MODE=device; APP_STORE=upload ;;
-        --ipa) MODE=device; APP_STORE=export ;;
+        --testflight) MODE=device; APP_STORE=upload; RELEASE_BUILD=ON ;;
+        --ipa) MODE=device; APP_STORE=export; RELEASE_BUILD=ON ;;
+        --release-build) RELEASE_BUILD=ON ;;
         --build-number) BUILD_NUMBER=${2:?}; shift ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1" >&2; usage ;;
@@ -105,6 +109,7 @@ fi
 [[ -z "$APP_STORE" ]] || rm -rf "$BUILD_DIR/bin/dunecity.app"
 cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
+    -DDUNECITY_RELEASE_BUILD="$RELEASE_BUILD" \
     -DCMAKE_SYSTEM_NAME=iOS \
     -DCMAKE_OSX_SYSROOT="$SYSROOT" \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \

@@ -29,6 +29,10 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
 - `--source TREE --build-dir TREE/build` measures an older release: the script copies
   `game-perf.inc` into that (throwaway) worktree and patches its probe and runner.
 - `--summary R.jsonl` prints tables; `--check` is `perf_regression` (below).
+- `--csv FILE` keeps per-cycle wall/component/house timings and a final `cpu`
+  column with the same cycle's main-thread CPU milliseconds. Compare them when
+  a loaded host reports a single wall-clock house spike; `--results R.jsonl`
+  also retains aggregate AI-phase timing scopes. Neither option changes budgets.
 - **Unit motion trace**: `--motion-csv FILE` writes one row per unit whose position changed:
   cycle, cycles since the previous row, frame, id, item, house, `realX/realY` and the change,
   location/next tile, `moving`/`justStoppedMoving`, Dynasty route tick and step start/end, carryall
@@ -37,6 +41,14 @@ on the Mac mini (JSONL per run, his save, perf logs, samples).
   under the continuous-ground-steps rule; otherwise the simulated ones) before each frame's first
   cycle, i.e. what that frame drew. Used for Stefan's
   `skipping.dls` (`docs/unit-route-comparison.md`, "Chained steps").
+- **Repeated scenario startup**: immutable Workshop activation still verifies the
+  stored revision and installed bytes, but retains resident graphics when that
+  verified revision is already active. Mutable mod selection/reload is unchanged.
+  The menu's real LAN fixture checks surface identity and rejection of an altered
+  already-active asset. `PROJECTILE_PINNED_INIT_DIAGNOSTIC=1` with
+  `run-unit-route-probe.py --projectile-combat` pins each selected mode before its
+  scenario loop and logs every case's initialization milliseconds, without
+  changing any combat assertion, CSV comparison or CTest time budget.
 
 ## Findings
 
@@ -159,6 +171,49 @@ Workshop pump, Discord, analytics; metaserver at a closed local port) and budget
 time outside the measured components: mini headless 143 fps, 489 cycles/s, other 0.23 ms/frame =
 0.032 x calibration (budget 0.3).
 
+## Stress scenario (unit/combat CPU, `simulation-throughput.py --cases stress256`)
+
+The CPU check for unit and combat AI candidates (docs/ai-baseline-gate.md, Stefan 2026-11-09):
+Vanilla six-house free-for-all on "6P - 256x256 - Alkozeltser 4" (the only six-player 256x256
+map; rich spice), every house QuantBot Brutal, local spectator, no unit cap
+(`tests/ai/game-options/stress-no-unit-cap.ini`), 50 game minutes, seeds 1101 2202 3303 4404 5505
+6606, `--style` applied to every house. Each game runs the game-perf stepped loop (BALANCE_PERF,
+10-cycle frames, unit phase timing on as in perf_regression; AI telemetry off, because decision
+records are built inside QuantBot updates) and every QuantBot is a subclass that adds its update's
+thread CPU (`tests/performance/quantbot-cpu.inc`). The `perf` column holds simulation CPU per tick
+and per frame, QuantBot CPU per tick (whole AI and per house), unit phase totals (targeting,
+navigate, move, turn, visibility), path searches and nodes, turret scans, the largest unit count
+and the calibration loop; peak RSS comes from the native measurement. `--report` prints the
+table, `--perf-gate NATIVE CANDIDATE` the promotion line. On a Mac, `--sample-seconds N
+--sample-cycle C` also keeps a `sample` summary (self and inclusive samples per symbol) in the
+`profile` column; `--ai-telemetry` adds the AI's scope totals at the cost of timing the logging.
+
+House timings are thread CPU, not the engine's wall clock: on a loaded host (aws-mel2, load 88 on
+96 cores) one tick's AI wall time was 417 ms while its QuantBot thread CPU was 7.5 ms.
+
+Measured 2026-11-09 on pin `4bdaf108` (aws-mel2, every game of the comparison on that host, 6 seeds;
+thread CPU in ms, geometric mean over the seeds; peak RSS the largest game; wall the mean game):
+
+| arm | QuantBot p95/tick | QuantBot mean | sim p95/tick | sim mean | sim p99 | frame p99 | worst house update | units at peak | peak RSS MiB | wall s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| native | 2.70 | 0.389 | 4.54 | 1.24 | 7.93 | 40.4 | 15.8 | 1056 | 759 | 416 |
+| genome w004-3ae12812 | 2.54 | 0.360 | 4.24 | 1.16 | 7.40 | 37.6 | 17.7 | 1006 | 759 | 372 |
+| genome w007-981f7c19 | 2.75 | 0.386 | 4.38 | 1.20 | 7.63 | 37.4 | 16.7 | 1055 | 762 | 379 |
+| focus-fire-2 | 2.82 | 0.402 | 4.58 | 1.25 | 7.86 | 39.2 | 18.9 | 1081 | 761 | 402 |
+| vanilla-army-counters-100 | 2.81 | 0.391 | 4.69 | 1.30 | 7.72 | 41.1 | 15.8 | 1145 | 761 | 412 |
+| focus-fire-2-sides-4 (native in FFA6) | 2.69 | 0.388 | 4.51 | 1.23 | 7.87 | 40.1 | 15.5 | 1056 | 761 | 382 |
+
+The sides-4 arm played the same games as native (6/6 digest-identical), so about 1% is the noise.
+Where the time goes (native seed 1101; `sample` on the mini for 60 s from cycle 140,250, share of
+the main thread; AI scope totals from an `--ai-telemetry` run): QuantBot 37% (build pass 16%, of it
+building placement `findSlabPlaceLocation`/`Map::okayToPlaceStructure` 9-10%; unit pass 14%, of it
+harvester safety `manageHarvesterSafety` 6.4% - half of the unit pass's scope time - army posture
+1.6-1.9% and focus fire 1.2% self, `ai.concentrateForces` 4% of the AI scope time), unit updates 28%
+(engine targeting `findTarget` 7%), path requests 17% (A*: 323k searches, 151M nodes per game).
+Focus fire is not a hot spot (focus-fire-2 raises it to 1.5% and QuantBot p95 by 4.7%), so the
+per-cell enemy index prepared for it was not pinned. The candidates leave the build placement
+search, harvester safety and A* as they are; those are the native costs to cut next.
+
 ## Not done
 
 - Rendering (5-10 ms per frame at 560 units) and the city simulation's 16-phase spikes were not
@@ -243,9 +298,9 @@ never independent of wall time; the stepped probe never adapts.
 
 **perf_regression** now also continues the save itself for 2 game minutes (`--eight-house 2`,
 `--scenario eight-house`): `tests/performance/data/eight-house-384` holds the save (gzip,
-419 KB), both Workshop manifests and the three files this tree lacks; the other 849 mod files
-are this tree's dunecity skins and `config/` ini files, found by SHA-256 (a changed skin fails
-by name). Budgets, multiples of the calibration loop: p99 simulation CPU per cycle 3.0, p99
+419 KB), both Workshop manifests, historical configuration and retired artwork.
+Unchanged mod graphics are reused from this tree only when their SHA-256 matches;
+missing or changed payloads fail by name. Budgets, multiples of the calibration loop: p99 simulation CPU per cycle 3.0, p99
 modelled 10-cycle frame (CPU) 9.0; then the same minutes through the headless main loop at 2 ms
 with pacing: its 750-cycle `PROBE_DIGEST`s must equal the stepped run's (up to any frame-rate
 path-budget change, which is reported), p99 frame wall time <= 8.0. Mini:

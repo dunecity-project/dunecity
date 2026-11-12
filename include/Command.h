@@ -56,7 +56,7 @@ typedef enum {
 
     // DuneCity commands
     CMD_CITY_PLACE_ZONE,                ///< CMD_CITY_PLACE_ZONE(X, Y, ZONE_TYPE)
-    CMD_CITY_SET_TAX_RATE,              ///< CMD_CITY_SET_TAX_RATE(HOUSE_ID, RATE)
+    CMD_CITY_SET_TAX_RATE,              ///< CMD_CITY_SET_TAX_RATE(RESERVED, RATE), issuing player's house only
     CMD_CITY_SET_BUDGET,                ///< CMD_CITY_SET_BUDGET(POLICE_PCT, RESERVED, RESERVED)
     CMD_CITY_TOOL,                      ///< CMD_CITY_TOOL(X, Y, TOOL_TYPE) - bulldoze, road, power line, etc.
     CMD_TECHCENTER_SPAWN,               ///< TECHCENTER_SPAWN(OBJECT_ID)
@@ -87,6 +87,9 @@ typedef enum {
     CMD_WINDTRAP_POWER_UPGRADE,        ///< WINDTRAP_POWER_UPGRADE(OBJECT_ID)
     CMD_SCOUTPOST_SLOWPOST_UPGRADE,    ///< SCOUTPOST_SLOWPOST_UPGRADE(OBJECT_ID)
     CMD_RADAR_RESEARCH,               ///< RADAR_RESEARCH(OBJECT_ID, RESEARCH_KIND)
+
+    CMD_AI_SUPPORT_ROLE,              ///< AI_SUPPORT_ROLE(ROLE): AIRole for the QuantBot partner in the issuing human's house
+    CMD_RESEARCH_TECH_LEVEL,          ///< RESEARCH_TECH_LEVEL(LAB_OBJECT_ID), next level for its owner
 
     CMD_MAX
 } CMDTYPE;

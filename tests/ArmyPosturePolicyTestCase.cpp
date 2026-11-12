@@ -655,24 +655,17 @@ TEST_CASE("Army recovery config: every new knob is hashed, without aliasing",
             REQUIRE(QuantBotConfig::parseWaveFormation(QuantBotConfig::waveFormationName(static_cast<int>(shape)), 7)
                     == static_cast<int>(shape));
     }
-    SECTION("the force concentration settings are hashed, bundling, the perimeter defence and opening readiness on by default") {
-        REQUIRE(baseline.force.focusFire);
-        REQUIRE(baseline.force.converge);
-        REQUIRE(baseline.force.waveReadinessPercent == 60);
-        REQUIRE(baseline.force.bundle);
-        REQUIRE(baseline.force.launchFromBundle);
-        REQUIRE(baseline.force.perimeterTurrets);
-        REQUIRE(baseline.force.sizedDefence);
-        REQUIRE(baseline.force.openingReadiness);
-        REQUIRE(baseline.force.finishWhenLeading);
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.focusFire = false; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.converge = false; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.waveReadinessPercent = 100; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.bundle = false; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.launchFromBundle = false; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterTurrets = false; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.sizedDefence = false; }));
-        REQUIRE(differs([](QuantBotConfig& c){ c.force.openingReadiness = false; }));
+    SECTION("force concentration settings have independent config hashes") {
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.focusFire = !c.force.focusFire; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.converge = !c.force.converge; }));
+        REQUIRE(differs([](QuantBotConfig& c){
+            c.force.waveReadinessPercent = c.force.waveReadinessPercent == 100 ? 0 : 100;
+        }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.bundle = !c.force.bundle; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.launchFromBundle = !c.force.launchFromBundle; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.perimeterTurrets = !c.force.perimeterTurrets; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.sizedDefence = !c.force.sizedDefence; }));
+        REQUIRE(differs([](QuantBotConfig& c){ c.force.openingReadiness = !c.force.openingReadiness; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.turretPriority = !c.force.turretPriority; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.pressOn = !c.force.pressOn; }));
         REQUIRE(differs([](QuantBotConfig& c){ c.force.finishWeakest = !c.force.finishWeakest; }));

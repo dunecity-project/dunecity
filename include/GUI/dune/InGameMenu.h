@@ -61,6 +61,7 @@ public:
     void onSettings();
     void onLoad();
     void onSave();
+    void onSaveMap();
     void onRestart();
     void onQuit();
     void onSkipMission();
@@ -78,10 +79,12 @@ private:
 
     InGameMenuButton pauseGameButton;
     InGameMenuButton  joinRequestsButton;
+    InGameMenuButton  requestPlayButton;
     InGameMenuButton  resumeButton;
     InGameMenuButton  gameSettingsButton;
     InGameMenuButton  restartGameButton;
     InGameMenuButton  saveGameButton;
+    InGameMenuButton  saveMapButton;
     InGameMenuButton  loadGameButton;
     InGameMenuButton  quitButton;
     InGameMenuButton  skipMissionButton;

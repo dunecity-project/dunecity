@@ -63,6 +63,7 @@ void runLauncherKitingProbe(Game& game) {
     bot->forceVariantOverride=QuantBot::kNoForceOverride;
     getQuantBotConfig().recovery.enabled=true;
     const bool savedServiceOwnership=getQuantBotConfig().force.respectServiceOwnership;
+    const int savedKiteExtra=getQuantBotConfig().force.launcherKiteExtraDistance;
 
     // ---- Free ground, large enough for a stand-off and a real retreat -------
     Coord origin=Coord::Invalid();
@@ -127,11 +128,6 @@ void runLauncherKitingProbe(Game& game) {
             [owner->getHouseID()].weaponrange;
         require(launcherRange>2,"Fixture launcher has no stand-off range to keep");
 
-        // The launcher under test and one closing enemy tank, out in the open
-        // well away from the base so nothing else can explain a move.
-        auto* launcher=spawn(owner,Unit_Launcher,Coord(20,20));
-        auto* closer=spawn(enemy,Unit_Tank,Coord(22,20));
-        publish();
         bot->dangerUpdated=std::numeric_limits<Uint32>::max();
         bot->refreshTacticalDanger();
         bot->squadRallyLocation=origin+Coord(4,5);
@@ -139,7 +135,7 @@ void runLauncherKitingProbe(Game& game) {
         bot->protectedRally=origin+Coord(4,5);
         bot->militaryValueLimit=1;
 
-        const int reach=std::max(1,closer->getWeaponRange());
+        const int reach=std::max(1,currentGame->objectData.data[Unit_Tank][enemy->getHouseID()].weaponrange);
         const int band=std::min(reach+1,launcherRange/2+1);
         SDL_Log("LAUNCHER_KITE_DIAG: launcher_range=%d tank_reach=%d close_band=%d",
             launcherRange,reach,band);
@@ -158,6 +154,89 @@ void runLauncherKitingProbe(Game& game) {
             bot->customWave.members.insert(unit->getObjectID());
             publish();
         };
+
+        // Same real approach in each arm, then exactly one completed escape.
+        // At the unchanged close-band edge the candidate must open another two
+        // tiles and land a real rocket from its new stand-off.
+        for(const auto difficulty:{QuantBot::Difficulty::Hard,QuantBot::Difficulty::Brutal}) {
+            bot->difficulty=difficulty;
+            for(const Uint32 item:{Uint32(Unit_Launcher),Uint32(Unit_EliteLauncher)}) {
+                // Elite units are real Tornie products, not legal DuneCity items.
+                if(item==Unit_EliteLauncher && !ModManager::instance().isTornieFamilyContentActive()) continue;
+                int oldGap=0;
+                for(const int extra:{0,2}) {
+                    getQuantBotConfig().force.launcherKiteExtraDistance=extra;
+                    auto* artillery=spawn(owner,item,Coord(20,12));
+                    auto* approaching=spawn(enemy,Unit_Tank,Coord(20+band+2,12));
+                    // Weapon range exceeds a launcher's sight. The same passive
+                    // scout spots the approached tank in both arms, so the firing
+                    // check measures spacing, not losing vision at the longer gap.
+                    auto* spotter=spawn(owner,Unit_Quad,Coord(20+band,15));
+                    spotter->doSetAttackMode(STOP);
+                    artillery->doSetAttackMode(STOP);
+                    approaching->doAttackObject(artillery,true);
+                    publish();
+                    int approachTicks=0;
+                    while(gap(artillery,approaching)>band && approachTicks++<1200) tick(1);
+                    require(gap(artillery,approaching)==band,
+                        "Paired enemy never approached the unchanged close-band edge");
+                    approaching->doSetAttackMode(STOP);
+                    approaching->setTarget(nullptr);
+                    approaching->setForced(false);
+                    hunt(artillery,artillery->getLocation());
+                    require(bot->escapeCloseThreatWhileHunting(artillery),
+                        "Paired approaching enemy did not trigger launcher spacing");
+                    const Coord destination=artillery->getDestination();
+                    int moveTicks=0;
+                    while((artillery->getLocation()!=destination || artillery->isMoving())
+                            && moveTicks++<1200) tick(1);
+                    require(artillery->getLocation()==destination,
+                        "Paired launcher did not complete its real spacing move");
+                    const int endGap=gap(artillery,approaching);
+                    if(extra==0) oldGap=endGap;
+                    else require(endGap>=oldGap+2,
+                        "Candidate launcher did not end at least two tiles further away");
+                    const FixPoint health=approaching->getHealth();
+                    int fireTicks=0;
+                    while(approaching->getHealth()>=health && fireTicks<1200) {
+                        tick(1); ++fireTicks;
+                    }
+                    SDL_Log("LAUNCHER_KITE_PAIR: difficulty=%d item=%u extra=%d approach=%d end=%d move_ticks=%d fire_ticks=%d damage=%d fire_gap=%d mode=%d target=%u visible=%d",
+                        int(difficulty),unsigned(item),extra,band,endGap,moveTicks,fireTicks,
+                        (health-approaching->getHealth()).lround(),gap(artillery,approaching),
+                        int(artillery->getAttackMode()),unsigned(currentGame->getObjectManager().getObject(artillery->target.getObjectID()) ? currentGame->getObjectManager().getObject(artillery->target.getObjectID())->getObjectID() : NONE_ID),
+                        int(approaching->isVisible(owner->getTeamID())));
+                    require(approaching->getHealth()<health && gap(artillery,approaching)>reach,
+                        "Paired launcher failed to land a rocket while standing off");
+                    bot->customWave.members.erase(artillery->getObjectID());
+                    // Fully unregister actors before the next arm reuses these
+                    // tiles. Removing a zero-health unit only from unitList leaves
+                    // its tile occupancy and target handle alive in this fixture.
+                    for(auto* actor:{artillery,approaching,spotter}) {
+                        roster.erase(std::remove(roster.begin(),roster.end(),actor),roster.end());
+                        actor->setVisible(VIS_ALL,false); // No random death-spawn crew.
+                        actor->setHealth(0);
+                        actor->destroy();
+                    }
+                    publish();
+                }
+            }
+        }
+        getQuantBotConfig().force.launcherKiteExtraDistance=savedKiteExtra;
+        // The Tornie invocation covers the paired distance/firing contract for
+        // both real launcher products. Existing authority/force regressions below
+        // keep their original DuneCity content and fresh, undamaged actors.
+        if(ModManager::instance().isTornieFamilyContentActive()) {
+            getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
+            cleanupStructures(); unitList=savedUnits;
+            SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=launcher_kiting outcome=passed");
+            return;
+        }
+        auto* launcher=spawn(owner,Unit_Launcher,Coord(20,20));
+        auto* closer=spawn(enemy,Unit_Tank,Coord(22,20));
+        publish();
+        bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+        bot->refreshTacticalDanger();
 
         UnitBase* focusVictim=nullptr;      // Section 2b's damaged tank, parked off-stage between uses.
         int sectionOnePose=-1;              // The launcher's facing when section 1 first starts.
@@ -186,7 +265,7 @@ void runLauncherKitingProbe(Game& game) {
             else launcher->setAngle(sectionOnePose);
             require(launcher->getAngle()==sectionOnePose,"Fixture launcher pose was not restored");
             closer->doAttackObject(launcher,true);
-            require(closer->getTarget()==launcher && closer->isInWeaponRange(launcher),
+            require(currentGame->getObjectManager().getObject(closer->target.getObjectID())==launcher && closer->isInWeaponRange(launcher),
                 "Fixture enemy is not shooting the launcher");
             const int before=gap(launcher,closer);
             require(before<=band,"Fixture enemy did not start inside the close band");
@@ -282,7 +361,7 @@ void runLauncherKitingProbe(Game& game) {
             const Coord standing=launcher->getLocation();
             bot->checkAllUnits();
             require(!launcher->wasForced() && launcher->getAttackMode()==HUNT
-                && (launcher->getDestination()==idle || launcher->getTarget()==closer),
+                && (launcher->getDestination()==idle || currentGame->getObjectManager().getObject(launcher->target.getObjectID())==closer),
                 "An ordinary pass moved a launcher that no enemy was close to");
             tick(30);
             require(launcher->getLocation()==standing,
@@ -317,14 +396,14 @@ void runLauncherKitingProbe(Game& game) {
             require(launcher->wasForced() && launcher->getAttackMode()==HUNT
                 && blockDistance(launcher->getDestination(),closer->getLocation()).lround()>gap(launcher,closer),
                 "Focus fire took a launcher out of its close-range escape");
-            require(bot->forceStats.focusSwitches==switchesBefore && launcher->getTarget()!=focusVictim,
+            require(bot->forceStats.focusSwitches==switchesBefore && currentGame->getObjectManager().getObject(launcher->target.getObjectID())!=focusVictim,
                 "Focus fire gave an escaping launcher an attack order");
             park(closer,Coord(20+band+2,20));
             hunt(launcher,origin+Coord(20,20));
             require(bot->launcherEscapeRange(launcher,closer)==0 && launcher->isInWeaponRange(closer),
                 "Fixture healthy tank is not an in-range, non-threatening enemy");
             bot->checkAllUnits();
-            require(launcher->getTarget()==focusVictim && !launcher->wasForced()
+            require(currentGame->getObjectManager().getObject(launcher->target.getObjectID())==focusVictim && !launcher->wasForced()
                 && launcher->getAttackMode()==HUNT,
                 "A standing-off launcher did not take the focus target");
             const FixPoint victimBefore=focusVictim->getHealth(), healthyBefore=closer->getHealth();
@@ -343,7 +422,7 @@ void runLauncherKitingProbe(Game& game) {
                 " gap=%d target_is_victim=%d forced=%d mode=%d",
                 int(difficulty),focusTicks,int(focusShots.size()),victimBefore.lround(),
                 focusVictim->getHealth().lround(),healthyBefore.lround(),closer->getHealth().lround(),
-                gap(launcher,focusVictim),int(launcher->getTarget()==focusVictim),
+                gap(launcher,focusVictim),int(currentGame->getObjectManager().getObject(launcher->target.getObjectID())==focusVictim),
                 int(launcher->wasForced()),int(launcher->getAttackMode()));
             require(focusVictim->getHealth()<victimBefore,
                 "The launcher never hit its focus target");
@@ -415,7 +494,7 @@ void runLauncherKitingProbe(Game& game) {
             closer->setHealth(closer->getMaxHealth());
             closer->doSetAttackMode(AREAGUARD);
             closer->doAttackObject(yard,true);
-            require(closer->getTarget()==yard && closer->isInWeaponRange(yard),
+            require(currentGame->getObjectManager().getObject(closer->target.getObjectID())==yard && closer->isInWeaponRange(yard),
                 "Emergency fixture invader is not actually attacking the yard");
             hunt(launcher,origin+Coord(6,5));
             require(gap(launcher,closer)<=band,
@@ -505,7 +584,7 @@ void runLauncherKitingProbe(Game& game) {
                 // an unforced attack (the Deviator is never focused).
                 require(unit->getAttackMode()==HUNT && !unit->wasForced()
                     && (unit->getDestination()==destination
-                        || (unit==tank && unit->getTarget()==closer)),
+                        || (unit==tank && currentGame->getObjectManager().getObject(unit->target.getObjectID())==closer)),
                     "An ordinary pass took a hunting attacker out of engine Hunt");
             }
 
@@ -630,7 +709,7 @@ void runLauncherKitingProbe(Game& game) {
                 bot->checkAllUnits();
                 tick(60);
                 moved=blockDistance(start,launcher->getLocation()).lround();
-                const ObjectBase* held=launcher->getTarget();
+                const ObjectBase* held=currentGame->getObjectManager().getObject(launcher->target.getObjectID());
                 engaged=held!=nullptr && launcher->isInWeaponRange(held);
             }
             SDL_Log("LAUNCHER_ADVANCE_DIAG: moved=%d engaged=%d passes=%d mode=%d tracked=%d"
@@ -771,7 +850,7 @@ void runLauncherKitingProbe(Game& game) {
                     for(const auto* shot:bulletList)
                         if(shot->shooterID==foot->getObjectID()
                             && shot->bulletID==Bullet_SmallRocket) firedSmallRocket=true;
-                    aimed=aimed || foot->getTarget()==raider;
+                    aimed=aimed || currentGame->getObjectManager().getObject(foot->target.getObjectID())==raider;
                     removedAirHp=raider->getHealth()<airFull;
                 }
                 airSpeed=savedAirSpeed;
@@ -874,7 +953,7 @@ void runLauncherKitingProbe(Game& game) {
                         const Coord drop=origin+pocket+Coord(-2,-2);
                         otherPassenger->doRequestCarryallDrop(drop.x,drop.y);
                         require(otherPassenger->getCarrier()==carrier
-                                && carrier->getTarget()==otherPassenger,
+                                && currentGame->getObjectManager().getObject(carrier->target.getObjectID())==otherPassenger,
                             "Repair-only fixture failed to book the carrier to its other passenger");
                     }
                     if(wantsRepair) light->doRepair();
@@ -887,13 +966,13 @@ void runLauncherKitingProbe(Game& game) {
                     require(light->isAwaitingPickup()==wantsPickup,
                         "Light raider did not acquire the requested real pickup state");
                     if(wantsPickup) require(light->getCarrier()==carrier
-                            && carrier->getTarget()==light && carrier->isBooked(),
+                            && currentGame->getObjectManager().getObject(carrier->target.getObjectID())==light && carrier->isBooked(),
                         "Light raider pickup lacks reciprocal carrier ownership");
-                    auto* repair=wantsRepair ? dynamic_cast<RepairYard*>(light->getTarget()) : nullptr;
+                    auto* repair=wantsRepair ? dynamic_cast<RepairYard*>(currentGame->getObjectManager().getObject(light->target.getObjectID())) : nullptr;
                     require(!wantsRepair || (repair && repair->getNumBookings()>0),
                         "Damaged light raider did not book a real repair yard");
                     const int yardBookings=repair ? repair->getNumBookings() : 0;
-                    const auto* serviceTarget=light->getTarget();
+                    const auto* serviceTarget=currentGame->getObjectManager().getObject(light->target.getObjectID());
                     const Coord serviceDestination=light->getDestination();
                     const auto serviceMode=light->getAttackMode();
                     const int before=gap(light,threat);
@@ -904,24 +983,24 @@ void runLauncherKitingProbe(Game& game) {
 
                     const bool preserve=enabled && service!=ServiceCase::Free;
                     if(preserve) {
-                        require(light->getTarget()==serviceTarget
+                        require(currentGame->getObjectManager().getObject(light->target.getObjectID())==serviceTarget
                                 && light->getDestination()==serviceDestination
                                 && light->getAttackMode()==serviceMode,
                             "Periodic raider micro replaced an owned service order");
                         if(wantsRepair) require(repair->getNumBookings()==yardBookings,
                             "Periodic raider micro released the repair-yard booking");
                         if(wantsPickup) require(light->isAwaitingPickup()
-                                && light->getCarrier()==carrier && carrier->getTarget()==light,
+                                && light->getCarrier()==carrier && currentGame->getObjectManager().getObject(carrier->target.getObjectID())==light,
                             "Periodic raider micro released a promised pickup");
                     } else {
                         require(light->wasForced() && light->getDestination().isValid()
                                 && blockDistance(light->getDestination(),threat->getLocation()).lround()>before,
                             "The off-arm or unreserved light raider did not take its ordinary escape");
-                        if(wantsRepair) require(light->getTarget()!=serviceTarget
+                        if(wantsRepair) require(currentGame->getObjectManager().getObject(light->target.getObjectID())!=serviceTarget
                                 && repair->getNumBookings()==yardBookings-1,
                             "The off arm did not reproduce the repair-target cancellation");
                         if(wantsPickup) require(!light->isAwaitingPickup()
-                                && light->getCarrier()==nullptr && carrier->getTarget()!=light,
+                                && light->getCarrier()==nullptr && currentGame->getObjectManager().getObject(carrier->target.getObjectID())!=light,
                             "The off arm did not reproduce reciprocal pickup cancellation");
                     }
                     SDL_Log("SERVICE_OWNERSHIP_DIAG: item=%d enabled=%d service=%d preserved=%d",
@@ -936,9 +1015,11 @@ void runLauncherKitingProbe(Game& game) {
         }
     } catch(...) {
         getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
+        getQuantBotConfig().force.launcherKiteExtraDistance=savedKiteExtra;
         cleanupStructures(); unitList=savedUnits; throw;
     }
     getQuantBotConfig().force.respectServiceOwnership=savedServiceOwnership;
+    getQuantBotConfig().force.launcherKiteExtraDistance=savedKiteExtra;
     cleanupStructures();
     unitList=savedUnits;
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=launcher_kiting outcome=passed");

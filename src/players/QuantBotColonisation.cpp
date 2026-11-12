@@ -22,7 +22,216 @@
 
 #include <FormationOrders.h>
 
+#include <array>
 #include <iterator>
+#include <players/QuantBotFieldExpansionPolicy.h>
+#include <sand.h>
+#include <MapSeed.h>
+#include <FileClasses/INIFile.h>
+#include <FileClasses/FileManager.h>
+
+bool QuantBot::fieldExpansionActive() const {
+    if (botConfig().force.spiceFieldExpansion <= 0 || gameMode != GameMode::Custom
+        || builderOnly() || isCampaignGameType(currentGame->gameType)
+        || ModManager::instance().isTornieFamilyContentActive()) return false;
+    if (!fieldExpansionInitialSpice) {
+        // Immutable terrain: spills from destroyed harvesters must not activate
+        // the experiment on an initially no-spice map.
+        const auto& setup = getGameInitSettings();
+        auto file = setup.getFiledata().empty() ? pFileManager->openFile(setup.getFilename())
+            : sdl2::RWops_ptr(SDL_RWFromConstMem(setup.getFiledata().data(), int(setup.getFiledata().size())));
+        INIFile source(file.get());
+        bool spice = !source.getStringValue("MAP", "Field").empty();
+        if (source.getIntValue("BASIC", "Version", 1) >= 2) {
+            for (int y = 0; y < getMap().getSizeY() && !spice; ++y) {
+                const auto row = source.getStringValue("MAP", fmt::sprintf("%.3d", y));
+                spice = row.find_first_of("~+gGrRlLwW") != std::string::npos;
+            }
+        } else {
+            Uint16 seedMap[64 * 64];
+            createMapWithSeed(source.getIntValue("MAP", "Seed", 0), seedMap);
+            const int scale = source.getIntValue("BASIC", "MapScale", 0);
+            const int offset = scale == 1 ? 16 : scale == 2 ? 11 : 1;
+            for (int y = 0; y < getMap().getSizeY() && !spice; ++y)
+                for (int x = 0; x < getMap().getSizeX(); ++x) {
+                    const int terrain = seedMap[(y + offset) * 64 + x + offset] >> 4;
+                    if (terrain == 0xb || terrain == 0xc) { spice = true; break; }
+                }
+        }
+        fieldExpansionInitialSpice = spice;
+    }
+    return *fieldExpansionInitialSpice;
+}
+
+QuantBot::FieldExpansionPlan QuantBot::surveyFieldExpansion(const MCV* mcv) {
+    using namespace QuantBotFieldExpansionPolicy;
+    FieldExpansionPlan plan;
+    if (!fieldExpansionActive() || getHouse()->getNumItems(Structure_ConstructionYard) == 0) return plan;
+    const int w = getMap().getSizeX(), h = getMap().getSizeY();
+    const auto* mainYard = getObject(mainConstructionYardID());
+    if (!mainYard) return plan;
+    const Coord home = mainYard->getLocation();
+    std::vector<uint8_t> passable(w * h), local(w * h, 0), contested(w * h, 0);
+    std::vector<int> starts;
+    std::vector<const StructureBase*> refineries;
+    auto stamp = [&](std::vector<uint8_t>& grid, Coord at, int radius) {
+        for (int y = std::max(0, at.y - radius); y <= std::min(h - 1, at.y + radius); ++y)
+            for (int x = std::max(0, at.x - radius); x <= std::min(w - 1, at.x + radius); ++x)
+                grid[y * w + x] = 1;
+    };
+    for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+        const auto* tile = getMap().getTile(x,y);
+        passable[y * w + x] = !tile->isMountain() && !tile->hasAStructure();
+    }
+    for (const auto* structure : getStructureList()) {
+        if (!structure->getOwner() || structure->getHealth() <= 0) continue;
+        const auto at = structure->getLocation(), size = structure->getStructureSize();
+        if (structure->getOwner() == getHouse()) {
+            if (structure->acceptsHarvesterDropoff()) {
+                refineries.push_back(structure);
+                stamp(local, at, kLocalRadius);
+            }
+            if (structure->acceptsHarvesterDropoff() || structure->getItemID() == Structure_ConstructionYard)
+                for (int y = std::max(0,at.y - 1); y <= std::min(h - 1,at.y + size.y); ++y)
+                    for (int x = std::max(0,at.x - 1); x <= std::min(w - 1,at.x + size.x); ++x)
+                        if (passable[y * w + x]) starts.push_back(y * w + x);
+        } else if (structure->getOwner()->getTeamID() != getHouse()->getTeamID()) {
+            const bool economy = structure->acceptsHarvesterDropoff()
+                || structure->getItemID() == Structure_ConstructionYard;
+            if (economy || structure->getItemID() == Structure_GunTurret || structure->getItemID() == Structure_RocketTurret)
+                stamp(contested, at, economy ? 20 : std::max(12,int(structure->getWeaponRange()) + 2));
+        }
+    }
+    for (const auto* unit : getUnitList())
+        if (unit->getOwner() && unit->getHealth() > 0 && unit->isActive()
+            && unit->getOwner()->getTeamID() != getHouse()->getTeamID()
+            && unit->getLocation().isValid()
+            && (QuantBotInternal::mobileCombatItem(unit->getItemID()) || QuantBotInternal::harvesterItem(unit->getItemID())))
+            stamp(contested, unit->getLocation(), 12);
+    if (mcv && mcv->getLocation().isValid()) starts = {mcv->getY() * w + mcv->getX()};
+    const auto reach = reachable(w,h,passable,starts);
+    int competitors = 0;
+    for (const auto& row : getGameInitSettings().getHouseInfoList())
+        if (!row.playerInfoList.empty()) ++competitors;
+    competitors = std::max(1,competitors);
+    int64_t total = 0;
+    std::vector<int64_t> prefix((w + 1) * (h + 1), 0);
+    for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+        const int at = y * w + x;
+        const int spice = reach[at] ? getMap().getTile(x,y)->getSpice().lround() : 0;
+        total += spice;
+        if (local[at]) plan.localSpice += spice;
+        const int64_t available = contested[at] || local[at] ? 0 : spice;
+        prefix[(y + 1) * (w + 1) + x + 1] = available + prefix[y * (w + 1) + x + 1]
+            + prefix[(y + 1) * (w + 1) + x] - prefix[y * (w + 1) + x];
+    }
+    plan.sharedSpice = static_cast<int>(std::min<int64_t>(std::numeric_limits<int>::max(),total / competitors));
+    auto stock = [&](Coord at) {
+        const int x0 = std::max(0,at.x - kFieldRadius), x1 = std::min(w,at.x + kFieldRadius + 1);
+        const int y0 = std::max(0,at.y - kFieldRadius), y1 = std::min(h,at.y + kFieldRadius + 1);
+        return prefix[y1 * (w + 1) + x1] - prefix[y0 * (w + 1) + x1]
+            - prefix[y1 * (w + 1) + x0] + prefix[y0 * (w + 1) + x0];
+    };
+    auto legal = [&](Uint32 item, Coord at, bool inRange) {
+        const auto size = getStructureSize(item);
+        return getMap().okayToPlaceStructure(at.x,at.y,size.x,size.y,false,inRange ? getHouse() : nullptr,true)
+            && !overlapsReservedStructure(at.x,at.y,size.x,size.y)
+            && !nearRecentStructureLoss(at.x,at.y,size.x,size.y)
+            && preservesGroundAccess(item,at) && dangerAt(at,size) == 0;
+    };
+    // A remote working refinery gets a permanent guard after its escort's trip.
+    for (const auto* ref : refineries) {
+        const Coord at = ref->getLocation();
+        if (blockDistance(home,at) <= kLocalRadius) continue;
+        bool hasSpice = false;
+        for (int y = std::max(0,at.y - kFieldRadius); y <= std::min(h - 1,at.y + kFieldRadius) && !hasSpice; ++y)
+            for (int x = std::max(0,at.x - kFieldRadius); x <= std::min(w - 1,at.x + kFieldRadius); ++x)
+                if (reach[y * w + x] && getMap().getTile(x,y)->hasSpice()) { hasSpice = true; break; }
+        if (!hasSpice) continue;
+        bool covered = false;
+        for (const auto* s : getStructureList())
+            if (s->getOwner() == getHouse() && s->getHealth() > 0
+                && (s->getItemID() == Structure_GunTurret || s->getItemID() == Structure_RocketTurret)
+                && blockDistance(at,s->getLocation()) <= 6) { covered = true; break; }
+        if (!covered) for (const auto& reservation : reservedStructures)
+            if ((reservation.second.item == Structure_GunTurret || reservation.second.item == Structure_RocketTurret)
+                && blockDistance(at,reservation.second.location) <= 6) { covered = true; break; }
+        if (covered) continue;
+        for (int y = std::max(0,at.y - 3); y <= std::min(h - 1,at.y + 4); ++y)
+            for (int x = std::max(0,at.x - 3); x <= std::min(w - 1,at.x + 4); ++x)
+                if (legal(Structure_GunTurret,Coord(x,y),true)) { plan.guard = Coord(x,y); break; }
+        if (plan.guard.isValid()) break;
+    }
+    const int threshold = botConfig().force.spiceFieldExpansion;
+    if (!due(threshold,plan.localSpice,int(refineries.size()),plan.sharedSpice)) return plan;
+    const auto refSize = getStructureSize(Structure_Refinery);
+    int bestDistance = std::numeric_limits<int>::max();
+    const int yardLimit = getGameInitSettings().getGameOptions().maximumNumberOfConstructionYardsOverride;
+    const bool canAddYard = (yardLimit <= 0 || getHouse()->getNumItems(Structure_ConstructionYard) < yardLimit)
+        && getHouse()->getNumItems(Structure_HeavyFactory) > 0;
+    for (int y = 0; y + refSize.y <= h; ++y) for (int x = 0; x + refSize.x <= w; ++x) {
+        const Coord at(x,y);
+        if (local[y * w + x] || contested[y * w + x] || !reach[y * w + x]) continue;
+        const int distance = blockDistance(home,at).lround();
+        if (distance >= bestDistance) continue;
+        const auto available = stock(at);
+        if (available < threshold || !legal(Structure_Refinery,at,false)) continue;
+        if (legal(Structure_Refinery,at,true)) {
+            plan.refinery = at; plan.yard = Coord::Invalid();
+        } else {
+            if (!canAddYard || available < int64_t(threshold) * 2) continue;
+            Coord yard = Coord::Invalid();
+            for (const Coord offset : {Coord(-3,0),Coord(refSize.x + 1,0),Coord(0,-3),Coord(0,refSize.y + 1)}) {
+                const Coord site = at + offset;
+                if (getMap().tileExists(site) && getMap().tileExists(site.x + 1,site.y + 1)
+                    && reach[site.y * w + site.x] && !contested[site.y * w + site.x]
+                    && legal(Structure_ConstructionYard,site,false)
+                    && (!mcv || mcvSiteUsable(mcv,site))) { yard = site; break; }
+            }
+            if (!yard.isValid()) continue;
+            plan.yard = yard; plan.refinery = Coord::Invalid();
+        }
+        bestDistance = distance;
+        plan.fieldSpice = static_cast<int>(std::min<int64_t>(available,std::numeric_limits<int>::max()));
+    }
+    traceDecision("spice_field_expansion",AITelemetry::Record()
+        .set("local_spice",plan.localSpice).set("shared_spice",plan.sharedSpice).set("field_spice",plan.fieldSpice)
+        .set("refinery_x",plan.refinery.x).set("refinery_y",plan.refinery.y)
+        .set("yard_x",plan.yard.x).set("yard_y",plan.yard.y).set("threshold",threshold));
+    return plan;
+}
+
+bool QuantBot::manageFieldExpansionMcv(const MCV* mcv) {
+    if (!fieldExpansionActive() || getHouse()->getNumItems(Structure_ConstructionYard) == 0) return false;
+    // A native colonist may already have a saved destination. It is not a
+    // spice mission unless the current depletion survey selects a new field.
+    const auto plan = surveyFieldExpansion(mcv);
+    if (!plan.yard.isValid()) return false;
+    const Uint32 id = mcv->getObjectID(), now = getGameCycleCount();
+    auto it = mcvExpansionSites.find(id);
+    Coord target = it == mcvExpansionSites.end() ? Coord::Invalid() : it->second;
+    if (target != plan.yard || !mcvSiteUsable(mcv,target)) {
+        if (mcvSurveyCycles.count(id) && now - mcvSurveyCycles[id] < MILLI2CYCLES(5000)) return true;
+        mcvSurveyCycles[id] = now;
+        target = plan.yard;
+        mcvExpansionSites[id] = target;
+        colonistEscortCycle = std::numeric_limits<Uint32>::max();
+    }
+    if (mcv->getLocation() == target) {
+        if (mcvMayDeployHere(mcv,true) && doDeploy(mcv)) {
+            mcvExpansionSites.erase(id); mcvSurveyCycles.erase(id);
+            clearPlacementCache();
+        } else if (botConfig().force.clearMcvFootprint) clearMcvFootprint(mcv);
+        return true;
+    }
+    bool gathered = true;
+    const int escorts = colonistEscortCount(mcv,&gathered);
+    // Assemble before departure, but do not strand a trip already away from home.
+    if (blockDistance(mcv->getLocation(),findBaseCentre(getHouse()->getHouseID())) <= 12
+        && (escorts == 0 || !gathered)) return true;
+    doMove2Pos(mcv,target.x,target.y,true);
+    return true;
+}
 
 Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     // The base survey notices colonists that died on the way since it last
@@ -45,6 +254,12 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
     AITelemetry::PerformanceScope survey("ai.rock_survey.anchor_field",
         getGameCycleCount(), getHouse()->getHouseID());
     const int w=getMap().getSizeX(),h=getMap().getSizeY();
+    const bool civWars=isCivWarsMatch();
+    const int end=w/4;
+    std::array<bool,NUM_HOUSES> alliedHouses{};
+    if(civWars) for(int i=0;i<NUM_HOUSES;++i)
+        if(const auto* house=getHouse(i);house&&!house->isNatives()&&house->getTeamID()==getHouse()->getTeamID())
+            alliedHouses[i]=true;
     // Map::isWithinBuildRange() is a box dilation of the owned-tile set, but it
     // is evaluated pointwise: BUILDRANGE 2 means a 5x5 probe for every rock
     // tile on the map. One summed-area table over the anchor indicator answers
@@ -86,7 +301,14 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
         out.rock=tile->isRock()&&!tile->isMountain();
         out.free=!structure && (!tile->hasAGroundObject() || tile->getNonInfantryGroundObject()==mcv);
         out.walkable=!tile->isMountain()&&!structure;
-        out.owned=structure&&tile->getOwner()==getHouse()->getHouseID();
+        const int owner=tile->getOwner();
+        // The generated map's outer quarters are team ends, never strategic
+        // islands, even when the opposite end has not been seen. Occupancy
+        // only excludes destinations: free room and routes keep their normal
+        // meaning. Allied buildings also claim their whole island.
+        out.owned=(structure&&(owner==getHouse()->getHouseID()
+            ||(civWars&&owner>=0&&owner<NUM_HOUSES&&alliedHouses[owner])))
+            ||(civWars&&(x<end||x>=w-end));
         // A site that already swallowed repeated construction yards is not
         // expanded onto again just because the short-term loss block expired:
         // redeploying there without cover is what turned single losses into a
@@ -140,6 +362,23 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
             if(it!=mcvExpansionSites.end()&&getMap().tileExists(it->second.x,it->second.y))reserved.push_back(it->second.y*w+it->second.x);
         }
     }
+    if(civWars) for(int i=0;i<NUM_HOUSES;++i) {
+        if(!alliedHouses[i]) continue;
+        const auto* house=getHouse(i);
+        for(const auto& player:house->getPlayerList()) {
+            const auto* bot=dynamic_cast<const QuantBot*>(player.get());
+            if(!bot||bot==this) continue;
+            // Read saved assignments only for live MCVs still owned by that
+            // ally. Their order is immaterial: choose() marks whole formations.
+            for(const auto& entry:bot->mcvExpansionSites) {
+                const auto* colonist=getObject(entry.first);
+                if(!colonist||colonist==mcv||colonist->getOwner()!=house
+                    ||colonist->getItemID()!=Unit_MCV||colonist->getHealth()<=0) continue;
+                if(getMap().tileExists(entry.second.x,entry.second.y))
+                    reserved.push_back(entry.second.y*w+entry.second.x);
+            }
+        }
+    }
     const StructureBase* mainYard=nullptr;
     for(const auto* structure:getStructureList())
         if(structure->getOwner()==getHouse() && structure->getItemID()==Structure_ConstructionYard
@@ -147,7 +386,7 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
             && (!mainYard || structure->getObjectID()<mainYard->getObjectID())) mainYard=structure;
     const int mainBase=mainYard ? mainYard->getY()*w+mainYard->getX() : -1;
     survey.next("ai.rock_survey.choose");
-    const auto result=RockExpansionPolicy::choose(w,h,tiles,starts,enemies,reserved,mainBase);
+    const auto result=RockExpansionPolicy::choose(w,h,tiles,starts,enemies,reserved,mainBase,civWars?24:48);
     if(!result.valid())return Coord::Invalid();
     const Coord site(result.x,result.y);
     if(!overlapsReservedStructure(site.x,site.y,2,2)&&preservesGroundAccess(Structure_ConstructionYard,site)) {
@@ -191,6 +430,31 @@ QuantBotColonisationPolicy::Demand QuantBot::colonisationDemand(int mcvsIncludin
     demand.yards=getHouse()->getNumItems(Structure_ConstructionYard);
     demand.mcvsIncludingQueued=mcvsIncludingQueued;
     demand.yardLimit=yardLimit;
+    // Strategic islands become a separate reason to buy/send one colonist
+    // only after the first ground wave. colonySiteOpen() keeps the core,
+    // danger, reachability and lost-colonist gates; a roomy home means its
+    // production-core prerequisite has not been waived for lack of space.
+    if(isCivWarsMatch()&&customWave.launched!=0&&demand.siteAvailable
+        &&QuantBotColonisationPolicy::colonisationAllowed(demand)
+        &&!QuantBotColonisationPolicy::builtOut(demand)&&mcvsIncludingQueued==0
+        &&(yardLimit<=0||demand.yards<yardLimit)) {
+        bool income=lastCalculatedSpice>0&&getAIHarvesterCount()>0&&getAIRefineryBays()>0;
+        if(!income&&getHouse()->getCapacity()>0) {
+            if(const auto* sim=currentGame->getCitySimulation()) {
+                const int house=getHouse()->getHouseID();
+                const auto& state=sim->getHouseState(house);
+                const int land=state.avgLandValue>0?state.avgLandValue:128;
+                const int tax=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(
+                    state.taxBaseEighths,sim->getCityTax(house),land));
+                const int upkeep=DuneCity::annualPerMinute(state.lastPoliceExpense)
+                    +(getHouse()->isPowerRequired()?getHouse()->getPowerRequirement()/8:0);
+                income=tax>upkeep;
+            }
+        }
+        // Existing health-weighted active ground value, not another map or
+        // tactical survey. Departure still requires its gathered escort.
+        demand.strategicSiteWanted=income&&ownGroundArmyValue()>=std::max(1,minWaveValue());
+    }
     return demand;
 }
 
@@ -201,8 +465,8 @@ bool QuantBot::colonisationMcvDue(int mcvsIncludingQueued, int yardLimit) const 
 bool QuantBot::colonyMissionDue(const MCV* pMCV) const {
     // The MCV in hand may have been bought for anything; what decides its job
     // is the base it stands in. A built-out base sends it away, and so does a
-    // formation that already runs its share of yards: stacking every yard on
-    // one rock leaves the rest of the map unsettled. Only a surveyed
+    // formation that already runs its share of yards or a ready generated
+    // Civ Wars base claiming a strategic island. Only a surveyed
     // destination ever sends one across the map, under exactly the rules that
     // would have bought a colonist, so campaigns, helpers and capped games
     // keep the behaviour they had.
@@ -583,6 +847,7 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         return;
     }
     if(pMCV->wasForced()) return;
+    if (manageFieldExpansionMcv(pMCV)) return;
     const Coord location=pMCV->getLocation();
     const bool expansion=currentGame->isCitySimEnabled()&&getHouse()->getNumItems(Structure_ConstructionYard)>0;
     const Uint32 cycle=getGameCycleCount();
@@ -602,16 +867,15 @@ void QuantBot::manageMcv(const MCV* pMCV) {
     if(expansion&&(stale||(target.isValid()&&!mcvSiteUsable(pMCV,target)))) {
         mcvSurveyCycles[id]=cycle;
         surveyedNow=true;
-        // Grow on the formation the base already stands on first; only when it
-        // has no room left, or already runs its share of yards, does
-        // colonising a new one apply, under its own gates. A stalled trip can
-        // use the nearest clear footprint; moving MCVs retain their
+        // Grow on the formation the base already stands on first unless it
+        // has no room, already runs its share of yards, or a ready generated
+        // Civ Wars base wants a strategic island. A stalled trip can use the
+        // nearest clear footprint; moving MCVs retain their
         // assignments above.
         //
-        // Either of those reverses the order: the colony is offered first and
-        // the local search stays as the fallback, so an MCV with nowhere safe
-        // to go still becomes a yard where it stands instead of waiting. The
-        // first production yard on a formation still deploys on the spot.
+        // A colony mission reverses the order: new rock is offered first and
+        // the local search stays the fallback, so an MCV with nowhere safe to
+        // go still becomes a yard where it stands instead of waiting.
         //
         // A trip already under way to a remote formation is kept while its
         // site is still a legal footprint. The survey re-runs every five
@@ -804,7 +1068,7 @@ bool QuantBot::expansionDefenceReady(bool needsLocalSpace) const {
     // leaves the rock free for the next one. Recovery of the only yard is exempt.
     if (!builtOut)
         for (Uint32 item : {Structure_HeavyFactory, Structure_HighTechFactory, Structure_RepairYard})
-            if (data[item][house].enabled && data[item][house].techLevel <= currentGame->techLevel
+            if (data[item][house].enabled && data[item][house].techLevel <= getHouse()->getTechLevel()
                 && getHouse()->getNumItems(item) == 0) return false;
     return true;
 }
@@ -861,14 +1125,15 @@ const std::map<Uint32,Uint32>& QuantBot::colonistEscorts() const {
     colonistEscortCycle = now;
     colonistEscortSet.clear();
     if (currentGame == nullptr || builderOnly() || gameMode != GameMode::Custom
-        || !currentGame->isCitySimEnabled()) return colonistEscortSet;
+        || (!currentGame->isCitySimEnabled() && !fieldExpansionActive())) return colonistEscortSet;
     // A colonist is an MCV on its way to another formation: its saved site
     // says so. In id order, so every peer gives escorts out the same way.
     std::vector<const UnitBase*> colonists;
     for (const auto* unit : getUnitList()) {
         if (unit->getOwner() != getHouse() || unit->getItemID() != Unit_MCV || unit->getHealth() <= 0) continue;
         const auto site = mcvExpansionSites.find(unit->getObjectID());
-        if (site == mcvExpansionSites.end() || site->second.isInvalid() || onOwnRockFormation(site->second)) continue;
+        if (site == mcvExpansionSites.end() || site->second.isInvalid()
+            || (onOwnRockFormation(site->second) && !fieldExpansionActive())) continue;
         colonists.push_back(unit);
     }
     if (colonists.empty()) return colonistEscortSet;

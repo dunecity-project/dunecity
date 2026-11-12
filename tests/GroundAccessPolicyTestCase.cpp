@@ -61,6 +61,14 @@ TEST_CASE("Residential gaps only outrank equally suitable expansion sites", "[ai
     REQUIRE(preferCitySite(true,0,2,500,true,2,0,0));
     REQUIRE_FALSE(preferCitySite(true,0,2,500,true,2,2,0));
 }
+TEST_CASE("Residential placement ties retain the first real candidate", "[ai][placement]") {
+    using CityPlacementPolicy::preferCitySite;
+    REQUIRE_FALSE(preferCitySite(true,1,8,301,true,0,8,301));
+    REQUIRE_FALSE(preferCitySite(true,2,8,264,true,2,8,264));
+    // One north neighbour is not infill: it must not beat the higher-scoring site.
+    REQUIRE_FALSE(preferCitySite(true,1,8,264,true,0,8,301));
+    REQUIRE(preferCitySite(true,0,8,301,true,1,8,264));
+}
 
 #include "performance/reference-ground-access.inc"
 TEST_CASE("Word-sized access checks match the original graph for every 2x2 occupancy", "[ai][placement]") {

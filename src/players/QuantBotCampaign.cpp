@@ -16,20 +16,39 @@
 #include <FileClasses/INIFile.h>
 #include <FileClasses/FileManager.h>
 #include <dunecity/CityEffects.h>
+#include <mod/ModManager.h>
 #include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <dunecity/CityStructurePopulation.h>
 
 int QuantBot::getCityPopulationLimit(int mapArea) const {
-    if(!currentGame || !currentGame->isCitySimEnabled()
+    if(!currentGame || !currentGame->isCitySimEnabled() || switchedOff()
        || gameMode != GameMode::Custom || isCampaignGameType(currentGame->gameType)) return 0;
     // All custom-game QuantBots share the same difficulty ceiling, including
     // helpers in a human-controlled house and support-mode controllers.
-    return std::max(0, QuantBotCityPolicy::populationLimit(static_cast<int>(difficulty),mapArea));
+    const bool hardCityMatch = difficulty == Difficulty::Hard && botConfig().force.hardCityMatch;
+    int limit = QuantBotCityPolicy::populationLimit(static_cast<int>(difficulty), mapArea, hardCityMatch);
+    // Hard grows past its base ceiling while another house's city (last census, the same
+    // structure population the ceiling is checked against) is bigger, up to that city.
+    const auto* sim = currentGame->getCitySimulation();
+    if(hardCityMatch && sim && sim->isInitialized()) {
+        int largestOther = 0;
+        for(int h=0; h<DuneCity::kMaxCityHouses; ++h)
+            if(h != getHouse()->getHouseID() && currentGame->getHouse(static_cast<HOUSETYPE>(h)))
+                largestOther = std::max(largestOther,
+                    QuantBotCityPolicy::displayPopulation(sim->getHouseState(h).getTotalPop()));
+        limit = QuantBotCityPolicy::withLargestRival(limit, largestOther);
+    }
+    return std::max(0, limit);
 }
 
 bool QuantBot::isAlliedWithHuman() const {
     if (!getHouse()) return false;
+    // The selected campaign house is the player even when no human controller
+    // is registered. Reuse every existing player/partner policy consistently.
+    if (botConfig().force.campaignPlayerHouse && currentGame
+        && isCampaignGameType(currentGame->gameType)
+        && getHouse()->getHouseID() == currentGame->getGameInitSettings().getHouseID()) return true;
     for (int h=0; h<NUM_HOUSES; ++h) if (const auto* house=getHouse(h)) {
         if (house->getTeamID()!=getHouse()->getTeamID()) continue;
         for (const auto& player : house->getPlayerList())
@@ -41,7 +60,7 @@ bool QuantBot::isAlliedWithHuman() const {
 // Original permissions and budget are independent of later construction or spice loss.
 bool QuantBot::campaignCityEconomy() const {
     return isCampaignEnemy() && currentGame->isCitySimEnabled()
-        && currentGame->getGameInitSettings().getModName() == "dunecity"
+        && ModManager::instance().isDuneCityContentActive()
         && currentGame->getCitySimulation() && currentGame->getCitySimulation()->isInitialized();
 }
 
@@ -96,6 +115,8 @@ void QuantBot::noteCampaignOriginalState(bool legacySave) {
 
 bool QuantBot::campaignPermitsStructure(Uint32 item) const {
     if (!campaignCityEconomy() || !isStructure(item)) return true;
+    if (item == Structure_ResearchLab)
+        return currentGame->getGameInitSettings().getGameOptions().researchLab;
     // An RTS building's city employment role is NOT permission to introduce it.
     if (isZoneStructure(item) || item==Structure_PoliceStation || item==Structure_NuclearPlant
         || item==Structure_Stadium || item==Structure_Airport
@@ -128,6 +149,7 @@ int QuantBot::campaignHarvesterCeiling() const {
 }
 
 bool QuantBot::campaignCanAddHarvester() const {
+    if (switchedOff()) return true;
     const int ceiling = campaignHarvesterCeiling();
     return ceiling < 0 || campaignCommittedCount(Unit_Harvester)
         + campaignCommittedCount(Unit_RebelHarvester) < ceiling;
@@ -145,7 +167,7 @@ int QuantBot::campaignIncomeForecastPerMinute() const {
     if (!campaignCityEconomy()) return 0;
     const auto* sim=currentGame->getCitySimulation();
     const auto& state=sim->getHouseState(getHouse()->getHouseID());
-    const int tax=sim->getCityTax(),land=state.avgLandValue>0 ? state.avgLandValue : 128;
+    const int tax=sim->getCityTax(getHouse()->getHouseID()),land=state.avgLandValue>0 ? state.avgLandValue : 128;
     int income=DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(state.taxBaseEighths,tax,land));
     // Forecast committed/developing zones using the actual tax and population
     // functions, never a universal credits-per-zone constant.
@@ -230,10 +252,20 @@ bool QuantBot::reserveDamagedUnitForRepair(const UnitBase* unit) const {
     // A deviated unit is refused by our repair yards for as long as we hold it, so reserving it
     // has the same effect as reserving an aircraft: withdrawn from every order, never healed.
     if (!unit->isEligibleForRepair()) return false;
+    if (retreatPreserveActive() && !fighterOnly() && unit->isAGroundUnit() && !unit->isInfantry()
+        && QuantBotInternal::mobileCombatItem(unit->getItemID()) && getHouse()->hasRepairYard()
+        && !declinesUnfundedRepair(unit)) {
+        const auto* target = unit->getTarget();
+        // A repair trip owns the unit until full health, not just until it
+        // crosses the entry threshold. Both target and health are saved state.
+        if (unit->getHealth() * 5 < unit->getMaxHealth() * 4
+            || (target && target->getOwner() == getHouse() && target->getItemID() == Structure_RepairYard
+                && unit->getHealth() < unit->getMaxHealth())) return true;
+    }
     // Easy/Medium campaign troops cannot recover at home without a repair yard.
     // Keep them available for combat instead of withdrawing and excluding them
     // from every later wave. Explicit retreat/manual orders remain protected.
-    return unit->isBadlyDamaged()
+    return unit->isBadlyDamaged() && !declinesUnfundedRepair(unit)
         && !(currentGame && isCampaignGameType(currentGame->gameType)
             && (difficulty==Difficulty::Easy || difficulty==Difficulty::Medium) && !getHouse()->hasRepairYard());
 }
@@ -252,35 +284,6 @@ CampaignDifficultyPolicy::Pressure QuantBot::campaignPressure() const {
     return result;
 }
 
-int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
-    int required = std::max(0, configuredThreshold);
-    // The human's ally measures its wave against the strongest opposing house's army (unit counts
-    // x prices, as the production allocator values them) after the opening, not against a
-    // skirmish-sized limit a campaign enemy never fields: it held 5,650-7,780 for 20 minutes
-    // against two empty enemy armies (vanilla Harkonnen m21) waiting for 8,000.
-    if (isAlliedWithHuman() && !isCampaignEnemy() && getGameCycleCount() >= MILLI2CYCLES(15 * 60000)) {
-        int strongest = 0;
-        for (int h=0; h<NUM_HOUSES; ++h) {
-            const House* house = getHouse(h);
-            // The Natives are always "alive" but are no opposing house.
-            if (!house || house->isNatives() || !house->isAlive() || house->getTeamID()==getHouse()->getTeamID()) continue;
-            int value = 0;
-            for (Uint32 item = Unit_FirstID; item <= (ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Unit_LastID); ++item)
-                if (QuantBotBuildPolicy::militaryItem(item) && item != Unit_Frigate
-                    && !isAmbientUnit(item))
-                    value += house->getNumItems(item) * currentGame->objectData.data[item][h].price;
-            strongest = std::max(strongest, value);
-        }
-        required = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
-    }
-    // Once the map is depleted, stop waiting for a larger army. A leftover
-    // cash balance or a few cheap survivors must not keep the game idle.
-    // Dispatch still enforces home reserves, opening and enemy wave limits.
-    // Delay this fallback beyond the initial spice scan and opening phase.
-    if (getGameCycleCount() >= MILLI2CYCLES(15 * 60000) && lastCalculatedSpice == 0)
-        required = 0;
-    return required;
-}
 
 bool QuantBot::campaignCanLaunch() const {
     if (!isCampaignEnemy()) return true;
@@ -373,7 +376,7 @@ void QuantBot::updateCampaignWave() {
         // than adding free units. Easy/Medium then stagger within minutes 4–6.
         const auto& setup=getGameInitSettings();
         const bool earlyCoreMap=setup.getMission()>=1 && setup.getMission()<=4
-            && (setup.getModName()=="vanilla" || setup.getModName()=="dunecity");
+            && (setup.getModName()=="vanilla" || ModManager::instance().isDuneCityContentActive());
         const bool earlySignal=anchor==std::numeric_limits<Uint32>::max() && earlyCoreMap;
         if (earlySignal) anchor=MILLI2CYCLES(4*60000);
         // An unknown missing trigger must never authorize an immediate attack.

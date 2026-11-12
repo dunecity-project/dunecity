@@ -25,6 +25,7 @@
 #include <GUI/Label.h>
 #include <GUI/Spacer.h>
 #include <GUI/Checkbox.h>
+#include <GUI/DropDownBox.h>
 #include <GUI/PictureButton.h>
 #include <GUI/ProgressBar.h>
 #include <GUI/dune/DigitsTextBox.h>
@@ -79,6 +80,7 @@ private:
 
     VBox vbox;                                      ///< vertical box
     HBox hbox;                                      ///< horizontal box
+    HBox okHBox;
     VBox vboxLeft;                                  ///< inner vertical box on the left side
     VBox vboxRight;                                 ///< inner vertical box on the right side
     Label captionlabel;                             ///< label that contains the caption
@@ -88,6 +90,9 @@ private:
     Checkbox instantBuildCheckbox;                  ///< If checked the building of structures and units does not take any time
     Checkbox onlyOnePalaceCheckbox;                 ///< If checked only one palace can be build per house
     DamageRulesCheckbox originalUnitDamageCheckbox;
+    Checkbox damageLowersLandValueCheckbox;
+    Checkbox mountainSceneryCheckbox;
+    Checkbox unpoweredZonesVacateCheckbox;
     Checkbox rocketTurretsNeedPowerCheckbox;        ///< If checked rocket turrets are dysfunctional on power shortage
     Checkbox sandwormsRespawnCheckbox;              ///< If checked killed sandworms respawn after some time
     Checkbox killedSandwormsDropSpiceCheckbox;      ///< If checked killed sandworms drop some spice
@@ -108,6 +113,12 @@ private:
     DigitsTextBox   maxConstructionYardsOverrideTextBox;   ///< The maximum number of construction yards
     Checkbox        planBuildingSitesCheckbox;      ///< Match rule: Construction Yard orders pick their plot first (pre-placement queue)
     Checkbox rememberDefaults;
+    Checkbox researchLabCheckbox;
+    Checkbox technologyInstallmentsCheckbox;
+    HBox researchPaceHBox;
+    Label researchPaceLabel;
+    DropDownBox researchPaceDropDownBox;
+    Checkbox trooperAntiAirCheckbox;
     Checkbox alliedControlCheckbox;
     Checkbox alliedBuildingCheckbox;
     Checkbox easyModeCheckbox;

@@ -659,6 +659,48 @@ void runMcvDeploymentProbe(Game& game) {
                 bot->build(0);
             };
 
+            // First-factory arbitration must not change the existing MCV
+            // ranking. Both switch states retain this ordinary import choice;
+            // the independent stock/cash/delivery checks follow below.
+            {
+                const auto savedConfig=bot->configOverride;
+                const int savedMilitaryLimit=bot->militaryValueLimit;
+                bot->militaryValueLimit=70000; // The surrounding economy-only fixture forbids combat.
+                auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+                config->force.storageCapacity=false;
+                bot->configOverride=config;
+                if(market.getNumAvailable(Unit_Quad)==INVALID) market.addItem(Unit_Quad,0);
+                auto resetCargo=[&]() {
+                    port->informFrigateDestroyed();
+                    while(port->getProductionQueueSize())
+                        port->doCancelItem(port->getProductionQueue().front().itemID);
+                };
+                auto competingImports=[&](bool enabled) {
+                    resetCargo();stock(2);fund(30000);
+                    config->force.cityConstructionCapital=enabled;
+                    for(auto& offer:market.availableItems)
+                        if(offer.itemID==Unit_Quad) {offer.num=10;offer.price=20;}
+                    port->updateBuildList();
+                    plan();
+                };
+                try {
+                    competingImports(false);
+                    require(portMcvs()==0 && !port->currentProductionQueue.empty()
+                        && port->currentProductionQueue.front().itemID==Unit_Quad,
+                        "Colonist negative control did not divert the expansion order into a combat bargain");
+                    competingImports(true);
+                    require(portMcvs()==0 && !port->currentProductionQueue.empty()
+                        && port->currentProductionQueue.front().itemID==Unit_Quad,
+                        "First-factory arbitration changed the ordinary colonist/import ranking");
+                    SDL_Log("MCV_CONSTRUCTION_CAPITAL_PASS: both switch states retain ordinary import priority");
+                } catch (...) {
+                    resetCargo();bot->configOverride=savedConfig;
+                    bot->militaryValueLimit=savedMilitaryLimit;throw;
+                }
+                resetCargo();bot->configOverride=savedConfig;
+                bot->militaryValueLimit=savedMilitaryLimit;
+            }
+
             stock(0);
             fund(30000);
             plan();

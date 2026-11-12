@@ -22,6 +22,7 @@
 #include "DataTypes.h"
 #include "SpiceIncome.h"
 #include <Campaign/CoopCampaignSession.h>
+#include <misc/InitialTerrain.h>
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
 
@@ -202,8 +203,18 @@ public:
         filedata = data;
         coopContextCached = false;
         coopHarvestCached = false;
+        civilizationWarsCached = false;
+        initialSpiceTilePermille = -2;
+        initialTerrainCached = false;
     }
     void setMapData(const std::string& data) { setScenarioData(data); }
+    /// Immutable initial spice density from saved explicit tiles or native seeded campaign maps.
+    /// Cached derived state, never serialized; missing/malformed scenarios return -1.
+    int getInitialSpiceTilePermille() const;
+    /// Immutable initial terrain counts of the same saved scenario's explicit grid (map-scoped
+    /// AI repairs). Seeded original maps, generator-seeded custom maps and missing/malformed
+    /// scenarios are unknown. Cached derived state, never serialized.
+    const InitialTerrain& getInitialTerrain() const;
     const std::optional<coop::Context>& getCoopCampaignContext() const;
     struct CoopHarvestObjective {
         int quota = 0;
@@ -211,6 +222,8 @@ public:
     };
     const CoopHarvestObjective& getCoopHarvestObjective() const;
     bool isTornieFamilyMatch() const;
+    /// Generated-map lane rules only; a mod name or arbitrary scenario never opts in.
+    bool isCivilizationWars() const;
     bool isEasyModeEnabled() const;
     bool isEasyModeHouse(int ownerHouse) const;
     int campaignPurchasePrice(int price, int ownerHouse) const;
@@ -336,6 +349,11 @@ private:
     mutable std::optional<coop::Context> coopContext;
     mutable bool    coopHarvestCached = false;
     mutable CoopHarvestObjective coopHarvestObjective;
+    mutable bool    civilizationWarsCached = false;
+    mutable bool    civilizationWars = false;
+    mutable int     initialSpiceTilePermille = -2;
+    mutable bool    initialTerrainCached = false;
+    mutable InitialTerrain initialTerrain;
 
     /// Local-only; see isLocalSpectator(). Never serialized, never transmitted.
     bool            localSpectator = false;

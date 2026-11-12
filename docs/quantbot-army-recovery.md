@@ -4,6 +4,297 @@ Custom-game Hard and Brutal bots use a house-level army posture, rather than
 asking every unit to decide independently whether the whole army is losing.
 Campaign roles, support bots, and Easy/Medium retain their existing pacing.
 
+## Harvester raiding experiment
+
+`[Force Concentration] HarvesterRaid` is hashed and **defaults OFF**;
+`HarvesterRaidLevel` is a hashed integer clamped to 1 or 2. The experiment is
+for ordinary Custom Medium/Hard/Brutal skirmish, including Vanilla and DuneCity.
+Campaigns, switched-off bots, builder-only roles and human-allied support are
+inert. OFF returns before surveying objects or changing any order.
+
+- Level 1 reserves two existing fast light vehicles. They share the nearest
+  reachable active harvester of the richest-income hostile house, falling
+  back to that house's nearest reachable refinery. Income means cumulative
+  harvested spice plus gross city-tax receipts divided by common elapsed
+  game time, so ranking uses only the two saved engine totals; it is not an
+  instantaneous or telemetry-derived income forecast.
+- Level 2 reserves four existing fast light vehicles against the nearest
+  reachable unprotected active harvester, with no refinery fallback. A worker
+  is protected by any active armed ally within the greater of eight tiles or
+  its weapon range plus two, or an armed allied structure whose weapon range
+  plus two reaches the worker. True simulation positions are used.
+
+Both levels choose fast vehicles by object ID and distance ties by target ID.
+An incomplete group remains in the ordinary home reserve; no new production
+quota, formation, random draw, saved membership or historical cache is added.
+Every member must be terrain-connected to the shared objective. Inactive
+workers in bays/carryalls are not targets. Human orders, repair journeys and
+reservations, RETREAT, emergency/base defence, escorts, colony guards and
+existing main-wave membership take precedence. The ordinary whole-army launch
+excludes the derived raid reserve; raid orders run ahead of ordinary rally and
+targeting. Preserve/retreat overrides raiding, never vice versa.
+
+An unseen target determines a forced approach to its true position. Once
+visible, the ordinary engine attack order and weapon legality apply. No
+observer or client-local state selects the target. The paired experiments use
+`harvester-raid-income2`, `harvester-raid-exposed4` and explicit-OFF
+`harvester-raid-off`; this documents an unpromoted experiment, not a measured
+win-rate improvement.
+
+## Stateless technology experiment and save compatibility
+
+`[Force Concentration] SimpleTechSavings` is hashed and **OFF after rejection**.
+The last authorized unreleased iteration combines existing-owned plus accepted-queue composition
+with economy-first, ordinary installment construction. A military limit is a
+ceiling, never the denominator that entitles cheap units to an opening quota.
+The next unit/factory moves the existing value composition toward its target;
+legal advanced ground production disables cheap emergency/affordability filler.
+Standing infantry uses the existing army share. Independent reactive rocket
+infantry remains available when a legal advanced launcher cannot supply it.
+
+There is no threat-sized military hold while a tech item builds. Factories keep
+their ordinary purchasing, economic working cash and real production commitments.
+A selected legal tech structure may start at zero credits and pays through the
+same engine installments as a human order. Its yard first visits real power,
+storage, city seed/service, worker/refining and first-Starport selectors; needed
+economic capital owns the shared planner before optional tech. Positive repeat
+zoning is not an endless tech veto, and other yards retain their normal growth
+fallback. Upgrades retain the full live-credit rule and normal quote debit in
+the AI's planning cash; the engine grants no AI exemption. Required Research Lab
+progression keeps its independent ordinary investment path. Campaign, human-order,
+saboteur and unit-role authority are unchanged.
+
+Removal-only commit `3710464d` retired the rejected income-ledger experiment,
+not merely disabled it: no `TechSavings` option/hash key, factorial styles,
+saved balances, debt/share arithmetic or ledger-only fixtures remain. The nine
+old ledger tests are retired with that implementation. The stateless helpers
+and Simple fixtures use no ledger API or compatibility alias.
+
+Current saves are **9883** and protocol **112**, matching the installed format.
+The experimental 33-byte QuantBot tail and its digest contribution are gone;
+the ordinary 9882/9883 layout is restored. Simple needs no saved runtime state,
+so multiplayer saves/observer base snapshots need no additional wire bump.
+The existing supplemental observer layout is unchanged. Interim unshipped 9884
+files are unsupported. Synthetic engine fixtures load both 9882 and 9883 bot
+blocks, resave/reload 9883, check following-record alignment and verify that
+Simple OFF/ON alone adds no serialized bytes. Private saves stay outside Git.
+
+At `3710464d`, Main's full suite was **159/165** (six known Simple failures).
+The separate retirement-only selection was **158/159**: `mouse_controls_probe`
+timed out on Pro and its automatic Mini retry; every selected AI/save/network
+test passed. These are different runs, not interchangeable green claims.
+
+The economy-first policy at `8a89f35d` passed **156/165**, with all nine Simple
+fixtures failing and every other test passing. Archived native evidence found
+three fixture-premise defects: ROI cost 712 was compared with physical HF quote
+600; a fully prefunded 300-credit upgrade finished before its first new income
+receipt; and the Vanilla Hard/Brutal setup still lacked the bounded fourth
+opening refinery. The fixture-only correction checks physical price/foundation
+components, requires arriving income for unfunded starts, and genuinely clears
+that refinery opening. Payment, progress, completion and zero-cash acceptance
+assertions remain. Its own pinned results must not retroactively relabel
+`8a89f35d` all-green.
+
+Fixture-only `88fbd772` passed **6/9** (all Dune2R/Vanilla); its three City
+failures had insufficient physical initial power reserve. `048a5fae` corrects
+that setup with real Windtraps, without changing gameplay thresholds or payment
+rules. Its separate City selection still passed **0/3**, on both Mini and Pro
+(`20261106T030739-tech-city-physical-power-048-f30819`).
+The remaining bounded failure is an HF upgrade: Medium/Hard start with zero
+cash, Brutal just below its 300-credit quote. After 18,750 cycles (five simulated
+minutes), cash is 1,214/1,354 with arriving income and sufficient power, but no
+target upgrade payment/completion. Emerging dangerous City crime disables
+`techSavingActive`; inactive/unselected tech cannot admit that upgrade.
+The initial stable premise does not persist. This is observed non-completion,
+not an all-green fixture or justification to bypass civic/emergency priority.
+No further fixture or policy iteration was made after the final cohort rejected
+the experiment.
+
+The approved private full-Game probes at `8a89f35d` passed **2/2**: actual 9882
+and 9883 saves loaded, ran 600 cycles, resaved/reloaded as 9883 and continued with
+native-worm/state checks. Their input/native binary hashes and local-only
+receipts are in `../outputs/tech-saving-20261105/private-compatibility-8a89f35d/`.
+No private save was committed. The later Air modification-time query timed out;
+no newer save, or absence of one, is claimed.
+
+### Final economy-first trial: rejected, default OFF
+
+The last authorized policy iteration is `8a89f35d`: **288 original native games,
+960 house histories, four seeds**, DuneCity/Dune2R/Vanilla and Medium/Hard/Brutal.
+TrooperSupport and FundedClassicProduction stayed ON in both arms. Whole-stream
+admission reconciled 11,431,003 raw records, 254,076 accepted quote records and
+47,707 complete cheap-order contexts. The obsolete ledger is absent, not a
+zero-balance treatment. Neither the ledger design nor the Simple iterations
+passed adoption. **No further policy iteration was made; Simple remains OFF.**
+
+Hard/Brutal matched equal-game means, balanced across the six mod/research cells:
+
+| Metric | OFF | ON | Paired change, 95% interval |
+| --- | ---: | ---: | --- |
+| Native credited wins per house | 0.2118 | 0 | -0.2118 [-0.2517, -0.1684] |
+| Native decided-match fraction | 0.4583 | 0 | -0.4583 [-0.5417, -0.3750] |
+| Dispatches | 3.5816 | 0.9896 | -2.5920 [-2.9801, -2.2083] |
+| Kill value | 43,309 | 11,252 | -32,057 [-36,113, -28,121] |
+| Actual live per-object replacement price | 308.39 | 271.93 | -36.46 [-53.69, -18.54] |
+| Economy-stall detector | 0.3151 | 0.1632 | -0.1519 [-0.2379, -0.0660] |
+| Bankrupt/empty-queue detector | 0.3498 | 0.1936 | -0.1563 [-0.2431, -0.0720] |
+| Missing-Starport detector | 0.2335 | 0.1849 | -0.0486 [-0.0816, -0.0174] |
+| Gross spice per observed house history | 85,295 | 75,998 | -9,297 [-12,489, -5,891] |
+| Gross tax per observed house history | 6,972 | 5,115 | -1,856 [-2,971, -852] |
+
+All six cells' dispatch and kill-value game intervals were adverse, with four
+negative seed blocks in each. Outcome, income, stall and bankruptcy coverage is
+320/320 paired houses; live price is conditioned on 205/320 nonempty measured
+pairs, not zero-imputed. Missing-Starport has 304/320 eligible pairs: ever-latched
+absence at a sampled minute >=20 while alive with a yard, with both arms exposed;
+later completion does not clear the flag. Own-house elimination fell
+0.2969→0.0642 and alive-final rose 0.7031→0.9358; observed right-censored survival
+was 36.690→39.483 minutes. In symmetric global-OFF/global-ON selfplay, fewer
+eliminations and no decided games indicate passivity/unresolved matches, **not
+proof of greater relative winning skill** or uncensored life expectancy.
+
+City completed HF/IX/Starport by the observed end, all three difficulties:
+
+| Research option | Houses per arm | OFF HF/IX/SP | ON HF/IX/SP |
+| --- | ---: | --- | --- |
+| OFF | 192 | 101 / 55 / 168 | 122 / 27 / 165 |
+| ON | 48 | 24 / 23 / 36 | 20 / 6 / 37 |
+
+Paired-achiever HF/IX/SP minutes were 15.886/24.853/21.829→
+26.921/29.442/22.620 with research OFF (89/16/145 paired achievers), and
+13.641/26.150/20.887→32.416/35.167/23.976 with research ON (17/6/28).
+These are selected timing contrasts, not population completion-time effects;
+death/admin censoring and achievement bounds remain in the companion tables.
+All production cohorts began at T9, so research acquisition is unmeasured.
+
+For City/research-OFF, accepted production/economy/military quotes were
+1.014/4.092/3.493M→0.798/3.477/2.622M; accepted cheap quotes **rose**
+0.831M→1.143M. Actual physical payments were 9.221M→7.400M; gross spice
+5.712M→5.387M and gross tax 3.790M→3.037M. Quote classes are commitments,
+not allocated income or physical-payment buckets; cheap/tech/city overlays
+are not additive. The largest ON cheap path was `existing_army_composition`,
+1,018,900 credits over 5,870 City/research-OFF orders. At the 40-minute H/B
+checkpoint, 114 paired-alive City/research-OFF armies grew 32.95→41.12 objects
+but value fell 8,409→8,069. Mean price was 215.89→181.86 in the separately
+conditioned 106 paired nonempty armies, not a ratio of those aggregate means:
+more cheap volume did not satisfy the requested higher-value mix.
+
+The four-minute diagnostic has 141 candidate groups and six exact higher-tech
+not-ordered/diversion examples. Windows overlap and flags are planner
+observations; do not sum their cheap quotes, infer independent trials or treat
+full-quote coverage as an installment admission requirement. Actual pending
+tech and final selected capital are separate fields; only explicit raw order
+pointers join an order to its capital decision.
+
+Evidence: `../outputs/tech-saving-20261105/confirmation-analysis-8a89f35d/`.
+`compact-summary.txt`, `primary-native-outcomes-summary.txt` and
+`population-timing-supplement.txt` give compact tables; the per-house checkpoint,
+composition, timing/censoring, spend, every-cheap-order and four-minute CSVs
+retain full provenance. Historical T/F ablations remain separate: supplier
+TrooperSupport missing-SP was 15/109→31/111 (paired delta +0.0983,
+95% [+0.0385,+0.1624]); the separate powered-classic seven-seed FundedClassic
+trial was 0W/4L/3 time limits→7W/0L/0. These are not effects estimated by this
+fixed-T/F Simple cohort. Historical retained raw subsets lack exact acceptance
+vectors/full price coverage and must not be pooled with current observers.
+
+### Earlier rejected Simple cohorts
+
+Two earlier separately pinned canonical 288-game/four-seed Simple cohorts were rejected.
+TrooperSupport/FundedClassicProduction were ON in both arms. At `5f2bdb16`, all
+six Hard/Brutal mod/research cells had four adverse dispatch and kill-value seed
+blocks. City research-OFF achieved HF/IX/Starport by40 minutes in
+101/55/168 of192 OFF house histories versus178/77/80 ON; research-ON was
+24/23/36 of48 versus42/21/21. Death and administrative censoring are retained.
+Paired-achiever research-OFF means were HF15.779→12.545, IX26.353→33.434 and
+Starport18.987→31.860 minutes; these are selection-conditioned, not all-house
+completion times.
+
+Balanced Hard/Brutal equal-game dispatches were3.5816→1.8793 and kill value
+43,309→19,963. Actual live per-object replacement value was299.26→314.11,
+conditioned on199/320 paired nonempty measured armies; its paired95% interval
+included a decrease. This is not accepted-order mean price. City research-OFF
+gross spice fell5.712M→4.071M and gross tax3.790M→0.983M. Accepted P/E/M quotes
+were1.014/4.092/3.493M→1.052/2.360/1.743M: spending classes, **not income
+allocations**. Physical payments and gross income are reported separately.
+
+PRIMARY native credited wins/house were0.2118→0.0625 and decided-match fraction
+0.4583→0.1250; own-house elimination fell0.2969→0.1259 and observed survival
+rose36.690→38.365 minutes. Alive histories are right-censored: this is not life
+expectancy or proof of strength. These symmetric all-QuantBot global-OFF/global-ON
+runs measure match health/decisiveness/passivity, not direct ON-versus-OFF winning
+power. The missing-Starport detector latches any eligible alive-with-yard absence
+at sampled minute≥20; later port completion does not clear it.
+
+Evidence: `../outputs/tech-saving-20261105/confirmation-analysis-df7da313/` and
+`confirmation-analysis-5f2bdb16/`, including canonical house/game outcomes,
+paired uncertainty, spend/technology/composition timelines and test addenda.
+`df7da313` had152/164 passes (three old-ledger City failures and nine Simple
+zero-cash failures); `5f2bdb16` targeted Simple tests had three Dune2R passes and
+six City-upgrade/Vanilla-payment-evidence failures. No later source receives
+retroactive credit. Research-enabled production cohorts started atT9 and do
+not demonstrate research acquisition. Four-minute quote coverage is not a
+structure-start affordability condition. The audit keeps unique scenario
+`city` and diagnostic `city_spend` columns, exact acceptance contexts, and
+historical table-aware provenance.
+
+## Required Research Lab progression
+
+With the match's Research Lab option enabled, the separately hashed
+`[Force Concentration] ResearchLabProgression` switch treats the lab and its
+research as prerequisites while the opening-fleet or dangerous-crime policy
+would otherwise veto technology. Once those gates are satisfied, the existing
+ordinary investment budget and research pacing apply; already-working classic
+openings do not become a different research rush. The switch defaults ON;
+OFF preserves the prior ordinary-match policy. Generated Civilization Wars
+retains required progression in either state. `ResearchLab=false` still
+disables the AI's lab/research policy altogether.
+
+The AI must have a powered, bootstrapped, positive-income economy and enough
+uncommitted cash for the lab/foundation or the complete research price plus
+working cash. Current defence emergencies and accepted production commitments
+remain protected. It does not wait for the larger opening harvester fleet,
+perfect crime coverage or repeated optional factory/city allocations: later
+technology may be needed to supply those very workers and facilities.
+Required research reserves its purchase before repeatable orders spend it,
+and an idle yard tries the first lab after power/storage emergencies.
+
+Build-list prerequisites, placement, foundations, generation and research
+payment/timing still use the ordinary engine paths shared with humans.
+Queue-inclusive counts prevent duplicate labs across yards. There is no
+new saved AI state, save migration, protocol change or random draw.
+Easy, Medium, Hard, Brutal, Defend and Builder authority use the same rule;
+Fighter-only and switched-off QuantBots remain excluded.
+
+`quantbot_research_lab_<vanilla|dunecity>_<difficulty>` runs a real tech-1
+full-build fixture with paired hashed switches, paid placement, normal
+level-2 research completion, Builder/Defend and negative legality/funding
+controls. `tests/ai/research-lab-continuation.py` audits and resumes an exact
+save through commit-pinned cluster units. Its frozen diagnostic input stores
+the save's SHA256 and gzip/base64 bytes; measured OFF/ON units reload it
+independently, without a diagnostic planning pass changing their starting
+state.
+
+`quantbot_research_lab_crime_policy` uses a synthetic physical city with
+positive tax income, no opening-fleet deficit, a normal legal lab offer,
+and dangerous crime read from the real city map. Its paired policy check
+requires the old funding refusal OFF and funded readiness ON. No recoverable
+user-save bytes are tracked. Stefan's private original 9883
+`notbuildingresearchlab` save (SHA256
+`8772302e2199d4de929c1b109f2c3151cc10e651b911358ea862e7c5882ebcb7`)
+can still be checked through the frozen private input transport. Its exact
+Workshop revision `27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4`
+is restored from the verified manifest/configuration archive and matching
+source artwork; neither the original profile nor save is modified.
+
+At saved cycle 49,399, Ordos and Neutral are Brutal QuantBots with 28,981
+and 27,533 credits, positive net tax forecasts of 1,128 and 1,238 per minute,
+and 333 and 268 legal lab sites. Neither has an opening-worker deficit.
+Four and three dangerous-crime properties alone make the old investment
+readiness false despite their nine and eight Police Stations. The paired
+private three-minute saved-game check requires that refusal OFF and real lab
+placement plus normal level-2 research startup ON. This is separate from
+the general tech-1 opening-fleet and full research-completion fixtures.
+
 ## Dispatch and the military limit
 
 The default outnumbered threshold is an observed enemy advantage of at least
@@ -73,6 +364,109 @@ distant enemy does not trigger retreat. The scan uses nearby tile occupants;
 workers, aircraft, human orders, repair and ordinary posted defence contacts
 retain their existing handling.
 
+### Retreat and preserve experiment (default OFF)
+
+`[Force Concentration] RetreatPreserve=0` and `RetreatPreserveLevel=1` are
+hashed, loaded and saved config keys. Level 1 withdraws at a true local enemy
+advantage of **at least 1.5x**; level 2 uses **2x**. Both share early vehicle
+repair and threatened-field protection. `retreat-preserve-{off,150,200}` are
+candidate-only test overlays; plain engine-Hunt/formation None remains control.
+
+The experiment applies to Custom skirmishes, including Vanilla, DuneCity and
+Easy/Defend, independently of power requirements. Campaign game types, saved
+campaign authority, Builder/Off roles and human-allied helpers remain inert.
+OFF retains native visibility, repair and disabled-withdrawal policy. It adds no
+RNG draw or saved field.
+
+Local strength uses the existing integer health-weighted purchase-price model.
+Within the existing 14-tile fight radius it counts all active hostile combat
+units, including unseen units and aircraft, and enemy turret fire that reaches
+the fight. Inactive cargo and native ambient threats are not enemy armies.
+Friendly troops/allies and covering allied turrets count only locally. A
+currently engaged offensive fighter (lowest object id, including non-wave
+raiders) anchors the fight instead of the mean of separated waves; without such
+contact the existing wave centre is used. A raider's membership is never moved
+into the main wave. There is no 1,500-credit/one-fifth-wave floor for this trigger.
+This is a strength proxy, not a matchup simulator.
+
+The existing saved Offensive/Withdrawing/Recovering machine, protected-rally
+selection, forced Area Guard moves, recall budget/backpressure and recovery
+dwell/readiness own the retreat. The general attrition/core triggers do not
+become enabled merely by selecting this experiment. Existing wave and
+damage-control passes preserve these orders; healthy emergency defenders retain
+authority. All offensive raiders must defer while `reserveHeldHome()` is true.
+
+Eligible combat vehicles below 80% health reserve the existing repair service.
+The ordinary engine command chooses and books a free owned yard. If every bay
+is busy, a bounded withdrawal shelters the waiting vehicle while subsequent
+passes retry. An actual yard target keeps ownership until full health; repaired
+units return to ordinary availability. Human orders win, then repair, then live
+defence, then attacks. Aircraft, infantry, deviated units and no-yard situations
+retain their existing repair eligibility; no unaffordable-repair bypass is
+removed. No independent repair queue, saved membership or target cache is added.
+
+The existing harvester danger field and clearing list include true active
+attackers with a three-tile approach margin (minimum four tiles). Existing
+two-second safety checks, safe-field relocation, escape corridors, cooling
+memory and bounded spice clearing provide withdrawal/support before impact.
+Unseen enemies need not be attackable by escorts: the worker can still leave.
+Routine cargo return, refinery choice, siting and fleet targets are unchanged.
+Full-knowledge field danger also excludes threatened retreat/rally slots;
+ordinary production placement/front intelligence stays visibility-based.
+
+`quantbot_retreat_preserve_{vanilla,dunecity}` exercise the real policy at exact
+1.5x/2x and just below 2x, hidden/inactive enemies, local versus distant allies,
+non-wave raiders, saved orders, human/campaign/role boundaries, a paid repair bay and
+field evacuation/clearing. The top-level config fixture covers defaults, both
+levels, clamping, save/load and hashing. These are fixture definitions, not
+claimed passing results or win-rate evidence. Outcome gates and controls live
+in `outputs/ai-tuning-20261108/RetreatPreserve/ledger.md`.
+
+## Exhausted Custom economies
+
+`[Force Concentration] ExhaustedArmyDispatch=true` is a default-on, hashed
+QuantBot switch (`force.exhaustedArmyDispatch`). It removes rebuild-only waits
+when a Custom army cannot replenish itself. Setting it to `false` retains the
+legacy minimum-wave, repair-yard and repair-reservation behaviour; no seed,
+match timeout or victory condition changes with this switch.
+
+The conservative exhaustion gate requires an active, non-builder-only Custom
+controller outside a campaign, with the switch enabled, and all of the following:
+
+- No harvestable spice reachable by an owned harvester or refinery/dropoff
+  region, including the existing carryall route. A zero periodic resource
+  survey is the no-spice observation; a positive survey is not exhaustion merely
+  because one field is inaccessible.
+- Actual starting and earned credit balances, before rounding, below the
+  cheapest enabled, positive-price, current-tech nonambient unit. Existing
+  builder offers, including Starport quotes, can lower that conservative funding
+  boundary. Cash sufficient for even that cheapest purchase keeps normal pacing.
+- No positive cargo in an owned Harvester or Rebel Harvester, including cargo
+  still on its way home.
+- No possible city tax income: a positive tax rate with either an existing tax
+  base or any owned R/C/I lot inhibits the bypass. Developing lots are protected
+  even before the census reports taxable population; a currently empty wallet
+  is not proof that a city cannot recover.
+
+When these conditions hold, the ordinary Custom whole-army selector may send
+its remaining available ground troops below the six-unit/3,000-credit main-wave
+floor, and `attack()` does not wait for an unaffordable missing repair yard.
+This is not permission to override a tactical withdrawal, emergency defence,
+campaign timing or a human command. Easy's existing standing-army share remains
+its own launch path.
+
+The same gate releases only AI-owned repair work that cannot finish under the
+yard's real payment rule:
+`cash < 0.5 + (ceil(missing health)-1) * UNIT_REPAIRCOST`.
+`House::payCredits` requires rounded credits of at least one before every debit,
+so a sub-half-credit balance cannot pay even an otherwise affordable last point.
+The gate makes damaged combat troops available, cancels repair-yard travel and
+releases unaffordable AI yard occupants;
+the engine's automatic repair decision uses the same owner check so it cannot
+immediately rebook them. Human orders, saboteurs, live/base/posted defenders,
+colony guards and colonist escorts keep their orders and repair authority.
+Campaign repair and dispatch paths are unchanged, even in an empty economy.
+
 ## Whole-army base defence
 
 In Custom Hard/Brutal games, a real attack on any owned building, including a
@@ -112,6 +506,14 @@ colonies, economy reserves, power rules, construction exits, and movement
 corridors retain priority. Battery construction is spread across passes.
 Destroyed hostile buildings count as kills in the attrition trade, at their
 purchase price, so assaulting a turret-defended base is not by itself a bad trade.
+
+A city's due, buildable first-cover rocket takes priority over founding its
+first WOR for standing trooper support. Extra overlap on already covered core
+assets still shares construction with growth; losing a refinery's only
+covering turret restores the first-cover priority immediately. The existing
+`quantbot_police_budget` and `quantbot_city_growth` probes preserve these
+distinctions after core suppliers are present, without disabling
+`TrooperSupport` or pre-filling its missing supplier.
 
 In DuneCity Custom Hard/Brutal games, a battery that has no usable free site can
 replace an owned residential, commercial or industrial lot on the observed
@@ -161,6 +563,31 @@ include the 80% boundary, minor raids, recovery/resumption, old-save migration,
 ordinary save and scoped observer AI continuation, legal battery sites, and actual
 movement of a large recalled army. Changes to saved state and multiplayer
 behaviour require explicit format/protocol gates.
+
+`quantbot_carryall_repair` covers the complete funded repair trip in Vanilla and DuneCity:
+the human Repair command, engine automatic repair, a human house's QuantBot partner and an
+autonomous QuantBot's damage response must book a free owned carryall, collect the vehicle
+before it drives away, deliver it into the yard, and release it at full health without stale
+bookings. The yard is over twenty tiles from the damaged unit, following the reported campaign
+layout. With no carryall, both the human order and the partner's damage response must drive;
+with the only carryall busy, the unit drives until transport becomes available. Each seeded case
+runs twice with one path worker and must reproduce the same event cycles. These are bounded
+progress checks on open rock with a funded yard, not a promise of transport when none exists.
+
+`quantbot_custom_attack` contains same-runtime OFF/ON/OFF exhausted-economy
+coverage through the actual `exhaustedArmyEconomy()` predicate,
+`declinesUnfundedRepair()`/repair reservation owner, `launchGroundHunt()` and
+`attack()` paths. Its controls retain legacy holds for reachable spice, exact
+cheapest-unit funding (with a fractional-shortfall boundary), pending harvester
+cargo, city tax income and developing lots. It compares actual campaign orders
+across switch states and protects human, defence and saboteur orders. Actual
+repair-yard trips and bay occupants exercise AI-only release, protected human
+and defender occupants, and the engine's automatic-repair no-rebooking rule.
+The single-bay traveller controls establish one real booking at a time.
+The actual repair-yard update proves both sides of the rounded-credit boundary
+for one and five missing health points.
+These fixture assertions describe coverage, not an unrun full-match or win-rate
+certification.
 
 `quantbot_whole_army_dispatch` checks whole-army building defence for both Hard
 and Brutal in all three postures, including a reserve 47 tiles away, remote

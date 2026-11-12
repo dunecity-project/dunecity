@@ -21,6 +21,70 @@
 
 #include <algorithm>
 
+
+ScreenBorder::~ScreenBorder() {
+    if(mousePanning) {
+        mousePanning = false;
+        SDL_CaptureMouse(SDL_FALSE);
+        SDL_ShowCursor(cursorBeforePan);
+    }
+}
+
+bool ScreenBorder::handleMiddlePan(const SDL_Event& event, bool enabled) {
+    const bool release = event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_MIDDLE;
+    const bool lostFocus = event.type == SDL_WINDOWEVENT
+        && (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST || event.window.event == SDL_WINDOWEVENT_LEAVE);
+    if(mousePanning && (!enabled || release || lostFocus)) {
+        mousePanning = false;
+        SDL_CaptureMouse(SDL_FALSE);
+        SDL_ShowCursor(cursorBeforePan);
+        return release;
+    }
+    if(!enabled) return false;
+    if(event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_MIDDLE
+       && event.button.which != SDL_TOUCH_MOUSEID
+       && isScreenCoordInsideMap(event.button.x, event.button.y)) {
+        mousePanning = true;
+        panAnchor = Coord(screen2worldX(event.button.x), screen2worldY(event.button.y));
+        SDL_CaptureMouse(SDL_TRUE);
+        cursorBeforePan = SDL_ShowCursor(SDL_QUERY);
+        SDL_ShowCursor(SDL_DISABLE);
+        return true;
+    }
+    if(mousePanning && event.type == SDL_MOUSEMOTION) {
+        const Coord underPointer(screen2worldX(event.motion.x), screen2worldY(event.motion.y));
+        const Coord requested = getCurrentCenter() + panAnchor - underPointer;
+        setNewScreenCenter(requested);
+        // Re-anchor at map bounds so reversing direction immediately moves the view.
+        if(getCurrentCenter() != requested)
+            panAnchor = Coord(screen2worldX(event.motion.x), screen2worldY(event.motion.y));
+        return true;
+    }
+    return false;
+}
+
+int ScreenBorder::mouseWheelZoom(const SDL_MouseWheelEvent& wheel) {
+    float delta = static_cast<float>(wheel.y);
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    if(wheel.preciseY != 0) delta = wheel.preciseY;
+#endif
+    if(wheel.direction == SDL_MOUSEWHEEL_FLIPPED) delta = -delta;
+    if(delta == 0) return 0;
+    const Uint32 now = wheel.timestamp ? wheel.timestamp : SDL_GetTicks();
+    if(now - wheelLastEvent > 250) resetMouseWheelZoom();
+    wheelLastEvent = now;
+    // Discrete wheels stay immediate, including rapidly reversed notches. Once a
+    // fractional delta identifies a trackpad gesture, keep its inertia rate-limited.
+    if(delta != std::trunc(delta)) wheelSmooth = true;
+    if(!wheelSmooth) return delta > 0 ? 1 : -1;
+    if((wheelRemainder > 0) != (delta > 0)) wheelRemainder = 0;
+    wheelRemainder += delta;
+    if(std::abs(wheelRemainder) < 1 || (wheelLastStep && now - wheelLastStep < 150)) return 0;
+    wheelLastStep = now;
+    const int step = wheelRemainder > 0 ? 1 : -1;
+    wheelRemainder = 0; // Do not replay a swipe's excess momentum as queued zooms.
+    return step;
+}
 void ScreenBorder::setNewScreenCenter(const Coord& newPosition) {
     Coord currentBorderSize = bottomRightCorner - topLeftCorner;
 

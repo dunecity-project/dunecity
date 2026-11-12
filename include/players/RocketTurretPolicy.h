@@ -65,6 +65,22 @@ inline int assetPriority(int item) {
 inline int coverageTurretCap(int coverageDemand) {
     return 2 + std::max(0, coverageDemand) / 4;
 }
+// A modest early battery, also bounding ordinary cover while optional core/tech
+// work finishes. Small established bases get one extra; only substantially
+// larger Hard+ bases get a second. Funding and growth still gate purchases.
+inline int earlyRocketLimit(bool more, int tier, int structures) {
+    if (!more || tier <= 0 || structures < 8) return 2;
+    return tier >= 2 && structures >= 16 ? 4 : 3;
+}
+// An actual ground raid is not the peaceful coverage plan. Price the observed
+// vehicles, not the whole enemy army; never restore the old unbounded battery.
+constexpr int threatTurretTotalCap = 12;
+inline int groundThreatGoal(int visibleGroundValue, bool more) {
+    if (visibleGroundValue <= 0) return 0;
+    const int goal = more ? 1 + (visibleGroundValue - 1) / 175
+                          : 1 + (visibleGroundValue - 1) / 200;
+    return std::clamp(goal, 2, 8);
+}
 // How much construction the city does between two peaceful emplacements.
 constexpr unsigned growthOrdersPerProactiveTurret = 3;
 // Whether this construction pass may spend its slot on proactive coverage.

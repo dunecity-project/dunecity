@@ -938,7 +938,7 @@ TEST_CASE("Commands: cycle windows bound the scheduling vector",
     REQUIRE(CommandValidation::isAcceptableCommandCycle(0, currentCycle, buffer));
     REQUIRE(CommandValidation::isAcceptableCommandCycle(currentCycle - 100, currentCycle, buffer));
 
-    // A cycle number of four billion would resize the timeslot vector to four billion entries.
+    // Arbitrarily distant cycles remain outside the negotiated command window.
     REQUIRE_FALSE(CommandValidation::isAcceptableCommandCycle(0xFFFFFFFEu, currentCycle, buffer));
     REQUIRE_FALSE(CommandValidation::isAcceptableCommandCycle(0x80000000u, currentCycle, buffer));
     REQUIRE_FALSE(CommandValidation::isAcceptableCommandCycle(
@@ -1229,7 +1229,7 @@ TEST_CASE("Command authorization: every object action is covered, control comman
         CMD_UNIT_ATTACKMOVE, CMD_UNIT_PATROL, CMD_UNIT_QUEUEORDER, CMD_BUILDER_SETREPEAT,
         CMD_BUILDER_RESERVE_PLACEMENT, CMD_BUILDER_CANCEL_RESERVATION, CMD_UNIT_FORMATION_MOVE,
         CMD_UNIT_FORMATION_HUNT, CMD_STRUCTURE_SELL, CMD_WINDTRAP_POWER_UPGRADE,
-        CMD_SCOUTPOST_SLOWPOST_UPGRADE, CMD_RADAR_RESEARCH
+        CMD_SCOUTPOST_SLOWPOST_UPGRADE, CMD_RADAR_RESEARCH, CMD_RESEARCH_TECH_LEVEL
     };
     for(const CMDTYPE commandID : objectActions) {
         INFO("command " << static_cast<int>(commandID));
@@ -1239,7 +1239,7 @@ TEST_CASE("Command authorization: every object action is covered, control comman
     // Commands that carry no acting object: they are authorized by issuer identity alone.
     const CMDTYPE nonObjectCommands[] = {
         CMD_PLAYER_PAUSE, CMD_PLAYER_RESUME, CMD_TEST_SYNC, CMD_HOUSE_AUTO_REPAIR, CMD_CAMPAIGN_SKIP, CMD_MATCH_PAUSE,
-        CMD_CITY_PLACE_ZONE, CMD_CITY_SET_TAX_RATE, CMD_CITY_SET_BUDGET, CMD_CITY_TOOL
+        CMD_CITY_PLACE_ZONE, CMD_CITY_SET_TAX_RATE, CMD_CITY_SET_BUDGET, CMD_CITY_TOOL, CMD_AI_SUPPORT_ROLE
     };
     for(const CMDTYPE commandID : nonObjectCommands) {
         INFO("command " << static_cast<int>(commandID));

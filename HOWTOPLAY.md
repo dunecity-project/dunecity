@@ -34,6 +34,13 @@ is designed for it.
 City tools only work on **rock** tiles. Sand is for spice harvesting and
 combat as usual.
 
+QuantBot puts enemy harvesters captured by its Deviators to work for itself.
+With a refinery available, a borrowed worker returns to the nearest own
+refinery at half capacity, or with ten seconds of deviation remaining if it
+has any spice, whichever comes first. Human orders take priority; harvesters
+controlled by a human keep their usual behaviour. The refinery doing the
+unloading receives the spice income even if deviation expires inside it.
+
 ## 3. Lay down the backbone
 
 Before zoning, build the core infrastructure:
@@ -121,6 +128,106 @@ still works:
 You can play a **pure city-builder** skirmish on a big rock map, or a
 **hybrid** where you defend the colony while it grows. The simulation
 runs the same way in both modes.
+
+## Research your house's technology
+
+Enable **Research Lab** in **Game Rules**, build a lab, then select it and
+press **Research level** to raise only your house's technology. Each study
+unlocks the next level, up to level 9. **Research Pace** changes the total
+price and study time; the sidebar shows both before you start.
+
+**Technology Installments** is an optional rule in **Game Rules** (off by
+default) and applies to humans and AI alike, for both research and
+Construction Yard/factory upgrades. When it is on, you do not need the full
+price in the bank and can start even with zero credits. Research drains
+credits on each funded
+simulation tick. The displayed **Drain** is the nominal credits per game
+second; the exact total paid over a completed study equals its quoted price.
+The sidebar also shows progress, the amount paid, and remaining study time.
+
+If money runs out, the sidebar says **Paused: no credits**. Any affordable
+part of the next payment is kept, but the timer advances only once that tick
+is fully funded. Income resumes research automatically: time spent paused
+does not create catch-up charges. Losing the researching lab cancels the
+study without a refund.
+
+With **Technology Installments** off, the full price is needed when starting
+each new study. A study keeps the price, duration and payment mode it started
+with. Older saved games retain their upfront-payment rules, and their
+already-paid research timers continue without another charge; the sidebar
+labels these **Paid upfront** and **No further charge**.
+
+## Upgrade Construction Yards and factories
+
+Select an eligible, fully repaired Construction Yard or factory and press
+**Upgrade** (or **U**). With **Technology Installments** enabled, you can
+start without saving the whole price first, just like the AI. Credits drain
+as the upgrade progresses. At zero credits the upgrade pauses; income
+resumes it automatically, with no catch-up bill.
+
+While upgrading, the sidebar replaces the building portrait with its
+**Upgrading** or **Paused: no credits** status, total price and amount paid.
+The upgrade bar shows the funded percentage. Production resumes after the
+upgrade completes; an existing production hold remains your choice.
+
+With the rule off, including older saved games, new upgrades retain their
+old full-balance starting requirement and then drain credits as before.
+Already-paid upgrade progress is retained when loading a save or changing
+the rule, never charged again.
+
+
+## Save a favourite map
+
+In a Random Skirmish, Civilization Wars or Custom Game, open the game menu
+and choose **Save as Map**. This also works while spectating; campaign
+missions do not offer it.
+
+- **From the start** exports the original map embedded in the match, unchanged:
+  its terrain, spice, starting buildings and units, players and generator settings.
+  Your chosen name is used for the file and map browser; the original map's
+  internal name is retained.
+- **From right now** makes a new starting map from the current terrain, spice
+  types, concrete/roads, surviving buildings and units, houses, teams and credits.
+  Health is rounded to the map format's 1/256 steps. Unit facing and supported
+  attack modes, wind-trap upgrades and map-supported city-zone density are kept.
+  Units in transports, contained in buildings or off-map are placed on nearby
+  legal tiles that the map loader can represent.
+
+Enter a map name and press **Save**. Replacing an existing file requires
+confirmation. Maps appear under **Custom Game → MP User Maps** (more than
+one player) or **SP User Maps** (one player), and in the map editor's user maps.
+The map keeps its gameplay mod dependency, including the Civilization Wars marker.
+
+This is a **new map**, not a resumable save: exact spice amounts, transported
+cargo, zone residents and civic overlays, completed/active research, construction
+and production queues, targets and paths, fog of war, statistics and scheduled
+reinforcements are not copied. Current credits become starting credits.
+Native sandworms are retained; native crime units are omitted because maps cannot
+express their special ownership. Normal new-map initialization still applies,
+including building road rings and a first refinery's harvester when needed.
+Use **Save Game** when you want to continue the complete match.
+
+## Mouse camera controls
+
+- Over the map, **wheel up** zooms in and **wheel down** zooms out, one step
+  per notch, anchored at the pointer. Zoom stops at the available limits.
+- On a **Mac trackpad**, move two fingers together to pan the map without
+  holding a button. Spread two fingers to zoom in; pinch them together to zoom
+  out at the pointer. Two-finger scrolling pans — it does **not** zoom. Both pan
+  axes honor the macOS scroll-direction preference consistently.
+  Physical mouse wheels, including unphased high-resolution wheels, still zoom.
+- On **iPhone/iPad**, move two fingers together to pan; spread/pinch them to
+  zoom around their midpoint. Start both fingers over the map, not a menu,
+  sidebar or map-control button. These controls work in the map editor too.
+- Hold **middle mouse button (mouse 3)** over the map and drag to grab it.
+  The map follows the cursor: dragging left moves the view right. Movement
+  follows the current zoom and stops at map edges. Release to stop panning;
+  the cursor is hidden during the grab. This never orders selected units.
+- Wheels over sidebars, lists and menus still scroll those controls. Arrow-key
+  and edge scrolling, minimap clicks and touch controls are unchanged.
+- The map editor supports the same wheel zoom and middle-drag controls, using
+  its three existing zoom levels. **Shift+wheel** over a unit rotates it.
+
 
 ---
 

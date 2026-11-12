@@ -46,7 +46,8 @@ TEST_CASE("Save compat: Tornie 546 IDs append without replacing city or legacy o
         Unit_CapacityHarvester, Unit_FastHarvester, Unit_TameSandworm};
     for(int index = 0; index < 14; ++index) REQUIRE(appended[index] == 74 + index);
     REQUIRE(Structure_Chemipost == 73);
-    REQUIRE(Num_ItemID == 88);
+    REQUIRE(Structure_ResearchLab == 88);
+    REQUIRE(Num_ItemID == 89);
     REQUIRE(isStructure(Structure_Doublefinery));
     REQUIRE(isStructure(Structure_Slowpost));
     REQUIRE_FALSE(isUnit(Structure_Slowpost));
@@ -85,9 +86,20 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9876 adds the MOD10 planned-construction rules; 9877 adds the MOD11 slow city year.
     // 9878 adds the integrated Tornie 1.0.546 object and family gameplay state.
     // 9879 adds the MOD13 shared factory queue rule without new per-builder state.
-    REQUIRE(SAVEGAMEVERSION == 9879);
+    // 9880 lets the QuantBot role byte hold Off (an AI partner switched off in game) and saves a
+    // tax rate per city house.
+    // 9881 appends Research Lab house state and MOD15 research/trooper-AA rules.
+    // 9882/MOD17's pace/area/damage layout is frozen; 9883/MOD18 drops area and adds scenery.
+    // 9884/MOD19 adds technology installments and captured per-house research payment state.
+    REQUIRE(SAVEGAMEVERSION == 9884);
+    REQUIRE(SAVEGAMEVERSION_RESEARCH_INSTALLMENTS == 9884);
+    REQUIRE(SAVEGAMEVERSION_MOUNTAIN_SCENERY == 9883);
+    REQUIRE(SAVEGAMEVERSION_RESEARCH_PACE == 9882);
+    REQUIRE(SAVEGAMEVERSION_RESEARCH_LAB == 9881);
     REQUIRE(SAVEGAMEVERSION_TORNIE546 == 9878);
     REQUIRE(SAVEGAMEVERSION_AI_ROLE == 9875);
+    REQUIRE(SAVEGAMEVERSION_AI_ROLE_OFF == 9880);
+    REQUIRE(SAVEGAMEVERSION_HOUSE_TAX_RATE == 9880);
     REQUIRE(SAVEGAMEVERSION_NATIVES == 9871);
     REQUIRE(SAVEGAMEVERSION_NATIVES_TEAM == 9873);
     REQUIRE(SAVEGAMEVERSION >= 9818);

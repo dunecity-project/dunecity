@@ -16,6 +16,8 @@
  */
 
 #include <players/QuantBotConfig.h>
+#include <players/QuantBotCoreDefencePolicy.h>
+#include <players/QuantBotVanillaPolicy.h>
 #include <FormationPlanner.h>
 #include <FileClasses/FileManager.h>
 #include <FileClasses/INIFile.h>
@@ -308,11 +310,12 @@ QuantBotConfig::QuantBotConfig() {
     recovery.withdrawalsEnabled = false;           // measured: docs/quantbot-all-against-atreides.md
 
     // === FORCE CONCENTRATION (Custom Hard/Brutal) ===
-    // Measured in duels (docs/formations.md, "Concentrating force", rounds 3 and 4): focus
-    // fire + converge + waves at 60% readiness (FCQ) beat the previous defaults; bundling the
-    // idle reserve forward and launching waves from the bundle (BWFCQ) beats FCQ.
+    // Force concentration (docs/formations.md); the r3831-w151 seven-gene treatment and
+    // original-map scope repairs are documented in docs/ai-scenario-matrix.md.
     force.focusFire = true;
-    force.converge = true;
+    force.focusFireLevel = 0;
+    force.targetPriorityLevel = 0;
+    force.converge = false;
     force.waveReadinessPercent = 60;
     force.bundle = true;
     force.launchFromBundle = true;
@@ -321,41 +324,162 @@ QuantBotConfig::QuantBotConfig() {
     // formations.md "Free-for-all: finishing the game"); an old PerimeterHold key is ignored.
     force.perimeterTurrets = true;
     force.sizedDefence = true;
-    // Construction Yard starts (docs/formations.md, "Scenario tests"): holding the first wave
-    // for full readiness beats BWFCQ (CY 1v1, 360 games, 0.567); inert with a Fortress army.
-    force.openingReadiness = true;
-    // Late game (docs/formations.md, "Free-for-all: finishing the game"): candidates, off.
-    force.turretPriority = false;
-    force.pressOn = false;
+    // r3831-w151 releases the full-readiness opening except in OpeningOpenMapScope.
+    force.openingReadiness = false;
+    force.turretPriority = true;
+    force.pressOn = true;
     force.finishWeakest = false;
     force.fortifiedWaves = false;
     force.sonicClearLane = false;
     force.spendAtCap = false;
     force.siegeStandoff = false;
     force.massAssault = false;
-    // The leader finishes the weakest (docs/formations.md, "Free-for-all: finishing the game,
-    // 1.0.848"): 4P DuneCity self-play time-outs 16 -> 13 of 24, first elimination median 37.6 ->
-    // 31.3 min; level head-to-head, on Fortress, /weak, CY and the difficulty ladder.
-    force.finishWhenLeading = true;
+    force.finishWhenLeading = false;
+    force.vanillaFfaWeakestTarget = false;
+    force.vanillaFfaNearbyTarget = false;
+    force.vanillaFfaReserve = false;
+    force.vanillaFfaFullWaves = false;
+    force.vanillaFfaStarportAfterWave = false;
+    force.starportBuying = 0;
+    force.starportCashStockpile = 0;
+    force.starportEconomyPriority = 0;
+    force.vanillaFfaThreatProduction = false;
+    force.vanillaFfaSingleFront = false;
+    force.vanillaFfaLightWorkingCash = false;
+    force.vanillaFfaFundedTech = false;
+    force.vanillaHarvesterBoom = false;
+    force.vanillaRefineryBoom = false;
+    force.vanillaGreedyBoom = false;
+    force.vanillaReactiveBoom = false;
+    force.vanillaBoomFfaOnly = false;
+    force.vanillaBoomSpiceGate = false;
+    force.vanillaBoomSpicePerRefinery = 4000;
+    force.duelOpeningPlan = 2;
+    force.vanillaHarvesterBoomWorkers = 8;
+    force.vanillaRefineryBoomRefineries = 4;
+    force.vanillaGreedyBoomMinutes = 6;
+    force.vanillaReactiveArmyRatioBps = 6000;
+    force.vanillaReactiveEconomyRatioBps = 12000;
+    force.vanillaCoreDefence = false;
+    force.vanillaCoreDefenceThreatBps = 5000;
+    force.vanillaArmyCounters = true;  // counters50-S5, default since protocol 119
+    force.vanillaArmyCounterBlendBps = 5000;
+    force.economicFleetRatios = false;
+    force.fleetHarvestersPerBay = 3;
+    force.fleetCarryallQuarters = 1;
+    force.fleetRepairYards = 1;
+    force.ffaVultureLevel = 0;
+    force.techIncomeTiming = 0;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
     // ally's fresh wave.
     force.joinAllyWaves = false;
+    force.teamSynchroniseAttacks = false;
+    force.teamDefenceSharePercent = 0;
     force.openingCombatBudget = false;
     force.campaignCombatBudget = false;
+    force.campaignPlayerHouse = false;
+    force.campaignMilitaryOpening = true;
+    force.campaignAdaptiveReadiness = true;
+    force.campaignThreatProduction = true;
+    force.campaignFundedLightOpening = true;
+    force.campaignLightWorkingCash = true;
+    force.campaignLightIncomeSeed = true;
+    force.campaignFactoryBeforeStarport = false;
+    force.campaignIdleCashFactory = true;
+    force.campaignIdleCashFactoryCredits = 2000;
+    force.campaignRefineryDefence = false;
+    force.campaignFactoryRunway = false;
+    force.campaignHomeFields = 2;
+    force.campaignSizedWorkerRescue = 0;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
     force.smallMapYardCap = false;
     force.deathHandTurrets = false;
+    force.palaceValueTarget = 0;
+    force.palaceWaveTiming = 0;
     force.spreadVsDeathHand = false;
     // On since 1.0.861: no-spice 1v1, 16 seeds, blue wiped out 8/16 -> 0/16; matrix neutral.
     force.defencePrerequisites = true;
+    // Stefan, 2026-11-01: Hard's city 20k/40k/60k/90k, growing to the largest other city.
+    force.hardCityMatch = true;
+    force.researchLab = true;
+    force.researchLabProgression = true;
+    force.cityGrowthPower = true;
+    force.cityPowerSizing = true;
+    force.cityOpeningCapital = true;
+    force.cityConstructionCapital = true;
+    force.cityProductionPrerequisites = true;
+    force.cityFirstFactorySaving = false;
+    force.cityThreatBudget = false;
+    force.cityZoneDefence = false;
+    force.cityAdvancedTech = false;
+    force.cityContinuousResearch = false;
+    force.cityResearchOrder = 2;
+    force.citySpiceTransition = false;
+    force.spiceFieldExpansion = 0;
+    force.citySpiceCapacityRunway = false;
+    force.citySingleYardGrowth = false;
+    force.cityPowerGrowthHorizon = false;
+    force.cityBoomWorkers = false;
+    force.cityBoomRefineries = false;
+    force.cityBoomGreedy = false;
+    force.cityBoomShortTax = false;
+    force.cityBoomReactive = false;
+    force.cityBoomWorkerGoal = 16;
+    force.cityBoomRefineryGoal = 6;
+    force.cityBoomGreedyMinutes = 6;
+    force.cityBoomTaxMinutes = 6;
+    force.cityBoomArmyRatioBps = 6000;
+    force.cityBoomEconomyRatioBps = 12000;
+    force.cityBoomSpiceGate = false;
+    force.cityBoomPaybackMinutes = 10;
+    force.cityHarvestFieldChoice = false;
+    force.cityHarvestFieldSafetyTiles = 6;
+    force.cityRefineryLogistics = false;
+    force.cityRefinerySiteTiles = 8;
+    force.cityHarvesterReplacement = false;
+    force.cityHarvesterReplacementMinutes = 10;
+    force.cityLandValueServices = false;
+    force.cityLandValueFundingPercent = 60;
+    force.cityGrowthStageTax = false;
+    force.cityGrowthTaxPopulation = 3000;
+    force.cityCapitalPacing = 2;  // default since protocol 120 (1 in 118-119)
+    force.cityFleetRatios = 0;
+    force.cityTechRefineries = 0;
+    force.cityYardRefineries = 0;
+    force.cityWorkerReplacement = 0;
+    force.closingMountainScope = 0;
+    force.convergeChokepointScope = 1;
+    force.openingOpenMapScope = 1;
+    force.vanillaArmyCounterMapScope = 5;
+    force.focusFireMapScope = 0;
+    force.spiceBloomHarvest = 1;
+    force.retreatPreserve = false;
+    force.retreatPreserveLevel = 1;
+    force.harvesterRaid = false;
+    force.harvesterRaidLevel = 1;
+    force.threatTurrets = true;
+    force.moreRocketTurrets = false; // Opt-in: the final paired count-gain gate was not met.
+    force.cityStarportSupply = true;
+    force.storageCapacity = true;
+    force.powerLeadBuildings = 0;
+    force.siloFillPercent = 0;
+    force.fundedClassicProduction = true;
+    force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
+    force.simpleTechSavings = false;
+    force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
+    force.exhaustedArmyDispatch = true;
+    force.mediumClassic = 0; // Regression807 diagnostic: 1.0.807 Custom Medium economy (1) / army (2).
 
     // === GENERAL AI BEHAVIOR ===
     attackTimerMs = 15000;                      // 15 seconds between attacks
     attackThresholdPercent = 0.30f;             // Attack when military >= 30% of limit
     minMoneyForProduction = 500;                // Minimum money to produce units
     strategicSiteGuards = true;
+    policeFundingRecovery = true;
+    deviatedHarvesterEarlyReturn = true;
+    civWarsStrategy = false;                   // Experimental: mirrors did not meet the finishing gate.
     // Attack waves hunt without a formation: in the formation research (docs/formations.md,
     // "Formation research") plain engine-Hunt waves beat every formation shape.
     waveFormation = kWaveFormationNone;
@@ -616,9 +740,14 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
         iniFile.setStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         iniFile.setBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
+        iniFile.setBoolValue("General Behavior", "PoliceFundingRecovery", policeFundingRecovery);
+        iniFile.setBoolValue("General Behavior", "DeviatedHarvesterEarlyReturn", deviatedHarvesterEarlyReturn);
+        iniFile.setBoolValue("Civ Wars", "Strategy", civWarsStrategy);
 
         // === FORCE CONCENTRATION ===
         iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
+        iniFile.setIntValue("Force Concentration", "FocusFireLevel", force.focusFireLevel);
+        iniFile.setIntValue("Force Concentration", "TargetPriorityLevel", force.targetPriorityLevel);
         iniFile.setBoolValue("Force Concentration", "Converge", force.converge);
         iniFile.setIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent);
         iniFile.setBoolValue("Force Concentration", "Bundle", force.bundle);
@@ -635,16 +764,138 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
         iniFile.setBoolValue("Force Concentration", "MassAssault", force.massAssault);
         iniFile.setBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaWeakestTarget", force.vanillaFfaWeakestTarget);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+        iniFile.setIntValue("Force Concentration", "StarportBuying", force.starportBuying);
+        iniFile.setIntValue("Force Concentration", "StarportCashStockpile", force.starportCashStockpile);
+        iniFile.setIntValue("Force Concentration", "StarportEconomyPriority", force.starportEconomyPriority);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
+        iniFile.setBoolValue("Force Concentration", "VanillaFfaFundedTech", force.vanillaFfaFundedTech);
+        iniFile.setBoolValue("Force Concentration", "VanillaHarvesterBoom", force.vanillaHarvesterBoom);
+        iniFile.setBoolValue("Force Concentration", "VanillaRefineryBoom", force.vanillaRefineryBoom);
+        iniFile.setBoolValue("Force Concentration", "VanillaGreedyBoom", force.vanillaGreedyBoom);
+        iniFile.setBoolValue("Force Concentration", "VanillaReactiveBoom", force.vanillaReactiveBoom);
+        iniFile.setBoolValue("Force Concentration", "VanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
+        iniFile.setBoolValue("Force Concentration", "VanillaBoomSpiceGate", force.vanillaBoomSpiceGate);
+        iniFile.setIntValue("Force Concentration", "VanillaBoomSpicePerRefinery", force.vanillaBoomSpicePerRefinery);
+        iniFile.setIntValue("Force Concentration", "DuelOpeningPlan", force.duelOpeningPlan);
+        iniFile.setIntValue("Force Concentration", "VanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers);
+        iniFile.setIntValue("Force Concentration", "VanillaRefineryBoomRefineries", force.vanillaRefineryBoomRefineries);
+        iniFile.setIntValue("Force Concentration", "VanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
+        iniFile.setIntValue("Force Concentration", "VanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps);
+        iniFile.setIntValue("Force Concentration", "VanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps);
+        iniFile.setBoolValue("Force Concentration", "VanillaCoreDefence", force.vanillaCoreDefence);
+        iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
+        iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
+        iniFile.setIntValue("Force Concentration", "VanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
+        iniFile.setBoolValue("Force Concentration", "EconomicFleetRatios", force.economicFleetRatios);
+        iniFile.setIntValue("Force Concentration", "FleetHarvestersPerBay", force.fleetHarvestersPerBay);
+        iniFile.setIntValue("Force Concentration", "FleetCarryallQuarters", force.fleetCarryallQuarters);
+        iniFile.setIntValue("Force Concentration", "FleetRepairYards", force.fleetRepairYards);
+        iniFile.setIntValue("Force Concentration", "FfaVultureLevel", force.ffaVultureLevel);
+        iniFile.setIntValue("Force Concentration", "TechIncomeTiming", force.techIncomeTiming);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
+        iniFile.setBoolValue("Force Concentration", "TeamSynchroniseAttacks", force.teamSynchroniseAttacks);
+        iniFile.setIntValue("Force Concentration", "TeamDefenceSharePercent", force.teamDefenceSharePercent);
         iniFile.setBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
         iniFile.setBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+        iniFile.setBoolValue("Force Concentration", "CampaignPlayerHouse", force.campaignPlayerHouse);
+        iniFile.setBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
+        iniFile.setBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
+        iniFile.setBoolValue("Force Concentration", "CampaignThreatProduction", force.campaignThreatProduction);
+        iniFile.setBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);
+        iniFile.setBoolValue("Force Concentration", "CampaignLightWorkingCash", force.campaignLightWorkingCash);
+        iniFile.setBoolValue("Force Concentration", "CampaignLightIncomeSeed", force.campaignLightIncomeSeed);
+        iniFile.setBoolValue("Force Concentration", "CampaignFactoryBeforeStarport", force.campaignFactoryBeforeStarport);
+        iniFile.setBoolValue("Force Concentration", "CampaignIdleCashFactory", force.campaignIdleCashFactory);
+        iniFile.setIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
+        iniFile.setBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
+        iniFile.setBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
+        iniFile.setIntValue("Force Concentration", "CampaignHomeFields", force.campaignHomeFields);
+        iniFile.setIntValue("Force Concentration", "CampaignSizedWorkerRescue", force.campaignSizedWorkerRescue);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
         iniFile.setBoolValue("Force Concentration", "SmallMapYardCap", force.smallMapYardCap);
         iniFile.setBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
+        iniFile.setIntValue("Force Concentration", "PalaceValueTarget", force.palaceValueTarget);
+        iniFile.setIntValue("Force Concentration", "PalaceWaveTiming", force.palaceWaveTiming);
         iniFile.setBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
         iniFile.setBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
+        iniFile.setBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
+        iniFile.setBoolValue("Force Concentration", "ResearchLab", force.researchLab);
+        iniFile.setBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
+        iniFile.setBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
+        iniFile.setBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
+        iniFile.setBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
+        iniFile.setBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
+        iniFile.setBoolValue("Force Concentration", "CityProductionPrerequisites", force.cityProductionPrerequisites);
+        iniFile.setBoolValue("Force Concentration", "CityFirstFactorySaving", force.cityFirstFactorySaving);
+        iniFile.setBoolValue("Force Concentration", "CityThreatBudget", force.cityThreatBudget);
+        iniFile.setBoolValue("Force Concentration", "CityZoneDefence", force.cityZoneDefence);
+        iniFile.setBoolValue("Force Concentration", "CityAdvancedTech", force.cityAdvancedTech);
+        iniFile.setBoolValue("Force Concentration", "CityContinuousResearch", force.cityContinuousResearch);
+        iniFile.setIntValue("Force Concentration", "CityResearchOrder", force.cityResearchOrder);
+        iniFile.setBoolValue("Force Concentration", "CitySpiceTransition", force.citySpiceTransition);
+        iniFile.setIntValue("Force Concentration", "SpiceFieldExpansion", force.spiceFieldExpansion);
+        iniFile.setBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
+        iniFile.setBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
+        iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+        iniFile.setBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
+        iniFile.setBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
+        iniFile.setBoolValue("Force Concentration", "CityBoomGreedy", force.cityBoomGreedy);
+        iniFile.setBoolValue("Force Concentration", "CityBoomShortTax", force.cityBoomShortTax);
+        iniFile.setBoolValue("Force Concentration", "CityBoomReactive", force.cityBoomReactive);
+        iniFile.setIntValue("Force Concentration", "CityBoomWorkerGoal", force.cityBoomWorkerGoal);
+        iniFile.setIntValue("Force Concentration", "CityBoomRefineryGoal", force.cityBoomRefineryGoal);
+        iniFile.setIntValue("Force Concentration", "CityBoomGreedyMinutes", force.cityBoomGreedyMinutes);
+        iniFile.setIntValue("Force Concentration", "CityBoomTaxMinutes", force.cityBoomTaxMinutes);
+        iniFile.setIntValue("Force Concentration", "CityBoomArmyRatioBps", force.cityBoomArmyRatioBps);
+        iniFile.setIntValue("Force Concentration", "CityBoomEconomyRatioBps", force.cityBoomEconomyRatioBps);
+        iniFile.setBoolValue("Force Concentration", "CityBoomSpiceGate", force.cityBoomSpiceGate);
+        iniFile.setIntValue("Force Concentration", "CityBoomPaybackMinutes", force.cityBoomPaybackMinutes);
+        iniFile.setBoolValue("Force Concentration", "CityHarvestFieldChoice", force.cityHarvestFieldChoice);
+        iniFile.setIntValue("Force Concentration", "CityHarvestFieldSafetyTiles", force.cityHarvestFieldSafetyTiles);
+        iniFile.setBoolValue("Force Concentration", "CityRefineryLogistics", force.cityRefineryLogistics);
+        iniFile.setIntValue("Force Concentration", "CityRefinerySiteTiles", force.cityRefinerySiteTiles);
+        iniFile.setBoolValue("Force Concentration", "CityHarvesterReplacement", force.cityHarvesterReplacement);
+        iniFile.setIntValue("Force Concentration", "CityHarvesterReplacementMinutes", force.cityHarvesterReplacementMinutes);
+        iniFile.setBoolValue("Force Concentration", "CityLandValueServices", force.cityLandValueServices);
+        iniFile.setIntValue("Force Concentration", "CityLandValueFundingPercent", force.cityLandValueFundingPercent);
+        iniFile.setBoolValue("Force Concentration", "CityGrowthStageTax", force.cityGrowthStageTax);
+        iniFile.setIntValue("Force Concentration", "CityGrowthTaxPopulation", force.cityGrowthTaxPopulation);
+        iniFile.setIntValue("Force Concentration", "CityCapitalPacing", force.cityCapitalPacing);
+        iniFile.setIntValue("Force Concentration", "CityFleetRatios", force.cityFleetRatios);
+        iniFile.setIntValue("Force Concentration", "CityTechRefineries", force.cityTechRefineries);
+        iniFile.setIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries);
+        iniFile.setIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement);
+        iniFile.setIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope);
+        iniFile.setIntValue("Force Concentration", "ConvergeChokepointScope", force.convergeChokepointScope);
+        iniFile.setIntValue("Force Concentration", "OpeningOpenMapScope", force.openingOpenMapScope);
+        iniFile.setIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
+        iniFile.setIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope);
+        iniFile.setIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest);
+        iniFile.setBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
+        iniFile.setIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel);
+        iniFile.setBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
+        iniFile.setIntValue("Force Concentration", "HarvesterRaidLevel", force.harvesterRaidLevel);
+        iniFile.setBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
+        iniFile.setBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
+        iniFile.setBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
+        iniFile.setBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
+        iniFile.setIntValue("Force Concentration", "PowerLeadBuildings", force.powerLeadBuildings);
+        iniFile.setIntValue("Force Concentration", "SiloFillPercent", force.siloFillPercent);
+        iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
+        iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
+        iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
+        iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
+        iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
+        iniFile.setIntValue("Force Concentration", "MediumClassic", force.mediumClassic);
 
         // === TARGET PRIORITIES ===
         savePriorities(iniFile, "Structure Priorities", structurePriorities);
@@ -734,6 +985,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     attackThresholdPercent = static_cast<float>(iniFile.getDoubleValue("General Behavior", "AttackThresholdPercent", attackThresholdPercent));
     minMoneyForProduction = iniFile.getIntValue("General Behavior", "MinMoneyForProduction", minMoneyForProduction);
     strategicSiteGuards = iniFile.getBoolValue("General Behavior", "StrategicSiteGuards", strategicSiteGuards);
+    policeFundingRecovery = iniFile.getBoolValue("General Behavior", "PoliceFundingRecovery", policeFundingRecovery);
+    deviatedHarvesterEarlyReturn = iniFile.getBoolValue("General Behavior", "DeviatedHarvesterEarlyReturn", deviatedHarvesterEarlyReturn);
     {
         const std::string shape = iniFile.getStringValue("General Behavior", "WaveFormation", waveFormationName(waveFormation));
         const int parsed = parseWaveFormation(shape, INT_MIN);
@@ -741,6 +994,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         else waveFormation = parsed;
     }
     force.focusFire = iniFile.getBoolValue("Force Concentration", "FocusFire", force.focusFire);
+    force.focusFireLevel = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireLevel", force.focusFireLevel), 0, 2);
+    force.targetPriorityLevel = std::clamp(iniFile.getIntValue("Force Concentration", "TargetPriorityLevel", force.targetPriorityLevel), 0, 2);
     force.converge = iniFile.getBoolValue("Force Concentration", "Converge", force.converge);
     force.waveReadinessPercent = std::clamp(
         iniFile.getIntValue("Force Concentration", "WaveReadinessPercent", force.waveReadinessPercent), 10, 300);
@@ -758,16 +1013,163 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.siegeStandoff = iniFile.getBoolValue("Force Concentration", "SiegeStandoff", force.siegeStandoff);
     force.massAssault = iniFile.getBoolValue("Force Concentration", "MassAssault", force.massAssault);
     force.finishWhenLeading = iniFile.getBoolValue("Force Concentration", "FinishWhenLeading", force.finishWhenLeading);
+    force.vanillaFfaWeakestTarget = iniFile.getBoolValue("Force Concentration", "VanillaFfaWeakestTarget", force.vanillaFfaWeakestTarget);
+    force.vanillaFfaNearbyTarget = iniFile.getBoolValue("Force Concentration", "VanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
+    force.vanillaFfaReserve = iniFile.getBoolValue("Force Concentration", "VanillaFfaReserve", force.vanillaFfaReserve);
+    force.vanillaFfaFullWaves = iniFile.getBoolValue("Force Concentration", "VanillaFfaFullWaves", force.vanillaFfaFullWaves);
+    force.vanillaFfaStarportAfterWave = iniFile.getBoolValue("Force Concentration", "VanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+    force.starportBuying = std::clamp(iniFile.getIntValue("Force Concentration", "StarportBuying", force.starportBuying), 0, 2);
+    force.starportCashStockpile = std::clamp(iniFile.getIntValue("Force Concentration", "StarportCashStockpile", force.starportCashStockpile), 0, 2);
+    force.starportEconomyPriority = std::clamp(iniFile.getIntValue("Force Concentration", "StarportEconomyPriority", force.starportEconomyPriority), 0, 2);
+    force.vanillaFfaThreatProduction = iniFile.getBoolValue("Force Concentration", "VanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
+    force.vanillaFfaSingleFront = iniFile.getBoolValue("Force Concentration", "VanillaFfaSingleFront", force.vanillaFfaSingleFront);
+    force.vanillaFfaLightWorkingCash = iniFile.getBoolValue("Force Concentration", "VanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
+    force.vanillaFfaFundedTech = iniFile.getBoolValue("Force Concentration", "VanillaFfaFundedTech", force.vanillaFfaFundedTech);
+    force.vanillaHarvesterBoom = iniFile.getBoolValue("Force Concentration", "VanillaHarvesterBoom", force.vanillaHarvesterBoom);
+    force.vanillaRefineryBoom = iniFile.getBoolValue("Force Concentration", "VanillaRefineryBoom", force.vanillaRefineryBoom);
+    force.vanillaGreedyBoom = iniFile.getBoolValue("Force Concentration", "VanillaGreedyBoom", force.vanillaGreedyBoom);
+    force.vanillaReactiveBoom = iniFile.getBoolValue("Force Concentration", "VanillaReactiveBoom", force.vanillaReactiveBoom);
+    force.vanillaBoomFfaOnly = iniFile.getBoolValue("Force Concentration", "VanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
+    force.vanillaBoomSpiceGate = iniFile.getBoolValue("Force Concentration", "VanillaBoomSpiceGate", force.vanillaBoomSpiceGate);
+    force.vanillaBoomSpicePerRefinery = QuantBotVanillaPolicy::spicePerRefineryLevel(iniFile.getIntValue(
+        "Force Concentration", "VanillaBoomSpicePerRefinery", force.vanillaBoomSpicePerRefinery));
+    force.duelOpeningPlan = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "DuelOpeningPlan", force.duelOpeningPlan), 0, 3);
+    force.vanillaHarvesterBoomWorkers = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "VanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers), 8, 12);
+    force.vanillaRefineryBoomRefineries = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "VanillaRefineryBoomRefineries", force.vanillaRefineryBoomRefineries), 4, 6);
+    force.vanillaGreedyBoomMinutes = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "VanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes), 6, 12);
+    force.vanillaReactiveArmyRatioBps = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "VanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps), 6000, 9000);
+    force.vanillaReactiveEconomyRatioBps = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "VanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps), 12000, 15000);
+    force.vanillaCoreDefence = iniFile.getBoolValue("Force Concentration", "VanillaCoreDefence", force.vanillaCoreDefence);
+    // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
+    force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
+        "Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps));
+    force.vanillaArmyCounters = iniFile.getBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
+    force.vanillaArmyCounterBlendBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
+        "Force Concentration", "VanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps));
+    force.economicFleetRatios = iniFile.getBoolValue("Force Concentration", "EconomicFleetRatios", force.economicFleetRatios);
+    force.fleetHarvestersPerBay = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "FleetHarvestersPerBay", force.fleetHarvestersPerBay), 2, 4);
+    force.fleetCarryallQuarters = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "FleetCarryallQuarters", force.fleetCarryallQuarters), 0, 2);
+    force.fleetRepairYards = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "FleetRepairYards", force.fleetRepairYards), 0, 1);
+    force.ffaVultureLevel = std::clamp(iniFile.getIntValue("Force Concentration", "FfaVultureLevel", force.ffaVultureLevel), 0, 2);
+    force.techIncomeTiming = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "TechIncomeTiming", force.techIncomeTiming), 0, 2);
     force.joinAllyWaves = iniFile.getBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
+    force.teamSynchroniseAttacks = iniFile.getBoolValue("Force Concentration", "TeamSynchroniseAttacks", force.teamSynchroniseAttacks);
+    force.teamDefenceSharePercent = iniFile.getIntValue("Force Concentration", "TeamDefenceSharePercent", force.teamDefenceSharePercent);
+    if (force.teamDefenceSharePercent != 25 && force.teamDefenceSharePercent != 50)
+        force.teamDefenceSharePercent = 0;
     force.openingCombatBudget = iniFile.getBoolValue("Force Concentration", "OpeningCombatBudget", force.openingCombatBudget);
     force.campaignCombatBudget = iniFile.getBoolValue("Force Concentration", "CampaignCombatBudget", force.campaignCombatBudget);
+    force.campaignPlayerHouse = iniFile.getBoolValue("Force Concentration", "CampaignPlayerHouse", force.campaignPlayerHouse);
+    force.campaignMilitaryOpening = iniFile.getBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
+    force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
+    force.campaignThreatProduction = iniFile.getBoolValue("Force Concentration", "CampaignThreatProduction", force.campaignThreatProduction);
+    force.campaignFundedLightOpening = iniFile.getBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);
+    force.campaignLightWorkingCash = iniFile.getBoolValue("Force Concentration", "CampaignLightWorkingCash", force.campaignLightWorkingCash);
+    force.campaignLightIncomeSeed = iniFile.getBoolValue("Force Concentration", "CampaignLightIncomeSeed", force.campaignLightIncomeSeed);
+    force.campaignFactoryBeforeStarport = iniFile.getBoolValue("Force Concentration", "CampaignFactoryBeforeStarport", force.campaignFactoryBeforeStarport);
+    force.campaignIdleCashFactory = iniFile.getBoolValue("Force Concentration", "CampaignIdleCashFactory", force.campaignIdleCashFactory);
+    force.campaignIdleCashFactoryCredits = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits), 1500, 2000);
+    force.campaignRefineryDefence = iniFile.getBoolValue("Force Concentration", "CampaignRefineryDefence", force.campaignRefineryDefence);
+    force.campaignFactoryRunway = iniFile.getBoolValue("Force Concentration", "CampaignFactoryRunway", force.campaignFactoryRunway);
+    force.campaignHomeFields = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignHomeFields", force.campaignHomeFields), 0, 2);
+    force.campaignSizedWorkerRescue = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignSizedWorkerRescue", force.campaignSizedWorkerRescue), 0, 2);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
     force.smallMapYardCap = iniFile.getBoolValue("Force Concentration", "SmallMapYardCap", force.smallMapYardCap);
     force.deathHandTurrets = iniFile.getBoolValue("Force Concentration", "DeathHandTurrets", force.deathHandTurrets);
+    force.palaceValueTarget = std::clamp(iniFile.getIntValue("Force Concentration", "PalaceValueTarget", force.palaceValueTarget), 0, 2);
+    force.palaceWaveTiming = std::clamp(iniFile.getIntValue("Force Concentration", "PalaceWaveTiming", force.palaceWaveTiming), 0, 2);
     force.spreadVsDeathHand = iniFile.getBoolValue("Force Concentration", "SpreadVsDeathHand", force.spreadVsDeathHand);
     force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
+    force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
+    civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
+    force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
+    force.researchLabProgression = iniFile.getBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
+    force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
+    force.cityPowerSizing = iniFile.getBoolValue("Force Concentration", "CityPowerSizing", force.cityPowerSizing);
+    force.cityOpeningCapital = iniFile.getBoolValue("Force Concentration", "CityOpeningCapital", force.cityOpeningCapital);
+    force.cityConstructionCapital = iniFile.getBoolValue("Force Concentration", "CityConstructionCapital", force.cityConstructionCapital);
+    force.cityProductionPrerequisites = iniFile.getBoolValue("Force Concentration", "CityProductionPrerequisites", force.cityProductionPrerequisites);
+    force.cityFirstFactorySaving = iniFile.getBoolValue("Force Concentration", "CityFirstFactorySaving", force.cityFirstFactorySaving);
+    force.cityThreatBudget = iniFile.getBoolValue("Force Concentration", "CityThreatBudget", force.cityThreatBudget);
+    force.cityZoneDefence = iniFile.getBoolValue("Force Concentration", "CityZoneDefence", force.cityZoneDefence);
+    force.cityAdvancedTech = iniFile.getBoolValue("Force Concentration", "CityAdvancedTech", force.cityAdvancedTech);
+    force.cityContinuousResearch = iniFile.getBoolValue("Force Concentration", "CityContinuousResearch", force.cityContinuousResearch);
+    force.cityResearchOrder = std::clamp(iniFile.getIntValue("Force Concentration", "CityResearchOrder", force.cityResearchOrder), 0, 2);
+    force.citySpiceTransition = iniFile.getBoolValue("Force Concentration", "CitySpiceTransition", force.citySpiceTransition);
+    force.spiceFieldExpansion = iniFile.getIntValue("Force Concentration", "SpiceFieldExpansion", force.spiceFieldExpansion);
+    force.citySpiceCapacityRunway = iniFile.getBoolValue("Force Concentration", "CitySpiceCapacityRunway", force.citySpiceCapacityRunway);
+    force.citySingleYardGrowth = iniFile.getBoolValue("Force Concentration", "CitySingleYardGrowth", force.citySingleYardGrowth);
+    force.cityPowerGrowthHorizon = iniFile.getBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+    force.cityBoomWorkers = iniFile.getBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
+    force.cityBoomRefineries = iniFile.getBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
+    force.cityBoomGreedy = iniFile.getBoolValue("Force Concentration", "CityBoomGreedy", force.cityBoomGreedy);
+    force.cityBoomShortTax = iniFile.getBoolValue("Force Concentration", "CityBoomShortTax", force.cityBoomShortTax);
+    force.cityBoomReactive = iniFile.getBoolValue("Force Concentration", "CityBoomReactive", force.cityBoomReactive);
+    force.cityBoomWorkerGoal = iniFile.getIntValue("Force Concentration", "CityBoomWorkerGoal", force.cityBoomWorkerGoal) == 24 ? 24 : 16;
+    force.cityBoomRefineryGoal = iniFile.getIntValue("Force Concentration", "CityBoomRefineryGoal", force.cityBoomRefineryGoal) == 10 ? 10 : 6;
+    force.cityBoomGreedyMinutes = iniFile.getIntValue("Force Concentration", "CityBoomGreedyMinutes", force.cityBoomGreedyMinutes) == 10 ? 10 : 6;
+    force.cityBoomTaxMinutes = iniFile.getIntValue("Force Concentration", "CityBoomTaxMinutes", force.cityBoomTaxMinutes) == 10 ? 10 : 6;
+    force.cityBoomArmyRatioBps = iniFile.getIntValue("Force Concentration", "CityBoomArmyRatioBps", force.cityBoomArmyRatioBps) == 9000 ? 9000 : 6000;
+    force.cityBoomEconomyRatioBps = iniFile.getIntValue("Force Concentration", "CityBoomEconomyRatioBps", force.cityBoomEconomyRatioBps) == 15000 ? 15000 : 12000;
+    force.cityBoomSpiceGate = iniFile.getBoolValue("Force Concentration", "CityBoomSpiceGate", force.cityBoomSpiceGate);
+    force.cityBoomPaybackMinutes = iniFile.getIntValue("Force Concentration", "CityBoomPaybackMinutes", force.cityBoomPaybackMinutes) == 15 ? 15 : 10;
+    force.cityHarvestFieldChoice = iniFile.getBoolValue("Force Concentration", "CityHarvestFieldChoice", force.cityHarvestFieldChoice);
+    force.cityHarvestFieldSafetyTiles = iniFile.getIntValue("Force Concentration", "CityHarvestFieldSafetyTiles", force.cityHarvestFieldSafetyTiles) == 10 ? 10 : 6;
+    force.cityRefineryLogistics = iniFile.getBoolValue("Force Concentration", "CityRefineryLogistics", force.cityRefineryLogistics);
+    force.cityRefinerySiteTiles = iniFile.getIntValue("Force Concentration", "CityRefinerySiteTiles", force.cityRefinerySiteTiles) == 12 ? 12 : 8;
+    force.cityHarvesterReplacement = iniFile.getBoolValue("Force Concentration", "CityHarvesterReplacement", force.cityHarvesterReplacement);
+    force.cityHarvesterReplacementMinutes = iniFile.getIntValue("Force Concentration", "CityHarvesterReplacementMinutes", force.cityHarvesterReplacementMinutes) == 15 ? 15 : 10;
+    force.cityLandValueServices = iniFile.getBoolValue("Force Concentration", "CityLandValueServices", force.cityLandValueServices);
+    force.cityLandValueFundingPercent = iniFile.getIntValue("Force Concentration", "CityLandValueFundingPercent", force.cityLandValueFundingPercent) == 100 ? 100 : 60;
+    force.cityGrowthStageTax = iniFile.getBoolValue("Force Concentration", "CityGrowthStageTax", force.cityGrowthStageTax);
+    force.cityGrowthTaxPopulation = iniFile.getIntValue("Force Concentration", "CityGrowthTaxPopulation", force.cityGrowthTaxPopulation) == 6000 ? 6000 : 3000;
+    force.cityCapitalPacing = std::clamp(iniFile.getIntValue("Force Concentration", "CityCapitalPacing", force.cityCapitalPacing), 0, 2);
+    force.cityFleetRatios = std::clamp(iniFile.getIntValue("Force Concentration", "CityFleetRatios", force.cityFleetRatios), 0, 2);
+    force.cityTechRefineries = std::clamp(iniFile.getIntValue("Force Concentration", "CityTechRefineries", force.cityTechRefineries), 0, 2);
+    force.cityYardRefineries = std::clamp(iniFile.getIntValue("Force Concentration", "CityYardRefineries", force.cityYardRefineries), 0, 2);
+    force.cityWorkerReplacement = std::clamp(iniFile.getIntValue("Force Concentration", "CityWorkerReplacement", force.cityWorkerReplacement), 0, 2);
+    force.closingMountainScope = std::clamp(iniFile.getIntValue("Force Concentration", "ClosingMountainScope", force.closingMountainScope), 0, 2);
+    force.convergeChokepointScope = std::clamp(iniFile.getIntValue("Force Concentration", "ConvergeChokepointScope", force.convergeChokepointScope), 0, 1);
+    force.openingOpenMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "OpeningOpenMapScope", force.openingOpenMapScope), 0, 1);
+    force.vanillaArmyCounterMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "VanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope), 0, 5);
+    force.focusFireMapScope = std::clamp(iniFile.getIntValue("Force Concentration", "FocusFireMapScope", force.focusFireMapScope), 0, 5);
+    force.spiceBloomHarvest = std::clamp(iniFile.getIntValue("Force Concentration", "SpiceBloomHarvest", force.spiceBloomHarvest), 0, 2);
+    force.retreatPreserve = iniFile.getBoolValue("Force Concentration", "RetreatPreserve", force.retreatPreserve);
+    force.retreatPreserveLevel = std::clamp(iniFile.getIntValue("Force Concentration", "RetreatPreserveLevel", force.retreatPreserveLevel), 1, 2);
+    force.harvesterRaid = iniFile.getBoolValue("Force Concentration", "HarvesterRaid", force.harvesterRaid);
+    force.harvesterRaidLevel = std::clamp(iniFile.getIntValue("Force Concentration", "HarvesterRaidLevel", force.harvesterRaidLevel), 1, 2);
+    force.threatTurrets = iniFile.getBoolValue("Force Concentration", "ThreatTurrets", force.threatTurrets);
+    force.moreRocketTurrets = iniFile.getBoolValue("Force Concentration", "MoreRocketTurrets", force.moreRocketTurrets);
+    force.cityStarportSupply = iniFile.getBoolValue("Force Concentration", "CityStarportSupply", force.cityStarportSupply);
+    force.storageCapacity = iniFile.getBoolValue("Force Concentration", "StorageCapacity", force.storageCapacity);
+    force.powerLeadBuildings = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "PowerLeadBuildings", force.powerLeadBuildings), 0, 2);
+    const int siloFill = iniFile.getIntValue("Force Concentration", "SiloFillPercent", force.siloFillPercent);
+    if (siloFill == 0 || siloFill == 80 || siloFill == 90) force.siloFillPercent = siloFill;
+    force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
+    force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
+    force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
+    force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
+    force.exhaustedArmyDispatch = iniFile.getBoolValue(
+        "Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
+    force.mediumClassic = std::clamp(iniFile.getIntValue(
+        "Force Concentration", "MediumClassic", force.mediumClassic), 0, 2);
     // [Strategy]: optional keys, never written by save(); a malformed value keeps the current one.
     if (iniFile.hasKey("Strategy", "Mode")) {
         const std::string mode = iniFile.getStringValue("Strategy", "Mode");
@@ -1065,6 +1467,9 @@ void QuantBotConfig::logSettings() const {
     SDL_Log("MinMoneyForProduction: %d", minMoneyForProduction);
     SDL_Log("WaveFormation: %s", waveFormationName(waveFormation));
     SDL_Log("StrategicSiteGuards: %d", int(strategicSiteGuards));
+    SDL_Log("PoliceFundingRecovery: %d", int(policeFundingRecovery));
+    SDL_Log("DeviatedHarvesterEarlyReturn: %d", int(deviatedHarvesterEarlyReturn));
+    SDL_Log("ExhaustedArmyDispatch: %d", int(force.exhaustedArmyDispatch));
     SDL_Log("%s", "");
 
     SDL_Log("=== ARMY RECOVERY (Custom Hard/Brutal, provisional) ===");
@@ -1201,6 +1606,8 @@ std::string QuantBotConfig::getConfigHash() const {
         configStr += '|'; configStr += name; configStr += '='; configStr += std::to_string(value);
     };
     addNamed("strategicSiteGuards", strategicSiteGuards);
+    addNamed("policeFundingRecovery", policeFundingRecovery);
+    addNamed("deviatedHarvesterEarlyReturn", deviatedHarvesterEarlyReturn);
     configStr += "|REC";
     addNamed("enabled", recovery.enabled);
     addNamed("windowMs", recovery.attritionWindowMs);
@@ -1224,6 +1631,9 @@ std::string QuantBotConfig::getConfigHash() const {
     configStr += "|/REC|";
     configStr += "|FORCE";
     addNamed("focusFire", force.focusFire);
+    // OFF preserves the native config hash, including strategy's seeded choices.
+    if (force.focusFireLevel) addNamed("focusFireLevel", force.focusFireLevel);
+    if (force.targetPriorityLevel) addNamed("targetPriorityLevel", force.targetPriorityLevel);
     addNamed("converge", force.converge);
     addNamed("waveReadinessPercent", force.waveReadinessPercent);
     addNamed("bundle", force.bundle);
@@ -1240,17 +1650,144 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("siegeStandoff", force.siegeStandoff);
     addNamed("massAssault", force.massAssault);
     addNamed("finishWhenLeading", force.finishWhenLeading);
+    addNamed("vanillaFfaWeakestTarget", force.vanillaFfaWeakestTarget);
+    addNamed("vanillaFfaNearbyTarget", force.vanillaFfaNearbyTarget);
+    addNamed("vanillaFfaReserve", force.vanillaFfaReserve);
+    addNamed("vanillaFfaFullWaves", force.vanillaFfaFullWaves);
+    addNamed("vanillaFfaStarportAfterWave", force.vanillaFfaStarportAfterWave);
+    if (force.starportBuying) addNamed("starportBuying", force.starportBuying);
+    if (force.starportCashStockpile) addNamed("starportCashStockpile", force.starportCashStockpile);
+    if (force.starportEconomyPriority) addNamed("starportEconomyPriority", force.starportEconomyPriority);
+    addNamed("vanillaFfaThreatProduction", force.vanillaFfaThreatProduction);
+    addNamed("vanillaFfaSingleFront", force.vanillaFfaSingleFront);
+    addNamed("vanillaFfaLightWorkingCash", force.vanillaFfaLightWorkingCash);
+    addNamed("vanillaFfaFundedTech", force.vanillaFfaFundedTech);
+    addNamed("vanillaHarvesterBoom", force.vanillaHarvesterBoom);
+    addNamed("vanillaRefineryBoom", force.vanillaRefineryBoom);
+    addNamed("vanillaGreedyBoom", force.vanillaGreedyBoom);
+    addNamed("vanillaReactiveBoom", force.vanillaReactiveBoom);
+    addNamed("vanillaBoomFfaOnly", force.vanillaBoomFfaOnly);
+    addNamed("vanillaBoomSpiceGate", force.vanillaBoomSpiceGate);
+    addNamed("vanillaBoomSpicePerRefinery", force.vanillaBoomSpicePerRefinery);
+    if (force.duelOpeningPlan != 0) addNamed("duelOpeningPlan", force.duelOpeningPlan);
+    addNamed("vanillaHarvesterBoomWorkers", force.vanillaHarvesterBoomWorkers);
+    addNamed("vanillaRefineryBoomRefineries", force.vanillaRefineryBoomRefineries);
+    addNamed("vanillaGreedyBoomMinutes", force.vanillaGreedyBoomMinutes);
+    addNamed("vanillaReactiveArmyRatioBps", force.vanillaReactiveArmyRatioBps);
+    addNamed("vanillaReactiveEconomyRatioBps", force.vanillaReactiveEconomyRatioBps);
+    addNamed("vanillaCoreDefence", force.vanillaCoreDefence);
+    addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
+    addNamed("vanillaArmyCounters", force.vanillaArmyCounters);
+    addNamed("vanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
+    addNamed("economicFleetRatios", force.economicFleetRatios);
+    addNamed("fleetHarvestersPerBay", force.fleetHarvestersPerBay);
+    addNamed("fleetCarryallQuarters", force.fleetCarryallQuarters);
+    addNamed("fleetRepairYards", force.fleetRepairYards);
+    if (force.ffaVultureLevel != 0) addNamed("ffaVultureLevel", force.ffaVultureLevel);
+    addNamed("techIncomeTiming", force.techIncomeTiming);
     addNamed("joinAllyWaves", force.joinAllyWaves);
+    addNamed("teamSynchroniseAttacks", force.teamSynchroniseAttacks);
+    addNamed("teamDefenceSharePercent", force.teamDefenceSharePercent);
     addNamed("openingCombatBudget", force.openingCombatBudget);
     addNamed("campaignCombatBudget", force.campaignCombatBudget);
+    addNamed("campaignPlayerHouse", force.campaignPlayerHouse);
+    addNamed("campaignMilitaryOpening", force.campaignMilitaryOpening);
+    addNamed("campaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
+    addNamed("campaignThreatProduction", force.campaignThreatProduction);
+    addNamed("campaignFundedLightOpening", force.campaignFundedLightOpening);
+    addNamed("campaignLightWorkingCash", force.campaignLightWorkingCash);
+    addNamed("campaignLightIncomeSeed", force.campaignLightIncomeSeed);
+    addNamed("campaignFactoryBeforeStarport", force.campaignFactoryBeforeStarport);
+    addNamed("campaignIdleCashFactory", force.campaignIdleCashFactory);
+    addNamed("campaignIdleCashFactoryCredits", force.campaignIdleCashFactoryCredits);
+    addNamed("campaignRefineryDefence", force.campaignRefineryDefence);
+    addNamed("campaignFactoryRunway", force.campaignFactoryRunway);
+    addNamed("campaignHomeFields", force.campaignHomeFields);
+    addNamed("campaignSizedWorkerRescue", force.campaignSizedWorkerRescue);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);
     addNamed("smallMapYardCap", force.smallMapYardCap);
     addNamed("deathHandTurrets", force.deathHandTurrets);
+    addNamed("palaceValueTarget", force.palaceValueTarget);
+    addNamed("palaceWaveTiming", force.palaceWaveTiming);
     addNamed("spreadVsDeathHand", force.spreadVsDeathHand);
     addNamed("defencePrerequisites", force.defencePrerequisites);
+    addNamed("hardCityMatch", force.hardCityMatch);
+    addNamed("researchLab", force.researchLab);
+    addNamed("researchLabProgression", force.researchLabProgression);
+    addNamed("cityGrowthPower", force.cityGrowthPower);
+    addNamed("cityPowerSizing", force.cityPowerSizing);
+    addNamed("cityOpeningCapital", force.cityOpeningCapital);
+    addNamed("cityConstructionCapital", force.cityConstructionCapital);
+    addNamed("cityProductionPrerequisites", force.cityProductionPrerequisites);
+    addNamed("cityFirstFactorySaving", force.cityFirstFactorySaving);
+    addNamed("cityThreatBudget", force.cityThreatBudget);
+    addNamed("cityZoneDefence", force.cityZoneDefence);
+    addNamed("cityAdvancedTech", force.cityAdvancedTech);
+    addNamed("cityContinuousResearch", force.cityContinuousResearch);
+    addNamed("cityResearchOrder", force.cityResearchOrder);
+    addNamed("citySpiceTransition", force.citySpiceTransition);
+    if (force.spiceFieldExpansion != 0) addNamed("spiceFieldExpansion", force.spiceFieldExpansion);
+    addNamed("citySpiceCapacityRunway", force.citySpiceCapacityRunway);
+    addNamed("citySingleYardGrowth", force.citySingleYardGrowth);
+    addNamed("cityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
+    addNamed("cityBoomWorkers", force.cityBoomWorkers);
+    addNamed("cityBoomRefineries", force.cityBoomRefineries);
+    addNamed("cityBoomGreedy", force.cityBoomGreedy);
+    addNamed("cityBoomShortTax", force.cityBoomShortTax);
+    addNamed("cityBoomReactive", force.cityBoomReactive);
+    addNamed("cityBoomWorkerGoal", force.cityBoomWorkerGoal);
+    addNamed("cityBoomRefineryGoal", force.cityBoomRefineryGoal);
+    addNamed("cityBoomGreedyMinutes", force.cityBoomGreedyMinutes);
+    addNamed("cityBoomTaxMinutes", force.cityBoomTaxMinutes);
+    addNamed("cityBoomArmyRatioBps", force.cityBoomArmyRatioBps);
+    addNamed("cityBoomEconomyRatioBps", force.cityBoomEconomyRatioBps);
+    addNamed("cityBoomSpiceGate", force.cityBoomSpiceGate);
+    addNamed("cityBoomPaybackMinutes", force.cityBoomPaybackMinutes);
+    addNamed("cityHarvestFieldChoice", force.cityHarvestFieldChoice);
+    addNamed("cityHarvestFieldSafetyTiles", force.cityHarvestFieldSafetyTiles);
+    addNamed("cityRefineryLogistics", force.cityRefineryLogistics);
+    addNamed("cityRefinerySiteTiles", force.cityRefinerySiteTiles);
+    addNamed("cityHarvesterReplacement", force.cityHarvesterReplacement);
+    addNamed("cityHarvesterReplacementMinutes", force.cityHarvesterReplacementMinutes);
+    addNamed("cityLandValueServices", force.cityLandValueServices);
+    addNamed("cityLandValueFundingPercent", force.cityLandValueFundingPercent);
+    addNamed("cityGrowthStageTax", force.cityGrowthStageTax);
+    addNamed("cityGrowthTaxPopulation", force.cityGrowthTaxPopulation);
+    // Batch3 City levels: absent (OFF) keeps the native multiplayer hash.
+    if (force.cityCapitalPacing != 0) addNamed("cityCapitalPacing", force.cityCapitalPacing);
+    if (force.cityFleetRatios != 0) addNamed("cityFleetRatios", force.cityFleetRatios);
+    if (force.cityTechRefineries != 0) addNamed("cityTechRefineries", force.cityTechRefineries);
+    if (force.cityYardRefineries != 0) addNamed("cityYardRefineries", force.cityYardRefineries);
+    if (force.cityWorkerReplacement != 0) addNamed("cityWorkerReplacement", force.cityWorkerReplacement);
+    // Map-scoped repair levels: absent (OFF) keeps the native multiplayer hash.
+    if (force.closingMountainScope != 0) addNamed("closingMountainScope", force.closingMountainScope);
+    if (force.convergeChokepointScope != 0) addNamed("convergeChokepointScope", force.convergeChokepointScope);
+    if (force.openingOpenMapScope != 0) addNamed("openingOpenMapScope", force.openingOpenMapScope);
+    if (force.vanillaArmyCounterMapScope != 0) addNamed("vanillaArmyCounterMapScope", force.vanillaArmyCounterMapScope);
+    if (force.focusFireMapScope != 0) addNamed("focusFireMapScope", force.focusFireMapScope);
+    // SpiceBloomHarvest levels: absent (OFF) keeps the native multiplayer hash.
+    if (force.spiceBloomHarvest != 0) addNamed("spiceBloomHarvest", force.spiceBloomHarvest);
+    addNamed("retreatPreserve", force.retreatPreserve);
+    addNamed("retreatPreserveLevel", force.retreatPreserveLevel);
+    addNamed("harvesterRaid", force.harvesterRaid);
+    addNamed("harvesterRaidLevel", force.harvesterRaidLevel);
+    addNamed("threatTurrets", force.threatTurrets);
+    addNamed("moreRocketTurrets", force.moreRocketTurrets);
+    addNamed("cityStarportSupply", force.cityStarportSupply);
+    addNamed("storageCapacity", force.storageCapacity);
+    // Preserve the native config/digest when these research switches are OFF.
+    if (force.powerLeadBuildings) addNamed("powerLeadBuildings", force.powerLeadBuildings);
+    if (force.siloFillPercent) addNamed("siloFillPercent", force.siloFillPercent);
+    addNamed("fundedClassicProduction", force.fundedClassicProduction);
+    addNamed("trooperSupport", force.trooperSupport);
+    addNamed("simpleTechSavings", force.simpleTechSavings);
+    addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
+    addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
+    addNamed("mediumClassic", force.mediumClassic);
     configStr += "|/FORCE|";
+    addNamed("civWarsStrategy", civWarsStrategy);
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);
     addNamed("fixedMix", static_cast<int>(strategy.fixedMix));

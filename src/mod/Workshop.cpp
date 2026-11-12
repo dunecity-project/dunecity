@@ -65,7 +65,7 @@ std::string mapID(const std::string& name,const std::string& data) {
 bool bundledMod(const std::string& modName) {
     return modName=="vanilla"||modName=="dunecity"||modName=="Tornie"||modName=="Dune2R"
         ||modName=="TornieLite"||modName=="Jericho"||modName=="JerichoLite"
-        ||modName=="ArcaKev"||modName=="ArcaKevLite";
+        ||modName=="ArcaKev"||modName=="ArcaKevLite"||modName=="CivWars";
 }
 }
 Store& store() { static Store value(userPath("workshop")); return value; }
@@ -249,7 +249,13 @@ std::string installMap(const Revision& revision) {
     pointer(path.string()+".workshop.ini",r,true);return path.string();
 }
 bool activateModRevision(const std::string& hash) {
-    try { return ModManager::instance().setActiveMod(installMod(store().get(hash))); }
+    try {
+        // Installation verifies both the stored revision and its installed bytes,
+        // including when this immutable revision is already active.
+        const auto name = installMod(store().get(hash));
+        auto& mods = ModManager::instance();
+        return mods.getActiveModName() == name || mods.setActiveMod(name);
+    }
     catch(const std::exception& e) { SDL_Log("Workshop: %s",e.what());return false; }
 }
 }

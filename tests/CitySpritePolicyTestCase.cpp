@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <dunecity/CitySpritePolicy.h>
+#include <dunecity/StructureTerrainPolicy.h>
 #include <FileClasses/lodepng.h>
 #include <cstdlib>
 #include <set>
@@ -8,6 +9,24 @@
 
 using namespace DuneCity;
 using namespace DuneCity::CitySprites;
+
+TEST_CASE("Transparent civic structures retain terrain beneath their footprint", "[city][sprites][terrain]") {
+    for(int item : {Structure_NuclearPlant, Structure_PoliceStation,
+                   Structure_Stadium, Structure_Airport}) {
+        CHECK(DuneCity::shouldDrawTerrainBelowStructure(item));
+    }
+    // Existing transparent Tornie art must retain its exemption, while opaque
+    // vanilla buildings still use the terrain-culling fast path.
+    for(int item : {Structure_AdvancedWindTrap, Structure_AdvancedWindTrapMK2,
+                   Structure_AdvancedWindTrapMK3, Structure_Worfinery,
+                   Structure_TechCenter, Structure_ResearchLab, Structure_Scoutpost, Structure_Flamepost,
+                   Structure_Chemipost, Structure_LoveFactory, Structure_ChaosFactory}) {
+        CHECK(DuneCity::shouldDrawTerrainBelowStructure(item));
+    }
+    for(int item : {Structure_ConstructionYard, Structure_Barracks, Structure_Refinery}) {
+        CHECK_FALSE(DuneCity::shouldDrawTerrainBelowStructure(item));
+    }
+}
 
 TEST_CASE("All imported RCI models are reachable without changing simulation density", "[city][sprites]") {
     for (auto type : {ZoneType::Residential, ZoneType::Commercial, ZoneType::Industrial}) {

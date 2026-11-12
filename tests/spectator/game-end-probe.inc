@@ -216,9 +216,8 @@ std::unique_ptr<Game> startSkirmish(const Params& p, const Result& result) {
 }
 
 /**
-    Spectated Random Skirmish free-for-all: the watched house goes out first (the match is not
-    decided: the game goes on), then all but one enemy - which is not the view anchor - so the
-    winner is somebody the view has no tie to.
+    Spectated Random Skirmish free-for-all: Ordos goes out first (the match is not
+    decided: the game goes on), then all but one enemy. The observer belongs to no house.
 */
 void runSpectatedFfa(const std::string& mod) {
     const Params p = skirmishParams(mod, 3, false, true);
@@ -228,8 +227,10 @@ void runSpectatedFfa(const std::string& mod) {
     std::vector<int> enemies;
     for(const HouseSetup& h : result.houses) if(h.role == Role::Enemy) enemies.push_back(h.house);
     int winner = -1;
-    for(int h : enemies) if(winner < 0 && h != pLocalHouse->getHouseID()) winner = h;
+    for(int h : enemies) if(winner < 0 && h != HOUSE_ORDOS) winner = h;
     endRequire(winner >= 0, "No enemy to win");
+    endRequire(pLocalHouse == nullptr && pLocalPlayer && pLocalPlayer->getHouse() == nullptr,
+               "The spectated FFA assigned the observer a house");
     eliminate(*game, HOUSE_ORDOS);
     expectRunning(*game, "the watched house is out, three houses remain");
     runCycles(*game, 60);
@@ -369,7 +370,7 @@ void runQuota() {
         auto game = startEndMatch(bundledMap("vanilla", "4P - 64x64 - Silicon Valley", ai, true));
         endRequire(game->isObserving() && game->winFlags == 7, "Silicon Valley is not a spectated quota match");
         runCycles(*game, 150);
-        const int winner = pLocalHouse->getHouseID() == HOUSE_ORDOS ? HOUSE_FREMEN : HOUSE_ORDOS;
+        const int winner = HOUSE_ORDOS;
         const Uint32 decided = bank(*game, winner);
         expectWatchedEnd(*game, "spectated-quota", decided, game->getHouse(winner)->getTeamID());
         endEndMatch(game);
@@ -464,7 +465,9 @@ void runMultiplayer() {
     for(Peer& peer : peers) {
         settings.general.playerName = peer.name;
         auto game = startEndMatch(init, peer.observer);
-        endRequire(game->isObserving() == peer.observer && pLocalHouse != nullptr, peer.name + " did not start as intended");
+        endRequire(game->isObserving() == peer.observer
+                   && (peer.observer ? pLocalHouse == nullptr && pLocalPlayer && pLocalPlayer->getHouse() == nullptr : pLocalHouse != nullptr),
+                   peer.name + " did not start as intended");
         endRequire(peer.observer || pLocalHouse->getHouseID() == (peer.name == "Host" ? HOUSE_ORDOS : guestHouse), peer.name + " plays the wrong house");
         runCycles(*game, 150);
         eliminate(*game, ai[0]);

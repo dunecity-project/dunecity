@@ -80,6 +80,9 @@ public:
     bool isTornieContentActive() const {
         return activeContentBase == "Tornie";
     }
+    bool isDuneCityContentActive() const {
+        return initialized && activeContentBase == "dunecity";
+    }
     // Includes immutable/derived Workshop copies through their declared content base.
     bool isTornieFamilyContent(const std::string& name) const;
     bool isTornieFamilyContentActive() const { return activeTornieFamily; }
@@ -363,6 +366,7 @@ private:
     bool installedObjectDataDiffersFromDefaults(const std::string& modName) const;
     
     std::string modsBasePath;        ///< Base path for mods directory
+    std::string sharedBundledModsPath; ///< Verified read-only probe payload; private active_mod.txt stays local
     std::string activeMod;
     std::string activeContentBase; // Capability identity, refreshed on activation; no per-tile filesystem reads.
     bool activeDune2RRemasterPresentation = false;

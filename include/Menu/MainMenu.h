@@ -69,7 +69,7 @@ private:
     PictureLabel logoPicture;
     PictureLabel buttonBorder;
 
-    TextButton      continueButton, customButton, randomSkirmishButton, onlineButton, loadButton;
+    TextButton      continueButton, customButton, randomSkirmishButton, civWarsButton, onlineButton, loadButton;
     bool canContinue = false;
     TextButton      campaignButton;
     TextButton      modesButton;

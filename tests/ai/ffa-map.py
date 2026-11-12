@@ -2,9 +2,9 @@
 """Draw an FFA_ARMY_DUMP (tests/ai/ffa-army.inc, BALANCE_FFA_DUMP) as a whole-map PNG.
 
 Terrain (sand, rock, mountain, spice), every building and road tile in its owner's colour,
-every mobile ground fighter as a dot (white ring = wave member, black ring = defender), and per
-QuantBot house its forward bundle (X), perimeter point (O), assembly anchor (+) and protected
-rally (square), each with a circle of the 8 tiles QuantBot counts as standing there.
+every mobile ground fighter as a dot, and stored QuantBot points where available.
+Historical measured roles use white wave/black defence rings; role -1 and
+garrisoned -1 explicitly mean unmeasured, not an absent assignment.
 
   ffa-map.py dump-m19.json out.png [--scale 5]
 """
@@ -71,12 +71,16 @@ def main():
             else:
                 draw.rectangle([cx - m // 2, cy - m // 2, cx + m // 2, cy + m // 2], outline=(255, 255, 255), width=2)
     y0 = h * s + 2
+    roles_text = ("white ring wave, black ring defence" if any(u[4] >= 0 for u in data['units'])
+                  else "roles unmeasured")
     draw.text((4, y0), f"minute {data['minute']}  X bundle  O perimeter (8-tile circles)  + assembly  [] protected rally; "
-                       "dots = fighters (white ring wave, black ring defence)", fill=(255, 255, 255))
+                       f"dots = fighters ({roles_text})", fill=(255, 255, 255))
     for i, info in enumerate(data['houses']):
         units = [u for u in data['units'] if u[0] == info['house']]
+        garrisoned = info.get('garrisoned')
+        garrisoned_text = garrisoned if garrisoned in (0, 1) else 'unmeasured'
         draw.text((4, y0 + 16 * (i + 1)), f"{NAMES.get(info['house'], info['house'])}: {len(units)} fighters, "
-                  f"garrisoned={info.get('garrisoned')} bundle={info.get('bundle')} perimeter={info.get('perimeter')}",
+                  f"garrisoned={garrisoned_text} bundle={info.get('bundle')} perimeter={info.get('perimeter')}",
                   fill=HOUSE.get(info['house'], (255, 255, 255)))
     image.save(args.out)
 

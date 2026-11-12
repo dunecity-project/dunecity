@@ -48,10 +48,10 @@ void TimeoutTrigger::trigger()
     if((currentGame->loseFlags & WINLOSEFLAGS_TIMEOUT) != 0) {
         // player has won
         currentGame->setGameWon();
-        soundPlayer->playVoice(YourMissionIsComplete, pLocalHouse->getHouseID());
+        if(pLocalHouse) soundPlayer->playVoice(YourMissionIsComplete, pLocalHouse->getHouseID());
     } else {
         // ai has won
         currentGame->setGameLost();
-        soundPlayer->playVoice(YouHaveFailedYourMission, pLocalHouse->getHouseID());
+        if(pLocalHouse) soundPlayer->playVoice(YouHaveFailedYourMission, pLocalHouse->getHouseID());
     }
 }

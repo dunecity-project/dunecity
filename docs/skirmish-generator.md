@@ -5,6 +5,11 @@ pre-built opposing bases, armies, and DuneCity cities. It writes the map as an i
 map-editor format and starts it through the normal CustomGame path,
 `GameInitSettings(mapfile, filedata, ...)`, so saving and loading the match work as usual.
 
+The separate [Civilization Wars](civilization-wars.md) main-menu screen uses the same catalogue,
+normal map/start path and developed-zone extension for fixed tech-1, zero-credit, mirrored
+three-lane games. Selecting its `CivWars` mod in the host's map chooser makes **Random map...**
+open that mode's generator instead; other mods retain the Random Skirmish screen below.
+
 ## Where it is
 - **Main menu → "Random Skirmish"**, directly below "Custom Game". Deviation from the spec: the
   `SinglePlayerMenu` class is no longer reachable. The main menu is the live single-player menu, so
@@ -26,20 +31,27 @@ map-editor format and starts it through the normal CustomGame path,
 ## Parameters
 All of these are saved as last-used values in the configuration file, section `[Random Skirmish]`.
 
-Settings with an order (Size, Rock, Spice, Sandworms, Credits, Tech level, Allies, Enemies, and each side's
-Base, Army and City) are horizontal sliders (`include/GUI/Slider.h`): lowest on the left, highest
+Settings with an order (Size, Sand, Rock, Mountain, Spice, Sandworms, Credits, Tech level, Allies,
+Enemies, and each side's Base, Army and City) are horizontal sliders (`include/GUI/Slider.h`): lowest on the left, highest
 on the right, the chosen step's text beside the track. Click or drag on the track, use the mouse
 wheel, or Left/Right when the slider is active. "Random" is the rightmost step of Army and City.
 Mod, house, AI and AI partner stay drop-downs.
 
 - **Map**
   - Size: 64, 96, 128, 160, 192 or 256. Default 128.
-  - Rock: 15 / 25 / 35 / 50 / 65 / 80 / 90 / 100% target share of rock plus mountain (the first four
-    keep their saved indices). Past what the editor's rock fields reach, rock grows outward from its
-    edges ring by ring with a seeded coin flip per tile (`growRock`), so coasts stay ragged and
-    mirrored maps stay symmetric; at 100% the whole map is rock and mountain. Spice only grows on
-    sand, so high rock leaves little (at 100% no) spice. Starts are always clean rock, so a crowded
-    map ends above its target: Stefan's 128x128 5-house 40,000-people match measures 67%.
+  - **Sand / Rock / Mountain:** map percentages, 0–100 in steps of 5, summing to 100.
+    Default **75 / 20 / 5**. Sand includes dunes and any spice; Rock is ordinary buildable,
+    passable rock; Mountain is impassable. Moving Sand or Rock trades the other first, preserving
+    Mountain where possible; moving Mountain trades Rock first, then Sand. The selected control
+    always wins. Clean start cores, future building room and their rims can force extra rock on
+    crowded maps; connecting lanes can limit mountains at impossible extreme settings. Surplus
+    editor fields are eroded back to the existing +12-point tolerance without eroding required
+    start footprints. Spice only grows on the sand
+    share, so zero sand also means no spice.
+    Last-used keys are `Sand Percent`, `Rock Percent`, `Mountain Percent`. An old `Rock` index
+    (15 / 25 / 35 / 50 / 65 / 80 / 90 / 100% **rock plus mountain**) migrates once: retain that
+    combined target and assign 5 points to Mountain. Thus old 80% becomes **20 / 75 / 5**;
+    literal 80% ordinary Rock plus 5% Mountain is instead **15 / 80 / 5**. Saving removes the old key.
   - Spice: None, Low 6%, Medium 12%, High 18%, Very high 24% of the map (spice, thick spice and
     blooms; Very high matches the map editor's default random map). Thick spice share inside the
     fields 0/10/25/40/55%.
@@ -68,6 +80,11 @@ Mod, house, AI and AI partner stay drop-downs.
     Deviation: the engine has no existing credit presets, so this list is new. The default of 3,000
     is `DEFAULT_STARTINGCREDITS`.
   - Tech level 1–9, default 9 (everything unlocked), written to `[BASIC] TechLevel`.
+  - **Research Lab**, shown only below tech 9: enable buildable labs and independent per-house
+    research from the selected starting level to 9. Off by default; remembered as
+    `[Random Skirmish] Research Lab`. No free lab is added to a Random Skirmish start. The hosted
+    Random Map screen passes the same choice to Game Rules in its parent lobby. See
+    [Research Lab](research-lab.md) for prices, duration, AI policy and save compatibility.
   - The saved map's `[BASIC] Mod` is `dunecity` for a city mod, otherwise the chosen mod's content
     category (`tornie` or `vanilla`).
   - "Game rules..." (bottom row) opens the same Game Rules window as Custom Game (game speed,
@@ -162,38 +179,218 @@ never serialized or sent, and no protocol, save or map format changed.
   running at half speed (35 s behind when the host left), and a Dune City game with Natives worms.
   `--remote ROLE=SSHHOST` runs a role on another Mac (the service through an ssh tunnel).
 
+## Mountain coverage correction (2026-11-03)
+
+`80rock.dls` starts from Random Skirmish seed **418379001**, **160×160**, four players
+(one ally, two allied enemies), tech 1, 3,000 credits, no prebuilt base/army/city, no spice,
+not mirrored, with the `CivWars` mod. This is **not** the separate Civilization Wars lane
+generator. Regenerating the old generator with those settings matched the save's complete
+embedded map INI byte-for-byte.
+
+The old **Rock** control counted rock **plus mountain**. `shapeRock` changed every eligible
+rock tile at least eight tiles from sand into a mountain massif (outside a ragged 10–16-tile
+base berth), without a mountain budget. It also added a wandering ridge per 110 remaining
+outer rock tiles, each 8 to `12 + mapSize / 8` steps, plus rim outcrops. Higher coverage made
+large deep interiors; larger maps also lengthened the ridges. At 160×160 / 80%, the 25 chosen
+editor fields produced **3,531 massif + 2,974 ridge + 39 outcrop = 6,544 mountain tiles**,
+25.5625% of the map and 31.9360% of all rock-like terrain. Reducing the earlier average ratio
+did not bound this high-coverage case.
+
+Measured mountain counts for the same seed and four bare starts; the corrected 5% setting is
+independent of the three combined-land targets:
+
+| Map size | Old 20% land | Old 50% land | Old 80% land | New 5% mountain (all three) |
+|---|---:|---:|---:|---:|
+| 64×64 | 19 (0.46%) | 211 (5.15%) | 474 (11.57%) | 204 (4.98%) |
+| 96×96 | 126 (1.37%) | 674 (7.31%) | 1,852 (20.10%) | 460 (4.99%) |
+| 128×128 | 408 (2.49%) | 1,367 (8.34%) | 3,002 (18.32%) | 819 (5.00%) |
+| 160×160 | 1,026 (4.01%) | 3,205 (12.52%) | 6,544 (25.56%) | 1,280 (5.00%) |
+| 192×192 | 1,436 (3.90%) | 5,089 (13.80%) | 13,337 (36.18%) | 1,843 (5.00%) |
+| 256×256 | 2,787 (4.25%) | 9,318 (14.22%) | 22,750 (34.71%) | 3,276 (5.00%) |
+
+20% is an instrumented target in the unchanged old algorithm; the old menu offered 15/25%
+instead. The new default mountain quota is 5% of the map, not a fraction of however much rock
+the field generator happens to produce.
+
+The original 160×160 / 80% geological target migrates to **Sand 20 / Rock 75 / Mountain 5**.
+Measured before/after terrain, with the same seed, mod and starting kit:
+
+| Terrain | Before tiles | Before % | After tiles | After % |
+|---|---:|---:|---:|---:|
+| Sand | 4,053 | 15.8320 | 4,053 | 15.8320 |
+| Dunes | 1,056 | 4.1250 | 1,056 | 4.1250 |
+| Ordinary rock | 13,947 | 54.4805 | 19,211 | 75.0430 |
+| Mountain | 6,544 | 25.5625 | 1,280 | 5.0000 |
+| Spice | 0 | 0 | 0 | 0 |
+
+Mountains fall by **80.4401%**, comfortably below half the old amount. The geological
+rock-plus-mountain mask and every sand/dune tile are unchanged in this reproduction.
+`outputs/rock-mountain-20261103/` preserves both matrices, exact before/after INIs, source
+hashes, phase counts, `before-after-80rock.png` (viewed, matched palette) and
+`terrain-verification.json`.
+
+This table records the terrain-version-2 mountain correction. Version 3's future-building-room
+policy below intentionally changes some coastlines as well.
+
+Corrected source `f0763fee78cd`, cluster job `20261104T020444-terrain-final-02e94e`:
+**35 generator cases / 3,322,285 assertions passed** (mini, 13.47 s) and the complete native
+skirmish probe passed (mini, 97.1 s), including multiplayer equal-state/save-load checks,
+strict played smoke logs and the full render matrix. Thirty measured terrain/INI digest pairs
+also matched macOS and Windows before repinning. The focused 640×480 terrain menu probe
+passed in `20261104T012524-combined-full-2-cec93f` (mini, 14.34 s, exactly one pass marker);
+desert, city and multiplayer screenshots were viewed at actual minimum size.
+
+## Fair contiguous start rock (2026-11-04)
+
+The two reported 8-player 256×256 MCV-only maps exposed a separate problem: a clean starting
+8×8 core was enough to deploy a yard, but not a guarantee of room to build a base and city.
+In the embedded original saves, Atreides on seed **418379001** had only **266** connected
+ordinary-rock tiles; Sardaukar on seed **836308809** had **255**. Mountains do not count as
+usable building rock, and a large rock component elsewhere is not room beside this start.
+
+Measurement uses a four-neighbour ordinary-rock flood fill from each start, **clipped to that
+start's square home berth**, rather than crediting a continent reached by a narrow distant neck.
+All starts on a map receive the same berth side and floor:
+
+- Goal side **32 in City mode**, **24 in Vanilla**.
+- With map area `A`, ordinary-Rock percentage `R` and `H` houses, compute
+  `budget = floor(8*A*R/(900*H))`; clamp it to `goal²`, take the integer square root,
+  round the side down to even and keep a minimum side of 8.
+- Required connected ordinary rock is `ceil(0.75*side²)`. A solid compact square, with its
+  side rounded up to even, supplies that floor; it contains the start and lies in its berth.
+  Thus every local count is between 75% and 100% of the same area: minimum/maximum ≥75%.
+- At 256×256 / eight houses / Rock 20%, City gets a **32×32 berth, 768-tile floor and
+  28×28 solid reserve (784 tiles)**. A checked design allowance for a full factory/service
+  chain with eight turrets and reactor spacing is 282 tiles; six roaded R/C/I lots add 176,
+  total 458. This is a terrain/build-out allowance, not a promise of an unlimited city or of
+  768 empty tiles after selecting a prebuilt city.
+
+Where a small starting kit needs extra room, sufficiently separated unmirrored slots first
+search a small deterministic neighbourhood for denser natural rock. This consumes no plan RNG;
+mirrored slots and already-large starting kits stay put. Missing building room is then made
+solid, with a small organic feather, and protected from mountain painting. Actual starting
+cores retain their existing wider noisy rims. Ground and spice connectors remain protected.
+
+The unchanged version-2 baseline was frozen as `d07062484c7a`, native job
+`20261104T194355-start-rock-baseline-86ecbe`. Its 576-map matrix spans six sizes, 2/4/8 players,
+City/Vanilla, mirrored/free layouts, four terrain mixes and 16 distinct seeds:
+**1,192 of 2,688 starts** missed the planned floor, across **347 maps**; worst within-map
+minimum/maximum was **26.52%**. For eight-player City maps at 75/20/5 (four maps per size):
+
+| Size | Berth / floor | Before min / median / max | Final min / median / max | Worst min/max, before → final |
+|---|---:|---:|---:|---:|
+| 64 | 8 / 48 | 64 / 64 / 64 | 64 / 64 / 64 | 100% → 100% |
+| 96 | 14 / 147 | 152 / 177 / 196 | 196 / 196 / 196 | 78.57% → 100% |
+| 128 | 18 / 243 | 181 / 263 / 314 | 266 / 282 / 309 | 62.63% → 87.38% |
+| 160 | 22 / 363 | 189 / 361 / 442 | 427 / 460.5 / 484 | 56.93% → 94.66% |
+| 192 | 28 / 588 | 219 / 409.5 / 638 | 712 / 741 / 761 | 34.33% → 94.68% |
+| 256 | 32 / 768 | 187 / 379 / 867 | 844 / 901.5 / 992 | 31.22% → 89.11% |
+
+That wider matrix also exposed six pre-existing mountain-quota shortfalls and 31 mirrored
+coverage overshoots beyond 12 points on sizes ≥128. Mirrored core rectangles were duplicated,
+and each already-mirrored lobe walk was repeated for every mirror image. Version 3 deduplicates
+the rectangles and walks each core orbit once. Unneeded editor-field surplus is shore-eroded
+without removing minimum start shapes. If protected ordinary rock leaves too few mountain
+candidates, remaining quota grows onto unprotected sand/dune coast instead of consuming
+building room, spice or connecting routes.
+
+Baseline settings, original-save measurements, per-map/per-start CSVs, exact generated INIs and
+labelled previews are retained in `outputs/fair-start-rock-20261104/`. The second reported
+save's baseline INI matches byte for byte, including its exact Workshop CivWars mod; the first
+save predates the version-2 mountain change, so its original terrain and current baseline are
+reported separately. The separate `CivWarsGenerator` is not changed.
+
+Corrected generator source **`76cb1cb6fe9a`**, final native capture
+`20261104T213114-start-rock-cap-corrected-e10b70`, gives these same-settings results:
+
+| Reported seed / Sand-Rock-Mountain | Baseline local min / median / max | Final local min / median / max | Fairness, before → final |
+|---|---:|---:|---:|
+| 418379001 / 35-60-5 | 271 / 672.5 / 934 | 935 / 968 / 999 | 29.01% → 93.59% |
+| 836308809 / 40-40-20 | 255 / 494.5 / 598 | 840 / 885.5 / 916 | 42.64% → 91.70% |
+
+All sixteen reported starts have a 32×32 berth and floor768. Specifically, Atreides goes
+**original266 → baseline271 → final935**; Sardaukar **255 → 255 → 882**. The second map
+achieves this while ordinary rock decreases from 27,774 to 26,620 tiles: the fix redistributes
+usable room instead of merely raising the global rock percentage.
+
+Across all 576 matched matrix maps, below-floor starts fall **1,192→0**, maps below 75%
+fairness **146→0**, worst fairness **26.52→84.18%**, and median fairness **95.22→100%**.
+Mountain deficits beyond the indivisible three-tile allowance fall **6→0**; the largest final
+deficit is three tiles, including the 144 high-mountain samples. All 384 maps of size≥128
+honour ordinary-rock and sand-family targets within 12 percentage points plus three rounding
+tiles. The existing minimum-core/rim precedence still overrides those targets on **34 tiny,
+crowded maps**: eight 64/4P, eighteen 64/8P and eight 96/8P. This is not a relaxed fairness,
+connectivity or mountain-quota check.
+
+The initial v3 capture found a genuine mirrored upper-cap boundary error, not a bad golden:
+128/4P Vanilla, seed 1, 75/20/5 retained 6,064 geological tiles above its integer upper cap 6,062.
+Together with the 816-tile rounded mountain quota that left 5,248 ordinary tiles, just beyond
+the existing allowance. Erosion now stops **at or below the upper cap**, preserving mandatory
+shapes; the full 720-configuration sweep passes without changing its tolerance. All eighteen
+large-map candidate rounding exceptions disappear in the final matrix.
+
+The original 160×160 `80rock` fixture still has **1,280 mountains (5%) versus 6,544 (25.56%)**
+in the supplied legacy map: **80.44% fewer**. Its v3 counts are Sand3,820 / Dunes1,049 /
+ordinary Rock19,451 / Mountain1,280 / Spice0; unlike the historical v2 table above, future
+building room intentionally changes some sand/coast tiles.
+
+Acceptance receipts:
+- **38 generator cases / 15,482,702 assertions passed**, mini51.8s, source`11b038839ffd`,
+  job`20261104T214643-start-rock-v3-repinned-cd7eb8`.
+- **Complete native skirmish probe passed**, mini156.9s, corrected source`76cb1cb6fe9a`,
+  including strict played smoke logs, multiplayer equal-state/save-load checks, both setup
+  sizes and the complete 598-map render/evidence run (576 matrix +20 references +2 reported).
+- Unchanged **Civ Wars generator units passed**, mini3.6s, source`35c3a7ca9c07`,
+  job`20261104T211938-start-rock-civwars-pins-e9e58f`.
+- All **30 measured terrain/INI pairs matched exactly on Mac mini, MacBook Pro and Windows/MSVC**
+  at source`76cb1cb6fe9a` before repinning. Windows measurement intentionally ran the old-v2
+  golden case and recorded its expected mismatches, not a passing Windows suite.
+  Provenance/output: `outputs/terrain-v3-windows-76cb1cb6-20261104/windows-pins.{json,txt,log}`.
+- `outputs/fair-start-rock-20261104/final76/` contains final per-map/per-start comparisons,
+  all16 reported factions' original/baseline/final coordinates and areas, exact INIs,
+  both labelled before/after previews, the current80rock preview and native640×480 setup.
+  These images were viewed. `candidate35/` is separately labelled diagnostic, not final proof.
+
 ## Generation
-- **Terrain** (`shapeRock`, `addSpice`), modelled on the map editor's random map
+- **Terrain** (`shapeRock`, `addSpice`, `addMountains`), modelled on the map editor's random map
   (`generateRandomMap`, which itself is unchanged):
   - The base layer is the editor's random map itself (organic rock fields, dunes, rock bits,
     blooms) with no spice. A binary search picks the smallest editor rock-field count that reaches
-    the rock target with everything below in place.
+    combined Rock + Mountain target with everything below in place. Above the editor fields'
+    reach, `growRock` grows outward in ragged seeded rings, mirrored where required.
+    Whole-field surplus above the existing 12-point allowance is removed from shallow shores,
+    retaining the zero-field minimum start shapes.
   - Scattered rock islands (one per 2,048 tiles, editor-style random walks).
   - Every start's clean core (the rectangle its base and city need) is rock, grown by a rim of
     irregular width: smooth value noise between 2 and 7 tiles, plus a tile of per-tile jitter,
     smoothed with the editor's fill-in rule, plus three editor-style rock lobes walked out from
     beyond the rim. The core is never the outline.
-  - Mountains, never within about 3 tiles of a core: massifs in rock at least 8 tiles from the
-    sand and a ragged 10–16 tiles from every core, wandering ridges (one per 110 rock tiles
-    outside the cores) through rock fields away from the rims, and clumps of outcrops on the rims
-    within 3 tiles of the sand (4 per 40 tiles of core width + height). The map border counts as
-    an edge of the rock. Over random configurations that is about 0.23 mountain tiles per rock
-    tile.
+    Mirrored core rectangles are unique and each lobe orbit is walked only once. Small kits
+    also receive the compact future-rock reserve described above, with a smaller feathered rim.
+  - Mountains have an independent tile budget: selected map percentage × map area, rounded down
+    to a whole mirrored group (at most three tiles below target). Seeded smooth value noise,
+    with a preference for deeper rock, first chooses coherent patches from ordinary rock.
+    If protected building/spice ground exhausts that layer, the remaining quota extends onto
+    unprotected sand/dunes, preferring existing geological coast. There is no unconditional
+    depth-to-mountain conversion. Actual clean cores keep their existing clearance, and the
+    full compact future reserve is mountain-free. Three-tile-wide protected ground routes
+    join the starts; a 0/1 BFS connects every spice tile through existing sand/spice while
+    minimizing reserved rock. Harvesting connectors need only one tile. An impossible crowded
+    request never paints through those protections or levels all mountains afterwards.
   - Spice fields grow like the editor's: random walks over sand and dunes that turn thick where
     they cross themselves, then the editor's fill-in passes for spice and thick spice, until the
     spice target is reached. The first field goes beside every start (toward the map centre),
     then between neighbouring starts, then anywhere.
   - Mirrored maps paint every change at every mirror image and key all noise and coin flips to
     the mirror-canonical tile, so they stay exactly symmetric.
-  - Every start is checked for ground connection. Up to 8 seeds are tried, then mountains are
-    levelled. In the unit test's 150-configuration random sweep no map needs levelling.
-  - Measured (`render` probe case, 128x128): editor random maps have their longest straight rock
-    edge at 11–12 tiles and 45–47 outline corners per 100 outline edges; the old generator had 57
-    and 3 on Stefan's map (rectangular plateaus) and 23 and 37 on a vanilla 2v2; the new generator
-    has 12 and 53 on Stefan's configuration and 10 and 56 on the vanilla 2v2.
+  - Up to eight terrain seeds are tried for nearby spice; start/spice ground connectivity is
+    preserved by construction. The legal-placement sweep still checks connected starts and
+    requires that no mountains were levelled.
 - **Start positions**
   - Mirrored mode: point mirroring for 2 houses; otherwise both axes, from the corner and edge slots.
   - Normal mode: an evenly spaced square ring with a seeded offset.
+    If a small kit needs future room and slots are sufficiently separated, a bounded local
+    search prefers denser natural rock without changing the plan RNG or overlapping berths.
   - The player takes slot 0, allies the nearest slots, and enemies the rest.
   - Each start owns its core and two tiles around it (cores first): no other house builds,
     zones or parks there.
@@ -259,8 +456,13 @@ never serialized or sent, and no protocol, save or map format changed.
     population are already saved.
 - **Save map** writes `<user>/maps/multiplayer/<N>P - <S>x<S> - Random <a>v<e>[ FFA] <Mode> T<tech> <seed>.ini`.
   The map shows up under Custom Game > MP User Maps and can be hosted (its houses are fixed; the
-  multiplayer Random map's starts are open). A `[RANDOMSKIRMISH]` section records seed, map seed
-  and per-house plan; the loader ignores it.
+  multiplayer Random map's starts are open). A `[RANDOMSKIRMISH]` section records seed, map seed,
+  terrain version 3, Sand/Rock/Mountain shares, their `TerrainOptionsHash` (fixed-byte-order
+  FNV-1a), and the per-house plan; the loader ignores this provenance. The complete INI is already
+  sent in `GameInitSettings` and embedded in saves, so the new map-only controls need no extra
+  game-options wire fields, protocol bump or save-version bump. The mountain correction and
+  version-3 future-rock/quota fixes intentionally change newly generated maps for existing seeds;
+  existing saves keep their embedded terrain unchanged.
 - If a crowded map cannot fit everything (for example many houses on 64x64), the items that do not
   fit are skipped. They are counted in `HouseSetup::skipped`, and the screen reports them.
 
@@ -272,10 +474,11 @@ generated", and "random settings on army and city must apply equally to each pla
 - **Flow:** the host opens Custom Game as usual (LAN / Internet game, or Custom Game → Online) and
   presses **Random map...** beside Load/Next. The **Random Map** screen
   (`RandomSkirmishMenu(hostMod)`) offers:
-  - Map: Size, Rock, Spice, Mirrored starts (on by default here, saved separately as
+  - Map: Size, Sand, Rock, Mountain, Spice, Mirrored starts (on by default here, saved separately as
     `Multiplayer Symmetric`), Seed, Keep this seed — the same controls as single player.
   - Game: the host's mod (shown, not chosen: the map chooser's Mod box stays the one mod picker),
-    Credits, Tech level. Game Rules stay on the map chooser's Game Options / Game Rules button.
+    Credits, Tech level, and Game Rules (including Research Pace); the selected rules return to
+    the parent lobby with the generated map.
   - Players: **Start positions** 2–8 (and within the engine's custom-game house cap).
   - **Every house starts with** Base / Army / City, applied to every start (Random draws once).
   - No allies/enemies counts, no house, no AI type, no AI partner: the lobby decides those.
@@ -333,8 +536,36 @@ generated", and "random settings on army and city must apply equally to each pla
     keys, across six configurations from 64 to 256, Stefan's configuration, and a 150-configuration
     seeded sweep over every choice (which also requires connected starts and no levelled mountains).
   - Ground connectivity, including a negative case.
-  - Rock share is monotonic and within +12 points of its target; spice share within 3 points of
-    its target for every preset over three seeds, monotonic, with thick spice.
+  - Sand/Rock targets within the organic +12-point combined-land tolerance, independently
+    budgeted mountains (including exact zero), monotonic controls, configuration migration,
+    normalization, terrain-options hash, deterministic INI, clean cores and reachable spice.
+    Spice share remains within 3 points of its target for every preset over three seeds.
+  - A 720-configuration future-rock sweep (six sizes, 2/4/8 houses, both modes, four mixes,
+    five seeds) checks the bounded independent flood-fill floor, a compact all-rock square,
+    minimum/maximum fairness, repeatable INI, clean/legal starts, spice/ground connectivity
+    and mirrored terrain. Budget scaling excludes mountain, and helper cases reject diagonal,
+    outside-berth, non-rock and invalid-start shortcuts.
+  - The sweep is one Catch test case per mode and `kMapSizes` entry (`[rockfairness-sweep]`,
+    60 configurations and 120 maps each, Vanilla's sizes first).
+    `skirmish_generator_tests_rockfairness_0` to `_11` run the sweep as
+    Catch's `--order decl --shard-count 12` split, so a changed size list moves work between
+    shards without dropping a case, and a shard left empty fails. As one test, the sanitized Debug
+    sweep exceeded CTest's 1,500 s timeout (CI run 43123285133); CI now runs the generator tests
+    two at a time. Every configuration is a section: from the checkout root, the group's name
+    (`dunelegacy_tests "[rockfairness-sweep]" --list-tests`) plus
+    `-c "players=8 shares=50/20/30 seed=418379001"` regenerates one map.
+  - Five other generation-heavy matrices carry `[generator-matrix]`: expansion-berth scaling,
+    city population presets, the 150 random configurations, Random army/city, and the 60-map
+    spice-bloom sweep. Their bodies, seeds and assertions are unchanged. Catch partitions these
+    cases into `skirmish_generator_tests_matrix_0` to `_4`, with declaration order and the single
+    `SKIRMISH_MATRIX_SHARDS` scheduling count. The base `skirmish_generator_tests` excludes only
+    `[rockfairness-sweep]` and `[generator-matrix]` from `[skirmish]`; the whole family keeps the
+    existing data environment, macOS ASan handling and 1,500 s timeout.
+    CI run 43135834417 measured 1,447.32 s for the base before this second split, but logged no
+    per-case durations. [INFERENCE] Weighting map-generation counts by area and scaling to that
+    aggregate predicts about 116/265/425/93/115 s for the five matrices above and 433 s for the
+    remaining base. City work, terrain retries and runner contention can change those estimates;
+    actual Linux sanitizer CI timings remain the acceptance evidence.
   - Terrain looks like the editor's: longest straight rock edge at most 16 tiles, mountains and
     dunes present, every start's rim reaches at least 2 tiles past its core and changes width at
     least once per 8 edge tiles, and the core stays clean rock.
@@ -368,7 +599,15 @@ generated", and "random settings on army and city must apply equally to each pla
     level and dearest price for every item. The hosted screen's choices round-trip without
     overwriting the single-player mod or layout; starts clamp to 2–8 and the house cap.
 - `ctest --test-dir build -R skirmish_generator_probe` (`tests/skirmish/run-skirmish-probe.py`, real
-  engine, isolated profiles) runs these cases:
+  engine, isolated profiles). CTest prepares one sealed fixture, then runs each case separately.
+  The wrapper memoizes the exact v2 source digest only after freshly enumerating all included
+  tracked/untracked files and matching canonical paths, device/inode, mode, size and nanosecond
+  mtime/ctime. A miss reads the original byte stream and rejects changes between complete
+  before/after snapshots. The source-cache manifest is atomically published under the existing
+  fixture lock; linked/toolchain inputs and the fixture executable are still fully hashed.
+  Profiles/settings remain private per case, and the 600-second deadlines are unchanged.
+  Metadata enumeration still costs time; this avoids repeated source-byte reads, not all startup work.
+  Cases:
   - **menu:** at 640x480 and 1280x720, checks house choices and the enemy cap, persistence across
     reopening, and that Save map writes the file. Screenshots are saved as
     `build/skirmish-probe/random-skirmish*.bmp`.
@@ -394,6 +633,10 @@ generated", and "random settings on army and city must apply equally to each pla
   - **allied-2v3** (128, Large, 10k): 5 houses with the right teams, 36–37 structures each,
     army 10000/10000 each, positive power. A one-minute played smoke had no problem lines, and a
     save/load round trip kept every structure and team.
+    It also validates every loaded infantry tile/slot and exercises radar research, slow
+    application and slow expiry on never-moved infantry inside the strict smoke-log window.
+    Such infantry legitimately have no previous movement slot; only active steps recalculate
+    velocity when modifiers change. Starting the next step reads the latest modifiers.
   - **city-192** (DuneCity, 15k, tech 8): 52 structures, 1 reactor and 1 wind trap, power
     2,100/878, army 5000/5000 per AI house. Measured population after two city days was 14,720
     and 14,360 (within 25%). A one-minute smoke had a clean log, and save/load passed.

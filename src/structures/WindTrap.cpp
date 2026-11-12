@@ -120,7 +120,7 @@ bool WindTrap::supportsPowerUpgrade(HOUSETYPE house) {
 bool WindTrap::isPowerUpgradeEligible() const {
     return !powerUpgraded && currentGame && owner && getHealth() > 0
         && supportsPowerUpgrade(static_cast<HOUSETYPE>(getTechnologyHouseID()))
-        && currentGame->techLevel >= 7 && owner->getNumItems(Structure_IX) > 0;
+        && owner->getTechLevel() >= 7 && owner->getNumItems(Structure_IX) > 0;
 }
 
 void WindTrap::handlePowerUpgradeClick() {

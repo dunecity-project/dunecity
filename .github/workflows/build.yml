@@ -22,6 +22,10 @@ on:
         description: 'Build an ARM64 Android candidate only; signing for public upgrades is performed separately.'
         type: boolean
         default: false
+      android_release_build:
+        description: 'With android_package_probe: explicitly build an official Android release candidate, not a development build.'
+        type: boolean
+        default: false
       macos_skin_probe:
         description: 'Validate the Mac build, skin renderer and performance only; no other platforms or publication.'
         type: boolean
@@ -30,6 +34,11 @@ on:
 concurrency:
   group: build-${{ github.ref }}${{ inputs.macos_skin_probe == true && '-mac-skin' || '' }}
   cancel-in-progress: true
+
+# Only official stable-tag builds opt in. Branch CI and validation probes must
+# reset this option even when a persistent runner reuses an official build tree.
+env:
+  DUNECITY_RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true && 'ON' || 'OFF' }}
 
 jobs:
   relay-tests:
@@ -128,14 +137,15 @@ jobs:
         # not need libdatachannel; the interoperability harness in tools/p2p-interop does, and is
         # built where that dependency is provisioned. A Debug build turns on AddressSanitizer and
         # UndefinedBehaviorSanitizer by default: any report aborts the test that hit it.
-        run: cmake -B build -DDUNECITY_BUILD_TESTS=ON -DDUNECITY_DIRECT_P2P=OFF -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -B build -DDUNECITY_BUILD_TESTS=ON -DDUNECITY_DIRECT_P2P=OFF -DCMAKE_BUILD_TYPE=Debug -DDUNECITY_RELEASE_BUILD=OFF
 
       - name: Build tests
         run: |
           # No unbounded -j: sanitizer translation units can exhaust a hosted
           # runner before it reports a compiler error. Keep all test targets.
           cmake --build build --parallel 2 --target dunelegacy_tests network_wire_harness \
-            relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests
+            relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests \
+            renderer_initialization_tests
 
       - name: Check native and browser framing still agree
         run: node tools/p2p-interop/framing-vectors.mjs
@@ -149,7 +159,11 @@ jobs:
         env:
           ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1
           UBSAN_OPTIONS: print_stacktrace=1
-        run: ctest --test-dir build --output-on-failure --stop-on-failure
+        # The Random Skirmish generator tests (skirmish_generator_tests and its seed-sweep shards)
+        # run two at a time; everything else runs once, in order.
+        run: |
+          ctest --test-dir build --output-on-failure --stop-on-failure -E '^skirmish_generator_tests'
+          ctest --test-dir build --output-on-failure --stop-on-failure --no-tests=error --parallel 2 -R '^skirmish_generator_tests'
 
   build-emscripten:
     runs-on: ubuntu-latest
@@ -261,6 +275,21 @@ jobs:
             exit 1
           }
 
+      - name: Check installer desktop shortcut
+        run: |
+          # The fixture installer on this disposable runner: a default silent install must
+          # create the desktop shortcut and the uninstaller must remove it.
+          $installer = Get-ChildItem installer-preflight/package -Filter *.exe | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP 'dunecity-installer-preflight'
+          $link = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Dune City.lnk'
+          $install = Start-Process $installer.FullName -ArgumentList '/S', "/D=$dir" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+          if (-not (Test-Path $link)) { throw 'The installer did not create the desktop shortcut' }
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+          if ($target -ne (Join-Path $dir 'dunecity.exe')) { throw "The desktop shortcut points to '$target'" }
+          $uninstall = Start-Process (Join-Path $dir 'Uninstall.exe') -ArgumentList '/S', "_?=$dir" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0 -or (Test-Path $link)) { throw 'The uninstaller did not remove the desktop shortcut' }
+
       - name: Set Windows dependency cache location
         id: windows-vcpkg-cache
         run: |
@@ -360,6 +389,7 @@ jobs:
         run: |
           cmake -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
+            "-DDUNECITY_RELEASE_BUILD=$env:DUNECITY_RELEASE_BUILD" `
             "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DCMAKE_C_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
@@ -387,6 +417,7 @@ jobs:
           sccache --zero-stats
           cmake -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
+            -DDUNECITY_RELEASE_BUILD=OFF `
             "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DCMAKE_C_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
@@ -413,6 +444,11 @@ jobs:
           if ($hits -lt 100 -or $hits * 10 -lt $total * 9) {
             throw "Compiler cache hit rate $rate% is below 90% or fewer than 100 hits; caching is not working"
           }
+
+      - name: Check nested game stack budgets
+        run: |
+          python scripts/check-windows-nested-game-stack.py --build-dir build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify secure relay support
         run: |
@@ -570,6 +606,7 @@ jobs:
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
+          -DDUNECITY_RELEASE_BUILD=$DUNECITY_RELEASE_BUILD
           -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
           -DVCPKG_TARGET_TRIPLET=arm64-osx
           -DDUNECITY_BUILD_TESTS=ON
@@ -625,6 +662,25 @@ jobs:
             --notary-keychain "$HOME/Library/Keychains/DuneCity-Signing.keychain-db"
           cp "$RUNNER_TEMP/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}"/*.dmg build/
           cp "$RUNNER_TEMP/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}"/*.zip build/
+
+      - name: Require packaged native pointer-to-menu alignment
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          DUNECITY_NATIVE_POINTER_TEST: '1'
+        run: |
+          python3 tests/menu/run-menu-probe.py \
+            --pointer-mapping --size 1440x900 --build-dir build \
+            --runtime-app "$RUNNER_TEMP/dunecity-mac-install/dunecity.app" \
+            --output-dir "$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Retain native pointer regression diagnostics
+        if: always() && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-macOS-pointer-regression
+          path: ${{ runner.temp }}/dunecity-pointer-mapping-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify DMG
         run: bash scripts/verify-macos-dmg.sh build/DuneCity-*-macOS.dmg
@@ -689,16 +745,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             autoconf autoconf-archive automake libtool libltdl-dev \
-            build-essential pkg-config bison flex \
+            build-essential pkg-config bison flex python3-jinja2 \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libx11-dev libxft-dev libxext-dev libwayland-dev libxkbcommon-dev libibus-1.0-dev \
             libsystemd-dev libpulse-dev libpipewire-0.3-dev xvfb xauth
 
       - name: Cache vcpkg binary packages
         uses: actions/cache@v6
         with:
           path: ~/.cache/vcpkg/archives
-          key: vcpkg-linux-x64-${{ hashFiles('vcpkg.json') }}
+          # SDL auto-detects GL/GLX headers. Do not restore older SDL archives
+          # built without the graphics development packages above.
+          key: vcpkg-linux-x64-graphics-v2-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-linux-x64-
+            vcpkg-linux-x64-graphics-v2-
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -725,7 +785,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=Release -DDUNECITY_RELEASE_BUILD=$DUNECITY_RELEASE_BUILD
 
       - name: Build
         # Limit to 2 parallel jobs — ubuntu-latest has 4 cores but only 7GB
@@ -739,6 +799,11 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/tests -p 'test_audio_runtime.py'
           python3 scripts/check-audio-runtime.py --binary build/bin/dunecity --require-driver alsa --require-driver pulseaudio --require-driver pipewire
+
+      - name: Verify Linux graphics backends and software recovery
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_video_runtime.py'
+          xvfb-run -a python3 scripts/check-video-runtime.py --binary build/bin/dunecity --require-driver opengl --require-accelerated
 
       - name: Create Linux Packages
         run: |
@@ -792,6 +857,8 @@ jobs:
 
           python3 scripts/check-audio-runtime.py --binary "$TGZ_BIN" --require-driver alsa --require-driver pulseaudio --require-driver pipewire
           APPIMAGE_EXTRACT_AND_RUN=1 python3 scripts/check-audio-runtime.py --binary "$APPIMAGE" --require-driver alsa --require-driver pulseaudio --require-driver pipewire
+          xvfb-run -a python3 scripts/check-video-runtime.py --binary "$TGZ_BIN" --require-driver opengl --require-accelerated
+          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a python3 scripts/check-video-runtime.py --binary "$APPIMAGE" --require-driver opengl --require-accelerated
 
           echo "TGZ executable: ${TGZ_BIN:-missing}"
           echo "TGZ DUNE.PAK: ${TGZ_DATA:-missing}"
@@ -822,7 +889,7 @@ jobs:
             set +e
             (
               cd "$launch_dir"
-              HOME="$SMOKE_ROOT/home" SDL_AUDIODRIVER=dummy SDL_RENDER_DRIVER=software \
+              env -u SDL_RENDER_DRIVER HOME="$SMOKE_ROOT/home" SDL_AUDIODRIVER=dummy \
                 timeout 12s xvfb-run -a "$executable" "$@" --showlog
             ) >"$SMOKE_ROOT/${label}.log" 2>&1
             local status=$?
@@ -928,7 +995,7 @@ jobs:
         run: |
           python -m unittest discover -s scripts/tests -p test_android_payload.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./scripts/package-android-apk.ps1 -RepoRoot $env:GITHUB_WORKSPACE -BuildNative -NativeBuildJobs 2 -BuildApk
+          ./scripts/package-android-apk.ps1 -RepoRoot $env:GITHUB_WORKSPACE -BuildNative -NativeBuildJobs 2 -BuildApk -ReleaseBuild:('${{ inputs.android_release_build }}' -eq 'true')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/check-build-deps.py build-android-arm64-ndk
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

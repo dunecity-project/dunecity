@@ -410,7 +410,7 @@ bool CrossplayMenu::activateGameContent(const std::string& fingerprint, bool run
 
 void CrossplayMenu::joinPublicGame() {
     const int index = publicGameList.getSelectedIndex();
-    if(stage != Stage::Choosing || directoryPending || index < 0
+    if(stage != Stage::Choosing || index < 0
        || static_cast<std::size_t>(index) >= publicGames.size()) return;
     const auto& game=publicGames[index];
     if(!activateGameContent(game.contentHash, game.running)) return;
@@ -773,7 +773,11 @@ void CrossplayMenu::update() {
     if(autoHostRequested) { autoHostRequested = false; beginAdmission(true); }
     if(preparedGame && stage == Stage::HostReady) {
         int result;
-        { CustomGamePlayers lobby(*preparedGame, true, false, nullptr, &preparedPlayers, startImmediately); result = lobby.showMenu(); }
+        {
+            // Match the guest path: this large roster must not consume the nested host stack.
+            auto lobby = std::make_unique<CustomGamePlayers>(*preparedGame, true, false, nullptr, &preparedPlayers, startImmediately);
+            result = lobby->showMenu();
+        }
         teardownSession({});
         quit(result);
         return;

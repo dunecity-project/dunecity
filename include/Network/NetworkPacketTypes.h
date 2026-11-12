@@ -335,7 +335,48 @@
 // 109: MOD13 shared factory queue (save 9879); older peers cannot read the new byte and
 //      would leave factories idle instead of pooling orders, desynchronising production.
 //      Also road plots can be reserved: a 108 peer refuses the reservation command.
-#define NETWORK_PROTOCOL_VERSION            109
+// 110: QuantBot HardCityMatch (hashed, on): Hard's custom city ceiling is 20k/40k/60k/90k and
+//      rises to the largest other house's city, so a 109 peer grows a different city.
+//      CMD_AI_SUPPORT_ROLE: a human switches the house's AI partner (None/Build/Fight/Both)
+//      in game; a 109 peer cannot validate the new command id (save 9880).
+//      CMD_CITY_SET_TAX_RATE sets only the issuer's house (a 109 peer sets every house), and
+//      GameInitSettings MOD14 appends the Micropolis land value rule.
+// 111: Research Lab command, per-house technology and MOD15 research/trooper-AA rules;
+//      MOD16 Starport Population (a city house needs 5,000 people to start a Starport).
+//      MOD17 hashes/saves Research Pace, initial map area and opt-in damage-sensitive land value.
+//      QuantBot's hashed PoliceFundingRecovery restores small affordable police-budget increases.
+//      Generated Civ Wars prioritizes required per-house research independently of the experimental strategy.
+// 112: MOD18 replaces frozen MOD17's map-area field with Mountain Scenery (save 9883).
+//      Research uses fixed prices/durations rather than map size.
+// 113: MOD19 carries the hashed technology-installments rule (save 9884).
+//      Research state captures payment mode, terms and exact cumulative payments.
+// 114: Feature-only interim restores QuantBot's installed 3710464d decision policy;
+//      installment research books its actual zero-upfront payment (save format unchanged).
+// 115: Campaign AI-support QuantBot defaults ON: MilitaryOpening, AdaptiveReadiness,
+//      ThreatProduction, FundedLightOpening, LightWorkingCash, LightIncomeSeed and
+//      IdleCashFactory (2000 credits). Save format unchanged.
+// 116: QuantBot CityResearchOrder defaults to 2: research-enabled Custom DuneCity matches on
+//      spice maps defer new research until income covers it (Civilization Wars excluded),
+//      so a 115 peer researches differently and would desync. Save format unchanged.
+// 117: QuantBot DuelOpeningPlan and CampaignHomeFields default to 2: Custom DuneCity 1v1 spice
+//      duels open with the light harvester raid and low-tech campaign AI support keeps its
+//      workers four tiles inside its own frontier, so a 116 peer would desync. Save format unchanged.
+// 118: QuantBot CityCapitalPacing defaults to 1 (research-enabled Custom DuneCity spice skirmish
+//      paces optional producer technology by income), so a 117 peer would desync. Save format
+//      unchanged.
+// 119: QuantBot VanillaArmyCounters defaults on at 50% blend with VanillaArmyCounterMapScope=5
+//      (native against at least 5 opposing sides or below 20% thick spice). A 118 peer would
+//      desync; save format unchanged.
+// 120: QuantBot CityCapitalPacing defaults to 2 (research-enabled Custom DuneCity spice skirmish
+//      buys optional producer technology only once income per minute reaches twice its cost),
+//      so a 119 peer would desync. Save format unchanged.
+// 121: QuantBot SpiceBloomHarvest defaults to strict level 1: eligible Custom houses shoot
+//      explored blooms only when no known spice lies nearby. Older peers issue different AI
+//      attack orders and would desync. Save format unchanged.
+// 122: QuantBot promotes the tested w151 tactical profile with ConvergeChokepointScope
+//      and OpeningOpenMapScope together. Older peers choose different AI attacks and
+//      would desync. Private development identity and save format remain unchanged.
+#define NETWORK_PROTOCOL_VERSION            122
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

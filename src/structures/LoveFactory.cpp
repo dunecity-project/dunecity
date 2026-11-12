@@ -263,7 +263,7 @@ bool LoveFactory::isDeliveryCandidate(Uint32 unitItemID, Uint32 deliveryID) cons
 
     const auto& data = currentGame->objectData.data[unitItemID][getTechnologyHouseID()];
     if(!data.enabled || data.builder == ItemID_Invalid
-       || (data.techLevel >= 0 && data.techLevel > currentGame->techLevel)) {
+       || (data.techLevel >= 0 && data.techLevel > getOwner()->getTechLevel())) {
         return false;
     }
 

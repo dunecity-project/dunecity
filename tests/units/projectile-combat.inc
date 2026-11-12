@@ -8,6 +8,7 @@
 #include <GasDeviationPolicy.h>
 #include <misc/Random.h>
 #include <mod/ModManager.h>
+#include <mod/Workshop.h>
 #include <units/Ornithopter.h>
 #include <units/Launcher.h>
 #include <units/Deviator.h>
@@ -234,6 +235,12 @@ int runUnitSpeedProbe() {
     const std::string mod=std::getenv("UNIT_SPEED_PROBE_MOD");
     auto require=[](bool ok,const char* why) {if(!ok)throw std::runtime_error(why);};
     require(ModManager::instance().setActiveMod(mod),"Missing projectile combat mod");
+    const bool diagnoseInit = std::getenv("PROJECTILE_PINNED_INIT_DIAGNOSTIC") != nullptr;
+    const Uint64 initFrequency = diagnoseInit ? SDL_GetPerformanceFrequency() : 0;
+    if(diagnoseInit) {
+        const auto revision = Workshop::saveMod(mod);
+        require(Workshop::activateModRevision(revision.hash), "Cannot activate the init diagnostic snapshot");
+    }
     settings.general.playerName="Speed tester";
     std::ifstream map(PROBE_MAP_PATH);
     const std::string mapData((std::istreambuf_iterator<char>(map)),{});
@@ -248,7 +255,12 @@ int runUnitSpeedProbe() {
         GameInitSettings init("projectiles.ini",mapData,"Projectile combat",true,options);init.randomSeed=seed;
         GameInitSettings::HouseInfo humans(HOUSE_ATREIDES,1);humans.addPlayerInfo({"Speed tester","HumanPlayer"});init.addHouseInfo(humans);
         GameInitSettings::HouseInfo enemies(HOUSE_HARKONNEN,2);enemies.addPlayerInfo({"Enemy","HumanPlayer"});init.addHouseInfo(enemies);
+        const Uint64 initStarted = diagnoseInit ? SDL_GetPerformanceCounter() : 0;
         game->initGame(init);game->initializeGameLoop();
+        if(diagnoseInit)
+            SDL_Log("PROJECTILE_INIT mod=%s kind=%d seed=%d distance=%d heading=%d ms=%.3f",
+                    mod.c_str(), kind, seed, distance, heading,
+                    (SDL_GetPerformanceCounter() - initStarted) * 1000.0 / initFrequency);
         // Diagnostic sensitivity experiment only; never changes shipped data.
         if(const char* reload = std::getenv("AA_RELOAD_CYCLES")) {
             const int cycles = std::atoi(reload);

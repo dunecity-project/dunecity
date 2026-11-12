@@ -46,6 +46,7 @@ const int BuilderBase::itemOrder[] = {    Unit_Troopers5, Unit_Infantry5, Unit_C
                                            Structure_HighTechFactory, Structure_HeavyFactory, Structure_RocketTurret,
                                            Structure_Scoutpost, Structure_Flamepost, Structure_Chemipost, Structure_LoveFactory, Structure_ChaosFactory,
                                            Structure_RepairYard, Structure_GunTurret, Structure_TechCenter, Structure_WOR,
+                                           Structure_ResearchLab,
                                            Structure_Worfinery, Structure_Slowpost, Structure_Doublefinery,
                                            Structure_Barracks, Structure_Wall, Structure_LightFactory,
                                            Structure_Silo, Structure_Radar, Structure_Refinery, Structure_WindTrap,
@@ -99,7 +100,7 @@ void logTechCenterBuildGate(const BuilderBase* builder,
             builder->getObjectID(),
             owner->getHouseID(),
             builder->getOriginalHouseID(),
-            currentGame->techLevel,
+            owner->getTechLevel(),
             objData.techLevel,
             objData.enabled ? 1 : 0,
             objData.builder,
@@ -463,6 +464,12 @@ void BuilderBase::updateProductionProgress() {
                 }*/
 
             }
+            if (AITelemetry::log().enabled() && (currentProducedItem == Structure_WindTrap || currentProducedItem == Structure_NuclearPlant
+                || currentProducedItem == Structure_AdvancedWindTrap
+                || currentProducedItem == Structure_AdvancedWindTrapMK2
+                || currentProducedItem == Structure_AdvancedWindTrapMK3))
+                AITelemetry::log().account(owner->getHouseID(), "generator_spent",
+                    (productionProgress - oldProgress).getRawValue());
 
             if ((oldProgress == productionProgress) && (owner == pLocalHouse)) {
                 currentGame->addToNewsTicker(_("Not enough money"));
@@ -522,21 +529,21 @@ int BuilderBase::getMaxUpgradeLevel() const {
     const int technology = tornieFamily ? getTechnologyHouseID() : originalHouseID;
     if(tornieFamily && itemID == Structure_Worfinery) {
         const auto& squad = currentGame->objectData.data[Unit_Troopers5][technology];
-        return squad.enabled && currentGame->techLevel >= 7
+        return squad.enabled && owner->getTechLevel() >= 7
             && owner->getNumItems(Structure_IX) > 0 ? 1 : 0;
     }
     int upgradeLevel = 0;
 
     for(int i = ItemID_FirstID; i <= ItemID_LastID; i++) {
         if (!currentGame->isCitySimEnabled() && DuneCity::isCityOnlyStructure(i)) continue;
-        if(!tornieFamily && i >= Unit_Troopers5) continue;
+        if(!tornieFamily && i >= Unit_Troopers5 && i <= Unit_TameSandworm) continue;
         const int dataHouseID = tornieFamily ? technology
             : (i == Unit_ChemicalCarryall ? owner->getHouseID() : originalHouseID);
         const ObjectData::ObjectDataStruct& objData = currentGame->objectData.data[i][dataHouseID];
 
         if(objData.enabled && (objData.builder == (int) itemID
             || isCityHarkonnenProductBuilder(itemID, i, originalHouseID))
-            && (objData.techLevel <= currentGame->techLevel)) {
+            && (objData.techLevel <= owner->getTechLevel())) {
             upgradeLevel = std::max(upgradeLevel, (int) objData.upgradeLevel);
         }
     }
@@ -546,8 +553,8 @@ int BuilderBase::getMaxUpgradeLevel() const {
         const int chemicalTech = currentGame->objectData.data[Unit_ChemicalCarryall][technology].techLevel;
         const bool revisedChemical = chemicalTech == 5 || chemicalTech == 6;
         const int firstUpgradeTech = revisedChemical ? chemicalTech : 6;
-        if(currentGame->techLevel >= firstUpgradeTech && (revisedChemical || currentGame->techLevel >= 7))
-            upgradeLevel = std::max(upgradeLevel, currentGame->techLevel >= 7 ? 2 : 1);
+        if(owner->getTechLevel() >= firstUpgradeTech && (revisedChemical || owner->getTechLevel() >= 7))
+            upgradeLevel = std::max(upgradeLevel, owner->getTechLevel() >= 7 ? 2 : 1);
     }
     return upgradeLevel;
 }
@@ -563,7 +570,7 @@ void BuilderBase::updateBuildList()
     for(int i = 0; itemOrder[i] != ItemID_Invalid; i++) {
 
         int itemID2Add = itemOrder[i];
-        if(!tornieFamily && itemID2Add >= Unit_Troopers5) {
+        if(!tornieFamily && itemID2Add >= Unit_Troopers5 && itemID2Add <= Unit_TameSandworm) {
             removeItem(buildList, iter, itemID2Add);
             continue;
         }
@@ -619,17 +626,31 @@ void BuilderBase::updateBuildList()
             : itemID2Add == Unit_ChemicalCarryall ? owner->getHouseID() : originalHouseID;
         const ObjectData::ObjectDataStruct& objData = currentGame->objectData.data[itemID2Add][dataHouseID];
         if(itemID2Add == Unit_Infantry5 && (!tornieFamily || itemID != Structure_Barracks
-            || curUpgradeLev < 2 || currentGame->techLevel < 4)) {
+            || curUpgradeLev < 2 || owner->getTechLevel() < 4)) {
             removeItem(buildList, iter, itemID2Add);
             continue;
         }
         if(itemID2Add == Unit_Troopers5 && (!tornieFamily || itemID != Structure_Worfinery
-            || curUpgradeLev < 1 || currentGame->techLevel < 7 || owner->getNumItems(Structure_IX) <= 0)) {
+            || curUpgradeLev < 1 || owner->getTechLevel() < 7 || owner->getNumItems(Structure_IX) <= 0)) {
             removeItem(buildList, iter, itemID2Add);
             continue;
         }
 
         const bool itemEnabled = objData.enabled || specialChemicalCarryall;
+        if(itemID2Add == Structure_ResearchLab
+           && !currentGame->getGameInitSettings().getGameOptions().researchLab) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
+        // City games: a Starport needs the house's city population (match rule). An order already
+        // started stays, so a city dipping under the threshold never cancels a paid Starport.
+        if(itemID2Add == Structure_StarPort && owner && !owner->meetsStarportPopulation()
+           && currentProducedItem != Structure_StarPort
+           && std::none_of(currentProductionQueue.begin(), currentProductionQueue.end(),
+                           [](const ProductionQueueItem& q) { return q.itemID == Structure_StarPort; })) {
+            removeItem(buildList, iter, itemID2Add);
+            continue;
+        }
         const bool wildspadeChemical = specialChemicalCarryall
             && isHouseFaction(static_cast<HOUSETYPE>(technology), HOUSE_WILDSPADE)
             && (objData.techLevel == 5 || objData.techLevel == 6);
@@ -653,7 +674,7 @@ void BuilderBase::updateBuildList()
         // the Worfinery: no tech-center, upgrade or structure prerequisite.
         if(!itemEnabled || !producedHere
            || (!directWorfineryProduct && (requiredUpgrade > curUpgradeLev))
-           || (!directWorfineryProduct && (requiredTechLevel > currentGame->techLevel))) {
+           || (!directWorfineryProduct && (requiredTechLevel > owner->getTechLevel()))) {
             // first simple checks have rejected this item as being available for built in this builder
             if(traceTechCenter) {
                 const char* reason = "available";
@@ -663,7 +684,7 @@ void BuilderBase::updateBuildList()
                     reason = "wrong-builder";
                 } else if(objData.upgradeLevel > curUpgradeLev) {
                     reason = "upgrade-too-low";
-                } else if(objData.techLevel > currentGame->techLevel) {
+                } else if(objData.techLevel > owner->getTechLevel()) {
                     reason = "tech-too-low";
                 }
                 logTechCenterBuildGate(this, owner, objData, producedHere, false, ItemID_Invalid, reason, false);
@@ -769,6 +790,19 @@ int BuilderBase::getUpgradeCost() const {
     const int technology = ModManager::instance().isTornieFamilyContentActive()
         ? getTechnologyHouseID() : originalHouseID;
     return currentGame->objectData.data[itemID][technology].price / 2;
+}
+
+bool BuilderBase::canStartUpgrade() const {
+    return !upgrading && isAllowedToUpgrade()
+        && (currentGame->getGameInitSettings().getGameOptions().technologyInstallments
+            || owner->getCredits() >= getUpgradeCost());
+}
+
+bool BuilderBase::isUpgradePaused() const {
+    if(!upgrading || upgradeProgress >= FixPoint(getUpgradeCost())) return false;
+    return currentGame->getGameInitSettings().getGameOptions().technologyInstallments
+        ? owner->getStartingCredits() + owner->getEarnedCredits() <= 0
+        : owner->getCredits() <= 0;
 }
 
 
@@ -929,14 +963,24 @@ bool BuilderBase::update() {
 
     if(upgrading == true) {
         FixPoint totalUpgradePrice = getUpgradeCost();
+        // The price is paid in equal per-tick shares over the nominal upgrade time.
+        const FixPoint totalUpgradeGameTicks = 30 * 100 / 5;
 
-        if(currentGame->getGameInitSettings().getGameOptions().instantBuild == true) {
+        const auto& options = currentGame->getGameInitSettings().getGameOptions();
+        if(options.technologyInstallments) {
+            const FixPoint remaining = std::max(FixPoint(0), totalUpgradePrice - upgradeProgress);
+            // The legacy rounded share, so a funded upgrade completes on the same tick with the
+            // rule on or off; only the last payment is clamped, so the total is exactly the price.
+            const FixPoint share = totalUpgradePrice / totalUpgradeGameTicks;
+            const auto payment = owner->payCreditsExact(options.instantBuild ? remaining : std::min(remaining, share));
+            upgradeProgress += payment.total;
+            upgradeProgressFromStartingCredits += payment.fromStarting;
+        } else if(options.instantBuild == true) {
             FixPoint upgradePriceLeft = totalUpgradePrice - upgradeProgress;
             const auto payment = owner->payCredits(upgradePriceLeft);
             upgradeProgress += payment.total;
             upgradeProgressFromStartingCredits += payment.fromStarting;
         } else {
-            FixPoint totalUpgradeGameTicks = 30 * 100 / 5;
             const auto payment = owner->payCredits(totalUpgradePrice / totalUpgradeGameTicks);
             upgradeProgress += payment.total;
             upgradeProgressFromStartingCredits += payment.fromStarting;
@@ -1031,16 +1075,11 @@ void BuilderBase::doSetRepeat(Uint32 itemID, bool enabled) {
 
 
 bool BuilderBase::doUpgrade() {
-    if(upgrading) {
-        return false;
-    } else if(isAllowedToUpgrade() && (owner->getCredits() >= getUpgradeCost())) {
-        upgrading = true;
-        upgradeProgress = 0;
-        upgradeProgressFromStartingCredits = 0;
-        return true;
-    } else {
-        return false;
-    }
+    if(!canStartUpgrade()) return false;
+    upgrading = true;
+    upgradeProgress = 0;
+    upgradeProgressFromStartingCredits = 0;
+    return true;
 }
 
 void BuilderBase::doProduceItem(Uint32 itemID, bool multipleMode) {

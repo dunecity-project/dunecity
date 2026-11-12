@@ -19,6 +19,7 @@
 #define DATATYPES_H
 
 #include <Definitions.h>
+#include <TechResearch.h>
 #include <misc/SDL2pp.h>
 
 // Libraries
@@ -292,7 +293,8 @@ public:
            maximumNumberOfHarvestersOverride(-1), maximumNumberOfConstructionYardsOverride(-1),
            immortalHumanPlayer(false), cityEffects(false), originalUnitDamage(false), planBuildingSites(true),
            continuousGroundSteps(false), retryPlannedPlacement(true), sharedYardQueue(true),
-           sharedFactoryQueue(true), slowCityYear(true)  {
+           sharedFactoryQueue(true), slowCityYear(true), micropolisLandValue(true),
+           researchLab(false), trooperAntiAir(true), starportPopulation(true) {
         }
 
 
@@ -319,6 +321,15 @@ public:
                     && (sharedYardQueue == goc.sharedYardQueue)
                     && (sharedFactoryQueue == goc.sharedFactoryQueue)
                     && (slowCityYear == goc.slowCityYear)
+                    && (micropolisLandValue == goc.micropolisLandValue)
+                    && (damageLowersLandValue == goc.damageLowersLandValue)
+                    && (mountainScenery == goc.mountainScenery)
+                    && (unpoweredZonesVacate == goc.unpoweredZonesVacate)
+                    && (researchLab == goc.researchLab)
+                    && (researchPace == goc.researchPace)
+                    && (technologyInstallments == goc.technologyInstallments)
+                    && (trooperAntiAir == goc.trooperAntiAir)
+                    && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
                     && (easyMode == goc.easyMode)
@@ -358,6 +369,15 @@ public:
             optStr += "/sharedYardQueue=" + std::to_string(sharedYardQueue);
             optStr += "/sharedFactoryQueue=" + std::to_string(sharedFactoryQueue);
             optStr += "/slowCityYear=" + std::to_string(slowCityYear);
+            optStr += "/micropolisLandValue=" + std::to_string(micropolisLandValue);
+            optStr += "/damageLowersLandValue=" + std::to_string(damageLowersLandValue);
+            optStr += "/mountainScenery=" + std::to_string(mountainScenery);
+            optStr += "/unpoweredZonesVacate=" + std::to_string(unpoweredZonesVacate);
+            optStr += "/researchLab=" + std::to_string(researchLab);
+            optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
+            optStr += "/technologyInstallments=" + std::to_string(technologyInstallments);
+            optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
+            optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
             optStr += "/easyMode=" + std::to_string(easyMode);
@@ -420,6 +440,27 @@ public:
         /// The city year (budget and zone growth) lasts 120 s instead of 60 s, so taxes, police
         /// costs and growth run at half the classic pace (DuneCity::cyclesPerCityYear).
         bool        slowCityYear;
+        /// City tax uses the Micropolis land value: the house's average over every developed
+        /// 2x2 block it owns (roads included, area-weighted), measured from the centre of its
+        /// buildings; off keeps the per-building-origin average measured from the centre of
+        /// every developed block (docs/city-economy-balance.md, "Land value for tax").
+        bool        micropolisLandValue;
+        /// Damaged buildings lower their city's land value; opt-in, city content only.
+        bool        damageLowersLandValue = false;
+        /// Mountain/ridge terrain supplies Micropolis forest scenery to nearby developed land.
+        bool        mountainScenery = true;
+        /// Unpowered R/C/I lots lose one population step per city day down to empty.
+        bool        unpoweredZonesVacate = true;
+        /// Optional Research Lab and per-house technology progression (levels 1-9).
+        bool        researchLab;
+        TechResearch::Pace researchPace = TechResearch::Pace::Normal;
+        /// Opt-in: start research and builder upgrades without their full price; pay while they run.
+        bool        technologyInstallments = false;
+        /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
+        bool        trooperAntiAir;
+        /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
+        /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
+        bool        starportPopulation;
 
         /// Tornie-family rules; ignored by other content families.
         bool        alliedControl = false;

@@ -309,7 +309,7 @@ void runWholeArmyDispatchProbe(Game& game) {
             engaged->setLocation(origin+Coord(30,14));
             publish();
             bot->doAttackObject(engaged,distraction,false);
-            require(engaged->getTarget()==distraction,"Fixture could not engage a hunter elsewhere");
+            require(currentGame->getObjectManager().getObject(engaged->target.getObjectID())==distraction,"Fixture could not engage a hunter elsewhere");
 
             bot->defenceAssignments.clear();
             bot->defenceResponseCycles.clear();
@@ -377,7 +377,7 @@ void runWholeArmyDispatchProbe(Game& game) {
                 auto* poacher=spawn(enemy,Unit_Tank,Coord(7,13));
                 publish();
                 poacher->doAttackObject(worker,true);
-                require(poacher->getTarget()==worker && poacher->isInWeaponRange(worker),
+                require(currentGame->getObjectManager().getObject(poacher->target.getObjectID())==worker && poacher->isInWeaponRange(worker),
                     "Worker-defence fixture attacker is not actually shooting the harvester");
                 bot->defenceAssignments.clear();
                 bot->defenceResponseCycles.clear();
@@ -489,7 +489,7 @@ void runWholeArmyDispatchProbe(Game& game) {
                 raider->doSetAttackMode(AREAGUARD);
                 raider->doAttackObject(building,true);
                 publish();
-                require(raider->getTarget()==building && raider->isInWeaponRange(building),
+                require(currentGame->getObjectManager().getObject(raider->target.getObjectID())==building && raider->isInWeaponRange(building),
                     "Base-scramble fixture raider is not actually attacking the building");
             };
             auto protectedUnitsKept=[&](const char* why) {
@@ -539,7 +539,7 @@ void runWholeArmyDispatchProbe(Game& game) {
                     // it stands, and kept that fight.
                     if(unit->isHuntingToward())
                         farthestSent=std::max(farthestSent,distanceTo(unit,building));
-                    const auto* fight=unit->getTarget();
+                    const auto* fight=currentGame->getObjectManager().getObject(unit->target.getObjectID());
                     if(unit->getAttackMode()==HUNT && !unit->wasForced()
                         && (unit->isHuntingToward()
                             || (fight && blockDistance(fight->getLocation(),
@@ -680,7 +680,7 @@ void runWholeArmyDispatchProbe(Game& game) {
                     if(!bot->defenceAssignments.count(unit->getObjectID())) continue;
                     SDL_Log("WHOLE_ARMY_DIAG: not released id=%u mode=%d toward=%d target=%u",
                         unit->getObjectID(),int(unit->getAttackMode()),int(unit->isHuntingToward()),
-                        unit->getTarget()?unit->getTarget()->getObjectID():0);
+                        currentGame->getObjectManager().getObject(unit->target.getObjectID())?currentGame->getObjectManager().getObject(unit->target.getObjectID())->getObjectID():0);
                     require(false,"A defender kept its scramble after the raider died");
                 }
                 raider=spawn(enemy,Unit_Trike,Coord(7,3));
@@ -715,10 +715,10 @@ void runWholeArmyDispatchProbe(Game& game) {
                 const int start=distanceTo(farTank,yard);
                 for(int i=0;i<10;++i) tick(30);
                 SDL_Log("WHOLE_ARMY_DIAG: hunt toward walk start=%d now=%d target=%u toward=%d dest=%d,%d home=%d,%d mode=%d",
-                    start,distanceTo(farTank,yard),farTank->getTarget()?farTank->getTarget()->getObjectID():0,
+                    start,distanceTo(farTank,yard),currentGame->getObjectManager().getObject(farTank->target.getObjectID())?currentGame->getObjectManager().getObject(farTank->target.getObjectID())->getObjectID():0,
                     int(farTank->isHuntingToward()),farTank->getDestination().x,farTank->getDestination().y,
                     home.x,home.y,int(farTank->getAttackMode()));
-                require(farTank->getTarget()!=nearestEnemy && farTank->isHuntingToward()
+                require(currentGame->getObjectManager().getObject(farTank->target.getObjectID())!=nearestEnemy && farTank->isHuntingToward()
                     && farTank->getDestination()==home && distanceTo(farTank,yard)<start,
                     "A hunting troop left its walk for the nearest enemy across the map");
                 // An enemy that turns up on the way: a free tile 2-3 tiles away.
@@ -742,10 +742,10 @@ void runWholeArmyDispatchProbe(Game& game) {
                 auto* blocker=spawn(enemy,Unit_Trike,met-origin);
                 publish();
                 int ticks=0;
-                while(ticks<600 && farTank->getTarget()!=blocker) { tick(10); ticks+=10; }
+                while(ticks<600 && currentGame->getObjectManager().getObject(farTank->target.getObjectID())!=blocker) { tick(10); ticks+=10; }
                 SDL_Log("WHOLE_ARMY_DIAG: hunt toward met enemy after %d ticks target=%u toward=%d",
-                    ticks,farTank->getTarget()?farTank->getTarget()->getObjectID():0,int(farTank->isHuntingToward()));
-                require(farTank->getTarget()==blocker && !farTank->isHuntingToward(),
+                    ticks,currentGame->getObjectManager().getObject(farTank->target.getObjectID())?currentGame->getObjectManager().getObject(farTank->target.getObjectID())->getObjectID():0,int(farTank->isHuntingToward()));
+                require(currentGame->getObjectManager().getObject(farTank->target.getObjectID())==blocker && !farTank->isHuntingToward(),
                     "A hunting troop walked past an enemy it met on the way");
                 retire(blocker);
                 raider=spawn(enemy,Unit_Trike,Coord(7,3));
@@ -823,7 +823,7 @@ void runWholeArmyDispatchProbe(Game& game) {
                 publish();
                 poacher->doSetAttackMode(AREAGUARD);
                 poacher->doAttackObject(worker,true);
-                require(poacher->getTarget()==worker && poacher->isInWeaponRange(worker),
+                require(currentGame->getObjectManager().getObject(poacher->target.getObjectID())==worker && poacher->isInWeaponRange(worker),
                     "Harvester fixture attacker is not actually shooting the harvester");
                 bot->defenceAssignments.clear();
                 bot->defenceResponseCycles.clear();
@@ -930,7 +930,7 @@ void runWholeArmyDispatchProbe(Game& game) {
                 bird->setHealth(bird->getMaxHealth());
                 bird->doSetAttackMode(AREAGUARD);
                 bird->doAttackObject(colony,true);
-                require(bird->getTarget()==colony,"Launcher handoff fixture raider is not attacking");
+                require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==colony,"Launcher handoff fixture raider is not attacking");
             };
             hover(raider,Coord(14,12));
             hover(wingman,Coord(14,16));

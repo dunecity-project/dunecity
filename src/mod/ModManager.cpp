@@ -24,6 +24,7 @@
 #include <mod/CustomHouseConfig.h>
 #include <mod/ModMentatConfig.h>
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/HeadlessAssets.h>
 #include <FileClasses/SFXManager.h>
 #include <FileClasses/TextManager.h>
 #include <misc/fnkdat.h>
@@ -49,6 +50,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 // File names
 static const char* ACTIVE_MOD_FILE = "active_mod.txt";
@@ -58,6 +60,7 @@ static const char* QUANTBOT_CONFIG_FILE = "QuantBot Config.ini";
 static const char* GAME_OPTIONS_FILE = "GameOptions.ini";
 static const char* VANILLA_MOD_NAME = "vanilla";
 static const char* DUNECITY_MOD_NAME = "dunecity";
+static const char* CIVWARS_MOD_NAME = "CivWars";
 static const char* TORNIE_MOD_NAME = "Tornie";
 static const char* DUNE2R_MOD_NAME = "Dune2R";
 static const char* MANAGED_MOD_STAMP = ".dunecity-managed";
@@ -145,9 +148,9 @@ std::string bundledModFingerprint(const std::filesystem::path& source) {
             const auto relative = entry.substr(0, entry.find('\n'));
             std::ifstream file(source / relative, std::ios::binary);
             if(!file) return {};
-            char buffer[65536];
-            while(file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
-                appendFingerprintBytes(hash, std::string(buffer, static_cast<size_t>(file.gcount())));
+            std::vector<char> buffer(65536); // heap: reached from mod activation under Game::initGame
+            while(file.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || file.gcount() > 0) {
+                appendFingerprintBytes(hash, std::string(buffer.data(), static_cast<size_t>(file.gcount())));
             }
             if(file.bad()) return {};
         }
@@ -335,7 +338,7 @@ ModManager::~ModManager() = default;
 
 std::string ModManager::installerContentHash(const std::string& name) const {
     namespace fs = std::filesystem;
-    if(name != VANILLA_MOD_NAME && name != DUNECITY_MOD_NAME
+    if(name != VANILLA_MOD_NAME && name != DUNECITY_MOD_NAME && name != CIVWARS_MOD_NAME
        && !isTornieFamilyBase(name) && name != DUNE2R_MOD_NAME) return {};
     try {
         // Cache individual file digests, not approval: every check enumerates the
@@ -431,6 +434,7 @@ std::string ModManager::installerContentHash(const std::string& name) const {
 }
 
 void ModManager::initialize() {
+    const HeadlessAssets::StartupTimer startupTimer("bundled_mods");
     activeContentBase.clear();
     activeDune2RRemasterPresentation = false;
     // Get mods base path in user config directory
@@ -443,16 +447,30 @@ void ModManager::initialize() {
     // Create mods directory if it doesn't exist
     // Note: createDir() handles "already exists" case gracefully
     createDir(modsBasePath);
+
+    sharedBundledModsPath.clear();
+    if(HeadlessAssets::enabled()) {
+        if(const char* shared = std::getenv("DUNECITY_SHARED_MODS")) {
+            sharedBundledModsPath = shared;
+            if(vanillaNeedsReseed() || dunecityNeedsReseed()) {
+                SDL_Log("ModManager: Shared probe payload is stale; using private profile copies");
+                sharedBundledModsPath.clear();
+            }
+        }
+    }
+    const bool privateBundledMods = sharedBundledModsPath.empty();
+    const bool seedOtherMods = privateBundledMods
+        && !(HeadlessAssets::enabled() && std::getenv("DUNECITY_HEADLESS_SEED_ONLY"));
     
     // Seed vanilla mod if needed
-    if (!modExists(VANILLA_MOD_NAME) || vanillaNeedsReseed()) {
+    if (privateBundledMods && (!modExists(VANILLA_MOD_NAME) || vanillaNeedsReseed())) {
         seedVanillaFromDefaults();
     }
 
     // Seed built-in dunecity mod if needed
-    if (!modExists(DUNECITY_MOD_NAME) || dunecityNeedsReseed()) {
+    if (privateBundledMods && (!modExists(DUNECITY_MOD_NAME) || dunecityNeedsReseed())) {
         seedDunecityFromDefaults();
-    } else {
+    } else if(privateBundledMods) {
         // graphics_skins is a managed presentation payload, but the DuneCity
         // mod directory also holds user-facing configuration. An existing
         // profile therefore receives new Compacts and Icon Sprites - and
@@ -461,22 +479,31 @@ void ModManager::initialize() {
         refreshBundledDunecityGraphicsSkins();
     }
 
-    for(const char* name : TORNIE_FAMILY_MOD_NAMES) {
-        if(!modExists(name) || tornieFamilyNeedsReseed(name)) {
-            seedTornieFamilyFromDefaults(name);
+    // Rules-only DuneCity derivative: arbitrary scenarios retain their authored starts and tech.
+    const auto civWarsBundle = findBundledModPath(CIVWARS_MOD_NAME);
+    if(seedOtherMods && (!modExists(CIVWARS_MOD_NAME)
+       || managedModNeedsRefresh(getModPath(CIVWARS_MOD_NAME), civWarsBundle))) {
+        refreshManagedMod(CIVWARS_MOD_NAME, getModPath(CIVWARS_MOD_NAME), civWarsBundle);
+    }
+
+    if(seedOtherMods) {
+        for(const char* name : TORNIE_FAMILY_MOD_NAMES) {
+            if(!modExists(name) || tornieFamilyNeedsReseed(name)) {
+                seedTornieFamilyFromDefaults(name);
+            }
         }
     }
 
     // Dune2R is a bundled graphics payload. Refresh stale installed copies so
     // new manifests and atlases are not hidden by an older user-data folder.
-    if (!modExists(DUNE2R_MOD_NAME) || dune2rNeedsReseed()) {
+    if (seedOtherMods && (!modExists(DUNE2R_MOD_NAME) || dune2rNeedsReseed())) {
         seedDune2RFromDefaults();
     }
 
     // Extra installer payloads are selectable, not approved/default mods.
     // Seed only missing folders; never replace a player's existing authored mod.
     const auto bundledMods = findBundledModPath(TORNIE_MOD_NAME).parent_path();
-    if(!bundledMods.empty() && std::filesystem::is_directory(bundledMods)) {
+    if(seedOtherMods && !bundledMods.empty() && std::filesystem::is_directory(bundledMods)) {
         for(const auto& entry : std::filesystem::directory_iterator(bundledMods)) {
             const auto name = entry.path().filename().string();
             if(!entry.is_directory() || !isValidModName(name) || modExists(name)
@@ -495,7 +522,9 @@ void ModManager::initialize() {
     // launch can refresh it successfully.
     const bool activeManagedModInvalid =
         (isTornieFamilyBase(activeMod) && tornieFamilyNeedsReseed(activeMod))
-        || (activeMod == DUNE2R_MOD_NAME && dune2rNeedsReseed());
+        || (activeMod == DUNE2R_MOD_NAME && dune2rNeedsReseed())
+        || (activeMod == CIVWARS_MOD_NAME
+            && managedModNeedsRefresh(getModPath(CIVWARS_MOD_NAME), civWarsBundle));
 
     // Verify the selected mod before any of its metadata or assets are read.
     if (!modExists(activeMod) || activeManagedModInvalid) {
@@ -661,6 +690,7 @@ bool ModManager::isCityModeActive() const {
 }
 
 bool ModManager::setActiveMod(const std::string& name) {
+    const HeadlessAssets::StartupTimer startupTimer("activate_mod");
     if (!modExists(name)) {
         SDL_Log("ModManager: Cannot activate mod '%s' - does not exist", name.c_str());
         return false;
@@ -802,7 +832,7 @@ std::vector<ModInfo> ModManager::listModChoices() const {
     // content-derived ID identifies them independently of the current build; an
     // authored mod has its own ID and must remain a separate choice.
     for(auto& owner : mods) {
-        if(owner.name != "vanilla" && owner.name != DUNECITY_MOD_NAME
+        if(owner.name != "vanilla" && owner.name != DUNECITY_MOD_NAME && owner.name != CIVWARS_MOD_NAME
            && owner.name != "Tornie" && owner.name != "Dune2R") continue;
         for(const auto& cached : mods) {
             if(!isWorkshopSnapshotMod(cached.name) || cached.revisionHash.empty()) continue;
@@ -1018,6 +1048,15 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Shared Yard Queue") result.sharedYardQueue = parseBool(value);
             else if (key == "Shared Factory Queue") result.sharedFactoryQueue = parseBool(value);
             else if (key == "Slow City Year") result.slowCityYear = parseBool(value);
+            else if (key == "Micropolis Land Value") result.micropolisLandValue = parseBool(value);
+            else if (key == "Damage Lowers Land Value") result.damageLowersLandValue = parseBool(value);
+            else if (key == "Mountain Scenery") result.mountainScenery = parseBool(value);
+            else if (key == "Unpowered Zones Vacate") result.unpoweredZonesVacate = parseBool(value);
+            else if (key == "Research Lab") result.researchLab = parseBool(value);
+            else if (key == "Research Pace") result.researchPace = TechResearch::sanitize(std::stoi(value));
+            else if (key == "Technology Installments") result.technologyInstallments = parseBool(value);
+            else if (key == "Trooper Anti-Air") result.trooperAntiAir = parseBool(value);
+            else if (key == "Starport Population") result.starportPopulation = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);
             else if (key == "Selling Buildings") result.sellingBuildings = parseBool(value);
@@ -1719,9 +1758,9 @@ void ModManager::refreshBundledDunecityGraphicsSkins() const {
             std::ifstream sourceFile(entry.path(), std::ios::binary);
             std::ofstream destinationFile(destination, std::ios::binary | std::ios::trunc);
             if(sourceFile && destinationFile) {
-                char buffer[65536];
-                while(sourceFile.read(buffer, sizeof(buffer)) || sourceFile.gcount() > 0) {
-                    destinationFile.write(buffer, sourceFile.gcount());
+                std::vector<char> buffer(65536); // heap: reached from mod activation under Game::initGame
+                while(sourceFile.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) || sourceFile.gcount() > 0) {
+                    destinationFile.write(buffer.data(), sourceFile.gcount());
                     if(!destinationFile) break;
                 }
                 destinationFile.flush();
@@ -1980,6 +2019,8 @@ std::string ModManager::getModPath(const std::string& name) const {
     if(name.empty()) {
         return modsBasePath;  // Safety: avoid trailing slash + empty name
     }
+    if(!sharedBundledModsPath.empty() && (name == VANILLA_MOD_NAME || name == DUNECITY_MOD_NAME))
+        return sharedBundledModsPath + "/" + name;
     return modsBasePath + "/" + name;
 }
 

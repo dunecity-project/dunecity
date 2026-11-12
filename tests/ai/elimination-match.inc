@@ -70,6 +70,7 @@ inline CrushCount crushCount;
 } // namespace EliminationMatch
 
 #include "ffa-army.inc"
+#include "dunecity-audit.inc"
 
 namespace EliminationMatch {
 
@@ -138,6 +139,7 @@ inline void sample(Game& game, bool final = false) {
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
     }
     FfaArmy::sample(game);
+    DuneCityAudit::sample(game);
     if (final) crushCount.report();
 }
 
@@ -154,11 +156,14 @@ inline std::string run(Game& game, Uint32 end, int house) {
                 players.c_str(), int(game.isObserving()));
     }
     int winner = 0;
+    FormationDuel::applyGenomePhase(game);
     sample(game);
     while (game.getGameCycleCount() < end) {
         ProbeDigest::periodic(game);
+        FormationDuel::applyGenomePhase(game);
         game.updateGameState();
         crushCount.observe();
+        DuneCityAudit::observe(game);
         if (game.getGameCycleCount() % minute == 0) sample(game);
         if ((winner = survivingTeam(game)) != 0) break;
     }

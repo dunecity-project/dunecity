@@ -1,4 +1,4 @@
-# quantbot_all_against_atreides — mandatory AI regression match
+# All against Atreides — mandatory AI regression matches
 
 Stefan, 2026-10-16: "add a mandatory test after all ai changes to make sure it can still win all
 against atreides on vanilla with this setup ... atreides quantbot brutal should win". His 1.0.842
@@ -20,12 +20,30 @@ headless).
 
 ## Pass condition
 
-On every one of six fixed seeds (his match seed 1756374161 plus five more), Atreides must
-eliminate all four houses (`House::isAlive`, the engine's own defeat rule) within **40 game
-minutes**. A slow win counts as a failure, because a slow win is what he reported. A single seed
-is chaotic: his own game and a headless replay of its seed match cycle for cycle for 12 minutes,
-then end 46 minutes apart. That is why six seeds are needed. Do not raise the limit or drop a
-seed to get a change through.
+On every supplied seed, Atreides must eliminate all four houses (`House::isAlive`, the
+engine's own defeat rule) within **50 game minutes**. Stefan explicitly set this recovery
+limit on 2026-11-07, replacing the former 40-minute gate; a slow win still fails.
+The runner and `quantbot_all_against_atreides` CTest use 50 by default and retain all six
+fixed default seeds. The approved recovery plan's focused gate uses exactly
+**1756374161 and 906213928**, selected with the existing `--seeds` option:
+
+```sh
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag aaa-recovery -- \
+  python3 tests/ai/scenario-matrix.py --tier full --cells '^aaa/qb-v-4ah/vanilla$' \
+  --aaa-seeds 2 --check --build-dir build-int --results RESULTS
+```
+
+The queued form reuses the scenario-matrix cell with the same map, roster, options
+and 50-minute deadline; its first two fixed seeds are exactly the two above.
+The legacy `run-all-against-atreides.py --seeds 1756374161 906213928` selector is
+also supported, but that older report-rich driver is not itself a distributed
+batch harness (`--output-dir`, not `--results`). Do not submit it directly to
+`dunecity-queue submit`; use the category above, or the pinned CTest gate for all six.
+
+Commit the tooling first; the queue uses that immutable revision, not dirty source.
+The default game cap is 51 minutes; victory after minute 50 fails. Do not describe a
+two-seed recovery run as a completed six-seed CTest gate, drop seeds, or change the
+deadline to get a candidate through. Historical measurements below retain their original limits.
 
 The runner (`tests/ai/run-all-against-atreides.py`) builds one probe and plays three matches at
 once. For each seed it prints the winner, the game time, Atreides' credits, army value and units,
@@ -116,9 +134,122 @@ R/I opening of every house alive at the end, still requires more than 100 banked
 of every house with a starting yard, reports defeated houses (`defeated` in
 `income-receipt.json`), and fails if no surviving city was checked. Withdrawals stay off.
 
+## Saved Dune2R setup (2026-11-04)
+
+`worseaiallagainstatreides.dls` is a different content/rules combination from the
+original vanilla gate: **Dune2R, city mode disabled**, Atreides QuantBot Brutal
+against four AI Player Hard houses, observed locally. Its map bytes match the
+bundled map. The save is at cycle 111,308 (29.68 minutes), with seed 1702260251.
+Its rules have fog and powered rocket turrets enabled, unlike the original
+fixture. `tests/ai/all-against-atreides-dune2r-options.ini` records those saved
+rules explicitly, including rules that are inert outside city mode.
+
+The scenario matrix's `aaa/qb-v-4ah-saved/Dune2R` cell uses the original six
+fixed seeds plus this saved seed. `--economy-samples` retains the existing
+read-only economy diagnostics, `--attack-events` retains attack/defence events,
+and every scenario now keeps per-minute credits, army, harvesters and structure
+samples before deleting its disposable profile. `games.csv` records the source
+commit and simulation-source fingerprint. `--check` applies the matrix's
+per-game expectations to selected full-tier cells as well as smoke runs.
+
+Single-key `brutal-aaa-*-off` play styles isolate new switch defaults in that
+saved setup. Existing audit/capital off styles cover StorageCapacity,
+CityPowerSizing, CityOpeningCapital, CityConstructionCapital and
+CityProductionPrerequisites. The default-off Civ Wars and MoreRocketTurrets
+experiments are not enabled in the control.
+
+### Powered non-city executor
+
+The real saved position has 99 Harvesters but only 35,110 credits of live combat
+units against 120,710 enemy combat value. Six of seven fully upgraded Heavy
+Factories are idle; the seventh is building a Harvester. A normal 60-second
+continuation earns 8,392 spice credits but builds no heavy combat units while
+losing three yards, two heavy factories and ten refineries.
+
+Previously, powered non-city Dune2R did not select the funded spice-economy
+policy, despite having no city taxes. Its executor still required more than
+2,000 **remaining planning credits** after shared planning reserved queues and
+other purchases. The planner selected an affordable active-defence Launcher in
+15 of 37 passes, but that separate floor prevented every heavy-allocation
+decision. Earlier classic fallback branches bought Harvesters below the AI cap
+even though the planned worker target was already exceeded.
+
+The first, Heavy-Factory-only experiment fixed the observed executor mismatch
+but did not restore strength: both arms won 0/7 saved-rules games within 60
+minutes. Fixing only the cash floor and surplus-worker fallback was insufficient.
+
+The hashed, default-on `FundedClassicProduction` selects the existing funded
+spice policy once for the whole build pass: worker/refinery investment, factory
+and MCV capacity, and production use the same plan. Its scope is Custom Brutal,
+non-campaign, non-city games. Engine power requirements, queue commitments and
+the existing unit-mix learning remain unchanged. The switch does not change
+city, campaign or already vanilla-funded policies.
+
+### Matched acceptance and the second CTest
+
+Both arms below use frozen source `6aa02856` and the exact saved-rule fixture.
+`T60` is a time-out, not a win; `L` means Atreides was eliminated.
+
+| Seed | Current policy OFF | Funded policy ON |
+|---|---:|---:|
+| 1756374161 | T60 | 29.79 |
+| 906213928 | L33.08 | 35.29 |
+| 41562270 | T60 | 31.16 |
+| 1841712204 | L42.51 | 31.43 |
+| 1430976924 | L30.96 | 33.99 |
+| 1804669015 | T60 | 34.04 |
+| 1702260251 | L42.35 | 33.15 |
+
+The native v1.0.864 baseline (`4fb0469e`) also fails this setup: 0 wins,
+6 losses and 1 time-out in seven games. The existing vanilla gate did not cover
+this rules/content combination. No matched historical last-good commit was
+established; older-source bisection was stopped after the same-build restoration.
+
+At the minute-20 checkpoint, all seven games have samples: mean Atreides combat
+value rises from 43,691 to 122,016, while mean unspent credits fall from 21,574 to
+5,100. Mean opposing combat value falls from 103,250 to 34,121. Nonempty
+`ground_hunt` dispatches rise from 2.58 to 3.41 per ten alive game minutes; mean
+first dispatch stays 4.656 minutes. This restores production and tempo, not an
+earlier first-wave timer.
+
+The exact saved position was also advanced by 3,750 relative cycles (60 seconds)
+in each arm. ON completes one Launcher versus none, places no new Harvester
+factory order versus one, and retains six yards versus three. Final combat
+value is 27,750 versus 26,000. This is not an eventual saved-game victory claim,
+nor a claim that more total combat units were completed during that minute.
+Power requirements remain active: sampled deficit observations fall from 6/37
+to 1/37; these are observations, not measured blackout durations.
+
+The same-binary city preservation audit has 16 games per arm and 48 paired
+Hard/Brutal houses: all state digests, scores, armies, dispatches, detector
+results and storage losses are identical. Map, options, content, object data,
+binary and source fingerprints match in every pair.
+
+`quantbot_all_against_atreides_dune2r` now requires **all seven wins within
+40 game minutes**, about 4.71 minutes (13%) above the measured worst. It uses
+three games concurrently and a 600-second wall timeout. It exercises defaults,
+not a forced ON style, and retains army/economy/attack diagnostics. The original
+six-seed vanilla test and its 40-minute limit are unchanged.
+
+Evidence is under `../outputs/worse-all-v-atreides-20261104/`:
+`funded-policy-{off,on}` (games, samples, dispatches),
+`funded-policy-save-comparison.json`, `funded-policy-save-provenance.json`,
+and `full-policy-city-comparison.txt`. Frozen binary SHA256:
+`9cf0a5d3dfe5648b844f4a19e79a639ac25892c993901675f2d6133f4b6b820c`.
+The Dune2R shared-spending probe checks actual low-cash queues, surplus workers,
+unaffordable purchases and unchanged Easy/Medium/Hard execution.
+
+The fresh default-policy CTest on combined source `35c3a7ca` passed all seven
+seeds in **128.8 seconds wall**, with the same worst win of 35.29 game minutes.
+The canonical eight AI/performance regressions also passed on that source.
+Spectator matches are reported by the winning team: their raw engine `outcome`
+can be `lost` for the detached local seat even when team 2 wins. Acceptance uses
+the actual `winner_team` and an explicit 40-minute expectation, not that local
+seat's result.
+
 ## CI
 
 Not in the CI Linux job. The harness relinks the macOS app bundle
 (`bin/dunecity.app/Contents/MacOS/dunecity`) through Ninja, and CI runs a sanitized Debug tree,
-where a 40-minute six-game match would take far longer than the job allows. Run it locally
+where the 40-minute match sets would take far longer than the job allows. Run them locally
 through ctest.

@@ -58,6 +58,24 @@ public:
     void configureCampaignCoopPlayers(const std::vector<std::pair<std::string, std::string>>& desired);
 
     inline int getHouseID() const { return houseID; }
+    /// The match technology when Research Lab is off; otherwise this house's researched level.
+    int getTechLevel() const;
+    bool isTechResearchActive() const { return techResearchTarget != 0; }
+    int getTechResearchTarget() const { return techResearchTarget; }
+    int getTechResearchRemaining() const { return techResearchRemaining; }
+    Uint32 getTechResearchLabID() const { return techResearchLabID; }
+    /// Captured terms of the active study; all amounts are zero while idle.
+    bool isTechResearchInstallment() const { return techResearchInstallment; }
+    int getTechResearchTotalCost() const { return techResearchTotalCost; } ///< whole credits
+    int getTechResearchTotalCycles() const { return techResearchTotalCycles; }
+    FixPoint getTechResearchPaid() const { return techResearchPaid; } ///< exact 32.32 credits
+    bool isTechResearchPaused() const;
+    int getTechResearchCost() const;
+    int techResearchCycles(int target) const;
+    bool canStartTechResearch(Uint32 labObjectID) const;
+    bool startTechResearch(Uint32 labObjectID);
+    /// Losing the particular lab doing the work cancels it without a refund.
+    void cancelTechResearch(Uint32 labObjectID);
     /// Ownership stays on the runtime house; co-op duplicates retain their chosen faction rules.
     int getFactionID() const;
     static int factionForRuntimeHouse(int runtimeHouse);
@@ -255,6 +273,8 @@ public:
     };
     /// Withdraw up to \a amount and report which pools paid for it.
     CreditPayment payCredits(FixPoint amount);
+    /// Same debit order/accounting, including balances below one displayed credit.
+    CreditPayment payCreditsExact(FixPoint amount);
     /// Refund \a newCredits, of which \a fromStartingCredits was originally
     /// paid out of starting cash and returns there. The rest is earned income
     /// and stays subject to storage capacity; the total never exceeds the
@@ -269,6 +289,9 @@ public:
     void printStat() const;
 
     void updateBuildLists();
+    /// False only in a non-campaign city game with the `Starport Population` rule on while this
+    /// house's displayed city population is below DuneCity::kStarportPopulation.
+    bool meetsStarportPopulation() const;
 
     void update();
     bool hasRadarResearch(int kind) const;
@@ -337,6 +360,8 @@ protected:
     */
     FixPoint acceptEarnedCredits(FixPoint amount, bool cityTax = false);
     void enforceCreditCeiling();
+    FixPoint nextTechResearchDue() const;
+    void updateTechResearch();
 
     /// Tells the local player that storage is full, at most once every 5 seconds.
     /// \a cityTax names city tax income as what is lost instead of spice.
@@ -359,6 +384,15 @@ protected:
     Sint32 numItemDamageInflicted[Num_ItemID]; /// Amount of damage inflicted by a specific unit type owned by the player
     DeviationReward::HouseCounters deviationCounters; ///< measured Deviator contribution (SAVEGAMEVERSION 9849)
     radar::State radarResearch;
+    int researchedTechLevel = 1;
+    int techResearchTarget = 0;
+    int techResearchRemaining = 0;
+    Uint32 techResearchLabID = NONE_ID;
+    bool techResearchInstallment = false;
+    int techResearchTotalCost = 0;
+    int techResearchTotalCycles = 0;
+    FixPoint techResearchPaid = 0;
+    bool starportPopulationMet = true; ///< last meetsStarportPopulation(); derived, not saved
     Uint32 structuresSold = 0;
     Uint32 saleCredits = 0;
 

@@ -38,11 +38,14 @@ class Harvester;
 #include <players/ForceConcentrationPolicy.h>
 #include <players/CombatPowerPolicy.h>
 #include <players/FrontBatteryPolicy.h>
+#include <players/QuantBotVanillaPolicy.h>
+#include <players/QuantBotCoreDefencePolicy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
 
 #include <DataTypes.h>
+#include <algorithm>
 #include <limits>
 #include <set>
 #include <map>
@@ -52,6 +55,8 @@ class Harvester;
 #include <optional>
 #include <vector>
 #include <list>
+
+namespace QuantBotBuildPolicy { struct FleetRatioLevel; }
 
 class QuantBot : public Player
 {
@@ -79,6 +84,8 @@ public:
     void save(OutputStream& stream) const override;
     void saveObserverRuntime(OutputStream& stream) const;
     void loadObserverRuntime(InputStream& stream);
+    /// Read-only receipt from the last normal build pass; inspecting it never runs AI planning.
+    const QuantBotVanillaPolicy::Observation& vanillaBoomObservation() const { return vanillaBoomReceipt; }
 
     void update() override;
     void onHumanUnitOrder(Uint32 id);
@@ -107,7 +114,14 @@ public:
     /// only by the in-range aircraft candidate filter, which both need for the same
     /// out-of-range release, not by launcher spacing or wave tracking.
     bool managesAutonomousRocketHunt(const UnitBase* unit) const;
+    /// Shared by automatic repair and the AI reservation: an exhausted economy
+    /// cannot finish this AI-owned repair. Explicit human and defence claims win.
+    bool declinesUnfundedRepair(const UnitBase* unit) const;
     void onScriptedReinforcement(const UnitBase* unit);
+    /// Palace experiments are confined to original spice-bearing Custom maps.
+    bool palaceExperimentScope() const;
+    bool palaceWeaponDue() const;
+    const ObjectBase* palaceValueTarget() const;
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;
     /**
@@ -179,11 +193,27 @@ public:
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
     bool canAddRepairYard(int includingQueued) const;
+    bool economicFleetRatioActive() const;
+    /// The active fleet-ratio treatment: EconomicFleetRatios' configured values, or
+    /// CityFleetRatios' fixed level when only that City switch is in scope.
+    QuantBotBuildPolicy::FleetRatioLevel fleetRatioTreatment() const;
+    /// CivWars rules only for two occupied opposing initial houses, never team games.
+    /// Ordinary Research Lab matches remain unchanged; shared-house copilots do not add houses.
+    bool civWarsRules() const;
+    /// Lane geometry is authorised only by the generated map's canonical marker.
+    bool isCivWarsMatch() const;
     AIRole getRole() const { return role; }
     /// The Builder role (formerly "AI Support"): builds and runs the economy, never commands the army.
     bool builderOnly() const { return role == AIRole::Builder; }
     /// The Fighter role: commands units, attacks and defends; never builds, produces or repairs.
     bool fighterOnly() const { return role == AIRole::Fighter; }
+    /// Off (docs/ai-roles.md): its human partner switched it off in game. It issues no orders,
+    /// builds nothing and imposes none of its difficulty's house rules until switched back on.
+    bool switchedOff() const { return role == AIRole::Off; }
+    /// The in-game role switch (CMD_AI_SUPPORT_ROLE), run on every peer at the same cycle.
+    /// Builder and Off stop the attack timer; a switch back to Both or Fighter restarts it the
+    /// way a human-allied controller's timer starts. Queued production and given orders stay.
+    void setRole(AIRole newRole);
 
     // Only opposing QuantBots in Dune City campaigns use this policy.
     QuantBotCityCampaignPolicy::Limits campaignCityLimits() const;
@@ -405,6 +435,9 @@ private:
     /// concentrated wave instead of Easy's standing raid share) and of the mobile
     /// anti-air floor (docs/ai-scenario-matrix.md, "Difficulty ladder").
     bool autonomousCustomArmy() const;
+    /// Easy, and Custom Medium under MediumClassic 2 (Regression807, default off): the 1.0.807
+    /// standing raid share whose uncommitted reserve stays at home.
+    bool raidShareDifficulty() const;
     /// Does this house play a production strategy (QuantBotStrategy: the default Fixed:Tuned,Swarm
     /// mix and tempo)? Custom Hard and Brutal only: the strategies were tuned there, and Custom
     /// Medium keeps its learned mix and the configured wave readiness, so the strategy is one of
@@ -435,6 +468,28 @@ private:
     /// at its building. Human orders, repair runs, booked carryall pickups,
     /// workers, builders, transports and aircraft keep their units.
     void scrambleWholeArmyToDefend(const ObjectBase* intruder, const ObjectBase* building);
+    /// VanillaCoreDefence (default off; docs/ai-play-styles.md): one refinery or combat factory
+    /// of ours that the strongest single hostile team's live mobile army can reach. Threats are
+    /// purchase price x health share of armed units within QuantBotCoreDefencePolicy's band.
+    struct CoreDefenceCore {
+        Uint32 id{NONE_ID};
+        Coord at{Coord::Invalid()};          ///< The core's centre tile.
+        Coord approach{Coord::Invalid()};    ///< That team's nearest contact of its larger arm.
+        int groundThreat{}, airThreat{};
+        int groundCover{}, airCover{};       ///< Live, powered and reserved turrets reaching the centre.
+        Uint32 groundContact{NONE_ID}, airContact{NONE_ID};
+    };
+    /// Transient per-pass survey of the true simulation state; never saved or cached.
+    struct CoreDefenceSurvey {
+        bool active{};
+        int ownValue{}, ownUnits{};          ///< Our live mobile ground army.
+        std::vector<CoreDefenceCore> cores;  ///< Threatened cores only, strongest threat first.
+    };
+    /// A standing post: AREAGUARD plus a saved defenceAssignments entry naming the
+    /// core itself. Scrambles, rescues and district responses replace it as before.
+    bool vanillaCoreGuardAssignment(const UnitBase* unit) const;
+    CoreDefenceSurvey surveyVanillaCoreDefence() const;
+    void holdVanillaCoreDefence(const CoreDefenceSurvey& survey);
     /// How close to the attacked building a troop's own fight, or the enemy
     /// strength it faces, counts as this battle.
     static constexpr int kBaseScrambleContactTiles = 8;
@@ -447,6 +502,15 @@ private:
     Coord findRockExpansionSite(const MCV* mcv = nullptr, bool needsLocalSpace = false);
     /// Orders one undeployed MCV: keep its remembered site, drive there, deploy.
     void manageMcv(const MCV* pMCV);
+    bool fieldExpansionActive() const;
+    struct FieldExpansionPlan {
+        Coord refinery = Coord::Invalid(), yard = Coord::Invalid(), guard = Coord::Invalid();
+        int localSpice = 0, sharedSpice = 0, fieldSpice = 0;
+    };
+    FieldExpansionPlan surveyFieldExpansion(const MCV* mcv = nullptr);
+    bool manageFieldExpansionMcv(const MCV* mcv);
+    FieldExpansionPlan fieldExpansion;
+    mutable std::optional<bool> fieldExpansionInitialSpice;
     /// A reachable 2x2 yard footprint on the rock formation the base already
     /// occupies, or invalid when this formation has no room left. \a current
     /// is the site this MCV is already driving at; it is kept while it stays
@@ -523,6 +587,11 @@ private:
                                       int* crimeBenefit = nullptr, int* crimeHotspot = nullptr);
 
     Coord findEffectiveTurretPlaceLocation(Uint32 itemID);
+    /// A legal 1x1 emplacement within \a item's reach of \a core's centre, facing its approach
+    /// and outside the live contacts' own reach where possible. One bounded window per call.
+    Coord findVanillaCoreTurretPlaceLocation(Uint32 item, const CoreDefenceCore& core);
+    Coord findThreatTurretPlaceLocation(Coord asset, Coord approach);
+    Coord findCoveredDefencePlaceLocation(Uint32 item, Coord home);
     /// Site for an enemy-facing battery emplacement, in city mode as well as
     /// outside it. The ordinary city coverage planner keeps every other
     /// rocket-turret decision; see the definition for why the battery needs its
@@ -603,6 +672,41 @@ private:
     Coord findBestDeathHandTarget(int enemyHouseID);
     const UnitBase* findLightRaiderTarget(const UnitBase* raider) const;
     const UnitBase* findThreateningTank(const UnitBase* raider) const;
+    /// Re-derived from simulation objects for each controller pass; never saved.
+    /// An incomplete group stays in the ordinary home reserve until it fills.
+    struct HarvesterRaidPlan {
+        std::array<const UnitBase*, 4> members{};
+        const ObjectBase* target = nullptr;
+        int count = 0, required = 0;
+        bool contains(const UnitBase* unit) const {
+            return target && std::find(members.begin(), members.end(), unit) != members.end();
+        }
+        bool ready() const { return target && count == required; }
+    };
+    HarvesterRaidPlan planHarvesterRaid() const;
+    /// SpiceBloomHarvest (docs/ai-scenario-matrix.md, "Spice bloom harvest"; default OFF): an
+    /// autonomous Custom Medium/Hard/Brutal house outside Civilization Wars and human alliances,
+    /// in Vanilla and DuneCity alike.
+    bool spiceBloomHarvestScope() const;
+    /// The unit pass hook: on every fourth pass, at most one cheap idle ranged unit is sent to
+    /// fire at a useful, unwasteful bloom on our side (players/QuantBotSpiceBloomPolicy.h).
+    void updateSpiceBloomHarvest(const HarvesterRaidPlan& raid);
+    /// One evaluation without the cadence; true when a shooter was ordered.
+    bool orderSpiceBloomShot(const HarvesterRaidPlan& raid);
+    /// An idle, freely available ranged ground unit whose projectile bursts a bloom.
+    bool spiceBloomShooter(const UnitBase* unit, const HarvesterRaidPlan& raid) const;
+    /// A held-home posture, a core building under attack or a live defence response.
+    bool spiceBloomEmergency() const;
+    /// Every bloom on the map, special ones as hazards only (fire never sets them off). Derived
+    /// from the map on first use - blooms are only ever placed by the map, so a reloaded game
+    /// rebuilds the same list - and pruned as they burst; never serialised.
+    struct SpiceBloomSite { Coord at; bool special = false; bool wasteNoted = false; };
+    std::vector<SpiceBloomSite> spiceBloomSites;
+    bool spiceBloomSitesScanned = false;
+    /// Runtime telemetry only: never consulted by a decision, never saved. Orders sent, and
+    /// blooms held back by the waste rule (each counted once).
+    struct SpiceBloomStats { Uint32 orders = 0, wasteful = 0; };
+    SpiceBloomStats spiceBloomStats;
     double getProductionBuildingMultiplier(int itemID) const;
     // Runtime-only observations. Never consulted by tactical/production decisions.
     struct HarvesterStrikeMemberTrace { Uint32 id, item; int price; CombatReward::Totals reward; };
@@ -676,6 +780,10 @@ private:
     const std::vector<int>& factoryClearance() const;
     std::vector<Coord> visibleEnemyBases;
     std::vector<Uint32> visibleHarvestLaunchers;
+    struct GroundTurretContact { Coord at; int value; int weaponRange; };
+    // Refilled by the build's shared visible-unit survey before every use.
+    // Transient scratch, not an inter-pass cache or supplemental save field.
+    std::vector<GroundTurretContact> visibleGroundTurretThreats;
     Uint32 dangerUpdated = std::numeric_limits<Uint32>::max();
     Uint32 lastSafetyTrace = std::numeric_limits<Uint32>::max();
     struct HarvesterSafety { Uint32 nextCheck = 0, retreatUntil = 0; Coord lastLocation = Coord::Invalid(), plannedDestination = Coord::Invalid(); bool controlled = false; };
@@ -695,6 +803,10 @@ private:
     int recentFactoryLossCount() const;
     struct SpiceFieldCache;
     bool manageHarvesterSafety(const Harvester* harvester, SpiceFieldCache* spice = nullptr);
+    // CityHarvestFieldChoice: true armed-threat stamps, derived only for this cycle.
+    const std::vector<int>& cityHarvestTrueDanger();
+    Uint32 cityHarvestDangerCycle = std::numeric_limits<Uint32>::max();
+    std::vector<int> cityHarvestDanger;
 
     std::vector<RecentStructureLoss> recentStructureLosses;
     bool nearRecentStructureLoss(int x, int y, int width, int height) const;
@@ -948,22 +1060,26 @@ private:
     /// minutes), else null: the learned default and the configured readiness.
     const QuantBotStrategy::MixProfile* strategyMix() const;
     const QuantBotStrategy::TempoProfile* strategyTempo() const;
-    /// The mix slots this house can produce at \a tech (default: the game's tech level): the unit
+    /// The mix slots this house can produce at \a tech (default: its researched tech level): the unit
     /// is enabled, priced and has a builder, its tech level is at most \a tech, and its builder
     /// and every prerequisite structure can be obtained at \a tech (ObjectData, recursively).
     UnitMixPolicy::Slots fieldableMixSlots(int tech = -1) const;
-    /// The first tech level of the game's tech band for this house: the lowest level at which
-    /// the house fields the same slots as at the game's tech level (tests/ai/tech-bands.py).
+    /// The first tech level of the current house tech band: the lowest level at which the
+    /// house fields the same slots as now (tests/ai/tech-bands.py).
     int techBand() const;
-    /// fieldableMixSlots() of the game's tech level, computed once (runtime only, not saved).
+    /// fieldableMixSlots() cached per house tech level (runtime only, not saved).
     mutable UnitMixPolicy::Slots fieldableSlots{};
     mutable bool fieldableSlotsCached = false;
+    mutable int fieldableSlotsTech = -1;
     /// The starting mix over the \a available slots, before any combat evidence: the configured
     /// opening, the strategy's prior in its place, then the starting-mix bounds (unless a test
     /// style turns them off). The prior UnitMixPolicy::allocate blends the learning into.
     UnitMixPolicy::Weights startingPrior(const UnitMixPolicy::Slots& available) const;
     /// The opening and wave rules of the style (if a test style is active) or else the tempo.
     bool lightFirstOpening() const;
+    int duelOpeningPlan() const;
+    bool duelOpeningRaider(const UnitBase* unit) const;
+    int duelReachableSpiceShare(const StructureBase* yard) const;
     int minWaveUnits() const;
     int minWaveValue() const;
     /// An Infantry mix strategy: Custom vanilla then founds a barracks and a WOR too.
@@ -984,6 +1100,7 @@ private:
     /// The strategy's starting ratios over this house's mix slots: strategyPrior (Tuned,
     /// Bounded) or the preset's group form expanded over the house's specials.
     UnitMixPolicy::Weights strategyStart{};
+    int strategyTechLevel = -1; ///< Runtime expansion of the saved strategy, not a new draw.
     void resolveStrategyProfile();
     // ---- Blob waves (docs/formations.md, "Blob waves") ------------------------------------
     //
@@ -1107,7 +1224,80 @@ private:
     /// The force bits in effect: the override if set, else the configured F, C, B, W, U, X, I,
     /// T, P, H, K and S.
     int forceBits() const;
+    /// Immutable original-map spice scope; unknown and zero-spice maps stay native.
+    bool combatTargetTuningActive() const;
+    /// Map-scoped repairs (players/QuantBotMapScopePolicy.h; docs/ai-scenario-matrix.md,
+    /// "Map-scoped repairs"). ClosingMountainScope: the native force settings on a mountain-rich
+    /// original map, else the configured ones. Read only PressOn, FinishWhenLeading and
+    /// JoinAllyWaves through it.
+    const QuantBotConfig::ForceSettings& closingForce() const;
+    /// ConvergeChokepointScope restores native Converge on a small mountainous original duel map.
+    bool convergeChokepointNative() const;
+    /// OpeningOpenMapScope restores native OpeningReadiness on an open flat original crowded map.
+    bool openingOpenMapNative() const;
+    /// FocusFireLevel in effect: native (0) where FocusFireMapScope applies (map or roster).
+    int effectiveFocusFireLevel() const;
+    /// VanillaArmyCounterMapScope: VanillaArmyCounters stays inert on this original map or roster.
+    bool armyCountersMapExcluded() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
+    /// Vanilla Custom games whose original roster has at least two hostile teams.
+    /// The tuning switches never activate in campaigns, duels or two-team matches.
+    bool vanillaMultiEnemyGame() const;
+    bool vanillaBoomGame() const;
+    /// Independent scope for the two default-OFF policies: original occupied
+    /// no-allies FFA4/6, autonomous Custom Brutal Vanilla with sustainable spice.
+    bool vanillaFfaTuningGame() const;
+    bool vanillaReactiveKnowledge() const;
+    QuantBotVanillaPolicy::Plan vanillaBoldPlan(QuantBotVanillaPolicy::Observation& receipt) const;
+    void vanillaReactiveSurvey(QuantBotVanillaPolicy::Observation& receipt, int* firstTeam = nullptr,
+                              const UnitBase* lead = nullptr) const;
+    QuantBotVanillaPolicy::Observation vanillaBoomReceipt{};
+    /// Economic experiments use original occupied controllers and saved grid
+    /// metadata, never surviving Houses or map/mission identifiers.
+    bool citySpiceFfaScope(unsigned minimumControllers) const;
+    /// Any-roster DuneCity Custom skirmish whose original map starts with spice.
+    bool citySpiceScope() const;
+    /// Batch3 City economy experiments: citySpiceScope() outside Civilization Wars.
+    bool cityEconomyExperimentScope() const;
+    /// Stefan's spice rule (full knowledge, true simulation state, never fog):
+    /// spice on tiles whose vehicle terrain region one of our anchors opens onto
+    /// is credited to the house whose nearest anchor (Chebyshev to the footprint)
+    /// is closest; exact ties split equally among competing houses. Anchors are
+    /// a house's drop-offs, or its yards while it has none. Allies count as
+    /// ours. Rebuilt in each new game cycle it is read in and never carried across
+    /// cycles, so checkpoint continuation does not depend on it.
+    struct CitySpiceShare {
+        int64_t ownSpice = 0;       ///< spice credited to this house
+        int64_t reachableSpice = 0; ///< all spice in regions our anchors open onto
+        int ownTiles = 0, reachableTiles = 0;
+        int ownAnchors = 0;         ///< our drop-offs (or yards while none) counted
+        int rivals = 0;             ///< hostile houses with an anchor in our regions
+        /// Per map tile (y*width+x): 0 no spice or unreachable, 1 ours, 2 tied, 3 a rival's.
+        std::vector<uint8_t> owner;
+        /// Chebyshev tiles from each labelled spice tile to our nearest anchor (-1 elsewhere).
+        std::vector<int16_t> ownDistance;
+    };
+    const CitySpiceShare& citySpiceShare() const;
+    mutable Uint32 citySpiceShareCycle = std::numeric_limits<Uint32>::max();
+    mutable CitySpiceShare citySpiceShareCache;
+    enum class CityBoomKind { Native, Workers, Refineries, Greedy, ShortTax, Reactive };
+    CityBoomKind cityBoomKind() const;
+    mutable Uint32 cityBoomKindCycle = std::numeric_limits<Uint32>::max();
+    mutable CityBoomKind cityBoomKindCache = CityBoomKind::Native;
+    /// True simulation state, never visibility: health-weighted mobile armies
+    /// whose terrain connects to our base, and the strongest local incursion.
+    /// Economic capital is cash + workers/bays + four minutes of observed
+    /// average spice income and the actual city's current tax-income forecast.
+    struct CityBoomSurvey {
+        int64_t ownArmy = 0, strongestArmy = 0, ownNearbyArmy = 0, nearbyArmy = 0;
+        int64_t ownEconomy = 0, leaderEconomy = 0;
+        int targetTeam = -1;
+        bool threatened = false, funding = false;
+    };
+    const CityBoomSurvey& cityBoomSurvey() const;
+    mutable Uint32 cityBoomSurveyCycle = std::numeric_limits<Uint32>::max();
+    mutable CityBoomSurvey cityBoomSurveyCache;
+    mutable std::vector<const StructureBase*> cityBoomBaseSites;
     /// Wave readiness and house attack threshold, percent of the difficulty's: the override's
     /// L (150) or Q (60) if set, else the configured WaveReadinessPercent; 100 outside Custom
     /// Medium/Hard/Brutal.
@@ -1137,9 +1327,22 @@ private:
     /// Health-weighted value of our team's mobile ground fighters (ours and our allies'; ours
     /// alone in a free-for-all or a 1v1).
     int64_t teamGroundArmyValue() const;
+    /// Stateless experiment: -1 native dispatch, -2 hold for mutual rivals' combat,
+    /// otherwise the weakened rival team to finish (true health-weighted armies).
+    int vultureOpportunity(const std::vector<Uint32>& strikeUnits);
+    const ObjectBase* vultureObjective(const UnitBase* lead, int team) const;
     /// JoinAllyWaves (Custom Hard/Brutal team play): the objective of an allied QuantBot's
     /// whole-army wave launched within the last kAllyWaveJoinMs, or nullptr.
     const ObjectBase* allyWaveObjective() const;
+    /// Scope comes from occupied original controllers, never ambient/runtime houses.
+    bool teamCoordinationGame() const;
+    /// Lowest-house-id live allied bot advertising the shared synchronised plan.
+    const QuantBot* teamAttackCoordinator() const;
+    bool teamAttackReady() const;
+    const ObjectBase* teamAttackObjective() const;
+    void wakeTeamAttackPartners();
+    bool alliedDefenceBuilding(const ObjectBase* building) const;
+    void helpAttackedAlly();
     /// FinishWhenLeading: our team's ground army is worth more than the strongest enemy team's
     /// remembered army (enemyThreatEstimate) - the leader of a free-for-all.
     bool finishLeading() const { return teamGroundArmyValue() > enemyThreatEstimate(); }
@@ -1211,7 +1414,7 @@ private:
     /// kForceFinishWeakest (H): the enemy team to finish - of the teams with a known structure,
     /// the weakest by remembered army plus kKnownTurretValue per known turret (ties: fewer known
     /// structures, then the lower team id); -1 when none is known.
-    int finishTargetTeam() const;
+    int finishTargetTeam(const UnitBase* lead) const;
     /// H's objective for a wave led by \a lead: the nearest known structure of \a team the lead can
     /// reach by ground, production and economy (yard, factories, refinery) counted 20 tiles nearer.
     const ObjectBase* finishObjective(const UnitBase* lead, int team) const;
@@ -1260,6 +1463,12 @@ private:
     /// starting army able to launch, no wave yet) at most its own threshold share of Medium's
     /// limit on this map (docs/ai-scenario-matrix.md, "Difficulty ladder").
     int reachableAttackThreshold(int required) const;
+    bool exhaustedArmyEconomy() const;
+    void releaseExhaustedArmyRepairs();
+    // Derived within one simulation cycle; no orders, RNG or persisted state.
+    mutable Uint32 exhaustedEconomyCycle = std::numeric_limits<Uint32>::max();
+    mutable int64_t exhaustedEconomyCredits = -1;
+    mutable bool exhaustedEconomyResult = false;
     /// Bundling waits until the house could attack: its military value reaches the house
     /// attack threshold at the configured wave readiness. Below it - an opening, a rebuild after
     /// losses - the reserve keeps to the home rally and defends the base.
@@ -1436,6 +1645,9 @@ private:
         bool frontObserved = false;
         Coord frontAnchor = Coord::Invalid();
         int waveMembers = 0;
+        /// Derived this survey only: an owned offensive fighter (including a
+        /// raider outside customWave) has a live hostile contact at this fight.
+        bool preservationContact = false;
         /// Local holding strength around the attacked core asset, and the
         /// hostile power actually attacking it. A minor raid that the local
         /// defenders and turret cover outweigh is not a house emergency.
@@ -1448,6 +1660,11 @@ private:
         Coord coreAt = Coord::Invalid();
     };
     ArmySurvey surveyArmy(const ObjectBase* plannedFront = nullptr);
+    /// One default-OFF experiment; never campaign, Builder/Off or a human ally.
+    bool retreatPreserveActive() const;
+    /// Repair first, then the saved house withdrawal. True means this controller
+    /// retains the unit; raids, Hunt spacing and ordinary rally must stand aside.
+    bool preserveCombatUnit(const UnitBase* unit, int& orderBudget, int radius = 3);
     /// Posture evaluation, once per AI pass this house actually takes.
     void updateArmyPosture();
     /// Apply the current posture to units: hold reinforcements, recall the wave.
@@ -1661,8 +1878,40 @@ private:
     void planBuildInventory(BuildPass& pass);
     /// Spendable cash, military budget, spice competition, support queues and reserves.
     void planBuildBudget(BuildPass& pass);
+    void planCityBoom(BuildPass& pass);
+    /// Measured native FFA winners' realised 5-15 minute yield, not the
+    /// optimistic trip forecast: credits of spice per worker-minute.
+    static constexpr int kCityBoomWorkerSpicePerMinute = 200;
+    struct CityBoomSpiceGate {
+        CityBoomKind kind = CityBoomKind::Native;
+        int kindWorkers = 0, kindBays = 0, workerCap = 0, bayCap = 0;
+        /// Capital for kindWorkers workers and kindBays bays, crediting each
+        /// bay's free harvester once. Keep the ratio exact until telemetry.
+        int64_t workerCapitalNumerator = 0;
+        bool inert = false;
+    };
+    /// Every boom consumer uses this effective kind. Native is returned when
+    /// the enabled gate cannot fund even its first worker; ShortTax is untouched.
+    CityBoomKind cityBoomSpiceKind(const CitySpiceShare* share = nullptr) const;
+    mutable Uint32 cityBoomSpiceGateCycle = std::numeric_limits<Uint32>::max();
+    mutable CityBoomSpiceGate cityBoomSpiceGateCache;
+    // Telemetry-only change detection; never an input to a game decision.
+    bool cityBoomSpiceGateTraceValid = false;
+    std::array<int64_t, 6> lastCityBoomSpiceGateTrace{};
+    void planFleetResourceBudget(BuildPass& pass);
+    // Scratch is recomputed before every ratio decision; no unsaved tactical cache.
+    std::vector<Uint8> fleetSurveySeen;
+    std::vector<int> fleetSurveyQueue;
     /// Per-house city statistics, custom-city valve tuning and power demand sampling.
     void planCityState(BuildPass& pass);
+    /// Default-OFF spice-FFA service packages; all inputs come from saved simulation state.
+    bool cityLandValueServiceScope() const;
+    struct CityLandValueBudget {
+        int spiceIncome = 0, taxIncome = 0, powerCost = 0;
+        int allowance = 0, targetFunding = 0, funding = 0;
+    };
+    CityLandValueBudget cityLandValueBudget(int spendable, int fullPoliceCost) const;
+    bool cityFirstPoliceAllocationReady() const;
     /// IX/Palace eligibility timers and the strategic reserve they protect.
     void planStrategicReserve(BuildPass& pass);
     /// Harvester targets, refinery queues, rock expansion and the opening fleet.
@@ -1677,6 +1926,9 @@ private:
     void traceBuildState(BuildPass& pass);
     /// Learned unit mix, anti-air floor and the funded army plan.
     void planUnitMix(BuildPass& pass);
+    /// VanillaArmyCounters: the native mix blended toward counters of the strongest
+    /// terrain-reachable hostile team's live army (players/QuantBotArmyCounterPolicy.h).
+    UnitMixPolicy::Mix vanillaArmyCounterMix(const BuildPass& pass, const UnitMixPolicy::Mix& native) const;
     /// Income forecast, producer lanes and the shared-spending decision.
     void planCapitalForecast(BuildPass& pass);
     /// City yards, civic reserve, storage and the no-spice bootstrap.
@@ -1685,18 +1937,49 @@ private:
     void planOpeningProduction(BuildPass& pass);
     /// Rocket coverage, core infrastructure and crime exposure.
     void planDefenceCoverage(BuildPass& pass);
+    /// VanillaCoreDefence: this pass's transient core-threat survey (inactive when off/out of scope).
+    void planVanillaCoreDefence(BuildPass& pass);
+    /// Net-income buckets, a legal next technology and its bounded savings plan.
+    bool simpleTechPolicyActive() const;
+    void planTechSavings(BuildPass& pass);
+    bool spendingEmergency(BuildPass& pass, Uint32 item);
+    bool incomeTechAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
+    bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
+    static size_t compositionSlot(Uint32 item);
+    bool compositionAdmits(BuildPass& pass, Uint32 item);
     /// Scores every producer's candidate purchases.
     void planCapitalCandidates(BuildPass& pass);
+    void planVanillaBoldCapital(BuildPass& pass);
+    bool vanillaBoomAdmits(BuildPass& pass, Uint32 item);
+    bool vanillaBoomUpgradeAdmitted(BuildPass& pass, const BuilderBase* builder);
     /// Chooses the protected capital purchase for this pass.
     void chooseCapitalPlan(BuildPass& pass);
     /// Orders this pass's producers.
     void planBuildOrder(BuildPass& pass);
     /// Records what the capital plan achieved.
     void traceCapitalOutcome(BuildPass& pass);
+    /// Match option and hashed policy switch; never consumes RNG or adds saved AI state.
+    bool researchLabPolicyActive() const;
+    /// Break ordinary fleet/crime research vetoes; Civ Wars always retains progression.
+    bool researchRequired(const BuildPass& pass) const;
+    void planCityResearchOrder(BuildPass& pass);
+    bool techInvestmentReady(BuildPass& pass);
+    bool economyReadyForCapital(BuildPass& pass);
+    bool canFundWorkingCapital(BuildPass& pass, int cost, Uint32 supplier);
+    bool cityOpeningCapitalFunded(BuildPass& pass, int cost, Uint32 supplier);
+    bool canFundProductionUpgrade(BuildPass& pass, const BuilderBase* builder);
+    /// Reserve required technology before repeatable orders spend its capital.
+    void planTechResearch(BuildPass& pass);
+    /// Preserve working capital, protected purchases and existing production runway.
+    bool canFundTechInvestment(BuildPass& pass, int cost);
+    /// Required progression researches before producers; legacy optional policy afterward.
+    void startTechResearch(BuildPass& pass);
     // Planning helpers shared by the producers and yards (QuantBotBuild.cpp).
-    bool openingFleetIncomplete(BuildPass& pass);
+    bool openingFleetIncomplete(const BuildPass& pass) const;
     bool openingWorkersNeeded(BuildPass& pass);
     int harvesterInvestmentReserve(BuildPass& pass);
+    bool campaignEconomySupport() const;
+    int campaignRefineryReplacementCost(BuildPass& pass);
     bool needsFirstTransport(BuildPass& pass);
     static int initialCityPopulation(Uint32 item);
     bool cityAdmitsStructure(BuildPass& pass, Uint32 item);
@@ -1707,25 +1990,38 @@ private:
     bool canBuildMilitaryVehicle(BuildPass& pass, const BuilderBase* factory);
     CivicPlan planCivicForYard(BuildPass& pass, const BuilderBase* yard);
     void forecastSpiceTrip(BuildPass& pass, Coord site);
+    /// CityRefineryLogistics: called only after safety accepts an established return.
+    bool balanceRefineryReturn(const Harvester* harvester);
+    /// Derived drop-off membership only; bookings stay live after every immediate order.
+    Uint32 refineryReturnDropoffsCycle = std::numeric_limits<Uint32>::max();
+    std::vector<Uint32> refineryReturnDropoffs;
+    /// Telemetry debounce only, never read by placement or return decisions.
+    std::array<Coord, 2> refinerySpiceSiteTrace{{Coord::Invalid(), Coord::Invalid()}};
     int workerAnnualIncome(BuildPass& pass);
     bool factoryPrefersHarvester(BuildPass& pass, const BuilderBase* factory);
+    int cityHarvesterReplacementFloor(BuildPass& pass);
+    bool cityHarvesterReplacementFactoryReady(BuildPass& pass);
+    bool buildCityHarvesterReplacement(BuildPass& pass, BuilderTurn& turn);
     Uint32 chooseCityEconomy(BuildPass& pass, const BuilderBase* builder, bool opening);
     bool infantryQuotaAdmits(BuildPass& pass, int value);
     bool cityInfantryItem(BuildPass& pass, Uint32 item);
-    bool cityTroopContentExists(BuildPass& pass);
+    bool troopContentExists(BuildPass& pass, const BuilderBase* builder);
+    bool trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value);
+    Uint32 supportTrooperOrder(BuildPass& pass, const BuilderBase* builder, int money, int target);
+    Uint32 trooperInfrastructureItem(BuildPass& pass, const BuilderBase* yard, bool requireCash);
     static int purchasePrice(const BuilderBase* builder, Uint32 item);
     QuantBotFoundationPolicy::Plan foundationPlan(const BuilderBase* builder, Uint32 item, Coord site, const std::vector<Uint32>& clearedZones = std::vector<Uint32>{});
     std::vector<QuantBotFoundationPolicy::SlabOrder> foundationOrders(const BuilderBase* builder, Uint32 item, Coord site);
     Sint32 repairPrice(const StructureBase* structure);
     bool repairPolicyMaintains(BuildPass& pass, const StructureBase* structure);
-    bool canFundCapacityMcv(BuildPass& pass, int price);
+    bool canFundCapacityMcv(BuildPass& pass, int price, Uint32 supplier);
     Uint32 affordableCityZone(BuildPass& pass, const BuilderBase* builder, int budget);
     int buildingCapitalCost(BuildPass& pass, Uint32 item);
     int cityBuildTicks(BuildPass& pass, Uint32 item);
     bool cityBootstrapNeeded(BuildPass& pass);
     int cityBootstrapReserve(BuildPass& pass);
     int coreCoverageShortfall(BuildPass& pass);
-    bool storageExpansionNeeded(BuildPass& pass);
+    Uint32 storageExpansionItem(BuildPass& pass, const BuilderBase* builder);
     int proactiveCoverageShortfall(BuildPass& pass);
     bool proactiveSavingHold(BuildPass& pass, int price);
     bool capitalPending(BuildPass& pass);
@@ -1735,6 +2031,7 @@ private:
     void buildRepair(BuildPass& pass, const StructureBase* pStructure);
     /// One producer's turn: shared rules, then its type's handler.
     void buildProducer(BuildPass& pass, const StructureBase* pStructure);
+    bool buildTechSavings(BuildPass& pass, BuilderTurn& turn);
     /// Per-builder bookkeeping and status telemetry.
     void beginBuilderTurn(BuildPass& pass, BuilderTurn& turn);
     /// Starport MCV recovery; true ends the turn.
@@ -1781,6 +2078,8 @@ private:
     void chooseYardAirDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Essential infrastructure, power recovery and economic generation.
     void chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// VanillaCoreDefence: at most one Gun/Rocket Turret per pass for the most threatened short core.
+    void chooseYardVanillaCoreDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// No-spice opening, civics, services and the seed economy.
     void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Core protection, power reserve, reactor and production recovery.
@@ -1793,6 +2092,8 @@ private:
     void chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Barracks, repair yard, yard upgrade, turrets and factories.
     void chooseYardMilitaryInfrastructure(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// Queues one founded lab or its power supply, after essentials and before optional tech.
+    bool buildResearchLab(BuildPass& pass, BuilderTurn& turn);
     /// IX, heavy factory expansion, refineries and repair expansion.
     void chooseYardTechAndExpansion(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Crime service, palace, vanilla defences, battery and zones.

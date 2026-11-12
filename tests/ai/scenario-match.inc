@@ -6,9 +6,9 @@
 //     multiplayer map (BALANCE_SKIRMISH), every house given its own team and controller class
 //     (BALANCE_SCENARIO_SIDES "house:team:class,...", e.g. 1:2:qBotBrutal,0:1:AIPlayerHard), run
 //     until one team is left (House::isAlive, the engine's own defeat rule) or the time limit;
-//   - a campaign mission (no sides: the human seat's QuantBot partner against the campaign
-//     enemies, as run-campaign-balance.py sets them up), run until the mission's own win/lose
-//     conditions end it (Game::finished) or the time limit.
+//   - a campaign mission (no sides: the player house's QuantBot against campaign enemies,
+//     as run-campaign-balance.py sets them up), run until the mission's own win/lose
+//     conditions end it (Game::finished, including spice quotas) or the time limit.
 // Once a game minute every playing house is sampled (EliminationMatch::sample) and its army's
 // "sortie" measured: combat ground units more than kAwayTiles from every structure of their
 // house. Scenario triggers (reinforcements, time-outs) are counted as they fire. The end logs
@@ -71,8 +71,8 @@ inline std::vector<Side> sidesFromEnv() {
 /// BALANCE_SKIRMISH "key=value,...": a Random Skirmish multiplayer map with one start per side,
 /// every start alike (the menu's start choices). Keys: size (64..256), base (none = MCV only, cy =
 /// Construction Yard only, outpost, small, medium, large, fortress), army (kArmyBudgets index),
-/// city (kCityTargets index), seed, tech, rock, spice (indices), credits, symmetric (0/1). The
-/// mode (vanilla or DuneCity city sim) follows the active mod, as the menu sets it.
+/// city (kCityTargets index), seed, tech, sand/rock/mountain (map percentages in steps of 5,
+/// summing to 100), spice (index), credits, symmetric (0/1). The mode follows the active mod.
 struct Skirmish {
     SkirmishGenerator::Params params;
     bool constructionYardOnly = false;
@@ -107,7 +107,9 @@ inline Skirmish parseSkirmish(const std::string& text, int starts) {
         else if (key == "city") p.startSide.city = std::stoi(value);
         else if (key == "seed") p.seed = static_cast<uint32_t>(std::stoul(value));
         else if (key == "tech") p.techLevel = std::stoi(value);
-        else if (key == "rock") p.rock = static_cast<Rock>(std::stoi(value));
+        else if (key == "sand") p.sandPercent = std::stoi(value);
+        else if (key == "rock") p.rockPercent = std::stoi(value);
+        else if (key == "mountain") p.mountainPercent = std::stoi(value);
         else if (key == "spice") p.spice = static_cast<Spice>(std::stoi(value));
         else if (key == "credits") p.credits = std::stoi(value);
         else if (key == "symmetric") p.symmetric = value == "1";
@@ -117,7 +119,8 @@ inline Skirmish parseSkirmish(const std::string& text, int starts) {
     p.clamp(getNumCustomGameHouses(), ModManager::instance().isTornieFamilyContentActive());
     if (p.starts != requested.starts || p.mapSize != requested.mapSize || p.credits != requested.credits
         || p.techLevel != requested.techLevel || p.startSide.army != requested.startSide.army
-        || p.startSide.city != requested.startSide.city)
+        || p.startSide.city != requested.startSide.city || p.sandPercent != requested.sandPercent
+        || p.rockPercent != requested.rockPercent || p.mountainPercent != requested.mountainPercent)
         throw std::runtime_error("Skirmish options out of range: " + text);
     return out;
 }
@@ -201,9 +204,39 @@ inline std::string classesOf(const House* house) {
 }
 
 /// Plays the game to its end (see the file comment). Returns "won"/"lost" for @a trackedHouse's
-/// team (the campaign's own result in a campaign), or "time_limit".
+/// team (the campaign's own result in a campaign), "decided" when a local observer watches a
+/// match (it plays no house), or "time_limit".
 inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, bool constructionYardOnly) {
     if (constructionYardOnly) deployMcvs(game);
+    const auto& init = game.getGameInitSettings();
+    GameStateDigest::Hasher mapHash;
+    for (const unsigned char byte : init.getFiledata()) mapHash.mixUint8(byte);
+    const auto checksums = ModManager::instance().getEffectiveChecksums();
+    const char* style = std::getenv("BALANCE_SCENARIO_STYLE");
+    SDL_Log("SCENARIO_SETUP: seed=%u cycle=%u config_hash=%s options_hash=%s map_hash=%016llx "
+            "map_hash_algorithm=fnv1a64 content_hash=%s object_data_hash=%s city_sim=%d observing=%d research_enabled=%d style=%s "
+            "initial_spice_tile_permille=%d",
+            init.getRandomSeed(), game.getGameCycleCount(), getQuantBotConfig().getConfigHash().c_str(),
+            init.getGameOptions().getHash().c_str(), static_cast<unsigned long long>(mapHash.value()),
+            checksums.combined.c_str(), checksums.objectData.c_str(), int(game.isCitySimEnabled()),
+            int(game.isObserving()),int(init.getGameOptions().researchLab),style && *style ? style : "default",
+            init.getInitialSpiceTilePermille());
+    if (const char* path = std::getenv("BALANCE_SCENARIO_DUMP_MAP"))
+        std::ofstream(path, std::ios::binary) << init.getFiledata();
+    if (const char* path = std::getenv("BALANCE_SCENARIO_DUMP_OPTIONS")) {
+        INIFile options(true, "Complete effective scenario options");
+        writeGameOptionsToConfig(options, "Game Options", init.getGameOptions());
+        if (!options.saveChangesTo(path))
+            throw std::runtime_error("Cannot record effective scenario options");
+    }
+    const char* genomeDirectory = std::getenv("BALANCE_GENOME_PHASE_DIR");
+    if (genomeDirectory) {
+        INIFile options(true, "Complete effective candidate qualification options");
+        writeGameOptionsToConfig(options, "Game Options", init.getGameOptions());
+        if (!options.saveChangesTo(std::string(genomeDirectory) + "/effective-options.ini"))
+            throw std::runtime_error("Cannot record candidate qualification options");
+        FormationDuel::applyGenomePhase(game);
+    }
     const House* tracked = game.getHouse(trackedHouse);
     // The houses that start with something: a campaign roster also names houses its map lacks.
     std::vector<const House*> houses;
@@ -212,6 +245,12 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     for (const House* house : houses)
         SDL_Log("SCENARIO_ROSTER: house=%d team=%d players=%s", house->getHouseID(), house->getTeamID(),
                 classesOf(house).c_str());
+    for (const House* house : houses)
+        for (const auto& player : house->getPlayerList())
+            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get()))
+                SDL_Log("SCENARIO_AI_CONFIG: house=%d config_hash=%s", house->getHouseID(),
+                        bot->botConfig().getConfigHash().c_str());
+    DuneCityAudit::sampleInitialResearch(game);
     const Uint32 minute = MILLI2CYCLES(60000);
     const size_t initialTriggers = game.getTriggerManager().getTriggers().size();
     int fired = 0, winner = 0;
@@ -221,10 +260,12 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     while (game.getGameCycleCount() < end) {
         ProbeDigest::periodic(game);
         const Uint32 now = game.getGameCycleCount();
+        if (genomeDirectory && now) FormationDuel::applyGenomePhase(game);
         const auto& triggers = game.getTriggerManager().getTriggers();
         for (auto it = triggers.begin(); it != triggers.end() && (*it)->getCycleNumber() == now; ++it) ++fired;
         game.updateGameState();
         EliminationMatch::crushCount.observe();
+        DuneCityAudit::observe(game);
         const Uint32 cycle = game.getGameCycleCount();
         if (cycle % minute == 0) {
             EliminationMatch::sample(game);
@@ -241,6 +282,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     }
     EliminationMatch::sample(game);
     const Uint32 cycle = game.getGameCycleCount();
+    const auto* city = game.getCitySimulation();
     for (const House* house : houses) {
         int armyValue = 0, armyUnits = 0, structures = 0;
         for (const auto* unit : unitList)
@@ -251,24 +293,29 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         for (const auto* structure : structureList)
             if (structure->getOwner() == house && structure->getHealth() > 0) ++structures;
         const HouseTrack& track = tracks[house->getHouseID()];
+        const int population = city && game.isCitySimEnabled() && city->isInitialized()
+            ? city->getHouseState(house->getHouseID()).getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier : -1;
         SDL_Log("SCENARIO_HOUSE: house=%d team=%d players=%s alive=%d eliminated_s=%.1f credits=%d kill_value=%d "
                 "loss_value=%d structures_destroyed=%d units_destroyed=%d structures=%d army_value=%d army_units=%d "
-                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d",
+                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d population=%d",
                 house->getHouseID(), house->getTeamID(), classesOf(house).c_str(), int(house->isAlive()),
                 track.eliminated ? FormationWaveMeasure::seconds(track.eliminated) : -1.0, house->getCredits(),
                 house->getKillValue(), house->getLossValue(), house->getNumDestroyedStructures(),
                 house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes,
-                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()));
+                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()), population);
     }
     std::string outcome;
     int winnerTeam = winner;
     if (campaign) {
         outcome = game.finished ? (game.won ? "won" : "lost") : "time_limit";
         winnerTeam = !game.finished ? 0 : (game.won && tracked ? tracked->getTeamID() : -1);
+    } else if (game.isObserving()) {
+        // The observer's view is anchored to some AI house, but it plays none: only the
+        // winning team is a result, never that anchor house's win or loss.
+        outcome = winner == 0 ? "time_limit" : "decided";
     } else {
         outcome = winner == 0 ? "time_limit" : (tracked && winner == tracked->getTeamID() ? "won" : "lost");
     }
-    const auto* city = game.getCitySimulation();
     SDL_Log("SCENARIO_RESULT: mode=%s outcome=%s winner_team=%d cycle=%u end_s=%.1f minutes=%.2f triggers=%zu fired=%d "
             "win_flags=%d lose_flags=%d quota=%d city_pop=%d",
             campaign ? "campaign" : "match", outcome.c_str(), winnerTeam, cycle, FormationWaveMeasure::seconds(cycle),

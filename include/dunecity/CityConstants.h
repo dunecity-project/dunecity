@@ -50,6 +50,9 @@ inline bool isCityOnlyStructure(int itemID) {
         || itemID == Structure_Airport;
 }
 
+/// Displayed city population a house needs to start a Starport (match rule `Starport Population`).
+constexpr int kStarportPopulation = 5000;
+
 // Construction reach follows owned tiles, regardless of their foundation.
 // Enemy roads, like enemy concrete, may be covered inside our normal build
 // range but never grant a foothold or extend that range themselves.

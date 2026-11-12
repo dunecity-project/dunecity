@@ -151,7 +151,9 @@ Uint64 digest(Game& game) {
         if(const auto* r = dynamic_cast<const Refinery*>(object)) {
             hash.mixInt32(r->getNumBookings());
             for(int bay = 0; bay < r->getNumBays(); ++bay) {
-                const auto* occupant = r->getContainedHarvester(bay); hash.mixUint32(occupant ? occupant->getObjectID() : NONE_ID);
+                const auto* occupant = r->extractingSpice[bay]
+                    ? game.getObjectManager().getObject(r->harvesters[bay].getObjectID()) : nullptr;
+                hash.mixUint32(occupant ? occupant->getObjectID() : NONE_ID);
             }
         }
         if(const auto* trap = dynamic_cast<const WindTrap*>(object)) hash.mixUint8(trap->isPowerUpgraded());
@@ -339,11 +341,46 @@ BuilderBase* capture(Game& game, House* captor, BuilderBase* victim) {
         result->getObjectID(), captor->getHouseID(), original, production, result->getTechnologyHouseID(), game.getGameCycleCount());
     return result;
 }
+void productionPrerequisiteBounds(Game& game, BuilderBase* builder) {
+    auto* owner = builder->getOwner();
+    const auto* controller = owner->getPlayerList().front().get();
+    const int technology = builder->getTechnologyHouseID();
+    std::array<ObjectData::ObjectDataStruct, Unit_TameSandworm - Unit_Troopers5 + 1> saved{};
+    for(int item = Unit_Troopers5; item <= Unit_TameSandworm; ++item) {
+        auto& spec = game.objectData.data[item][technology];
+        saved[item - Unit_Troopers5] = spec;
+        spec.enabled = false;
+    }
+    auto& spec = game.objectData.data[Unit_Troopers5][technology];
+    spec.enabled = true;
+    spec.builder = builder->getItemID();
+    spec.techLevel = owner->getTechLevel();
+    spec.upgradeLevel = builder->getCurrentUpgradeLevel() + 1;
+    spec.prerequisiteStructuresSet.reset();
+    require(spec.upgradeLevel <= builder->getMaxUpgradeLevel(), "Bounds fixture needs a real upgrade goal");
+    require(isStructure(Structure_ResearchLab)
+        && Structure_ResearchLab >= spec.prerequisiteStructuresSet.size()
+        && owner->getNumItems(Structure_ResearchLab) == 0, "Bounds fixture lacks an absent extended structure");
+    require(controller->hasTornieProductionUpgradeGoal(builder),
+        "IDs outside the prerequisite mask became phantom upgrade prerequisites");
+    spec.prerequisiteStructuresSet.set(Structure_LastID);
+    require(owner->getNumItems(Structure_LastID) == 0 && !controller->hasTornieProductionUpgradeGoal(builder),
+        "The last valid prerequisite bit was ignored");
+    spec.prerequisiteStructuresSet.reset(Structure_LastID);
+    spec.prerequisiteStructuresSet.set(Structure_WindTrap);
+    require(owner->getNumItems(Structure_WindTrap) > 0 && controller->hasTornieProductionUpgradeGoal(builder),
+        "An owned valid prerequisite blocked the upgrade goal");
+    for(int item = Unit_Troopers5; item <= Unit_TameSandworm; ++item)
+        game.objectData.data[item][technology] = saved[item - Unit_Troopers5];
+    SDL_Log("TORNIE_GAMEPLAY_PREREQUISITE_BOUNDS: mask_bits=%zu last_valid=%d extended_id=%d missing_blocks=1 owned_allows=1",
+        spec.prerequisiteStructuresSet.size(), Structure_LastID, Structure_ResearchLab);
+}
 void mechanics(std::unique_ptr<Game>& game) {
     const std::vector<int> houses{HOUSE_ORDOS,HOUSE_HARKONNEN,HOUSE_ATREIDES,HOUSE_WILDSPADE,HOUSE_KLESHMERSH,HOUSE_CUSTOM,HOUSE_NEUTRAL,HOUSE_REBELS};
     world(game,"Tornie",houses);
     std::array<Base,NUM_HOUSES> bases{};
     for(int h : houses) bases[h] = readyBase(*game,h);
+    productionPrerequisiteBounds(*game,bases[HOUSE_ORDOS].barracks);
     upgrade(*game,{{bases[HOUSE_KLESHMERSH].light,2},{bases[HOUSE_ORDOS].light,1},
         {bases[HOUSE_ATREIDES].heavy,2},{bases[HOUSE_WILDSPADE].air,3},
         {bases[HOUSE_ORDOS].barracks,2},{bases[HOUSE_ORDOS].combo,1}});
@@ -437,7 +474,9 @@ void busyState(std::unique_ptr<Game>& game) {
     std::ofstream fields(out("busy-state-fields.txt"));
     fields<<"cycle="<<game->getGameCycleCount()<<" rng="<<game->randomGen.getSeed()<<" chaos_exchanged="<<exchanged<<'\n';
     fields<<"refinery="<<refinery->getObjectID()<<" bookings="<<refinery->getNumBookings()<<" occupied="<<refinery->getNumOccupiedBays()<<'\n';
-    for(int bay=0;bay<2;++bay) {const auto* u=dynamic_cast<const Harvester*>(refinery->getContainedHarvester(bay));
+    for(int bay=0;bay<2;++bay) {const auto* u=dynamic_cast<const Harvester*>(
+        bay < refinery->getNumBays() && refinery->extractingSpice[bay]
+            ? game->getObjectManager().getObject(refinery->harvesters[bay].getObjectID()) : nullptr);
         fields<<"bay="<<bay<<" object="<<u->getObjectID()<<" item="<<u->getItemID()<<" cargo_raw="<<u->getAmountOfSpice().getRawValue()<<" active="<<u->isActive()<<'\n';}
     fields<<"slowed="<<slowed->getObjectID()<<" timer="<<slowed->getSlowTimer()<<" speed_factor_raw="<<slowed->getMovementSpeedFactor().getRawValue()<<" step_offset_raw="<<slowed->dynastyStepTimeOffset.getRawValue()<<'\n';
     fields<<"research_active="<<owner->getRadarResearchActive()<<" remaining="<<owner->getRadarResearchRemaining()<<'\n';
@@ -485,7 +524,7 @@ void aircraftOrders(std::unique_ptr<Game>& game) {
             for(int tick=0;tick<96;++tick) {
                 game->updateGameState();
                 air=dynamic_cast<UnitBase*>(game->getObjectManager().getObject(airID));
-                require(air && air->getTarget()==worker && air->wasForced(),
+                require(air && currentGame->getObjectManager().getObject(air->target.getObjectID())==worker && air->wasForced(),
                     "Explicit aircraft worker target was replaced during refresh cadence");
             }
             require(air->getAttackMode()==(family ? HUNT : STOP),"Aircraft order changed unrelated-mod mode");

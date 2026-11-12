@@ -8,6 +8,268 @@ should beat an easy. test different levels from 1-9 ... a few of the MP popular 
 Until 1.0.847 almost every AI measurement was a 1v1 or All against Atreides. The matrix plays many
 kinds of game with one driver, `tests/ai/scenario-matrix.py`, and prints one summary table.
 
+Mixed four-way FFA smoke cells check completion and meaningful combat, not a
+particular seed's incidental default winner. Keep explicit matchup/campaign
+expectations and replay-digest checks; do not pin a past protocol's FFA winner.
+
+## Income-based technology timing experiment
+
+`TechIncomeTiming` is a hashed, default-OFF QuantBot setting (`0/1/2`) for
+Custom Vanilla and DuneCity spice games. Levels 1/2 admit optional first Repair
+Yard, High Tech Factory, IX, Palace, Research Lab and military producer/research
+upgrades only when net income per minute reaches 1x/2x the full project cost
+(the first cut used cost per five minutes and never held in the Vanilla screen,
+where median realised income was 885/min). Income is
+the lifetime realised spice/tax receipt rate, less current upkeep, capped by
+the existing four-minute delivered-worker/shared-spice forecast. Starting cash
+is never income. The lifetime rate avoids unsaved rolling history; it responds
+more slowly to a recent economic improvement or loss than a rolling window.
+
+The policy applies only to Custom Medium/Hard/Brutal Vanilla or DuneCity games
+with remaining map spice. Campaign and no-spice maps are inert. First worker
+and carryall technology, first suppliers, recovery and civic yard upgrades
+retain native authority. Rejected optional technology does not reserve cash:
+current-tier military production remains native. This is not SimpleTechSavings.
+
+When the full-health-adjusted true rival mobile armies are no larger than
+ours, no hostile mobile combat unit is within 20 tiles of the main base and
+the economy is not under attack, the yard may buy one affordable legal next
+technology ahead of optional capacity growth. It still requires delivered
+opening workers, power, site/foundation legality and working reserves.
+All knowledge comes from deterministic simulation state, without fog or
+mission/map/seed conditions. Levels never alter unit composition or prices.
+
+Use candidate-only `tech-income-1` / `tech-income-2`; `tech-income-off` is the
+explicit native control. The audit's `tech-houses.csv` records first-owned and
+first-completed structure times; join `tech-samples.csv` at the preceding
+minute to compare live/queued army, cash and receipts at those transitions.
+Timing comparisons between winners and losers are descriptive, not causal.
+Telemetry events `income_tech_state`, `income_tech_hold`, `income_tech_early`
+record the rate, threshold level and full-knowledge safety mechanism. Do not
+set `DUNECITY_TECH_SAVINGS_AUDIT`; use equal observer modes in paired arms.
+
+## Batch3 City economy experiments
+
+Five hashed `[Force Concentration]` integers (`0` OFF, `1`/`2` levels; default
+OFF except `CityCapitalPacing`: level 1 since protocol 118, level 2 since
+protocol 120) re-test
+economy-freeing ideas only where earlier unscoped arms gained:
+`QuantBot::cityEconomyExperimentScope()`, an autonomous Custom
+Medium/Hard/Brutal QuantBot in a DuneCity-mod city game
+(`CustomGame`/`CustomMultiplayer`) whose map starts with spice
+(`getInitialSpiceTilePermille() > 0`), outside Civilization Wars. Vanilla,
+campaigns, Civilization Wars and no-spice maps are inert, so of the fixed
+controls only map 12 exercises them. No map, mission or seed predicate is used.
+
+- `CityCapitalPacing`: TechIncomeTiming's 1x/2x income gate and its safe-rival
+  early technology, in research-enabled scope games with remaining spice. An
+  explicit `TechIncomeTiming` keeps precedence. Level 1 was the default in
+  protocols 118-119 (2026-11-09): on B3m `7e188318` paired96 45 -> 58 of 96 (13
+  gained, none lost, CI [+0.062, +0.219]), fresh48 19 -> 26 and screen24 11 -> 13
+  without a lost game, controls26 26/26 digest-identical, and the 1.0.807 check
+  PASS (candidate 56 / OFF 56 / 807 22; the research-off deck is outside its scope).
+  Level 2 is the default since protocol 120: optional producer technology waits
+  until income per minute is twice its cost. Against the shipped level 1 on the
+  release line `a1d85ffa`, two fresh paired96 blocks pooled to 192 games and
+  77 -> 90 wins (+17/-4; blocks +4 and +9; Δ+0.068, CI [+0.021, +0.120]), with no
+  format or spice stratum collapsing. The old (Silicon Valley) deck and the
+  60-minute Outpost deck both kept 14/14 native wins with all 26 digests identical,
+  and the 1.0.807 deck scored L2 56 / L1 56 / 807 22. The recheck on the round-119
+  base `7ebe1906` (counters50-S5 on; controls on the 120-minute Outpost schedule) is
+  in `SimpleGate/round120`.
+- `CityFleetRatios`: EconomicFleetRatios on Hard/Brutal with remaining spice;
+  level 1 is `h3-cq1-r1`, level 2 `h4-cq1-r1`. An explicit
+  `EconomicFleetRatios` keeps its configured values.
+- `CityTechRefineries`: optional producer technology (TechIncomeTiming's
+  project list and exemptions) and new studies wait until 3 (level 1) or 5
+  (level 2) refinery bays stand, never more than one bay per three workers of
+  the spice plan (minimum 1). A held study keeps no research reserve.
+- `CityYardRefineries`: an optional capacity MCV (a yard stands; no rock
+  expansion or colonisation need) waits for the same bay count.
+- `CityWorkerReplacement`: `CityHarvesterReplacement`'s lost-worker floor for
+  every roster, paid back in 10 (level 1) or 15 (level 2) minutes at 200 spice
+  per worker-minute. The FFA switch keeps precedence in its own scope.
+
+Candidate-only overlays are `city-capital-pacing-1/2`, `city-fleet-ratios-1/2`,
+`city-tech-refineries-1/2`, `city-yard-refineries-1/2` and
+`city-worker-replacement-1/2`; `experiment-batch-3-off` is the OFF proof
+overlay and `round-118-off` returns the protocol 118 defaults to their protocol
+117 values. `round-120-off` returns `CityCapitalPacing` to its protocol 119
+level 1, and `round-119-off` also sets level 1, so it still plays protocol 118.
+`income_tech_hold` records the refinery gate as `refinery_bays`.
+The screen24 cells (`tests/ai/screen-designs/b3-city-screen24-cases.json`, fresh
+seeds 1300000-1300011) keep the TechTiming screen's format/size/spice/tech/tier
+layout. Preregistrations and results are in
+`outputs/ai-tuning-20261108/B3-*/ledger.md`.
+
+## Map-scoped repairs
+
+The control-map rule's repair step (a passer that lost native wins tests a
+variant scoped by the lost maps' observable features) gets five hashed
+`[Force Concentration]` integers (`0` OFF; levels below). They originally defaulted OFF;
+`VanillaArmyCounterMapScope` defaults to 5 since protocol 119, and the r3831 release
+candidate enables `ConvergeChokepointScope` and `OpeningOpenMapScope` at level 1.
+The map predicates read
+fixed thresholds from `GameInitSettings::getInitialTerrain()`: counts of
+the original explicit `[MAP]` grid of the saved scenario, the same source as the
+initial spice density (rock is `%`, mountain `@`, spice and thick spice the
+initial-spice tiles and their thick variants; rock contiguity is 3x3 all-rock
+windows per rock tile). Seeded original maps, generator-seeded custom maps and
+missing or malformed scenarios are unknown, and unknown or initially spiceless
+maps are never scoped. Initially spiceless maps remain functional policy cases,
+but are not a special promotion-control veto. No map name, mission or seed is read
+(`players/QuantBotMapScopePolicy.h`).
+
+- `ClosingMountainScope`: PressOn, FinishWhenLeading and JoinAllyWaves play
+  their compiled native values when mountain is at least 8% (level 1) or 6%
+  (level 2) of the tiles. It acts only on candidates that change those genes.
+- `ConvergeChokepointScope` (idea 38, default 1): Converge plays native (true)
+  with exactly two original occupied controller rows, initial area at most
+  **4,096 tiles**, and mountain at least 8% (`smallMountainDuel`). This is an
+  area limit, not width and height each at most 64: 128x32 also qualifies.
+- `OpeningOpenMapScope` (idea 31, default 1): OpeningReadiness plays native
+  (true) with at least four original occupied controller rows, mountain
+  strictly below 1.1%, and `thinOrFragmented(2, terrain)` (`openFlatCrowd`):
+  thick spice strictly below 20% of spice, or positive rock with strictly
+  fewer than 45 all-rock 3x3 windows per 100 rock tiles. Both new scopes require
+  measured, initially spice-bearing terrain. Occupied rows are counted from the
+  original roster, not distinct teams or surviving houses. The predicates do
+  not inspect mod names, map names, missions or seeds; existing force-consumer
+  eligibility is unchanged.
+- `VanillaArmyCounterMapScope`: VanillaArmyCounters stays inert when thick
+  spice is below 20% of the spice tiles (level 1), or also when rock contiguity
+  is below 0.45 (level 2).
+- `FocusFireMapScope`: FocusFireLevel plays native (0) on maps of at least
+  192x192 tiles (level 1), or also below 1,000 tiles per original occupied
+  controller (level 2).
+- Levels 3 and 4 of `VanillaArmyCounterMapScope` and `FocusFireMapScope` scope
+  by the original roster instead of the map: the combat change plays native when
+  the house faces at least 3 (level 3: FFA4 and larger) or 5 (level 4: FFA6)
+  opposing sides, i.e. distinct teams other than its own among the occupied
+  controller rows at game start (1v1 and 2v2 have one). Overlays
+  `focus-fire-2-sides-3/4` and `counters100-sides-3/4`; ledger
+  `outputs/ai-tuning-20261108/B3m-CombatSidesScope`.
+- Level 5 of each switch adds its map level 1 to a roster level (control-map
+  repairs, ideas 23d/22c): `FocusFireMapScope=5` is level 3 or at least 192x192
+  tiles, `VanillaArmyCounterMapScope=5` is level 4 or thick spice below 20%.
+  Overlays `focus-fire-2-sides-5`, `counters100-sides-5` and `counters50-sides-5`.
+  Since protocol 119 the last is the default treatment: `VanillaArmyCounters=1`,
+  blend 5000, `VanillaArmyCounterMapScope=5`. The release-line evidence on
+  `8617247d` is FFA4 576 paired games 192 -> 216 wins, old-deck controls 14/14
+  native wins kept, deck 56 / OFF 56, and CPU
+  x0.999/x0.994 (FFA6 no-leak check). `round-119-off` restores both switched
+  keys to 0; full receipts live in `B3m-CombatSidesScope` and
+  `SimpleGate/round119-counters` under `outputs/ai-tuning-20261108`.
+  The current control deck replaces Silicon Valley with The Sardaukar Outpost:
+  all 13 maps use the ordinary 75% native-win retention rule, with no special
+  digest-identical veto. Historical Silicon Valley receipts cannot qualify the replacement.
+
+Generated sample maps are 96-160 tiles square with at least 1,536 tiles per
+controller; the SweepLane screen/fresh/confirm maps measured 5% mountain and the
+counters paired96 maps thick share 0.24-0.53 and rock contiguity 0.61-0.84. The
+map levels are therefore inert on those decks (the roster levels act there, and
+level 5 plays as level 3/4), and only fixed and bundled maps exercise them.
+Candidate-only overlays are
+`closing-mountain-1-<sweep genome>` (a SweepLane genome plus level 1),
+`vanilla-army-counters-100-map-scope-1/2` and `focus-fire-2-map-scope-1/2`.
+Preregistrations and results are in
+`outputs/ai-tuning-20261108/B3m-ClosingMountainScope`, `B3m-VanillaArmyCounterMapScope`
+and `B3m-FocusFireMapScope` (`ledger.md`).
+
+### r3831-w151 release candidate
+
+The 2026-11-11 integration takes one qualified seven-field treatment from
+`8cee4d03674f061d93cebd61941cbc5b3c2bc48d`, evaluated on the round-121
+`c1d9d0cc` baseline. All seven fields move together:
+
+| Force Concentration key | Round-121 control | r3831 candidate |
+|---|---:|---:|
+| `Converge` | 1 | 0 |
+| `FinishWhenLeading` | 1 | 0 |
+| `OpeningReadiness` | 1 | 0 |
+| `PressOn` | 0 | 1 |
+| `TurretPriority` | 0 | 1 |
+| `ConvergeChokepointScope` | 0 | 1 |
+| `OpeningOpenMapScope` | 0 | 1 |
+
+The unscoped w151 lost three native control wins. The Converge repair recovered
+the small mountainous duel without globally reverting Converge (which drew two
+large mountainous six-player wins); the OpeningReadiness repair recovered both
+seeds of the open thin-spice four-player loss. Ablation and scoped receipts are in
+`outputs/ai-tuning-20261108/SweepLane/nominations-807/release-c1d9d0cc-ablation-driver1119`
+and the adjacent `release-c1d9d0cc-repairs-driver1219`.
+The evaluated scoped source retained **14/14 native QB/team-1 wins** across the
+26 controls (100% retention, not an absolute 14/26 win requirement), with 13 maps
+and two seeds and Outpost at 120 minutes. Paired96 wins were 52 -> 58; the
+1.0.807 deck comparison was same-source control 53 -> candidate 63.
+CPU ratios were x0.903 QuantBot / x0.973 simulation on `7728ee0a`, whose scoped
+engine/config/data/mod sources match the evaluated candidate.
+
+These are source-candidate receipts, **not a pass for the combined multiplayer
+release candidate**. Its final immutable pin still needs same-build controls,
+paired96, 1.0.807 and CPU gates. `CityCapitalPacing=2`, strict
+`SpiceBloomHarvest=1`, existing campaign behavior and save serialization remain
+unchanged. No Medium-player repair or rejected player-economy experiment is included.
+
+Use `release-r3831-control` and `release-r3831-candidate` in the existing
+play-style transport. Both explicitly set all seven fields; the control does
+not rely on the now-promoted constructor defaults. In `--tier controls`,
+`--style` changes only the QB candidate seat; in the 1.0.807 league and CPU
+stress runs it changes every QuantBot. All other seats retain the same configured
+defaults in each paired arm. Always record one common source pin, use fresh result
+directories, and do not reuse old-round-120 genome overlays as this control.
+
+## Spice bloom harvest
+
+`[Force Concentration] SpiceBloomHarvest` (hashed integer 0-2, default 1 = strict; absent from
+the config hash while explicitly OFF) lets QuantBot shoot spice blooms so that they burst into fields for
+its own harvesters. Any weapon impact except Sonic waves and the sandworm sets a bloom off
+(`Map::damage`): the bloom tile and every plain sand tile within 5 tiles become thin spice
+(up to 81 tiles, about 9,000 credits), and nothing is damaged. A ground unit that stops on a
+bloom also sets it off, and dies. Blooms are only placed by the map, never during a game.
+
+- Scope: autonomous Custom Medium/Hard/Brutal houses (`autonomousCustomArmy`) in Vanilla and
+  DuneCity, never a campaign, Civilization Wars, a fighter-only helper or a house allied with
+  a human. Maps without blooms are inert.
+- Cadence: from the cycle alone, on every fourth unit pass (`cycle % 200 < 50`), at most one
+  order per evaluation and none while a unit we ordered has yet to fire. A walk the engine
+  gave up on (the order no longer forced) is released back to the other controllers.
+- A bloom is a candidate when our team has explored it and at least half of the 7-tile disc
+  around it, it lies within 20 tiles of one of our dropoffs on the same ground, it is no
+  closer to an explored enemy building than to ours, no observed danger covers the 11x11
+  spill and no ground unit stands beside it. Special blooms are never shot (fire does not set
+  them off); they only count as hazards.
+- Waste rule: the known spice within 7 tiles (the 5-tile spill plus a 2-tile margin) must be
+  0 at level 1 and at most 2,000 credits at level 2. Otherwise the bloom is skipped and counted
+  once as wasteful.
+- Shooter: the cheapest idle ranged ground unit of our own (guarding, no target, no order, not
+  in a formation, a hunt party, a raid or any defence/escort role; not a Deviator or Sonic
+  Tank; shells, small rockets or rockets; range at least 2), within 32 tiles on the same ground
+  and on a danger-free tile, whose weapon range is shorter than the distance from the bloom to
+  any other bloom, so it never stops on one. Ties go to the idle unit, then the nearer, then the
+  lower object id. The order is a forced `doAttackPos` on the bloom; the engine ends it after
+  one shot.
+- Telemetry only: the engine ledger `spice_bloom_burst` per triggering house (decision
+  telemetry), QuantBot's `spiceBloomStats` and traces `spice_bloom_order` /
+  `spice_bloom_wasteful`. The probe sidecar `tests/ai/spice-bloom-audit.inc` writes
+  `SPICE_BLOOM_AUDIT:` lines per house per minute, which `dunecity-audit.py` collects into
+  the additive `spice-blooms.csv` (blooms initial/burst, bloom-made spice tiles, blooms the
+  house set off, orders, wasteful skips, and cargo loaded on bloom-made tiles).
+
+Policy `players/QuantBotSpiceBloomPolicy.h`, decisions `src/players/QuantBotSpiceBloom.cpp`,
+unit tests `[spice-bloom]` in `tests/QuantBotStrategyTestCase.cpp`, real-engine probe
+`tests/ai/spice-bloom-probe.inc` (CTest `quantbot_spice_bloom_vanilla` /
+`quantbot_spice_bloom_dunecity`). Candidate-only overlays `spice-bloom-harvest-1/2`;
+preregistration and results in `outputs/ai-tuning-20261108/SpiceBloom/ledger.md`.
+
+Protocol 121 enables strict level 1 at Stefan's request: do not shoot while any known spice
+lies within 7 tiles. This is a requested behaviour choice, not a performance promotion:
+the exploratory screen lost two positive-spice wins (46→44/84), despite producing more spice.
+The scope and safety checks above are unchanged. `round-121-off` sets `SpiceBloomHarvest=0`
+and restores round-120 AI decisions; save format 9884 is unchanged. Older explicit round-OFF
+styles also disable blooms so their historical controls remain reproducible.
+
+
 ## How a game is played
 
 Every game is a real match played headless to its end by the balance probe:
@@ -24,12 +286,13 @@ Every game is a real match played headless to its end by the balance probe:
   `symmetric`); its mode (vanilla or DuneCity city simulation) follows `--mod` as in the menu.
   `base=cy` is a Construction Yard only start: each start's MCV is deployed where the map put it before
   the first cycle (`SCENARIO_CY_START`), no army, the menu's default 3,000 credits.
-- **Campaign missions** (no sides; `--house`, `--level`, optional `--mission`): the human seat is shared
-  by an idle human player and a QuantBot partner of `--partner-difficulty`; the enemies are the campaign's
-  default enemy AI (QuantBot Easy, `HouseChoiceMenu` `kEnemyAIClasses[0]`), or with
-  `--enemy-ai campaign` the "scenario settings" `CampaignAIPlayer`. The game runs until the mission's own
-  win/lose conditions end it (`Game::finished`: conquest or harvest quota; the DuneCity economic victory
-  is removed on `fix/remove-economic-victory`) or the time limit.
+- **Campaign missions** (no sides; `--house`, `--level`, optional `--mission`): the full-tier
+  vanilla gate uses a sole Brutal QuantBot on the player house, authored scenario-settings
+  `CampaignAIPlayer` opponents and `--campaign-ai-only`. No human is registered or issues orders.
+  A detached, command-disabled UI identity anchors the campaign's player house, without enabling
+  observer match-end semantics. The real mission's win/lose conditions (`Game::finished`) decide
+  conquest, loss and spice-quota victory; no forced conquest or scripted orders substitute for them.
+  DuneCity partner-difficulty diagnostics and the existing smoke campaign cells retain their prior setup.
 - Game rules come from the mod (`ModManager::loadEffectiveGameOptions`) as a new Custom Game takes them;
   `--game-options` (All against Atreides: Stefan's own options) applies on top.
 - Once a game minute every house is sampled, and its **sortie** measured: combat ground units more than
@@ -40,10 +303,224 @@ Every game is a real match played headless to its end by the balance probe:
   minutes, triggers and how many fired, win/lose flags, quota, city population),
   then the final state digest (`PROBE_DIGEST ... final=1`).
 
+For a natural-duration diagnostic, `--minutes 120` overrides only the selected
+run's cell limits. It does not change the ordinary matrix limits or winner
+assertions; use a separate results directory for the extended observation.
+For matched fresh-seed campaign screens, `--campaign-seeds 1280000 1280001`
+replaces the fixed seeds for each selected campaign mission (duplicate seeds are
+played once). `--cases` can restrict the missions. The default fixed 66-game gate,
+the idle-human AI-support seating, and every non-campaign seed remain unchanged.
+Use separate result directories for each arm and keep observer flags identical.
+
+Campaign support home fields: `[Force Concentration] CampaignHomeFields`
+is hashed and defaults to 2 since protocol 117 (0 is OFF). Level 1 rejects spice jobs closer to any
+hostile base centre than the support AI's own base; level 2 leaves a four-tile
+inward margin. Base centres use live deterministic structures, ignoring fog.
+Existing immediate-danger, route, unloading and ownership rules remain.
+It does not increase refinery or worker targets. It requires a positive exact
+initial-map spice measurement, remaining spice, and a Heavy Factory that is
+disabled or above the match's legal technology. It never checks the current
+factory count: destruction cannot reactivate the opening restriction. It is
+inert on initially spiceless or unsupported inputs, at Heavy Factory technology,
+outside classic campaign human support, or at level 0. Campaign activation
+requires the shared campaign initial-spice helper, not its Custom-only
+predecessor. The broad high-tech policy was rejected after A20 fell from23/24
+wins to15/24 or10/24. Restricting high-tech income fields is not a qualified fix;
+the low-tech hypothesis requires its own fresh paired and full-campaign gates.
+Level 2 passed them on B2 `f9fd39b0` (2026-11-09): paired96 campaign wins 59 -> 82
+(23 gained, none lost; A20 digest-identical 48/48), fresh48 32 -> 42, fixed66
+63 -> 63 with all 45 legal-Heavy-Factory missions identical, controls26 and AAA2
+digest-identical, and the 1.0.807 promotion check PASS (candidate 53 / OFF 53 /
+807 22; the Custom deck is outside its scope).
+Styles:
+`campaign-home-fields-off`, `campaign-home-fields-home`, `campaign-home-fields-margin`.
+The hypothesis is worker survival without drawing the whole opening army into
+an enemy base to rescue a worker; measure worker deaths and defence-response
+locations as well as delivered spice, army, idle cash and wins.
+
+Campaign sized worker rescue experiment: `[Force Concentration]
+CampaignSizedWorkerRescue` is hashed, default 0 (OFF), with levels 1/2 requiring
+100%/150% health-weighted threat coverage. It applies only to classic campaign
+human support on an exactly measured initially spice-bearing map, when a live
+own harvester is hit or actually targeted within weapon range by a ground
+attacker. Buildings, air defence, spice-clearing requests, human orders and
+repair ownership retain their existing paths.
+
+The candidate reuses the existing sized-worker threat survey and responder
+pool: committed forces count toward coverage; an insufficient reachable pool
+is declined before issuing any new unit orders. An admitted pool retains its
+existing bundle/nearest/id selection order. It changes no harvesting jobs,
+refinery/worker targets or production budgets. `campaign_worker_rescue` events
+record worker, threat, required/committed/reachable value, coverage and admission;
+existing defence responses/declines also expose the campaign coverage.
+Styles `campaign-sized-worker-rescue-off`, `campaign-sized-worker-rescue-equal`
+and `campaign-sized-worker-rescue-superior` keep HomeFields OFF to isolate this
+hypothesis. Shared startup, OFF/outside-scope digests, fresh outcomes, worker
+losses and full66 campaign acceptance remain mandatory; source alone is not a
+qualified improvement.
+
+
+### Genuine exhaustion regression
+
+**Since protocol 119** (counters50-S5: `VanillaArmyCounters=1`,
+`VanillaArmyCounterMapScope=5`, blend 50%) QB (team 1) wins seed 90866 at 41.26
+minutes, so the smoke expects that win (`('wins', 1)`; round 119 ctest
+`20261109T163152-r119counters-ctest-4f0850`; digest `48cc8b1ed60fab21` on both
+mini and aws). Only the Brutal QB is in the counters' scope; its build mix first
+diverges at minute 8. The explicit-OFF style `round-119-off` still
+plays the protocol 118 game: a 60-minute audited exhaustion with QB and QM
+alive, digest `9a39d8e612300c36`, identical to `a1d85ffa`. The exhaustion check
+below covers protocols 81-118 and stays available as the `exhausted` expectation.
+
+Through protocol 118 the mixed-difficulty vanilla FFA kept seed **90866** as an explicit exhaustion
+check, not a winner check. At runtime `cf05f6b7` it still had two surviving houses
+after **120 natural game minutes** (receipt
+`20261105T010832-suite-90866-natural-120-1acf45`, digest `32f5b20f27feaa01`).
+Accepted switch arms changed which side could finish: launcher-kite OFF gave QM
+a 46.96-minute win, while deviated-harvester early-return OFF gave QB a
+35.94-minute win. These are different accepted trajectories, not evidence for
+disabling either default.
+
+The `exhausted` expectation passes only with a complete per-house engine audit: the production
+`exhaustedArmyEconomy()` predicate must prove cash below the cheapest enabled
+unit, no reachable harvestable spice, no pending cargo or possible tax income;
+there must be no idle raid-ready combat units and no unaffordable offensive
+repair trips or contained repair holds. Existing damaged-air, human, defence
+and saboteur authority remains intact. Missing audit evidence fails the case.
+The next seed from the same generator, **91875**, is also in smoke and keeps the
+unchanged FFA-must-finish, elimination and sortie assertions. Every other seed
+keeps its existing completion requirement; draw scoring is unchanged.
+
 The driver writes `games.csv` (one row per game; the win type of a campaign win: conquest or
 quota) and `houses.csv` (one row per house, with its `match_score` placement score: teams are entrants,
 a time-out is a negative draw). Games already in `games.csv` are skipped; failed games are retried on the
-next run; a crashed game's last log lines go to `failed-*.txt`.
+next run; a crashed game's last log lines go to `failed-*.txt`. A smoke timeout keeps its
+complete engine log in `timeout-*.log`, including the final unit/target, exact cargo,
+repair-owner and containment audits, before ordinary game-directory cleanup.
+The timeout still fails the same winner assertion.
+With `--attack-events`, raw logs for every result instead live under
+`diagnostics/<game>/run.log`, so same-source A/B runs can compare their complete
+`PROBE_DIGEST` prefix before the first changed endgame decision.
+
+### Starport buying experiments
+
+`StarportBuying`, `StarportCashStockpile`, and `StarportEconomyPriority` are
+independent default-OFF, hashed `[Force Concentration]` levels 0/1/2, scoped to
+custom Vanilla/DuneCity games whose initial explicit map has spice (the shared
+`getInitialSpiceTilePermille()>0` prerequisite); no-spice/unknown maps and campaigns
+remain native. Buying levels admit all imports only at or below
+80%/100% of the research-adjusted factory cost; OFF keeps the native strict
+base-price combat discount test and unrestricted needed economic imports.
+Existing economy/capital funding and caps still apply. Stockpile levels preserve
+one/two factory-unit prices when an orderable port has that unit in stock but
+above the chosen price ceiling; only optional factory combat orders wait.
+Priority levels buy the existing worker shortfall before transport, then also
+try the economy planner's pending MCV at an admitted price. No worker/yard target
+is increased. Campaign purchasing is unchanged.
+
+`starport_purchase` telemetry records every accepted port queue entry, including
+capital/recovery paths, with item/name, market, base and research-adjusted factory
+price, native rule, and cash after acceptance. With `--attack-events`, the audit
+driver retains compact `starport-purchases.csv` rows with capture completeness;
+`--keep-telemetry` additionally retains raw streams. Sample mode's optional
+`--game-seed-base N` assigns consecutive engine seeds (separate from the factor
+deck's `--sample-seed`), keeping paired seats on the same seed and placing a second
+mod immediately after the first mod's cases. Compare candidate-only arms against
+native on identical schedules; economy samples and wins accompany price summaries.
+
+### Source-separated economy curves
+
+For a real Random Skirmish city game, `tests/ai/dunecity-audit.py --attack-events`
+retains once-per-minute credit balances and the existing accounting ledger in
+`samples.csv`, including starting cash remaining, refined-spice and tax gross
+receipts, separate spice/city balances, storage capacity, the Construction
+Yards' share of that capacity, police funding, military target and unit-limit
+state. Spending, power, police, refunds and storage losses are cumulative
+ledger fields; `ledger_enabled=1` identifies a captured ledger (without
+`--attack-events` those fields are unavailable, not measured zero).
+
+The source counters are read-only in `DUNECITY_ECONOMY` probe rows. A Yard's
+storage is capacity, never income. Pair these rows with the existing queue,
+upgrade, held-front, growth and attack samples before calling a rising balance
+an AI spending stall. Use `--style police-recovery-off` and
+`--style police-recovery-on` for a same-build A/B of the default-on hashed
+`[General Behavior] PoliceFundingRecovery` switch. No income multiplier,
+starting grant or balance constant changes with that switch.
+
+
+## Fixed promotion controls
+
+Every AI promotion runs `--tier controls` **alongside AAA2 and campaign 66**, not instead
+of them. It is 26 unobserved games: the 13 maps in the tuning output's `CONTROL-MAPS.md`,
+each with fixed seeds **10801, 11810** and the ordinary per-seed house/start rotation.
+The candidate is Brutal QuantBot, with the mixed skirmish opponents QH/QM/QE/AH/AM
+(truncated to the player count); Tuono-Blake is QB+QH versus QM+QM.
+Six-player maps use the existing multiplayer house order. Map 12 uses `dunecity`;
+all others use `vanilla`. Limits are 60 game minutes, or 80 on 192/256-square maps,
+except The Sardaukar Outpost's 120; the ordinary 1,800-second per-game wall cap applies.
+Map 13 is now **4P - 128x128 - The Sardaukar Outpost**, replacing Silicon Valley by
+Stefan's 2026-11-09 decision.
+It is an ordinary win-retention control, not a digest-inertness test. Its authored
+playable starts are Harkonnen, Mercenary, Atreides and Ordos (1,500 credits each);
+the harness rotates those four houses, with QB/QH/QM/QE on separate teams, rather
+than assigning a player to the preplaced, unoccupied Sardaukar outpost. Existing
+authored units, structures and terrain are unchanged. Time-limit draws are recorded.
+Its limit rose from 60 to 120 minutes on 2026-11-09: every 60-minute Outpost game had
+been a draw, while native 7ebe1906 at 120 minutes decides seed 11810 (QH, 65.52 min;
+10801 is still a two-house draw). Its 60-minute receipts fail the 120-minute schedule,
+and the comparator rejects any draw that ends before its row's limit, so an old draw
+cannot be relabelled as a 120-minute game.
+
+Submit one pinned cluster command (never local games):
+
+```sh
+/usr/bin/lockf -k /tmp/dunecity-submit.lock agent-workspace run --project dunecity \
+  --owner "$OWNER" --tests --wait -- dunecity-queue submit \
+  --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev "$SHA" \
+  --tag "controls-$STYLE" -- python3 tests/ai/scenario-matrix.py \
+  --tier controls --style "$STYLE" --results "$RESULTS"
+dunecity-queue wait "$JOB"
+python3 tests/ai/compare-control-maps.py --baseline "$BASELINE" --results "$RESULTS" \
+  --in-scope 1 2 3
+```
+
+Use a fresh results directory per source/style. Omit `--style` for native. In this tier
+`--style` is **candidate-only**: it overlays just the Brutal seat (slot 0; in Tuono-Blake not
+its QH ally) through the per-house genome-phase transport of `dunecity-audit.py
+--candidate-style`. Every other seat stays native, unlike the other tiers' all-QuantBot
+`--style`. The style must be a config overlay (no `[Play Style]` section); `--genome`,
+`--game-options`, economy/tech-savings audits and observer overlays are refused.
+Each `games.csv` row records `style_seats` from the probe log (`none`, or
+`<house>=candidate-<style>`; a seat whose QuantBot config differs from native without
+that genome is listed as `<house>=config`); a mismatch fails the game.
+Comparison exits nonzero for missing/failed/duplicate games, a missing receipt or a style
+on any non-candidate seat, changed scheduled map/mod/seed/roster/limit, unmatched source
+pins on a native/candidate pair, keeping fewer than **75% of native QB/team-1 wins
+across all 13 maps**, or a changed digest outside an explicitly declared `--in-scope`.
+The default scope allows all 13 maps; Outpost has no special digest rule. Winner,
+minutes, digest equality and every lost native win are printed per map/seed.
+Old Silicon Valley rows cannot satisfy an Outpost receipt, even if only their IDs
+are relabelled. Historical receipts and verdicts remain evidence of the old deck.
+Record the actual engine base with `--base "$ENGINE_SHA"`. Reuse unchanged maps
+1–12 only with their original per-row source pins and compatible native rows; new
+Outpost pairs must actually run on the same harness-only child of the candidate engine.
+Mixed parent/child receipts retain every row's real pin (`--pin PARENT CHILD`);
+the harness-only child manifest records its unchanged engine parent. A default-ON
+candidate can record an explicit OFF native overlay with `--native-style STYLE`.
+
+```sh
+python3 tests/ai/compare-control-maps.py --results "$NATIVE_RESULTS" \
+  --record "$BASELINE" --base "$ENGINE_SHA" --pin "$SHA" --job "$JOB"
+```
+
+For a **separate observed handmade-map study**, use `--tier controls
+--control-diagnostics --economy-samples --attack-events`, with optional
+`--control-seeds 1180100 1180101 1180102` and `--control-mod vanilla|dunecity`.
+The same candidate-only style transport is retained. Every compared arm must use
+the observer; do not compare these samples with the unobserved native gate.
+`control_diagnostics=1` is written to receipts, `--check` is forbidden, and
+`compare-control-maps.py` rejects them as promotion evidence. Ordinary controls
+still use exactly the fixed seeds, original mods and unobserved setup.
 
 ## The matrix
 
@@ -56,13 +533,13 @@ by the seed's index so every controller plays every house; map-named houses (All
 |---|---|---|
 | `skirmish` | 13 Random Skirmish cells: 1v1, 3-8 player FFA, 2v2, 3v3, 4v4; MCV only, small, medium and fortress bases; no, small and large armies; 8 vanilla, 5 DuneCity; QuantBot difficulties mixed with AI Player; 4 seeds each | decided, eliminations, idle armies; team cells with a stronger team must be won by it; placement score per controller (QB > QH > QM > QE) |
 | `cy` | 7 Construction Yard only cells: 1v1 QH v AH, QH v QM, QB v QE (40 min), QH mirror; 4P FFA vanilla and DuneCity; 2v2 mirror | as above |
-| `aaa` | All against Atreides, 6 quantbot_all_against_atreides seeds each: vanilla Brutal v 4 AI Player Hard (win within 40 min), the same in DuneCity (win within 40 min), the reverse Atreides Medium v 4 QuantBot Hard (must lose) | expected winner |
-| `campaign` | Atreides, Harkonnen and Ordos; levels 1-9: the level's first mission and, for levels 2-8, the second (missions 1-22 of `CampaignControls`); vanilla and DuneCity; partner Hard (2 seeds), Medium and Easy (1 seed); vanilla first missions also against `CampaignAIPlayer` | the mission loads and runs; Hard must win; how (conquest/quota); triggers fired |
+| `aaa` | All against Atreides: vanilla Brutal v 4 AI Player Hard (6 fixed seeds, win within **50 min**); DuneCity (6 seeds, win within its 60-min cap); saved Dune2R rules (7 seeds, unchanged 40-min gate); reverse vanilla Atreides Medium v 4 QuantBot Hard (6 seeds, must lose) | expected winner |
+| `campaign` | Vanilla: every real mission ID **1–22**, Atreides/Harkonnen/Ordos, one fixed seed per mission (**66 games**); sole Brutal player against authored `CampaignAIPlayer`. DuneCity retains Hard/Medium/Easy partner diagnostics, now also covering all 22 IDs | vanilla and Hard-partner missions must be won by their native conditions; conquest/quota and triggers reported |
 | `ladder` | Every adjacent pair (QB v QH, QH v QM, QM v QE) plus QB v QM and QH v QE. Long maps (the decision): Random Skirmish 128x128 (75 min) and 160x160 (90 min), vanilla and DuneCity, medium bases, no army, 18 seeds each played twice with the houses swapped (`#swap`; each side keeps its start): 144 games per pair. Short maps (reported): 96x96 small bases vanilla and DuneCity, Habbanya-Penny, a vanilla CY 96x96 start, 9 seeds x both houses: 72 per pair | the stronger QuantBot's placement score interval above 0 over the long maps (the interval resamples seeds); game length per cell |
 | `mp` | The most-played bundled maps (dunelegacy.com usage statistics, all time, 2026-10-18): 1v1 Habbanya-Penny (364 games), Tuono-Orac (104), Sihaya-Chvrches (82); 2v2 Sihaya-Toto (113), Deserted (105), 4P DuneCity (68, DuneCity mod); 3v3 Sihaya-Lenka (536), Full Wormage, Alkozeltser 4 (265, 256x256: 2 seeds, 80 min). QH teams v QH teams (4 seeds), and QH teams v AH teams on the 2v2/3v3 maps (must win) | decided, idle armies, expected winner |
 
-Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 41, as the
-mandatory test; campaign 80).
+Time limits: 60 game minutes (7-8 player and 256x256 maps 80; All against Atreides vanilla 51,
+with victory required by 50; saved Dune2R remains 40; campaign 80).
 
 ### Flags
 
@@ -72,7 +549,7 @@ check (k/n with a Wilson 95% interval) and these flags, and collects every probl
 - **crash**: the probe failed or left no result;
 - **time-out**: two or more teams alive at the limit; **nobody eliminated** in a game of 3+ houses;
 - **idle**: a house that lasted 20+ game minutes without a single sortie minute or kill;
-- **campaign not finished / lost** (the Hard partner must win every mission);
+- **campaign not finished / lost** (the vanilla Brutal player and DuneCity Hard partner must win every mission);
 - **inverted**: an expectation's interval wholly below 50%, or the ladder's strong side scoring below 0.
 
 ## Tiers
@@ -90,40 +567,310 @@ check (k/n with a Wilson 95% interval) and these flags, and collects every probl
 
 Every game must also finish without a crash. 10 games, three at a time.
 
-**Full** (`--tier full`, 1,739 games, 1,080 of them ladder): the whole matrix.
+**Full** (`--tier full`): the whole matrix; `--list` prints the current schedule and counts.
 
 ## Running
 
+### Complete vanilla campaign recovery gate
+
+`run-campaign-matrix.py` is a thin entry point to the existing `campaign` category,
+not a separate campaign convention. It selects `player-brutal-v-campaign-ai/vanilla`,
+enforces native wins (`--check`), forwards the scenario-matrix options and writes the
+same `games.csv` / `houses.csv` evidence.
+
 ```sh
-# smoke, as ctest runs it
-python3 tests/ai/scenario-matrix.py --tier smoke --fresh --jobs 3 --build-dir build --results build/scenario-matrix-smoke
-# full tier, one machine
-python3 tests/ai/scenario-matrix.py --tier full --jobs 8 --results ~/Documents/projects/dunecity-results/scenario-matrix/<tag>
-# a slice: --categories ladder campaign, --seeds-per-cell 2, --cells 'QB-v-QM|3v3' (regex on
-# category/cell/mod), --ladder-seeds 9 (72 long ladder games per pair), --list (print the plan)
-# report over any number of results directories (e.g. the four shards)
+python3 tests/ai/run-campaign-matrix.py --list
+python3 tests/ai/run-campaign-matrix.py --list --shard 1/4
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag campaign-recovery -- \
+  python3 tests/ai/scenario-matrix.py --tier full --categories campaign \
+  --cells '^campaign/player-brutal-v-campaign-ai/vanilla$' --check --build-dir build-int --results RESULTS
+```
+
+Coverage per house: L1=mission 1; L2=2/3/4; L3=5/6/7; L4=8/9/10; L5=11/12/13;
+L6=14/15/16; L7=17/18/19; L8=20/21; L9=22. The previous first/second-only
+enumeration skipped **4, 7, 10, 13, 16 and 19** in every house. Mission 22 is the
+final mission, not another L8 branch. Each mission keeps its deterministic
+mission-specific seed from `seeds_for`; `--list` exposes those seeds.
+`--shard K/N` partitions the same ordered 66-game plan without replacing seeds or
+opponents. Merge shard directories with the existing `--report DIR1 DIR2 ...`.
+The default 80-minute cap is not a victory condition: unfinished quotas and other
+unfinished missions fail. Historical smoke expectations are unchanged.
+
+**The campaign gate is the AI-support setup** (Stefan, 2026-11-08: QuantBot always
+plays the campaign as AI support beside a human). The default schedule gives the
+selected house an idle human seat plus the Brutal QuantBot support, so the AI has to
+carry both roles; IDs end `#human-partner`. `--campaign-ai-only` keeps the old
+no-human diagnostic and is never gate evidence.
+
+`[Force Concentration] CampaignPlayerHouse` (default off) identifies the selected
+campaign house from `GameInitSettings`, independently of registered human seats.
+ON gives its sole QuantBot the same Custom economic planning, player-side
+readiness and attacks as an existing human partner; authored enemy-house roles
+and human-partner behaviour are unchanged. OFF retains the old human-presence
+role test, including its AI-only campaign opening stall. It only matters for
+`--campaign-ai-only`; the AI-support gate is digest-identical either way, so the
+switch is parked off.
+
+Measured on `08eafddc` (2026-11-08), `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignRole/`:
+AI-only **4W/11L/51T → 56W/10L/0T**, paired score Δ **+1.00 [95% CI +0.81,+1.19]**.
+All four prior wins remain wins; seven time-outs become losses, so the role fix alone
+does not pass the all-missions-win gate. Its 66 final digests match the original
+human-partner arm. That arm remains **56W/10L/0T**, with all 66 digests unchanged;
+vanilla AAA remains **2/2** at **36.47/34.54 min**, also digest-identical.
+OFF equivalence is recorded for 17 AI-only and 22 partner missions plus both AAA seeds;
+the redundant remaining OFF games were cancelled with integrator approval. The switch
+remains default off pending owner review.
+
+The independent, hashed `[Force Concentration]` candidates
+`CampaignMilitaryOpening` and `CampaignAdaptiveReadiness` originally defaulted off.
+The first establishes one available combat producer after the first refinery,
+before repeat refinery/storage/Starport expansion, preserving power and live
+air-defence priority. It walks the actual prerequisite tree and saves for the
+producer rather than spending its price on another refinery. The second applies
+the partner readiness scale (1.25x the strongest opposing **team's** army,
+floor 2,000 and ceiling 75% of its military limit) from the first wave, capped
+by the configured threshold. It does not mistake one house of an enemy alliance
+for the entire hostile army; OFF keeps the old post-fifteen-minute per-house rule.
+Authored campaign opponents and noncampaign skirmishes are unchanged.
+Use `campaign-opening-off` / `campaign-opening-on` for the paired combination;
+`campaign-military-opening-on` and `campaign-adaptive-readiness-on` isolate each
+change. These styles do not enable `CampaignPlayerHouse`: add that switch only
+when comparing the AI-only role-fixed arm.
+
+`CampaignThreatProduction` was initially a separate default-off hashed candidate for the
+remaining funding hold: while a visible enemy is actually firing at the
+campaign player's buildings or harvesters, ground producers plan before
+economic expansion and can spend economic savings on replacements. A heavy
+factory that can afford a military vehicle does not choose another worker in
+that pass. Existing queued obligations, prices, unit budgets and unit limits
+remain enforced; without a live attack, normal economic priorities resume.
+`campaign-threat-production-on` isolates it; `campaign-opening-funded-on`
+enables all three opening/readiness/funding candidates.
+
+Measured on `e26bd898` (2026-11-08), all 66 human-partner missions:
+
+| Opening switches | Won | Lost | Paired score difference [95% CI] |
+|---|---:|---:|---|
+| Control, all off | 56 | 10 | — |
+| Military opening | 55 | 11 | −0.03 [−0.24,+0.18] |
+| Military opening + threat production | 60 | 6 | +0.12 [−0.09,+0.33] |
+| All three | 61 | 5 | +0.15 [−0.06,+0.36] |
+
+**Those original combinations were rejected for default adoption.** All three
+rescue nine original losses (Atreides 2/5/6/9/20, Harkonnen 21/22, Ordos 5/6),
+but lose four prior wins (Atreides 16/21, Ordos 2/21); Ordos 4 still loses.
+The strict same-build vanilla sample (`7c2ed4dd`, 48 cases × two seats) matches
+all 96 OFF/ON digests: score +0.203 in both arms, zero difference in every
+factor stratum. Vanilla AAA remains 2/2 at 36.47/34.54 minutes, digest-identical
+to control; four OFF campaign checks also retain the control digests.
+
+Regression telemetry shows an early Light Factory occupying capital while idle
+until minutes 8–12 (Ordos 2 never orders a military unit), delaying workers,
+imports and replacement strength. A single bounded attempt (`31f12e62`) reused
+the capital planner's delivered-worker seed before that factory. It won 7/13:
+only Atreides 16 was repaired; Atreides 21 and Ordos 2/21 still lost, and rescued
+Atreides 20 plus Ordos 5/6 became losses. AAA remained 2/2. The attempt was
+rejected and its source edit reverted, not promoted or tuned further.
+
+Evidence: `~/Documents/projects/outputs/ai-recovery-20261108/fixes/CampaignOpening/`
+(`paired-results.json`, `paired-campaign-cases.csv`, `*-comparison.txt`,
+`bounded-seed13/`, `bounded-seed-aaa2/`). These results do not pass the
+all-missions-win recovery gate.
+
+The next campaign tuning round isolated the cheap ablations on `fa5228ac`,
+paired against a fresh 66-mission control on `c598fc46`. The fresh OFF arm
+matches all 66 original control digests:
+
+| Campaign switches, no military opening | Won | Lost | New control losses | Rescued |
+|---|---:|---:|---:|---|
+| Threat production only | 56 | 10 | 0 | — |
+| Adaptive readiness only | 56 | 10 | 0 | — |
+| Readiness + threat production | 57 | 9 | 0 | Harkonnen 21 (31.85 min) |
+
+Readiness plus threat is the first clean campaign improvement: it preserves all
+56 control wins. Its paired score difference is +0.0303, with normal 95% interval
+[-0.0291,+0.0897], so the one-mission gain is not an established aggregate
+statistical improvement. Neither isolated switch rescues Harkonnen 21. AAA2
+passes with both original control digests. These isolated arms are not the
+adopted defaults; the five-switch combination below is the accepted set.
+
+Independent hashed light-production candidates investigated the observed idle
+factory. `CampaignFundedLightOpening` leaves normal yard economy
+active until the opening Light Factory, a legal first vehicle, and the
+producer's protected cash can all be funded together; it does not wait for a
+particular delivered-worker count. Its completed paired 66-mission run is
+**58W/8L**, preserving all 56 control wins and rescuing Harkonnen 21 plus Ordos 6.
+The isolated real-price-entry experiment (`CampaignAffordableLight`) still had
+four regressions and an Ordos 4 loss on the weak 14; its switch/code were
+removed, with the result and immutable test pin retained in the ledger.
+
+Ordos 4 telemetry isolates another hold: at 2.55–9.13 min, its 100% Raider mix
+targets exactly the existing four Raiders' 600 credits. Composition planning
+still subtracts the 2,000-credit economy buffer after live-threat producer
+admission releases it. `CampaignLightWorkingCash` tests matching light growth
+to genuinely uncommitted cash before heavy-factory technology, while preserving
+strategic/civic protection, prices, commitments, army budgets and unit limits.
+Combining it with the funded factory gate (`7b3001e4`,
+`campaign-light-funded-working-on`) achieves **61W/5L**, preserving every control
+win and rescuing Atreides 2/5, Harkonnen 21, and Ordos 5/6. Paired score difference
+is +0.1515, normal 95% interval [+0.0229,+0.2802]. AAA2 passes both original
+digests, within 50 minutes. The remaining losses are Atreides 6/9/20, Harkonnen
+22, and Ordos 4. Aggregate campaign wins exceed the 1.0.796/1.0.807 references
+(56/59), but those references win A6/A9 (both) and A20/H22 (1.0.807); preserving
+those historical mission wins is not yet established.
+
+The accepted round defaults are `CampaignMilitaryOpening`,
+`CampaignAdaptiveReadiness`, `CampaignThreatProduction`,
+`CampaignFundedLightOpening`, `CampaignLightWorkingCash`, and
+`CampaignLightIncomeSeed`, together with Main's protocol/save version bump.
+All six are confined to non-city campaigns with human support; AdaptiveReadiness
+explicitly excludes city simulation. `CampaignPlayerHouse` remains OFF.
+Constructor, shipped INI and registry defaults agree. `campaign-defaults-on`
+selects all six; `campaign-income-seed-off` retains the five-switch diagnostic;
+`campaign-opening-off` explicitly disables all six for original-control digest
+comparison. Historical ablation styles override the adopted settings explicitly.
+
+Working cash without the factory gate starts O4 replacement production at
+2.92 min and buys 36 Raiders, but never dispatches: the one-worker army grows
+slower than its readiness requirement (3,990 versus 5,000 at 19.21 min), then
+loses at 40.51 min. `CampaignLightIncomeSeed` protects only the second refinery's
+founded quote from working-cash light production until that refinery is queued.
+It does not wait for worker delivery or change factory admission.
+Its diagnostic style `campaign-light-income-seed-on` (funded factory gate OFF)
+wins O4 by conquest at **17.71 min**, digest `f8d68a18d4f2a43a`, on `a764605b`.
+The separate full-set arm on `98ddf9d7` achieves **62W/4L**: it preserves all
+61 prior wins and adds A6 (21.03 min), but O4 still loses. Main accepted Seed ON
+under the no-control-win-lost plus gain rule. All three 68-game confirmation
+arms pass AAA2 with the original digests; defaults reproduce 66/66 prior61
+campaign digests, and explicit all-OFF reproduces 66/66 original control digests.
+Remaining losses are **A9/A20/H22/O4**. Full paired rows and economy diagnostics
+are in `~/Documents/projects/outputs/ai-tuning-20261108/CampaignLane/ledger.md`.
+
+
+For the recovery skirmish **sample** (48 balanced cases per mod, both candidate
+seats, not a full cross product), use `dunecity-audit.py --mode sample --mod both`;
+see [sampler factors and research verification](quantbot-dunecity-audit.md#balanced-recovery-skirmish-sampler).
+
+For a sampler candidate/control comparison, use **`--candidate-style NAME`**,
+not `--style`: only the sampled candidate seat receives that INI; opponents
+retain their native QuantBot config even when they are Brutal too. Both seat
+assignments keep the same maps, seeds, rosters and IDs. `games.csv` records the
+candidate style and every house's effective config hash. Missing candidate
+application or a changed opponent hash is an error, not a measured game.
+The transport reuses the probe's per-house config inputs with one constant
+overlay for the whole game; no genome search or changing phases is involved.
+`--style` remains available for explicitly **all-QuantBot** experiments and is
+mutually exclusive with `--candidate-style`. Campaign/AAA `--style` comparisons
+do not change their non-QuantBot opponents.
+
+For several variations in the **same** game, use
+`--seat-styles control,A,B,C,D` (play-style names without `.ini`). `control`
+means native config, not another experimental INI. Each cohort rotates once
+through every house/start and controller tier on an unchanged map. Spare seats
+are native controls. If the list exceeds the game's capacity, consecutive
+cohorts contain at most seats-minus-one variants plus control; 1v1 therefore
+plays each variant directly against control. A sampler uses each original
+roster once per rotation instead of duplicating the singled-out candidate
+swap. An all-control list retains the ordinary unexpanded schedule and IDs.
+Sharding occurs after cohort expansion.
+
+`games.csv` retains the house/style mapping, cohort and rotation;
+`houses.csv` identifies each seat's style. Reports give each variant's placement
+score, wins, observed survival and better/tied/worse finishing order against
+opposing controls **in the same game**. Allied controls are excluded from that
+head-to-head count. Different cohorts and multiple controls are not independent
+paired trials or evidence for enabling a default. Promote a promising variant
+to the unchanged candidate-only full-mode and cross-mode gates.
+
+The vanilla FFA round isolates four default-off hashed `[Force Concentration]`
+switches: `VanillaFfaWeakestTarget` uses the existing weakest-rival hunt even
+before leading; `VanillaFfaNearbyTarget` adds 200 credits per tile to remembered
+army/turret strength; `VanillaFfaReserve` retains at least 25% of available wave
+value nearest the protected rally; `VanillaFfaFullWaves` tests 100% readiness
+instead of the smaller strategy waves. They require vanilla Custom mode and at
+least two hostile teams in the original roster; 1v1, 2v2, campaigns and cities
+keep their existing behavior. Human orders and live defence ownership remain
+authoritative; the reserve is bypassed when the economy is exhausted.
+Use the `vanilla-ffa-{weakest,nearby,reserve,full-waves}-on` styles, native
+`control` in shared games, and `vanilla-ffa-off` for candidate-only OFF parity.
+
+Round2 adds three independent default-off, hashed and registry-listed candidates:
+`VanillaFfaStarportAfterWave` defers the first optional port until a ground wave
+dispatches, once four real workers, unload capacity and a legal local Heavy
+Factory exist. Its first-wave Repair Yard remains funded at its actual price
+and legal foundation; missing/unplaceable recovery capital releases the deferral.
+`VanillaFfaThreatProduction` puts legal ground replacements before uncommitted
+optional-growth savings only under actual visible ground fire and below ordinary
+army readiness. Both require remaining spice, a yard and the worker seed, and
+leave space/yard recovery, accepted orders and required defence/transport intact.
+`VanillaFfaSingleFront` sends fresh reinforcements to the existing live army's
+known, reachable structure objective. It reuses checkpointed wave state and
+existing recovery/tracking, with no new tactical cache; local combat and defence
+still override transit. It is inactive after spice exhaustion. Their styles are
+`vanilla-ffa-{starport-after-wave,threat-production,single-front}-on`, with
+`vanilla-ffa-round2-off` for explicit OFF parity; they do not reset earlier flags.
+
+The minute audit appends `refineries` and `power_required` after all existing log
+and CSV fields without changing their order or parser. Legacy captures leave the
+new columns blank. Raw `power < need` is not a powered-mode economy penalty when
+`power_required=0`. Use `--attack-events` only for diagnostic captures that need
+spending, first dispatch and the candidate activation/front-continuation records.
+
+Round3 isolates the observed winning-economy gap with two more default-off,
+hashed, registry-listed switches (both spice-backed vanilla multi-enemy only).
+`VanillaFfaLightWorkingCash` removes the flat700-credit light-factory entry hurdle
+below ordinary readiness after four real workers. Actual quotes, protected cash,
+unit limits and the existing mix remain authoritative; it does not give cheap
+entry to optional factory upgrades. `VanillaFfaFundedTech` defers optional
+IX/Palace orders and their savings until up to eight sustainable real workers
+and ordinary army readiness, while a legal local Heavy Factory can supply the
+army without them. The first port, transport, repair, accepted commitments and
+space/yard recovery keep their existing rules. Styles:
+`vanilla-ffa-light-working-cash-on`, `vanilla-ffa-funded-tech-on`,
+`vanilla-ffa-round3-off`. New capital-plan fields and `front_continued` are built
+only in their enabled vanilla switch scope, not for OFF/campaign telemetry.
+
+The scoped follow-up retains the hashed, default-OFF keys
+`VanillaFfaThreatProduction` and `VanillaFfaFundedTech`, but activates them only
+in vanilla multi-enemy skirmishes with **at least five original occupied player
+houses**. Original setup, not current survivors, determines match size; no
+mission, map-name or seed condition participates. Four-player FFA, 1v1, teams,
+other mods and campaigns remain inert. The existing nine-switch round-trip/hash
+fixture still covers both keys. Acceptance uses fresh sample seed9202, both arms
+observer-off, requiring a gain inside the five-plus-player stratum and identical
+native digests in every smaller match. The earlier observed9101 screen is
+discovery evidence, not the fresh-seed acceptance gate.
+
+For outcome/digest promotion gates use **`--observer-off`** in both arms.
+It removes `BALANCE_DUNECITY_AUDIT`, keeps real elimination samples/final results,
+and leaves power/refinery/audit-dependent metrics unmeasured rather than inventing
+zeros. `games.csv` appends the verified `observer_mode` receipt; comparison rejects
+mixed or missing modes and resume requires a new directory when the mode changes.
+Mandatory cycle-zero per-playing-house research proof remains enabled for DuneCity
+sample/team-study games; the optional continuous sampler stays off. Setup/roster
+metadata alone cannot replace the engine's research-state rows. See
+`docs/quantbot-dunecity-audit.md` for the one-game runtime smoke and fresh-results
+requirements after an old observer-off capture lacks this proof.
+Do not compare an observed screen with an observer-off gate. Any screen winner
+still needs the full candidate-only vanilla96 against observer-off native on the
+same pin, plus AAA2 and the cross-mode/default gates, before proposing ON.
+
+```sh
+# Real games run only through the committed cluster queue, never a local mini batch.
+dunecity-queue submit --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev COMMIT --tag sm-smoke -- \
+  python3 tests/ai/scenario-matrix.py --tier smoke --jobs 3 --build-dir build-int --results RESULTS
+# Full tier: change --tier smoke to --tier full; --categories / --cells select a slice.
+# --seeds-per-cell limits seeds without replacing them; --list prints the plan.
 python3 tests/ai/scenario-matrix.py --report DIR1 DIR2 ...
-# A/B of a candidate config switch: the same games with every QuantBot playing a play style
-# (tests/ai/play-styles/<style>.ini, e.g. allyjoin = [Force Concentration] JoinAllyWaves=true);
-# compare per game id with a run without --style
-python3 tests/ai/scenario-matrix.py --tier full --categories team --style allyjoin --results DIR
+# Same-source switch A/B: add --style NAME to the queued candidate arm, then compare.
+python3 tests/ai/scenario-matrix.py --compare CONTROL CANDIDATE
 ```
 
-Split across the four machines with `--shard K/N` (every N-th game from the K-th), each into its own
-results directory, then `--report` all of them:
+The queue distributes the existing harness over the cluster, including headless-only
+Air commands; it never submits the dirty checkout. For explicit independent shards,
+add `--shard K/N`, give each shard a distinct results directory, and combine them
+with `--report`. Do not launch simultaneous local batches or create another build tree.
 
-```sh
-dunecity-pro sync $PWD && dunecity-pro run --jobs 8 sm-<tag>-s1 scenario-matrix --tier full --shard 1/4
-dunecity-air sync $PWD && dunecity-air run --jobs 7 sm-<tag>-s2 scenario-matrix --tier full --shard 2/4
-# PC: bundle the branch to C:\dunecity\deps, fetch + checkout in C:\dunecity\src, detach build.ps1, then
-#   ps-batch.ps1 -Tag sm-<tag>-s3 -Harness scenario-matrix -Jobs 8 -ArgsFile <file: --tier full --shard 3/4>
-dunecity-queue submit --slots 3 --cwd $PWD --tag sm-<tag>-s4 --owner <you> -- \
-    python3 tests/ai/scenario-matrix.py --tier full --shard 4/4 --results <dir> --jobs 3
-dunecity-pro pull sm-<tag>-s1 <dir1>; dunecity-air pull sm-<tag>-s2 <dir2>   # PC: scp C:\dunecity\results\sm-<tag>-s3\*.csv
-```
-
-The runners' `run-batch.sh` accepts `scenario-matrix` as a harness (added 2026-10-18). Parity: the
-smoke tier on the Pro, the Air and the PC gives the same final digest for every game as on the mini.
 
 ## Machines and time
 
@@ -261,6 +1008,25 @@ min, DuneCity 6/6 (before 5/6). 7P FFA: no idle house (before QM idle 1/4). Regr
 0/4 decided (before 3/4), the skirmish controller order is QH +0.26 > QB +0.18 > QM +0.12 > QE (Brutal
 plays 20 houses, interval -0.13..+0.48).
 
+### Pre-ladder Medium (`MediumClassic`, diagnostic, default 0)
+
+On the 1.0.807 deck's frozen maps (docs/ai-baseline-gate.md), vanilla Custom Medium 1v1 measures:
+attack dispatches per house 14.6 / 15.8 (807) -> 4.6 / 3.1, Palace adoption 1.0 / 1.0 -> 0.63 / 0.13, first
+heavy factory at ~14 -> ~7.6-8 game minutes. Exact-map release bisection puts the whole step at the
+`fix/ai-late-game-2` merge `fbbeecff` (848 trial `748f9288` unchanged), i.e. at this branch's Medium changes:
+the retired statistical gate counted dispatches, and one whole-army wave replaces several 40% raid shares by design.
+`[Force Concentration] MediumClassic` restores the pre-ladder Custom Medium for measurement (Easy, Hard,
+Brutal and campaigns unchanged; style overlays `medium-classic-off`, `-economy`, `-army`):
+
+- **1** (economy): no banked-credit surplus army (`planningMilitaryBudget` stops at the cap) and no
+  heavy-factory walk after the starport opening.
+- **2** (army): 1, and Medium leaves `autonomousCustomArmy()` - the standing 40% raid share
+  (`SimpleArmyPolicy::customAttack`) with its uncommitted reserve anchored at home, as Easy
+  (`QuantBot::raidShareDifficulty`).
+
+Level 2 reverts the change behind the QM v QE result above, so it stays default 0 unless a paired screen,
+including the QM v QE ladder pair, shows a net gain.
+
 ## Difficulty separation (branch `fix/difficulty-separation`, protocol 88)
 
 Stefan: a clear ladder, Brutal > Hard > Medium > Easy; "brutal should have a higher harvester limit and military
@@ -336,6 +1102,25 @@ mirror (144 games, both houses of every seed, each side keeping its start) Harko
 draws: no Harkonnen advantage overall. The start decides more than the house (the same start won both games of
 a seed in 41 of 72 pairs, the same house in 27); the one house effect is Habbanya-Penny, Atreides 25-10 from
 either start. Every ladder seed is now played with both houses (`#swap`).
+
+## City population ceilings (custom DuneCity games, protocol 110)
+
+Each capped QuantBot's displayed city population (`QuantBotCityPolicy`), checked both when it orders
+population-bearing buildings and in natural zone growth; the R+C+I zone allowance is 48 zones per
+20,000 of the ceiling, rounded up. Human houses and campaigns are never capped.
+
+| Difficulty | up to 32x32 | up to 64x64 | up to 128x128 | larger |
+|---|---|---|---|---|
+| Easy | 5,000 | 10,000 | 20,000 | 30,000 |
+| Medium | 10,000 | 20,000 | 40,000 | 60,000 |
+| Hard | 20,000 | 40,000 | 60,000 | 90,000 |
+| Brutal, Defend | none | none | none | none |
+
+Hard (Stefan, 2026-11-01; `[Force Concentration] HardCityMatch`, hashed, on): while any other house's
+city is bigger than Hard's ceiling, the ceiling rises to that city's population (last census), so
+Hard keeps pace with a large human or Brutal city but no further. Off restores the former fixed Hard
+row 20,000 / 40,000 / 80,000 / 120,000. In the 1.0.864 1v3 on the MacBook Air (160x160, three Hard
+houses) one Hard city sat at its 120,000 ceiling from minute ~50 while the human's was ~56,000.
 
 ## Ladder and campaign candidates (protocol 98, default off)
 
@@ -487,4 +1272,86 @@ defeats each remain6/6 in both arms at their original60-minute caps.
 regression is fixed only when explicitly enabled, not claimed shipped by default.
 Raw inputs, all36 outcomes and actual host coverage:
 `~/Documents/projects/dunecity-results/unit-movement/serviceownership-78eaa25e/`.
+
+
+## Police recovery and rich-city audit (2026-11-03)
+
+Source `2456373e6002`, same-build `police-recovery-off/on`: ten 30-minute
+Random Skirmish FFA games, forty AI-house histories. Four paired Fortress
+games cover Hard/Brutal, seeds 9101/148680876, 160×160, 20,000 armies,
+40,000 cities and Medium spice. A fifth pair uses the ordinary Medium-base,
+no-city, 2,500-army 128×128 Hard start, seed 9101. All houses receive 3,000
+credits and spice factor 1. All games reach the time limit without a harness
+error; this is an economy/recovery observation, not an expected-winner gate.
+
+Minute-level per-AI credit curves, sources, spending and funding are retained
+under `~/Documents/projects/outputs/ai-rich-police-20261103/`; the complete
+tables, capped-city spending explanation and unimplemented balance
+recommendation are in [City economy: Rich-AI investigation](city-economy-balance.md#rich-ai-investigation-2026-11-03-protocol-111-staging).
+The wealthiest case is Hard Atreides, seed 9101: 37,257 credits at minute 30,
+from ordinary starting cash plus 159,401 refined spice and 147,294 gross tax,
+not Yard storage income. Existing population/army admission ceilings constrain
+late construction. Fortress OFF/ON curves and final digests match; ordinary
+starts exercise budget changes and diverge. No income or difficulty-cap change
+is silently folded into police recovery.
+
+The real-engine `quantbot_police_budget` gate now proves funding **100→53→81**
+after cash recovers and **100→97→100** after a small affordable recovery; the
+off-switch control remains 97. Its 30-second/two-minute review boundaries,
+immediate cuts and per-house/campaign/helper ownership checks pass.
+
+Acceptance: cluster `20261103T202057-ctest-daf8f5` **11/11 PASS**:
+police budget/placement, shared-spending DuneCity, no-spice city, growth
+installments, custom attack, strategic-site stall, mandatory all-against-Atreides,
+scenario matrix smoke, FFA deployment and performance. Air ran the strategic
+stall/FFA gates; mini ran the six short probes; Pro ran performance and the two
+match matrices. `dunelegacy_tests` separately passed on PC in the shared
+same-source job `20261103T201949-ctest-746ac5`.
+
+### Opening-market fixture and Starport Population
+
+The full-suite opening-economy fixture's synthetic base does not run a city
+census before testing market support. With the default-on Starport Population
+rule, that is not an eligible city: a supported but sold-out import cannot
+justify a Starport below 5,000 displayed population. The fixture now establishes
+and later restores its own eligible census for the absent-market,
+sold-out-supported and disabled-import assertions, and adds a separate
+below-threshold negative control. It does not disable or bypass the match rule;
+campaign exemption follows `isCampaignGameType(game.gameType)`.
+
+The Starport-economy probe's late empty-market technology cases similarly
+switch from their initial campaign into a custom game. Those cases establish
+and restore the required population before checking locked/disabled/unrelated
+technology, exactly one prerequisite Starport, pending-order deduplication
+and resumed IX/Palace construction. Earlier campaign import and MCV-recovery
+checks keep their original population and assertions.
+
+## Research order (default 2: defer new research)
+
+`[Force Concentration] CityResearchOrder=0|1|2` affects only research-enabled
+Custom DuneCity matches whose original explicit map contains spice. Level 1
+caps linear tech progression at the prerequisites of the future strategic unit
+mix (not the currently tech-filtered mix), economic workers/transports, demanded
+MCV expansion and reactive rocket defence. It does not speculate on Palace-only
+technology. Level 2 also defers new research commitments until delivered-spice
+and net-tax forecast per minute covers `max(1000, active production burn + 500)`.
+Already-funded studies are not cancelled. Both levels limit new studies only:
+the Research Lab building keeps its ordinary optional-capital admission, so a
+deferred study (always at tech 9) never stops the lab being built (Batch2 fix;
+`quantbot_research_order_lab_capital`). Native power, capital and cash-reserve
+gates still apply. Vanilla, campaigns, Civilization Wars (generated matches and
+the CivWars mod keep their required research), initially no-spice maps,
+research-off and unknown/seed-only map data retain native behavior.
+
+Default 2 since protocol 116 (2026-11-09): paired96 wins against native 45 -> 69
+(lane pin `f4f977cb`) and 48 -> 65 (B2), controls26/campaign66/AAA2/no-spice/tech9 unchanged, and
+the 1.0.807 promotion check PASS (candidate 53 / OFF 53 / 807 22). Civilization
+Wars was never measured with it and is excluded. Styles: `research-order-off`
+(the explicit OFF control), `research-order-plan`, `research-order-income`.
+Research is an optional engine rule, not inherently exclusive to DuneCity.
+
+For a preassigned actual seed range, `dunecity-audit.py --mode sample
+--sample-seed N --game-seed-base B --cases C` retains the ordinary balanced
+factor draws but uses map seeds `B..B+C-1` (each from both candidate seats).
+Omitting `--game-seed-base` preserves the historical schedule exactly.
 

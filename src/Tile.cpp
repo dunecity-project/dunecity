@@ -26,8 +26,10 @@
 #include <Game.h>
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CitySpritePolicy.h>
+#include <dunecity/StructureTerrainPolicy.h>
 #include <Map.h>
 #include <House.h>
+#include <players/AIDecisionLog.h>
 #include <SoundPlayer.h>
 #include <ScreenBorder.h>
 #include <Explosion.h>
@@ -41,6 +43,26 @@
 #define FOGTIME MILLI2CYCLES(10 * 1000)
 
 namespace {
+
+void appendOccupant(std::forward_list<Uint32>& occupants, Uint32 id) {
+    auto tail = occupants.before_begin();
+    for (auto it = occupants.begin(); it != occupants.end(); ++it) tail = it;
+    occupants.insert_after(tail, id);
+}
+
+std::forward_list<Uint32> readOccupants(InputStream& stream) {
+    std::forward_list<Uint32> occupants;
+    const Uint32 count = stream.readUint32();
+    stream.requireReadableElements(count, sizeof(Uint32));
+    auto tail = occupants.before_begin();
+    for (Uint32 i = 0; i < count; ++i) tail = occupants.insert_after(tail, stream.readUint32());
+    return occupants;
+}
+
+void writeOccupants(OutputStream& stream, const std::forward_list<Uint32>& occupants) {
+    stream.writeUint32(static_cast<Uint32>(std::distance(occupants.begin(), occupants.end())));
+    for (Uint32 id : occupants) stream.writeUint32(id);
+}
 
 bool isThinSpiceTerrain(int terrainType) noexcept {
     return terrainType == Terrain_Spice
@@ -122,25 +144,6 @@ unsigned int getTerrainObjPic(int terrainType) noexcept {
             return ObjPic_Terrain_WhiteSpice;
         default:
             return ObjPic_Terrain;
-    }
-}
-
-bool shouldDrawTerrainBelowStructure(int itemID) noexcept {
-    switch(itemID) {
-        case Structure_AdvancedWindTrap:
-        case Structure_AdvancedWindTrapMK2:
-        case Structure_AdvancedWindTrapMK3:
-        case Structure_Worfinery:
-        case Structure_TechCenter:
-        case Structure_Scoutpost:
-        case Structure_Flamepost:
-        case Structure_Chemipost:
-        case Structure_LoveFactory:
-        case Structure_ChaosFactory:
-            return true;
-
-        default:
-            return false;
     }
 }
 
@@ -240,6 +243,7 @@ void Tile::load(InputStream& stream) {
     sandRegion = stream.readUint32();
 
     spice = stream.readFixPoint();
+    Map::noteSpiceChanged(*this);
 
     bool bHasDamage, bHasDeadUnits, bHasAirUnits, bHasInfantry, bHasUndergroundUnits, bHasNonInfantryGroundObjects;
     stream.readBools(&bHasDamage, &bHasDeadUnits, &bHasAirUnits, &bHasInfantry, &bHasUndergroundUnits, &bHasNonInfantryGroundObjects);
@@ -288,19 +292,19 @@ void Tile::load(InputStream& stream) {
     }
 
     if (bHasAirUnits) {
-        assignedAirUnitList = stream.readUint32List();
+        assignedAirUnitList = readOccupants(stream);
     }
 
     if (bHasInfantry) {
-        assignedInfantryList = stream.readUint32List();
+        assignedInfantryList = readOccupants(stream);
     }
 
     if (bHasUndergroundUnits) {
-        assignedUndergroundUnitList = stream.readUint32List();
+        assignedUndergroundUnitList = readOccupants(stream);
     }
 
     if (bHasNonInfantryGroundObjects) {
-        assignedNonInfantryGroundObjectList = stream.readUint32List();
+        assignedNonInfantryGroundObjectList = readOccupants(stream);
     }
 
     if (currentGame && currentGame->getLoadedSavegameVersion() >= 9807) {
@@ -382,19 +386,19 @@ void Tile::save(OutputStream& stream) const {
     }
 
     if (!assignedAirUnitList.empty()) {
-        stream.writeUint32List(assignedAirUnitList);
+        writeOccupants(stream, assignedAirUnitList);
     }
 
     if (!assignedInfantryList.empty()) {
-        stream.writeUint32List(assignedInfantryList);
+        writeOccupants(stream, assignedInfantryList);
     }
 
     if (!assignedUndergroundUnitList.empty()) {
-        stream.writeUint32List(assignedUndergroundUnitList);
+        writeOccupants(stream, assignedUndergroundUnitList);
     }
 
     if (!assignedNonInfantryGroundObjectList.empty()) {
-        stream.writeUint32List(assignedNonInfantryGroundObjectList);
+        writeOccupants(stream, assignedNonInfantryGroundObjectList);
     }
 
     stream.writeUint8(static_cast<Uint8>(cityZoneType_));
@@ -404,7 +408,7 @@ void Tile::save(OutputStream& stream) const {
 }
 
 void Tile::assignAirUnit(Uint32 newObjectID) {
-    assignedAirUnitList.push_back(newObjectID);
+    appendOccupant(assignedAirUnitList, newObjectID);
     Map::noteObjectAssigned(*this);
 }
 
@@ -413,7 +417,7 @@ void Tile::assignNonInfantryGroundObject(Uint32 newObjectID) {
     // checks the next tile, and searches refresh occupancy each slice. Structures
     // bump the revision on placement/destruction, mountain changes in setType(),
     // and repaired zone footprints in Game::loadSaveGame().
-    assignedNonInfantryGroundObjectList.push_back(newObjectID);
+    appendOccupant(assignedNonInfantryGroundObjectList, newObjectID);
     Map::noteObjectAssigned(*this);
 }
 
@@ -444,14 +448,14 @@ int Tile::assignInfantry(Uint32 newObjectID, Sint8 currentPosition) {
         newPosition = std::max(static_cast<Sint8>(0), std::min(newPosition, static_cast<Sint8>(NUM_INFANTRY_PER_TILE)));
     }
 
-    assignedInfantryList.push_back(newObjectID);
+    appendOccupant(assignedInfantryList, newObjectID);
     Map::noteObjectAssigned(*this);
     return newPosition;
 }
 
 
 void Tile::assignUndergroundUnit(Uint32 newObjectID) {
-    assignedUndergroundUnitList.push_back(newObjectID);
+    appendOccupant(assignedUndergroundUnitList, newObjectID);
     Map::noteObjectAssigned(*this);
 }
 
@@ -464,12 +468,14 @@ void Tile::blitGround(int xPos, int yPos) {
     // (colored zone tint + dotted border) underneath. Without this
     // exception, fresh-zoned tiles render as solid black. Dune2R's transparent
     // sprites and crossfade also need the terrain beneath their footprints.
+    // Standalone DuneCity civic skins need it even with that crossfade off:
+    // their per-house graphics choice is independent of the Dune2R fade.
     if (hasANonInfantryGroundObject()) {
         const ObjectBase* groundObject = getNonInfantryGroundObject();
         if (groundObject != nullptr && groundObject->isAStructure()
             && !hasCityZone()
             && pGFXManager->getDune2RVisualBlend() == 0
-            && !shouldDrawTerrainBelowStructure(groundObject->getItemID())) {
+            && !DuneCity::shouldDrawTerrainBelowStructure(groundObject->getItemID())) {
             return;
         }
     }
@@ -980,6 +986,7 @@ void Tile::setType(int newType) {
             }
         }
     }
+    Map::noteSpiceChanged(*this);
 
     currentGameMap->for_each(location.x, location.y, location.x + 4, location.y + 4, [](Tile &t) { t.clearTerrain(); });
 }
@@ -1019,6 +1026,7 @@ FixPoint Tile::harvestSpice() {
     else {
         spice = 0;
     }
+    Map::noteSpiceChanged(*this);
 
     if (oldSpice >= RANDOMTHICKSPICEMIN && spice < RANDOMTHICKSPICEMIN) {
         setType(getThinSpiceTerrain(type));
@@ -1043,6 +1051,7 @@ void Tile::setSpice(FixPoint newSpice) {
         type = getThinSpiceTerrain(type);
     }
     spice = newSpice;
+    Map::noteSpiceChanged(*this);
 }
 
 
@@ -1064,6 +1073,7 @@ InfantryBase* Tile::getInfantry() const {
 }
 
 ObjectBase* Tile::getNonInfantryGroundObject() const {
+    if (assignedNonInfantryGroundObjectList.empty()) return nullptr;
     return currentGame->getObjectManager().getObject(assignedNonInfantryGroundObjectList.front());
 }
 
@@ -1164,6 +1174,9 @@ ObjectBase* Tile::getObjectWithID(Uint32 objectID) const {
 void Tile::triggerSpiceBloom(House* pTrigger) {
     if (!isSpiceBloom()) return;
     AchievementEvents::bloom(pTrigger);
+    // Diagnostic only: which house set the bloom off (docs/ai-scenario-matrix.md,
+    // "Spice bloom harvest"). A no-op unless decision telemetry is enabled.
+    AITelemetry::log().account(pTrigger->getHouseID(), "spice_bloom_burst", int64_t{1} << 32);
 
     const int bloomType = type;
     std::pair<int, int> generatedSpiceTerrain;
@@ -1565,7 +1578,8 @@ void Tile::selectFilter(int houseID, ObjectBase** lastCheckedObject, ObjectBase*
                                 obj = currentGame->getObjectManager().getObject(objectID);
 
                                 if (obj->isSelected()
-                                    || !currentGame->canPlayerControlHouse(currentGame->getHouse(houseID), obj->getOwner()))
+                                    || (!currentGame->isObserving()
+                                        && !currentGame->canPlayerControlHouse(currentGame->getHouse(houseID), obj->getOwner())))
                                     return;
 
                                 if (!predicate(obj))

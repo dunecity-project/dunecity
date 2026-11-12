@@ -63,6 +63,137 @@ TEST_CASE("QuantBot strategic savings leave excess funds available for tanks", "
     REQUIRE(spendableCredits(-100, 2000) == 0);
 }
 
+TEST_CASE("Rocket infantry has a standing floor and bounded observed-threat support",
+          "[quantbot][production][troopers]") {
+    REQUIRE(trooperSupportTarget(0,0) == 6);
+    REQUIRE(trooperSupportTarget(1,0) == 6);
+    REQUIRE(trooperSupportTarget(2,0) == 10);
+    REQUIRE(trooperSupportTarget(3,0) == 15);
+    REQUIRE(trooperSupportTarget(4,0) == 18);
+    REQUIRE(trooperSupportTarget(0,600) == 6);
+    REQUIRE(trooperSupportTarget(0,601) == 6);
+    REQUIRE(trooperSupportTarget(0,6000) == 9);
+    REQUIRE(trooperSupportTarget(-1,-1) == 6);
+    REQUIRE(trooperSupportFloor(0) == 6);
+    REQUIRE(trooperSupportFloor(std::numeric_limits<int>::max()) == 18);
+    REQUIRE(trooperSupportTarget(std::numeric_limits<int>::max(),std::numeric_limits<int>::max()) == 18);
+    REQUIRE(rocketInfantrySize(Unit_Trooper) == 1);
+    REQUIRE(rocketInfantrySize(Unit_Troopers) == 3);
+    REQUIRE(rocketInfantrySize(Unit_Troopers5) == 5);
+    REQUIRE(rocketInfantry(Unit_Troopers5));
+    REQUIRE(rocketInfantrySize(Unit_Soldier) == 0);
+    REQUIRE_FALSE(rocketInfantry(Unit_Saboteur));
+}
+
+TEST_CASE("QuantBot storage forecasts earned surplus after useful spending", "[quantbot][production][storage]") {
+    REQUIRE(storageCapacityNeeded(1800,2005,400,100,0));
+    REQUIRE(storageCapacityNeeded(2005,2005,1800,300,0));
+    REQUIRE_FALSE(storageCapacityNeeded(1800,2005,400,400,0));
+    REQUIRE_FALSE(storageCapacityNeeded(1800,2005,400,500,0));
+    REQUIRE_FALSE(storageCapacityNeeded(1800,2005,400,100,500));
+    REQUIRE_FALSE(storageCapacityNeeded(0,2005,400,100,0)); // A starting grant is not earned storage.
+    REQUIRE_FALSE(storageCapacityNeeded(2005,2005,0,0,0));
+    REQUIRE_FALSE(storageCapacityNeeded(2005,0,1800,300,0));
+    REQUIRE(storageCapacityNeeded(std::numeric_limits<int>::max(),std::numeric_limits<int>::max(),
+                                 std::numeric_limits<int>::max(),0,0));
+}
+
+TEST_CASE("Research keeps current and forecast economy and defence reserves",
+          "[quantbot][research][production]") {
+    TechInvestment state;
+    state.enabled = state.economyReady = state.powerReady = true;
+    state.cost = 600;
+    state.reserve = 1500;
+    state.cash = 2100;
+    state.projectedCash = 2800;
+    state.orderedCost = 700;
+    REQUIRE(canFundTechInvestment(state));
+    --state.cash;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    ++state.cash;
+    --state.projectedCash;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    ++state.projectedCash;
+    ++state.orderedCost;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    --state.orderedCost;
+    state.emergency = true;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+}
+
+TEST_CASE("Research never replaces income bootstrap power recovery or the off policy",
+          "[quantbot][research][production]") {
+    TechInvestment state;
+    state.enabled = state.economyReady = state.powerReady = true;
+    state.cost = 2700;
+    state.cash = 10000;
+    state.projectedCash = 10000;
+    state.reserve = 1000;
+    REQUIRE(canFundTechInvestment(state));
+    state.enabled = false;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.enabled = true;
+    state.economyReady = false;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.economyReady = true;
+    state.powerReady = false;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.powerReady = true;
+    state.cost = 0;
+    REQUIRE_FALSE(canFundTechInvestment(state));
+    state.cost = std::numeric_limits<int>::max();
+    state.cash = std::numeric_limits<int>::max();
+    state.projectedCash = std::numeric_limits<int>::max();
+    REQUIRE_FALSE(canFundTechInvestment(state));
+}
+
+TEST_CASE("Civ Wars funds a small tech-opening fleet before difficulty-scaled expansion",
+          "[quantbot][civ-wars][production]") {
+    for (int difficulty : {1, 2, 3}) {
+        REQUIRE(civWarsWorkerTarget(40, 1, false, difficulty) == 2);
+        REQUIRE(civWarsWorkerTarget(40, 3, false, difficulty) == 2);
+        REQUIRE(civWarsWorkerTarget(40, 4, false, difficulty) == 4 + 2*difficulty);
+        REQUIRE(civWarsWorkerTarget(40, 9, false, difficulty) == 4 + 2*difficulty);
+        REQUIRE(civWarsWorkerTarget(1, 1, false, difficulty) == 1);
+        REQUIRE(civWarsWorkerTarget(0, 9, true, difficulty) == 0);
+        REQUIRE(civWarsWorkerTarget(-1, 9, true, difficulty) == 0);
+    }
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 1) == 8);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 2) == 12);
+    REQUIRE(civWarsWorkerTarget(40, 5, true, 3) == 16);
+    REQUIRE(civWarsWorkerTarget(3, 5, true, 3) == 3);
+}
+
+TEST_CASE("Civ Wars research saving leaves a tiny tax city able to compound",
+          "[quantbot][civ-wars][research]") {
+    REQUIRE(civWarsResearchSaving(600, 300, 899) == 0);
+    REQUIRE(civWarsResearchSaving(600, 300, 900) == 900);
+    REQUIRE(civWarsResearchSaving(600, 600, 1200) == 1200);
+    REQUIRE(civWarsResearchSaving(2700, 0, 3000) == 3000);
+    REQUIRE(civWarsResearchSaving(0, 300, 3000) == 0);
+    REQUIRE(civWarsResearchSaving(std::numeric_limits<int>::max(), 300,
+                                  std::numeric_limits<int>::max()) == 0);
+}
+
+TEST_CASE("Civ Wars technology leaves room for the first wave and reinforcements",
+          "[quantbot][civ-wars][research]") {
+    CHECK(civWarsResearchPacing(1, false, 0, 3000));
+    CHECK(civWarsResearchPacing(3, false, 0, 3000));
+    CHECK_FALSE(civWarsResearchPacing(4, false, 7500, 3000));
+    CHECK_FALSE(civWarsResearchPacing(4, true, 2999, 3000));
+    CHECK(civWarsResearchPacing(4, true, 3000, 3000));
+    CHECK_FALSE(civWarsResearchPacing(8, true, 0, 3000));
+}
+
+TEST_CASE("Civ Wars city expansion grows after its first field army",
+          "[quantbot][civ-wars][city]") {
+    for (int difficulty = 1; difficulty <= 3; ++difficulty)
+        CHECK(civWarsZoneTarget(false, difficulty) == 24);
+    CHECK(civWarsZoneTarget(true, 1) == 36);
+    CHECK(civWarsZoneTarget(true, 2) == 48);
+    CHECK(civWarsZoneTarget(true, 3) == 60);
+}
+
 TEST_CASE("QuantBot repairs an over-residential economy even at saturated demand", "[quantbot][city]") {
     const auto zones = rankZones(60, 4, 9, 2000, 1500, 1500, false);
     REQUIRE(zones[0] == Structure_ZoneCommercial);
@@ -162,6 +293,44 @@ TEST_CASE("City opening grows beyond two workers before optional tech", "[quantb
     CHECK_FALSE(preferFactoryHarvester(0,0,0,80000,300,true,true));
     // Vanilla keeps its established army/worker balance.
     CHECK_FALSE(preferFactoryHarvester(2,120,300,80000,300,true));
+}
+
+TEST_CASE("Spice transition uses the working fleet and finite remaining fields", "[quantbot][city][economy]") {
+    using namespace CityEconomyInvestmentPolicy;
+    CHECK(spiceTransitionDue(4800,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(4801,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(0,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(-1,2,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(100,1,1,300,600));
+    CHECK_FALSE(spiceTransitionDue(100,2,0,300,600));
+    CHECK_FALSE(spiceTransitionDue(100,2,1,0,600));
+    CHECK(spiceTransitionDue(4800,12,1,300,600)); // Bays, not hypothetical workers, limit receipts.
+    CHECK_FALSE(spiceTransitionDue(4801,12,1,300,600));
+    CHECK(spiceTransitionDue(std::numeric_limits<int>::max(),100000,100000,100000,100000));
+}
+
+TEST_CASE("Single-yard growth spends live infrastructure allowance beyond the seed", "[quantbot][city][economy]") {
+    using namespace CityEconomyInvestmentPolicy;
+    CHECK_FALSE(singleYardGrowthDue(1,4));
+    CHECK(singleYardGrowthDue(2,4));
+    CHECK_FALSE(singleYardGrowthDue(3,5));
+    CHECK(singleYardGrowthDue(4,5));
+    CHECK_FALSE(singleYardGrowthDue(12,10));
+    CHECK(singleYardGrowthDue(14,10));
+    CHECK_FALSE(singleYardGrowthDue(std::numeric_limits<int>::max(),std::numeric_limits<int>::max()));
+}
+
+TEST_CASE("Bounded city power growth preserves observed and committed loads", "[quantbot][city][economy]") {
+    using namespace CityEconomyInvestmentPolicy;
+    using QuantBotBuildPolicy::cityGrowthPowerHeadroom;
+    CHECK(boundedMatureZonePower(200,1200,120,1) == 320);
+    CHECK(boundedMatureZonePower(200,1200,120,2) == 440);
+    CHECK(boundedMatureZonePower(200,250,120,1) == 250);
+    CHECK(cityGrowthPowerHeadroom(200,boundedMatureZonePower(200,1200,120,1),80,24) == 144);
+    CHECK(cityGrowthPowerHeadroom(200,boundedMatureZonePower(200,1200,120,1),400,24) == 424);
+    CHECK(cityGrowthPowerHeadroom(200,boundedMatureZonePower(200,1200,120,1),0,600) == 720);
+    CHECK(boundedMatureZonePower(std::numeric_limits<int>::max(),std::numeric_limits<int>::max(),
+        std::numeric_limits<int>::max(),std::numeric_limits<int>::max()) == std::numeric_limits<int>::max());
 }
 
 TEST_CASE("Refinery forecasts count the first delivery and only marginal shared-bay income", "[quantbot][city]") {
@@ -1786,6 +1955,52 @@ TEST_CASE("Proactive turret overlap is interleaved with city growth", "[quantbot
     CHECK(RocketTurretPolicy::coverageTurretCap(0)==2);
     CHECK(RocketTurretPolicy::coverageTurretCap(40)==12);
 }
+
+TEST_CASE("More rockets allow only a modest established-base head start", "[quantbot][defence][regression]") {
+    using RocketTurretPolicy::earlyRocketLimit;
+    for (int tier=0;tier<=3;++tier) {
+        CHECK(earlyRocketLimit(false,tier,1000)==2);
+        CHECK(earlyRocketLimit(true,tier,7)==2);
+    }
+    CHECK(earlyRocketLimit(true,0,1000)==2);
+    CHECK(earlyRocketLimit(true,1,8)==3);
+    CHECK(earlyRocketLimit(true,1,1000)==3);
+    CHECK(earlyRocketLimit(true,2,8)==3);
+    CHECK(earlyRocketLimit(true,2,15)==3);
+    CHECK(earlyRocketLimit(true,2,16)==4);
+    CHECK(earlyRocketLimit(true,2,32)==4);
+    CHECK(earlyRocketLimit(true,3,16)==4);
+    CHECK(earlyRocketLimit(true,3,32)==4);
+    CHECK(earlyRocketLimit(true,3,1000)==4);
+}
+
+TEST_CASE("Observed ground raids get a bounded local rocket goal", "[quantbot][defence][regression]") {
+    using RocketTurretPolicy::groundThreatGoal;
+    CHECK(groundThreatGoal(0,false)==0);
+    CHECK(groundThreatGoal(200,false)==2);
+    CHECK(groundThreatGoal(400,false)==2);
+    CHECK(groundThreatGoal(401,false)==3);
+    CHECK(groundThreatGoal(800,false)==4);
+    CHECK(groundThreatGoal(801,false)==5);
+    CHECK(groundThreatGoal(2000,false)==8);
+    CHECK(groundThreatGoal(100000,false)==8);
+    CHECK(groundThreatGoal(0,true)==0);
+    CHECK(groundThreatGoal(350,true)==2);
+    CHECK(groundThreatGoal(351,true)==3);
+    CHECK(groundThreatGoal(600,true)==4);
+    CHECK(groundThreatGoal(700,true)==4);
+    CHECK(groundThreatGoal(701,true)==5);
+    CHECK(groundThreatGoal(1225,true)==7);
+    CHECK(groundThreatGoal(1226,true)==8);
+    CHECK(groundThreatGoal(100000,true)==8);
+    for (int value=0;value<=2000;++value) {
+        const int oldGoal=groundThreatGoal(value,false);
+        const int newGoal=groundThreatGoal(value,true);
+        CHECK(newGoal>=oldGoal);
+        CHECK(newGoal<=oldGoal+1);
+    }
+    CHECK(RocketTurretPolicy::threatTurretTotalCap==12);
+}
 TEST_CASE("Air withdrawal exits new coverage without crossing a second defended area", "[quantbot][air]") {
     AirStrikePolicy::Coverage map(40,40);
     map.add(Coord(10,20),5);
@@ -2054,6 +2269,13 @@ TEST_CASE("Police funding cuts apply at once and increases wait for review", "[a
     // Sustained headroom past the interval, beyond the deadband, is applied.
     CHECK(smoothedPoliceFunding(60,100,1000+kPoliceIncreaseReviewCycles,1000)==100);
     CHECK(smoothedPoliceFunding(60,100,1000+kPoliceIncreaseReviewCycles-1,1000)==60);
+    // Small recoveries are delayed longer, not lost forever in the deadband.
+    const Uint32 recoveryCycles=kPoliceIncreaseReviewCycles*kPoliceRecoveryReviewMultiplier;
+    CHECK(smoothedPoliceFunding(97,100,1000+recoveryCycles-1,1000)==97);
+    CHECK(smoothedPoliceFunding(97,100,1000+recoveryCycles,1000)==100);
+    CHECK(smoothedPoliceFunding(60,63,1000+recoveryCycles,1000)==63);
+    CHECK(smoothedPoliceFunding(97,100,1000+10*recoveryCycles,1000,false)==97);
+    CHECK(smoothedPoliceFunding(97,100,900,5000)==97);
     // Demand that flips on every build pass used to move funding every pass:
     // 1,028 changes on Medium and 1,275 on Hard in the reviewed run. Cuts stay
     // immediate, so the level still follows the limit down, but the reversals

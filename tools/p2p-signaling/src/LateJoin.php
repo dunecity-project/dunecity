@@ -33,7 +33,7 @@ trait LateJoinSignaling
             if (count($s['joinRequests'])>=8 || self::reservedSeats($s)>=(int)$s['maxPeers'])
                 throw new ServiceError(409,'room_full','This game has no space for another player.');
             foreach($s['peers'] as $p) if($p['name']===$name)
-                throw new ServiceError(409,'name_taken','That name is already in the game.');
+                throw new ServiceError(409,'name_taken','Somebody in that game is already using your player name. Change Player name in Settings, then try again.');
             foreach($s['joinRequests'] as $r) if($r['name']===$name && in_array($r['state'],['pending','approved'],true))
                 throw new ServiceError(409,'request_pending','A request with that name is already waiting.');
             unset($claims['publicOnly']);

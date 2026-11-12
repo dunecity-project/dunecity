@@ -44,7 +44,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import require_free_space, scratch_dir  # noqa: E402
+from probe_profile import remove_tree, require_free_space, scratch_dir  # noqa: E402
 
 DATA = root / 'tests/performance/data'
 SCENARIOS = {
@@ -57,6 +57,10 @@ CYCLES_PER_MINUTE = 3750   # MILLI2CYCLES(60000) at 16 ms per cycle
 EIGHT_HOUSE = DATA / 'eight-house-384'
 # Where the 8-house mod revision's other files live in this tree (found by their SHA-256).
 EIGHT_HOUSE_SOURCES = ('mods/dunecity/graphics_skins', 'config')
+# perf_regression budgets of the stefan-map case, as multiples of the calibration loop
+# (docs/game-performance.md "perf_regression"); the stress check of
+# tests/ai/simulation-throughput.py --perf-gate reads them from here.
+BUDGETS = {'cpu_mean': 0.25, 'house_p99': 1.0, 'house_max': 10.0}
 # perf_regression budgets of the 8-house case, as multiples of the calibration loop (see
 # docs/game-performance.md "perf_regression: eight houses on 384x384"). The p99 cycle of this
 # save is a QuantBot build pass (8 houses x one per 100 cycles = 8% of cycles): 1.0.852 measured
@@ -316,7 +320,7 @@ def run_menu_launch(args, scratch):
                   other_ms=max(0.0, frame['sum_ms'] / frame['count'] - sum(per_frame.values())),
                   windows=windows, wall_s=round(time.time() - started, 1), host=os.uname().nodename,
                   load=os.getloadavg()[0], time=time.strftime('%Y-%m-%d %H:%M:%S'))
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     return result
 
 
@@ -399,7 +403,7 @@ def run_one(args, scratch, index):
                   minutes=args.minutes, source=str(source), commit=commit, wall_s=round(time.time() - started, 1),
                   render_every=args.render_every, path_workers=args.path_workers, host=os.uname().nodename,
                   load=os.getloadavg()[0], time=time.strftime('%Y-%m-%d %H:%M:%S'))
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     return result
 
 
@@ -483,11 +487,11 @@ def main():
                         help='perf_regression: fail unless the stepped run stays inside the budgets below, each a '
                              'multiple of this process\'s calibration loop (game-perf.inc calibrationMs) so they '
                              'travel between machines and loads')
-    parser.add_argument('--budget-cpu-mean', type=float, default=0.25,
+    parser.add_argument('--budget-cpu-mean', type=float, default=BUDGETS['cpu_mean'],
                         help='mean simulation CPU per cycle / calibration (1.0.847 on the mini: 0.15)')
-    parser.add_argument('--budget-house-p99', type=float, default=1.0,
+    parser.add_argument('--budget-house-p99', type=float, default=BUDGETS['house_p99'],
                         help='worst house\'s p99 update / calibration')
-    parser.add_argument('--budget-house-max', type=float, default=10.0,
+    parser.add_argument('--budget-house-max', type=float, default=BUDGETS['house_max'],
                         help='worst single house update / calibration (1.0.847: ~4.6; Stefan\'s slow session: 8-26)')
     parser.add_argument('--menu-launch', type=int, default=0, metavar='SECONDS',
                         help='Also play SECONDS of a game started the way a player does (main menu -> Random '

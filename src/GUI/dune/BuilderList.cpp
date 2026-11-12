@@ -150,11 +150,12 @@ BuilderList::BuilderList(Uint32 builderObjectID) {
     enableResizing(false,true);
     this->builderObjectID = builderObjectID;
 
-    upButton.setTextures(   pGFXManager->getUIGraphic(UI_ButtonUp,pLocalHouse->getHouseID()),
-                            pGFXManager->getUIGraphic(UI_ButtonUp_Pressed,pLocalHouse->getHouseID()));
+    const int interfaceHouse = currentGame->getInterfaceHouseID();
+    upButton.setTextures(   pGFXManager->getUIGraphic(UI_ButtonUp,interfaceHouse),
+                            pGFXManager->getUIGraphic(UI_ButtonUp_Pressed,interfaceHouse));
 
-    downButton.setTextures( pGFXManager->getUIGraphic(UI_ButtonDown,pLocalHouse->getHouseID()),
-                            pGFXManager->getUIGraphic(UI_ButtonDown_Pressed,pLocalHouse->getHouseID()));
+    downButton.setTextures( pGFXManager->getUIGraphic(UI_ButtonDown,interfaceHouse),
+                            pGFXManager->getUIGraphic(UI_ButtonDown_Pressed,interfaceHouse));
 
     addWidget(&upButton,Point(ArrowX,0),upButton.getSize());
     upButton.setOnClick(std::bind(&BuilderList::onUp, this));

@@ -1,5 +1,6 @@
 #include <players/CityPlacementPolicy.h>
 #include <players/QuantBotBuildPolicy.h>
+#include <players/QuantBotBuildPass.h>
 
 // Real queues, market, placement, power and household accounting in both mods.
 void runSharedSpendingProbe(Game& game) {
@@ -73,6 +74,12 @@ void runSharedSpendingProbe(Game& game) {
         bot->builderPlaceLocations.clear();bot->reservedStructures.clear();bot->clearPlacementCache();
         bot->lastCalculatedSpice=spice;
         house->producedPower=10000;house->storedCredits=0;house->cityCredits=0;house->startingCredits=credits; // Explicit scenario funding, not an over-capacity spice deposit.
+        // This parallel-allocation fixture assumes ample bank headroom. Its
+        // synthetic tax base forecasts 29,092 credits over four minutes, above
+        // the campaign's real 6,020 store; StorageCapacity correctly buys a
+        // vault instead of the demanded lot in that different premise.
+        // Keep the default-on rule live, but isolate overflow (no-spice-city-probe).
+        if(game.isCitySimEnabled())house->capacity=100000;
         structureList.clear();structureList.push_back(yard);structureList.push_back(heavy);structureList.push_back(refinery);
     };
     auto count=[&](BuilderBase* builder,Uint32 item) {
@@ -87,6 +94,12 @@ void runSharedSpendingProbe(Game& game) {
         game.objectData.data[Structure_RocketTurret][HOUSE_HARKONNEN].enabled=false;
         yard->updateBuildList();secondYard->updateBuildList();
     }
+    const auto originalSharedConfig=bot->configOverride;
+    auto sharedConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+    // This is the generic economic-allocation baseline. The full-build
+    // trooper fixture separately checks proactive WOR and paid troops ON.
+    sharedConfig->force.trooperSupport=false;
+    bot->configOverride=sharedConfig;
     try {
         reset(price,1000000);bot->build(10000);
         require(count(heavy,Unit_Harvester)==1,"Next worthwhile worker lost its exact purchase budget");
@@ -161,24 +174,48 @@ void runSharedSpendingProbe(Game& game) {
             setCrime(0);
             // The reported 100k opening must grow production before reaching
             // its six-yard target, while its dedicated yard still zones.
-            reset(100000,0);structureList.push_back(secondYard);
-            bot->militaryValueLimit=80000;
-            heavy->doProduceItem(Unit_Tank);
-            bot->build(1000);
-            require(hasZone(yard),"Rich production displaced the dedicated R/I/C yard");
-            require(count(secondYard,Structure_HeavyFactory)>0,
-                "Cash-funded factory expansion waited for the construction-yard target");
-            require(bot->cityProductionPlots.size()==2,"Did not preserve factory and repair plots on open rock");
-            for(const auto& entry:bot->reservedStructures) {
-                if (!DuneCity::isCityZoneStructure(entry.second.item)) continue;
-                const auto p=entry.second.location, size=getStructureSize(entry.second.item);
-                for(const auto& plot:bot->cityProductionPlots) {
-                    const auto extent=getStructureSize(plot.item);
-                    require(!CityPlacementPolicy::overlaps(p.x,p.y,size.x,size.y,
-                        plot.location.x-1,plot.location.y-1,extent.x+2,extent.y+2),
-                        "Zoning consumed a future production footprint or access");
+            const auto savedPlotConfig=bot->configOverride;
+            auto plotConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=plotConfig;
+            try {
+                for(bool prerequisites:{true,false}) {
+                    plotConfig->force.cityProductionPrerequisites=prerequisites;
+                    reset(100000,0);structureList.push_back(secondYard);
+                    bot->militaryValueLimit=80000;
+                    heavy->doProduceItem(Unit_Tank);
+                    bot->build(1000);
+                    require(hasZone(yard),"Rich production displaced the dedicated R/I/C yard");
+                    require(count(secondYard,Structure_HeavyFactory)>0,
+                        "Cash-funded factory expansion waited for the construction-yard target");
+                    // Inventory counts the actual house, including producers
+                    // hidden from this allocation fixture's active list. Both
+                    // core suppliers already stand, so only the legacy control
+                    // may reserve speculative copies.
+                    require(bot->cityProductionPlots.size()==(prerequisites ? 0u : 2u),
+                        "Production reservations did not match the owned core suppliers");
+                    bool checkedQueuedFactory=false;
+                    for(const auto& entry:bot->reservedStructures) {
+                        if(entry.second.item==Structure_HeavyFactory) {
+                            const auto previousBuilder=bot->planningBuilder;
+                            bot->planningBuilder=entry.first;
+                            const bool accessible=bot->preservesGroundAccess(entry.second.item,entry.second.location);
+                            bot->planningBuilder=previousBuilder;
+                            require(accessible,"Zoning blocked the queued factory's ground access");
+                            checkedQueuedFactory=true;
+                        }
+                        if (!DuneCity::isCityZoneStructure(entry.second.item)) continue;
+                        const auto p=entry.second.location, size=getStructureSize(entry.second.item);
+                        for(const auto& plot:bot->cityProductionPlots) {
+                            const auto extent=getStructureSize(plot.item);
+                            require(!CityPlacementPolicy::overlaps(p.x,p.y,size.x,size.y,
+                                plot.location.x-1,plot.location.y-1,extent.x+2,extent.y+2),
+                                "Zoning consumed a future production footprint or access");
+                        }
+                    }
+                    require(checkedQueuedFactory,"The funded factory had no reserved placement site");
                 }
-            }
+            } catch(...) { bot->configOverride=savedPlotConfig;throw; }
+            bot->configOverride=savedPlotConfig;
             // With only two workers, ample runway must still unlock the MCV
             // that supplies parallel city construction; neither target waits
             // for the other to finish.
@@ -336,11 +373,110 @@ void runSharedSpendingProbe(Game& game) {
             house->numItem[Structure_HighTechFactory]=highTechCount;
             SDL_Log("CITY_CAPACITY_PASS: upgrade, save MCV, parallel zoning, additional transport");
         }
+        {
+            const auto savedConfig=bot->configOverride;
+            auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=config;
+            const bool savedOption=game.gameInitSettings.gameOptions.researchLab;
+            const int savedTech=house->researchedTechLevel, savedTarget=house->techResearchTarget;
+            const int savedRemaining=house->techResearchRemaining, savedWorkerLimit=bot->harvesterLimit;
+            const Uint32 savedLab=house->techResearchLabID;
+            auto& tankData=game.objectData.data[Unit_Tank][HOUSE_HARKONNEN];
+            const int savedTankTech=tankData.techLevel;
+            auto restore=[&] {
+                game.gameInitSettings.gameOptions.researchLab=savedOption;
+                house->researchedTechLevel=savedTech;house->techResearchTarget=savedTarget;
+                house->techResearchRemaining=savedRemaining;house->techResearchLabID=savedLab;
+                tankData.techLevel=savedTankTech;bot->harvesterLimit=savedWorkerLimit;
+                bot->configOverride=savedConfig;bot->fieldableSlotsCached=false;
+                bot->resolveStrategyProfile();
+                for(auto* builder:{yard,heavy,secondYard})builder->updateBuildList();
+            };
+            try {
+                game.gameInitSettings.gameOptions.researchLab=true;
+                house->researchedTechLevel=1;house->techResearchTarget=0;
+                house->techResearchRemaining=0;house->techResearchLabID=NONE_ID;
+                bot->harvesterLimit=2;
+                config->force.researchLab=false;
+                for(auto* builder:{yard,heavy,secondYard})builder->updateBuildList();
+                reset(100000,1000000);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)==0 && !house->isTechResearchActive(),
+                    "Disabled research policy constructed or researched a lab");
+                config->force.researchLab=true;
+                const int labPrice=game.objectData.data[Structure_ResearchLab][HOUSE_HARKONNEN].price;
+                reset(labPrice+999,1000000);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)==0,"Lab construction consumed the working reserve");
+                reset(100000,1000000);structureList.push_back(secondYard);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)+count(secondYard,Structure_ResearchLab)==1,
+                    "Funded parallel yards failed to queue exactly one lab");
+                reset(100000,1000000);
+                auto* lab=place(Structure_ResearchLab);
+                require(lab,"Research lab placement failed");
+                saved.push_back(lab);
+                reset(house->getTechResearchCost()+999,1000000);structureList.push_back(lab);bot->build(10000);
+                require(!house->isTechResearchActive(),"Research consumed the basic economy and defence reserve");
+
+                // Exercise real build-list refresh as well as the bot's cached
+                // prospective slots. The existing factory/requirements are real;
+                // only this offer's unlock level is pinned to the next step.
+                tankData.techLevel=2;heavy->updateBuildList();
+                require(!heavy->isAvailableToBuild(Unit_Tank),"Factory offer ignored the house's low tech");
+                bot->fieldableMixSlots();
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(house->isTechResearchActive() && house->getTechResearchTarget()==2,
+                    "Funded QuantBot did not start the next research level");
+                require(house->getTechResearchRemaining()==house->techResearchCycles(2),
+                    "Research duration differs from simulated House timing");
+                require(house->getCredits()>=1000,"Accepted research left no working reserve");
+                const int paidCredits=house->getCredits();
+                QuantBot::BuildPass duplicate(0);bot->startTechResearch(duplicate);
+                require(house->getCredits()==paidCredits,"Active research was charged twice");
+                house->techResearchRemaining=1;house->updateTechResearch();
+                require(house->getTechLevel()==2 && !house->isTechResearchActive(),
+                    "House research did not complete the next level");
+                require(heavy->isAvailableToBuild(Unit_Tank),"Research completion did not refresh the factory offer");
+                require(bot->fieldableMixSlots()==bot->fieldableMixSlots(2) && bot->fieldableSlotsTech==2,
+                    "QuantBot retained a pre-research prospective-slot cache");
+
+                config->force.researchLab=false;
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(!house->isTechResearchActive(),"Disabled research policy started another level");
+                config->force.researchLab=true;
+                game.gameInitSettings.gameOptions.researchLab=false;
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(!house->isTechResearchActive(),"Match research option off still spent on research");
+                game.gameInitSettings.gameOptions.researchLab=true;
+                reset(100000,1000000);structureList.push_back(lab);bot->build(10000);
+                require(house->isTechResearchActive() && house->getTechResearchTarget()==3,
+                    "Completed research did not permit the following level");
+                saved.remove(lab);lab->setVisible(VIS_ALL,false);lab->destroy();
+                require(!house->isTechResearchActive() && house->getTechLevel()==2,
+                    "Lab loss did not cancel work while retaining completed technology");
+                // Keep both real yards visible, just as for the initial lab.
+                // City planning reserves one of a multi-yard house's builders
+                // for demanded zoning; rebuilding must coexist with that work.
+                reset(100000,1000000);structureList.push_back(secondYard);bot->build(10000);
+                require(count(yard,Structure_ResearchLab)+count(secondYard,Structure_ResearchLab)==1,
+                    "Destroyed research lab was not rebuilt");
+                if(game.isCitySimEnabled()) {
+                    bool growth=false;
+                    for(auto* builder:{yard,secondYard})for(const auto& order:builder->currentProductionQueue)
+                        growth|=DuneCity::isCityZoneStructure(order.itemID);
+                    require(growth,"Research lab rebuilding displaced protected city growth");
+                }
+                SDL_Log("RESEARCH_LAB_AI_PASS: hashed off/on policy, real lab queue, reserve, payment, completion, build gate, cache, cancellation, rebuilding");
+            } catch (...) {restore();throw;}
+            restore();
+        }
         if (game.isCitySimEnabled()) {
             const auto savedConfig=bot->configOverride;
             auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
             config->force.openingCombatBudget=false;
             config->force.campaignCombatBudget=false;
+            // Isolate CapacityMcvRunway in both arms: the independent tax-opening
+            // guard also correctly rejects this unfunded negative-control MCV.
+            // Its own financial boundaries are tested by no-spice-city-probe.
+            config->force.cityOpeningCapital=false;
             bot->configOverride=config;
             try {
                 auto& hs=game.getCitySimulation()->houseState_[HOUSE_HARKONNEN];
@@ -408,8 +544,53 @@ void runSharedSpendingProbe(Game& game) {
             } catch (...) {bot->configOverride=savedConfig;throw;}
             bot->configOverride=savedConfig;
         }
+        if (!game.isCitySimEnabled() && house->isPowerRequired()) {
+            const auto savedConfig=bot->configOverride;
+            auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+            bot->configOverride=config;
+            try {
+                heavy->curUpgradeLev=heavy->getMaxUpgradeLevel();heavy->updateBuildList();
+                while(house->getNumItems(Unit_Harvester)<8)house->createUnit(Unit_Harvester,true);
+                auto combatQueued=[&]() {
+                    return std::any_of(heavy->currentProductionQueue.begin(),heavy->currentProductionQueue.end(),
+                        [](const auto& order){return QuantBotBuildPolicy::militaryItem(order.itemID);});
+                };
+                for (bool enabled:{false,true}) {
+                    config->force.fundedClassicProduction=enabled;
+                    // The shared planner has already priced the queue. The
+                    // legacy powered-mod floor must actually leave this idle.
+                    reset(1000,0);structureList.remove(yard);
+                    bot->build(10000);
+                    require(combatQueued()==enabled,
+                        "Powered non-city heavy production ignored the funded spendable budget");
+                    // Enough existing workers for this finite field: the
+                    // legacy cap-only fallback still adds a ninth Harvester.
+                    reset(1000,10000);structureList.remove(yard);
+                    bot->build(10000);
+                    require((count(heavy,Unit_Harvester)>0)!=enabled,
+                        "Powered non-city worker execution disagreed with the planned fleet target");
+                    if(enabled)require(combatQueued(),
+                        "Rejected surplus worker swallowed affordable heavy combat production");
+                }
+                for (const auto otherDifficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
+                    bot->difficulty=otherDifficulty;
+                    reset(1000,0);structureList.remove(yard);
+                    bot->build(10000);
+                    require(heavy->getProductionQueueSize()==0,
+                        "Funded classic production changed a non-Brutal powered economy");
+                }
+                bot->difficulty=QuantBot::Difficulty::Brutal;
+                reset(200,10000);structureList.remove(yard);
+                bot->build(10000);
+                require(heavy->getProductionQueueSize()==0,
+                    "Funded classic production bypassed the actual purchase price");
+                SDL_Log("FUNDED_CLASSIC_PRODUCTION_PASS: real off/on low-cash combat, surplus workers, purchase budget, Brutal-only scope");
+            } catch (...) {bot->difficulty=QuantBot::Difficulty::Brutal;bot->configOverride=savedConfig;throw;}
+            bot->configOverride=savedConfig;
+        }
         SDL_Log("SHARED_SPENDING_PASS: exact worker reserve, simultaneous construction, depletion, scarce credits (%s)",game.isCitySimEnabled()?"city":"vanilla");
-    }catch(...){structureList=saved;throw;}
+    }catch(...){bot->configOverride=originalSharedConfig;structureList=saved;throw;}
+    bot->configOverride=originalSharedConfig;
     structureList=saved;
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=shared-spending outcome=passed");
 }

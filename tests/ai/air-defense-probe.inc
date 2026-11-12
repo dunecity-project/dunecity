@@ -50,17 +50,17 @@ void runAirDefenseProbe(Game& game) {
             attacker->setLocation(origin+Coord(3,7));attacker->doAttackObject(base,true);
             bot->doSetAttackMode(air,STOP);bot->doAttackObject(air,raid,true);
             bot->tryLaunchOrnithopterStrike(settings,config);
-            require(air->getTarget()==attacker,"Aircraft kept raiding while its construction yard was attacked");
+            require(currentGame->getObjectManager().getObject(air->target.getObjectID())==attacker,"Aircraft kept raiding while its construction yard was attacked");
             attacker->setLocation(origin+Coord(18,19));attacker->doAttackObject(worker,true);
             bot->doAttackObject(air,raid,true);
             bot->tryLaunchOrnithopterStrike(settings,config);
-            require(air->getTarget()==attacker,"Aircraft ignored an attacked harvester outside its base");
+            require(currentGame->getObjectManager().getObject(air->target.getObjectID())==attacker,"Aircraft ignored an attacked harvester outside its base");
             settings.ornithopterAttackEnabled=false;
             bot->doSetAttackMode(air,STOP);bot->tryLaunchOrnithopterStrike(settings,config);
-            require(air->getTarget()==attacker,"Disabling offensive raids disabled defensive interception");
+            require(currentGame->getObjectManager().getObject(air->target.getObjectID())==attacker,"Disabling offensive raids disabled defensive interception");
             settings.ornithopterAttackEnabled=true;
             attacker->setHealth(0);bot->tryLaunchOrnithopterStrike(settings,config);
-            require(air->getTarget()==raid,"Aircraft did not resume raiding after the threat died");
+            require(currentGame->getObjectManager().getObject(air->target.getObjectID())==raid,"Aircraft did not resume raiding after the threat died");
             attacker->setHealth(attacker->getMaxHealth());
         }
         const auto& config=getQuantBotConfig();auto settings=config.hard;
@@ -72,7 +72,7 @@ void runAirDefenseProbe(Game& game) {
         // is not abandoned - the launcher stands on the harvester's attacker.
         launcher->setLocation(attacker->getLocation());unitList.push_back(launcher);
         bot->doSetAttackMode(air,STOP);bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==launcher,
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==launcher,
                 "An escorted rescue did not engage the launcher escorting the attacker");
         require(blockDistance(launcher->getLocation(),attacker->getLocation()).lround()
                 <=AirStrikePolicy::kLocalEngagementRadius,
@@ -81,23 +81,23 @@ void runAirDefenseProbe(Game& game) {
         launcher->doAttackObject(worker,true);
         bot->doAttackObject(air,raid,true);
         bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==launcher,"Aircraft refused to intercept a launcher attacking its harvester");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==launcher,"Aircraft refused to intercept a launcher attacking its harvester");
         // Exercise the damage callback, not just the standalone target chooser.
         bot->doAttackObject(air,raid,true);bot->defenceResponseCycles.clear();
         bot->onDamage(worker,1,launcher->getObjectID());
-        require(air->getTarget()==launcher,"Harvester damage did not immediately interrupt the air raid");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==launcher,"Harvester damage did not immediately interrupt the air raid");
         // Nearby threats without an actual attack still obey normal raid safety.
         launcher->doSetAttackMode(STOP);
         bot->doSetAttackMode(air,STOP);bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()!=attacker && air->getTarget()!=launcher,
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())!=attacker && currentGame->getObjectManager().getObject(air->target.getObjectID())!=launcher,
                 "Proximity alone bypassed anti-air safety");
         launcher->setLocation(origin+Coord(3,7));launcher->doAttackObject(base,true);
         bot->doAttackObject(air,raid,true);bot->defenceResponseCycles.clear();
         bot->onDamage(base,1,launcher->getObjectID());
-        require(air->getTarget()==launcher,"Base damage did not recall aircraft from a raid");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==launcher,"Base damage did not recall aircraft from a raid");
         launcher->setHealth(0);attacker->setHealth(0);
         bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==raid,"Aircraft failed to resume raids after the emergency ended");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==raid,"Aircraft failed to resume raids after the emergency ended");
 
         // Damaged aircraft keep fighting. Nothing repairs an ornithopter —
         // UnitBase::doRepair is empty and only ground units drive to a repair
@@ -111,45 +111,45 @@ void runAirDefenseProbe(Game& game) {
                 "An unrepairable damaged aircraft was still reserved for repair");
         bot->doSetAttackMode(air,STOP);bot->doAttackObject(air,raid,true);
         bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==launcher,"A damaged ornithopter refused to defend its base");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==launcher,"A damaged ornithopter refused to defend its base");
 
         // A live interception is stable. Repeated damage callbacks and a moving
         // attacker must not restart the attack run: the reported match had 149
         // target switches in five minutes, 144 of them while the previous
         // target was still alive.
-        const ObjectBase* held=air->getTarget();
+        const ObjectBase* held=currentGame->getObjectManager().getObject(air->target.getObjectID());
         attacker->setLocation(origin+Coord(2,3));attacker->doAttackObject(base,true);
         for(int volley=0;volley<6;++volley) {
             bot->defenceResponseCycles.clear();
             launcher->setLocation(origin+Coord(3+volley%3,7+volley%2));
             launcher->doAttackObject(base,true);
             bot->onDamage(base,1,volley%2 ? attacker->getObjectID() : launcher->getObjectID());
-            require(air->getTarget()==held,"Aircraft re-chose its target on a later volley");
+            require(currentGame->getObjectManager().getObject(air->target.getObjectID())==held,"Aircraft re-chose its target on a later volley");
         }
         // A worker attacked out in the field does not pull aircraft off the base.
         attacker->setLocation(origin+Coord(18,19));attacker->doAttackObject(worker,true);
         bot->defenceResponseCycles.clear();
         bot->onDamage(worker,1,attacker->getObjectID());
-        require(air->getTarget()==launcher,"A remote harvester rescue outranked an attack on the base");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==launcher,"A remote harvester rescue outranked an attack on the base");
         // With the base safe the same wing does rescue the worker, and a fresh
         // attack on the base then takes it back.
         launcher->doSetAttackMode(STOP);launcher->setHealth(0);
         bot->doSetAttackMode(air,STOP);bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==attacker,"Aircraft ignored the remaining harvester attacker");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==attacker,"Aircraft ignored the remaining harvester attacker");
         launcher->setHealth(launcher->getMaxHealth());
         launcher->setLocation(origin+Coord(3,7));launcher->doAttackObject(base,true);
         bot->defenceResponseCycles.clear();
         bot->onDamage(base,1,launcher->getObjectID());
-        require(air->getTarget()==launcher,"An attack on the base did not outrank a rescue under way");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==launcher,"An attack on the base did not outrank a rescue under way");
         air->setHealth(air->getMaxHealth());
         launcher->setHealth(0);attacker->setHealth(0);
         bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==raid,"Aircraft did not resume raiding after the stable interception ended");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==raid,"Aircraft did not resume raiding after the stable interception ended");
 
         unitList.remove(launcher);
         bot->onHumanUnitOrder(air->getObjectID());bot->doAttackObject(air,raid,true);
         bot->tryLaunchOrnithopterStrike(settings,config);
-        require(air->getTarget()==raid,"Defensive automation replaced a human aircraft order");
+        require(currentGame->getObjectManager().getObject(air->target.getObjectID())==raid,"Defensive automation replaced a human aircraft order");
 
         // === Ordinary ground prey, the launcher ratio and launcher first ===
         // The reported match flew 3636 sorties and found a building to hit in
@@ -196,20 +196,20 @@ void runAirDefenseProbe(Game& game) {
             // --- An exposed unit in the open is attacked, and really shot at.
             wingOf(1);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==prey,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==prey,
                 "A single aircraft ignored an exposed enemy tank with no anti-air near it");
             require(flyer()->getAttackMode()==STOP && flyer()->wasForced(),
                 "The raid was not issued as an explicit forced order in STOP mode");
             // Infantry is prey on the same terms.
             unitList.clear();unitList.push_back(foot);unitList.push_back(flyer());
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==foot,"Exposed enemy infantry was not raided");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==foot,"Exposed enemy infantry was not raided");
 
             // Real frames: it flies there and damages the tank. Selection alone
             // is what the old telemetry already showed for buildings.
             wingOf(1);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==prey,"The firing fixture lost its target before flying");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==prey,"The firing fixture lost its target before flying");
             const FixPoint preyFull=prey->getMaxHealth();
             const int startedAway=blockDistance(flyer()->getLocation(),prey->getLocation()).lround();
             const Uint32 fireDeadline=game.getGameCycleCount()+MILLI2CYCLES(120000);
@@ -236,15 +236,15 @@ void runAirDefenseProbe(Game& game) {
             unitList.push_back(escortA);
             escortA->setVisible(VIS_ALL,false);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==prey,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==prey,
                 "The held emergency fixture did not acquire the base attacker");
             raids.ornithopterAttackEnabled=false;
             escortA->setVisible(owner->getTeamID(),true);
             strike();
-            require(flyer()->getTarget()==escortA,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,
                 "A held emergency target or disabled raids suppressed launcher escort priority");
             strike();
-            require(flyer()->getTarget()==escortA,"The emergency launcher interception was unstable");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,"The emergency launcher interception was unstable");
             raids.ornithopterAttackEnabled=true;
             prey->doSetAttackMode(STOP);
             prey->setLocation(preyAt);escortA->setLocation(escortAt);
@@ -260,12 +260,12 @@ void runAirDefenseProbe(Game& game) {
             auto holdsAt=[&](int count,const char* why) {
                 wingWithEscort(count);
                 bot->doSetAttackMode(flyer(),STOP);strike();
-                require(flyer()->getTarget()==nullptr,why);
+                require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==nullptr,why);
             };
             holdsAt(3,"Three aircraft raided into a launcher's cover, below the four-per-launcher ratio");
             wingWithEscort(4);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==escortA,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,
                 "Four aircraft did not engage the launcher covering their prey first");
             // Overlapping launchers cost twice as much: seven hold, eight fly.
             escortB->setVisible(owner->getTeamID(),true);
@@ -278,11 +278,11 @@ void runAirDefenseProbe(Game& game) {
             };
             withBoth(7);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==nullptr,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==nullptr,
                 "Seven aircraft entered the overlap of two launchers, which costs eight");
             withBoth(8);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==escortA || flyer()->getTarget()==escortB,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA || currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortB,
                 "Eight aircraft did not engage either launcher of the two-launcher overlap");
             unitList.remove(escortB);escortB->setVisible(VIS_ALL,false);
 
@@ -293,14 +293,14 @@ void runAirDefenseProbe(Game& game) {
                 bot->doSetAttackMode(flyer(),STOP);strike();
             };
             fourWithOne();
-            require(flyer()->getTarget()==escortA,"The wing fixture does not start at the ratio");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,"The wing fixture does not start at the ratio");
             auto* spare=fleet[3];
             const Coord spareHome=spare->getLocation();
             auto excluded=[&](const char* why) {
                 unitList.clear();unitList.push_back(prey);unitList.push_back(escortA);
                 for(int i=0;i<4;++i) unitList.push_back(fleet[i]);
                 bot->doSetAttackMode(flyer(),STOP);strike();
-                require(flyer()->getTarget()==nullptr,why);
+                require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==nullptr,why);
             };
             spare->setLocation(origin.x+2,origin.y+2);
             require(blockDistance(flyer()->getLocation(),spare->getLocation()).lround()
@@ -325,15 +325,15 @@ void runAirDefenseProbe(Game& game) {
             excluded("An unrespondable aircraft was counted towards an offensive sortie");
             spare->setRespondable(true);
             fourWithOne();
-            require(flyer()->getTarget()==escortA,"Restoring the wing did not restore the sortie");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,"Restoring the wing did not restore the sortie");
 
             // --- A launcher we cannot see, do not own or have already killed
             // charges nothing. Three aircraft take the tank in each case.
             auto threeTakePrey=[&](const char* why) {
                 wingOf(3);unitList.push_back(escortA);
                 bot->doSetAttackMode(flyer(),STOP);strike();
-                require(flyer()->getTarget()==prey,why);
-                require(flyer()->getTarget()!=escortA,"A launcher that charges nothing became prey itself");
+                require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==prey,why);
+                require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())!=escortA,"A launcher that charges nothing became prey itself");
             };
             escortA->setVisible(VIS_ALL,false);
             threeTakePrey("A launcher hidden by fog was still charged for, inferring cover we cannot see");
@@ -354,19 +354,19 @@ void runAirDefenseProbe(Game& game) {
             escortA->setVisible(VIS_ALL,false);
             wingOf(4);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==prey && flyer()->wasForced(),
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==prey && flyer()->wasForced(),
                 "The arrival fixture does not start on a forced ordinary ground target");
             escortA->setVisible(owner->getTeamID(),true);
             wingOf(4);unitList.push_back(escortA);
             strike();
-            require(flyer()->getTarget()==escortA,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,
                 "A launcher arriving over the prey did not take over the attack run");
             strike();
-            require(flyer()->getTarget()==escortA,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,
                 "A live launcher attack run was re-chosen on the following pass");
             escortA->setHealth(0);
             strike();
-            require(flyer()->getTarget()==prey,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==prey,
                 "Killing the escort did not hand the attack run back to the ground target");
             escortA->setHealth(escortA->getMaxHealth());
             escortA->setVisible(VIS_ALL,false);unitList.remove(escortA);
@@ -383,7 +383,7 @@ void runAirDefenseProbe(Game& game) {
                 "The rocket turret does not cover the prey, so this tests nothing");
             wingOf(8);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==nullptr,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==nullptr,
                 "A large wing entered rocket turret cover, which no number of aircraft buys");
             structureList.remove(turret);
             auto* deviator=spawn(enemy,Unit_Deviator,Coord(20,22));
@@ -392,7 +392,7 @@ void runAirDefenseProbe(Game& game) {
                 "The Deviator does not cover the prey, so this tests nothing");
             wingOf(8);unitList.push_back(deviator);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==nullptr,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==nullptr,
                 "A large wing entered Deviator cover, which converts whatever it hits");
 
             // === Enemy workers are never an autonomous air target ===
@@ -413,24 +413,24 @@ void runAirDefenseProbe(Game& game) {
                 for(int i=0;i<count;++i) unitList.push_back(fleet[i]);
             };
             auto notAWorker=[&](const char* why) {
-                require(flyer()->getTarget()!=worker1 && (!worker2 || flyer()->getTarget()!=worker2),why);
+                require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())!=worker1 && (!worker2 || currentGame->getObjectManager().getObject(flyer()->target.getObjectID())!=worker2),why);
             };
             // An exposed worker with nothing else around is simply not a target.
             withWorkers(1);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==nullptr,"An ordinary raid selected an exposed enemy harvester");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==nullptr,"An ordinary raid selected an exposed enemy harvester");
             // The same pass still raids an ordinary combat unit beside it, so
             // this is a worker veto and not a disabled raid.
             withWorkers(1);unitList.push_back(prey);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==prey,"The control tank beside the workers was not raided");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==prey,"The control tank beside the workers was not raided");
             notAWorker("The raid chose a worker over the exposed tank next to it");
             // Escorts first still holds, and the worker under the escort is
             // still not what gets hit.
             escortA->setVisible(owner->getTeamID(),true);
             withWorkers(4);unitList.push_back(escortA);
             bot->doSetAttackMode(flyer(),STOP);strike();
-            require(flyer()->getTarget()==escortA,
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==escortA,
                 "A wing at the ratio did not take the launcher escorting the workers");
             notAWorker("A wing at the ratio raided a worker under launcher escort");
             escortA->setVisible(VIS_ALL,false);
@@ -438,7 +438,7 @@ void runAirDefenseProbe(Game& game) {
             // is dropped by the planner rather than flown out.
             withWorkers(1);
             bot->doSetAttackMode(flyer(),STOP);bot->doAttackObject(flyer(),worker1,true);
-            require(flyer()->getTarget()==worker1,"The stale-order fixture could not set its order");
+            require(currentGame->getObjectManager().getObject(flyer()->target.getObjectID())==worker1,"The stale-order fixture could not set its order");
             require(static_cast<Ornithopter*>(flyer())->isVetoedAutonomousPrey(worker1),
                 "A shared-house AI worker order bypassed the execution veto");
             const FixPoint staleWorkerHealth=worker1->getHealth();
@@ -489,7 +489,7 @@ void runAirDefenseProbe(Game& game) {
             aiBird->doSetAttackMode(STOP);aiBird->doAttackObject(worker,true);
             const FixPoint ourWorkerFull=worker->getHealth();
             for(int step=0;step<900;++step) {game.processObjects();++game.gameCycleCount;}
-            require(aiBird->getTarget()!=worker,
+            require(currentGame->getObjectManager().getObject(aiBird->target.getObjectID())!=worker,
                 "An aircraft of a house with no human operator kept a worker target");
             require(worker->getHealth()>=ourWorkerFull,
                 "An aircraft of a house with no human operator shot a harvester");
@@ -506,7 +506,7 @@ void runAirDefenseProbe(Game& game) {
             turret->setVisible(VIS_ALL,false);
             // Hand the fixture back exactly as the human-order check left it.
             bot->onHumanUnitOrder(air->getObjectID());bot->doAttackObject(air,raid,true);
-            require(air->getTarget()==raid,"The ground-prey block did not restore the outer fixture");
+            require(currentGame->getObjectManager().getObject(air->target.getObjectID())==raid,"The ground-prey block did not restore the outer fixture");
         }
 
         // === Launchers rescue an outlying colony from aircraft ===
@@ -564,13 +564,13 @@ void runAirDefenseProbe(Game& game) {
                 "Air rescue fixture could not place its launchers");
             bot->doSetAttackMode(skirmisher,AREAGUARD);
             bot->doAttackObject(skirmisher,attacker,true);
-            require(skirmisher->getTarget()==attacker && skirmisher->wasForced(),
+            require(currentGame->getObjectManager().getObject(skirmisher->target.getObjectID())==attacker && skirmisher->wasForced(),
                 "The fixture needs a launcher already committed by a forced AI order");
             bot->doSetAttackMode(rallying,AREAGUARD);
             bot->doMove2Pos(rallying,rallying->getX(),rallying->getY(),false);
             bot->onHumanUnitOrder(commanded->getObjectID());
             commanded->doAttackObject(attacker,true);
-            const ObjectBase* commandedTarget=commanded->getTarget();
+            const ObjectBase* commandedTarget=currentGame->getObjectManager().getObject(commanded->target.getObjectID());
             bot->doSetAttackMode(groundOnly,AREAGUARD);
             require(!groundOnly->canAttack(raider),
                 "A tank that can shoot aircraft would make the exclusion below meaningless");
@@ -584,7 +584,7 @@ void runAirDefenseProbe(Game& game) {
                 "A launcher stayed on its ground skirmish while aircraft killed an outlying colony");
             require(bot->defenceAssignments[rallying->getObjectID()]==raider->getObjectID(),
                 "A launcher kept its rally point while aircraft killed an outlying colony");
-            require(skirmisher->getTarget()!=attacker,
+            require(currentGame->getObjectManager().getObject(skirmisher->target.getObjectID())!=attacker,
                 "A forced AI ground order outranked an active attack on one of our buildings");
             const Coord rescuePost=skirmisher->getDestination();
             bot->defenceResponseCycles.clear();
@@ -593,7 +593,7 @@ void runAirDefenseProbe(Game& game) {
                 && skirmisher->getDestination()==rescuePost,
                 "An incidental ground contact stole a launcher travelling to air defence");
             require(bot->defenceAssignments.count(commanded->getObjectID())==0
-                && commanded->getTarget()==commandedTarget,
+                && currentGame->getObjectManager().getObject(commanded->target.getObjectID())==commandedTarget,
                 "The rescue replaced a human order");
             require(!bot->defenceAssignments.count(groundOnly->getObjectID())
                 || bot->defenceAssignments.at(groundOnly->getObjectID())!=raider->getObjectID(),
@@ -655,7 +655,7 @@ void runAirDefenseProbe(Game& game) {
                 colony->setHealth(colony->getMaxHealth());
                 raider->setHealth(raider->getMaxHealth());
                 if(raider->getLocation()!=hover) raider->setLocation(hover.x,hover.y);
-                if(raider->getTarget()!=colony) raider->doAttackObject(colony,true);
+                if(currentGame->getObjectManager().getObject(raider->target.getObjectID())!=colony) raider->doAttackObject(colony,true);
                 bot->checkAllUnits();
                 engaged=game.combatStats.launcherFiresOnOrni>shotsBefore;
             }
@@ -674,9 +674,9 @@ void runAirDefenseProbe(Game& game) {
             const Coord held=onStation->getLocation();
             for(int pass=0;pass<4;++pass) {
                 if(raider->getLocation()!=hover) raider->setLocation(hover.x,hover.y);
-                if(raider->getTarget()!=colony) raider->doAttackObject(colony,true);
+                if(currentGame->getObjectManager().getObject(raider->target.getObjectID())!=colony) raider->doAttackObject(colony,true);
                 bot->checkAllUnits();
-                require(onStation->getTarget()==raider,
+                require(currentGame->getObjectManager().getObject(onStation->target.getObjectID())==raider,
                     "A launcher in range of the aircraft did not fire at it, or re-chose its target");
                 require(onStation->getLocation()==held && !onStation->isMoving(),
                     "A launcher in range was force-moved instead of firing");
@@ -693,7 +693,7 @@ void runAirDefenseProbe(Game& game) {
                 require(bot->defenceAssignments.count(rescuer->getObjectID())==0,
                     "A launcher stayed committed after the aircraft broke off");
                 require(!rescuer->wasForced(),"A finished rescue left its launcher under a forced order");
-                require(rescuer->getTarget()==nullptr || !rescuer->getTarget()->isAFlyingUnit(),
+                require(currentGame->getObjectManager().getObject(rescuer->target.getObjectID())==nullptr || !currentGame->getObjectManager().getObject(rescuer->target.getObjectID())->isAFlyingUnit(),
                     "A launcher kept chasing an aircraft that was no longer attacking anything");
             }
             peak->setType(peakTerrain);
@@ -950,7 +950,7 @@ void runAirDefenseProbe(Game& game) {
             waveLauncher->doSetAttackMode(GUARD);
             waveLauncher->setForced(false);
             bot->updateCustomWave();
-            require(waveLauncher->getAttackMode()==HUNT && waveLauncher->getTarget()==raid
+            require(waveLauncher->getAttackMode()==HUNT && currentGame->getObjectManager().getObject(waveLauncher->target.getObjectID())==raid
                     && bot->customWave.members.count(waveLauncher->getObjectID())>0,
                 "An idle committed launcher did not rejoin its observed reachable wave front");
             waveLauncher->setTarget(nullptr);
@@ -986,6 +986,12 @@ void runAirDefenseProbe(Game& game) {
         // inside the ordinary infantry quota (which counts queued orders and the
         // order being placed) and out of cash its working reserve does not need.
         {
+            // Keep the previous reactive policy's control arm explicit; the
+            // paid-production/real-air-kill fixture covers TrooperSupport on.
+            const auto savedTrooperConfig=bot->configOverride;
+            auto legacyTrooperConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+            legacyTrooperConfig->force.trooperSupport=false;
+            bot->configOverride=legacyTrooperConfig;
             const bool savedCitySim=game.citySimEnabled_;
             const int savedTech=currentGame->techLevel;
             const auto savedLimit=bot->militaryValueLimit;
@@ -1288,6 +1294,7 @@ void runAirDefenseProbe(Game& game) {
             owner->numUnits=savedNumUnits;
             unitList=cityUnits;structureList=cityStructures;
             bot->difficulty=QuantBot::Difficulty::Brutal;
+            bot->configOverride=savedTrooperConfig;
         }
 
         // === Difficulty policy for autonomous aircraft ===
@@ -1339,9 +1346,9 @@ void runAirDefenseProbe(Game& game) {
             // and Medium, still answered on Hard.
             for(auto difficulty:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium}) {
                 flyFor(difficulty);
-                require(bird->getTarget()!=wanderer,
+                require(currentGame->getObjectManager().getObject(bird->target.getObjectID())!=wanderer,
                     "Easy/Medium attacked an enemy unit that was not attacking anything of ours");
-                require(bird->getTarget()==raid,
+                require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==raid,
                     "Easy/Medium did not take the undefended enemy base building instead");
                 require(bird->getAttackMode()==STOP && bird->wasForced(),
                     "The lower-difficulty raid was not issued as an explicit forced order");
@@ -1350,32 +1357,32 @@ void runAirDefenseProbe(Game& game) {
                     "A repeated identical air pass re-issued orders instead of holding");
             }
             flyFor(QuantBot::Difficulty::Hard);
-            require(bird->getTarget()==wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==wanderer,
                 "Hard lost its proximity defence against an enemy unit beside our harvester");
             flyFor(QuantBot::Difficulty::Brutal);
-            require(bird->getTarget()==wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==wanderer,
                 "Brutal lost its proximity defence against an enemy unit beside our harvester");
 
             // --- Actual defence is legal at every difficulty: the attacker of
             // a live harvester, and of the base, is a target on Easy.
             wanderer->doAttackObject(asset,true);
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==wanderer,
                 "Easy refused to defend its own harvester from the unit attacking it");
             wanderer->doSetAttackMode(STOP);wanderer->setTarget(nullptr);
             // The same contact between volleys: the onDamage ledger keeps it
             // legal for the grace, so a reload does not end the defence.
             bot->assetAttackerContacts.clear();
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()!=wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())!=wanderer,
                 "A contact with no target of its own stayed an Easy air target");
             bot->onDamage(base,1,wanderer->getObjectID());
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==wanderer,
                 "A confirmed recent attacker of our base was not a legal Easy defence target");
             game.gameCycleCount+=MILLI2CYCLES(QuantBot::kAircraftDefenceGraceMs)+1;
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()!=wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())!=wanderer,
                 "The bounded onDamage defence grace never expired");
             bot->assetAttackerContacts.clear();
 
@@ -1391,7 +1398,7 @@ void runAirDefenseProbe(Game& game) {
                     <= AirStrikePolicy::safetyRange(guardTurret->getWeaponRange()),
                 "The covering turret does not cover the attacker, so this tests nothing");
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==wanderer,
                 "Anti-air cover suppressed a legal Easy defence of our own harvester");
             // The same turret denies the opportunistic raid, three times further
             // out than its ground range, because that is how far it shoots
@@ -1427,7 +1434,7 @@ void runAirDefenseProbe(Game& game) {
                 turretRange,turretToRaid,AirStrikePolicy::safetyRange(turretRange),
                 AirStrikePolicy::antiAirSafetyRange(Structure_RocketTurret,turretRange));
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==nullptr,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==nullptr,
                 "An Easy raid flew at a base building inside a rocket turret's anti-air reach");
             structureList.remove(farTurret);farTurret->setVisible(VIS_ALL,false);
             farTurret->setHealth(0);
@@ -1443,18 +1450,18 @@ void runAirDefenseProbe(Game& game) {
             require(trooper->canAttack(bird),
                 "The rocket infantry fixture cannot actually shoot at aircraft");
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==nullptr,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==nullptr,
                 "An Easy raid flew at a base building guarded by rocket infantry");
             trooper->setHealth(0);
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==raid,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==raid,
                 "Clearing the guarding rocket infantry did not re-open the raid");
             trooper->setVisible(VIS_ALL,false);unitList.remove(trooper);
             auto* bystander=spawn(enemy,Unit_Tank,Coord(12,7));
             unitList.push_back(bystander);
             bystander->doSetAttackMode(STOP);
             flyFor(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==raid,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==raid,
                 "A non-anti-air enemy unit beside the building blocked an undefended raid");
             bystander->setVisible(VIS_ALL,false);unitList.remove(bystander);
 
@@ -1476,16 +1483,16 @@ void runAirDefenseProbe(Game& game) {
                     config.getSettings(static_cast<int>(difficulty)),config);
             };
             flyWing(QuantBot::Difficulty::Easy);
-            require(bird->getTarget()==nullptr,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==nullptr,
                 "A large Easy wing priced its way into launcher cover over a base building");
             for(auto* extra:policyFleet)
-                require(extra->getTarget()==nullptr,
+                require(currentGame->getObjectManager().getObject(extra->target.getObjectID())==nullptr,
                     "A wing member raided into launcher cover on Easy");
             // The same wing and the same launcher on Hard: the established
             // four-aircraft-per-launcher ratio and launcher-first still apply,
             // so this is a difficulty policy and not a disabled planner.
             flyWing(QuantBot::Difficulty::Hard);
-            require(policyFleet[0]->getTarget()==guardLauncher,
+            require(currentGame->getObjectManager().getObject(policyFleet[0]->target.getObjectID())==guardLauncher,
                 "Hard's wing ratio and launcher-first no longer engage the covering launcher");
             for(auto* extra:policyFleet) {
                 bot->doSetAttackMode(extra,STOP);
@@ -1520,12 +1527,12 @@ void runAirDefenseProbe(Game& game) {
             // granting permission once that unit stops attacking our assets.
             bot->aircraftTargetAuthority[bird->getObjectID()]=wanderer->getObjectID();
             bot->doSetAttackMode(bird,STOP);bot->doAttackObject(bird,wanderer,true);
-            require(bird->getTarget()==wanderer,"The stale-order fixture could not set its order");
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())==wanderer,"The stale-order fixture could not set its order");
             require(static_cast<Ornithopter*>(bird)->isVetoedAutonomousPrey(wanderer),
                 "An unauthorized Easy air target bypassed the execution veto");
             const FixPoint wandererFull=wanderer->getHealth();
             for(int step=0;step<900;++step) {game.processObjects();++game.gameCycleCount;}
-            require(bird->getTarget()!=wanderer,
+            require(currentGame->getObjectManager().getObject(bird->target.getObjectID())!=wanderer,
                 "A stale Easy air order survived without a planner pass");
             require(wanderer->getHealth()>=wandererFull,
                 "An Easy aircraft fired at a contact it was not allowed to attack");
@@ -1534,7 +1541,7 @@ void runAirDefenseProbe(Game& game) {
                 require(bird->findTarget()!=wanderer,
                     "An Easy autonomous air search returned a non-attacking enemy unit");
                 for(int step=0;step<300;++step) {game.processObjects();++game.gameCycleCount;}
-                require(bird->getTarget()!=wanderer,
+                require(currentGame->getObjectManager().getObject(bird->target.getObjectID())!=wanderer,
                     "Autonomous reacquisition below the planner picked an illegal Easy target");
                 require(wanderer->getHealth()>=wandererFull,
                     "An Easy aircraft fired after reacquiring an illegal target");
@@ -1593,7 +1600,7 @@ void runAirDefenseProbe(Game& game) {
         " reach holdable ground covering it through threatened approaches, fire in range without"
         " being force-moved, hold across ordinary unit passes and clear when the attack ends;"
         " deviated vehicles are not reserved for repair while our own damaged ones still are;"
-        " a city raises rocket infantry only for an observed hostile wing, inside one aggregate"
+        " with TrooperSupport off a city raises rocket infantry only for an observed hostile wing, inside one aggregate"
         " infantry quota that counts queued orders, out of cash its working and strategic"
         " reserves do not need, never on Easy, in support mode or in a campaign, founds"
         " the WOR only under that demand and only with real troop content, and leaves the"

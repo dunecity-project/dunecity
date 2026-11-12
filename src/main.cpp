@@ -27,6 +27,7 @@
 
 #include <FileClasses/FileManager.h>
 #include <FileClasses/GFXManager.h>
+#include <FileClasses/HeadlessAssets.h>
 #include <FileClasses/SFXManager.h>
 #include <FileClasses/FontManager.h>
 #include <FileClasses/TextManager.h>
@@ -52,8 +53,10 @@
 #include <misc/exceptions.h>
 #include <misc/format.h>
 #include <misc/SDL2pp.h>
+#include <misc/RendererInitialization.h>
 #include <misc/md5.h>
 #include <misc/WebRuntime.h>
+#include <misc/MacTrackpad.h>
 
 #include <players/QuantBotConfig.h>
 #include <mod/ModManager.h>
@@ -154,7 +157,7 @@ void setVideoMode(int displayIndex);
 void realign_buttons();
 
 static void printUsage() {
-    fprintf(stderr, "Usage:\n\tdunecity [--showlog] [--fullscreen|--window] [--PlayerName=X] [--ServerPort=X]\n"
+    fprintf(stderr, "Usage:\n\tdunecity [--showlog] [--non-interactive] [--fullscreen|--window] [--PlayerName=X] [--ServerPort=X]\n"
                     "\t         [--RelayEndpoint=HTTPS_URL] [--RelayDevEndpoint=LOOPBACK_URL] [--RelayDev]\n");
 }
 
@@ -260,15 +263,7 @@ void setVideoMode(int displayIndex)
 #endif
 #endif
 
-    // Prefer Direct3D on Windows, let SDL choose best renderer on other platforms
-#ifdef _WIN32
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d11");
-#else
-    // On non-Windows platforms, let SDL choose the best renderer
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
-#endif
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  // Use nearest-neighbor scaling for pixel-perfect look
-    SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");       // Enable render batching for performance
+    configureStartupRenderHints();
 
     int windowWidth = settings.video.physicalWidth;
     int windowHeight = settings.video.physicalHeight;
@@ -277,7 +272,7 @@ void setVideoMode(int displayIndex)
         clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);
     }
 #endif
-    window = SDL_CreateWindow("DuneCity",
+    window = SDL_CreateWindow("DuneCity " DUNECITY_DISPLAY_VERSION,
                               SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex), SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
                               windowWidth, windowHeight,
                               videoFlags);
@@ -286,13 +281,15 @@ void setVideoMode(int displayIndex)
         exit(EXIT_FAILURE);
     }
     // Create renderer (VSync set separately for macOS compatibility)
-    Uint32 rendererFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE;
-    
-    renderer = SDL_CreateRenderer(window, -1, rendererFlags);
+    renderer = createStartupRenderer(window);
     if (!renderer) {
         fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
         exit(EXIT_FAILURE);
     }
+
+    SDL_RendererInfo rendererInfo{};
+    if(SDL_GetRendererInfo(renderer, &rendererInfo) == 0)
+        SDL_Log("Render driver: %s (flags=0x%x)", rendererInfo.name, rendererInfo.flags);
 
     {
         int windowWidth = 0;
@@ -352,6 +349,7 @@ void setVideoMode(int displayIndex)
             settings.video.width, settings.video.height, settings.video.interfaceHeight,
             settings.video.interfaceHeight == INTERFACE_HEIGHT_NATIVE ? " (native 1:1)" : "");
     SDL_RenderSetLogicalSize(renderer, settings.video.width, settings.video.height);
+    MacTrackpad::initialize();
     screenTexture = SDL_CreateTexture(renderer, SCREEN_FORMAT, SDL_TEXTUREACCESS_TARGET, settings.video.width, settings.video.height);
 
     // Check if texture creation failed
@@ -820,7 +818,8 @@ void showMissingFilesMessageBox() {
 
     instruction += "\nYou may want to add GERMAN.PAK or FRENCH.PAK for playing in these languages.";
 
-    if(!SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity", instruction.c_str(), nullptr)) {
+    if(!errorDialogsEnabled()
+       || !SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity", instruction.c_str(), nullptr)) {
         fprintf(stderr, "%s\n", instruction.c_str());
     }
 }
@@ -894,6 +893,13 @@ bool openStartupAudio(std::string& deviceError, std::string& fallbackError) {
 }
 
 int main(int argc, char *argv[]) {
+    // Decide this before initialization can fail. A visible game window alone
+    // does not mean a test has someone available to dismiss an error dialog.
+    for(int index = 1; index < argc; ++index) {
+        if(std::strcmp(argv[index], "--non-interactive") == 0) {
+            setErrorDialogsEnabled(false);
+        }
+    }
 #ifndef __EMSCRIPTEN__
     // Packaging checks run before opening a profile or game session.
     for(int index = 1; index < argc; ++index) {
@@ -914,6 +920,52 @@ int main(int argc, char *argv[]) {
             }
             Mix_CloseAudio();
             SDL_Quit();
+            return ready ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+        if(std::strcmp(argv[index], "--check-video-runtime") == 0) {
+            for(int driver = 0; driver < SDL_GetNumVideoDrivers(); ++driver)
+                std::printf("Video backend available: %s\n", SDL_GetVideoDriver(driver));
+            for(int driver = 0; driver < SDL_GetNumRenderDrivers(); ++driver) {
+                SDL_RendererInfo info{};
+                if(SDL_GetRenderDriverInfo(driver, &info) == 0)
+                    std::printf("Render backend available: %s\n", info.name);
+            }
+            if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+                std::fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError());
+                return EXIT_FAILURE;
+            }
+            std::printf("Video driver: %s\n", SDL_GetCurrentVideoDriver());
+            configureStartupRenderHints();
+            SDL_Window* probeWindow = SDL_CreateWindow("Dune City video check", 0, 0, 64, 64,
+                                                       SDL_WINDOW_HIDDEN);
+            SDL_Renderer* probeRenderer = probeWindow ? createStartupRenderer(probeWindow) : nullptr;
+            SDL_RendererInfo info{};
+            if(probeRenderer && SDL_GetRendererInfo(probeRenderer, &info) == 0) {
+                std::printf("Render driver: %s\n", info.name);
+                std::printf("Render accelerated: %s\n",
+                            (info.flags & SDL_RENDERER_ACCELERATED) ? "yes" : "no");
+            }
+            SDL_Texture* target = probeRenderer ? SDL_CreateTexture(probeRenderer, SCREEN_FORMAT,
+                SDL_TEXTUREACCESS_TARGET, 64, 64) : nullptr;
+            Uint8 pixel[4]{};
+            const SDL_Rect sample{0, 0, 1, 1};
+            bool ready = target && SDL_SetRenderTarget(probeRenderer, target) == 0
+                && SDL_SetRenderDrawColor(probeRenderer, 37, 83, 149, 255) == 0
+                && SDL_RenderClear(probeRenderer) == 0
+                && SDL_SetRenderTarget(probeRenderer, nullptr) == 0
+                && SDL_RenderCopy(probeRenderer, target, nullptr, nullptr) == 0
+                && SDL_RenderReadPixels(probeRenderer, &sample, SDL_PIXELFORMAT_RGBA32, pixel, 4) == 0;
+            if(ready && (pixel[0] != 37 || pixel[1] != 83 || pixel[2] != 149 || pixel[3] != 255)) {
+                SDL_SetError("Target texture round trip returned an unexpected pixel");
+                ready = false;
+            }
+            if(ready) SDL_RenderPresent(probeRenderer);
+            else std::fprintf(stderr, "Video runtime rendering failed: %s\n", SDL_GetError());
+            if(target) SDL_DestroyTexture(target);
+            if(probeRenderer) SDL_DestroyRenderer(probeRenderer);
+            if(probeWindow) SDL_DestroyWindow(probeWindow);
+            SDL_Quit();
+            if(ready) std::puts("Video runtime target rendering passed");
             return ready ? EXIT_SUCCESS : EXIT_FAILURE;
         }
         if(std::strcmp(argv[index], "--check-desktop-runtime") == 0) {
@@ -977,7 +1029,7 @@ int main(int argc, char *argv[]) {
     // v1.0.512: build-stamp log so Stefan can verify the binary on disk
     // actually contains the v1.0.5xx fixes. If this line is missing from
     // the run log, the .exe is stale.
-    SDL_Log("DuneCity v%s — build stamp active", std::string(VERSION).c_str());
+    SDL_Log("DuneCity v%s — build stamp active", DUNECITY_DISPLAY_VERSION);
 
     // v1.0.514: install SIGSEGV/SIGABRT/SIGFPE handler so a fatal native
     // crash (nullptr deref, divide by zero, etc.) writes a diagnostic to
@@ -1014,7 +1066,7 @@ int main(int argc, char *argv[]) {
                 "  Check Dune City.log for the last SDL_Log lines before the\n"
                 "  crash — that is where the actionable diagnostic lives.\n"
                 "=============================\n",
-                sig, sigName, info->si_code, info->si_addr, VERSION);
+                sig, sigName, info->si_code, info->si_addr, DUNECITY_DISPLAY_VERSION);
             if(n > 0) {
                 // stderr
                 (void)!write(2, buf, n);
@@ -1065,6 +1117,8 @@ int main(int argc, char *argv[]) {
             if(parameter == "--showlog") {
                 // special parameter which does not overwrite settings
                 bShowDebugLog = true;
+            } else if(parameter == "--non-interactive") {
+                // Error presentation was selected before startup.
             } else if((parameter == "-f") || (parameter == "--fullscreen") || (parameter == "-w") || (parameter == "--window") || (parameter.compare(0, 13, "--PlayerName=") == 0) || (parameter.compare(0, 13, "--ServerPort=") == 0)
                       || parameter.compare(0, 16, "--RelayEndpoint=") == 0
                       || parameter.compare(0, 19, "--RelayDevEndpoint=") == 0
@@ -1153,7 +1207,7 @@ int main(int argc, char *argv[]) {
         installCrashHandlers(crashLogPath.c_str());
 #endif
 
-        SDL_Log("Starting DuneCity %s on %s", VERSION, SDL_GetPlatform());
+        SDL_Log("Starting DuneCity %s on %s", DUNECITY_DISPLAY_VERSION, SDL_GetPlatform());
 
         // First check for missing files
         std::vector<std::string> missingFiles = FileManager::getMissingFiles();
@@ -1347,6 +1401,15 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.sharedYardQueue = myINIFile.getBoolValue("Game Options", "Shared Yard Queue", true);
             settings.gameOptions.sharedFactoryQueue = myINIFile.getBoolValue("Game Options", "Shared Factory Queue", true);
             settings.gameOptions.slowCityYear = myINIFile.getBoolValue("Game Options", "Slow City Year", true);
+            settings.gameOptions.micropolisLandValue = myINIFile.getBoolValue("Game Options", "Micropolis Land Value", true);
+            settings.gameOptions.damageLowersLandValue = myINIFile.getBoolValue("Game Options", "Damage Lowers Land Value", false);
+            settings.gameOptions.mountainScenery = myINIFile.getBoolValue("Game Options", "Mountain Scenery", true);
+            settings.gameOptions.unpoweredZonesVacate = myINIFile.getBoolValue("Game Options", "Unpowered Zones Vacate", true);
+            settings.gameOptions.researchLab = myINIFile.getBoolValue("Game Options", "Research Lab", false);
+            settings.gameOptions.researchPace = TechResearch::sanitize(myINIFile.getIntValue("Game Options", "Research Pace", 1));
+            settings.gameOptions.technologyInstallments = myINIFile.getBoolValue("Game Options", "Technology Installments", false);
+            settings.gameOptions.trooperAntiAir = myINIFile.getBoolValue("Game Options", "Trooper Anti-Air", true);
+            settings.gameOptions.starportPopulation = myINIFile.getBoolValue("Game Options", "Starport Population", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);
             settings.gameOptions.easyMode = myINIFile.getBoolValue("Game Options", "Easy Mode", false);
@@ -1364,7 +1427,11 @@ int main(int argc, char *argv[]) {
                     setBackToEnglishWarning += filename + "\n";
                 }
                 setBackToEnglishWarning += "\nLanguage is changed to English!";
-                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "DuneCity", setBackToEnglishWarning.c_str(), NULL);
+                if(errorDialogsEnabled()) {
+                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "DuneCity", setBackToEnglishWarning.c_str(), NULL);
+                } else {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", setBackToEnglishWarning.c_str());
+                }
 
                 SDL_Log("Warning: Language is changed to English!");
 
@@ -1513,7 +1580,7 @@ int main(int argc, char *argv[]) {
 
             Scaler::setDefaultScaler(Scaler::getScalerByName(settings.video.scaler));
 
-            if(bFirstInit == true) {
+            if(bFirstInit == true && !HeadlessAssets::enabled()) {
                 SDL_Log("Initializing audio...");
                 std::string deviceError, fallbackError;
                 if(!openStartupAudio(deviceError, fallbackError))
@@ -1539,6 +1606,8 @@ int main(int argc, char *argv[]) {
             // Initialize the mod system (seeds vanilla mod from install defaults if needed)
             SDL_Log("Initializing mod system...");
             ModManager::instance().initialize();
+            if(HeadlessAssets::enabled() && std::getenv("DUNECITY_HEADLESS_SEED_ONLY"))
+                return EXIT_SUCCESS;
             // Once per profile: the `ws-<hash>` copies older releases left of Vanilla and Dune City.
             Workshop::pruneShippedModCopiesOnce();
 
@@ -1603,7 +1672,7 @@ int main(int argc, char *argv[]) {
                 
                 // Native renderers benefit from a short initialization pause.
 #ifndef __EMSCRIPTEN__
-                SDL_Delay(100);
+                if(!HeadlessAssets::enabled()) SDL_Delay(100);
 #endif
                 
                 SDL_RendererInfo rendererInfo;
@@ -1636,12 +1705,16 @@ int main(int argc, char *argv[]) {
                                     + "\n\nA required data file is probably missing or the bundled PAK is corrupt."
                                     + "\nSee dunecity-crash.log next to the executable for the full SDL log.";
                     SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION, "%s", msg.c_str());
-                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed", msg.c_str(), nullptr);
+                    if(errorDialogsEnabled()) {
+                        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed", msg.c_str(), nullptr);
+                    }
                     THROW(std::runtime_error, "%s", msg.c_str());
                 } catch(...) {
                     SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION, "GFXManager failed to initialize: unknown exception");
-                    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed",
-                                              "GFXManager threw an unknown exception. See dunecity-crash.log.", nullptr);
+                    if(errorDialogsEnabled()) {
+                        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity — graphics load failed",
+                                                  "GFXManager threw an unknown exception. See dunecity-crash.log.", nullptr);
+                    }
                     THROW(std::runtime_error, "GFXManager unknown exception");
                 }
 
@@ -1665,6 +1738,10 @@ int main(int argc, char *argv[]) {
                 GUIStyle::setGUIStyle(std::make_unique<DuneStyle>(settings.video.menuPalette, settings.video.uiSkin));
 
                 if(bFirstInit == true) {
+                    if(HeadlessAssets::enabled()) {
+                        settings.audio.playSFX = false;
+                        settings.audio.playMusic = false;
+                    }
                     SDL_Log("Starting sound player...");
                     soundPlayer = std::make_unique<SoundPlayer>();
 
@@ -1740,6 +1817,7 @@ int main(int argc, char *argv[]) {
             pFileManager.reset();
 
             // Safely destroy SDL objects
+            MacTrackpad::shutdown();
             if(screenTexture != nullptr) {
                 SDL_DestroyTexture(screenTexture);
                 screenTexture = nullptr;
@@ -1768,7 +1846,9 @@ int main(int argc, char *argv[]) {
     } catch(const std::exception& e) {
         std::string message = std::string("An unhandled exception of type \'") + demangleSymbol(typeid(e).name()) + std::string("\' was thrown:\n\n") + e.what() + std::string("\n\nDuneCity will now be terminated!");
         SDL_LogCritical(SDL_LOG_CATEGORY_APPLICATION, "%s", message.c_str());
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity: Unrecoverable error", message.c_str(), nullptr);
+        if(errorDialogsEnabled()) {
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity: Unrecoverable error", message.c_str(), nullptr);
+        }
 
         return EXIT_FAILURE;
     }

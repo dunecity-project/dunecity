@@ -49,6 +49,7 @@ Map::Map(int xSize, int ySize)
 
     init_tile_location();
     rebuildObjectTiles();
+    rebuildSpiceTiles();
 }
 
 
@@ -68,11 +69,14 @@ void Map::load(InputStream& stream) {
     init_tile_location();
     rebuildActiveDeadUnitTiles();
     rebuildObjectTiles();
+    rebuildSpiceTiles();
 }
 
 namespace {
 // Object assignments to a tile that belongs to no current map (see Map::noteObjectAssigned).
 Uint64 untrackedObjectAssignments = 0;
+// Spice changes on a tile that belongs to no current map (see Map::noteSpiceChanged).
+Uint64 untrackedSpiceChanges = 0;
 }
 
 size_t Map::tileIndexOf(const Tile& tile) const noexcept {
@@ -102,6 +106,37 @@ void Map::rebuildObjectTiles() {
     for (size_t index = 0; index < tiles.size(); ++index)
         if (tiles[index].hasAnObject()) objectTiles[index >> 6] |= Uint64(1) << (index & 63);
     objectTilesUntrackedMark = untrackedObjectAssignments;
+}
+
+const Uint64* Map::objectTileBits() const noexcept {
+    if (this != currentGameMap || objectTilesUntrackedMark != untrackedObjectAssignments
+        || objectTiles.size() != (tiles.size() + 63) / 64) return nullptr;
+    return objectTiles.data();
+}
+
+void Map::noteSpiceChanged(const Tile& tile) {
+    const size_t index = currentGameMap ? currentGameMap->tileIndexOf(tile) : static_cast<size_t>(-1);
+    if (index == static_cast<size_t>(-1) || (index >> 6) >= currentGameMap->spiceTiles.size()) {
+        ++untrackedSpiceChanges;
+        return;
+    }
+    Uint64& word = currentGameMap->spiceTiles[index >> 6];
+    const Uint64 bit = Uint64(1) << (index & 63);
+    word = tile.hasSpice() ? (word | bit) : (word & ~bit);
+}
+
+void Map::rebuildSpiceTiles() {
+    spiceTiles.assign((tiles.size() + 63) / 64, 0);
+    for (size_t index = 0; index < tiles.size(); ++index)
+        if (tiles[index].hasSpice()) spiceTiles[index >> 6] |= Uint64(1) << (index & 63);
+    spiceTilesUntrackedMark = untrackedSpiceChanges;
+}
+
+const Uint64* Map::spiceTileBits() {
+    if (this != currentGameMap) return nullptr;
+    if (spiceTilesUntrackedMark != untrackedSpiceChanges || spiceTiles.size() != (tiles.size() + 63) / 64)
+        rebuildSpiceTiles();
+    return spiceTiles.data();
 }
 
 void Map::registerDeadUnitTile(Tile& tile) {
@@ -848,13 +883,13 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
         if (!tile_center)
             return;
 
-        if(tile_center->isExploredByTeam(pHouse->getTeamID()) || debug || observing) {
+        if(debug || observing || (pHouse && tile_center->isExploredByTeam(pHouse->getTeamID()))) {
             lastCheckedObject = tile_center->getObjectAt(realX, realY);
         } else {
             lastCheckedObject = nullptr;
         }
 
-        if(lastCheckedObject && currentGame->canPlayerControlHouse(pHouse, lastCheckedObject->getOwner())) {
+        if(lastCheckedObject && (observing || currentGame->canPlayerControlHouse(pHouse, lastCheckedObject->getOwner()))) {
             // Buildings have a single-object sidebar. Shift must not combine a
             // building with troops (or another building) into a troop command panel.
             if (lastCheckedObject->isAStructure()) {
@@ -878,7 +913,7 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
                         const auto tile = getTile_internal(i, j);
 
                         if (tile && tile->hasAnObject()) {
-                            tile->selectAllPlayersUnitsOfType(pHouse->getHouseID(), lastSinglySelectedObject->getItemID(), &lastCheckedObject, &lastSelectedObject);
+                            tile->selectAllPlayersUnitsOfType(observing ? lastSinglySelectedObject->getOwner()->getHouseID() : pHouse->getHouseID(), lastSinglySelectedObject->getItemID(), &lastCheckedObject, &lastSelectedObject);
                         }
                     }
                 }
@@ -910,10 +945,10 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
                 const auto tile = getTile_internal(i, j);
 
                 const bool visibleHere = observing
-                    || (tile && tile->isExploredByTeam(pHouse->getTeamID())
+                    || (pHouse && tile && tile->isExploredByTeam(pHouse->getTeamID())
                         && !tile->isFoggedByTeam(pHouse->getTeamID()));
                 if (tile && tile->hasAnObject() && visibleHere) {
-                    tile->selectAllPlayersUnits(pHouse->getHouseID(), &lastCheckedObject, &lastSelectedObject);
+                    tile->selectAllPlayersUnits(pHouse ? pHouse->getHouseID() : -1, &lastCheckedObject, &lastSelectedObject);
                 }
             }
         }
@@ -925,7 +960,7 @@ void Map::selectObjects(const House* pHouse, int x1, int y1, int x2, int y2, int
         lastSelectedObject = lastCheckedObject;
         currentGame->getSelectedList().insert(lastCheckedObject->getObjectID());
         currentGame->selectionChanged();
-    } else if (lastSelectedObject != nullptr) {
+    } else if (lastSelectedObject != nullptr && !observing) {
         lastSelectedObject->playSelectSound();  //we only want one unit responding
     }
 }

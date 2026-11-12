@@ -4,6 +4,9 @@ Verified 2026-09-10. This is the entry point for Codex, Claude, Hermes and human
 maintainers. Check current branches, workflows and release state before acting;
 version numbers and run IDs below are verification examples, not next-version defaults.
 
+Read [Release execution contract](#release-execution-contract) before starting
+qualification. It governs readiness, parallel execution, evidence reuse and stalls.
+
 ## Repositories and destinations
 
 | Purpose | Repository / local checkout on Stefan's MacBook Air | Destination |
@@ -41,6 +44,121 @@ the portable ZIP remains available. Stable feeds and binaries are uploaded to a
 draft before publication. Do not replace assets in an already published release;
 use a new version. No update feed is emitted for `latest-dev`.
 
+## Development identity and official release opt-in
+
+Normal staging, local agent builds and non-release CI builds use
+`DUNECITY_RELEASE_BUILD=OFF` (the CMake default). Their runtime label is
+`<last release version>dev`, currently `1.0.864dev`; do not bump the numeric version
+just to identify development work. `CMAKE_BUILD_TYPE=Release` selects optimized
+code, not official release identity.
+
+Only an explicitly requested official build configures with
+`-DDUNECITY_RELEASE_BUILD=ON`, giving the plain runtime label (currently `1.0.864`).
+Apply that opt-in at each release channel's configure step:
+
+| Channel | Official release identity |
+|---|---|
+| macOS, Windows, Linux | Stable-tag release jobs and deliberate local official builds pass `-DDUNECITY_RELEASE_BUILD=ON` to CMake. `scripts/build.sh --release-build` is the explicit helper opt-in. Ordinary staging/PR/main builds remain OFF. |
+| Browser | The published stable-tag build and an authorized browser hotfix pass `-DDUNECITY_RELEASE_BUILD=ON` through `emcmake cmake` (or `scripts/package-web.ps1 -ReleaseBuild`). Ordinary web development/CI remains OFF. |
+| iOS device, IPA, TestFlight | Use `scripts/build-ios.sh --device --release-build` for a deliberate official device build. `--ipa` and `--testflight` are explicit distribution requests and select ON automatically. Normal simulator/device builds default to dev. |
+| Android | Official release APK builds pass `-DDUNECITY_RELEASE_BUILD=ON` to CMake (`scripts/package-android-apk.ps1 -BuildNative -BuildApk -ReleaseBuild`). Workflow package probes/candidates remain dev unless explicitly requested as official with both `android_package_probe=true` and `android_release_build=true`; a stable tag alone does not opt Android in. |
+
+CMake caches this option: when returning an official build tree to staging or
+agent work, explicitly reconfigure with `-DDUNECITY_RELEASE_BUILD=OFF`; do not make
+dev builds official merely because they use Release optimizations or reuse a tree.
+Keep `PROJECT_VERSION` and the `VERSION` macro numeric. Packaging/updater versions,
+protocol/save/mod compatibility metadata, `CFBundleShortVersionString` and iOS
+`CFBundleVersion` stay unchanged; the `dev` suffix belongs only to runtime display
+identity (and macOS Finder's long version/Get Info description).
+
+## Release execution contract
+
+Use the existing workspace coordinator, queue and CI; do not build another release
+orchestrator. These rules change execution order, not the required channel gates.
+
+### Establish readiness before long runs
+
+1. Name one release coordinator and pin the full 40-hex committed source SHA.
+   Record required gates and their owners in the release evidence directory under
+   `~/Documents/projects/outputs/release-X.Y.Z/`. Each gate records its command,
+   source SHA, configuration, machine, state, timestamps and evidence path.
+2. Read `~/.local/state/compute-watch/latest.md`,
+   `~/.local/state/agent-workspace/reports/compute-watch-alerts.md`,
+   `agent-workspace status` and `dunecity-queue status -v`. Check actual host
+   reachability, admission holds and platform capability. AWS game capacity is
+   not CTest capacity. Air work must be positively classified headless.
+3. Budget physical free bytes for the next phase: the unchanged 25 GB reserve
+   plus its measured or conservatively bounded peak scratch/package footprint.
+   Recheck before that phase, not just at release start. Preserve evidence and
+   build trees; do not turn a release into speculative cleanup or compression.
+4. Inspect the harness at the pinned SHA, its required assets and packaged-runtime
+   inputs. Prove admission and one representative required test/game before
+   submitting a large dependent matrix. Count that canary toward its required
+   scope where valid; do not invent an extra suite. AI observer-off canaries must
+   prove the strict verifier receives required per-house research evidence.
+   An earlier source-cache prewarm is not proof the archive still exists: verify
+   its identity immediately before consumption using existing canonical checks.
+
+### Execute independent work concurrently
+
+Start PR CI and independent native-platform checks together with readiness work.
+Fan suitable pinned AI games out to available game hosts after the canary passes.
+Keep Mini-only GUI, packaging and simulator phases on one explicitly ordered lane.
+Obtain a named handoff from competing owners through the existing coordinator;
+an agent being idle is not a handoff. If unavailable, record the owner/blocker
+and continue independent work. Never stop running jobs, globally pause research,
+override another owner's hold, or bypass the one-heavy-build rule.
+
+Use one pinned queue submission per positively classified headless scope:
+
+```sh
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- \
+  dunecity-queue ctest --cwd /Users/stefan/Documents/projects/dunecity-feature-batch \
+  --rev FULL_SHA --priority 5 --tag release-X.Y.Z --owner OWNER -R CLASSIFIED_REGEX
+# Capture the returned JOB_ID; follow outside the workspace wrapper:
+dunecity-queue report JOB_ID --follow
+```
+
+Replace placeholders with the actual identity, full SHA and headless test
+allowlist. Partition GUI/headless scopes without omissions or overlap.
+`dunecity-queue ctest` has no host-selection flag: a graphical regex alone does
+not keep work off the Air. Run graphical scopes through the existing coordinated
+native lane on a verified non-Air host, for example on the Mini:
+
+```sh
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- \
+  ctest --test-dir /Users/stefan/Documents/projects/dunecity-feature-batch/build-int \
+  -R GUI_REGEX --output-on-failure --no-tests=error -j1
+```
+
+Confirm that tree's source/configuration matches the recorded gate inputs;
+native execution requires committed staging and the normal source freeze.
+Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
+
+### Bound stalls and preserve completed work
+
+- Agents report `preparing`, `submitted`, `running`, `passed`, `failed` or
+  `blocked`. Running requires a live operation/job identity and start time.
+  After five minutes preparing without launch, report the exact missing input
+  or guard; do not silently expand a wrapper or wait for redundant approval.
+- After an admission timeout, first check for an accepted job to avoid duplicates.
+  Preserve the failure and measure archive creation, extraction, unit discovery,
+  cleanup and publication separately with existing diagnostics before retrying.
+  Do not increase deadlines, weaken assertions or repeat an unchanged failure.
+- After ten minutes with no new phase evidence, the coordinator investigates and
+  names the owner and next action. This is an escalation interval, not permission
+  to terminate a legitimate long test or cluster job. Distinguish a product
+  failure from a harness failure, unavailable host and work never launched.
+- Reuse completed passes when the required gate's inputs are unchanged: source
+  dependency closure, harness, assets, configuration, toolchain and platform.
+  Keep the actual tested SHA and record explicit equivalence evidence for reuse
+  across commits. Docs-only changes do not restart game qualification. Harness
+  fixes rerun affected gates; runtime changes invalidate affected consumers.
+  Never relabel old results as tested at the new pin.
+- Progress updates state published production version, completed gates, currently
+  running operations and the single critical-path blocker. Preparation is not
+  execution; CI success is not publication. No ETA without measured throughput.
+
 ## Release checklist: every channel (verified for 1.0.864, 2026-11-01)
 
 One release touches all of these; each is a separate gate. Report each one as verified,
@@ -70,13 +188,16 @@ client that needs them).
 
 ## Test on every available computer (Stefan, 2026-11-01)
 
-Every build, release candidate and release is tested on all reachable machines in parallel,
-not on the Mac mini alone (`~/.config/agent-workspace/POLICY.md`, "Use every available
-computer"). The full suite runs through `dunecity-queue ctest --cwd <staging> --wait`, which
-spreads it over the MacBook Pro, Windows PC, MacBook Air and mini. Native checks run on the
-machine that is that platform: Windows packages on the Windows PC, iOS on the mini's
-simulators, the browser build on the mini with the pinned Emscripten 4.0.14. Run one agent
-per platform while PR CI runs. Android needs Stefan's phone. The release report names the
+Every build, release candidate and release is tested on all reachable machines in
+parallel (`~/.config/agent-workspace/POLICY.md`, "Use every available computer").
+Classify the actual CTest registry into complete, disjoint headless and graphical
+allowlists. Only the headless allowlist uses the pinned queue command above;
+graphical work uses the coordinated non-Air native lane. The Air is headless-only,
+and a queue regex does not select a host. Queue acceptance is not test completion.
+Native checks run on the machine that is that platform: Windows packages on the
+Windows PC, iOS on the mini's simulators, the browser build on the mini with pinned
+Emscripten 4.0.14. Run one agent per platform while PR CI runs, subject to the Mini
+heavy-build limit. Android needs Stefan's phone. The release report names the
 machine for each check and lists every untested platform.
 
 ## An authorized desktop release
@@ -189,7 +310,7 @@ For an authorized browser hotfix, build current committed source locally:
 
 ```sh
 source /path/to/emsdk/emsdk_env.sh
-emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DDUNECITY_BUILD_TESTS=OFF -DDUNECITY_ENABLE_PCH=OFF
+emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DDUNECITY_RELEASE_BUILD=ON -DDUNECITY_BUILD_TESTS=OFF -DDUNECITY_ENABLE_PCH=OFF
 cmake --build build-web --parallel 8
 python3 scripts/check-web-mods.py --build-root build-web
 python3 scripts/package-web.py --build-root build-web --play-root ../dunelegacy.com/website/play
@@ -216,36 +337,37 @@ WASM and data URL carries the same version/content token; unversioned artifacts
 must revalidate. Verify the live `play/build.json` and download/hash every listed
 artifact after deployment. Browser-test fresh defaults, Display aspect changes,
 Options resolution changes, reload persistence, viewport resize and fullscreen.
-Released 1.0.661 crossplay uses `https://dunelegacy.com/relay`. Desktop ENet multiplayer remains
-available; browser/native crossplay supports WebSocket and HTTPS polling transports,
-the public directory, optional private invitations and confirmed-name lobby chat.
-Package production clients with `--relay-origin https://dunelegacy.com` so their CSP
-permits the exact HTTPS/WSS origin. Local development packages explicitly opt into
-loopback and must never be copied to production.
 
-Before publishing a crossplay client, verify the relay and signed PHP analytics
-receiver. See `tools/room-relay/deploy/README.md` for both deployment paths and the
-rollback contract. The administrator path installs a service and WebSocket proxy.
-The restricted-account path uses existing Apache/PHP with a fixed-route HTTPS
-polling gateway and a supervised, sandboxed loopback relay. It needs neither a new
-server nor administrator access; it does not install Apache proxy modules.
+Current clients use direct peer-to-peer gameplay. The PHP introduction service
+provides rooms, invitations and signaling; it does not carry gameplay packets.
+See `docs/direct-play.md` and `tools/p2p-signaling/README.md`. The packaged
+manifest must identify `gameTransport=direct-webrtc`, contain no relay origins,
+and match the candidate's source and artifact hashes.
 
-A `release-*` branch builds candidate packages without publishing a stable release
-or replacing the browser site. Hold stable publication until actual public
-browser/browser and browser/native gameplay, bounded gateway behavior, signed
-SQLite delivery, artifact checks and watchdog recovery have passed. Successful
-localhost tests or desktop CI alone do not establish public gameplay readiness.
+Hold stable publication until actual public browser/browser and browser/native
+gameplay, non-relay ICE selection, artifact checks and bounded client recovery
+have passed. Exercise endpoint failures only against an owned isolated preview;
+never stop a live production service or other players' rooms to manufacture a
+recovery result. Where the production trusted-local analytics hook is enabled,
+verify SQLite delivery for the acceptance test's own room through an authorized
+server-side reader. Do not substitute unrelated legacy HMAC receiver tests.
+Successful localhost tests or desktop CI alone do not establish public gameplay
+readiness.
 
-### Gateway persistence during website deployments
+The relay, HTTPS polling queue, signed HTTP analytics receiver and Node watchdog
+described in `tools/room-relay/deploy/README.md` belong to historical clients,
+including 1.0.661. They are not the current client's transport or acceptance
+path. Do not deploy a relay or TURN service for a current release.
 
-The website deploy uses rsync --delete and runs after scheduled download-stat updates
-as well as release pushes. Relay PHP/.htaccess and analytics receiver files must be
-committed to website main before relying on them in a public test or release. A manual
-webroot upload alone is temporary: the 13 September 2026 test lost its gateway to the
-next scheduled deploy. Website main 9a85d48 contains the gateway and additive receiver.
-Untracked play-test-* previews are also removed; restore previews after deployment,
-or finish their tests before publishing. The private loopback relay and SQLite data
-live outside the deployed webroot and are preserved.
+### Introduction service and preview persistence during website deployments
+
+Website deployments use rsync --delete, including scheduled statistics updates.
+Introduction-service code and deployment/preservation rules must be committed
+to the website repository before relying on them. Keep private configuration,
+room/session state and SQLite data outside the replaced web root.
+Untracked play-test-* previews can be removed by the next deployment; use an
+explicitly preserved candidate preview or finish its tests before deploying.
+Historical gateway persistence failures do not establish current P2P readiness.
 
 ## iPhone and iPad: TestFlight
 
@@ -255,11 +377,13 @@ simulators (iPhone and iPad), then build the exact committed release tree:
 
 ```sh
 agent-workspace run --project dunecity --owner OWNER --tests --wait -- nice -n 10 env JOBS=4 /bin/bash -c \
-  'scripts/build-ios.sh --device && /usr/libexec/PlistBuddy -c "Print :NSBluetoothAlwaysUsageDescription" build-ios-device/bin/dunecity.app/Info.plist && scripts/build-ios.sh --testflight'
+  'scripts/build-ios.sh --device --release-build && /usr/libexec/PlistBuddy -c "Print :NSBluetoothAlwaysUsageDescription" build-ios-device/bin/dunecity.app/Info.plist && scripts/build-ios.sh --testflight'
 ```
 
-The build number is the UTC time (`YYYYMMDD.HHMM`); App Store Connect shows it without the
-leading zero (`20261101.356`). After processing, use the App Store Connect API key
+`--testflight` (like `--ipa`) selects official release identity automatically;
+ordinary simulator/device builds do not. The `CFBundleVersion` build number remains
+the UTC time (`YYYYMMDD.HHMM`); App Store Connect shows it without the leading zero
+(`20261101.356`). After processing, use the App Store Connect API key
 (1Password `Agent-Operator`, "App Store Connect API key", read with `agent-op`) to set the
 en-US "What to Test" text, add the build to the **Public** group (public link
 https://testflight.apple.com/join/nsEVY7Eb) and submit it for Beta App Review. A missing
@@ -272,9 +396,11 @@ changes only after Apple approves the build for external testing.
 Android has its own version line (`android-version.json`, `net.dunecity.dune2r`, e.g.
 0.2.33 / 1000553 on engine 1.0.858) and is never the repository's Latest release.
 
-1. Candidate: `gh workflow run build.yml --ref BRANCH -f android_package_probe=true`, then download
-   `DuneCity-Android-Runner-Candidate`. The runner signs it with a throwaway debug key, so it
-   cannot be installed over a public APK.
+1. Official release candidate:
+   `gh workflow run build.yml --ref BRANCH -f android_package_probe=true -f android_release_build=true`,
+   then download `DuneCity-Android-Runner-Candidate`. The explicit release input selects
+   `-DDUNECITY_RELEASE_BUILD=ON`; omit it for ordinary dev package probes. The runner
+   signs it with a throwaway debug key, so it cannot be installed over a public APK.
 2. Re-sign it locally with the existing upgrade key (certificate SHA-256
    `a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60`, DN "Android Debug").
    Use `zipalign -P 16`, then `apksigner sign` and `verify`. Compare every non-signature entry
@@ -282,6 +408,11 @@ Android has its own version line (`android-version.json`, `net.dunecity.dune2r`,
    installed copies could then no longer upgrade.
    **As of 1.0.864 nobody can find this keystore** on the mini, Air, Pro, Windows PC or in
    1Password. Once Stefan finds it, store it in 1Password `Agent-Operator`.
+   **2026-11-07 update:** PRED's existing
+   `%USERPROFILE%\.android\debug.keystore` was inspected read-only and its
+   public certificate exactly matches the required upgrade SHA-256 above.
+   The key was not exported, replaced or uploaded. Use that existing key
+   locally; the phone-test and explicit publication gate below still apply.
 3. Install with `adb install -r` on Stefan's phone, keeping app data. He tests it, and the APK
    is published only after he says "publish".
 4. `gh release create android-vX.Y.Z DuneLegacy.apk SHA256SUMS.txt --target SOURCE_SHA --latest=false`,
@@ -319,6 +450,67 @@ Hold stable publication until full public browser/browser and browser/native mat
 pass, including gameplay after signaling outage and SQLite runtime attribution.
 Transport fixtures alone are insufficient. Networks unable to establish direct ICE
 connectivity fail visibly; there is no hidden relay fallback.
+
+## Native pointer alignment release gate
+
+Before the next production release, require the native mouse/menu regression
+with the candidate's bundled SDL libraries on the Mac mini. It must exercise
+native pointer motion and button down/up through SDL and the real menu hit-test
+path, not inject already-logical SDL events or call widget handlers directly.
+Check off-center controls and control edges with Retina drawable/window scaling,
+letterboxing, and fullscreen/windowed resolution transitions. Record the actual
+window, drawable, logical and viewport sizes and loaded SDL identities.
+
+A hidden-window initialization pass, center-only coordinate check, or skipped
+opt-in test does not satisfy this gate. Keep production held if this check fails
+or cannot run. Never run graphical or pointer-automation checks on the MacBook Air.
+
+For the registered CTest gate, `DUNECITY_POINTER_RUNTIME_APP` is a CMake `PATH`
+cache entry passed directly to the existing `--runtime-app` CLI. Its default is
+`$<TARGET_BUNDLE_DIR:dunecity>`, preserving CI that already bundles the target app.
+A local Homebrew build's `build-int/bin/dunecity.app` is not a packaged candidate:
+select the dependency-fixed **installed** app explicitly. Do not credit a prior
+packaged-app pass to a CTest command that selected a different, unbundled app.
+
+On the mini, with `FINALPIN` set to the full committed candidate SHA and `OWNER`
+to the workspace owner identity, release edit claims first and use the shared
+staging lane. Configure the candidate path **before** the coherent build,
+installation and fixture preparation so their CMake cache identity stays stable.
+For example, the local 1.0.865 candidate sequence is:
+
+```sh
+CANDIDATE_PREFIX="/Users/stefan/Documents/projects/outputs/release-1.0.865/macos-local-${FINALPIN}/install"
+CANDIDATE_APP="$CANDIDATE_PREFIX/dunecity.app"
+agent-workspace run --project dunecity --owner "$OWNER" --wait -- \
+  cmake -S . -B build-int -DDUNECITY_POINTER_RUNTIME_APP:PATH="$CANDIDATE_APP"
+agent-workspace stage --project dunecity --owner "$OWNER" --wait --jobs 4 build
+agent-workspace run --project dunecity --owner "$OWNER" --wait -- \
+  cmake --install build-int --config Release --prefix "$CANDIDATE_PREFIX"
+codesign --verify --deep --strict "$CANDIDATE_APP"
+agent-workspace run --project dunecity --owner "$OWNER" --tests --wait -- \
+  env DUNECITY_NATIVE_POINTER_TEST=1 ctest --test-dir build-int \
+  --output-on-failure -R '^native_pointer_mapping_probe$'
+```
+
+The install rules bundle and fix up runtime dependencies; do not copy SDK
+libraries into the build app as a substitute. The gate still requires every
+dynamically loaded SDL library to reside inside the selected app, records its
+runtime identities, and returns skip code 77 without the native opt-in. A skip
+is not a passing release gate. CTest diagnostics remain under
+`build-int/native-pointer-mapping-probe`.
+
+For a direct full regression, retain the same packaged `CANDIDATE_APP` and set
+`EVIDENCE_DIR` to a dedicated results directory:
+
+```sh
+DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py \
+  --pointer-mapping --build-dir build-int \
+  --runtime-app "$CANDIDATE_APP" --output-dir "$EVIDENCE_DIR"
+```
+
+`--pointer-sdl-only` is a fast, no-game-startup diagnostic, not a substitute for
+the full menu gate. Stable macOS CI runs the full packaged-library check before
+artifact upload and retains its diagnostics on failure.
 
 ## Windows compile caching
 

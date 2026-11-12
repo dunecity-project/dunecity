@@ -18,9 +18,14 @@
 #include <GameInitSettings.h>
 #include <misc/CampaignControls.h>
 #include <FileClasses/INIFile.h>
+#include <FileClasses/FileManager.h>
+#include <MapSeed.h>
 #include <Network/CustomGamePlayerPolicy.h>
 #include <misc/SDL2pp.h>
 #include <algorithm>
+#include <charconv>
+#include <limits>
+#include <string_view>
 
 #include <misc/IFileStream.h>
 #include <misc/IMemoryStream.h>
@@ -46,6 +51,12 @@ constexpr Uint32 GAMEINIT_MOD10_MARKER = 0x4D4F4441; // MODA: retry planned plac
 constexpr Uint32 GAMEINIT_MOD11_MARKER = 0x4D4F4442; // MODB: slow city year (MOD11)
 constexpr Uint32 GAMEINIT_MOD12_MARKER = 0x4D4F4443; // MODC: Tornie-family match rules
 constexpr Uint32 GAMEINIT_MOD13_MARKER = 0x4D4F4444; // MODD: shared factory queue
+constexpr Uint32 GAMEINIT_MOD14_MARKER = 0x4D4F4445; // MODE: Micropolis land value
+constexpr Uint32 GAMEINIT_MOD15_MARKER = 0x4D4F4446; // MODF: per-house research and trooper anti-air
+constexpr Uint32 GAMEINIT_MOD16_MARKER = 0x4D4F4447; // MODG: Starport city population requirement
+constexpr Uint32 GAMEINIT_MOD17_MARKER = 0x4D4F4448; // MODH: research pace/map area and damage land value
+constexpr Uint32 GAMEINIT_MOD18_MARKER = 0x4D4F4449; // MODI: fixed research pace and mountain scenery
+constexpr Uint32 GAMEINIT_MOD19_MARKER = 0x4D4F444A; // MODJ: technology installments
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -57,7 +68,7 @@ constexpr bool isKnownModMarker(Uint32 marker) {
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD2 and later carry the per-house colour array.
@@ -72,7 +83,7 @@ constexpr bool markerHasGraphicsSkins(Uint32 marker) {
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD4 and later carry the immutable Workshop revision descriptors. A stream that announced
@@ -82,7 +93,7 @@ constexpr bool markerHasWorkshopRevisions(Uint32 marker) {
         || marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
         || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD5 and later carry the construction yard limit.
@@ -91,7 +102,7 @@ constexpr bool markerHasYardLimit(Uint32 marker) {
         || marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD6 and later carry the original-unit-damage rule.
@@ -99,7 +110,7 @@ constexpr bool markerHasOriginalUnitDamage(Uint32 marker) {
     return marker == GAMEINIT_MOD6_MARKER || marker == GAMEINIT_MOD7_MARKER
         || marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD7 and later carry the per-house spice income multipliers.
@@ -107,7 +118,7 @@ constexpr bool markerHasSpiceIncome(Uint32 marker) {
     return marker == GAMEINIT_MOD7_MARKER || marker == GAMEINIT_MOD8_MARKER
         || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD8 and later carry the plan-building-sites rule, after the spice income block. Older
@@ -115,7 +126,7 @@ constexpr bool markerHasSpiceIncome(Uint32 marker) {
 constexpr bool markerHasPlanBuildingSites(Uint32 marker) {
     return marker == GAMEINIT_MOD8_MARKER || marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD9 and later carry the continuous-ground-steps rule, after the plan-building-sites byte.
@@ -123,13 +134,90 @@ constexpr bool markerHasPlanBuildingSites(Uint32 marker) {
 constexpr bool markerHasContinuousGroundSteps(Uint32 marker) {
     return marker == GAMEINIT_MOD9_MARKER || marker == GAMEINIT_MOD10_MARKER
         || marker == GAMEINIT_MOD11_MARKER || marker == GAMEINIT_MOD12_MARKER
-        || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD13_MARKER || marker == GAMEINIT_MOD14_MARKER;
 }
 
 /// MOD10 and later carry the planned-construction rules (retry, shared yard queue).
 constexpr bool markerHasPlannedConstruction(Uint32 marker) {
     return marker == GAMEINIT_MOD10_MARKER || marker == GAMEINIT_MOD11_MARKER
-        || marker == GAMEINIT_MOD12_MARKER || marker == GAMEINIT_MOD13_MARKER;
+        || marker == GAMEINIT_MOD12_MARKER || marker == GAMEINIT_MOD13_MARKER
+        || marker == GAMEINIT_MOD14_MARKER;
+}
+
+template<typename T>
+bool parseInitialSpiceInteger(std::string_view text, T& value) {
+    const auto first = text.find_first_not_of(" \t\r\n");
+    if(first == std::string_view::npos) return false;
+    text = text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+    if(text.front() == '+') text.remove_prefix(1);
+    if(text.empty()) return false;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    return result.ec == std::errc{} && result.ptr == text.data() + text.size();
+}
+
+int seededInitialSpiceTilePermille(const INIFile& map) {
+    Uint32 seed;
+    int scale;
+    if(!parseInitialSpiceInteger(map.getStringValue("MAP", "Seed"), seed)
+       || !parseInitialSpiceInteger(map.getStringValue("BASIC", "MapScale"), scale)
+       || scale < 0 || scale > 2) return -1;
+
+    const int size = scale == 0 ? 62 : (scale == 1 ? 32 : 21);
+    const int offset = scale == 0 ? 1 : (scale == 1 ? 16 : 11);
+    Uint16 terrain[64 * 64];
+    createMapWithSeed(seed, terrain);
+    for(int y = offset; y < offset + size; ++y) {
+        for(int x = offset; x < offset + size; ++x) {
+            auto& tile = terrain[y * 64 + x];
+            tile >>= 4;
+            switch(tile) {
+                case 0x2: case 0x7: case 0x8: case 0x9: case 0xa: case 0xb: case 0xc:
+                    break;
+                default: tile = 0x7; break; // Native unknown terrain fallback is sand.
+            }
+        }
+    }
+
+    // Native overlays replace blooms first, then add fields only on Terrain_Sand.
+    // Keep the original 64-wide coordinates, including fields centred outside the crop.
+    for(const char* key : {"Bloom", "Special", "Field"}) {
+        const auto positions = map.getStringValue("MAP", key);
+        if(positions.empty()) continue;
+        std::string_view remaining(positions);
+        while(true) {
+            const auto separator = remaining.find(',');
+            int position;
+            if(!parseInitialSpiceInteger(remaining.substr(0, separator), position)) return -1;
+            const int x = position % 64 - offset;
+            const int y = position / 64 - offset;
+            if(key[0] == 'F') {
+                for(int dx = -5; dx <= 5; ++dx) {
+                    for(int dy = -5; dy <= 5; ++dy) {
+                        const int tileX = x + dx;
+                        const int tileY = y + dy;
+                        if(tileX < 0 || tileX >= size || tileY < 0 || tileY >= size
+                           || dx * dx + dy * dy > 25) continue;
+                        auto& tile = terrain[(tileY + offset) * 64 + tileX + offset];
+                        if(tile == 0x7) tile = 0xb;
+                    }
+                }
+            } else if(x >= 0 && x < size && y >= 0 && y < size) {
+                terrain[(y + offset) * 64 + x + offset] = 0; // Bloom, not sand or spice.
+            }
+            if(separator == std::string_view::npos) break;
+            remaining.remove_prefix(separator + 1);
+        }
+    }
+
+    int fields = 0;
+    for(int y = offset; y < offset + size; ++y) {
+        for(int x = offset; x < offset + size; ++x) {
+            const auto tile = terrain[y * 64 + x];
+            if(tile == 0xb || tile == 0xc) ++fields;
+        }
+    }
+    // SpiceVariant transforms change colour/thickness, never the spice tile footprint.
+    return fields * 1000 / (size * size);
 }
 }
 
@@ -245,12 +333,29 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.sharedYardQueue = false;
     gameOptions.sharedFactoryQueue = false;
     gameOptions.slowCityYear = false;
+    gameOptions.micropolisLandValue = false;
+    gameOptions.researchLab = false;
+    gameOptions.researchPace = TechResearch::Pace::Normal;
+    gameOptions.technologyInstallments = false;
+    gameOptions.damageLowersLandValue = false;
+    gameOptions.mountainScenery = false;
+    gameOptions.unpoweredZonesVacate = false;
+    gameOptions.trooperAntiAir = false;
+    gameOptions.starportPopulation = false;
 
     // Read mod info (added in version with mod system)
     // Use marker to detect presence for backward compatibility
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
+        const bool hasTechnologyInstallments = modMarker == GAMEINIT_MOD19_MARKER;
+        const bool hasMountainScenery = modMarker == GAMEINIT_MOD18_MARKER || hasTechnologyInstallments;
+        const bool hasLegacyResearchArea = modMarker == GAMEINIT_MOD17_MARKER;
+        const bool hasResearchPace = hasLegacyResearchArea || hasMountainScenery;
+        const bool hasStarportPopulation = modMarker == GAMEINIT_MOD16_MARKER || hasResearchPace;
+        const bool hasResearchOptions = modMarker == GAMEINIT_MOD15_MARKER || hasStarportPopulation;
+        // MOD15..19 share the complete MOD14 prefix.
+        if(hasResearchOptions) modMarker = GAMEINIT_MOD14_MARKER;
         if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
             modChecksum = stream.readString();
@@ -324,10 +429,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 gameOptions.sharedYardQueue = stream.readBool();
             }
             if(modMarker == GAMEINIT_MOD11_MARKER || modMarker == GAMEINIT_MOD12_MARKER
-               || modMarker == GAMEINIT_MOD13_MARKER) {
+               || modMarker == GAMEINIT_MOD13_MARKER || modMarker == GAMEINIT_MOD14_MARKER) {
                 gameOptions.slowCityYear = stream.readBool();
             }
-            if(modMarker == GAMEINIT_MOD12_MARKER || modMarker == GAMEINIT_MOD13_MARKER) {
+            if(modMarker == GAMEINIT_MOD12_MARKER || modMarker == GAMEINIT_MOD13_MARKER
+               || modMarker == GAMEINIT_MOD14_MARKER) {
                 gameOptions.alliedControl = stream.readBool();
                 gameOptions.alliedBuilding = stream.readBool();
                 gameOptions.easyMode = stream.readBool();
@@ -335,8 +441,39 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 gameOptions.sellingBuildings = stream.readBool();
                 chaosCampaignEligible = stream.readBool();
             }
-            if(modMarker == GAMEINIT_MOD13_MARKER) {
+            if(modMarker == GAMEINIT_MOD13_MARKER || modMarker == GAMEINIT_MOD14_MARKER) {
                 gameOptions.sharedFactoryQueue = stream.readBool();
+            }
+            if(modMarker == GAMEINIT_MOD14_MARKER) {
+                gameOptions.micropolisLandValue = stream.readBool();
+            }
+            if(hasResearchOptions) {
+                gameOptions.researchLab = stream.readBool();
+                gameOptions.trooperAntiAir = stream.readBool();
+            }
+            if(hasStarportPopulation) {
+                gameOptions.starportPopulation = stream.readBool();
+            }
+            if(hasResearchPace) {
+                const Uint32 pace = stream.readUint32();
+                if(hasLegacyResearchArea) stream.readUint32(); // frozen MOD17 area; no longer affects research
+                if(!TechResearch::isValid(pace))
+                    throw std::runtime_error("Invalid research pace.");
+                gameOptions.researchPace = static_cast<TechResearch::Pace>(pace);
+                gameOptions.damageLowersLandValue = stream.readBool();
+                if(hasMountainScenery) {
+                    // MOD18 originally wrote a bool (0/1). Reserve bit 1 for
+                    // vacancy without extending that unframed settings block:
+                    // earlier MOD18 saves and protocol-112 packets read it off.
+                    const Uint8 cityRules = stream.readUint8();
+                    if(cityRules & ~Uint8(3))
+                        throw std::runtime_error("Invalid city rules.");
+                    gameOptions.mountainScenery = (cityRules & 1) != 0;
+                    gameOptions.unpoweredZonesVacate = (cityRules & 2) != 0;
+                }
+            }
+            if(hasTechnologyInstallments) {
+                gameOptions.technologyInstallments = stream.readBool();
             }
         }
     } catch (InputStream::eof&) {
@@ -429,6 +566,8 @@ GameInitSettings::~GameInitSettings() {
 }
 
 void GameInitSettings::save(OutputStream& stream) const {
+    if(!TechResearch::isValid(static_cast<Uint32>(gameOptions.researchPace)))
+        THROW(std::runtime_error, "GameInitSettings::save(): invalid research pace.");
     if(houseInfoList.size() > static_cast<std::size_t>(CustomGamePlayerPolicy::maxPlayers(isTornieFamilyMatch())))
         THROW(std::runtime_error, "GameInitSettings::save(): too many house rows.");
     stream.writeSint8(static_cast<Sint8>(gameType));
@@ -464,7 +603,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD13_MARKER);
+    stream.writeUint32(GAMEINIT_MOD19_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -516,6 +655,20 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(chaosCampaignEligible);
     // MOD13: ordinary factories share waiting orders; all older streams keep it off.
     stream.writeBool(gameOptions.sharedFactoryQueue);
+    // MOD14: Micropolis land value; all older streams keep the legacy calculation.
+    stream.writeBool(gameOptions.micropolisLandValue);
+    // MOD15: old saves keep both mechanics off.
+    stream.writeBool(gameOptions.researchLab);
+    stream.writeBool(gameOptions.trooperAntiAir);
+    // MOD16: older streams keep the Starport without a population requirement.
+    stream.writeBool(gameOptions.starportPopulation);
+    // MOD18: pace4 + damage1 + city rules1 (bit0 scenery, bit1 vacancy).
+    stream.writeUint32(static_cast<Uint32>(gameOptions.researchPace));
+    stream.writeBool(gameOptions.damageLowersLandValue);
+    stream.writeUint8((gameOptions.mountainScenery ? 1 : 0)
+        | (gameOptions.unpoweredZonesVacate ? 2 : 0));
+    // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
+    stream.writeBool(gameOptions.technologyInstallments);
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {
@@ -524,6 +677,119 @@ bool GameInitSettings::isTornieFamilyMatch() const {
         tornieFamilyCached = true;
     }
     return tornieFamilyMatch;
+}
+
+int GameInitSettings::getInitialSpiceTilePermille() const {
+    const bool originalMap = gameType == GameType::Campaign || gameType == GameType::Skirmish;
+    if(!originalMap && gameType != GameType::CustomGame && gameType != GameType::CustomMultiplayer) return -1;
+    if(initialSpiceTilePermille != -2) return initialSpiceTilePermille;
+    initialSpiceTilePermille = -1;
+    try {
+        sdl2::RWops_ptr source;
+        if(!filedata.empty()) {
+            if(filedata.size() > static_cast<size_t>(std::numeric_limits<int>::max())
+               || (originalMap && filedata.find('\0') != std::string::npos)) return initialSpiceTilePermille;
+            source.reset(SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size())));
+        } else if(originalMap && pFileManager && !filename.empty()) {
+            // Use the saved canonical filename and exactly the native campaign/mod resolver.
+            source = pFileManager->openCampaignFile(filename);
+        }
+        if(!source) return initialSpiceTilePermille;
+        INIFile map(source.get());
+        if(originalMap) {
+            int version = 1;
+            if(map.hasKey("BASIC", "Version")
+               && !parseInitialSpiceInteger(map.getStringValue("BASIC", "Version"), version))
+                return initialSpiceTilePermille;
+            if(version < 2) {
+                initialSpiceTilePermille = seededInitialSpiceTilePermille(map);
+                return initialSpiceTilePermille;
+            }
+        }
+        const int width = map.getIntValue("MAP", "SizeX", 0);
+        const int height = map.getIntValue("MAP", "SizeY", 0);
+        if(width <= 0 || height <= 0 || (!originalMap && map.hasKey("MAP", "Seed"))) return initialSpiceTilePermille;
+        int64_t fields = 0;
+        for(int y = 0; y < height; ++y) {
+            auto key = std::to_string(y);
+            if(key.size() < 3) key.insert(0, 3-key.size(), '0');
+            const auto row = map.getStringValue("MAP", key);
+            if(row.size() != static_cast<size_t>(width)) return initialSpiceTilePermille;
+            for(char tile : row) {
+                switch(tile) {
+                    case '~': case '+': case 'g': case 'G': case 'r': case 'R':
+                    case 'l': case 'L': case 'w': case 'W': ++fields; break;
+                    default: break;
+                }
+            }
+        }
+        initialSpiceTilePermille = int(fields*1000/(int64_t(width)*height));
+    } catch(const std::exception&) {
+        // Missing assets, failed streams and malformed scenarios are unknown, not zero spice.
+    }
+    return initialSpiceTilePermille;
+}
+
+const InitialTerrain& GameInitSettings::getInitialTerrain() const {
+    // The same scenario source and validity rules as getInitialSpiceTilePermille(), except that a
+    // seeded original map has no explicit grid to measure and stays unknown.
+    static const InitialTerrain unknown{};
+    const bool originalMap = gameType == GameType::Campaign || gameType == GameType::Skirmish;
+    if(!originalMap && gameType != GameType::CustomGame && gameType != GameType::CustomMultiplayer) return unknown;
+    if(initialTerrainCached) return initialTerrain;
+    initialTerrainCached = true;
+    initialTerrain = InitialTerrain{};
+    try {
+        sdl2::RWops_ptr source;
+        if(!filedata.empty()) {
+            if(filedata.size() > static_cast<size_t>(std::numeric_limits<int>::max())
+               || (originalMap && filedata.find('\0') != std::string::npos)) return initialTerrain;
+            source.reset(SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size())));
+        } else if(originalMap && pFileManager && !filename.empty()) {
+            source = pFileManager->openCampaignFile(filename);
+        }
+        if(!source) return initialTerrain;
+        INIFile map(source.get());
+        if(originalMap) {
+            int version = 1;
+            if(map.hasKey("BASIC", "Version")
+               && !parseInitialSpiceInteger(map.getStringValue("BASIC", "Version"), version))
+                return initialTerrain;
+            if(version < 2) return initialTerrain;
+        }
+        const int width = map.getIntValue("MAP", "SizeX", 0);
+        const int height = map.getIntValue("MAP", "SizeY", 0);
+        if(width <= 0 || height <= 0 || (!originalMap && map.hasKey("MAP", "Seed"))) return initialTerrain;
+        std::vector<std::string> rows;
+        rows.reserve(static_cast<size_t>(height));
+        for(int y = 0; y < height; ++y) {
+            auto key = std::to_string(y);
+            if(key.size() < 3) key.insert(0, 3-key.size(), '0');
+            rows.push_back(map.getStringValue("MAP", key));
+            if(rows.back().size() != static_cast<size_t>(width)) return initialTerrain;
+        }
+        initialTerrain = countInitialTerrain(width, rows);
+    } catch(const std::exception&) {
+        // Missing assets, failed streams and malformed scenarios stay unknown.
+    }
+    return initialTerrain;
+}
+
+bool GameInitSettings::isCivilizationWars() const {
+    // LoadMultiplayer.filedata holds a binary checkpoint until its saved map settings
+    // replace it. Never scan those bytes, a filename or a mod name for a marker.
+    if(gameType != GameType::CustomGame && gameType != GameType::CustomMultiplayer) return false;
+    if(!civilizationWarsCached) {
+        civilizationWars = false;
+        if(!filedata.empty()) {
+            auto source = sdl2::RWops_ptr{SDL_RWFromConstMem(filedata.data(), static_cast<int>(filedata.size()))};
+            INIFile map(source.get());
+            // getIntValue accepts numeric prefixes; only this complete version opts in.
+            civilizationWars = map.getStringValue("CIVILIZATIONWARS", "Version") == "1";
+        }
+        civilizationWarsCached = true;
+    }
+    return civilizationWars;
 }
 
 const std::optional<coop::Context>& GameInitSettings::getCoopCampaignContext() const {

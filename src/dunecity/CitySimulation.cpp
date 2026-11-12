@@ -38,10 +38,9 @@ HouseCityState& CitySimulation::getHouseStateMut(int houseID) {
     return houseState_[houseID];
 }
 
-void CitySimulation::setCityTax(int16_t v) {
-    if (v < kMinTaxRate) v = kMinTaxRate;
-    if (v > kMaxTaxRate) v = kMaxTaxRate;
-    cityTax_ = v;
+void CitySimulation::setCityTax(int houseID, int16_t v) {
+    if (houseID < 0 || houseID >= kMaxCityHouses) return;
+    houseState_[houseID].taxRate = std::clamp(v, kMinTaxRate, kMaxTaxRate);
 }
 
 void CitySimulation::init(int width, int height) {
@@ -87,7 +86,7 @@ void CitySimulation::load(InputStream& stream) {
         // --- New format (9818+) ---
         // Global sim fields (same across all houses - read once)
         totalFunds_              = stream.readSint32();
-        cityTax_                 = stream.readSint16();
+        const int16_t sharedTax  = stream.readSint16(); // one rate for every house before 9880
         cityYear_                = stream.readSint32();
         cityDay_                 = stream.readSint32();
         lastProcessedDay_        = stream.readUint32();
@@ -101,6 +100,8 @@ void CitySimulation::load(InputStream& stream) {
         for (int h = 0; h < savedCityHouseCount; ++h) {
             houseState_[h].load(stream);
         }
+        if (loadedVersion < SAVEGAMEVERSION_HOUSE_TAX_RATE)
+            for (int h = 0; h < kMaxCityHouses; ++h) setCityTax(h, sharedTax);
     } else {
         // --- Legacy format (9809..9817) ---
         // Stream order is: [houseState_[0].resPop/valve] [global fields]
@@ -121,7 +122,8 @@ void CitySimulation::load(InputStream& stream) {
 
         // Global sim fields (mid-stream in the old layout)
         totalFunds_              = stream.readSint32();
-        cityTax_                 = stream.readSint16();
+        const int16_t sharedTax  = stream.readSint16();
+        for (int h = 0; h < kMaxCityHouses; ++h) setCityTax(h, sharedTax);
         cityYear_                = stream.readSint32();
         cityDay_                 = stream.readSint32();
         lastProcessedDay_        = stream.readUint32();
@@ -151,7 +153,7 @@ void CitySimulation::load(InputStream& stream) {
 void CitySimulation::save(OutputStream& stream) const {
     // Global sim fields (same across all houses - written once)
     stream.writeSint32(totalFunds_);
-    stream.writeSint16(cityTax_);
+    stream.writeSint16(kDefaultCityTaxRate); // retired shared tax slot: rates are per house from 9880
     stream.writeSint32(cityYear_);
     stream.writeSint32(cityDay_);
     stream.writeUint32(lastProcessedDay_);
@@ -205,6 +207,9 @@ void CitySimulation::loadObserverRuntime(InputStream& stream) {
         status.averageLandValue=stream.readSint32(); status.averagePollution=stream.readSint32();
         status.averageCrime=stream.readSint32(); status.averageTraffic=stream.readSint32();
         status.sampledStructures=stream.readSint32();
+        // The load-time reconcile rescans the city; the live host's tax land value is the one
+        // its scans left, which the status carries (they are the same average).
+        houseState_[h].avgLandValue=status.averageLandValue;
     }
     const auto layer=[&](auto& map) {
         const int bs=map.getBlockSize();
@@ -250,6 +255,7 @@ void HouseCityState::save(OutputStream& stream) const {
     stream.writeSint32(policeFundingPercent);
     stream.writeSint32(nominalPoliceCost);
     stream.writeSint32(lastPoliceExpense);
+    stream.writeSint16(taxRate);
 
     stream.writeSint32(budget.getLastTaxRevenue());
     stream.writeSint32(budget.getRoadPercent());
@@ -281,6 +287,11 @@ void HouseCityState::load(InputStream& stream) {
     policeFundingPercent = stream.readSint32();
     nominalPoliceCost    = stream.readSint32();
     lastPoliceExpense    = stream.readSint32();
+    // 9880 gives every house its own tax rate; CitySimulation::load applies the shared rate of
+    // an older save to every house.
+    taxRate = currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_HOUSE_TAX_RATE
+        ? std::clamp(stream.readSint16(), CitySimulation::kMinTaxRate, CitySimulation::kMaxTaxRate)
+        : kDefaultCityTaxRate;
 
     budget.setLastTaxRevenue(stream.readSint32());
     budget.setRoadPercent(stream.readSint32());
@@ -449,12 +460,12 @@ void CitySimulation::executeCityCommand(int playerID, int commandID,
         } break;
 
         case CMD_CITY_SET_TAX_RATE: {
-            // p0 reserved (was houseID in the legacy form); p1 = new rate
-            // (0-20). Routed through the command system so multiplayer
-            // stays deterministic.
+            // p0 reserved (was houseID in the legacy form); p1 = new rate (0-20). The rate
+            // belongs to the issuer's house, like police funding; routed through the command
+            // system so multiplayer stays deterministic.
             auto* sim = currentGame ? currentGame->getCitySimulation() : nullptr;
             if (sim && CommandAuthorization::isValidCityTaxRate(p1)) {
-                sim->setCityTax(static_cast<int16_t>(p1));
+                sim->setCityTax(issuer->getHouse()->getHouseID(), static_cast<int16_t>(p1));
             }
         } break;
 

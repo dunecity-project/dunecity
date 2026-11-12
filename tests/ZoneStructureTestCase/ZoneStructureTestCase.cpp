@@ -334,33 +334,6 @@ TEST_CASE("ZoneStructure: ObjPic_Zone enums exist in GFXManager.h",
     REQUIRE(hdr.find("ObjPic_ZoneIndustrial") != std::string::npos);
 }
 
-// =============================================================================
-// Zone power status regression tests
-//
-// The zone tooltip/inspector must derive power status from the Dune house
-// power model (House::hasPower), not from the stubbed per-tile city power
-// grid (Tile::isCityPowered), which always returns false. The tooltip
-// rendering moved from Game.cpp into ZoneStructureInterface.h alongside the
-// other zone-specific UI; the invariants are unchanged.
-// =============================================================================
-
-TEST_CASE("ZoneStructure: tooltip uses house power model not tile power",
-          "[zone][power][regression]") {
-    std::string src = readSourceFile("include/GUI/ObjectInterfaces/ZoneStructureInterface.h");
-    REQUIRE_FALSE(src.empty());
-
-    // Find the zone inspector section — look for the density/power block.
-    auto densityPos = src.find("getCityZoneDensity()");
-    REQUIRE(densityPos != std::string::npos);
-
-    // Extract a reasonable window around the power check.
-    auto start = (densityPos > 200) ? densityPos - 200 : 0;
-    auto window = src.substr(start, src.find("cityStats_.update(pZone)", densityPos) - start);
-
-    INFO("Power check must use the owner's hasPower(), not Tile::isCityPowered()");
-    REQUIRE(window.find("hasPower()") != std::string::npos);
-    REQUIRE(window.find("isCityPowered()") == std::string::npos);
-}
 
 TEST_CASE("ZoneStructure: selected Dune2 zones use the house icon",
           "[zone][graphics][regression]") {

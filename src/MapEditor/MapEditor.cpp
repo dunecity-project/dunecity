@@ -37,6 +37,7 @@
 #include <misc/format.h>
 #include <misc/DiscordManager.h>
 #include <misc/TouchInput.h>
+#include <misc/MacTrackpad.h>
 #include <CursorManager.h>
 
 #include <mod/ModManager.h>
@@ -124,6 +125,7 @@ unsigned int getMapEditorStructureUIGraphic(int itemID) noexcept {
         case Structure_Worfinery:           return UI_MapEditor_Worfinery;
         case Structure_Doublefinery:        return UI_MapEditor_Doublefinery;
         case Structure_TechCenter:          return UI_MapEditor_TechCenter;
+        case Structure_ResearchLab:         return UI_MapEditor_TechCenter;
         case Structure_Scoutpost:           return UI_MapEditor_Scoutpost;
         case Structure_Flamepost:           return UI_MapEditor_Flamepost;
         case Structure_Slowpost:           return NUM_UIGRAPHICS;
@@ -198,6 +200,7 @@ MapEditor::MapEditor() : pInterface(nullptr) {
 }
 
 MapEditor::~MapEditor() {
+    MacTrackpad::setMapArea(nullptr);
     // Clean up cursor manager
     cursorManager.cleanup();
     
@@ -528,7 +531,7 @@ void MapEditor::loadMap(const std::string& filepath) {
 
 void MapEditor::saveMap(const std::string& filepath) {
     if(!loadedINIFile) {
-        std::string comment = "Created with Dune City " + std::string(VERSION) + " Map Editor.";
+        std::string comment = "Created with Dune City " + std::string(DUNECITY_DISPLAY_VERSION) + " Map Editor.";
         loadedINIFile = std::make_unique<INIFile>(false, comment);
     }
 
@@ -1419,12 +1422,27 @@ void MapEditor::drawScreen() {
     presentWithCursor();
 }
 
+void MapEditor::setZoomLevel(int level, int screenX, int screenY) {
+    level = std::clamp(level, 0, static_cast<int>(NUM_ZOOMLEVEL) - 1);
+    if(level == currentZoomlevel) return;
+    const Coord anchor(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
+    const Coord center = screenborder->getCurrentCenter();
+    currentZoomlevel = level;
+    screenborder->adjustScreenBorderToMapsize(map.getSizeX(), map.getSizeY());
+    screenborder->setNewScreenCenter(center);
+    const Coord moved(screenborder->screen2worldX(screenX), screenborder->screen2worldY(screenY));
+    screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + anchor - moved);
+}
+
 void MapEditor::processInput() {
     SDL_Event event;
 
-    while(SDL_PollEvent(&event)) {
+    for(;;) {
+        const bool mapInputEnabled = !pInterface->hasChildWindow();
+        MacTrackpad::setMapArea(mapInputEnabled ? &screenborder->getScreenRect() : nullptr);
+        if(!SDL_PollEvent(&event)) break;
         updateCursorVisibilityForInput(event);
-        if(TouchInput::translateTouchEvent(event)) {
+        if(TouchInput::translateTouchEvent(event, mapInputEnabled ? &screenborder->getScreenRect() : nullptr)) {
             continue;
         }
 
@@ -1433,6 +1451,11 @@ void MapEditor::processInput() {
             SDL_MouseMotionEvent* mouse = &event.motion;
             drawnMouseX = std::max(0, std::min(mouse->x, settings.video.width-1));
             drawnMouseY = std::max(0, std::min(mouse->y, settings.video.height-1));
+        }
+
+        if(screenborder->handleMiddlePan(event, !pInterface->hasChildWindow())) {
+            bLeftMousePressed = false;
+            continue;
         }
 
         if(pInterface->hasChildWindow()) {
@@ -1605,26 +1628,26 @@ void MapEditor::processInput() {
                 } break;
 
                 case SDL_MOUSEWHEEL: {
-                    if (event.wheel.y != 0) {
-                        if(screenborder->isScreenCoordInsideMap(drawnMouseX, drawnMouseY) == true) {
-                            //if mouse is not over side bar
-                            int xpos = screenborder->screen2MapX(drawnMouseX);
-                            int ypos = screenborder->screen2MapY(drawnMouseY);
-
+                    if(screenborder->isScreenCoordInsideMap(drawnMouseX, drawnMouseY)) {
+                        // Shift+wheel retains the editor's unit-rotation shortcut.
+                        if(SDL_GetModState() & KMOD_SHIFT) {
                             for(const Unit& unit : units) {
-                                Coord position = unit.position;
-                                if((position.x == xpos) && (position.y == ypos)) {
-                                    if(event.wheel.y > 0) {
-                                        pInterface->onUnitRotateLeft(unit.id);
-                                    } else {
-                                        pInterface->onUnitRotateRight(unit.id);
-                                    }
+                                if(unit.position == Coord(screenborder->screen2MapX(drawnMouseX),
+                                                          screenborder->screen2MapY(drawnMouseY))) {
+                                    if(event.wheel.y > 0) pInterface->onUnitRotateLeft(unit.id);
+                                    else if(event.wheel.y < 0) pInterface->onUnitRotateRight(unit.id);
                                     break;
                                 }
                             }
+                            screenborder->resetMouseWheelZoom();
+                        } else {
+                            const int step = screenborder->mouseWheelZoom(event.wheel);
+                            setZoomLevel(currentZoomlevel + step, drawnMouseX, drawnMouseY);
                         }
-
-                        pInterface->handleMouseWheel(drawnMouseX,drawnMouseY,(event.wheel.y > 0));
+                    } else {
+                        screenborder->resetMouseWheelZoom();
+                        if(event.wheel.y != 0)
+                            pInterface->handleMouseWheel(drawnMouseX, drawnMouseY, event.wheel.y > 0);
                     }
                 } break;
 
@@ -1746,11 +1769,30 @@ void MapEditor::processInput() {
                 {
                     bQuitEditor = true;
                 } break;
+
+                default: {
+                    TouchInput::MapGesture gesture;
+                    if(TouchInput::decodeMapGesture(event, gesture)) {
+                        bLeftMousePressed = false;
+                        if(gesture.kind == TouchInput::MapGestureKind::Pan) {
+                            const Coord before(screenborder->screen2worldX(gesture.x - gesture.dx),
+                                               screenborder->screen2worldY(gesture.y - gesture.dy));
+                            const Coord after(screenborder->screen2worldX(gesture.x), screenborder->screen2worldY(gesture.y));
+                            screenborder->setNewScreenCenter(screenborder->getCurrentCenter() + before - after);
+                        } else {
+                            setZoomLevel(currentZoomlevel + (gesture.kind == TouchInput::MapGestureKind::ZoomIn ? 1 : -1),
+                                         gesture.x, gesture.y);
+                        }
+                    }
+                } break;
             }
         }
     }
 
-    if((pInterface->hasChildWindow() == false) && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS)) {
+    if(pInterface->hasChildWindow() && screenborder->isMousePanning())
+        screenborder->handleMiddlePan(SDL_Event{}, false);
+
+    if(!pInterface->hasChildWindow() && !screenborder->isMousePanning() && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_FOCUS)) {
         const Uint8 *keystate = SDL_GetKeyboardState(nullptr);
         scrollDownMode =  (drawnMouseY >= getRendererHeight()-1-SCROLLBORDER) || keystate[SDL_SCANCODE_DOWN];
         scrollLeftMode = (drawnMouseX <= SCROLLBORDER) || keystate[SDL_SCANCODE_LEFT];
@@ -2084,6 +2126,7 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
                 case Structure_AdvancedWindTrapMK3: objectPic = ObjPic_AdvancedWindTrap3x2; break;
                 case Structure_Worfinery:           objectPic = ObjPic_Worfinery;           break;
                 case Structure_TechCenter:          objectPic = ObjPic_TechCenter;          break;
+                case Structure_ResearchLab:         objectPic = ObjPic_TechCenter;          break;
                 case Structure_Scoutpost:           objectPic = ObjPic_Scoutpost;           break;
                 case Structure_Flamepost:           objectPic = ObjPic_Flamepost;           break;
                 case Structure_Slowpost:            objectPic = ObjPic_Slowpost;            break;

@@ -396,7 +396,7 @@ try {
             ? requireInteger($form, 'offset', 0, Limits::MAX_ROOMS) : 0;
         $allMods=($form['allMods'] ?? '') === '1';
         $details=($form['details'] ?? '') === '1';
-        $page = $rooms->listPublic($gameProtocol, $contentHash, $offset, $allMods, $details);
+        $page = $rooms->listPublic($appVersion, $gameProtocol, $contentHash, $offset, $allMods, $details);
         $lines = [['status', 'ok'], ['protocol', (string)Limits::PROTOCOL_VERSION],
                   ['next', (string)$page['next']]];
         foreach ($page['games'] as $game) {

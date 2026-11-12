@@ -200,6 +200,20 @@ Builder = Construction Yard
 TechLevel = 5
 Prerequisite = Windtrap, Radar, Light Factory
 
+[Research Lab]
+# Optional per-house technology; build-list availability is gated by Research Lab.
+Enabled = true
+HitPoints = 500
+Price = 500
+Power = 30
+ViewRange = 3
+BuildTime = 96
+InfSpawnProp = 25
+Builder = Construction Yard
+TechLevel = 1
+UpgradeLevel = 0
+Prerequisite = Invalid
+
 [House IX]
 Enabled = true
 HitPoints = 400

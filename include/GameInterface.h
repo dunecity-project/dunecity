@@ -161,6 +161,8 @@ private:
     TextButton          joinRequestButton;
     bool                joinRequestFlash = false;
     TextButton          autoRepairButton;
+    TextButton          aiRoleButton;           ///< "AI behaviour": the house's AI partner's role
+    bool                aiRoleInSidebar = false;///< sidebar row, or beside the zoom controls when the sidebar is full
     TextButton movementPathsButton;
     TextButton          landValueOverlayButton;
     TextButton          crimeOverlayButton;

@@ -13,12 +13,16 @@ run in leased scratch (scratch_dir), delete each game's directory once its rows
 are written, and check free space before they start (require_free_space).
 """
 import configparser
+import gzip
+import hashlib
 from contextlib import contextmanager
 import importlib.util
 import os
+import json
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -33,6 +37,105 @@ DISPOSABLE_PROFILE_ASSETS = ('mods', 'workshop/revisions')
 FAILED_GAMES_KEEP = 5
 _failed_lock = threading.Lock()
 HASH = re.compile(rb'[0-9a-f]{64}')
+
+
+def remove_tree(path):
+    """Remove a private probe tree, including read-only Windows snapshots."""
+    def retry_readonly(function, filename, error):
+        if isinstance(error, FileNotFoundError):
+            return
+        if (sys.platform != 'win32' or not isinstance(error, PermissionError)
+                or function not in (os.unlink, os.rmdir)):
+            raise error
+        os.chmod(filename, stat.S_IWRITE)
+        function(filename)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=retry_readonly)
+    else:
+        def onerror(function, filename, exc_info):
+            retry_readonly(function, filename, exc_info[1])
+        shutil.rmtree(path, onerror=onerror)
+
+def headless_asset_arguments():
+    """Batch-only opt-in; direct CTest/UI probes retain the normal asset loader."""
+    return ['--no-headless-assets'] if os.environ.get('DUNECITY_HEADLESS_ASSETS') == '0' else ['--headless-assets']
+
+
+def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
+    """Reuse exact, sealed Vanilla/DuneCity install payloads, never a user's mods.
+
+    A real seed-only engine run produces the files. The immutable binary and
+    source identity key the cache; every reader verifies all bytes under the
+    publication lock. Invalid caches are left untouched and the caller uses
+    ordinary private profile copies instead.
+    """
+    if not fingerprint:
+        return None
+    binary, build = Path(binary), Path(build)
+    identity = {'binary': hashlib.sha256(binary.read_bytes()).hexdigest(), 'source': fingerprint}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    cache = build / 'headless-mod-cache'
+    destination = cache / key
+    staged = None
+
+    def payload_hashes(directory):
+        if directory.is_symlink() or not directory.is_dir():
+            raise RuntimeError('Missing or linked shared headless mods')
+        result = {}
+        for path in sorted(directory.rglob('*')):
+            if path.is_symlink():
+                raise RuntimeError('Linked file in shared headless mods')
+            if path.is_file():
+                result[path.relative_to(directory).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+        return result
+
+    try:
+        cache.mkdir(parents=True, exist_ok=True)
+        with (cache / (key + '.lock')).open('a+b') as handle:
+            if handle.tell() == 0:
+                handle.write(b'\0')
+                handle.flush()
+            handle.seek(0)
+            lock_exclusive(handle)
+            if destination.exists():
+                manifest = json.loads((destination / 'manifest.json').read_text())
+                if manifest['identity'] != identity or manifest['files'] != payload_hashes(destination / 'mods'):
+                    raise RuntimeError('Shared headless mod fingerprint differs')
+                return destination / 'mods'
+            with scratch_dir('headless-mod-seed') as scratch:
+                seed_env = dict(env, DUNECITY_USERDIR=str(scratch / 'profile'),
+                                DUNECITY_HEADLESS_SEED_ONLY='1')
+                for name in ('DUNECITY_SHARED_MODS', 'DUNECITY_SIM_MEASURE', 'DUNECITY_SIM_SAMPLE_SECONDS',
+                             'BALANCE_HEAP_PROFILE', 'BALANCE_HEAP_TOOLS', 'MallocStackLogging'):
+                    seed_env.pop(name, None)
+                with (scratch / 'seed.log').open('w') as log:
+                    subprocess.run([str(binary), '--window', '--showlog', '--non-interactive'],
+                                   cwd=scratch, env=seed_env, stdout=log, stderr=subprocess.STDOUT,
+                                   check=True, timeout=120)
+                staged = Path(tempfile.mkdtemp(prefix=key + '.incoming-', dir=cache))
+                for name in ('vanilla', 'dunecity'):
+                    shutil.copytree(scratch / 'profile/mods' / name, staged / 'mods' / name)
+                (staged / 'manifest.json').write_text(
+                    json.dumps({'identity': identity, 'files': payload_hashes(staged / 'mods')}, sort_keys=True) + '\n')
+            # Read-only files on both platforms; read-only directories on POSIX.
+            for path in staged.rglob('*'):
+                if path.is_file():
+                    path.chmod(0o444)
+                elif sys.platform != 'win32':
+                    path.chmod(0o555)
+            staged.rename(destination)
+            staged = None
+            return destination / 'mods'
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
+        print(f'Shared headless mods unavailable; using private copies: {error}', file=sys.stderr)
+        return None
+    finally:
+        if staged is not None:
+            for path in staged.rglob('*'):
+                path.chmod(0o755 if path.is_dir() else 0o644)
+            remove_tree(staged)
+
 
 
 def default_build_dir(root):
@@ -52,10 +155,10 @@ def default_build_dir(root):
 
 def probe_binary(out):
     """The balance-probe binary run-campaign-balance.py prepared for --output-dir out, for
-    --prebuilt-probe reuse. Windows runs it from the game's output directory (data is found
-    beside the executable), so the run directory records its path instead of holding a copy."""
+    --prebuilt-probe reuse. Windows and Linux run it from the game's output directory (data is
+    found beside the executable), so the run directory records its path instead of holding a copy."""
     out = Path(out)
-    if sys.platform == 'win32':
+    if sys.platform != 'darwin':
         return Path((out / 'balance-probe-path.txt').read_text().strip())
     return out / 'balance-probe.app/Contents/MacOS/balance-probe'
 
@@ -130,7 +233,7 @@ def scratch_dir(purpose, explicit=None):
         if managed:
             scratch.finish(path, not failed)
         elif not failed:
-            shutil.rmtree(path, ignore_errors=True)
+            remove_tree(path)
 
 
 def finish_game(scratch, out, failed):
@@ -148,20 +251,21 @@ def finish_game(scratch, out, failed):
                 discard_profile_assets(out / 'profile', telemetry=True)
                 out.rename(kept / out.name)
                 return
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
 
 
-def require_free_space(min_gb=None):
-    """Refuse to start a batch on a nearly full disk, after sweeping stale agent scratch.
+def require_free_space(min_gb=None, *, sweep=True):
+    """Refuse to start a batch on a nearly full disk, optionally sweeping stale scratch.
 
     The threshold is the project's min_free_gb on managed hosts (25 GB), overridable
-    with DUNECITY_MIN_FREE_GB or the argument."""
+    with DUNECITY_MIN_FREE_GB or the argument. Native UI checks can use the
+    existing 'if-low' guard mode; simulation batches retain the full sweep."""
     if min_gb is None and os.environ.get('DUNECITY_MIN_FREE_GB'):
         min_gb = float(os.environ['DUNECITY_MIN_FREE_GB'])
     module = _installed('scratch')
     if module is not None and PROJECT in module.Scratch().projects:
         try:
-            return module.Scratch().guard(PROJECT, min_gb)
+            return module.Scratch().guard(PROJECT, min_gb, sweep=sweep)
         except module.LowDisk as e:
             sys.exit('Refusing to start: ' + str(e))
     need = 25.0 if min_gb is None else float(min_gb)
@@ -179,7 +283,7 @@ def discard_profile_assets(profile, telemetry=False):
     for name in names:
         path = Path(profile) / name
         if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path, ignore_errors=True)
+            remove_tree(path)
 
 
 def prune_runs(parent, prefix, keep):
@@ -187,7 +291,7 @@ def prune_runs(parent, prefix, keep):
     runs = sorted((p for p in Path(parent).glob(prefix + '*') if p.is_dir() and not p.is_symlink()),
                   key=lambda p: p.stat().st_mtime)
     for stale in runs[:max(0, len(runs) - keep)]:
-        shutil.rmtree(stale, ignore_errors=True)
+        remove_tree(stale)
 
 
 def clone_tree(source, destination):
@@ -234,6 +338,48 @@ def copy_revisions(source_profile, profile, saves=()):
     names = needed_revisions(store, source_profile, saves)
     for name in names:
         clone_tree(store / name, Path(profile) / 'workshop' / 'revisions' / name)
+    return names
+
+
+def restore_fixture_revisions(profile, saves):
+    """Restore the exact archived mod revisions the committed save fixtures name.
+
+    Historical configuration bytes live beside their original manifests. Unchanged
+    Dune City graphics come from the source tree; retired artwork is already kept
+    by the eight-house performance fixture. Every payload must match its original
+    SHA-256 and size. Embedded maps need no separate Workshop-store copy.
+    """
+    source_root = Path(__file__).resolve().parents[2]
+    store = source_root / 'tests/saves/data/workshop/revisions'
+    names = needed_revisions(store, saves=saves)
+    for name in names:
+        archived = store / name
+        manifest = (archived / 'manifest').read_bytes()
+        if hashlib.sha256(manifest).hexdigest() != name:
+            raise RuntimeError('Archived fixture manifest does not match revision ' + name)
+        target = Path(profile) / 'workshop/revisions' / name
+        for line in manifest.decode().splitlines():
+            if not line.startswith('file='):
+                continue
+            digest, size, encoded = line[5:].split(',', 2)
+            relative = bytes.fromhex(encoded).decode()
+            source = archived / 'files' / relative
+            if source.is_file():
+                data = source.read_bytes()
+            else:
+                current = source_root / 'mods/dunecity' / relative
+                data = current.read_bytes() if current.is_file() else b''
+                if hashlib.sha256(data).hexdigest() != digest:
+                    old_art = source_root / 'tests/performance/data/eight-house-384/files' / (digest + '.png.gz')
+                    if old_art.is_file():
+                        data = gzip.decompress(old_art.read_bytes())
+            if len(data) != int(size) or hashlib.sha256(data).hexdigest() != digest:
+                raise RuntimeError('Archived fixture bytes changed: ' + relative + ' for revision ' + name)
+            destination = target / 'files' / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+        (target / 'manifest').write_bytes(manifest)
+        shutil.copyfile(archived / 'version', target / 'version')
     return names
 
 

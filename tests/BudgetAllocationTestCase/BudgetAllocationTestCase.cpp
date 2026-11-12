@@ -138,7 +138,7 @@ TEST_CASE("BudgetAllocation: zero city tax yields zero tax revenue", "[budget][t
     sim.init(4, 4);
     budget.init(&sim);
 
-    sim.setCityTax(0);
+    sim.setCityTax(0, 0);
     sim.setTotalFunds(1000);
 
     budget.collectTax();
@@ -154,7 +154,7 @@ TEST_CASE("BudgetAllocation: collectTax can be called multiple times", "[budget]
     sim.init(4, 4);
     budget.init(&sim);
     sim.setTotalFunds(1000);
-    sim.setCityTax(10);
+    sim.setCityTax(0, 10);
 
     // First call
     budget.collectTax();

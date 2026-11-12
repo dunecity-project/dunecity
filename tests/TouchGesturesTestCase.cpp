@@ -118,6 +118,7 @@ TEST_CASE("A one-finger drag presses at its start and releases where it ends", "
 
 TEST_CASE("Two fingers moved together pan by their midpoint and never click", "[touch]") {
     TouchGestures g;
+    g.setMapArea({0, 40, 480, 440}, {});
     std::vector<Seen> seen;
     add(seen, g.fingerDown(1, 100, 100, 0));
     add(seen, g.fingerDown(2, 200, 100, 60));
@@ -139,6 +140,7 @@ TEST_CASE("Two fingers moved together pan by their midpoint and never click", "[
 
 TEST_CASE("Spreading two fingers zooms in one step per 1.2x, pinching zooms out", "[touch]") {
     TouchGestures g;
+    g.setMapArea({0, 40, 480, 440}, {});
     std::vector<Seen> seen;
     add(seen, g.fingerDown(1, 300, 200, 0));
     add(seen, g.fingerDown(2, 340, 200, 20));      // 40 px apart
@@ -150,6 +152,148 @@ TEST_CASE("Spreading two fingers zooms in one step per 1.2x, pinching zooms out"
     add(seen, g.fingerMotion(2, 330, 200, 100));   // 30: pinched to 0.5x
     CHECK(only(seen, Kind::ZoomOut).size() == 1);
     CHECK_FALSE(any(seen, {Kind::LeftDown, Kind::RightClick}));
+}
+
+TEST_CASE("A pan can spread and pinch at the current midpoint without clicking", "[touch]") {
+    for (const int firstLifted : {1, 2}) {
+        TouchGestures g;
+        g.setMapArea({0, 40, 480, 440}, {});
+        std::vector<Seen> seen;
+        add(seen, g.fingerDown(1, 200, 200, 0));
+        add(seen, g.fingerDown(2, 400, 200, 20));
+        add(seen, g.fingerMotion(1, 216, 208, 40));
+        add(seen, g.fingerMotion(2, 416, 208, 50));
+        add(seen, g.fingerMotion(2, 464, 208, 70)); // 248 px spread after the pan
+        add(seen, g.fingerMotion(2, 404, 208, 90)); // 188 px: pinch relative to the last zoom
+
+        CHECK(only(seen, Kind::Pan) == std::vector<Seen>{
+            {Kind::Pan, 316, 208, 16, 8},
+            {Kind::Pan, 340, 208, 24, 0},
+            {Kind::Pan, 310, 208, -30, 0}});
+        CHECK(only(seen, Kind::ZoomIn) == std::vector<Seen>{{Kind::ZoomIn, 340, 208, 0, 0}});
+        CHECK(only(seen, Kind::ZoomOut) == std::vector<Seen>{{Kind::ZoomOut, 310, 208, 0, 0}});
+        CHECK_FALSE(any(seen, {Kind::LeftDown, Kind::LeftUp, Kind::RightClick}));
+
+        seen.clear();
+        const int remaining = firstLifted == 1 ? 2 : 1;
+        add(seen, g.fingerUp(firstLifted, firstLifted == 1 ? 216 : 404, 208, 110));
+        add(seen, g.fingerMotion(remaining, 260, 240, 130));
+        add(seen, g.fingerUp(remaining, 260, 240, 150));
+        CHECK(seen.empty()); // either lift order ends the gesture, with no one-finger selection
+
+        add(seen, g.fingerDown(3, 100, 200, 1000));
+        add(seen, g.fingerDown(4, 300, 200, 1020));
+        add(seen, g.fingerMotion(3, 116, 200, 1040));
+        add(seen, g.fingerMotion(4, 316, 200, 1060));
+        add(seen, g.fingerUp(3, 116, 200, 1080));
+        add(seen, g.fingerUp(4, 316, 200, 1100));
+        CHECK(only(seen, Kind::Pan) == std::vector<Seen>{{Kind::Pan, 216, 200, 16, 0}});
+        CHECK_FALSE(any(seen, {Kind::LeftDown, Kind::LeftUp, Kind::RightClick, Kind::ZoomIn, Kind::ZoomOut}));
+    }
+}
+
+TEST_CASE("Sidebar list taps and drags remain mouse actions with a map area configured", "[touch]") {
+    TouchGestures g;
+    g.setMapArea({0, 40, 480, 440}, {300, 46, 170, 44});
+    std::vector<Seen> seen;
+    add(seen, g.fingerDown(1, 540, 200, 0));
+    add(seen, g.fingerUp(1, 540, 200, 80));
+    CHECK(seen == std::vector<Seen>{
+        {Kind::Motion, 540, 200, 0, 0},
+        {Kind::LeftDown, 540, 200, 0, 0},
+        {Kind::LeftUp, 540, 200, 0, 0}});
+
+    seen.clear();
+    add(seen, g.fingerDown(2, 540, 200, 200));
+    add(seen, g.fingerMotion(2, 540, 230, 240));
+    add(seen, g.fingerMotion(2, 540, 260, 280));
+    add(seen, g.fingerUp(2, 540, 260, 320));
+    CHECK(seen == std::vector<Seen>{
+        {Kind::Motion, 540, 200, 0, 0},
+        {Kind::LeftDown, 540, 200, 0, 0},
+        {Kind::Motion, 540, 230, 0, 0},
+        {Kind::Motion, 540, 260, 0, 0},
+        {Kind::Motion, 540, 260, 0, 0},
+        {Kind::LeftUp, 540, 260, 0, 0}});
+    CHECK(g.edgeScroll() == std::array<int, 2>{0, 0});
+}
+
+TEST_CASE("Both touch origins must be on the map rather than a list or map control", "[touch]") {
+    for (const auto starts : {std::array<int, 4>{100, 200, 540, 200}, {540, 200, 100, 200},
+                              {520, 200, 560, 200}, {350, 60, 200, 200},
+                              {200, 200, 350, 60}, {200, 20, 300, 20}}) {
+        TouchGestures g;
+        g.setMapArea({0, 40, 480, 440}, {300, 46, 170, 44});
+        std::vector<Seen> seen;
+        add(seen, g.fingerDown(1, starts[0], starts[1], 0));
+        add(seen, g.fingerDown(2, starts[2], starts[3], 20));
+        add(seen, g.fingerMotion(1, 220, 240, 40));
+        add(seen, g.fingerMotion(2, 440, 240, 60)); // entering the map cannot admit the gesture
+        add(seen, g.fingerUp(1, 220, 240, 80));
+        add(seen, g.fingerUp(2, 440, 240, 100));
+        CHECK_FALSE(any(seen, {Kind::Pan, Kind::ZoomIn, Kind::ZoomOut,
+                              Kind::LeftDown, Kind::LeftUp, Kind::RightClick}));
+
+        seen.clear();
+        add(seen, g.fingerDown(3, starts[0], starts[1], 1000));
+        add(seen, g.fingerDown(4, starts[2], starts[3], 1020));
+        add(seen, g.fingerUp(3, starts[0], starts[1], 1080));
+        add(seen, g.fingerUp(4, starts[2], starts[3], 1100));
+        CHECK(only(seen, Kind::RightClick) == std::vector<Seen>{
+            {Kind::RightClick, (starts[0] + starts[2]) / 2, (starts[1] + starts[3]) / 2, 0, 0}});
+        CHECK_FALSE(any(seen, {Kind::Pan, Kind::ZoomIn, Kind::ZoomOut, Kind::LeftDown, Kind::LeftUp}));
+    }
+}
+
+TEST_CASE("Moving the first touch into the map before the second arrives does not admit it", "[touch]") {
+    TouchGestures g;
+    g.setMapArea({0, 40, 480, 440}, {});
+    std::vector<Seen> seen;
+    add(seen, g.fingerDown(1, 484, 200, 0));
+    add(seen, g.fingerMotion(1, 476, 200, 10)); // still within the one-finger tap slop
+    add(seen, g.fingerDown(2, 400, 200, 20));
+    add(seen, g.fingerMotion(2, 320, 240, 40));
+    add(seen, g.fingerUp(1, 476, 200, 60));
+    add(seen, g.fingerUp(2, 320, 240, 80));
+    CHECK_FALSE(any(seen, {Kind::Pan, Kind::ZoomIn, Kind::ZoomOut,
+                          Kind::LeftDown, Kind::LeftUp, Kind::RightClick}));
+}
+
+TEST_CASE("Without an active map two-finger movement never emits map gestures or clicks", "[touch]") {
+    TouchGestures g; // menu/list translation supplies no map area
+    std::vector<Seen> seen;
+    add(seen, g.fingerDown(1, 100, 200, 0));
+    add(seen, g.fingerDown(2, 200, 200, 20));
+    add(seen, g.fingerMotion(2, 260, 240, 40));
+    add(seen, g.fingerUp(1, 100, 200, 60));
+    add(seen, g.fingerUp(2, 260, 240, 80));
+    CHECK_FALSE(any(seen, {Kind::Pan, Kind::ZoomIn, Kind::ZoomOut,
+                          Kind::LeftDown, Kind::LeftUp, Kind::RightClick}));
+}
+
+TEST_CASE("Disabling the map cancels admission until both fingers lift", "[touch]") {
+    for (const bool secondAlreadyDown : {false, true}) {
+        TouchGestures g;
+        g.setMapArea({0, 40, 480, 440}, {});
+        std::vector<Seen> seen;
+        add(seen, g.fingerDown(1, 100, 200, 0));
+        if(secondAlreadyDown) add(seen, g.fingerDown(2, 200, 200, 20));
+        g.setMapArea({}, {}); // a modal opens before or during the two-finger gesture
+        if(!secondAlreadyDown) add(seen, g.fingerDown(2, 200, 200, 20));
+        add(seen, g.fingerMotion(2, 260, 200, 40));
+        g.setMapArea({0, 40, 480, 440}, {});
+        add(seen, g.fingerMotion(2, 320, 200, 60));
+        add(seen, g.fingerUp(1, 100, 200, 80));
+        add(seen, g.fingerUp(2, 320, 200, 100));
+        CHECK_FALSE(any(seen, {Kind::Pan, Kind::ZoomIn, Kind::ZoomOut,
+                              Kind::LeftDown, Kind::LeftUp, Kind::RightClick}));
+
+        seen.clear();
+        add(seen, g.fingerDown(3, 100, 200, 1000));
+        add(seen, g.fingerDown(4, 200, 200, 1020));
+        add(seen, g.fingerMotion(4, 230, 200, 1040));
+        CHECK(only(seen, Kind::ZoomIn) == std::vector<Seen>{{Kind::ZoomIn, 165, 200, 0, 0}});
+    }
 }
 
 TEST_CASE("A quick two-finger tap right-clicks between the fingers", "[touch]") {
@@ -189,6 +333,7 @@ TEST_CASE("Holding one finger and tapping a second right-clicks under the first"
 
 TEST_CASE("After a gesture the next single tap clicks again", "[touch]") {
     TouchGestures g;
+    g.setMapArea({0, 40, 480, 440}, {});
     g.fingerDown(1, 100, 100, 0);
     g.fingerDown(2, 200, 100, 30);
     g.fingerMotion(2, 260, 100, 60);

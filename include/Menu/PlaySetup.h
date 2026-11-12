@@ -42,9 +42,12 @@ void rememberPlayMode(PlayModeScope scope, bool online);
 // restarts. Mods activated automatically (a save, a join, a campaign) do not change it.
 void rememberCustomGameMod(const std::string& modName);
 SettingsClass::GameOptionsClass initialCustomGameRules();
-// A random-map start opens the multiplayer generator for the active mod, then skips
-// the map browser. Cancelling the generator leaves without opening a connection.
-void playCustomGame(bool online, bool publicGame = true, bool randomMap = false);
+// A generated-map start skips the map browser. Civilization Wars uses its fixed three-lane
+// generator and CivWars mod; randomMap otherwise uses Random Skirmish for the active mod.
+// Cancelling either generator leaves without opening a connection.
+// initialRules carries a generator's selected rules into its online setup without changing defaults.
+void playCustomGame(bool online, bool publicGame = true, bool randomMap = false, bool civilizationWars = false,
+                    const SettingsClass::GameOptionsClass* initialRules = nullptr);
 void showGameLibrary(bool replays = false);
 bool hasRecentGame();
 void continueRecentGame();

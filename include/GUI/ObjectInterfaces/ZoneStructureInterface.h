@@ -122,15 +122,15 @@ protected:
         if (currentGameMap != nullptr && currentGameMap->tileExists(loc.x, loc.y)) {
             density = currentGameMap->getTile(loc.x, loc.y)->getCityZoneDensity();
         }
-        if (pZone->getZoneType() == DuneCity::ZoneType::Residential && pZone->getResidentialPopulation() <= 8)
-            densityLabel.setText(" Houses: " + std::to_string(pZone->getResidentialPopulation()) + "/8");
+        if (pZone->getZoneType() == DuneCity::ZoneType::Residential
+            && pZone->getResidentialPopulation() > 0 && pZone->getResidentialPopulation() <= 8)
+            densityLabel.setText(" L0: " + _("Houses") + " " + std::to_string(pZone->getResidentialPopulation()) + "/8");
         else
             densityLabel.setText(" " + _("Density") + ": " + std::to_string(density) + "/" + std::to_string(DuneCity::getStructureMaxLevel(pZone->getItemID())));
 
-        // Per-tile city power grid is still stubbed, so fall back to the
-        // owning house's overall power state — same fallback the old hover
-        // tooltip used.
-        const bool powered = pZone->getOwner()->hasPower();
+        // Use exactly the growth/animation power predicate, including a vacant
+        // lot with no generation (0 produced / 0 required).
+        const bool powered = pZone->hasCityPower();
         poweredLabel.setText(std::string(" ") + (powered ? _("Powered") : _("UNPOWERED")));
 
         cityStats_.update(pZone);

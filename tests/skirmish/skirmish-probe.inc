@@ -1,6 +1,9 @@
 // Included only by run-skirmish-probe.py, never by the shipped game. Drives the real Random
 // Skirmish screen and the real CustomGame start/load path with an isolated profile.
 #include <Menu/RandomSkirmishMenu.h>
+#include <Menu/CivWarsMenu.h>
+#include <units/Carryall.h>
+#include "../units/civ-wars-worm-respawn.inc"
 #include <Menu/CustomGameMenu.h>
 #include <Menu/PlaySetup.h>
 #include <Menu/CustomGamePlayers.h>
@@ -22,8 +25,12 @@
 #include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
+#include <units/InfantryBase.h>
 #include <dunecity/CitySimulation.h>
+#include <GameInterface.h>
+#include <GUI/ObjectInterfaces/ResearchLabInterface.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/CityEffects.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/IMemoryStream.h>
@@ -38,6 +45,8 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+
+void startCivWarsProbeGame(const GameInitSettings& init);
 
 namespace {
 
@@ -167,6 +176,13 @@ void checkLoaded(Game& game, const Result& result, const Params& params) {
         for(const UnitBase* u : unitList) if(u->getOwner() == house && wantUnits.count(u->getItemID())) {
             ++haveUnits[u->getItemID()];
             if(u->getItemID() != Unit_MCV) armyValue += game.objectData.data[u->getItemID()][setup.house].price;
+            if(const auto* infantry = dynamic_cast<const InfantryBase*>(u)) {
+                const Coord at = infantry->getLocation();
+                skirmishRequire(currentGameMap->tileExists(at) && !currentGameMap->getTile(at)->isMountain(),
+                                "Generated infantry started on invalid or mountain terrain");
+                skirmishRequire(infantry->getTilePosition() >= 0 && infantry->getTilePosition() < NUM_INFANTRY_PER_TILE,
+                                "Generated infantry did not receive a valid tile slot");
+            }
         }
         for(const auto& [item, count] : wantStructures)
             skirmishRequire(haveStructures[item] == count, "House " + std::to_string(setup.house) + " has "
@@ -203,6 +219,33 @@ void checkLoaded(Game& game, const Result& result, const Params& params) {
                 setup.house, house->getTeamID(), static_cast<int>(setup.role), setup.playerClass.c_str(), structures,
                 armyValue, setup.armyBudget, house->getProducedPower(), house->getPowerRequirement());
     }
+}
+
+/// Research and slow changes must not calculate a step for never-moved infantry.
+void checkStationaryInfantrySpeedRefresh(Game& game) {
+    for(auto* unit : unitList) {
+        auto* infantry = dynamic_cast<InfantryBase*>(unit);
+        if(!infantry || infantry->getOwner() != pLocalHouse || infantry->moving
+           || infantry->oldTilePosition != INVALID_POS) continue;
+        const Coord at = infantry->getLocation();
+        skirmishRequire(infantry->getTilePosition() >= 0 && infantry->xSpeed == 0 && infantry->ySpeed == 0,
+                        "Stationary infantry fixture was not freshly deployed");
+        infantry->refreshRadarResearch();
+        infantry->applySlow();
+        skirmishRequire(infantry->getSlowTimer() > 0 && !infantry->moving
+                        && infantry->oldTilePosition == INVALID_POS && infantry->getLocation() == at
+                        && infantry->xSpeed == 0 && infantry->ySpeed == 0,
+                        "Research or slow refresh changed a stationary infantry step");
+        infantry->slowTimer = 1; // Exercise real expiry on the next game tick.
+        game.updateGameState();
+        skirmishRequire(infantry->getSlowTimer() == 0 && !infantry->moving
+                        && infantry->oldTilePosition == INVALID_POS && infantry->getLocation() == at
+                        && infantry->xSpeed == 0 && infantry->ySpeed == 0,
+                        "Slow expiry changed a stationary infantry step");
+        SDL_Log("SKIRMISH_PROBE: stationary infantry research/slow/expiry kept its valid spawn slot");
+        return;
+    }
+    skirmishRequire(false, "No never-moved infantry for the stationary speed fixture");
 }
 
 /// The Fighter partner of @a houseID plays a minute without queueing, upgrading or placing anything.
@@ -278,6 +321,7 @@ void runMatch(const std::string& name, bool smoke) {
 
     if(smoke) {
         SDL_Log("SKIRMISH_SMOKE_BEGIN: %s", result.name.c_str());
+        if(name == "allied-2v3") checkStationaryInfantrySpeedRefresh(*game);
         const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(60 * 1000);
         while(!game->finished && game->getGameCycleCount() < end) game->updateGameState();
         SDL_Log("SKIRMISH_SMOKE_END: cycle=%u finished=%d", game->getGameCycleCount(), game->finished ? 1 : 0);
@@ -414,8 +458,8 @@ void runMenu() {
             rulesWindow->rememberDefaults.setChecked(false);
             rulesWindow->onOK();
             menu.processChildWindowOpenCloses();
-            skirmishRequire(menu.rulesChosen && menu.matchRules().fogOfWar == !fog
-                            && menu.matchRules().startWithExploredMap == !explored,
+            skirmishRequire(menu.rulesChosen && menu.getMatchRules().fogOfWar == !fog
+                            && menu.getMatchRules().startWithExploredMap == !explored,
                             "The match does not take the rules chosen in the window");
             SDL_Log("SKIRMISH_PROBE: game rules window sets the match rules (fog %d -> %d, explored %d -> %d)",
                     int(fog), int(!fog), int(explored), int(!explored));
@@ -453,6 +497,13 @@ void runMenu() {
                         "City rows hidden for the DuneCity mod");
         probeSelect(menu.enemyCityBox, 2);
         probeSelect(menu.techBox, 7);
+        skirmishRequire(menu.researchLabBox.isVisible(), "Research Lab is hidden below tech 9");
+        menu.researchLabBox.setChecked(true);
+        probeSelect(menu.techBox, 9);
+        skirmishRequire(!menu.researchLabBox.isVisible(), "Research Lab is visible at tech 9");
+        probeSelect(menu.techBox, 7);
+        skirmishRequire(menu.researchLabBox.isVisible() && menu.readParams().researchLab,
+                        "Research Lab choice did not survive a hidden level-9 row");
         menu.seedBox.setText("123456789");
         menu.fixedSeedBox.setChecked(true);
         skirmishCapture(menu, "random-skirmish");
@@ -475,7 +526,8 @@ void runMenu() {
         RandomSkirmishMenu again;
         const Params p = again.readParams();
         skirmishRequire(p.mapSize == 96 && p.allies == 1 && p.enemies == 3 && p.mod == "dunecity" && p.mode == Mode::DuneCity
-                        && p.enemySide.city == 2 && p.techLevel == 7 && p.seed == 123456789u && p.fixedSeed,
+                        && p.enemySide.city == 2 && p.techLevel == 7 && p.seed == 123456789u && p.fixedSeed
+                        && p.researchLab,
                         "Last-used parameters were not restored");
         skirmishCapture(again, "random-skirmish-restored");
     }
@@ -641,8 +693,10 @@ void runMultiplayerLobby() {
         for(Widget* hidden : std::initializer_list<Widget*>{&menu.alliesBox, &menu.enemiesBox, &menu.enemiesAlliedBox, &menu.houseBox,
                                                             &menu.partnerBox, &menu.allyAIBox, &menu.enemyAIBox, &menu.modBox,
                                                             &menu.partnerAI.roleBox, &menu.spectateBox, &menu.spectateAIBox,
-                                                            &menu.rulesButton, &menu.saveButton, &menu.startButton})
+                                                            &menu.saveButton, &menu.startButton})
             skirmishRequire(hidden->getParent() == nullptr, "The multiplayer screen shows a single-player control");
+        skirmishRequire(menu.rulesButton.getParent() == &menu.windowWidget && menu.rulesButton.isVisible(),
+                        "The multiplayer map generator cannot open Game Rules");
         skirmishRequire(menu.symmetricBox.isChecked(), "Mirrored starts are not on by default for a hosted map");
         skirmishRequire(menu.startsBox.getEntryIntData(0) == kMinStarts
                         && menu.startsBox.getEntryIntData(menu.startsBox.getNumEntries() - 1) == maxStarts(menu.houseCount, menu.tornieFamily),
@@ -814,6 +868,12 @@ void runMultiplayerLobby() {
     skirmishRequire(digests[0] == digests[1], "Host and guest disagree about the game state");
 }
 
+#include "civ-wars-probe.inc"
+
+}
+
+void startCivWarsProbeGame(const GameInitSettings& init) {
+    runCivResearchGame(init);
 }
 
 int runSkirmishProbe() {
@@ -825,6 +885,9 @@ int runSkirmishProbe() {
     else if(kind == "legacy-map") runLegacyMap();
     else if(kind == "spectate") runSpectate();
     else if(kind == "render") runRender();
+    else if(kind == "civ-menu") runCivMenu();
+    else if(kind == "civ-research") runCivResearch();
+    else if(kind == "civ-1v1" || kind == "civ-2v2" || kind == "civ-3v3") runCivMatch(kind);
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);
     SDL_Log("SKIRMISH_PROBE_PASS: %s", kind.c_str());
     return MENU_QUIT_DEFAULT;

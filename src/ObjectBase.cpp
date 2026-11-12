@@ -60,6 +60,7 @@
 #include <structures/AdvancedWindTrap.h>
 #include <structures/Worfinery.h>
 #include <structures/TechCenter.h>
+#include <structures/ResearchLab.h>
 #include <structures/Scoutpost.h>
 #include <structures/LoveFactory.h>
 #include <structures/ChaosFactory.h>
@@ -299,10 +300,8 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
     // Immortality guard: Human-controlled houses are invulnerable in single-player modes when option is enabled
     // This applies when ANY human player controls the house (not just AI players)
     if(damage > 0) {
-        // Game::localHumanImmortalityApplies() carries the option, the game-type restriction
-        // and - new - the requirement that pLocalHouse really is played by a registered human.
-        // While observing, pLocalHouse is a view anchor onto an AI faction, and making that
-        // faction invulnerable would change the match being watched.
+        // The option protects only a real, registered local human's house, never a faction
+        // being watched by the detached, houseless observer.
         if(currentGame->localHumanImmortalityApplies() && getOwner() == pLocalHouse) {
             // Zero damage so human-controlled units/structures are invulnerable
             // Continue function execution so visibility/music/stats hooks still run
@@ -310,6 +309,12 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
         }
     }
     
+    // Resolve once for both diagnostics and the existing reward ledger. Projectile
+    // snapshots outlive their shooter; legacy shots explicitly forbid a live guess.
+    const auto credit = damagerOwner != nullptr && damage != 0
+        && !provenance.known() && provenance.allowsLiveLookup()
+        ? DeviationReward::liveProvenance(currentGame->getObjectManager().getObject(damagerID), damagerOwner)
+        : provenance;
     const FixPoint healthBefore = getHealth();
     if(damage >= 0) {
         FixPoint newHealth = getHealth();
@@ -321,6 +326,11 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                 AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "lethal_damage",
                     AITelemetry::Record().set("object", objectID).set("item", itemID)
                         .set("attacker", damagerID).set("attacker_house", damagerOwner ? damagerOwner->getHouseID() : -1)
+                        .set("attacker_item", credit.sourceItemID != NONE_ID ? Sint32(credit.sourceItemID) : -1)
+                        .set("attacker_source", credit.sourceObjectID)
+                        .set("attacker_firing_house", credit.beneficiaryHouse)
+                        .set("attacker_attribution", std::string(provenance.known() ? "snapshot"
+                            : credit.known() ? "direct" : "unknown"))
                         .set("damage", damage).set("x", location.x).set("y", location.y));
             setHealth(0);
 
@@ -337,12 +347,6 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
     }
 
     if (damagerOwner != nullptr && damage != 0) {
-        ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
-        // Attribution belongs to the moment the shot left the weapon. A shooter that died,
-        // reverted to its original house or was recaptured in the meantime no longer decides
-        // which learning bucket its shot pays.
-        const auto credit = provenance.known() || !provenance.allowsLiveLookup()
-            ? provenance : DeviationReward::liveProvenance(pDamager, damagerOwner);
         // The reward goes to the house that owned the shot when it was fired, which is not
         // always the house the engine damages on behalf of: an armed Devastator that reverts
         // mid-fuse explodes under its original owner but still pays its captor. Simulation
@@ -362,6 +366,18 @@ void ObjectBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                 hostile, isAUnit(),
                 lethalUnit ? House::killBonusPermilleForVictim(itemID, originalHouseID, price)
                            : CombatReward::kBaselineBonusPermille);
+            // Measurement only: no state, save or digest fields. Capture exact hit
+            // destinations, wasted lethal HP and first-contact-to-death in the harness.
+            if (hostile && healthBefore > 0 && AITelemetry::log().enabled())
+                AITelemetry::log().write(currentGame->getGameCycleCount(), beneficiary->getHouseID(), -1,
+                    "combat_target_hit", AITelemetry::Record()
+                        .set("attacker", damagerID).set("attacker_item", credit.sourceItemID)
+                        .set("target", objectID).set("target_item", itemID)
+                        .set("target_house", getOwner()->getHouseID()).set("target_unit", isAUnit())
+                        .set("target_value", price).set("damage", damage)
+                        .set("hp_before_milli", (healthBefore*1000).lround())
+                        .set("hp_after_milli", (getHealth()*1000).lround())
+                        .set("killed", getHealth() <= 0));
             // A borrowed unit's damage pays its controller's Deviator and nothing else: the
             // natural type must not be credited a second time for the same hit.
             beneficiary->addCombatReward(credit.rewardItemID, reward);
@@ -643,6 +659,9 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
 
     const auto* rocketHunt = managedRocketHunt(seeker);
     const auto* autonomousAircraft = managedAutonomousAircraft(seeker);
+    // A clear bit in the map's object-tile set means hasAnObject() is false on that tile:
+    // such tiles return below without reading the tile.
+    const Uint64* occupied = currentGameMap->objectTileBits();
     const int maxRadiusX = std::max(seekerLocation.x, currentGameMap->getSizeX() - 1 - seekerLocation.x);
     const int maxRadiusY = std::max(seekerLocation.y, currentGameMap->getSizeY() - 1 - seekerLocation.y);
     const int maxRadius = std::max(maxRadiusX, maxRadiusY);
@@ -656,6 +675,9 @@ const ObjectBase* findClosestTargetLegacy(const ObjectBase& seeker) {
             const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
             ++ObjectBase::targetSearchStats.cellsVisited;
             if(!currentGameMap->tileExists(checkCoord)) {
+                return;
+            }
+            if(occupied && !Map::tileBit(occupied, currentGameMap->tileIndex(checkCoord.x, checkCoord.y))) {
                 return;
             }
 
@@ -710,6 +732,9 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
     }
 
     const auto* autonomousAircraft = managedAutonomousAircraft(seeker);
+    // As in findClosestTargetLegacy(): tiles the object-tile set marks empty hold no object
+    // and would return at the hasAnObject() test (or earlier), so they return first.
+    const Uint64* occupied = currentGameMap->objectTileBits();
     ObjectBase* closestTarget = nullptr;
     auto closestDistance = FixPt_MAX;
 
@@ -718,6 +743,9 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
             const Coord checkCoord(seekerLocation.x + dx, seekerLocation.y + dy);
             ++ObjectBase::targetSearchStats.cellsVisited;
             if(!currentGameMap->tileExists(checkCoord)) {
+                return;
+            }
+            if(occupied && !Map::tileBit(occupied, currentGameMap->tileIndex(checkCoord.x, checkCoord.y))) {
                 return;
             }
 
@@ -1061,6 +1089,7 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario, 
         case Structure_AdvancedWindTrapMK3: newObject = new AdvancedWindTrap(Owner, Structure_AdvancedWindTrapMK3); break;
         case Structure_Worfinery:           newObject = new Worfinery(Owner); break;
         case Structure_TechCenter:          newObject = new TechCenter(Owner); break;
+        case Structure_ResearchLab:         newObject = new ResearchLab(Owner); break;
         case Structure_Scoutpost:           newObject = new Scoutpost(Owner); break;
         case Structure_Flamepost:           newObject = new Scoutpost(Owner, Structure_Flamepost); break;
         case Structure_Chemipost:           newObject = new Scoutpost(Owner, Structure_Chemipost); break;
@@ -1212,6 +1241,7 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
         case Structure_AdvancedWindTrapMK3: newObject = new AdvancedWindTrap(stream, Structure_AdvancedWindTrapMK3); break;
         case Structure_Worfinery:           newObject = new Worfinery(stream); break;
         case Structure_TechCenter:          newObject = new TechCenter(stream); break;
+        case Structure_ResearchLab:         newObject = new ResearchLab(stream); break;
         case Structure_Scoutpost:           newObject = new Scoutpost(stream); break;
         case Structure_Flamepost:           newObject = new Scoutpost(stream, Structure_Flamepost); break;
         case Structure_Chemipost:           newObject = new Scoutpost(stream, Structure_Chemipost); break;

@@ -63,11 +63,12 @@ const QuantBot::PlayStyle& QuantBot::style() const {
 }
 
 UnitMixPolicy::Slots QuantBot::fieldableMixSlots(int tech) const {
-    // ObjectData and the game's tech level do not change during a game: computed once.
-    if (tech < 0 && fieldableSlotsCached) return fieldableSlots;
-    const bool gameTech = tech < 0;
+    const bool houseTech = tech < 0;
+    if (houseTech) {
+        tech = getHouse()->getTechLevel();
+        if (fieldableSlotsCached && fieldableSlotsTech == tech) return fieldableSlots;
+    }
     const int houseID = getHouse()->getHouseID();
-    if (tech < 0) tech = currentGame->techLevel;
     const auto& data = currentGame->objectData.data;
     // A structure can be obtained at `tech` when it is enabled, priced, built somewhere obtainable
     // and its own prerequisites can be obtained too; the Construction Yard is where a game starts.
@@ -94,24 +95,34 @@ UnitMixPolicy::Slots QuantBot::fieldableMixSlots(int tech) const {
     };
     UnitMixPolicy::Slots slots{};
     for (size_t i = 0; i < slots.size(); ++i) slots[i] = buildable(kMixItems[i]);
-    if (gameTech) { fieldableSlots = slots; fieldableSlotsCached = true; }
+    if (houseTech) {
+        fieldableSlots = slots;
+        fieldableSlotsTech = tech;
+        fieldableSlotsCached = true;
+    }
     return slots;
 }
 
 int QuantBot::techBand() const {
     const auto slots = fieldableMixSlots();
-    int band = currentGame->techLevel;
+    int band = getHouse()->getTechLevel();
     while (band > 1 && fieldableMixSlots(band - 1) == slots) --band;
     return band;
 }
 
 void QuantBot::pickStrategy() {
-    if (strategyPicked || currentGame == nullptr || getHouse() == nullptr) return;
+    if (currentGame == nullptr || getHouse() == nullptr) return;
+    if (strategyPicked) {
+        // Research unlocks new slots without rerolling the saved mix or tempo.
+        if (currentGame->getGameInitSettings().getGameOptions().researchLab
+            && strategyTechLevel != getHouse()->getTechLevel()) resolveStrategyProfile();
+        return;
+    }
     const int houseID = getHouse()->getHouseID();
     auto buildable = [&](Uint32 item) {
         const auto& spec = currentGame->objectData.data[item][houseID];
         return spec.enabled && spec.price > 0 && spec.builder != ItemID_Invalid
-            && spec.techLevel <= currentGame->techLevel;
+            && spec.techLevel <= getHouse()->getTechLevel();
     };
     const UnitMixPolicy::Slots slots = fieldableMixSlots();
     const bool infantry = buildable(Unit_Soldier) || buildable(Unit_Infantry)
@@ -148,6 +159,7 @@ void QuantBot::pickStrategy() {
 }
 
 void QuantBot::resolveStrategyProfile() {
+    strategyTechLevel = getHouse()->getTechLevel();
     strategyProfile = QuantBotStrategy::profile(strategy.mix);
     strategyStart = UnitMixPolicy::expandGroups(strategyProfile.prior, fieldableMixSlots());
     if (strategy.mix != QuantBotStrategy::Mix::Tuned && strategy.mix != QuantBotStrategy::Mix::Bounded) return;
@@ -175,7 +187,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
     const auto configured = UnitMixPolicy::expandGroups(group, slots);
     // Without the bounds (test style): the 1.0.847 opening over this pass's producible slots.
     if (!style().startBounds) {
-        const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, available);
+        const auto opening = UnitMixPolicy::openingMix(getHouse()->getTechLevel(), configured, available);
         UnitMixPolicy::Weights prior{};
         for (size_t i = 0; i < prior.size(); ++i) prior[i] = opening[i];
         if (const auto* mix = strategyMix())
@@ -186,7 +198,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
     // tech level; plus anything producible now) and bounded there: every such slot 2%-50%
     // (docs/ai-play-styles.md, section 8). A pass then plays it over the slots producible at that
     // pass, renormalised - the factories not yet standing do not re-shape it.
-    const auto opening = UnitMixPolicy::openingMix(currentGame->techLevel, configured, slots);
+    const auto opening = UnitMixPolicy::openingMix(getHouse()->getTechLevel(), configured, slots);
     UnitMixPolicy::Weights prior{};
     for (size_t i = 0; i < prior.size(); ++i) prior[i] = opening[i];
     // A mix strategy replaces this prior with its own starting ratios (or, Counter, with the counter
@@ -208,8 +220,56 @@ const QuantBotStrategy::TempoProfile* QuantBot::strategyTempo() const {
     return &tempo;
 }
 
+int QuantBot::duelOpeningPlan() const {
+    const int plan = botConfig().force.duelOpeningPlan;
+    if (!plan || !autonomousCustomArmy()
+        || getGameCycleCount() >= Uint32(MILLI2CYCLES(8 * 60000))) return 0;
+    const auto& settings = currentGame->getGameInitSettings();
+    if (settings.getModName() != "vanilla" && settings.getModName() != "dunecity") return 0;
+    // The fresh duel screen rejected this opening in Vanilla; only the city
+    // production gap justified confirmation. Other plans remain experiment arms.
+    if (plan == 2 && settings.getModName() != "dunecity") return 0;
+    if (settings.getInitialSpiceTilePermille() <= 0) return 0;
+    size_t controllers = 0;
+    bool enemy = false;
+    for (const auto& house : settings.getHouseInfoList()) {
+        controllers += house.playerInfoList.size();
+        if (!house.playerInfoList.empty() && house.team != getHouse()->getTeamID()) enemy = true;
+    }
+    return controllers == 2 && enemy ? plan : 0;
+}
+
+int QuantBot::duelReachableSpiceShare(const StructureBase* yard) const {
+    // Geographic ground reachability, ignoring temporary units/buildings.
+    // Both occupied controllers share the reachable pool conservatively.
+    const int width = currentGameMap->getSizeX(), height = currentGameMap->getSizeY();
+    const Coord start = yard->getLocation();
+    std::vector<unsigned char> seen(width * height, 0);
+    std::vector<int> queue;
+    queue.reserve(width * height);
+    const int first = start.y * width + start.x;
+    seen[first] = 1;
+    queue.push_back(first);
+    int64_t spice = 0;
+    for (size_t head = 0; head < queue.size(); ++head) {
+        const int x = queue[head] % width, y = queue[head] / width;
+        const auto* tile = currentGameMap->getTile(x, y);
+        if (tile->hasSpice()) spice += tile->getSpice().lround();
+        for (const Coord d : {Coord(-1, 0), Coord(1, 0), Coord(0, -1), Coord(0, 1)}) {
+            const int nx = x + d.x, ny = y + d.y;
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            const int next = ny * width + nx;
+            if (seen[next] || currentGameMap->getTile(nx, ny)->isMountain()) continue;
+            seen[next] = 1;
+            queue.push_back(next);
+        }
+    }
+    return int(std::min<int64_t>(spice / 2, std::numeric_limits<int>::max()));
+}
+
 bool QuantBot::lightFirstOpening() const {
     if (style().active()) return style().lightFirst;
+    if (duelOpeningPlan() == 2) return true;
     const auto* tempo = strategyTempo();
     return tempo && tempo->lightFirst;
 }
@@ -265,6 +325,24 @@ UnitMixPolicy::Mix QuantBot::styledUnitMix(const UnitMixPolicy::Mix& mix, const 
     return result;
 }
 
+bool QuantBot::duelOpeningRaider(const UnitBase* unit) const {
+    if (duelOpeningPlan() != 2 || getGameCycleCount() < Uint32(MILLI2CYCLES(4 * 60000))) return false;
+    const auto eligible = [&](const UnitBase* candidate) {
+        return candidate && candidate->getOwner() == getHouse() && candidate->getHealth() > 0
+            && candidate->isActive() && candidate->isRespondable() && candidate->isAGroundUnit()
+            && QuantBotBuildPolicy::isLightRaider(candidate->getItemID())
+            && unitRole(candidate, {UnitRole::Human, UnitRole::Repair, UnitRole::BaseDefence,
+                                   UnitRole::LiveDefence, UnitRole::Escort}) == UnitRole::Free;
+    };
+    if (!eligible(unit)) return false;
+    // Derive membership from current deterministic state at every caller.
+    // The test-style set is runtime-only and must not decide a saved AI policy.
+    int earlier = 0;
+    for (const auto* candidate : getUnitList())
+        if (candidate->getObjectID() < unit->getObjectID() && eligible(candidate) && ++earlier >= 4) return false;
+    return true;
+}
+
 void QuantBot::updateStyleRaiders() {
     const int wanted = style().raidUnits;
     if (wanted <= 0) { styleRaiders.clear(); return; }
@@ -290,10 +368,11 @@ void QuantBot::updateStyleRaiders() {
 
 bool QuantBot::raidWithStyle(const UnitBase* raider) {
     const int myTeam = getHouse()->getTeamID();
+    const bool duelRaid = duelOpeningPlan() == 2;
     const ObjectBase* current = raider->getTarget();
     auto hostile = [&](const ObjectBase* object) {
         return object && object->getOwner() && object->getOwner()->getTeamID() != myTeam
-            && object->getHealth() > 0 && object->isActive() && object->isVisible(myTeam);
+            && object->getHealth() > 0 && object->isActive() && (duelRaid || object->isVisible(myTeam));
     };
     if (hostile(current) && (enemyHarvester(current) || current->getItemID() == Structure_Refinery)) return true;
     // Nearest visible enemy harvester; with none, the nearest enemy refinery.
@@ -312,6 +391,9 @@ bool QuantBot::raidWithStyle(const UnitBase* raider) {
             }
     if (!best) return false;
     doAttackObject(raider, best, true);
+    if (duelRaid) traceDecision("duel_opening_raid", AITelemetry::Record()
+        .set("unit", raider->getObjectID()).set("target", best->getObjectID())
+        .set("target_item", int(best->getItemID())).set("distance", bestTiles));
     ++forceStats.raidOrders;
     return true;
 }

@@ -17,7 +17,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
-#include <list>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,10 +54,10 @@ TileScalars readScalars(const Tile& tile) {
     s.deadData = tile.deadUnits.data();
     s.deadSize = tile.deadUnits.size();
     s.deadCapacity = tile.deadUnits.capacity();
-    s.airUnits = tile.assignedAirUnitList.size();
-    s.infantry = tile.assignedInfantryList.size();
-    s.undergroundUnits = tile.assignedUndergroundUnitList.size();
-    s.groundObjects = tile.assignedNonInfantryGroundObjectList.size();
+    s.airUnits = std::distance(tile.assignedAirUnitList.begin(), tile.assignedAirUnitList.end());
+    s.infantry = std::distance(tile.assignedInfantryList.begin(), tile.assignedInfantryList.end());
+    s.undergroundUnits = std::distance(tile.assignedUndergroundUnitList.begin(), tile.assignedUndergroundUnitList.end());
+    s.groundObjects = std::distance(tile.assignedNonInfantryGroundObjectList.begin(), tile.assignedNonInfantryGroundObjectList.end());
     s.type = tile.type;
     s.destroyed = tile.destroyedStructureTile;
     for(int i = 0; i < NUM_ANGLES; ++i) s.tracks[i] = tile.tracksCreationTime[i];
@@ -94,7 +94,7 @@ std::string serialize(const Tile& tile) {
 struct TileContents {
     std::vector<std::string> damage;
     std::vector<std::string> dead;
-    std::list<Uint32>        groundObjects;
+    std::vector<Uint32>      groundObjects;
 };
 
 TileContents readContents(const Tile& tile) {
@@ -108,7 +108,7 @@ TileContents readContents(const Tile& tile) {
                          + std::to_string(d.onSand) + "/" + std::to_string(d.timer) + "/"
                          + std::to_string(d.realPos.x) + "," + std::to_string(d.realPos.y));
     }
-    c.groundObjects = tile.assignedNonInfantryGroundObjectList;
+    c.groundObjects.assign(tile.assignedNonInfantryGroundObjectList.begin(), tile.assignedNonInfantryGroundObjectList.end());
     return c;
 }
 

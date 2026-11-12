@@ -1,3 +1,1831 @@
+## 2026-11-07 - Combined 1.0.865 candidate: Linux startup and civic transparency
+
+Unpublished integration branch `release/1.0.865-civic-linux-20261107` preserves
+both sibling commits: Linux candidate `677e075d` and transparency `c932a5f1`.
+Neither is assumed to include the other. All three desktop version files agree
+on 1.0.865 via the official check. Android candidate metadata is 0.2.34 /
+1000554; public Android remains 0.2.33 until its separate acceptance gate.
+
+PRED Windows validation of the actual combined tree: 120,944 assertions in ten
+native C++ cases passed via CTest, including real SDL dummy-driver recovery
+and target-texture rendering. Nine video-runtime checker unit tests and seven
+Android payload tests pass. Freshly compiled terrain-policy SDL rendering
+passes 120 cases (40 shipped frames, eight houses, three zooms). These are not
+physical Linux Mint/NVIDIA, Mac performance, Android phone or iOS tests.
+Fresh combined-branch CI is required; the green #121 run tested only c932a5f1.
+
+Android signing update supersedes the earlier missing-key report: PRED's
+existing standard debug keystore public certificate exactly matches upgrade
+SHA-256 a29825bfecef94665244e1963e3c7dc64eadb387ae52820a793d26e193c21b60.
+No key was exported, replaced or uploaded. Phone install/test and Stefan's
+explicit publication gate remain required. The Mac mini builder is offline,
+claw.local does not resolve from PRED, and the online Pro lacks the builder
+label. Do not reroute signing/labels. iOS remains Stefan's own build/signing
+handoff. No stable tag, website deployment or platform publication is claimed.
+
+## 2026-11-07 - Civic transparency: retain terrain under Police/Nuclear/Stadium/Airport
+
+Source-only fix based on freshly fetched upstream `897249cf`, preserving older
+checkout edits. `Tile::blitGround` culled terrain beneath standalone civic
+structures when the global Dune2R fade was zero, although the independently
+selected DuneCity house skins contain alpha. Transparent corners therefore
+revealed the black render clear. PNG alpha and final texture blending were
+correct; changing atlas copy blending would not fix the missing underlay.
+
+`StructureTerrainPolicy.h` retains the existing transparent Tornie exemptions
+and adds Police Station, Nuclear Plant, Stadium and Airport. Hospital/church
+remain zone overlays, already covered by the zone exception. Opaque vanilla
+buildings keep their culling fast path. No sprites, footprints, simulation,
+protocol, saves or version metadata changed.
+
+Windows/MSVC focused CTest: 120,911 assertions in six CitySpritePolicy cases
+passed. A separate native SDL software-render probe called the compiled
+upstream and fixed policies on 40 shipped civic frames, all eight houses and
+three zooms (120 cases): baseline black reproduced; fixed transparent and
+partial-alpha pixels reveal the backing color, opaque detail stays exact.
+Audited 56 shipped building frames across all six sprite types; authored alpha
+was retained. This is not a full game/platform acceptance run. OMP's read-only
+review agreed with the terrain-culling cause; its default Codex model was
+unavailable and OMP selected its configured fallback. No auth changes.
+
+Not released here. Integrator must follow the every-channel checklist and
+choose/bump the release version. On this date GitHub reports latest v1.0.864;
+designated `dunecity-mac-mini` builder is offline (online Pro lacks its builder
+label). Android's current runbook records the missing upgrade keystore and
+requires Stefan's phone test and explicit publication gate. Do not replace the
+key or repurpose runner labels. Stefan must build/sign iOS from the accepted
+source using his own tools. No releases or website deployment claimed.
+
+## 2026-11-07 — Private feature-only MBA development install (headless-first validation)
+
+- Source `940c301a84b55d0a4b92c13ff93626e3208bd159` preserves current gameplay,
+  campaign, city, Research Lab, fixed Research Pace, Mountain Scenery and shared
+  Technology Installments features. Installments remain **default OFF**; captured
+  payments, old-save migration and the corrected legacy upgrade completion tick
+  are unchanged. The load/next-mission path retains outgoing-world teardown.
+- AI policy/defaults are the previously installed
+  `3710464dd6c75a969d0246860636b358ee9afcf7`, **not pristine historical QuantBot**.
+  The only production AI adapter selects an active live lab and books research's
+  actual upfront payment (zero for installment studies, full quote when prepaid).
+  Later composition/supplier/capacity, compact-power, continuous-research, SWMS,
+  first-factory and first-rocket experiments and offline trial hooks are absent.
+  Existing `3710464d` policies, including its default-OFF SimpleTechSavings, remain.
+  Experimental fixture files/results/history are preserved, but obsolete compiled
+  callers/registrations are detached. No AI recovery plan or comparison games ran.
+- Deterministic policy separation uses **protocol114**; **save9884/MOD19** and
+  **1.0.864dev** remain unchanged. This is a private ad-hoc-signed development app,
+  not an official release; no push, publication or trial overlay was installed.
+- Reviewed source built once through the coordinator in shared `build-int`
+  (native Release, release identity OFF; 97.18 s). Focused committed CTest job
+  `20261107T105333-feature-only-mba-940c301a-f51856` passed **9/9** in 10m34s:
+  Air five tests, mini four. Coverage includes ordinary unit/protocol tests,
+  skirmish/CivWars generators, research/installment payments and inactive-lab
+  accounting, menu navigation and save round trips. These are feature/path tests,
+  not new AI baseline/outcome qualification. Pro/Windows PC did not run these
+  checks; other release platforms/channels were not packaged or published.
+- Installed on `Stefans-MacBook-Air.local` at `/Applications/dunecity.app`:
+  executable SHA256
+  `52a4710af04b867ec2436d8e400e2cc08652e641ba0d08c3aa99e96db7691295`.
+  Strict deep codesign and actual bundled SDL2/SDL3 hidden-window runtime checks
+  passed on the MBA. Portable packaging used the existing CMake install route.
+  MBA Documents/FileProvider attached FinderInfo to extracted bundles; the owned
+  candidate was copied outside FileProvider and metadata-cleared before final
+  signature verification. Clean archives use `ditto --noextattr --norsrc --noacl`.
+- Original app rollback: `/Applications/dunecity-before-feature-only-20261107.app`;
+  independent app/profile copies:
+  `~/Documents/DuneCity App Backups/feature-only-20261107/{dunecity.app,profile}`.
+  The original profile's **59,294 files**, including **58 save/mpsave/replay
+  files**, are byte-identical before/after installation; nothing was added or removed.
+- Actual installed-app native capture:
+  `evidence/06-feature-research-installment-rules.png` under the evidence root
+  below shows Research Lab ON, Technology Installments OFF, Normal Research Pace
+  and Mountain Scenery ON, rendered by Metal at 1600x1200. Aqua-session launching
+  resolved the earlier SSH foreground-registration problem; input was guarded by
+  the owned foreground PID. This capture predates the user's UI-testing override.
+- **Manual in-game load/next-mission flow was not completed**: the user stopped
+  interactive MBA testing before any load was attempted. Headless
+  `save_roundtrip_probe` passed, but is not relabelled as a manual transition pass.
+  All owned GUI processes and temporary launch agents were stopped/removed.
+  Standing policy is now **MBA headless only**; graphical checks belong on other
+  computers, and most testing remains headless. No normal-profile app was launched.
+- Frozen app, clean ZIP and evidence:
+  `../outputs/install-feature-only-mba-20261107/`. Receipts under `evidence/` record
+  the exact source policy, signature/runtime results, rollback, complete bundle
+  manifest, focused test summary and unchanged-profile hashes.
+
+## 2026-11-06 — Shared technology installments and continuous AI research (OMP ResearchLabAI, unreleased)
+
+- New hashed **Technology Installments** match rule, **default OFF** for new games
+  (Main, 2026-11-06, after the measured scenario regression below): when ON,
+  humans and AI start research or any BuilderBase upgrade with any balance.
+  Research captures its mode/price/duration and pays exact cumulative 32.32 dues;
+  insufficient cash preserves partial payment and pauses the countdown, without
+  cancelling or accumulating catch-up debt. Upgrades use their existing saved
+  paid progress and the same pause/resume semantics. They pay the legacy rounded
+  price/600 share per tick, and only the last payment is clamped to the exact
+  remainder. A funded upgrade therefore completes on the same tick with the
+  rule ON or OFF, without legacy's sub-credit final overpayment.
+- **Save9884/MOD19, protocol113**: one game-rule bool and 17 captured-research
+  bytes per house, included in state digests. Frozen9882/MOD17 and9883/MOD18
+  setups load installments OFF. Already-paid research countdowns are never
+  recharged or repriced. No extra BuilderBase or QuantBot saved fields. With the
+  rule ON, the object digest also mixes each builder's upgrading flag, level and
+  exact paid progress, so sub-credit paused upgrades are visible to lockstep checks.
+- Independent hashed `[Force Concentration] ContinuousResearch` is **default
+  OFF**, pending Genome promotion. With **Technology Installments ON**, it starts
+  the next study through tech9 without full-quote reserves, income/fleet/crime
+  readiness or army pacing; current attacks on economic assets and blackouts
+  may defer a start. With the rule OFF, it retains the complete legacy research
+  planner. Shared human engine legality/payment remains authoritative;
+  ResearchLabProgression remains the separate lab-acquisition policy.
+- Private `notbuilding.dls`, SHA256 `277f2e52…9797c49`, initial cycle30088:
+  all active controllers are QuantBot Brutal, Both; Ordos has two. All four
+  houses own a legal tech1 lab at tech2 with power/income. Credits are
+  Ordos260/Mercenary519/Neutral2221/Rebels498; forecast net income is
+  918/1327/1016/1153 credits per minute. Ordos already has prepaid tech3 with
+  8196cycles left. Others face full-price/capital-reserve gates; Neutral is
+  specifically79 short of tech3's2000 plus its300 operating reserve.
+- Corrected-source `b8a627aa` four-arm private continuation (15 game minutes):
+  with both controls ON, Mercenary/Neutral/Rebels begin tech3 after
+  0.128/0.208/1.072 seconds; Mercenary/Rebels reach tech5 and are studying tech6
+  at the cutoff. Rule OFF/policy OFF reaches tech4/tech3 respectively.
+  Ordos's prepaid tech3 completes after exactly8196 timer updates in every arm;
+  Ordos/Neutral later lose their labs in combat, not to a research veto.
+- Rule-only scenario comparison at `33014bf1` (same four mandatory smoke games,
+  overlay the only difference): OFF reproduces every expected result (CY
+  Brutal-v-Easy won at 31.66 min, FFA 90866 reaches the 60-minute exhaustion).
+  ON fails both: Brutal needs 59.76 min (Easy army 5,550 vs 2,000 at minute 20)
+  and FFA 90866 ends in a 28.28-minute Brutal win. Measured cause: the decision
+  logs match until cycle 8025. QuantBot never starts an upgrade below full price.
+  The old ON payer rounded its share upward, so both opening CY upgrades
+  finished in 600 ticks instead of legacy's 601. Each second upgrade then
+  started 100 cycles earlier (8025/8079 instead of 8125/8179), and the chaotic
+  trajectories diverged. Easy's minute-16 army was smaller with ON (3,150) than
+  with OFF (3,700). In OFF, Brutal won the minute 17-20 fight (7,090 killed for
+  1,520 lost). In ON, the minute 19-24 fights took place under Easy's 14-15
+  rocket turrets (OFF: 9-10 at minutes 19-21). The ON payer now keeps
+  legacy timing (above). Paired check at `c490a1d0`, with the same seeds and
+  the overlay as the only difference. In all 171 games the arms diverge by
+  minute 4. Legacy overpays part of its last share, so at the first differing
+  sample the ON houses hold more displayed credits in 169 of 171 games.
+  - Full cy and skirmish tiers (80 games): 66 have the same outcome. QB scores
+    -0.22 [-0.46, -0.01] (10 worse, 4 better). Every other controller is not
+    significant. Time-outs rise from 8 to 12.
+  - aaa plus the QB short-map ladder (91 games): 86 have the same outcome. QB
+    scores +0.01 [-0.08, +0.08].
+  - Pooled QB (83 seeds): -0.07 [-0.17, +0.02], so it is not shown worse.
+  - The ON smoke still fails 2 of 4 games: 27392 times out, and 90866 ends in
+    a QM win at 56.80 min. Default stays OFF; whether to flip it is Main's call.
+  ContinuousResearch=1 with the rule OFF now reproduces ContinuousResearch=0
+  exactly on the private save (identical lab/tech transitions and finals).
+- Real-save bytes stay under private `outputs/` and frozen queue transport.
+  The old encoded crime save is removed; committed crime/continuous coverage
+  uses synthetic real-engine worlds. Private continuation tooling records
+  loaded controller types, actual rule/price/payment state, minute snapshots
+  and exact lab/tech/pause transitions; opt-in never edits the original save.
+- Research and upgrade panels show paid progress/drain/paused state; real
+  640×480 captures and ordinary human-button commands are required by the
+  engine fixture. Evidence root: `../outputs/research-installments-20261106/`.
+- Physical fixtures observe the complete capital-selection lifecycle and seat
+  the registered human whose sidebar they exercise. Civ Wars covers both payment
+  rules at640×480 and1280×720 through its normal rules/start callbacks and actual
+  SDL Lab/research-button commands; legacy affordability checks remain intact.
+
+## 2026-11-06 — Deterministic native input probes and bounded fatal-error exit (OMP MouseControls, unreleased)
+
+- Investigated `20261106T010547-ledger-retirement-371-69f817`: Pro failed
+  before input with SDL “video driver did not add any displays”; mini logged
+  “Native trackpad spread failed to zoom one step”. Both then reached the
+  fatal exception path, which synchronously displayed a native message box.
+  The runner's old 1800 s wait exceeded CTest's 600 s deadline. No archived
+  stack showed a camera-loop deadlock. Pro display/session availability is a
+  separate host issue, not bypassed or retried by the fix.
+- The private native-event injector installed a second consuming AppKit monitor
+  and assumed registration order. In 20 isolated hidden/non-activating native
+  processes, A-before-B registration dispatched A→B **13** times and B→A **7**.
+  When its sink ran first it swallowed pinch before the shipped router. That
+  sink never existed in real games. Evidence:
+  `../outputs/mouse-controls-hang-20261106/monitor-order-trials.json`.
+- Removed the competing test monitor. Pinch and a dedicated phased pan still
+  traverse the real NSApp monitor; explicit physical/UI passthrough uses the
+  exact native router and actual SDL view responder. Added flushed native
+  dispatch begin/end diagnostics; no private Quartz fields or fake SDL fallback.
+  Camera math and normal game gesture behavior are unchanged.
+- Explicit `--non-interactive` selects log-only native error presentation
+  before startup. Balance probes pass it; ordinary human game launches retain
+  their fatal dialogs. Failures keep their actual logs and nonzero status.
+- Controls children now have a maximum **120 s** wait inside CTest's 600 s
+  deadline. Timeout preserves `run-timeout.log`, attempts a bounded native
+  stack capture (`run-sample.txt`), then kills/reaps only the private child
+  process group. New `native_probe_process_lifecycle` exercises forced SDL
+  startup failure, failure propagation, deadline, sampling and cleanup.
+- Fixed source `3d42030090f699dd965567bb7dad392cca2fdb32`: all five authorized
+  translation-unit syntax checks passed (main, crash handler, native router,
+  native injector and full private probe). Receipts:
+  `../outputs/mouse-controls-hang-20261106/syntax-checks.json`.
+- Source-pinned, clean first-attempt mini repetitions all passed:
+
+  | Queue job | Mouse controls | Fatal/process lifecycle |
+  | --- | ---: | ---: |
+  | `20261106T025222-mouse-fixed-2941131c4b48-1-mini-3ee6dc` | 24.52 s | 4.32 s |
+  | `20261106T025818-mouse-fixed-2941131c4b48-2-mini-5f795c` | 8.65 s | 2.86 s |
+  | `20261106T025838-mouse-fixed-2941131c4b48-3-mini-4480d5` | 8.36 s | 2.84 s |
+  | `20261106T025859-mouse-fixed-2941131c4b48-4-mini-cda3f6` | 8.87 s | 2.87 s |
+  | `20261106T025919-mouse-fixed-2941131c4b48-5-mini-0b702b` | 8.57 s | 2.87 s |
+
+- Separate Pro job `20261106T025222-mouse-fixed-2941131c4b48-1-pro-78d2c7`
+  again had no SDL displays, before input. It now failed non-interactively with
+  status 1 in **41.22 s including compilation**, not a 600 s dialog timeout.
+  The coordinator's existing automatic mini retry passed **8.52 s**; this is
+  not a Pro camera pass. Pro lifecycle regression passed **6.07 s**, including
+  the real forced-SDL-startup failure. Pro camera repetitions require a usable
+  GUI/display session; that host prerequisite is separate from the fixed code.
+- Main-authorized temporary SQLite affinity was restricted to this owner's
+  immutable source and exact original ten job tags, with other hosts excluded.
+  Both installed triggers were dropped. Complete actual attempt histories,
+  scoped SQL and queue receipts are retained under
+  `../outputs/mouse-controls-hang-20261106/repetitions/` and
+  `../outputs/mouse-controls-hang-20261106/repetitions-mini-reachable/`.
+- Viewed the fixed-source native-renderer before/after PNGs in that evidence
+  directory (`mouse-zoom-before.png`, `mouse-zoom-after.png`): the latter shows
+  **Zoom 200%**, enlarged terrain and unchanged sidebar geometry.
+
+## 2026-11-05 — Native Mac trackpad pan/pinch and consistent mobile gestures (OMP MouseControls, unreleased)
+
+- Mac two-finger scrolling now pans without a mouse button; native spread/pinch
+  zooms around the cursor. The Cocoa event monitor distinguishes phased or
+  momentum scrolling from unphased physical wheels before SDL discards that
+  metadata. Precision alone is not a device identifier: unphased high-resolution
+  wheels and ordinary notched wheels retain zoom; middle-button grab is unchanged.
+- Native magnification accumulates multiplicatively (`scale *= 1 + delta`),
+  emitting the existing 1.2× zoom steps. Consumed native gestures do not also
+  become SDL wheel events. Sidebar/list/menu scrolling passes through unchanged.
+- Game and editor reuse the existing local `TouchInput::MapGesture` queue.
+  Editor now consumes two-finger pan/zoom on iPhone/iPad too. Mobile map gestures
+  require both touch origins inside the active map, excluding controls; UI/modal
+  origins cannot pan/zoom the map. One-finger UI and two-finger taps are retained.
+- Measured **synthetic**, hidden/non-key, non-activating mini native→SDL trace:
+  SDL2-compat2.32.72/SDL3 3.4.16 collapses phased/unphased native scroll to the
+  same SDL2 wheel fields; native magnification is not delivered as SDL2 pinch.
+  Evidence: `../outputs/mac-trackpad-native-trace-20261105/`. No attach/input/
+  tracing of Stefan's running Air game; the integrator explicitly redirected
+  measurement to an isolated mini instance.
+- Pre-commit syntax checks passed for changed native/C++ TUs, touch tests and
+  the full private C++ balance-probe fixture. Cocoa test injection is compiled
+  separately to avoid AppKit's global Point/FileInfo type collisions.
+- Feature `0c0fd805`: pinned cluster job
+  `20261105T232215-mac-trackpad-native-0efeaf` **4/4 PASS** on mini:
+  native Cocoa `mouse_controls_probe` **27.21 s**, command regressions
+  **15.43 s**, menu navigation **563.19 s**, and unit tests (including touch
+  admission/gesture coverage). Native runtime logs contain `MAC_TRACKPAD_PASS`;
+  injected spread/pinch, multiplicative/split increments, ended/cancelled reset,
+  phased pan without zoom, physical wheels, list scrolling and no commands pass.
+- Follow-up `28439a61` consumes phased scroll/pinch over map-overlay controls
+  instead of leaking an SDL wheel into the ordinary zoom fallback. Pinned
+  `20261105T233821-mac-trackpad-overlay-a45f70` **PASS**, including explicit
+  no-SDL-wheel/no-camera-change overlay assertions and all existing mouse gates.
+- iOS Simulator arm64 build/install/launch **PASS**, **528 build steps,
+  337.68 s**. Rendered iPhone main-menu screenshot viewed:
+  `../outputs/mouse-controls-ios-25318627/iphone-launch.png`.
+  AXe failed to create its remote automation session, so neither single-touch
+  automation nor actual iOS two-finger interaction is claimed; no physical
+  device interaction. Windows/Linux runtime was not exercised in this check;
+  the native bridge is a no-op there, with no Cocoa dependency.
+- Viewed native-renderer 640×480 before/after zoom PNGs under the trace evidence
+  directory (`native-game-zoom-before.png`, `native-game-zoom-after.png`);
+  terrain scales around the pointer while the sidebar remains unchanged.
+- No simulation, protocol, save, hashed rule or persistent preference changes.
+
+## 2026-11-06 — QuantBot savings experiment rejected; installed format restored (OMP TechSaving, unreleased)
+
+- **No gameplay adoption:** `SimpleTechSavings` remains hashed and OFF. Final
+  authorized economy-first/owned-composition iteration `8a89f35d` also failed;
+  no further policy iteration was made. The installed AI does not receive this
+  rejected behavior merely because experimental code is present.
+- Ledger retirement `3710464d` removes its code/config/hash/styles/tests and
+  33-byte QuantBot tail. Save **9883**, protocol **112**; ordinary 9882/9883 layout
+  restored, no new Simple saved state/wire bump. Interim unshipped 9884 is not
+  supported. Private saves are not committed.
+- Candidate uses existing-owned + accepted queues, not military-cap shares;
+  no cheap fallback with a legal advanced supplier. No threat-sized unit hold.
+  Actual economy/civic/worker/power/first-port choices precede ordinary zero-
+  upfront tech installments; upgrades retain human full-credit admission.
+  Human leases, saboteur orders and unitRole authority are unchanged.
+- Final **288 native games / 960 house histories / four seeds**, all M/H/B and
+  three mods, T/F fixed ON. All six H/B cells' dispatch/kill intervals adverse.
+
+| Balanced H/B equal-game metric | OFF | ON | Paired 95% change |
+| --- | ---: | ---: | --- |
+| Native credited wins/house | .2118 | 0 | -.2118 [-.2517,-.1684] |
+| Native decided matches | .4583 | 0 | -.4583 [-.5417,-.3750] |
+| Dispatches | 3.5816 | .9896 | -2.5920 [-2.9801,-2.2083] |
+| Kill value | 43,309 | 11,252 | -32,057 [-36,113,-28,121] |
+| Actual live unit price | 308.39 | 271.93 | -36.46 [-53.69,-18.54] |
+| Economy-stall / bankrupt-empty detectors | .3151 / .3498 | .1632 / .1936 | both pooled intervals favorable |
+| Missing-Starport detector | .2335 | .1849 | -.0486 [-.0816,-.0174] |
+| Gross spice / tax | 85,295 / 6,972 | 75,998 / 5,115 | both intervals adverse |
+
+- Price coverage205/320 paired nonempty armies; outcomes/income/stall/bankrupt
+  320/320. Missing-SP304/320 eligible pairs is ever-latched sampled absence
+  after20m while alive+yard in both arms, not final absence. Own
+  elimination .2969→.0642, alive-final .7031→.9358, right-censored observed
+  survival36.690→39.483m. Symmetric global-OFF/ON selfplay measures match
+  health/passivity, not direct relative winning skill; no decided ON matches
+  is not a strength win.
+- City HF/IX/SP completed counts: research-OFF101/55/168→122/27/165 per192;
+  research-ON24/23/36→20/6/37 per48. Conditional paired-achiever HF/IX/SP times
+  15.886/24.853/21.829→26.921/29.442/22.620m (research-OFF;89/16/145 pairs).
+  Censoring remains explicit. T9 cohorts do not measure research acquisition.
+- City research-OFF accepted P/E/M quotes1.014/4.092/3.493M→.798/3.477/2.622M;
+  cheap quotes.831M→1.143M. Physical paid9.221M→7.400M; gross spice5.712M→
+  5.387M and tax3.790M→3.037M. Quote classes are not income allocations or
+  physical-payment buckets. Main ON cheap path is existing composition,
+  1,018,900 credits/5,870 orders; all47,707 cheap contexts are retained.
+- Verification is source-qualified: `8a89f35d` full156/165 (all other156 PASS,
+  nine Simple failures). Fixture-only `88fbd772`6/9 PASS, all Vanilla/Dune2R;
+  City3/3 fail initially because physical power headroom89 is below reserve396.
+  `048a5fae` fixes that initial-power premise without policy/payment changes,
+  but its City selection **0/3**, both Mini and Pro. Remaining five-minute HF
+  upgrade is unpaid/incomplete despite later cash1214/1354 covering quote300:
+  emerging dangerous crime disables tech admission. Initial stability does not
+  persist; no bypass or further iteration, no all-green claim. Earlier
+  quote/income/refinery failures are not retroactively green. Retirement
+  selection158/159 had a Mouse timeout; Main's full159/165 is a separate run.
+- Approved real full-Game 9882/9883 compatibility at `8a89f35d` **2/2 PASS**:
+  load600cycles→9883resave/reload→continuation/native-worm checks. Input/app/
+  probe SHA receipts and local private archive: `private-compatibility-8a89f35d/`.
+  Air's later mtime SSH query timed out, so a newer save remains unmeasured.
+- Evidence root `../outputs/tech-saving-20261105/`: final tables and original-
+  stream certification in `confirmation-analysis-8a89f35d/`; historical baseline
+  and T/F ablations are source-separated (Trooper supplier missing-SP15/109→
+  31/111; classic Funded7seed0W/4L/3T→7W). Ledger and earlier Simple cohorts
+  also failed; no approach passed. No deployment performed by this task.
+
+
+## 2026-11-05 — QuantBot WOR and troopers (OMP QuantTroopers, unreleased)
+
+- **TrooperSupport stays ON at Stefan's explicit direction knowing it is
+  unproven**, confirmed by Main. Do not describe this as an all-green acceptance
+  or silently turn it OFF based on the earlier provisional comment.
+- DuneCity-content Custom games only; ordinary Vanilla/Classic/Dune2R/campaign
+  recruitment is unchanged. One legal WOR follows actual Heavy Factory/core
+  production, positive income and real power including queued consumers. A
+  population-locked Starport does not veto it; first legal profitable-SP saving
+  is protected under the switch. Six standing troops, armour demand up to9 and
+  reactive aircraft floor up to18 use existing army/defence/unitRole systems.
+  Infantry strategy retains its quota; free crew and pending squads count.
+- Runtime846c1336 includes the actual-power/generic-service-bypass correction
+  for the installed10cc315a WOR blackout, protected first-WOR and floor-order
+  capital allocation before optional Palace/repeat growth, funded infantry
+  headroom, and the existing human-lease guard in retreat. Saboteur orders are
+  never changed. No new saved state, save/protocol bump or victory rule.
+- Final same-source OFF/ON audit:160 games/240 house pairs, no errors or
+  fingerprint exclusions, PC pairs retained. **Adoption84.4% funded low/medium
+  spice (81/96),51.25% overall legal non-At houses (82/160), none-spice1/64.**
+  Paid troops0→1431; exact Trooper Orni kills67→93; own Orni losses732→618;
+  enemy Orni kills638→544. The all-legal clear-majority target is not established.
+- **Open issue for the next build: missing Starports15/109→31/111 in the
+  matrix.** Hard8→15, Brutal7→16; Brutal conditional game-rate CI[+.025,+.192],
+  sign0 better/5 worse,p2=.0625. Exposure changes leave the guardrail unmeasured,
+  not passed. Keep this visible despite the explicit ON decision.
+- Pinned846 named gates: **17/18 PASS**, receipt
+  `20261105T054156-quant-supplier-final-gates-0f3d65`. Paid WOR+6 troops as all five
+  recruitable houses plus a genuine Harkonnen Trooper lethal hit on an attacking
+  Orni passes (Pro186.8s); config hash/roundtrip, both AAA gates, strategy,
+  recovery, performance, city/police/civic/growth/air/no-spice probes pass.
+  Scenario11/11 passes, including QB-v-QE31.66m and replay. Performance Pro229.7s.
+- **Unchanged mandatory FFA fails its30m elimination condition on mini+Pro**:
+  seed9101 none,9103 Sardaukar30.303m,9105 Ordos30.633m. Deployment is healthy:
+  19 waves, four by8m, largest70; reserve-inside stretches≤1 minute. Exact FFA
+  OFF/ON9105: Ordos dies21.218m OFF versus30.633m ON; at20m its army/structures
+  are0/53 OFF versus14200/320 ON, final kill value41200→102900. ON orders a WOR
+  and21 Trooper orders, OFF neither. Main decides the FFA test; it was not loosened.
+- d2d41b0f's replenishment-core veto caused canonical timeouts; SP saving alone
+  did not fix them.846c1336 removes that veto/helper per Main, retaining SP
+  saving. No additional priority rule was stacked.
+- Strategy calibration keeps all primary assertions, other mixes' original
+  three-seed means and the strict positive/300s gate. TrikeSwarm uses the full
+  predeclared12-seed mean(+379bps); frozen ablations attribute its old triple to
+  accepted launcher spacing, not troopers (Vanilla). Three isolated processes
+  and scheduler weight3 give a Pro pass237.0s at2899cf2a; current846 Mini68.9s.
+  Three subprocess lifecycle tests and16 audit-contract tests passed.
+- Full tables, house counts, causal logs and immutable receipts:
+  `docs/quantbot-dunecity-audit.md`; outputs
+  `quant-troopers-20261104/supplier-{matrix,ladder,factions}-{off,on}/` and
+  `population-ffa-{off,on}-cause/`. Main owns final full suite and Air reinstall;
+  Air was unreachable, so no post-fix Air/deployment verification is claimed.
+
+## 2026-11-05 — Staging suite triage (OMP SuiteTriage, unreleased)
+
+- Civ Wars' failure classifier mistook normal occupied-refinery rerouting for
+  an invalid placement (`364cafcd`); `72087318` distinguishes occupied position/tile
+  failures without weakening game/research assertions.
+- Police-budget and city-growth failures came from first-WOR precedence
+  (`ccf17d92`, TrooperSupport ON). QuantTroopers' `dcbbe185` restores actual first
+  rocket-cover priority; both unchanged probes pass at `f1be627a` in receipt
+  `20261105T002947-suite-endgame-gates-bc892e`, as does Civ Wars.
+- Custom armies exhausted of reachable spice, income and unit funding could wait
+  forever for six units/3,000 value, a repair yard or unaffordable repairs.
+  `f1be627a` adds hashed default-ON `ExhaustedArmyDispatch`; `8dd835ac` matches
+  `House::payCredits`' rounded-credit debit gate and avoids authority scans outside
+  exhaustion. Campaign/manual/defence/saboteur authority stays unchanged.
+- Natural FFA seed90866 still draws at120 minutes: `cf05f6b7`, receipt
+  `20261105T010832-suite-90866-natural-120-1acf45`, digest `32f5b20f27feaa01`.
+  Integrator decision: retain it as a strict measured-exhaustion regression, and
+  add generator-next seed91875 as the unchanged completion check. No forced
+  victory, resource injection, anti-air override or accepted-default rollback.
+- `quantbot_custom_attack` and all11 scenario-smoke cases pass at `87bc458c`,
+  receipt `20261105T011643-suite-exhaustion-cutover-gates-1de3bf`.
+  Performance passes at `8dd835ac`, receipt
+  `20261105T005216-suite-rounded-cash-gates-0a17ad` (other failures in that earlier
+  diagnostic batch were subsequently corrected).
+- Same-source exhausted-dispatch OFF/ON audit at `87bc458c`:
+  `20261105T011638-suite-exhausted-final-off-f09dec` /
+  `20261105T011643-suite-exhausted-final-on-dad5cf`. Seed90866 has182 identical
+  checkpoints through cycle135750 (36.2min), first divergence136500; ON ends
+  with no idle-ready troops or unfunded repair holds. Seed91875 has all148
+  checkpoints and its29.25min QH victory identical, digest `6f622794c50664f6`.
+- City repins are measured, not inferred: Medium `070bbafc6799818b`, Brutal
+  `2bc949df2bf759d8`, final source `87bc458c`. Both setups, bot configs and all126
+  checkpoint digests match macOS/Windows. Mac receipt
+  `20261105T011751-suite-final-city-parity-measure-1bc7b8`; Windows receipt
+  `20261105T012455-suite-city-windows-87bc-7f1bc9-28c7f1`. Old-pin failures remain
+  explicit. The Windows Brutal raw trace was recovered from its receipt-owned
+  run after its collector produced an empty archive.
+
+## 2026-11-04 — Fair contiguous rock for Random Skirmish starts (OMP TerrainMix, unreleased)
+
+- Bare-MCV starts previously guaranteed only their 8×8 core, not future base/city room.
+  The reported original Atreides island had 266 ordinary-rock tiles; Sardaukar had 255.
+  Mountain and distant continents are not counted as usable home building room.
+- Terrain v3 gives every start the same bounded berth/floor: goal 32×32 City / 24×24
+  Vanilla, scaled by map size, house count and ordinary-Rock budget. At 256/8P/Rock 20%,
+  City has floor 768 and a solid 28×28 reserve. Small kits prefer denser nearby natural
+  rock before filling missing room; existing large kits and mirrored slots stay put.
+- Seed 418379001 local min/median/max: 271/672.5/934 → 935/968/999.
+  Seed 836308809: 255/494.5/598 → 840/885.5/916. Atreides: 266 original → 935 final;
+  Sardaukar: 255 → 882. Both retain requested mountain quotas, including 20% in the
+  second. Its total ordinary rock falls 27,774 → 26,620 while home room improves.
+- Matched 576 maps / 2,688 starts: below-floor 1,192 → 0; maps below 75% fairness 146 → 0;
+  worst fairness 26.52 → 84.18%, median 95.22 → 100%. Mountain deficits beyond 3 tiles: 6 → 0.
+  All 384 maps ≥128 stay within 12 points + 3 rounding tiles of ordinary-rock/sand targets.
+  Existing core/rim precedence remains explicit on 34 tiny crowded maps only
+  (64/4P: 8; 64/8P: 18; 96/8P: 8), not a relaxed fairness/connectivity/mountain check.
+- Fixed duplicated mirrored cores/repeated mirrored lobe walks, excess editor-field
+  coast and protected-ground mountain shortfalls. A real seed 1 /128/4P mirrored upper-
+  cap off-by-group error was corrected without changing test tolerances.
+- TerrainOptionsHash/provenance is now version 3; new seed maps intentionally change.
+  Embedded saved terrain and separate CivWarsGenerator stay untouched; no extra
+  save/protocol fields. Current 160×160 80rock still has 1,280 mountains vs 6,544 original
+  (80.44% fewer), with working Sand/Rock/Mountain controls.
+- Green: 38 cases / 15,482,702 assertions, mini 51.8s, source 11b03883,
+  job 20261104T214643-start-rock-v3-repinned-cd7eb8. Complete native skirmish probe:
+  PASS 156.9s, generator 76cb1cb6, job 20261104T213114-start-rock-cap-corrected-e10b70.
+  Civ Wars units: PASS 3.6s at 35c3a7ca. All 30 terrain/INI pairs matched Mac mini/Pro and
+  Windows/MSVC at 76cb1cb6 before repin 11b03883; Windows measurement kept the old
+  golden failures explicit rather than claiming a passing suite.
+- Both before/after 256 previews, current 80rock and native 640 setup were viewed.
+  Full per-start/settings/terrain evidence: outputs/fair-start-rock-20261104/final76/;
+  Windows source/binary/command fence: outputs/terrain-v3-windows-76cb1cb6-20261104/.
+  Policy, before/after tables and exact receipts: docs/skirmish-generator.md.
+
+## 2026-11-04 — Launcher kite moves two more tiles (OMP LauncherKite, unreleased)
+
+- QuantBot spacing now has independent hashed/saved INI value
+  `[Force Concentration] LauncherKiteExtraDistance` (0..2, final default2/ON).
+  OFF preserves the previous policy; ON increases the Launcher/EliteLauncher
+  movement cap2→4 tiles and Hunt target gap enemy range+2→+4, never beyond
+  launcher firing range. Other units, close-band trigger, human/service ownership,
+  Hunt restoration and saboteur orders are unchanged. No save/protocol change.
+- Production commit `7495ec73`; content/fixture completion `9e106339`
+  (intermediate fixes `d4fa298d`, `58b5e4f8`). Real-engine OFF/ON measurements:
+  **6→8 tiles exactly**, Launcher on DuneCity/Tornie and EliteLauncher on its
+  legal Tornie content, both Hard/Brutal. Every ON case lands a rocket from gap8
+  (4–7 damage,18–91cycles after movement). A passive scout gives equal visibility;
+  actors are fully unregistered between arms. Existing authority/force checks pass.
+- Fixture job `20261104T220858-launcher-kite-clean-pair-d117fc`: **2/2 PASS**,
+  Pro98.0/97.5s. Production-source job `20261104T213128-launcher-kite-candidate-eab8f2`:
+  **all8mandatory gates PASS** (unit1,271PASS/3skip; AAA vanilla/Dune2R,
+  scenario,FFA,custom,recovery,perf). Mini ran7; Pro ranperf. The extra strategy
+  probe failed Infantry-versus-Learned production; QuantTroopers owns the separately
+  identified standing-troop-cap interaction. Do not count that extra failure green.
+- Two independent16-game/arm cohorts,32games/96house pairs total: stalls11/95→13/95,
+  bankrupt32/96→32/96, nonempty dispatches/house0.8333→0.8646, winning houses6→12.
+  Launcher kiting actually occurred27/32games each arm (1,563/1,343 events).
+  Mean kill value5,624.9→5,407.4; Hard4,601.0→4,751.9; **Brutal6,648.8→6,062.9**,
+  lower in both cohorts. Mean game18.40→17.74min partly confounds raw kills.
+  Main explicitly accepted ON on the pooled, not-consistently-worse outcomes:
+  doubled wins, unchanged bankruptcy and more dispatches; no statistical gain claim.
+- Per arm:17games mini,13PC,2Pro; Air correctly held by Stefan's own game.
+  Evidence `outputs/launcher-kite-20261104/` (`fixture-pairs.json`,
+  `pooled-acceptance.json`, paired raw CSVs/telemetry); details `docs/formations.md`.
+
+## 2026-11-04 — Restore funded classic Brutal production (OMP BrutalRegression, unreleased)
+
+- `worseaiallagainstatreides.dls` is a detached spectator of **Atreides QuantBot
+  Brutal versus four AI Player Hard**, Dune2R with city mode OFF, seed1702260251.
+  It is not the vanilla regression fixture or a human-versus-four-Brutal game.
+- Powered non-city production skipped the established funded spice policy:
+  shared queue reservations met legacy raw-cash floors, cap-only worker buying
+  and separate capacity rules. The save has99Harvesters,35110combat value versus
+  120710enemy, six idle Heavy Factories and another buying a Harvester.
+- Hashed/default-ON `FundedClassicProduction` reuses the existing funded spice
+  policy consistently for CustomBrutal non-campaign/non-city production and
+  worker/refinery/factory/MCV capacity. Real power rules and mix learning are
+  preserved; city/campaign/vanilla policies and human-order authority are not
+  changed. No saboteur-order, victory or save-migration changes.
+- Same frozen6aa02856 binary: OFF0W/4L/3T versus ON7W/0L/0T on seven seeds;
+  wins29.79–35.29min. Native864 is already0W/6L/1T. The rejected HF-only fix is
+  0W/7 both arms. No historical first-bad commit is claimed.
+- Matched original-save+60s restores one Launcher, suppresses the extra Harvester
+  order, retains6CY versus3 and finishes with27750combat value versus26000.
+  It does not prove an eventual save victory or greater total minute output.
+- Final-policy paired city audit16games/arm,48Hard/Brutal houses: matching inputs,
+  binary/source fingerprints and state digests; scores, armies, attacks, power,
+  detectors and storage losses all identical.
+- Adds mandatory `quantbot_all_against_atreides_dune2r`: seven fixed seeds,
+  including906213928/1702260251, all wins within40game-min, three concurrently,
+  600s wall timeout and no forced style. Worst measured35.29 leaves4.71min
+  margin. Original vanilla6×40 gate unchanged; real queue tests fence non-Brutal
+  difficulties. Shared CMake wiring also includes the consented harvester-safety
+  probes for vanilla/DuneCity/Dune2R.
+- Evidence: `outputs/worse-all-v-atreides-20261104/` games/samples/waves,
+  `funded-policy-save-{comparison,provenance}.json`,
+  `full-policy-city-comparison.txt`. Snapshot/runtime verification is recorded
+  in the shared candidate receipts; this entry does not assert an unrun suite.
+
+## 2026-11-04 — Unpowered zones can become empty lots (OMP ZeroPowerZones, unreleased)
+
+- Power-starved decline explicitly stopped at level 1, and its fixed score -500
+  could not pass the separate level-1 vacancy threshold -1500. This was a real
+  simulation floor, not allied power or the rocket-turret power rule.
+- Hashed/default-on **Unpowered Zones Vacate** removes one population step per
+  city day down to zero for R/C/I lots; non-zone buildings keep their L1 floor.
+  Residential apartments lose eight residents, then houses leave one per day.
+  No generator means no 0/0 bootstrap/regrowth. Restored power resumes normal
+  growth. Zone status and industrial animation share the growth power test.
+- Earlier saves keep the rule off. MOD18's existing scenery byte is now city-rule
+  bits (bit0 scenery, bit1 vacancy), preserving both frozen MOD17 and earlier
+  MOD18 blocks without consuming the next record. Save9883/protocol112 unchanged.
+  Pregame Game Rules has the checkbox; there is no runtime rules editor.
+- Added grid-edge unit coverage, MOD18/legacy codec and menu/INI checks, real-engine
+  `city_zone_power` and per-lot `--zone-power-continuation saved|off|on` diagnostics.
+  `--zone-power-save` writes an explicit opted-in copy without modifying its source.
+- Real save: SHA256 `6717d421…5d7c`, 9882/MOD17, cycle108288/day694.
+  Purple is **Rebels/house7/color7**: produced0/required749, 83 unpowered L1
+  lots (44R/23C/16I), aggregate lot population743. Other houses' live grids did
+  not power any of those lots. The original save is unchanged.
+- Same frozen source35c3a7ca/probe90025b0c continuation, five additional game
+  minutes =120 city days: OFF left all69 surviving lots at L1; ON took all83
+  original lots to L0 at the next scan (+134cycles/2.144s), and emptied the last
+  44 residential house stacks at day703 (+1382cycles/**22.112s**, nine scans).
+  All69 surviving lots remained empty after five minutes; later lot loss was
+  combat, not removal by the vacancy rule.
+- Opted-in copy: `../outputs/purple-zero-power-20261104/save/purple zero power - zones vacate.dls`
+  (SHA256 `965c73cf…31ed9`). Reloaded as9883 with saved_rule1 and no override,
+  then continued one minute successfully. Old installed9882 builds need the
+  patched build to read this copy; setting new-game defaults does not alter an old save.
+- `city_zone_power` passed9.27s[mini], including identical powered off/on
+  trajectories, restored-power regrowth, empty0/0 persistence, live sidebar and
+  rendered owner-specific red/green Power Grid overlay. Removed an obsolete
+  source-text assertion instead of re-pinning it; pinned3494d932 umbrella unit/
+  codec tests passed2.0s[mini].
+- Six twelve-minute no-spice 96×96 QuantBot games (Medium/Hard/Brutal, seed9101,
+  OFF/ON, mini+Pro+Windows PC): paired simulation digests, six house histories
+  and78 minute samples per arm are identical. Power-deficit flags0/6 each,
+  minimum sampled surplus116; all six houses added generation400→500 and grew
+  their cities. Two economy-stall and one empty-bankruptcy flags were unchanged
+  per arm, not newly introduced. Air was held by Stefan's running game.
+- Durable per-lot timing and receipts: `../outputs/purple-zero-power-20261104/`
+  (`save-measurement.json`, `verification.json`, before/after/reload logs and both
+  audit CSV sets). Native commits2cc8017b/13adb50d, textual-test removal3494d932.
+- Full-menu coverage exposed the added checkbox overflowing the family layout.
+  Commit5a5628fe removes family-only extra row gaps, keeping the430px crest-safe
+  frame. Focused regressiona8c854e2 uses a real640×480 renderer and draws/checks
+  both Game Rules layouts and off/reopen persistence. Pinned5a `city_zone_power`
+  passed84.9s[Pro]: DuneCity626×410/min544×369; Tornie626×430/min544×419.
+  Receipt `rules-ui-verification.json`, job20261104T220332-zone-power-minimum-ui-eaa583.
+
+## 2026-11-04 — QuantBot cashes in captured harvesters (OMP DeviatedHarvest, unreleased)
+
+- `[General Behavior] DeviatedHarvesterEarlyReturn` is a default-on, multiplayer-
+  hashed QuantBot switch. Enemy-origin captured harvesters work for their
+  temporary owner and return to its nearest refinery at half their own capacity,
+  or with any cargo and at most ten seconds of deviation remaining.
+- Reads the actual damage-shortenable timer in simulation cycles before the
+  safety manager's two-second cache. A read-only UnitBase accessor adds no saved
+  state or engine behaviour; no save/protocol bump. Rule OFF, ordinary workers
+  and a deviator without a refinery retain the previous policy.
+- Human-order leases and existing unitRole claims take priority. This is AI
+  policy, not an automatic return imposed on human-controlled harvesters.
+  The existing engine releases return bookings on reversion; a refinery already
+  unloading continues to earn its own physical delivery, then deploys the worker.
+- Deviator targeting already accepts enemy harvesters through the shared gas
+  eligibility policy. Ordinary target acquisition uses distance; harvesters are
+  not specially excluded or deprioritized. No targeting/valuation change added.
+- The harvester-safety engine fixture exercises an actual QuantBot Deviator
+  capture, half-load and T-10s returns/delivery, the OFF/ordinary/empty/no-refinery
+  cases, human/role ownership and reversion both on the road and inside a refinery.
+  HOWTOPLAY and the in-game help explain the AI-only behaviour.
+- Final fixture source `646335f564026ba577e4edf89455c817e224121a`,
+  cluster job `20261104T221812-ctest-ce3b5c`: **4/4 PASS** on mini.
+  `dunelegacy_tests`: 1,271 cases / 13,338,419 assertions passed, 3 skipped
+  (2.15 s); harvester-safety Vanilla/DuneCity/Dune2R: 27.61/24.80/27.60 s.
+  All three engine runs measured the same capture (82 cycles), 350-spice
+  half-load delivery (1,841 cycles = 29.456 s, 5,659 deviation cycles left),
+  10-spice deadline delivery (330 cycles = 5.280 s, 295 cycles left), and
+  mid-unload-expiry release (401 cycles = 6.416 s). T-10s is exactly 625 cycles.
+  A ten-second *return-order* lead cannot promise a distant/large load finishes
+  unloading; the expired-return/unload cases explicitly cover that boundary.
+- Fixture preconditions were corrected, not engine rules: `setGuardPoint` turns
+  STOP into GUARD on spice, so the real gas capture uses stationary bare sand
+  and ordinary seven-tile weapon range before introducing its harvest field.
+  Temporary address/mode diagnostics were removed.
+- Short same-source OFF/ON audit `35c3a7ca9c07a3e150c73dc6a96b263e6b410114`:
+  4 paired 128x128/Medium-spice FFA games, Hard/Brutal, seeds 9101/148680876,
+  20 minutes; 16 paired houses. All final digests, army/kill values and detector
+  counts matched. Both difficulties' mean score stayed -0.25; all games timed
+  out (4/4 each arm). No strategic improvement is claimed from this small,
+  invariant sample. Per-bot hashes OFF `225083b722df99e6`, ON `2f4aee9d962f608f`;
+  measured total game wall 217.683/201.309 s (mixed hosts/load, not a speed gate).
+  Evidence: `outputs/deviated-harvest-20261104/{off,on}`; queue jobs
+  `20261104T211707-deviated-harvest-{off-9fda3b,on-424712}`.
+- Mandatory AI/performance gates passed in the shared `35c3a7ca9c07` cohort
+  `20261104T211358-all-candidates-regressions-27d5b1`: All-against-Atreides
+  6/6 seeds within 40 minutes (136.81 s mini), scenario matrix smoke (60.25 s
+  mini), FFA army deployment (134.25 s mini), performance (216.34 s Pro).
+  This earlier union had unrelated failures and the then-unfixed capture fixture;
+  it is not described as an all-green union. The final four focused checks above
+  include the corrected fixture and now-green unit umbrella.
+
+## 2026-11-04 — Save a running match as a custom map (OMP SaveAsMap, unreleased)
+
+- Game menu **Save as Map** opens a named export dialog with **From the start**
+  and **From right now**. Custom/generated matches and spectators can use it;
+  campaign/co-op campaign missions cannot. Offline spectator menus no longer
+  dereference a missing network manager; host spectators have separate join and
+  request-to-play controls. Pause/menu/error dialogs stay between desert crests.
+- Start writes the exact embedded original INI, without renaming its BASIC data.
+  Current writes live terrain/spice types, concrete and independent roads, houses,
+  teams, complete credit balances, surviving structures/units, health in 1/256
+  steps, facing/attack modes, supported zone density and windtrap upgrades.
+  The Civ Wars marker is kept without replaying original startup armies/cities.
+- Exported maps go to SP/MP user maps by player count. Portable names, explicit
+  overwrite confirmation, staged binary writes and existing Workshop dependencies
+  are reused; the chosen filename supplies the browser label without changing
+  original map bytes. No simulation, protocol or savegame format change.
+- This is a new scenario, not a savegame: research, queues, paths/targets, cargo,
+  exact spice/zone populations, fog, statistics and reinforcements reset.
+  Contained/off-map units move to legal map tiles; aircraft keep valid overlaps.
+  Native worms stay native; native crime units are omitted. Normal fresh-map
+  road-ring and first-refinery harvester rules still apply. HOWTOPLAY and the
+  in-game help explain these format boundaries.
+- The menu fixture now drives both real generators, advances real game cycles,
+  saves both moments through the dialog, compares Start bytes, checks live world
+  mutations, loads all four files in the editor/Custom Game, starts each, and
+  exercises safe names, confirmed/cancelled overwrite, spectator/campaign policy
+  and 640x480 control/crest geometry. It emits SAVE_AS_MAP_OK, not an additional
+  MENU_PROBE_PASS line.
+- Windows/MSVC export construction explicitly passes a `std::string` comment;
+  `(false, "comment")` ambiguously competes with the `SDL_RWops*`/bool INI loader.
+- Final acceptance: pinned `5a5628fe`, job
+  `20261104T220921-map-export-full-menu-fit-c50c4b`: full menu **PASS 514.89s on mini**
+  at **640x480, 854x480 and 1280x720**. Each run has SAVE_AS_MAP_OK,
+  CAMPAIGN_MAPS_OK and exactly one MENU_PROBE_PASS. All four exported variants
+  load in the real editor/Custom Game and start playable matches. The Pro's
+  first attempt took **453.16s**, hitting the **420s per-process timeout** before
+  the successful mini retry; no assertion or timeout was relaxed.
+- Shared `dunelegacy_tests` **PASS (mini, 2s)** at `3494d932`, job
+  `20261104T212804-zone-power-unit-refresh-399b37`. The shared native Release build
+  passed at `54a62300` in 41.81s. Implementation is `54a62300`, corrections through
+  `1875b7c9`, with MSVC disambiguation `c6fb6cc9`.
+- Viewed 640x480 pause/start/current dialogs; PNGs, the four map files and retained
+  test evidence are under `../dunecity-results/save-as-map-20261104/`.
+
+## 2026-11-04 — Fixed research prices and level-minute timing (OMP ResearchPace, unreleased)
+
+- Stefan rejected map scaling after `researchtooexpensive.dls` (9882, Normal,
+  256×256, Research Lab on) calculated level4 at11,501credits/11:10.880.
+  The approved replacement is **1000×(target−1) credits and target game minutes**:
+  level4=3000/4min, level9=8000/9min, full Normal chain36000/44min.
+  Fast½ / Normal1(default) / Slow2 / Very slow4 multiply both, identically on all maps.
+- Removed the research-area member, options equality/hash contribution, map binding
+  and obsolete same-build reference-area harness. House, UI and QuantBot savings/
+  forecasts share the level/pace-only policy. No population gate, active-timer
+  repricing, credit refund or change to the Research Lab's own building price.
+- Shared **9883/MOD18/protocol112** with Mountain Scenery. Installed9882/MOD17
+  is frozen at pace4+area4+damage1; read/ignore area, no scenery byte. New writes
+  pace4+damage1+scenery1. Official tagv1.0.864 defines save9879, but real installed
+  9882 saves still require exact compatibility; no in-place MOD17 rewrite.
+- Already-paid positive timers remain valid even above a new quote, including after
+  9883 resave/reload. Their exact countdown is retained; displayed progress clamps
+  to0–100. Engine fixtures explicitly round-trip an over-quote timer, compare64/160
+  map quotes/hash, check Slow's exact4-minute boundary and assert new prices.
+- Civ Wars fixtures keep the original83.72credits/min research-allocation floor:
+  `ceil(430sec-in-cycles×quotedCost/600)+quotedDuration`, minimum8min.
+  Normal first-step window is13:56.672 on every map. Human price/time status now
+  expects1000/2:00; all-AI cases preserve separate research milestones, ≥10min
+  play, full turret/police/power tax checks and640/1280 screenshots.
+- Exact input SHA256 `ba02944a414a1bc3a00c19fbe1c73fd91f7ab7bd4043fbb3149cc4fe87e89443`;
+  original immutable CivWars revision `37d5ce34…066f38` matches the retained verified
+  `outputs/research-save-20261103/exact-profile` cache. No content/hash bypass.
+  The older map-scaling entry below is historical and superseded by this policy.
+
+## 2026-11-04 — Mouse wheel zoom and middle-button map grab (OMP MouseControls, unreleased)
+
+- Wheel over the game map now zooms in/out in every content family, anchored at
+  the pointer, using the existing ten zoom steps and limits. Sidebar/menu wheel
+  routing stays ahead of map zoom; fractional trackpad deltas accumulate with a
+  150 ms smooth-gesture zoom interval instead of racing through every level.
+- Middle mouse over the map grabs it: map pixels follow the pointer at current
+  zoom, bounded by map edges. Release, focus loss or opening a modal ends the
+  grab; the cursor is hidden while grabbed. No unit command is sent. Edge
+  scrolling pauses during a grab and otherwise retains its existing behaviour.
+- The shared viewport input also supports middle-drag in the editor. Editor
+  wheel zoom uses its three existing levels; unit rotation is Shift+wheel.
+- `mouse_controls_probe` injects real SDL events through Game::doInput, checks
+  zoom direction/limits/pointer anchor, trackpad accumulation, a real sidebar
+  build list, drag pixel displacement at all ten zooms, release/focus/map bounds,
+  unchanged selection and no commands; captures mouse-zoom-before/after.bmp.
+- Feature commit `fe954e6c`; final repeatable acceptance fixture `5fd117ad`.
+  Pinned cluster job `20261104T213024-mouse-controls-repeatable-1a05fa` passed on
+  **Mac mini, 33.18 s**, including `MOUSE_CONTROLS_PASS`, the existing order/
+  selection/WASD checks and confirmed/cancelled mission-skip assertions.
+- SDL2-compat 2.32.72 truncates synthetic SDL2 `SDL_PushEvent` wheel precision
+  and drops whole-tick fields. The probe injects complete native SDL3 wheel
+  events into the same queue on that runtime, preserving every real
+  `Game::doInput` precision/sidebar assertion; no production workaround.
+- Viewed the passing 640×480 before/after captures: terrain grows from 175% to
+  200% around the pointer, while the sidebar stays unchanged. Preserved PNGs:
+  `../outputs/mouse-zoom-before.png` and `../outputs/mouse-zoom-after.png`.
+  The passing run/log/screenshots are also retained in that job's
+  `cluster-evidence/.../probe-evidence.tar.gz`.
+- Local presentation only: no simulation, protocol, configuration or save change.
+
+## 2026-11-04 — Production plots cannot exclude their own prerequisite (OMP SardaukarExpand, unreleased)
+
+- `notcolonizingsadukar.dls` loads at cycle **145097**. Sardaukar is a Brutal
+  full-role bot with a standing Starport but no Light/Heavy Factory. Its two
+  future Heavy Factory/Repair Yard plots excluded the Light Factory both require,
+  and all demanded zoning sites. The survey still reported four free footprints,
+  so missing core production also kept the colonisation gate closed.
+- Hashed/default-on **CityProductionPrerequisites** reserves the first missing
+  prerequisite instead, sharing one plot when both future buildings need it.
+  Already standing/queued suppliers no longer reserve another speculative plot:
+  exact-digest Medium replays showed second-HF plots excluding every demanded
+  zone despite 124–196 free rock tiles and no need for another production line.
+  Existing placement safety, market and colony rules remain.
+- The continuations exposed a separate allocation loop: zoning, power and imports
+  repeatedly spent receipts before the first Heavy Factory's full quote accumulated.
+  Independent hashed **CityFirstFactorySaving**, experimental/default **off**, lets
+  **CityConstructionCapital** reserve below that quote only in a seeded Hard/Brutal
+  multi-yard tax city with a standing Starport, available technology and enough
+  forecast net income for the founded quote plus queued debt. Ordinary affordable
+  protection remains on; seed/power/defence, single-yard and weak-income gates remain.
+- Added real-engine negative-control coverage for legal-but-reserved light sites,
+  reopened zoning, all four difficulties and the subsequent affordable Heavy
+  Factory, plus config load/save/hash coverage. Save investigation logging can
+  distinguish physical legal origins from AI reservations without advancing a
+  planner (`BALANCE_BUILD_SITE_AUDIT=HOUSE` on a performance continuation).
+- Pre-split source `6aa02856` passed all eight mandatory AI/performance regressions.
+  Its 600-second save control stayed at 33 structures; geometry+saving reached 70,
+  ordered the Starport MCV at 50.304 s (deployed 183.504 s), and ordered/built the
+  Heavy Factory at 187.904/223.104 s. The combined 48-game matrix improved Hard/
+  Brutal stalls 6→2 and bankrupt queues 6→4, but dispatches fell 41→31. The 24-game
+  paired ladder lost kill value (322380→266600 in Hard/Brutal) and a stronger-side
+  win (8→7 of 12), so funding is not enabled by default. Evidence and exact case
+  identities: `../outputs/sardaukar-not-colonizing-20261104/combined-audit-evidence.json`.
+
+
+- **Accepted defaults:** integrator approved **CityProductionPrerequisites ON**
+  and **CityFirstFactorySaving OFF**, after the independent-seed pooled review
+  below. Implementation `8cb479f5`; no saboteur orders or human-order leases changed.
+- Original saved state: **1405 credits / 2005 capacity**, **9320 population**
+  (above the 5000 Starport rule), **600 produced / 491 required power**. The 33
+  structures were CY/Radar/Refinery/Starport ×1, Windtrap ×6, Rocket ×2, Police ×2,
+  and R/C/I ×11/4/4; no LF, HF or MCV. Physical overlapping legal origins were
+  **46 (2×2 LF)** and **17 (3×2 HF)**. Forecast tax/upkeep was **1351/176 per
+  game minute**. The Air log bounds the last placement message to **309.8–312.3
+  game seconds** before the save; its corresponding rocket turret is present.
+- Final frozen native `35c3a7ca` (`90025b0c…22c4e`) continued the exact save for
+  **37500 cycles / 600 game seconds**. OFF stayed at 33 structures. A-only
+  reached **33/35/36/48/70** structures at **0/60/180/300/600 s**: first zoning
+  at 10.304 s; LF ordered/built **23.104/47.104 s**; Starport MCV ordered
+  **50.304 s for 630**, deployed **186.704 s at (249,166)**; HF ordered/built
+  **187.904/224.704 s**. A+B had the same final world digest
+  `70d2ccf3b9a7cfdb`; below-quote saving is not needed for this final save result.
+- **Pooled A-only vs OFF:** 144 games, zero harness errors, source `35c3a7ca`;
+  matrix seeds 9101/148680876 and independent 24017/77377, plus both-seat ladders
+  at 9101 and 24017. All per-pair map/content/object/options hashes matched.
+  Counts below are hit/exposed where applicable; B remained OFF in both arms.
+
+| Metric | OFF | A-only |
+|---|---:|---:|
+| Matrix Hard/Brutal economy stalls | 3/96 | 8/96 |
+| Matrix Hard/Brutal bankrupt empty queues | 42/96 | 42/96 |
+| Matrix Hard/Brutal missing Starport | 29/92 | 23/94 |
+| Matrix Hard/Brutal dispatches | 37 | 48 |
+| Matrix Hard/Brutal kill value | 776690 | 795640 |
+| Matrix Medium economy stalls | 2/48 | 3/48 |
+| Matrix Medium bankrupt empty queues | 18/48 | 19/48 |
+| Matrix Medium missing Starport | 14/44 | 8/45 |
+| Ladder Hard/Brutal economy stalls | 0/24 | 2/24 |
+| Ladder Hard/Brutal bankrupt empty queues | 7/24 | 9/24 |
+| Ladder Hard/Brutal missing Starport | 7/24 | 7/23 |
+| Ladder Hard/Brutal dispatches | 23 | 19 |
+| Ladder Hard/Brutal kill value | 277990 | 192460 |
+| Ladder stronger-side wins | 12/24 | 12/24 |
+| Ladder weaker-side wins | 3/24 | 2/24 |
+
+- This is **not an all-green point estimate**: ladder kills declined and stalls
+  rose. Hard/Brutal matrix bankruptcy deltas flipped **+4 / −4** across seed
+  sets; its stall discordance was 8 new-only / 3 old-only (house-paired exact
+  two-sided **p=0.227**, not a proof of equivalence or an FFA-cluster adjustment).
+  The integrator accepted the mixed result given flat pooled bankruptcy, better
+  matrix supply/combat, unchanged ladder wins and the repaired real save.
+- Final allocation fixture `a8e84774` passed all three pinned targets in job
+  `20261104T223838-sardaukar-owned-core-fixtures-141d8b`: vanilla **22.2 s**,
+  DuneCity **27.8 s**, Dune2R **27.4 s**. Both geometry modes retain rich
+  production/growth checks; A reserves no already-owned core copies, the actual
+  queued factory has a reserved site and ground access, and legacy plots retain
+  their footprint/access assertions. The generic baseline isolates proactive
+  TrooperSupport; its real full-build ON fixture is separate.
+- Complete provenance, both audit seed tables, save checkpoints and fixture
+  receipts: `../outputs/sardaukar-not-colonizing-20261104/accepted-expansion-evidence.json`.
+  The save runner reported checkout `1875b7c9`; every AI Python harness is
+  byte-identical to `35c3a7ca`, and the native binary is independently pinned
+  above. Generated summaries were not relabelled.
+
+## 2026-11-04 — Civilization Wars rock lanes and defended sand-front cities (OMP CivWarsLayout, unreleased)
+
+- Every lane now has a mirrored, continuous three-tile buildable rock strip joining
+  both team ends to its central island, plus one-tile rock margins on both sides of
+  each seven-tile mountain divider. The 7x7 island cores remain; the smallest map's
+  island height is eleven tiles to preserve two open sand/worm/spice channels per lane.
+- Every player base, including each team seat, starts with exactly **15 rocket
+  turrets: 10 front and 5 core/flank**. Front allocation is 4/3/3 across a 1v1
+  player's mouths; 5/5 for the upper 2v2 seat and 10 for the lower; 10 per 3v3 lane.
+  Mouth centres remain clear, Yard/Lab retain overlapping coverage, and windtraps
+  account for all fifteen turrets with at least ten percent spare power.
+- Mature R/C lots now form the sand-facing front edge. Industry and Dune
+  infrastructure sit behind them, with a twelve-tile R/I gap, connected frontage
+  roads and clear Refinery side/bottom exits. Sand does add land value: existing
+  raw40/twice-smoothed terrain plus direct8/radius5 water-like bonuses. Pollution,
+  crime, centre distance and other amenities still affect the final value.
+- Marker remains `[CIVILIZATIONWARS] Version=1`: saved maps embed exact terrain,
+  buildings and worm positions; saved worms capture and serialize actual origin
+  coordinates, never reconstructing slots from the current generator. Old maps
+  and saves therefore retain their existing layout/origins. The layout itself adds
+  no option or save field; the separate research/scenery changes use 9883/MOD18.
+- Generator acceptance now checks exact 15/10 counts, front/back placement,
+  coverage, all rock strips/margins and six unbroken sand channels. Engine probes
+  retain the original research deadlines, continue every all-QuantBot match to at
+  least ten minutes, check actual tax against full police/turret/power costs, and
+  capture overview plus front/rear base views at 640x480 and 1280x720.
+- Layout implementation **`d6541e96`**; combined native build passed before cluster
+  acceptance. On **mini**, source **`ade2e8b79d28`**, job
+  **`20261104T180249-combined-full-12497d74-66d0e7`**: all three Civ Wars checks
+  passed — generator **30 cases / 37,803,797 assertions (2.82s)**, gameplay probe
+  **86.17s**, human research probe **19.08s**. These are the Civ Wars results, not
+  a claim that the entire combined suite passed.
+- All-QuantBot **1v1, 2v2 and 3v3**, each at **640x480 and 1280x720**, reached
+  **cycle 52606 / 14:01.696** with the strict load/played-log checks passing.
+  All starting bases loaded **15 turrets (10 front, 5 core/flank), 6 windtraps,
+  600/533 power**, one normal Harvester gift and one permanent Carryall.
+  Initial full annual costs are **325 police/turrets + 132–134 power**; actual
+  tax is **486–490 (1v1), 466–493 (2v2), 497–501 (3v3)**. No reduced AI police
+  funding was used to satisfy the full-cost assertion.
+- Viewed 1v1/3v3 loaded overviews at both sizes, front/rear close-ups at640,
+  whole-base close-ups at1280, and played1280 base views. Rock strips, ridge
+  margins, turret fronts/core, R/C sand frontage and rear Dune/I are visible.
+  Overview legend: white turrets, green R, blue C, yellow I; other buildings
+  retain house colours. Worm permanent-slot/save/load fixtures pass at both sizes.
+- Screenshots, six game logs, generated INI maps, three CTest receipts and measured
+  `acceptance.json`: **`/Users/stefan/Documents/projects/outputs/civ-wars-layout-20261104/`**.
+
+## 2026-11-04 — Mountains are forest scenery (OMP MountainLandValue, unreleased)
+
+- **Mountain Scenery** is a default-on hashed/saved Game Rules option. Mountains and
+  Civ Wars ridges contribute Micropolis's forest +15 per tile through the existing
+  park-terrain grid/kernel: one integer `(centre + cardinalSum/4)/2` pass on 3-tile
+  terrain blocks (Micropolis uses 4), averaged into the 2x2 land-value map before
+  pollution/crime/clamping. No new allocation/pass; existing park investment estimates
+  see the shared scenery baseline. Infantry do not remove mountain scenery.
+- Ordinary rock remains neutral. Existing sand/dunes retain raw40, twice-smoothed
+  2x2 terrain plus direct8/radius5 water-like bonuses. Empty undeveloped land stays0.
+- Uses **MOD18/save9883/protocol112**, shared with fixed-price research. Frozen
+  MOD17/save9882 reads its exact pace4+area4+damage1 suffix with no scenery byte;
+  the retired area is consumed/ignored, and scenery stays OFF in existing saves.
+  New MOD18 writes pace4+damage1+scenery1. Game Rules, defaults and mod rules carry it.
+- Added no-mountain/adjacent/rule-off unit coverage, dense ridge weighting/range,
+  hashed/wire/legacy/truncation coverage and Game Rules persistence/viewport checks.
+- Shared native build passed on `ade2e8b7`; combined cluster job
+  `20261104T180249-combined-full-12497d74-66d0e7` passed the real Civ Wars probe
+  (mini86.17s), research probe (mini19.08s), generator tests (mini2.82s), game-command
+  regression (mini15.6s) and menu navigation (mini602.1s). On the actual generated
+  129x96 ridge, a test residential lot at(47,24) measured **132 OFF /147 ON**,
+  terrain contribution15, identically at640x480 and1280x720. The ridge is untouched;
+  nearby non-mountain tiles are rock only in this fixture to isolate sand's bonus.
+- Unit scenery cases cover136 without a mountain,137 with one adjacent mountain,
+  136 with the rule off, and152 beside a full3x3 mountain terrain block. The full
+  combined unit run completed1264 passing cases/3skips; its only failed assertion
+  was a second old protocol111 test pin, now corrected to112. No gameplay bypass.
+- After the pin correction (`7f1a31fd`), targeted source`54a62300275a` job
+  `20261104T190212-mountain-protocol112-research-mouse-981b23` passed the complete
+  unit suite on mini in1.84s: **1266 cases,3skips,13,331,285 assertions**. This includes
+  city-effects and exact frozenMOD17/newMOD18 wire/hash/truncation coverage.
+  ResearchLab also passed12.4s; the co-submitted mouse probe failed independently
+  and remains its owner's check, not a claimed3/3pass. Receipt:
+  `outputs/mountain-scenery-20261104/targeted-acceptance.json`.
+- Viewed640 standard/family Game Rules screenshots. Moving Remember for new games
+  into the centred footer keeps the extra rule inside the430px family modal and
+  away from corner crests. Evidence: `outputs/mountain-scenery-20261104/`.
+- Stefan's original9882 `notcolonizingsadukar.dls` loaded, resaved9883 and reloaded
+  atcycle145097 with sceneryOFF. MOD18 suffix`010000000000` confirms Normal/damage0/
+  scenery0; this is load compatibility, not a claim of byte-identical derived city
+  state. Receipt: `outputs/sardaukar-not-colonizing-20261104/compatibility.json`.
+
+## 2026-11-04 — Development builds identify themselves as dev (OMP DevVersion, unreleased)
+
+- Normal CMake, staging and helper-script builds now display **1.0.864dev**.
+  `DUNECITY_RELEASE_BUILD=ON` is the explicit official-release opt-in; selecting
+  optimized `CMAKE_BUILD_TYPE=Release` alone does not remove the suffix.
+- `DUNECITY_DISPLAY_VERSION` drives the main-menu label, window title, startup
+  and crash diagnostics, feedback context and map-editor creation comment.
+  Finder's Get Info description uses the display version too.
+- Compatibility identifiers remain numeric: `PROJECT_VERSION`, `VERSION`,
+  `VERSIONSTRING`, network protocol/lobby matching, save header/version,
+  bundled-mod/workshop pins, desktop update comparisons, package versions,
+  browser `build.json`, Android versionCode/name and Apple short/build versions.
+  Machine-readable gameplay telemetry retains the numeric version.
+- Official stable-tag desktop/browser jobs pass the release flag. iOS
+  `--testflight`/`--ipa` select it; ordinary builds reset it OFF. Android requires
+  the explicit official-candidate input or packaging switch. Release helpers,
+  runbook and the shared `dunecity-release` skill document all channels.
+- Added version identity regression coverage and real main-menu probe assertions
+  that the rendered label and startup log agree. No release or publication.
+- Implementation commit: **`3b33573b`**. Shared `build-int` built successfully on
+  **mini**. A release configure with `-DDUNECITY_RELEASE_BUILD=ON` generated
+  `DUNECITY_DISPLAY_VERSION "1.0.864"`; restored OFF afterward, generating
+  `"1.0.864dev"`. Bundle short/build versions remain `1.0.864`, while its
+  `CFBundleGetInfoString` is `Dune City 1.0.864dev` (Finder UI not visually tested).
+- Cluster acceptance job **`20261104T170258-dev-version-da8d2a`**, source
+  `3b33573ba3ea`: **3/3 PASS**, all on **mini**:
+  `dunelegacy_tests` **1.9s**, `desktop_updater_security` **0.4s**,
+  `menu_navigation_probe` **482.1s** (640x480, 854x480, 1280x720). Total submission
+  wall time **9m32s**. Other hosts did not execute tests: observed Pro PAUSE file
+  and macOS daemon load, Air running DuneCity, PC only **1.79GB** available.
+- Viewed the **640x480** home screenshot: visible **`App v1.0.864dev`**, unclipped.
+  Its run log records `Starting DuneCity 1.0.864dev on Mac OS X` and
+  `MENU_VERSION_PASS: App v1.0.864dev`. Retained screenshot and acceptance JSON:
+  `/Users/stefan/Documents/projects/outputs/dev-version-20261104/`.
+  CTest logs: `~/.local/state/dunecity-queue/ctest/20261104T170258-dev-version-da8d2a/`.
+- Untested runtimes: Windows, Linux, browser, iOS/TestFlight and Android device.
+  No cross-platform runtime acceptance, installation or publication is claimed.
+
+## 2026-11-04 — Release-suite probe compatibility repairs (OMP ReleaseTriage, unreleased)
+
+- The five failures in full-suite job `20261104T062350-release-full-f84cc592-ac108b`
+  are probe compatibility failures, not a failed performance budget. The retained
+  `perf_regression` compiler diagnostic is `unknown type name 'QuantBot'` in
+  `probe-digest.inc`: `0cd42553` added serialized AI dumps without including their
+  type. The shared digest now includes `players/QuantBot.h` itself and uses the
+  canonical `Network/GameStateDigest.h` path.
+- `4e53eaac` deliberately made `StorageCapacity` forecast earned-income overflow
+  and buy a vault before the production core. The shared-spending city fixture's
+  injected tax base forecasts **29,092 credits/4min** against only **6,020 storage**,
+  so the recorded real queue correctly chose a Silo plus the protected Harvester,
+  not a city lot. Give this parallel-allocation fixture explicit ample storage;
+  keep the default-on rule and every worker, R/C/I and protection assertion.
+- All three opening-economy fixtures still assumed missing Heavy/HighTech
+  infrastructure must outrank an overflowing bank. They now retain the strict
+  old behavior with `StorageCapacity=0`, verify spare storage never displaces the
+  core, and require real Silo orders before the missing core for imminent overflow
+  with `StorageCapacity=1`. Mature storage, pending-order, ceiling and progression
+  assertions remain; no gameplay/config defaults or digest pins change.
+- Continuing the Vanilla/Dune2R fixtures exposed two more old premises from the
+  same storage cutover: the first Carryall spends **800 earned credits** before
+  a yard with only **525 forecast receipts** over the Silo's lead time, so the
+  formerly “overflowing” bank is safe. Give the mature-base fixture its actual
+  first Carryall. Preserve the legacy pending-refinery assertion in the off arm;
+  the on arm must order a Silo for a genuinely full bank without pending capacity
+  and must not duplicate a vault already being built.
+- Fixes: `3fb17a4a` (digest include, ample shared-spending store, both storage/core
+  policy arms), `2bf51eeb` (real mature transport and pending-vault controls).
+  Shared `build-int` rebuilt successfully at `2bf51eeb`; Ninja dependency checks
+  passed before/after and no native recompilation was needed.
+- Final cluster acceptance: **8/8 PASS**, source `2bf51eeb7b84`, job
+  `20261104T090754-release-triage-final-80f241`, all on **mini**.
+  Start times below are **2026-11-04 AEDT (UTC+11)**; durations are CTest wall time.
+
+| Test | Start | Duration | Result |
+|---|---|---:|---|
+| `perf_regression` |09:28:08|100.33s|PASS|
+| `quantbot_shared-spending_dunecity` |09:08:58|7.72s|PASS|
+| `quantbot_opening-economy_vanilla` |09:09:10|6.95s|PASS|
+| `quantbot_opening-economy_dunecity` |09:08:34|20.26s|PASS|
+| `quantbot_opening-economy_Dune2R` |09:09:04|6.84s|PASS|
+| `quantbot_custom_attack` |09:08:43|10.04s|PASS|
+| `quantbot_no_spice_city` |09:08:28|26.12s|PASS|
+| `dunelegacy_tests` |09:08:28|1.90s|PASS|
+
+- Performance emitted `PERF_BUDGET_OK`: normalized CPU mean **0.047/0.250**,
+  house p99 **0.149/1.000**, eight-house CPU p99 **1.096/1.600**,
+  eight-house frame CPU p99 **3.910/5.500**, main-loop frame p99 **4.568/8.000**;
+  five checkpoint digests matched. Logs and `summary.txt` are under
+  `~/.local/state/dunecity-queue/ctest/20261104T090754-release-triage-final-80f241/`.
+  The earlier `20261104T083259-release-triage-72f3a8` was superseded/cancelled
+  after exposing the remaining non-city transport premise; it is not an all-green
+  receipt. Observed scheduler restrictions: Pro at **23.3GB free** plus macOS
+  daemon load, Air offline, PC without a prepared eligible source. No cross-host
+  acceptance is claimed. This is the required eight-test repair acceptance,
+  not a fresh run of all138 tests, installation, or publication of1.0.865.
+
+## 2026-11-04 — Additional standing-rocket tuning remains opt-in (OMP RocketTurrets, unreleased)
+
+- Final decision: hashed `[Force Concentration] MoreRocketTurrets=0`, **default off**.
+  The extra tuning did not meet Stefan's final acceptance gate; it is not claimed as
+  an enabled increase. The original `ThreatTurrets` and `CityStarportSupply` fixes
+  remain default on; their original-save evidence and qualified survival result below
+  are unchanged.
+- Experimental production `b98c698a` permits three rockets from eight structures,
+  four for Hard/Brutal from sixteen, and uses175 rather than200 observed ground
+  value per local cover (local8/reactive-house12 ceilings retained). Tax-only towns
+  need positive recurring income and a four-minute budget covering every remaining
+  yard step plus the next rocket, concrete and working cash; actual production
+  still leaves the working buffer. Existing power/prerequisites, real transport work,
+  emergency/income priorities and the growth interleave remain required.
+- The retained causal trace at+1.008min had497cash/322spendable, a payable200
+  yard step, but forecast net−60/4min and only262funding, below the full755
+  rocket bridge/buffer. An idle-fleet500Hi-Tech quote scored5500 over3500
+  despite no spice-worker/pickup/repair/busy-transport demand. The final guarded
+  policy avoids that partial-funding mistake but did not deliver enough extra guns.
+- Final **88 completed/error-free paired games**, immutable source`b98c698a6155`,
+  same seed/options/map/content identities:32matrix and12ladder games per arm,
+  None/Low spice,30min cap. Matrix joint-alive rockets10m5.60→5.60(n78),
+  20m19.38→19.41(n64). The targeted no-spice20m cohort rises only
+  **1.89→2.00(+0.11,n18)**, not the required≥+1; Low is unchanged.
+  Matrix bankrupt31→31/96, kills12724.3→12713.4; ladder wins unchanged,
+  bankrupt5→5/24, stalls2→3, kills14531.2→14526.2. Mixed-host loop times
+  are diagnostic only, not a performance gate. No further retune was accepted.
+- Whole `quantbot_custom_attack` **PASS22.5s**, source`f793b88d` (same production),
+  job`20261104T060933-isolated-battery-native-f793b88d-d90c53`. Fixtures retain
+  native funded/poor/negative-income/full-bridge/savings/real-upgrade, threat-site,
+  active-transport and Starport assertions. Native bootstrap, the separate5,000-pop
+  rule and mandatory bulk-concrete priority are correctly isolated; no production
+  guard was added for the fixture-only default-slab state (reachability proof`2c2bd222`).
+- Default-off load/save/hash regression and explicit `more-rocket-turrets-{on,off}`
+  styles retain reproducibility. Final default-off combined regressions, cross-platform
+  pins and performance verification belong to the integrator and are not claimed here.
+  Tables/provenance/decision: `outputs/more-rocket-turrets-20261104/healthy-tax-final/`
+  (`submission.json`, `acceptance.json`, matrix/ladder comparison tables);
+  policy: `docs/quantbot-spending.md`. No extra save/protocol bump or tax-rule change.
+
+## 2026-11-04 — Stop earned-income storage overflow (OMP SiloCapacity, unreleased)
+
+- Commits `4e53eaac` (policy/config/hash/probe/audit/fixtures) and `0c1a0aa5`
+  (physical vault admission at the population ceiling). Busy-yard placement avoidance
+  landed with `0d27bb65`. Default-on hashed `[Force Concentration] StorageCapacity`;
+  no save/protocol change beyond the release's existing111 bump.
+- Two measured causes: technology1 cannot build the only previously considered storage
+  item (Silo); higher-tech storage also waited for Heavy/HighTech/Repair. Separately,
+  a Silo's industrial workers made the population cap reject a funded safe vault.
+  The latter trace selected a Silo with26,848 forecast net/4min but never queued it
+  at40,000/40,000 population.
+- Forecast earned receipts over actual construction/foundation lead time, subtract active
+  production and ordered capital, then buy one safe funded vault only as needed. Count all
+  pending capacity, retain power/air-defence priority, use technology-legal refinery vaults
+  before Silos, and leave other cash for useful production. Starting grants are exempt;
+  ordinary city zoning retains its cap. No saboteur or human-order changes.
+- Exact historical-revision `80rock.dls`, cycle26,188→75,000: all-house full-storage time
+  **10.5029→0 house-minutes**, refused income **12,549→0 credits**, OFF→ON. Neutral's
+  final capacity2,005→6,025; Sardaukar's2,005→5,020. No injected income/orders.
+- Frozen source `87479bf109a2`, probe SHA256 `8ab8039c14f232eed9b6e52b869eed0a278105ba80e791ab9311f618ac8127b6`:
+  **144 distributed paired games**, DuneCity None/Low/Medium spice. Matrix full time
+  1.6861→0; ladder71.8232→0.1261 house-minutes. Credits lost12,589→4,493 and
+  395,906→16,972. All remaining increases occur in sampled intervals with a yard absent
+  at one/both endpoints; no claim that these unrecoverable-house losses are eliminated.
+- Combat/economy caveats are retained: matrix stall15→16, attackers68→69, all36 winners
+  unchanged; ladder stalls6→6, bankrupt11→12, attackers62→62, Hard-over-Medium wins6→5
+  (weaker wins unchanged). Kill value rises slightly; ladder score CIs include zero.
+  This is not a blanket claim that every point metric improves.
+- Source-pinned cluster evidence: `d635fd0a` no-spice fixture PASS and Atreides6/6 PASS;
+  `e551dd78` unit/army-recovery/scenario/FFA/perf PASS. That full batch is not all-green:
+  HF duplicate-queue and funded-extra-rocket fixture assertions stop before the storage
+  case, and Atreides seed906213928 wins at40.8m rather than≤40. Owners/integrator have
+  the logs; do not represent the later combined full suite as passed.
+- Full tables, switch semantics, detectors and causal traces:
+  `docs/quantbot-dunecity-audit.md`; evidence `outputs/silo-capacity-20261103/`,
+  especially `final-provenance.json`, `final-80rock-comparison.json`,
+  `final-audit-summary.json` and `final-residual-losses.json`.
+
+## 2026-11-04 — First Heavy Factory capital: default on for Hard/Brutal (OMP ExpandFinish, unreleased)
+
+- Production commits: `11e13cf2` narrows the claim to an already affordable
+  first HF and removes the extra protected-MCV priority; `a3d6c2c6` limits it
+  to Hard/Brutal. Hashed `[Force Concentration] CityConstructionCapital=1`
+  remains default on; Easy/Medium keep their existing allocation. It requires
+  a standing Starport, completed tax seed, positive tax less upkeep, legal
+  technology/site, no active defence, and the existing 24-power growth floor
+  after the factory draw. The complete factory/foundation quote must already
+  be affordable: no below-price savings hold, production-burn forecast loan,
+  duplicated queued HF, new MCV priority, saboteur order or human-lease change.
+  Protocol111/save9882 already cover the batch; no independent bump.
+- Original save: DuneCity8P256×256 FFA, map418379001, match1229922152, Brutal,
+  T9, cycle69986 (18:39.776). Blue Atreides has37structures,725credits,
+  2005capacity,10380displayed population, one CY/Light Factory/Starport,
+  no HF/MCV, power600/518, annual tax2883/police130, and no viable spice.
+  The first survey finds147free rock tiles and at least4usable2×2 footprints,
+  including HF(233,0); built-out/colonisation-due are initially false.
+  Existing expansion subsequently finds(202,6).
+- Live pre-save placements stop for288.608–291.104seconds while army value
+  rises3250→12400 and sampled cash is646/718/744 against a600-credit HF.
+  Its old score0 `bootstrap_managed_separately` let a70-credit Quad claim
+  reserve first;8Quads then consume560. Controlled save-pass forecasts
+  tax/upkeep1457/129per minute, so this is allocation, not absent income.
+- The rejected `04b076dc` floor guard was not safe merely because an HF
+  appeared. Exact retained replays match all4original FFA digests:
+  Atreides/None had12unaffordable HF claims above affordable100-credit plots;
+  Sardaukar/None had38such claims,30above affordable plots; Atreides/Low
+  already had its HF but made25unaffordable protected-MCV claims,17above
+  affordable plots, and bought a third MCV at16.794min instead of a first
+  Starport at18.181min. The two bankrupt houses subsequently lost44/26
+  structures. Sardaukar's later stall reports allR/C/I sites unavailable,
+  not a still-pending HF claim. Full causal scope and per-minute evidence:
+  `floor-claim-investigation.json`.
+
+| Paired audit phase | Houses/arm | Economy stalls OFF→ON | Bankrupt OFF→ON | Missing Starport OFF→ON | Missing HF OFF→ON |
+|---|---:|---:|---:|---:|---:|
+| Rejected24-power floor guard, original4CY games |12|0→2|0→2|2→4|4→1|
+| Affordable-only, all difficulties,36games |108|0→2|0→1|13→13|22→14|
+| Final Hard/Brutal scope, original4CY games |12|0→0|0→0|2→2|4→3|
+| Final scope,36games, same-probe diagnostic replacements below |108|0→0|0→0|13→13|22→17|
+
+- Final source `a3d6c2c62bc2584243f82358874b60c87f06b01a`: CY/army0/city0,
+  None/Low/Medium spice,96/160,1v1/FFA4,Medium/Hard/Brutal,seed9101,25min:
+  **36games per arm** plus the repeated original4-game pair. The broader
+  all-difficulty candidate's extra stalls/bankruptcy were all Medium; this
+  is why the switch is difficulty-scoped rather than enabled everywhere.
+
+| Final matrix difficulty | Houses/arm | Stalls | Bankrupt | Missing Starport | Missing HF | Ground dispatches | Mean kill value |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Medium |36|0→0|0→0|6→6|6→6|31→31|7613.61→7613.61|
+| Hard |36|0→0|0→0|3→3|8→5|17→16|7830.28→7935.00|
+| Brutal |36|0→0|0→0|4→4|8→6|15→15|7860.00→8462.50|
+
+- **Platform caveat, not hidden row replacement:** the preceding final table
+  uses retained same-Mac-binary replays for2crossed-host pairs, with the
+  remaining34pairs unchanged. Raw cluster matrix is also preserved:
+  HF23→17, dispatches63→64, mean kills7739.72→8003.61; after the explicit
+  two-pair replays: HF22→17, dispatches63→62, kills7767.96→8003.70.
+  Stalls0/0, bankrupt0/0 and missing-Starport13/13 are equal in both tables.
+  Medium160/None/1v1, where the switch is inert, differed PC-OFF/mini-ON;
+  one frozen mini binary gives identical9c8dd9752d75dd64digests in both arms.
+  Brutal96/None/FFA4 mini-ONdd327c648188768e differs from PC-ON75b1ce2c53e2cb75.
+  CrossPlatform subsequently identified/fixed empty-list `front()` UB in
+  `2b497206`; these pre-fix rows do not prove latest combined crossplay parity.
+- Final45-minute ladder:36games/arm,128,None/Low/Medium,two seeds and both
+  house assignments. Strong–weak+limits: B/H4–4+4 in both arms;
+  H/M3–2+7→3–3+6; M/E9–0+3 in both. Hard score delta−0.031,
+  95%CI[−0.094,0], classified level with control. This is not a claim of a
+  strengthened or strictly established difficulty ladder. Ladder stalls1/1,
+  bankrupt1/1, missing-Starport3/3; HF21→18; dispatches298→304.
+- Exact original-save continuation, **one frozen a3d6c2c6 probe for both
+  arms**, SHA256`3876bf328459f67677358634a71e472a2f97254cd024378817677aeaae82cf0c`,
+  original pinned revisions,37500cycles,69986→107486:
+
+| Save measurement after loading | OFF | ON |
+|---|---:|---:|
+| HF order/completion seconds |403.088 /438.288|1.488 /36.688|
+| MCV order/delivery seconds |465.488 /499.664|489.488 /523.664|
+| MCV deployment seconds |581.888|599.488|
+| Standing structures at+10min |45|41|
+| Standing CY/HF at+10min |2/1|2/1|
+
+- Integrator explicitly accepts the17.6-second-later MCV and4fewer final
+  buildings to remove401.6seconds of first-HF delay, and Hard's17→16
+  dispatch tradeoff. Second-CY observation counts77→75 do not improve;
+  no blanket expansion/growth-strength claim accompanies this fix.
+- Verification: shared `build-int` PASS on final HF sourcea3d6c2c6;
+  `dunelegacy_tests`2.0s and `quantbot_mcv_deployment`9.3s PASS[mini,a3d].
+  `quantbot_no_spice_city` **PASS26.2s[mini,55b3a594]**,
+  job`20261104T042652-ctest-2e7783`. Fixtures retain all4difficulties,
+ 600/599cash,23/24power, cheap imports, all-yard deduplication/availability
+  refresh, ordinary MCV ranking, and the original40000-population storage
+  assertions. `9dd61b5b`/`55b3a594` fix the two-yard fixture accounting;
+  `5746a962`/`b63879bf` isolate power/HF budget cases from the separate
+  optional standing-battery claim without changing production defaults.
+  `quantbot_custom_attack` was exercised and failed8.1s[mini,a3d] at
+  RocketTurrets's funded-extra-rocket real-queue assertion; that peer owns
+  its separate repair/receipt. No passing combined release suite is claimed.
+- Evidence root `outputs/atreides-no-expand-20261103/`:
+  `scoped-{cy-audit,matrix,ladder45}-{off,on}/`,
+  `scoped-audit-comparison.json`, `scoped-save-comparison.json`,
+  `scoped-platform-crossover.json`, `floor-claim-investigation.json`.
+  Final152distributed games ran mini109/PC43; Pro/Air contributed none.
+  Matrix/CY job stems`20261104T024332-expand-scoped-*`; ladder jobs
+  `20261104T024457-expand-scoped-ladder45-{off-f77ee6,on-9bac79}`.
+  Later Rocket transport-priority and crossplay fixes are distinct source
+  changes; Main owns the latest combined release full-suite gate.
+
+## 2026-11-04 — Adjustable Random Skirmish terrain (OMP TerrainMix, unreleased)
+
+- `80rock.dls`: Random Skirmish/CivWars mod, seed418379001,160×160,4P2v2,
+  tech1,3000credits,MCVs only,no spice,not mirrored. The unchanged generator
+  reproduced the save's **complete embedded map INI byte-for-byte**.
+- Initial tiles: sand4053(15.8320%),dunes1056(4.1250%),ordinary rock13947
+  (54.4805%),mountain6544(25.5625%),spice0. Old “80% Rock” counted rock plus
+  mountain (80.0430% combined), not80% buildable rock.
+- Cause: unbudgeted depth≥8 massifs plus one ridge/110outer rock tiles
+  (8..12+size/8 steps),plus outcrops. Its25editor fields yielded
+  **3531massif+2974ridge+39outcrop=6544**. At256/80%,old mountains were22750
+  tiles(34.71%); the oldaverage-ratio reduction did not bound highcoverage.
+- Sand/Rock/Mountain are now explicit0..100%,step5,sum100; default75/20/5.
+  OldRock80 migrates to20/75/5 (same geological target). Measured160result:
+  sand4053/dunes1056/spice0 unchanged;rock19211(75.0430%);mountain1280(5.0000%),
+  **80.4401% fewer mountains**. Coast mask unchanged; coherent patches preserve
+  clean start cores and connected ground routes to starts/every spice tile.
+- Newkeys and terrain-options FNV are stored in map provenance and the usual
+  saved config. Full map INI already travels in multiplayer and saves; no extra
+  terrain save/protocol change. Existing saves retain terrain; new generation
+  intentionally changes mountains. Separate Civ Wars lane terrain is unchanged.
+- Correctedf076snapshot,job`20261104T020444-terrain-final-02e94e`: generator
+  **35cases/3,322,285assertions PASS**(mini13.47s); full native skirmish probe
+  **PASS97.1s**,including strict smoke,MP equal state,save/load and render.
+  Thirty terrain/INI hash pairs agreed on Mac+Windows; pins updated8f9a43d6.
+- Focused640×480 terrain menu **PASS14.34s** in full2e551job; exactly one
+  pass marker; desert/city/multiplayer screenshots viewed. Before/after160PNG
+  and matched-palette side-by-side viewed. Matrices,INIs,images and verification:
+  `outputs/rock-mountain-20261103/`.
+- Allied smoke exposed an engine—not placement—bug: all178starting Troopers
+  were on ordinary rock,max5/tile. Radar/slow refresh incorrectly calculated
+  velocity for never-moved infantry without a previous movement slot.
+  `1345f662` refreshes active steps only; next steps read current modifiers.
+  Native fixture exercises research/slow/expiry inside unchanged strict logs.
+
+## 2026-11-03 — Map-scaled Research Pace (OMP ResearchPace, superseded 2026-11-04)
+
+- Stefan's `research.dls` is193×128,3v3,seed138083612,cycle112730 /
+  **30:03.680**. Harkonnen/Ordos/Rebels are tech9; Fremen/Mercenary are tech8
+  researching9; Neutral is tech8. Median lifetime gross tax+spice income is
+  **1792.27credits/game-min**, tax alone335.53. Old tech1→9 cost13200 was
+  7.365such income-minutes /24.50% of median accumulated gross.
+- Approved integer policy in `include/TechResearch.h`: `A0=129*96`,
+  `S=max(A0,2*A-A0)/A0`; apply `S*P` to both300×target credits and the
+  old30+10×target-second duration, ceiling once to credits/cycles.
+  Fast½,Normal1,Slow2,Very slow4. Small/reference maps do not slow at Normal.
+  On Stefan's map: **39468credits /33:53.024 uninterrupted** versus13200 /
+  11:20;22.021observed gross-income-minutes /73.25% of median accumulated gross.
+  Even unlimited money cannot reach tech9 before that new duration.
+- Pace and initial-map area are hashed/saved; bind geometry before any house
+  advances, never from live economy or roster. House, Lab price/time/progress and
+  QuantBot's existing research reserve/forecast share the policy.
+  Direct Civ Wars setup and Game Rules in Custom/Random/online preserve pace.
+- Shared save9882/MOD17 appends paceu32,areau32,damage-land-valuebool.
+  Older saves load Normal; completed tech and already-paid active remaining
+  timers are retained, subsequent starts use map scaling. No protocol112 bump:
+  this is part of the already-unreleased111 cutover.
+- The two user saves are different games, not income/progression delta samples.
+  `notresearching.dls` seed95244949 is9:50.016,all tech1/inactive.
+  Completed research timestamps are not serialized/logged; no invented history.
+  Active level9 starts infer cycles106788/109696 (±onecycle), conditional
+  completion114288/117196. Exact ledgers/offsets/hashes/bounds:
+  `outputs/research-save-20261103/research-analysis.json`.
+- Frozen pre-change 1v1 Hard/Hard,193×128,seed138083612,medium spice,two worms/lane,
+  45min reached tech9 at **26:54.944 Ordos /28:39.680 Atreides**; time-limit,
+  both alive. Original binary/manifest and logs retained in
+  `outputs/research-pace-20261103/{baseline-probe.app,baseline-manifest.json,before/}`.
+  Normal per-level cost/time tables and pace/migration rationale are in
+  `docs/civilization-wars.md`; exact cycles in the output's `normal-cost-time.csv`.
+- Same-build controlled A/B on clean `d635fd0acc36`, same193×128 map/config/seed:
+  reference-price control reached tech9 at32:58.880 Atreides /26:56.544 Ordos;
+  Normal left both attech7 at45:00 (Ordos researching8). Both alive, complete
+  telemetry/no sequence gaps; every observed start matched scaled price/cycles.
+  Exact per-level timing, hashes and the single-seed limitation are in the guide
+  and `outputs/research-pace-20261103/{reference,normal,paired-progression.json}`.
+- Actual `research.dls` loaded all1,775,110bytes atcycle112730 on the new build:
+  Normal,area24704,next-tech9 quote8073credits/22423cycles, all original
+  tech/timer states preserved. One real tick and9882 resave passed. Recovered the
+  exact original four-file CivWars revision, matching saved SHA256 `37d5ce34…066f38`
+  before use; no save/checksum/resolver bypass. Provenance/cache and load receipt:
+  `outputs/research-save-20261103/{revision-reconstruction.json,exact-profile}`,
+  `outputs/research-pace-20261103/save-load-exact-d635fd0a/`.
+- Corrected the observed640×480 Research Pace corner-crest overlap in `5e60f97a`:
+  compact row gaps and a centered OK footer, not weaker assertions. On mandatory
+  `e551dd78` suite `20261104T012524-combined-full-2-cec93f`, menu navigation passed
+  563.44s across640/854/1280, exactly one PASS marker per run. Fresh640 GameRules,
+  CivWars and Tornie screenshots were viewed; all four choices fit. Receipt:
+  `outputs/research-pace-20261103/menu-acceptance.json`. Native unit suite passed
+  1261cases/3skips,13,329,994assertions; ResearchLab engine probe passed12.18s.
+- `5f91e4b7` fixes the stale eight-minute team-game research assertion, not the AI.
+  At161×112 the first step costs1148 and lasts95.616s; all four houses had started
+  by7:29.616 and actually completed by9:05.232. The test retains its reference
+  funding rate: `(8min−reference duration)×quoted price/reference price`, ceiling
+  to cycles, plus the quoted duration; reference8min stays unchanged. Normal
+  windows are8:00.000/15:18.352/23:55.200 on129/161/193-wide maps; all six193×128
+  houses completed first research by11:27.968. On clean `f0763fee`, requested
+  `civilization_wars_probe` and `civilization_wars_research_probe` passed53.3s/24.1s:
+  `20261104T020512-research-policy-windows-b7a879`,2/2. Matrix Python tests9/9 passed.
+
+## 2026-11-03 — Building damage no longer lowers land value (OMP LandValueDamage, unreleased)
+
+- Stefan: "dont make damage to buildings affect land value". **Damage Lowers Land Value**
+  is a default-off, hashed Game Rules option (MOD17, shared save 9882). Off skips the
+  building-condition scan entirely; on retains proportional damage penalties on occupied
+  blocks and repair recovery. Windtrap health-scaled power is unchanged.
+- City-effects unit coverage exercises both states. The existing real-engine degradation
+  probe checks off/on across zones, services, Airport and Wall, logging full/damaged/repaired
+  land values; the off state requires all three values to match.
+- Checks on source `d635fd0acc36`, cluster job
+  `20261104T001634-land-value-damage-research-silo-3e550e`: Windows PC
+  `dunelegacy_tests` passed (1,258 passed, 3 skipped; 13,325,950 assertions),
+  including both condition-rule states. MacBook Pro `structure_degradation_dunecity`
+  passed in 32.49 s: Residential full/damaged/repaired land value was **92/92/92 off**
+  and **92/46/92 on**; all eight checked building types preserved value off and halved
+  it on. Native staging build passed before this snapshot. Measurements and receipt
+  paths: `../dunecity-results/land-value-damage/acceptance.log`.
+- The broader cohort's `menu_navigation_probe` timed out on mini and Pro; do not treat
+  retained screenshots as fresh 640×480 evidence. The integrator's combined full suite
+  and ResearchPace's menu diagnosis own that remaining cross-feature verification.
+
+## 2026-11-03 — CTest historical-content and fixture repairs (OMP CtestTriage, unreleased)
+
+- Original cluster `20261103T045258-release-integration-760977`, source27176982:
+  115 passed,16 failed/timeouts,2 not executed (Atreides/scenario matrix), not18
+  independently failing tests. The balance-probe wrappers hid normal exit1
+  exceptions, not one shared native crash. Actual messages distinguish legacy
+  House alignment, campaign opening, peaceful overlap, reactor affordability,
+  first-carryall savings and the9854 legacy checksum.
+- `5d56bb9e` updates stale test serialization assumptions introduced by Research
+  Lab `b3ad447b`: the9840 House fixture removes the9881 technology tail as well
+  as the earlier tails; the yard-cap fixture downgrades the actualMOD15 stream;
+  Tornie546 isolation ends at its real last ID, not the later all-family Research
+  Lab. Campaign pressure keeps its initialized mod family rather than changing
+  only a setup name (content-family cutover `6334f038`); both registered real
+  Vanilla/Dune City cases retain their4–6-minute assertions.
+- Research Lab content `34841947` broke the earlier shipped-byte equivalence.
+  Restore exact fixture revisions for842/847/850/851pub saves, Natives9868 and
+  the852 Palace-stall continuation from committed manifests/versions/historical
+  INIs. Sources are the retained `dunecity-results/regression-852/savecompat/`
+  producer profiles. Reuse unchanged source graphics and the already archived
+  eight-house retired artwork only after SHA256/size checks; manifest hashes
+  must match revision IDs. No current-rule substitution, download or user cache.
+  Natives save preflight is noninteractive. Original saves are unchanged.
+- The9854 preplace save has no immutable pin. Its isolated legacy subcase
+  temporarily restores the850 archived rules: the producer log records the same
+  original checksum `6feab22edf365c95`. The real checksum resolver remains
+  enforced, and current rules are restored before the factory-queue subcase.
+- Eight-house performance now retains exact1.0.849 `4018fe36` ObjectData
+  (a9446d14…,20149B) and QuantBot config (4a4a503d…,11507B). Save, manifests and
+  every timing budget are unchanged. This missing-content failure is NOT
+  pre-existing on1.0.864: both bytes exist in897249cf, and release job
+  `20261101T135451-release-1.0.864-eaff32/perf_regression@pro.log` passed206.53s.
+  That release's Natives retry passed save9868, then failed the separate airplane
+  assertion already fixed by6b11e1a2; it did not have today's content-modal hang.
+- Spectator failure is a mini network-environment limitation, not attributed to
+  a feature without evidence: both native ICE production files are unchanged
+  from897249cf. The same six-case mini probe passed582.97s in
+  `20261101T231611-ctest-365281`. Today's plain Vanilla control also exchanges
+  host candidates but selects no pair/ICE fails40896ms. The later full run's
+  decision controllers finish together, but its Viewer still fails before gameplay. Evidence:
+  `outputs/civ-wars-final/plain-loopback-control/`. Read-only inspection found
+  firewallState1, defaulten1 and Tailscaleutun1; the exact changed setting/time
+  is unproven. No firewall change, TURN, relay or relaxed network assertion.
+- Required current-HEAD cluster rerun `20261103T071210-ctest-triage-initial-3ae4bd`
+  (36dbc683) reproduced save/Natives/Palace/spectator failures;14 others were
+  cancelled without execution. Pro authentication failure and battery-paused
+  Air prevent failed-mini retries from settling. Main explicitly authorized the
+  documented local fallback, `nice -n 10 ctest --test-dir build-int -j3`, through
+  the shared coordinator after the combined fixes. Passing final receipts are
+  not established by the original or cancelled initial job.
+- `fd36161f` makes the command probe's partner-selector subcase explicitly
+  offline. Its default-online dependency dates to `8b352f038` (1.0.740):
+  an unapproved temporary mod correctly disables those controls for the lobby.
+  The measured failure had entry0, empty partner and correct640x480/origin0,0;
+  all keyboard/difficulty/role assertions remain.
+- Independent owning-agent fixes: `11a2f104` isolates peaceful fixture hostility
+  exposed by ThreatTurrets policy `329b6bea` in city-growth/first-carryall cases.
+  `a43467cc` checks legal Wind availability (planner comparison `820bae19`),
+  and `60bbe8eb` refreshes every owned fixture yard after shared rule mutation.
+  `5900ca7e` replaces the old alive-only eligibility (`a64c7db28`) with actual
+  construction capability, retaining both income/opening assertions and at least
+  one capable survivor; the premerge loss timeline was identical. The exact
+  survivor-trajectory exposer was not bisected. `d56d1710` fixes the new MCV
+  financial-readiness coupling from `8ff2d79a` without changing its fixture.
+  `495c1b23` isolates both arms of the separate capacity/runway negative-control
+  case from the now-independent CityOpeningCapital guard; no cash/assertion change.
+- Completed local receipts on `fd36161f`: previous18 set17PASS/1spectator timeout
+  (`local-final18-fd36161f`,1879.72s); complete133 set130PASS/3fail
+  (`local-full133-fd36161f`,4448.41s). The latter also exposed projectile startup
+  timeout and the shared-spending negative control. This is not a clean full-suite
+  receipt. The earlier339898a9 full attempt was externally interrupted after103
+  results and is not a completed suite. Both completedfd source guards are unchanged.
+- Projectile sampling placed3705/3778 main-thread samples in Game initialization,
+  chiefly Workshop pin/activation and complete graphics reload, not combat updates.
+  Its12:04–12:09AEDT failure did not overlap Audit cohorts (last ended11:35:08).
+  Unconditional immutable reactivation dates to `b6a8920c`, predating1.0.864.
+  `f4eaa94a` retains resident graphics only after the stored and installed exact
+  revision bytes have both been verified; ordinary mutable-mod reload is unchanged.
+  The real LAN menu regression checks stable surface identity, rejects altered
+  already-active content and checks successful reactivation after restoring bytes.
+- Exact897249cf production code and the fixed build both ran the complete
+  three-mode combat/gas/CSV assertions with identical opt-in pinned-init hooks.
+  Mean milliseconds over128 case initializations per mode:
+
+  | Mode | 1.0.864 /897249cf | Fixed /f4eaa94a |
+  |---|---:|---:|
+  | Vanilla | 693.9 | 10.3 |
+  | Dune City | 2086.5 | 925.3 |
+  | Dune2R | 702.3 | 11.4 |
+
+  Baseline total499.03s included445.78s in initialization; this is a deliberately
+  pinned-path diagnostic, not a claim that its ordinary approved-profile CTest took
+  499s. Fixed `projectile_combat_probe` passed147.78s within the unchanged300s
+  CTest budget; full menu passed460.03s and Dune City shared-spending24.54s.
+  That three-test source guard is unchanged. Temporary baseline instrumentation
+  was reverted; six owned successful baseline asset roots were registered and
+  removed through the managed lifecycle, preserving INIs, logs, CSVs and binaries.
+- Spectator termination uses SIGTERM and40s bounded cleanup grace with the same
+  1200s gameplay deadline; nested finalization also runs if service cleanup fails
+  (`d0567781`, `339898a9`, `13ca5a6f`). The completedfd full receipt finalized
+  its artifacts without the earlier orphan-lease exception. Its Viewer logged
+  no selected ICE pair after45006ms even when Host/Partner agreed at cycle2491.
+- Evidence: `/Users/stefan/Documents/projects/outputs/ctest-triage-20261103/`
+  contains per-test JUnit/log/results/source-guard receipts, `failure-roots.json`,
+  `immutable-init-comparison.json`, native CPU sample and exact network excerpts.
+  The bounded339898a9 performance diagnostic passed all unchanged budgets: its
+  worst house0 wall cycle9525 was15.190ms with5.618ms whole-cycle thread CPU,
+  in the AI build phase. Raw CPU for the earlier93ms wall outlier was not retained,
+  so that earlier exact spike is not attributed to scheduling as a measured fact.
+
+## 2026-11-03 — Windows online host roster stack use (OMP CivWars, unreleased)
+
+- The real Windows Civ Wars **Host Online** diagnostic terminated before admission with
+  `0xC00000FD` (stack overflow). Production and diagnostic executables both reserve 1 MiB.
+  Native unwind records measured `playCustomGame` at 495,200 B and `CrossplayMenu::update`
+  at 437,904 B before their callers; `CustomGamePlayers` itself is 436,520 B.
+- Heap-own the pregame player setup and prepared host roster, following the existing guest
+  lobby pattern. Destruct each roster before its setup/session teardown; no global stack
+  increase, gameplay-rule change, save change or protocol bump.
+- Static records and the original Windows termination are retained under
+  `/Users/stefan/Documents/projects/outputs/civ-wars-final/online-windows/host-stack-investigation/`.
+
+## 2026-11-03 — DuneCity QuantBot audit and right-sized reserve power (OMP DuneCityAIAudit, unreleased)
+
+- Added reproducible all-QuantBot Random Skirmish audit/sampler:96/128/160 ×
+  None/Low/Medium × 1v1/2v2/FFA4 × Medium/Hard/Brutal × two seeds,30min:
+  initial162 games/540 houses. Cycle-based12-detector tables, exact dispatch timing,
+  local turret coverage, examples and reproducible recipes are in the audit doc.
+- `CityPowerSizing` is hashed/defaultON: a2000-credit reactor for a40-power top-up
+  at2993 cash starved the seed town. Planner/candidate/final quotes now agree on
+  useful load, legal sites and protected working cash. Wind reserves its own full
+  foundation cost. Rich/load/cramped/blackout/justified installments keep nuclear;
+  existing queues stay untouched. No new placement search/allocation/save state.
+- Final `CityOpeningCapital` is hashed/defaultON and **tax-dependent only**:
+  while no viable spice economy exists, optional MCV/producer upgrades use existing
+  four-minute financial funding/reserves, not research fleet/crime readiness.
+  Productive spice expansion keeps its normal budgets. Recovery, required yard
+  tech, live defence, growth power, reactive turrets and first supplier keep priority.
+  No military production gate, saboteur/human-lease/victory changes or new budget model.
+- Rejected8ff military gating stopped all reinforcements because the picked2000
+  standing floor was already filled by the2500 starting army. Rejected60bbe all-city
+  capital gating made H/M6–8 vs OFF7–3 in18 matched games and delayed spice-backed
+  heavy tech4.38→12.54min. Final **d56d1710** fixes tax scope/funding; the same case
+  again ends with Hard winning40.29min. Research readiness itself is unchanged.
+- Final exact-same-probe A/B:72 games/240 houses **per arm**,96/128,None/Low,
+  all formats/difficulties,two seeds,30min. Stalls57/233→39/223; empty-queue poverty
+  99→77/240; missing Starport57/202→17/156, or28→15 on151 joint exposures.
+  No IX gain on joint exposure(142→142). Not all strata improve.
+- Activity: first dispatch8.42→7.07min, dispatches/10 alive-min0.415→0.482,
+  kills11141→11615, mean observed length27.88→25.33min, decisive22→26/72.
+  Army10 falls1842→1720; army20 rises2817→2860; stock+loss proxy rises3.3%.
+  Censoring and mirror-game win counts are not hidden or sold as strength proof.
+- Final ladder:54 games **per arm**,128,all spice,three seeds,swapped houses,45min.
+  ON B/H7–3+8limits,H/M7–1+10,M/E9–0+9; observed ladder holds, sample remains small.
+  Total final acceptance252 games. Frozen app/probe copies run nice10/jobs2 without
+  holding the shared workspace lease. Final mirror recheck does not re-cover160/Medium.
+- Fixture fixes preserve assertions: legal wind/all-yard caches, real Starport queue
+  cancellation, complete quote competitor and -1 selected-capital sentinel.
+  Low-cash capability change5900ca7e followed proof of identical pre/postCYloss13682;
+  both growth assertions remain for capable survivors. No refinery-first change.
+  495c1b23 isolates the independent CapacityMcvRunway off/on control in both arms;
+  the new tax guard is separately exercised. No cash/assertion/timeout relaxation.
+- CtestTriage actual short passes: no-spice23.23s,MCV9.63s,growth installments8.31s;
+  corrected shared-spending DuneCity23.61s. Fullfd36161f **130/133 PASS, not clean**:
+  four mandatory AI regressions and perf_regression passed; spectator/projectile
+  timeouts remain with the verification owner. No claim of a new full-suite pass.
+  Historical headless CPU max14.863ms is not final rendered FPS or isolated perf A/B;
+  these and final other-platform checks are unverified.
+- Detailed tables, roots, commits and limitations: `docs/quantbot-dunecity-audit.md`.
+  Evidence: `../outputs/dunecity-audit-20261103/`; integration receipts:
+  `../outputs/ctest-triage-20261103/`. Shared unreleased protocol111 already covers it.
+
+## 2026-11-03 — Quad-rush rocket cover and first city Starport (OMP RocketTurrets, unreleased)
+
+- Stefan's `ai dont build enough rocket turrets.dls` is a 1.0.864/9879,
+  seed418379001, 160×160, zero-spice 2v2. At cycle91269 Atreides (team2) is
+  QuantBot Hard/Both, tech9, 301 credits, 46 structures, one Harvester and no
+  combat army. CY upgrade2 can build rockets and Starport; power700/494,
+  Radar295/500. Its two rockets at(8,60),(6,61) sit behind the eastern/southeastern
+  Mercenary raid: five nearby Quads, four Trikes and a Launcher.
+- Exact pinned mod2d643c… and mapff068e… were used, not newer replacement content.
+  Six-minute baseline builds no rockets or Starport, goes46→4 structures and
+  loses its yard. First-minute gross tax1236, spice0, police114, power68 and total
+  spending1122: a250-credit turret is affordable if its budget is protected.
+- Slow City Year OFF is diagnostic only: first-minute tax2555, but still no new
+  rockets or Starport; the yard is lost and only9 structures remain at+6min.
+  Tax forecasts correctly scale1016/min ON versus2036/min OFF. The half-rate
+  income aggravates the stall, but neither stale year math nor absolute poverty
+  explains the missing purchases. The match's tax/year rules are unchanged.
+- Cause: two baseline rockets disable routine expansion until the heavy/high-tech/
+  repair core exists; the peaceful battery wants two refineries, while no-spice
+  cities keep one. The perimeter also wants a1000-credit unit reserve. First-heavy
+  saving, repeat zoning/police and unit spending prevent the late Starport fallback
+  from owning its price. Reactive ground cover had no protected capital candidate.
+- New hashed, default-on `[Force Concentration] ThreatTurrets` uses a transient
+  per-build visible-only contact survey, a2–8 local goal (one rocket/200 hostile
+  ground value) and12-total ceiling. Custom Hard/Brutal protect production,
+  income/power and Radar core, not every outlying district. Bounded firing-site
+  search minimizes observed return fire and preserves roads/access/spacing.
+  The next turret or power/tech prerequisite owns its price without the peaceful
+  core/refinery gates postponing an actual visible raid.
+- `CityStarportSupply` protects a solvent, seeded city's first useful Starport.
+  After six real rockets stand with working tech and spare supplier power, it
+  owns its one-off price before further outlying replacements; a standing or
+  pending port ends that claim. Switches OFF retain the old paths.
+- Late-save evidence also found7140-score import bargains eclipsing6500 defensive
+  Radar savings: the military/growth interleave then spent371/385 credits on
+  plots/imports just before the400-credit prerequisite was affordable. Bounded
+  defence/supply claims now compare non-military priorities without that diversion;
+  higher-priority blackout and other infrastructure choices remain eligible.
+- Defensive tech/power and first supplier sites prefer standing rocket cover.
+  Final yard vetting preserves the selected project's real footprint/site rather
+  than discarding a Radar's protected site as though it were a stale1×1 service.
+- No saved AI fields or extra protocol bump: the shared unreleased protocol111
+  already covers this batch. No saboteur orders or human-order leases changed.
+- Added a minimal eight-quad/rear-pair/one-refinery engine fixture to
+  `quantbot_custom_attack`, plus bounded-goal and both switches' load/save/hash
+  tests. Evidence: `/Users/stefan/Documents/projects/outputs/turrets-20261103/`.
+- Final combinedebd8ba42, exact original content, ten-minute paired continuation
+  (CityPowerSizing ON in both): switches OFF build0 new rockets/0 Starports,
+  lose the CY at+257.952s and are eliminated by+6min. ON build5 new rockets
+  (first+88.16s), order the Starport+299.36s/place+329.76s, and retain40 structures,
+  6 rockets,1 Starport and the CY at+6min. The continuing enemy wave destroys the
+  port+398.096s and CY+446.256s; elimination follows by+9min. This holds the
+  original rush for several more minutes, **not a permanent rescue/match win**.
+- Final fast-year diagnostic with the fixes ON earns2377 gross tax in minute1
+  versus1186 under Slow City Year (spice0 in both). Its Starport stands+115.36s;
+  at+6min it retains48 structures/7 rockets/1 port, but the CY still falls+445.936s.
+  Turning the rule off funds both sides faster; it is not an AI-only cash grant
+  and did not avert eventual defeat. No income rule or forecast formula changed.
+- Final native build, `quantbot_custom_attack` (6.68s) and `quantbot_no_spice_city`
+  (28.72s) pass. The custom fixture also checks import-score diversion, emergency
+  precedence, real Radar queue/site preservation, and first-supplier handoff after
+  six standing guns. Raw final arms: `supplier-{off,on,fast-year-on}/`; numbers and
+  purchase/loss times: `actual-save-comparison.json` beside the preserved probe.
+- Original27176982 priority-fixture failures exposed native-map raid inputs, not
+  peaceful overlap/carryall regressions. `city_growth` capital_plan52 observed800
+  ground value (goal4/local cover1) and chose6500-score `ground_threat`;
+  `starport_dunecity` plan93 observed2700 (goal8) and correctly funded a200-credit
+  defensive yard upgrade before saving640 for the first Carryall.
+- Fixture-only11a2f104 hides native hostile armed units only during the peaceful
+  planning calls, restores visibility on return/exception and invalidates tactical
+  caches both ways. Explicit peaceful-input guards were added; AI switches,
+  production priorities and every original assertion remain unchanged. These
+  corrections were not independently rerun before the combined final triage.
+  Original evidence: runner `w2/build/city-growth-probe/run-pyfva30e/` and
+  `starport-dunecity-probe/run-dy40wcjk/`, including decision JSONL.
+
+## 2026-11-03 — QuantBot Civilization Wars experiments (default OFF, unreleased)
+
+- `[Civ Wars] Strategy` remains multiplayer-hashed but **defaults OFF**: the final
+  finishing criterion failed. Explicit opt-in additionally requires exactly two occupied
+  opposing initial houses plus Research Lab and generated CivWars/mod identity. Shared-house
+  copilots count as one house; team elimination cannot activate the experiment later.
+  Team formats retain the ordinary/basic Research Lab policy. Shared protocol111 is unchanged.
+- The retained experimental parameters are two workers through tech3; pre-wave Medium/Hard/
+  Brutal caps6/8/10 and post-wave8/12/16; real research payment plus operating reserve;
+  tech4 then a real wave before further research; city-zone caps24 then36/48/60;
+  visible active worm warning8tiles; generated-only mountain-safe spice corridors and
+  24-free-tile island admission with the existing MCV escort/loss/allied-claim gates.
+  No lane-order override, formation, saboteur or human-authority change is retained.
+- Final source271 mirrors: **90 games**, five seeds × three formats × three difficulties
+  × off/on,40min. Off33/45 decisive, on9/45; stalemates26.7% versus80%.
+  Even1v1 on mirrors finished only3/15. The historical12/45 control had a30min cap;
+  do not misattribute the longer40min control's33/45 to the experiment.
+- Final Hard direct matrix: **30 games**, five seeds × three formats × both orientations.
+  On W/L/T is **9/0/1 in1v1,0/8/2 in2v2,0/7/3 in3v3**: team total **0/15/5**.
+  [INFERENCE, unverified cause] worker/pre-wave land caps likely starve team income:
+  minute20 off/on median harvesters13/5 in2v2 and8/4 in3v3, with lower on army value.
+- Side-swapped source271 ladder: **120 games**, five seeds × both orientations × three
+  formats × Hard:Medium/Brutal:Hard × off/on. Off40/60 decisive versus on13/60.
+  A strict Brutal>Hard>Medium ladder is **not established**: on Hard:Medium is tied
+  in1v1 and inverted in team games; control also has format-specific inversions.
+- Corrected source271 gates: **32/32 real early-Ornithopter strikes** killed by the defender
+  with yard/lab intact, both sides/targets and repeats; **eight ordinary-map off/on pairs**
+  have identical complete digest sequences with distinct config hashes (16 cases).
+- Duel-gate source94cd2d4c: all four2v2/3v3 off/on pairs match rolling digests through10min;
+  all ten1v1 direct reruns preserve source271 final cycles, digests and9/0/1 results.
+- Final CivWars code353d5282 defaults OFF in both constructor and distributed INI; the
+  config fixture round-trips both states and checks different hashes. All six final
+  40min OFF games (three formats × seeds7101/7202) match source271 control final cycles,
+  rolling digests, outcomes and config/map/options hashes, including cross-host1v1.
+- Final353 mandatory-check receipt is **6 PASS /1 FAIL /2 UNRUN**: native umbrella
+  (1251passed/3skipped;13,323,037assertions), CivWars29cases/6,577,248assertions,
+  custom_attack, army_recovery, strategy and FFA pass. perf passes CPU/menu budgets
+  (0.30ms CPU/cycle;313.7fps on its non-CivWars menu-launched scene) but fails at
+  the missing eight-house pinned ObjectData bytes. Atreides/scenario did not run;
+  Main approved cancelling the superseded job and using CtestTriage's newer frozen suite.
+- The completed source271 full cluster receipt is115/133pass,16fail/timeouts,2cancelled,
+  **not a full-suite pass**. Main/CtestTriage own integrated fixture/command/spectator
+  fixes and the newer-source full rerun; no later result is backdated onto271/353.
+  Full experiment parameters, result tables, source/job identities and verification receipts
+  are in `docs/civilization-wars-ai.md`; raw evidence is in `dunecity-results/civwars-ai/`.
+  Headless cycles/s is not rendered FPS; no rendered-FPS acceptance is claimed. No origin push.
+
+## 2026-11-03 — Power-starved Harkonnen city (OMP IdleAISave, unreleased)
+
+- Stefan's `harkonan doing nothing.dls` is a 1.0.864/9879 Random Skirmish save,
+  160×160, seed448824951, no spice, tech9, four QuantBot Hard/Both controllers;
+  Sardaukar also has the human. This is not a Fighter/Off menu setting.
+- At cycle68631 Harkonnen has 3 credits, 11 structures, R/C/I=3/0/1, population2760,
+  power200/190, a Refinery, Radar and Starport. The yard is empty. The next demanded
+  plot needs24 spare power, but military savings/imports repeatedly spend the
+  Windtrap budget. At cycle74425 the yard has only3 spendable of273 credits and
+  rejects its Windtrap (`committed_cash`); the Starport then buys a270-credit Launcher.
+- Mercenary is cash-poor, not permanently idle: 93 credits, 25 structures,
+  R/C/I=8/3/3, population5960, power400/346, no factory/Starport. In six more game
+  minutes it reaches43 structures, population11620 and328 credits. Atreides goes
+  from60 to97 structures and16680 to30780 population; Harkonnen stays11/2760.
+- Both the released v1.0.864 build and staging9881 load the original save and
+  produce those continuation numbers. Research Lab/trooper-AA load off, all tax
+  rates remain7%, and HardCityMatch's90k ceiling is far above these cities.
+- New `[Force Concentration] CityGrowthPower` (hashed, default ON) makes demanded
+  growth's legal generator prerequisite a protected capital project, including its
+  concrete. Wind is the saving target; a fully affordable reactor retains its normal
+  preference. Pending generation prevents duplicate projects. Existing threat/civic
+  priority and surplus military spending remain; switch off keeps the prior path.
+  No saved AI state change; shared unreleased protocol111 already covers the release.
+- With the switch ON in the actual save, Harkonnen orders its next Windtrap at
+  cycle75125 (+103.904s), completes it at75925 (+116.704s), and completes the first
+  new Commercial zone at81925 (+212.704s). At +6min: **16 structures, population3740,
+  81 credits, power300/223**, versus OFF **11/2760/136/200:190**. Mercenary reaches
+  **43/11740/3/700:589** with ON versus **43/11620/328/700:592** with OFF.
+- Original Slow City Year remains7500 cycles. The forecast correctly converts annual
+  tax496 to248/min and police100 to50/min, adds23/min power, and predicts700 net over
+  four minutes. Slow taxes aggravate the saving deadlock; the year conversion is not
+  the bug, and no tax/year rule changed.
+- Verified native build and config unit suite; the new off/on cheap-import/power-headroom
+  fixture passes, as do `quantbot_custom_attack` and `quantbot_army_recovery`. The
+  shared-spending DuneCity gate fails its Research Lab check, **"Destroyed research lab
+  was not rebuilt"**, after `CITY_CAPACITY_PASS`; this is not claimed as passing.
+- Normal-spice seed448824951, Hard Harkonnen v Hard Atreides, CY-only/army0: at20min
+  Harkonnen has93 structures,46 army units/value12250,1374 credits and38942 spice refined,
+  with heavy/light/high-tech factories. Growth-power savings did not starve military.
+- Remaining economy, scenario, All-against-Atreides, FFA and performance gates are
+  snapshotted at2ccb2894 as queue job `20261103T014206-city-growth-final-7e52a4`;
+  pending is not a pass. Earlier snapshot93d96ea3 was cancelled after a fixture-only
+  RobustList compile error; 886b75bc/f2d20e08 correct it, and2ccb2894 isolates the
+  fixture bargain from unrelated routine turret scoring.
+- Evidence: `/Users/stefan/Documents/projects/outputs/harkonnen-idle-20261103/`,
+  especially `continuation-comparison.json`, `fix-{off,on}/`, `fixture-pass/`,
+  `normal-spice/` and `slow-city-year-accounting.json`.
+
+## 2026-11-02 — Civilization Wars (OMP CivWars, unreleased)
+
+- New main-menu Civilization Wars screen: seeded mirrored three-lane maps, 1v1/2v2/3v3,
+  rectangular size, spice, equal worms per lane, house/AI choices, Spectate, Game Rules, saved
+  maps and the ordinary online host/lobby flow. See `docs/civilization-wars.md`.
+- Fixed zero-credit tech-1 starts include Yard, built Research Lab, Refinery, permanent
+  Carryall, mature small R/C/I city/police, lane-mouth rocket turrets plus two core turrets
+  covering Yard/Lab, and sufficient windtraps. The engine's existing first-Refinery grant
+  supplies a Harvester even at tech 1; the generator does not add one.
+- Selectable `CivWars` / Civilization Wars mod inherits DuneCity content, city economy and
+  approved-online policy. Research Lab, Sandworms Respawn and Trooper Anti-Air defaults are
+  on for any authored scenario; map/lobby tech and authored starting objects are unchanged.
+- Only version-marked generated maps retain each worm's mirrored permanent lane spawn slot
+  after defeat/eating/save-load; unmarked scenarios retain ordinary map-wide random respawn.
+  Wake events are asynchronous, not automatically spawned/synchronized unit waves.
+- ResearchLab prerequisite `34841947`, full mechanics `b3ad447b`, fixture corrections
+  `5c0936bc` / `dc3a27e0` and shared-art fix `8a3f3113` are merged. They own the shared save
+  9881/protocol 111 bump. App version remains 1.0.864 for the integrator.
+- Mini native Release `build-civwars` built at nice 10, `-j4`, through shared ccache. The staging
+  wrapper rejected a separate dirty-staging invocation; Main explicitly approved the direct build.
+  Pinned `platform/web` SDK installed with `npm ci --ignore-scripts`; no build-directory
+  disposable helper exists (the installed helper manages generated profile assets only).
+- Queued own-tree mini generator run: **12 test cases, 6,551,272 assertions passed**, including
+  the 720-case seed/size/team/worm matrix. Engine `engine-final`: **1v1, 2v2 and 3v3 each reached
+  cycle 11,564**, the three-game-minute target after initial city setup, with clean played logs.
+  Each fresh house was tech 1, credits 0, on positive power, with its normal free Harvester and
+  one owned Carryall. Worm defeat/eating, occupied-slot retry, sleeping save/load, the 9880
+  read gate and unmarked-map RNG continuation all passed.
+- Full-funding starting economy checked against every actual placed turret/police cost, not
+  the AI's current reduced funding: annual tax **399–403 vs 220** in 1v1, **360–384 vs
+  160/190** in 2v2, **352–364 vs 160** in 3v3. Initial power is 400/358 in 1v1,
+  400/308 or 300/258 in 2v2, and 300/258 per 3v3 seat. Medium AI had independently reduced
+  its paid police funding to zero; that was not used to claim that the kit covers full upkeep.
+- `menu_navigation_probe` at **640×480 passed**, including main-menu keyboard placement,
+  selectable CivWars activation/approval and online generator-to-player setup. Engine-menu
+  checks also passed at 640×480 and 1280×720, including left/right teams and exact guest setup
+  reserialization (the pre-existing non-wire `cityEffects` GUI default is mod-derived).
+- `ui_gallery_probe`: Modern and Classic **640×480 passed**, plus fresh/1.0.850 profile checks.
+  No Civilization Wars screen or corner-crest findings. The existing generic Custom Game map
+  dropdown clipping (2 Classic findings) and old-profile HD Skin-label clipping (4) are
+  recorded unchanged in `gallery640/issues.tsv`.
+- Evidence/screenshots: `/Users/stefan/Documents/projects/outputs/civ-wars/`. The initial
+  distributed acceptance snapshot was cancelled after remaining pending beyond 20 minutes:
+  Pro SSH auth offline, Air below the disk floor, mini memory guard, and a Windows fixture
+  overload ambiguity (fixed by `b849a943`). Own-tree fallback checks ran through the queue.
+
+## 2026-11-02 — Research Lab and trooper anti-air (unreleased)
+
+- New optional `Research Lab` match rule (default off), item 88 (`Research Lab`, 3×2), reusing
+  Tornie's Tech Center art without changing the Tornie building. Yard tech 1; default price500,
+  HP500, power30. Independent house technology to level9, one paid research at a time:
+  `300 * target` credits, `30 + 10 * target` game seconds. Losing the active lab cancels without
+  refund; completed levels persist and the lab is rebuildable. Details: `docs/research-lab.md`.
+- House-specific production/upgrade gates and QuantBot use researched technology; feature-off
+  gates and checkpoint digest fields/order stay on the old path. Synchronized owner-authorized
+  `CMD_RESEARCH_TECH_LEVEL`; active lab/target/remaining state saved. Save9881, protocol111,
+  GameInitSettings MOD15 (old streams load research and trooper-AA off). App version unchanged.
+- Random Skirmish's saved Research Lab checkbox is visible below tech9, grants no free lab,
+  and is handed to a hosted random map's lobby. QuantBot's hashed ResearchLab config switch is
+  default on and reserves economy/defence spending before construction/research.
+- `Trooper Anti-Air` match rule defaults on and only affects content based on `dunecity`,
+  including Civilization Wars. Trooper small rockets reuse moving-aircraft homing/proximity
+  interception; damage stays5. Off/other content keeps original projectile behavior.
+- Measured core checks: native staging build; Windows cluster `dunelegacy_tests` (1,242 passed,
+  3 skipped, 13,322,892 assertions); 14 Python telemetry tests; Random Skirmish engine/menu
+  probe (640×480 included) and generator tests. Research fixture restored active target2 with
+  3,002 cycles left, matched every continuation digest, reached level9, and kept the off-state
+  digest layout. Its tech1 QuantBot built/researched at cycle16,380 and reached tech2 at19,505
+  (262.08s/312.08s). Lab artwork was found content-gated during this run and opened for all mods.
+- Trooper fixture: 3 seeds × 2 flight directions, repeated exactly, DuneCity on: 3 troops
+  0/6 kills with15damage, 5 and8 troops6/6 kills with25damage; off0/6 kills/0damage for every
+  group. Vanilla and Dune2R off/on serialized traces and RNG matched exactly. Results:
+  `outputs/research-trooper-aa-core-v2/summary.csv`, `outputs/research-lab-core/research.csv`.
+  CivWars-specific AA, final menu/gallery and full cluster suite remain integration checks.
+
+## 2026-11-02 — City tax per house, Micropolis land value (OMP integrator, unreleased)
+
+- Stefan: one tax rate for every house was wrong, and tax land value should follow Micropolis.
+- 231c7d4c: each city house has its own tax rate (`HouseCityState::taxRate`, save 9880);
+  `CMD_CITY_SET_TAX_RATE` sets the issuer's house only. Older saves give every house the old
+  shared rate. QuantBot and the budget window read their own house's rate.
+- 231c7d4c, a2e0404f: match rule `Micropolis Land Value` (GameInitSettings MOD14, default on):
+  only roads and buildings develop a block (units do not), each cluster's centre is the centre of
+  its buildings (walls excluded), and a house's tax land value is the area-weighted average of
+  every developed block where it owns a road tile or building. Buildings come from the structure
+  list, not a tile's object order. Off keeps the earlier per-building-origin average.
+- b76c68e9: observer checkpoints restore the live tax land value after the load-time city rescan
+  (`quantbot_army_recovery` caught a one-point land value drift).
+- R/C/I tax checked against Micropolis: per zone R pop/8 + C + I, ×2 zone weight, ×1.4 (easy);
+  `run-city-income.py --mix RICRIC`: tax base 160 eighths at land value 136 and 7% gives
+  222/yr, as `docs/city-economy-balance.md` says, and paid receipts average ~63/min, half the
+  yearly figure under Slow City Year.
+- Protocol 110 and save 9880 cover this too. Checked: `dunelegacy_tests`,
+  `quantbot_custom_attack`, `quantbot_army_recovery`, spectator probes, `save_roundtrip_probe`,
+  full cluster suite 128/129 (`natives_probe` failing before this work).
+
+## 2026-11-01 — Hard city ceiling and in-game AI behaviour switch (OMP integrator, unreleased)
+
+- Stefan: Medium to Hard QuantBot was too big a jump. Cause (MBA game on 1.0.864, 160×160, three
+  Hard bots): Hard's custom city ceiling was 120,000 on maps above 128×128, twice Medium's 60,000.
+- 13e86c24, switch `[Force Concentration] HardCityMatch` (hashed, default on): Hard's ceiling is
+  20k/40k/60k/90k (≤32², ≤64², ≤128², larger) and rises to the largest other house's city
+  population while another house is bigger. Off restores 20k/40k/80k/120k. Details:
+  `docs/ai-scenario-matrix.md` "City population ceilings".
+- a1906c6b, 5608ee37, bc57ec04: a human whose house has a QuantBot partner switches it between
+  None, Build, Fight and Both with an "AI: …" button on the right (`CMD_AI_SUPPORT_ROLE`, new
+  `AIRole::Off`, save 9880). Sidebar row under Auto repair when the stack fits 480 lines,
+  otherwise left of the zoom controls. Details: `docs/ai-roles.md` "Switching the partner in game".
+- One protocol bump for both: 110. App version not bumped.
+- Checked: `dunelegacy_tests`, `quantbot_custom_attack` (city cap and role switch probe),
+  `quantbot_army_recovery` (role save round trip), `game_command_regressions` (button row,
+  zoom-side placement, click queues and applies Fight; screenshots `ai-behaviour-sidebar.png`,
+  `skip-mission-city-sidebar.png`), `stats_ui_*`, `rts_controls_probe`, `menu_navigation_probe`.
+
+## 2026-11-01 — Campaign missions as maps (OMP integrator, unreleased)
+
+- Stefan: put every campaign map into single player with readable names, so it can be played
+  in Custom Game or edited in the map editor.
+- `CampaignMapLibrary` (src/INIMap) copies the active mod's `SCEN?0??.INI` scenarios, as the
+  campaign itself resolves them (PAKs and mod overrides), into
+  `<user data>/maps/campaign/<mod>/` as "<House> Mission <N>[ (A|B|C)].ini". It writes them at
+  runtime from the player's own data, so nothing copyrighted is committed or shipped.
+  Existing files are never overwritten, so edits survive; deleting a file restores the original.
+  Level 1 and 9 have one mission, levels 2-7 have three (A-C), level 8 has two.
+  Vanilla exports 176 files: 22 each for Atreides, Harkonnen, Ordos, Fremen, Sardaukar,
+  Mercenary, Neutral and Rebels, each file distinct.
+- Custom Game lists them under SP Maps (and All Maps). The editor's Load Map window has a new
+  Campaign tab.
+- Commits 8de91ab7, addae7d2, e37a383a. `verifyCampaignMapLibrary` in the menu probe checks:
+  labels; the export is byte-identical to the scenario; edit survival and restore; 66
+  original-house entries in the editor tab; editor load; the Custom Game entry; the lobby seats.
+  A headless 3-minute custom game on "Atreides Mission 3 (B)" ran to the time limit.
+  Cluster ctest: 128/129 (only `natives_probe`, which fails on main too).
+- No gameplay change, so no config switch, protocol or save bump.
+
 ## 2026-11-01 — 1.0.864: builder shortcuts, road plans, AI support, Sandworms, Play Online random skirmish (OMP integrator)
 
 - Shipped: v1.0.864 tag at merge 4fb0469e (PR #117), protocol 109, save 9879. Notes:
@@ -16060,4 +17888,94 @@ website commit a108e55 deployed successfully in run 40086096589. Live build.json
 reports engine 1.0.853 from 3885e067; all eight served artifact hashes passed
 download verification. Core engine hashes match the website repository; the
 delivery-layer loading-progress helper matches its canonical Git source.
+
+## 2026-11-06 — Compact city power candidate (OMP PowerPlants, unreleased)
+
+- Both private Air saves are format **9883 / DuneCity1.0.864**, exact Workshop
+  `27a8c8d92876c5001b7744c7252eca5971327edbc17cde5d5249e1d6351fb0f4`.
+  SHA-256: problem1 `3471c2f58cf449cf49fa38538db923877b94d9b3b668be68927d15e949e94db6`;
+  ainonuclear `91c8f0e23deff5bca62a29f36c714493fe000a11b5b6172608b535e7f6f7821b`.
+  Both candidate source commits `65d227c7` and `3710464d` use package 1.0.864;
+  the header does not record a unique Git identity. Neither save is committed.
+- The exact content's Windtrap is **300 / 100 power / 2×2**; Nuclear is
+  **2,000 / 2,000 power / 3×3**, technology 6, prerequisite Windtrap. Advanced
+  windtraps are disabled. Nuclear gives 20× the output for 6.67× the price and
+  2.25× the ground.
+- Diagnostic pin `68d07089`, problem1 on mini: all eight controllers audited as
+  Brutal, tech 8, normal Custom role. All had available Nuclear offers and AI
+  sites; human-legal nuclear lot counts by house 0–7 were
+  **17/24/73/28/42/41/19/23**. The 15-minute native continuation completed and
+  built **104 Windtraps + 14 Nuclear Plants**. Its scheduler report failed only
+  at read-only finalization (`read` API missing), not in either native game.
+- Native decisions prove **35 fully funded nuclear rejections** across all
+  eight houses. Examples: house 0 need 140/cash 2,196; house 6 need 203/cash
+  3,694; house 7 need 105/cash 3,750. `CityPowerSizing` required extra 1,000
+  working cash and/or charged the reactor's whole price against only the next
+  few Windtraps' worth of immediate need. Technology and placement were not
+  the cause. Initial lower-cash/queued-debt refusals were separately reported
+  to MoneyPlanner; this candidate introduces no replacement money model.
+- New independently hashed **CityCompactPower, default OFF**, compares complete
+  generation per credit and per tile, using actual legal foundation quotes.
+  The shared capital candidate and final yard choice agree; changing a Windtrap
+  to Nuclear also discards the old 2×2 site. Existing commitments, technology,
+  placement safety and first-Windtrap/pending-generation controls remain.
+- Added committed physical/paid OFF/ON fixtures for all four difficulties,
+  config/policy tests and private-save candidate input/behavior checks.
+  `generator_spent` records actual generation-production withdrawals for the
+  paired audit; it is observational only, not a simulation/save/protocol change.
+- Evidence: `../outputs/problem1-20261106/`, including exact hashes,
+  `problem1-baseline/refusal-summary.json`, native compressed decisions and
+  per-house endpoints. Corrected candidate pin **dc2aee77** (do not use the
+  malformed staged predecessor 974b2650), diagnostic/parser follow-up **48521a67**,
+  cheap pre-placement quote guard **1000d208**. The latter preserves the full
+  founded-price check and SWMS bypass; it avoids searching a 384×384 world when
+  legacy spendable cash cannot cover even the base reactor price.
+- Exact problem1 OFF/ON at dc2aee77: both audit arms and both 15-minute native
+  continuations **PASS**. Actual completed builds **104 Wind / 14 Nuclear →
+  65 Wind / 19 Nuclear**; gross completed-generator footprint **542 → 431 tiles**
+  (not final occupied land). Actual generator-production payments
+  **59,547 → 59,688 credits**, including unfinished production. Fully funded
+  Nuclear refusals **35 → 0**, with 15 compact choices. Every house ends with
+  positive power balance. Read-only persisted-evidence behavior check **PASS**;
+  `problem1-compact-pair/{off,on}-power-summary.json` records all eight houses.
+- ainonuclear: after the runner E2BIG fix, both candidate audit arms passed.
+  House 2 has **zero human-legal 3×3 lots**; house 4 has 100 human-legal lots but
+  its AI search rejects 98 for threat and four for ground access. These are
+  legitimate site constraints, not scoring refusals. The old baseline hit its
+  1,800-second wall bound after 13 simulated minutes; that attempt stays a
+  retained failure. Corrected job
+  `20261106T201308-compact-power-nuclear-long-bound-1e6332` (same 15 simulated
+  minutes, 3,600-second bound) **PASSED** all four arms, plus `--verify-compact`.
+  Completed builds **84 Wind / 12 Nuclear → 26 Wind / 16 Nuclear**; gross
+  completed-generator footprint **444 → 248 tiles**; actual generation payments
+  **52,563 → 38,173**; funded Nuclear refusals **33 → 0**, with 11 compact
+  choices. House 4 builds no Nuclear in either arm; house 2 builds one in each.
+  Houses 1–7 end with positive power balance; house 0 and non-player house 12
+  end at 0/0 in both arms. Walls 2,249 s OFF / 2,707 s ON.
+- Checked committed source, not the dirty staging tree: all six changed C++
+  translation units at dc2aee77 passed syntax compilation; QuantBotBuild.cpp at
+  1000d208 also passed. Six Python parser contracts passed.
+- Physical fixtures: combined job
+  `20261106T204440-money-planning-corrected-combined-regressions-20261106-cfac7f`
+  failed all four difficulties at “Small-plot control excludes the windtrap
+  too”; that run did not log the AI rejection reason. 5c3d4602 authored an
+  explicit two-column lot, replacing the one-tile frontage setup guard with a
+  human-legality guard; its run passed those checks, then the decision stream
+  showed the light-factory bootstrap reserving the only small lot. fe8aa498
+  gives the factory its own 2×2 lot, separated by sand so no 3×3 exists;
+  behavior assertions are unchanged. Committed private TU syntax passed with
+  the runner's access flag.
+  Pinned job `20261106T220444-compact-power-factory-lot-081319`: **4/4 passed**
+  with native PASS markers. Mandatory combined regressions and matched
+  strength/historical comparisons still need the integration pin; promotion
+  remains Genome-owned and CityCompactPower stays OFF.
+- Side effects, Compact-only OFF→ON from the same native events, unique
+  (house, object): problem1 Construction Yards lost **3→0**, zone completions
+  606→648, structures lost 88→70; ainonuclear yards lost **6→7**, zones
+  763→776, structures lost 484→497. Reactor detonations 1→1 and 5→4; no yard
+  loss in either arm is within 6 tiles/40 cycles of a detonation. One paired run
+  per save; no strength claim. MoneyPlanner's joint SWMS+Compact lane at
+  b8a627aa raised yard losses 3→8 (problem1) / 6→10 (ainonuclear), saved
+  rule; Compact alone does not reproduce that, so judge the combination as an
+  interaction rather than charging either gene alone.
 

@@ -46,7 +46,7 @@ elseif(APPLE)
         MACOSX_BUNDLE_BUNDLE_NAME "Dune City"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-        MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_LONG_VERSION_STRING "${DUNECITY_DISPLAY_VERSION}"
         MACOSX_BUNDLE_ICON_FILE "dunecity.icns"
         MACOSX_BUNDLE_GUI_IDENTIFIER "net.dunecity.DuneCity"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/IDE/xCode/Info.plist"
@@ -170,6 +170,8 @@ target_sources(dunecity
         INIMap/INIMapLoader.cpp
         INIMap/INIMapEditorLoader.cpp
         INIMap/INIMapPreviewCreator.cpp
+        INIMap/CampaignMapLibrary.cpp
+        INIMap/MatchMapExport.cpp
 
         # FileClasses
         FileClasses/Animation.cpp
@@ -224,6 +226,7 @@ target_sources(dunecity
         GUI/dune/DuneStyle.cpp
         GUI/dune/GameOptionsWindow.cpp
         GUI/dune/LoadSaveWindow.cpp
+        GUI/dune/SaveMapWindow.cpp
         GUI/dune/InGameMenu.cpp
         GUI/dune/InGameSettingsMenu.cpp
         GUI/dune/NewsTicker.cpp
@@ -240,6 +243,7 @@ target_sources(dunecity
         Menu/SinglePlayerMenu.cpp
         Menu/SinglePlayerSkirmishMenu.cpp
         Menu/RandomSkirmishMenu.cpp
+        Menu/CivWarsMenu.cpp
         Menu/CustomGameMenu.cpp
         Menu/CustomGamePlayers.cpp
         Menu/CoopCampaignMenu.cpp
@@ -305,6 +309,7 @@ target_sources(dunecity
         players/QuantBotStrategy.cpp
         players/QuantBotAir.cpp
         players/QuantBotHarvesters.cpp
+        players/QuantBotSpiceBloom.cpp
         players/QuantBotCampaign.cpp
         players/QuantBotConfig.cpp
         players/SmartBot.cpp
@@ -343,6 +348,7 @@ target_sources(dunecity
         structures/AdvancedWindTrap.cpp
         structures/Worfinery.cpp
         structures/TechCenter.cpp
+        structures/ResearchLab.cpp
         structures/Scoutpost.cpp
         structures/LoveFactory.cpp
         structures/ChaosFactory.cpp
@@ -418,6 +424,7 @@ target_sources(dunecity
         MapEditor/MapMirror.cpp
         MapEditor/NewMapWindow.cpp
         MapEditor/SkirmishGenerator.cpp
+        MapEditor/CivWarsGenerator.cpp
         MapEditor/SkirmishCatalogue.cpp
         MapEditor/LoadMapWindow.cpp
         MapEditor/PlayerSettingsWindow.cpp
@@ -490,10 +497,12 @@ if(APPLE)
         PRIVATE
             ${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
             ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
+            ${CMAKE_SOURCE_DIR}/src/misc/MacTrackpad.mm
     )
     # Enable Objective-C ARC (Automatic Reference Counting)
     set_source_files_properties(${CMAKE_SOURCE_DIR}/IDE/xCode/MacFunctions.m
             ${CMAKE_SOURCE_DIR}/src/misc/GameActivityMac.mm
+            ${CMAKE_SOURCE_DIR}/src/misc/MacTrackpad.mm
         PROPERTIES
             COMPILE_FLAGS "-fobjc-arc"
     )
@@ -757,9 +766,10 @@ if(NOT EMSCRIPTEN)
         "${MODS_DIR}/*/ObjectData.ini" "${MODS_DIR}/*/checksums.sha256")
     file(GLOB_RECURSE COMMUNITY_MOD_FILES CONFIGURE_DEPENDS
         "${MODS_DIR}/community-*/*" "${MODS_DIR}/new/*")
+    file(GLOB CIVWARS_MOD_FILES CONFIGURE_DEPENDS "${MODS_DIR}/CivWars/*")
     set_property(TARGET dunecity APPEND PROPERTY LINK_DEPENDS
         "${CMAKE_SOURCE_DIR}/config/Achievements.ini"
-        "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default" ${BUNDLED_OBJECT_DATA} ${COMMUNITY_MOD_FILES})
+        "${CMAKE_SOURCE_DIR}/config/ObjectData.ini.default" ${BUNDLED_OBJECT_DATA} ${COMMUNITY_MOD_FILES} ${CIVWARS_MOD_FILES})
 endif()
 
 function(add_copy_mods DEST_DIR)

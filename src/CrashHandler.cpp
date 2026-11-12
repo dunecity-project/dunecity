@@ -26,6 +26,15 @@
 static FILE* crashLogFile = nullptr;
 static const char* crashLogPath = nullptr;
 static void* registeredGame = nullptr;
+static volatile sig_atomic_t errorDialogs = 1;
+
+void setErrorDialogsEnabled(bool enabled) {
+    errorDialogs = enabled ? 1 : 0;
+}
+
+bool errorDialogsEnabled() {
+    return errorDialogs != 0;
+}
 
 /**
  * Get current timestamp as string
@@ -117,7 +126,7 @@ static void signalHandler(int sig) {
     writeCrashLog("========================================\n");
     writeCrashLog("Signal: %d (%s)\n", sig, getSignalName(sig));
     writeCrashLog("Time: %s\n", getTimeStamp());
-    writeCrashLog("Version: %s\n", VERSION);
+    writeCrashLog("Version: %s\n", DUNECITY_DISPLAY_VERSION);
     writeCrashLog("Platform: %s\n", SDL_GetPlatform());
     writeCrashLog("\n");
     
@@ -192,22 +201,24 @@ static void signalHandler(int sig) {
         crashLogFile = nullptr;
     }
     
-    // Show message to user
-    char message[512];
-    snprintf(message, sizeof(message),
-        "Dune City has crashed unexpectedly.\n\n"
-        "A crash report has been saved to:\n"
-        "%s\n\n"
-        "Please report this bug on GitHub or the forums.\n"
-        "Include the crash report to help fix the issue.",
-        crashLogPath ? crashLogPath : "Dune City.log");
-    
-    SDL_ShowSimpleMessageBox(
-        SDL_MESSAGEBOX_ERROR,
-        "Dune City - Fatal Error",
-        message,
-        nullptr
-    );
+    // Unattended probes must not wait for someone to dismiss a native dialog.
+    if(errorDialogsEnabled()) {
+        char message[512];
+        snprintf(message, sizeof(message),
+            "Dune City has crashed unexpectedly.\n\n"
+            "A crash report has been saved to:\n"
+            "%s\n\n"
+            "Please report this bug on GitHub or the forums.\n"
+            "Include the crash report to help fix the issue.",
+            crashLogPath ? crashLogPath : "Dune City.log");
+
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR,
+            "Dune City - Fatal Error",
+            message,
+            nullptr
+        );
+    }
     
     // Restore default handler and re-raise signal
     // This allows the OS to generate a core dump if enabled

@@ -1,4 +1,4 @@
-"""A saved benchmark must remain reproducible after graphics-only replacements."""
+"""A saved benchmark must remain reproducible after artwork and config replacements."""
 import gzip
 import hashlib
 import importlib.util
@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tests/performance'))
@@ -16,9 +17,12 @@ spec.loader.exec_module(benchmark)
 
 
 class SavedBenchmarkTests(unittest.TestCase):
-    def test_exact_saved_revisions_survive_current_art_replacement(self):
+    def test_exact_saved_revisions_survive_current_art_and_config_replacement(self):
         with tempfile.TemporaryDirectory() as temporary:
-            save, profile = benchmark.build_eight_house_fixture(Path(temporary))
+            # Production defaults may change; the saved revision must supply its own configs.
+            with mock.patch.object(benchmark, 'EIGHT_HOUSE_SOURCES',
+                                   ('mods/dunecity/graphics_skins',)):
+                save, profile = benchmark.build_eight_house_fixture(Path(temporary))
             self.assertEqual(save.read_bytes(), gzip.decompress(
                 (benchmark.EIGHT_HOUSE / 'fpsstillfucked.dls.gz').read_bytes()))
             versions = json.loads((benchmark.EIGHT_HOUSE / 'versions.json').read_text())

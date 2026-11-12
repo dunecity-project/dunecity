@@ -663,7 +663,7 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
 
 bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
     return unit && unit->getOwner()==getHouse() && QuantBotInternal::ornithopterItem(unit->getItemID())
-        && !builderOnly() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
+        && !builderOnly() && !switchedOff() && unitRole(unit, {UnitRole::Human}) == UnitRole::Free;
 }
 
 bool QuantBot::autonomousAircraftRaids() const {
@@ -754,7 +754,7 @@ Coord QuantBot::findBestDeathHandTarget(int enemyHouseID) {
         // of the wave's ground units are shooting at (ties to the lower team id).
         int waveTeam = -1;
         if (forceVariant(kForceFinishWeakest) || forceVariant(kForceMassAssault)) {
-            waveTeam = finishTargetTeam();
+            waveTeam = finishTargetTeam(nullptr);
         } else {
             std::map<int, int> engaged;
             for (const Uint32 id : customWave.members) {

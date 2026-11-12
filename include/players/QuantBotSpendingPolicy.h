@@ -8,6 +8,11 @@
 // random tie breaking, or assumption that forecast income is spendable today.
 namespace QuantBotSpendingPolicy {
 constexpr int horizonMinutes = 4;
+enum class Bucket : unsigned { Production, Economy, Military };
+inline const char* bucketName(Bucket bucket) {
+    return bucket == Bucket::Production ? "production"
+        : bucket == Bucket::Economy ? "economy" : "military";
+}
 struct CashFlow {
     int projectedCash = 0;
     int netBurnPerMinute = 0;

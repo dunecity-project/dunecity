@@ -68,6 +68,8 @@ public:
     /// setLocation, density-change hooks, and load.
     void refreshZonePowerDraw();
     int getZonePowerDraw() const { return registeredZonePower_; }
+    /// City growth, animation and status share the same house-grid power test.
+    bool hasCityPower() const;
 
     /// Update curAnimFrame from current tile density (column in the atlas)
     /// and the sampled land-value tier (row). Called every tick so the

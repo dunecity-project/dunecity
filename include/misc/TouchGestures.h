@@ -18,6 +18,7 @@
       step (misc/ZoomSteps.h) per kZoomStep change in their distance, about the ratio
       between neighbouring steps, and lifting them quickly without either is a right
       click at their midpoint.
+      Pan and zoom require both fingers to start inside the active map, outside its controls.
     - Holding one finger and then tapping a second is a right click at the first finger.
     - Holding still for kLongPressMs and releasing is a right click without a left click.
     - A gesture beginning at the configured map edge scrolls without clicking.
@@ -62,7 +63,11 @@ public:
             return w > 0 && h > 0 && px >= x && py >= y && px < x + w && py < y + h;
         }
     };
-    void setMapArea(Rect area, Rect controls) { mapArea = area; mapControls = controls; }
+    void setMapArea(Rect area, Rect controls) {
+        mapArea = area;
+        mapControls = controls;
+        if(area.w <= 0 || area.h <= 0) mapGestureAllowed = false;
+    }
     /// Held touch only: never scroll from a lifted finger's stale mouse position.
     std::array<int, 2> edgeScroll() const;
 
@@ -71,6 +76,7 @@ public:
 
 private:
     enum class State { Idle, Pending, Pressed, Edge, TwoFinger, Done };
+    bool mapAt(int x, int y) const { return mapArea.contains(x, y) && !mapControls.contains(x, y); }
     std::array<int, 2> edgeAt(int x, int y) const;
     Rect mapArea, mapControls;
 
@@ -100,6 +106,7 @@ private:
     float startSpread = 1.0f;
     float zoomSpread = 1.0f;
     bool moving = false;
+    bool mapGestureAllowed = false; ///< latched from both touch origins; disabling the map cancels it
 };
 
 #endif // TOUCHGESTURES_H

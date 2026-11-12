@@ -4,17 +4,18 @@
 // Once a game minute (EliminationMatch::sample, so in vanilla-match.py matches and in a continued
 // save) every playing house logs FFA_ARMY_SAMPLE: its mobile ground army value (price) inside
 // its base (within kBaseTiles of one of its own buildings, city zones and roads' buildings
-// included) and outside it, and for a QuantBot the value per role (wave, defence, free), the free
-// value standing at the forward bundle and at the perimeter point, units that are stuck (a free
-// unit away from its destination that did not move since the last sample), the outnumbered
-// verdict with the remembered enemy army summed and per enemy team, and where the bundle and the
-// perimeter point lie relative to its own buildings. Read-only; probe-only state.
+// included) and outside it. Policy-derived roles are explicitly unmeasured:
+// evaluating them can mutate AI caches or lazily clear an ObjectPointer. Stored
+// points/counters and pure army estimates remain available, but an expired cache
+// is not recomputed by observation. Read-only; probe-only state.
+// The army-deploys regression alone opts into its historical, non-pure role
+// evaluation. That explicit mode must never be used for A/B or digest evidence.
 //
 // BALANCE_FFA_DUMP=<prefix> also writes <prefix>-m<minute>.json at the first sample and every
 // BALANCE_FFA_DUMP_EVERY minutes (default 5): terrain, building and road tiles per owner, every
 // unit and each QuantBot's points, for tests/ai/ffa-map.py to draw. BALANCE_FFA_SCREENSHOT=<png>
-// renders the game view (Game::drawScreen at the profile's resolution) centred between house
-// BALANCE_FFA_SCREENSHOT_HOUSE's assembly point and its forward bundle at the first sample.
+// renders the game view (Game::drawScreen at the profile's resolution) centred on
+// BALANCE_FFA_SCREENSHOT_HOUSE's stored forward bundle or protected rally.
 #include <players/QuantBot.h>
 #include <structures/StructureBase.h>
 #include <units/UnitBase.h>
@@ -96,11 +97,23 @@ inline std::map<int, int64_t> sightingsByTeam(const QuantBot& bot) {
     return teams;
 }
 
-inline std::map<Uint32, Coord>& lastPositions() { static std::map<Uint32, Coord> positions; return positions; }
+inline bool armyDeploysRegressionObserver() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER");
+        return value && value[0] == '1' && value[1] == '\0';
+    }();
+    return enabled;
+}
+
+inline std::map<Uint32, Coord>& regressionLastPositions() {
+    static std::map<Uint32, Coord> positions;
+    return positions;
+}
 
 inline void dump(Game& game, int minute) {
     const char* prefix = std::getenv("BALANCE_FFA_DUMP");
     if (!prefix) return;
+    const bool regression = armyDeploysRegressionObserver();
     static int lastDump = -1000;
     const int every = std::getenv("BALANCE_FFA_DUMP_EVERY") ? std::max(1, std::atoi(std::getenv("BALANCE_FFA_DUMP_EVERY"))) : 5;
     if (lastDump >= 0 && minute - lastDump < every) return;
@@ -135,10 +148,11 @@ inline void dump(Game& game, int minute) {
     first = true;
     for (const auto* unit : unitList) {
         if (!groundFighter(unit)) continue;
-        const QuantBot* bot = quantBotOf(unit->getOwner());
         int role = -1;
-        if (bot) role = int(bot->unitRole(unit, {QuantBot::UnitRole::Human, QuantBot::UnitRole::Repair,
-            QuantBot::UnitRole::Defence, QuantBot::UnitRole::Wave, QuantBot::UnitRole::Escort, QuantBot::UnitRole::ColonyGuard}));
+        if (regression)
+            if (const auto* bot = quantBotOf(unit->getOwner()))
+                role = int(bot->unitRole(unit, {QuantBot::UnitRole::Human, QuantBot::UnitRole::Repair,
+                    QuantBot::UnitRole::Defence, QuantBot::UnitRole::Wave, QuantBot::UnitRole::Escort, QuantBot::UnitRole::ColonyGuard}));
         out << (first ? "" : ",") << '[' << unit->getOwner()->getHouseID() << ',' << unit->getLocation().x << ','
             << unit->getLocation().y << ',' << unit->getItemID() << ',' << role << ',' << int(unit->getAttackMode()) << ','
             << int(unit->isMoving()) << ']';
@@ -151,10 +165,13 @@ inline void dump(Game& game, int minute) {
         out << (first ? "" : ",") << "{\"house\":" << house->getHouseID() << ",\"team\":" << house->getTeamID()
             << ",\"alive\":" << int(house->isAlive());
         if (bot) {
-            const Coord perimeter = bot->perimeter().point, anchor = bot->armyAssemblyAnchor();
+            const Coord perimeter = regression ? bot->perimeter().point
+                : (bot->perimeterCycle == game.getGameCycleCount() ? bot->perimeterCache.point : Coord::Invalid());
+            const Coord anchor = regression ? bot->armyAssemblyAnchor() : Coord::Invalid();
             out << ",\"bundle\":[" << bot->bundlePoint.x << ',' << bot->bundlePoint.y << "],\"perimeter\":[" << perimeter.x << ','
                 << perimeter.y << "],\"assembly\":[" << anchor.x << ',' << anchor.y << "],\"protected\":[" << bot->protectedRally.x
-                << ',' << bot->protectedRally.y << "],\"garrisoned\":" << int(bot->garrisoned());
+                << ',' << bot->protectedRally.y << "],\"garrisoned\":" << (regression ? int(bot->garrisoned()) : -1)
+                << ",\"roles_measured\":" << int(regression) << ",\"assembly_measured\":" << int(regression);
         }
         out << '}';
         first = false;
@@ -171,9 +188,14 @@ inline void screenshot(Game& game, int minute) {
     taken = true;
     const House* house = game.getHouse(std::atoi(std::getenv("BALANCE_FFA_SCREENSHOT_HOUSE")));
     const QuantBot* bot = house ? quantBotOf(house) : nullptr;
-    Coord centre = house ? bot ? bot->armyAssemblyAnchor() : Coord::Invalid() : Coord::Invalid();
-    if (bot && centre.isValid() && bot->bundlePoint.isValid())
-        centre = Coord((centre.x + bot->bundlePoint.x) / 2, (centre.y + bot->bundlePoint.y) / 2);
+    Coord centre = Coord::Invalid();
+    if (armyDeploysRegressionObserver()) {
+        centre = bot ? bot->armyAssemblyAnchor() : Coord::Invalid();
+        if (bot && centre.isValid() && bot->bundlePoint.isValid())
+            centre = Coord((centre.x + bot->bundlePoint.x) / 2, (centre.y + bot->bundlePoint.y) / 2);
+    } else if (bot) {
+        centre = bot->bundlePoint.isValid() ? bot->bundlePoint : bot->protectedRally;
+    }
     if (centre.isInvalid()) return;
     screenborder->setNewScreenCenter(Coord(centre.x * TILESIZE + TILESIZE / 2, centre.y * TILESIZE + TILESIZE / 2));
     SDL_SetRenderTarget(renderer, nullptr);
@@ -186,28 +208,32 @@ inline void screenshot(Game& game, int minute) {
 
 inline void sample(Game& game) {
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
-    screenshot(game, minute);
-    auto& last = lastPositions();
+    const bool regression = armyDeploysRegressionObserver();
+    auto* last = regression ? &regressionLastPositions() : nullptr;
     std::map<Uint32, Coord> now;
+    screenshot(game, minute);
     for (const House* house : EliminationMatch::playingHouses(game)) {
         if (!house->isAlive()) continue;
         const BaseGrid grid = baseGrid(house);
         QuantBot* bot = quantBotOf(house);
-        int64_t total = 0, inside = 0, wave = 0, defence = 0, freeValue = 0, atBundle = 0, atPerimeter = 0, freeInside = 0,
-                stuck = 0, onRoad = 0;
-        int units = 0, stuckUnits = 0;
+        int64_t total = 0, inside = 0, onRoad = 0;
+        const int roleInitial = regression ? 0 : -1;
+        int64_t wave = roleInitial, defence = roleInitial, freeValue = roleInitial, freeInside = roleInitial,
+                atBundle = roleInitial, atPerimeter = roleInitial, stuck = roleInitial;
+        int units = 0, stuckUnits = roleInitial;
         const Coord bundle = bot ? bot->bundlePoint : Coord::Invalid();
-        const Coord perimeter = bot ? bot->perimeter().point : Coord::Invalid();
+        const Coord perimeter = !bot ? Coord::Invalid() : regression ? bot->perimeter().point
+            : (bot->perimeterCycle == game.getGameCycleCount() ? bot->perimeterCache.point : Coord::Invalid());
         for (const auto* unit : unitList) {
             if (unit->getOwner() != house || !groundFighter(unit)) continue;
             const int value = price(unit);
             const Coord at = unit->getLocation();
-            now[unit->getObjectID()] = at;
+            if (regression) now[unit->getObjectID()] = at;
             total += value; ++units;
             const bool in = grid.inside(at);
             if (in) inside += value;
             if (currentGameMap->getTile(at)->isRoad()) onRoad += value;
-            if (!bot) continue;
+            if (!regression || !bot) continue;
             const auto role = bot->unitRole(unit, {QuantBot::UnitRole::Human, QuantBot::UnitRole::Repair, QuantBot::UnitRole::Defence,
                                                    QuantBot::UnitRole::Wave, QuantBot::UnitRole::Escort, QuantBot::UnitRole::ColonyGuard});
             if (role == QuantBot::UnitRole::Wave) { wave += value; continue; }
@@ -217,9 +243,9 @@ inline void sample(Game& game) {
             if (in) freeInside += value;
             if (bundle.isValid() && chebyshev(at, bundle) <= kAtPointTiles) atBundle += value;
             if (perimeter.isValid() && chebyshev(at, perimeter) <= kAtPointTiles) atPerimeter += value;
-            const auto previous = last.find(unit->getObjectID());
+            const auto previous = last->find(unit->getObjectID());
             const Coord destination = unit->getDestination();
-            if (previous != last.end() && previous->second == at && !unit->isMoving() && !unit->hasATarget()
+            if (previous != last->end() && previous->second == at && !unit->isMoving() && !unit->hasATarget()
                 && destination.isValid() && chebyshev(destination, at) > 2) { stuck += value; ++stuckUnits; }
         }
         std::string extra;
@@ -238,8 +264,11 @@ inline void sample(Game& game) {
                 "bundle_ready=%d held_home=%d bundle=%d,%d bundle_base_tiles=%d bundle_road=%d perimeter=%d,%d "
                 "perimeter_base_tiles=%d garrison_holds=%d bundle_orders=%d gate_holds=%d",
                 (long long)bot->ownGroundArmyValue(), (long long)sum, (long long)strongest,
-                perTeam.empty() ? "-" : perTeam.c_str(), int(bot->outnumberedByEstimate()), int(bot->garrisoned()),
-                int(bot->bundleArmyReady()), int(bot->reserveHeldHome()), bundle.x, bundle.y,
+                perTeam.empty() ? "-" : perTeam.c_str(),
+                regression ? int(bot->outnumberedByEstimate())
+                    : (bot->estimateCycle == game.getGameCycleCount() ? int(bot->estimateOutnumbered) : -1),
+                regression ? int(bot->garrisoned()) : -1,
+                int(bot->bundleArmyReady()), regression ? int(bot->reserveHeldHome()) : -1, bundle.x, bundle.y,
                 bundle.isValid() ? grid.distance(bundle) : -1,
                 bundle.isValid() && currentGameMap->tileExists(bundle) ? int(currentGameMap->getTile(bundle)->isRoad()) : -1,
                 perimeter.x, perimeter.y, perimeter.isValid() ? grid.distance(perimeter) : -1, bot->forceStats.garrisonHolds,
@@ -248,13 +277,13 @@ inline void sample(Game& game) {
         }
         SDL_Log("FFA_ARMY_SAMPLE: minute=%d cycle=%u house=%d team=%d units=%d army_value=%lld inside_value=%lld "
                 "outside_value=%lld on_road_value=%lld wave_value=%lld defence_value=%lld free_value=%lld free_inside_value=%lld "
-                "at_bundle_value=%lld at_perimeter_value=%lld stuck_value=%lld stuck_units=%d%s",
+                "at_bundle_value=%lld at_perimeter_value=%lld stuck_value=%lld stuck_units=%d roles_measured=%d%s",
                 minute, game.getGameCycleCount(), house->getHouseID(), house->getTeamID(), units, (long long)total,
                 (long long)inside, (long long)(total - inside), (long long)onRoad, (long long)wave, (long long)defence,
                 (long long)freeValue, (long long)freeInside, (long long)atBundle, (long long)atPerimeter, (long long)stuck,
-                stuckUnits, extra.c_str());
+                stuckUnits, int(regression), extra.c_str());
     }
-    last.swap(now);
+    if (regression) last->swap(now);
     dump(game, minute);
 }
 

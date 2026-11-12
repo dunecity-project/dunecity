@@ -57,3 +57,14 @@ TEST_CASE("Power ordering: Industrial > Commercial > Residential at every densit
         REQUIRE(c > r);
     }
 }
+
+TEST_CASE("Zone growth needs a live, sufficient grid under the vacancy rule", "[zonepower]") {
+    REQUIRE_FALSE(DuneCity::hasZonePower(0, 0, true));
+    REQUIRE_FALSE(DuneCity::hasZonePower(0, 10, true));
+    REQUIRE_FALSE(DuneCity::hasZonePower(9, 10, true));
+    REQUIRE(DuneCity::hasZonePower(10, 10, true));
+    REQUIRE(DuneCity::hasZonePower(11, 10, true));
+    REQUIRE(DuneCity::hasZonePower(10, 0, true));
+    REQUIRE(DuneCity::hasZonePower(0, 0, false));
+    REQUIRE_FALSE(DuneCity::hasZonePower(0, 10, false));
+}

@@ -4,8 +4,14 @@
 // Everything here drives the production QuantBot entry points against real
 // units, real structures and the real map. No behaviour is simulated.
 #include "battery-clearance-probe.inc"
+#include "retreat-preserve-probe.inc"
 
 void runArmyRecoveryProbe(Game& game) {
+    if (std::getenv("BALANCE_RETREAT_PRESERVE_ONLY")) {
+        runRetreatPreserveProbe(game);
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=retreat_preserve outcome=passed");
+        return;
+    }
     // QuantBot's AI pass interval (AIUPDATEINTERVAL in QuantBot.cpp, which is a
     // translation-unit macro). One interval of real frames is serviced between
     // recall passes in the stress section below.
@@ -572,7 +578,7 @@ void runArmyRecoveryProbe(Game& game) {
                 if(bot->defenceAssignments.count(unit->getObjectID())
                     && bot->defenceAssignments[unit->getObjectID()]==victim->getObjectID()
                     && unit->getAttackMode()==HUNT
-                    && (unit->isHuntingToward() || unit->getTarget()==raider))
+                    && (unit->isHuntingToward() || currentGame->getObjectManager().getObject(unit->target.getObjectID())==raider))
                     defended=true;
             require(defended,"Emergency base defence was blocked by the recovery posture");
             // And the recall must not steal an assigned defender back.
@@ -1144,7 +1150,7 @@ void runArmyRecoveryProbe(Game& game) {
                 for(const auto id:bot->customWave.members) {
                     const auto* unit=dynamic_cast<const UnitBase*>(bot->getObject(id));
                     if(!unit || !unit->isAGroundUnit()) continue;
-                    require(unit->getTarget()!=anchor || !unit->wasForced(),
+                    require(currentGame->getObjectManager().getObject(unit->target.getObjectID())!=anchor || !unit->wasForced(),
                         "A dispatched attacker was forced onto a controller-chosen target");
                 }
             }
@@ -1646,8 +1652,9 @@ void runArmyRecoveryProbe(Game& game) {
             require(std::string(again.getData(),again.getDataLength())==bytes,
                 "Re-saving a loaded bot produced different bytes");
             // The role byte (save 9875, docs/ai-roles.md): every role round-trips, and an older
-            // save's support flag, stored in the same byte, loads as Builder or Both.
-            for(AIRole role:{AIRole::Fighter,AIRole::Builder,AIRole::Both}) {
+            // save's support flag, stored in the same byte, loads as Builder or Both. Off (3)
+            // exists from save 9880; a 9879 save holding 3 is corrupt and loads as Both.
+            for(AIRole role:{AIRole::Fighter,AIRole::Builder,AIRole::Both,AIRole::Off}) {
                 const AIRole keepRole=bot->role;
                 bot->role=role;
                 OMemoryStream roleOut; roleOut.open();
@@ -1657,7 +1664,14 @@ void runArmyRecoveryProbe(Game& game) {
                 IMemoryStream roleIn(roleBytes.data(),roleBytes.size());
                 QuantBot reloaded(roleIn,owner);
                 require(reloaded.role==role,"A save and load changed the AI role");
-                if(role==AIRole::Fighter) continue;
+                if(role==AIRole::Off) {
+                    currentGame->loadedSavegameVersion=SAVEGAMEVERSION_AI_ROLE_OFF-1;
+                    IMemoryStream oldIn(roleBytes.data(),roleBytes.size());
+                    QuantBot beforeOff(oldIn,owner);
+                    currentGame->loadedSavegameVersion=SAVEGAMEVERSION;
+                    require(beforeOff.role==AIRole::Both,"A pre-9880 save loaded the Off role");
+                }
+                if(role==AIRole::Fighter || role==AIRole::Off) continue;
                 currentGame->loadedSavegameVersion=SAVEGAMEVERSION_AI_ROLE-1;
                 IMemoryStream flagIn(roleBytes.data(),roleBytes.size());
                 QuantBot fromFlag(flagIn,owner);

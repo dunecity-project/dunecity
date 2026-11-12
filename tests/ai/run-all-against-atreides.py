@@ -9,8 +9,8 @@ unit and harvester overrides 0, concrete required, explored map, worms respawn .
 watched by a local spectator so no human player is involved.
 
 Pass: on every seed Atreides eliminates every other house within --win-minutes of game
-time. The limit comes from the last good release (see docs/quantbot-all-against-atreides.md);
-a slow win is the regression Stefan reported, so "eventually wins" is not enough.
+time. Stefan's recovery gate sets the limit at 50 minutes (2026-11-07; see
+docs/quantbot-all-against-atreides.md); "eventually wins" is not enough.
 
 Each seed prints winner, game time, Atreides' credits/army/harvester curve, enemies alive,
 attack waves launched (ground_hunt: count, size) and defence responses (defence_response,
@@ -23,7 +23,6 @@ runs inline (--path-workers 1), the fastest setting when the matches fill the co
 """
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 import time
@@ -32,7 +31,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import discard_profile_assets, require_free_space  # noqa: E402
+from probe_profile import discard_profile_assets, headless_asset_arguments, remove_tree, require_free_space  # noqa: E402
 
 MAP = root / 'data/maps/singleplayer/5P - 128x128 - All against Atreides.ini'
 OPTIONS = root / 'tests/ai/all-against-atreides-options.ini'
@@ -47,9 +46,10 @@ ROSTER = 'harkonnen:1,atreides:2,ordos:1,fremen:1,sardaukar:1'
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--seeds', type=int, nargs='+', default=list(DEFAULT_SEEDS))
+parser.add_argument('--seeds', type=int, nargs='+', default=list(DEFAULT_SEEDS),
+                    help='Exact seeds to play; recovery gate: 1756374161 906213928')
 parser.add_argument('--jobs', type=int, default=3, help='Matches played at once')
-parser.add_argument('--win-minutes', type=float, default=40.0,
+parser.add_argument('--win-minutes', type=float, default=50.0,
                     help='Atreides must have eliminated every other house by this game minute')
 parser.add_argument('--minutes', type=int, default=0,
                     help='Game-time cap per match (default: --win-minutes + 1, the result is decided then)')
@@ -71,7 +71,7 @@ args = parser.parse_args()
 require_free_space()
 cap = args.minutes or int(args.win_minutes) + 1
 out = args.output_dir.resolve()
-shutil.rmtree(out, ignore_errors=True)
+remove_tree(out)
 out.mkdir(parents=True)
 
 options = OPTIONS
@@ -89,7 +89,7 @@ def campaign(output, *extra):
             *(() if args.human_seat else ('--local-spectator',)), '--elimination-match',
             '--enemy-ai', args.enemy_ai, '--enemy-difficulty', 'hard', '--game-options', str(options),
             '--capture-mib', '512', '--path-workers', str(args.path_workers),
-            *(('--no-ai-telemetry',) if args.no_ai_telemetry else ()), *extra]
+            *headless_asset_arguments(), *(('--no-ai-telemetry',) if args.no_ai_telemetry else ()), *extra]
 
 
 def fields(line, marker):
@@ -174,7 +174,7 @@ probe = out / 'probe'
 subprocess.run(campaign(probe, '--minutes', '1', '--seed', str(args.seeds[0])), cwd=root, check=True,
                capture_output=True, text=True)
 binary = probe / 'balance-probe.app/Contents/MacOS/balance-probe'
-shutil.rmtree(probe / 'profile', ignore_errors=True)
+remove_tree(probe / 'profile')
 started = time.time()
 with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
     games = list(pool.map(play, args.seeds))

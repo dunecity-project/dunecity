@@ -19,6 +19,7 @@
 #define SLIDER_H
 
 #include "Widget.h"
+#include "Button.h"
 #include <GUI/GUIStyle.h>
 #include <misc/draw_util.h>
 #include <misc/SDL2pp.h>
@@ -69,6 +70,13 @@ public:
     /// Called with true when the player changed the step, false when the program did.
     void setOnSelectionChange(std::function<void (bool)> onChange) { pOnSelectionChange = std::move(onChange); }
 
+    /// Reuse Button's tooltip timing, placement and rendering, as DropDownBox does.
+    void setTooltipText(const std::string& text) {
+        tooltip.resize(getSize());
+        tooltip.setTooltipText(text);
+    }
+    const std::string& getTooltipText() const noexcept { return tooltip.getTooltipText(); }
+
     bool isActivatable() const override { return isEnabled() && isVisible(); }
 
     Point getMinimumSize() const override { return Point(120, 18); }
@@ -76,11 +84,14 @@ public:
     void resize(Point newSize) override { resize(newSize.x, newSize.y); }
     void resize(Uint32 width, Uint32 height) override {
         Widget::resize(width, height);
+        if(!tooltip.getTooltipText().empty()) tooltip.resize(width, height);
         invalidateTextures();
     }
 
     void handleMouseMovement(Sint32 x, Sint32 y, bool insideOverlay) override {
         hover = !insideOverlay && x >= 0 && y >= 0 && x < getSize().x && y < getSize().y;
+        if(!tooltip.getTooltipText().empty())
+            tooltip.handleMouseMovement(insideOverlay || !isEnabled() || dragging ? -1 : x, y, insideOverlay);
         if(dragging) selectAt(x, true);
     }
 
@@ -148,6 +159,10 @@ public:
         }
     }
 
+    void drawOverlay(Point position) override {
+        if(isVisible() && isEnabled() && !dragging) tooltip.drawOverlay(position);
+    }
+
 protected:
     void updateTextures() override {
         Widget::updateTextures();
@@ -206,6 +221,7 @@ private:
     std::function<void (bool)> pOnSelectionChange;
     sdl2::texture_ptr pBackground;
     sdl2::texture_ptr pText;
+    Button tooltip;
 };
 
 #endif // SLIDER_H

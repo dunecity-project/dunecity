@@ -120,7 +120,11 @@ CREATE VIEW IF NOT EXISTS capital_orders AS
  UNION ALL
  SELECT session,seq,cycle,house,json_extract(data,'$.capital_plan'),json_extract(data,'$.builder'),
  23,'Road batch',json_extract(data,'$.cost'),'road_maintenance','roads'
- FROM events WHERE event='capital_road_batch';
+ FROM events WHERE event='capital_road_batch'
+ UNION ALL
+ SELECT session,seq,cycle,house,json_extract(data,'$.capital_plan'),json_extract(data,'$.lab'),
+ 88,'Tech research',json_extract(data,'$.cost'),'tech_research','research'
+ FROM events WHERE event='research_started' AND json_extract(data,'$.capital_plan')>0;
 CREATE VIEW IF NOT EXISTS capital_outcomes AS
  SELECT session,seq,cycle,house,json_extract(data,'$.plan') AS plan,
  json_extract(data,'$.priority_ordered') AS priority_ordered,

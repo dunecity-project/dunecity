@@ -2224,11 +2224,14 @@ void UnitBase::applySlow() {
        || isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_KLESHMERSH)) return;
     const bool rebels = isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_REBELS);
     slowTimer = std::max(slowTimer, MILLI2CYCLES(rebels ? 8000 : 4000));
-    if(currentGameMap->tileExists(location)) setSpeeds();
+    // Recompute only an active step: stationary infantry have no previous tile slot.
+    // A later step reads the current slow/research modifiers when it starts.
+    if(moving && currentGameMap->tileExists(location)) setSpeeds();
 }
 
 void UnitBase::refreshRadarResearch() {
-    if(ModManager::instance().isTornieFamilyContentActive() && currentGameMap->tileExists(location)) setSpeeds();
+    if(moving && ModManager::instance().isTornieFamilyContentActive()
+       && currentGameMap->tileExists(location)) setSpeeds();
 }
 
 FixPoint UnitBase::getMaxSpeed() const {
@@ -3142,7 +3145,7 @@ bool UnitBase::update() {
     }
 
     if(ModManager::instance().isTornieFamilyContentActive() && slowTimer > 0 && --slowTimer == 0
-       && currentGameMap->tileExists(location)) setSpeeds();
+       && moving && currentGameMap->tileExists(location)) setSpeeds();
     if(recalculatePathTimer > 0) recalculatePathTimer--;
     if(findTargetTimer > 0) findTargetTimer--;
     if(primaryWeaponTimer > 0) primaryWeaponTimer--;

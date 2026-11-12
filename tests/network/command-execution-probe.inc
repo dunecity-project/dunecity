@@ -17,6 +17,7 @@
 #include <Map.h>
 #include <ScreenBorder.h>
 #include <players/HumanPlayer.h>
+#include <players/QuantBot.h>
 #include <Menu/MenuBase.h>
 #include <Menu/HouseChoiceMenu.h>
 #include <Network/NetworkManager.h>
@@ -91,27 +92,66 @@ int runOwnershipProbe() {
         GameInitSettings copy(input);
         if(copy.getGameOptions().maximumNumberOfConstructionYardsOverride != before+1)
             throw std::runtime_error("Yard cap lost in network/save setup");
-        std::string legacy(output.getData(),output.getDataLength());
-        const auto marker = legacy.rfind("DDOM");
-        if(marker == std::string::npos) throw std::runtime_error("MOD13 fixture missing");
-        // Everything after MOD4's payload: the yard limit, the original-damage byte,
-        // MOD7's factor count plus one factor per house, MOD8's plan-sites byte, MOD9's
-        // ground-steps byte, MOD10's two planned-construction bytes, MOD11, MOD12 and MOD13.
-        const auto afterMod4 = 4 + 1
-            + 4 + 4 * game->gameInitSettings.getHouseInfoList().size() + 1 + 1 + 2 + 1 + 6 + 1;
-        legacy[marker]='4'; legacy.resize(legacy.size()-afterMod4);
-        IMemoryStream oldInput(legacy.data(),legacy.size());
+        // Freeze the historical MOD4 layout instead of slicing the latest
+        // marker/tail, so new setup rules cannot corrupt this old-save fixture.
+        const auto& setup = game->gameInitSettings;
+        const auto& options = setup.getGameOptions();
+        const auto& houses = setup.getHouseInfoList();
+        OMemoryStream legacy; legacy.open();
+        legacy.writeSint8(static_cast<Sint8>(setup.gameType));
+        legacy.writeSint8(setup.houseID);
+        legacy.writeString(setup.filename);
+        legacy.writeString(setup.filedata);
+        legacy.writeUint8(setup.mission);
+        legacy.writeUint32(setup.alreadyPlayedRegions);
+        legacy.writeUint32(setup.alreadyShownTutorialHints);
+        legacy.writeUint32(setup.randomSeed);
+        legacy.writeBool(setup.multiplePlayersPerHouse);
+        legacy.writeUint32(options.gameSpeed);
+        legacy.writeBool(options.concreteRequired);
+        legacy.writeBool(false); // Reserved degradation rule.
+        legacy.writeBool(options.fogOfWar);
+        legacy.writeBool(options.startWithExploredMap);
+        legacy.writeBool(options.instantBuild);
+        legacy.writeBool(options.onlyOnePalace);
+        legacy.writeBool(options.rocketTurretsNeedPower);
+        legacy.writeBool(options.sandwormsRespawn);
+        legacy.writeBool(options.killedSandwormsDropSpice);
+        legacy.writeBool(options.manualCarryallDrops);
+        legacy.writeSint32(options.maximumNumberOfUnitsOverride);
+        legacy.writeSint32(options.maximumNumberOfHarvestersOverride);
+        legacy.writeBool(options.immortalHumanPlayer);
+        legacy.writeUint32(houses.size());
+        for(const auto& house : houses) house.save(legacy);
+        legacy.writeUint32(0x4D4F4434); // MOD4.
+        legacy.writeString(setup.modName);
+        legacy.writeString(setup.modChecksum);
+        legacy.writeUint32(houses.size());
+        for(const auto& house : houses) legacy.writeSint32(house.colorOfHouse);
+        legacy.writeUint32(houses.size());
+        for(const auto& house : houses)
+            legacy.writeUint32(static_cast<Uint32>(house.graphicsSkin));
+        legacy.writeUint32(static_cast<Uint32>(setup.campaignGraphicsSkin));
+        legacy.writeString(setup.modRevisionHash);
+        legacy.writeUint32(setup.modRevisionVersion);
+        legacy.writeString(setup.mapRevisionHash);
+        legacy.writeUint32(setup.mapRevisionVersion);
+        legacy.writeString(setup.mapRevisionManifest);
+        legacy.writeUint32(0x79617264);
+        IMemoryStream oldInput(legacy.getData(), legacy.getDataLength());
         GameInitSettings old(oldInput);
         if(old.getGameOptions().maximumNumberOfConstructionYardsOverride != -1)
             throw std::runtime_error("Older setup did not default to unlimited yards");
         for(const auto& houseInfo : old.getHouseInfoList())
             if(houseInfo.spiceIncomeMultiplier != SpiceIncome::kDefault)
                 throw std::runtime_error("Older setup did not default to 1x spice income");
-        if(copy.getHouseInfoList().size() != game->gameInitSettings.getHouseInfoList().size())
+        if(oldInput.readUint32() != 0x79617264)
+            throw std::runtime_error("Older setup consumed following save data");
+        if(copy.getHouseInfoList().size() != setup.getHouseInfoList().size())
             throw std::runtime_error("Yard cap roundtrip lost a house row");
         rules.maximumNumberOfConstructionYardsOverride = -1;
         game->gameInitSettings.setGameOptions(rules);
-        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; MOD10 roundtrip and MOD4 defaults pass");
+        SDL_Log("YARD_CAP_PROBE_PASS: refused deployment preserves MCV; setup roundtrip and MOD4 defaults preserve following save data");
     }
     UnitBase* unit = owner->createUnit(Unit_Tank, true);
     unit->doSetAttackMode(GUARD);
@@ -444,6 +484,13 @@ int runOwnershipProbe() {
             if(!cityInterface.skipMissionButton.isVisible() || skip->position.y < pollution->position.y + pollution->size.y
                || skip->position.y + skip->size.y > 480)
                 throw std::runtime_error("city sidebar skip overlaps Pollution or falls below compact screen");
+            // AI behaviour (docs/ai-roles.md): with the city overlays and Skip mission the sidebar
+            // has no row left, so the partner switch sits beside the zoom controls.
+            const auto* aiRole = cityInterface.windowWidget.getWidgetDataFromWidget(&cityInterface.aiRoleButton);
+            const auto* zoomIn = cityInterface.windowWidget.getWidgetDataFromWidget(&cityInterface.zoomInButton);
+            if(!aiRole || cityInterface.aiRoleInSidebar || !cityInterface.aiRoleButton.isVisible()
+               || aiRole->position.y != zoomIn->position.y || aiRole->position.x + aiRole->size.x > zoomIn->position.x)
+                throw std::runtime_error("city AI behaviour switch missing or not beside the zoom controls");
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
             cityInterface.draw(Point(0,0));
             auto citySidebar = renderReadSurface(renderer);
@@ -520,6 +567,46 @@ int runOwnershipProbe() {
             game->getSelectedList().clear();
             interface.updateObjectInterface();
             if(!interface.skipMissionButton.isVisible()) throw std::runtime_error("campaign sidebar skip missing");
+            // AI behaviour (docs/ai-roles.md): this house has QuantBot partners, so the switch is the
+            // row under Auto repair; a click queues the next role and the command applies it.
+            {
+                auto data = [&](Widget& widget) { return interface.windowWidget.getWidgetDataFromWidget(&widget); };
+                const auto* aiRole = data(interface.aiRoleButton);
+                const auto* repair = data(interface.autoRepairButton);
+                const auto* paths = data(interface.movementPathsButton);
+                if(!aiRole || !interface.aiRoleInSidebar || !interface.aiRoleButton.isVisible()
+                   || aiRole->position.y < repair->position.y + repair->size.y
+                   || aiRole->position.y + aiRole->size.y > paths->position.y)
+                    throw std::runtime_error("campaign AI behaviour row missing or overlapping");
+                const QuantBot* partner = nullptr;
+                for(const auto& player : pLocalHouse->getPlayerList())
+                    if(!partner) partner = dynamic_cast<const QuantBot*>(player.get());
+                if(!partner || partner->getRole() != AIRole::Builder || interface.aiRoleButton.getText() != "AI: Build")
+                    throw std::runtime_error("AI behaviour label does not show the Builder partner");
+                const auto queued = game->getCommandManager().timeslot;
+                interface.aiRoleButton.handleMouseLeft(5, 5, true);
+                interface.aiRoleButton.handleMouseLeft(5, 5, false);
+                const Command* sent = nullptr;
+                for(const auto& [cycle,commands] : game->getCommandManager().timeslot)
+                    for(const auto& command : commands)
+                        if(command.getCommandID() == CMD_AI_SUPPORT_ROLE) sent = &command;
+                if(!sent || sent->getParameter() != std::vector<Uint32>{static_cast<Uint32>(AIRole::Fighter)}
+                   || sent->getPlayerID() != pLocalPlayer->getPlayerID())
+                    throw std::runtime_error("AI behaviour click did not queue Fight from the local player");
+                sent->executeCommand();
+                interface.updateObjectInterface();
+                if(partner->getRole() != AIRole::Fighter || interface.aiRoleButton.getText() != "AI: Fight")
+                    throw std::runtime_error("AI behaviour command did not switch the partner to Fight");
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
+                interface.draw(Point(0,0));
+                auto aiSidebar = renderReadSurface(renderer);
+                SavePNG(aiSidebar.get(), "ai-behaviour-sidebar.png");
+                game->getCommandManager().timeslot = queued;
+                for(const auto& player : pLocalHouse->getPlayerList())
+                    if(auto* bot = dynamic_cast<QuantBot*>(player.get())) bot->setRole(AIRole::Builder);
+                interface.updateObjectInterface();
+                SDL_Log("AI_BEHAVIOUR_UI_PROBE_PASS: sidebar row, click queues Fight, label follows the partner");
+            }
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
             interface.draw(Point(0,0));
             auto sidebar = renderReadSurface(renderer);
@@ -553,7 +640,7 @@ int runOwnershipProbe() {
             question->onButton(QSTBOX_BUTTON1);
             game->pInGameMenu->processChildWindowOpenCloses();
             size_t skipCount = 0;
-            for(const auto& slot : game->getCommandManager().timeslot)
+            for(const auto& [cycle,slot] : game->getCommandManager().timeslot)
                 for(const auto& command : slot) if(command.getCommandID() == CMD_CAMPAIGN_SKIP) ++skipCount;
             if(skipCount != 1) throw std::runtime_error("confirmation did not queue exactly one skip command");
             game->getCommandManager().timeslot = commandsBefore;
@@ -713,13 +800,19 @@ int runOwnershipProbe() {
         if(!menuTarget || SDL_SetRenderTarget(renderer, menuTarget.get()) != 0) throw std::runtime_error("menu render target failed");
         SDL_RenderSetLogicalSize(renderer, 640, 480);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); SDL_RenderClear(renderer);
-        HouseChoiceMenu menu;
+        // Offline partner controls must not depend on a temporary mod's online approval.
+        HouseChoiceMenu menu(false);
+        if(HouseChoiceMenu::isOnline() || !menu.partnerSelector.aiBox.isEnabled())
+            throw std::runtime_error("AI partner fixture requires the enabled offline selector");
         // Partner AI box (336,313 256x22): None -> QuantBot.
         menu.handleMouseLeft(400, 320, true); menu.handleMouseLeft(400, 320, false);
         SDL_KeyboardEvent key{}; key.keysym.sym = SDLK_DOWN;
         menu.handleKeyPress(key);
         if(HouseChoiceMenu::getPartnerClass() != "qBotEasy")
-            throw std::runtime_error("AI partner QuantBot missing");
+            throw std::runtime_error("AI partner QuantBot missing: selected='" + HouseChoiceMenu::getPartnerClass()
+                + "' menu=" + std::to_string(menu.getPosition().x) + "," + std::to_string(menu.getPosition().y)
+                + " renderer=" + std::to_string(getRendererWidth()) + "x" + std::to_string(getRendererHeight())
+                + " entry=" + std::to_string(menu.partnerSelector.aiBox.getSelectedIndex()));
         key.keysym.sym = SDLK_SPACE; menu.handleKeyPress(key);
         // Difficulty box (336,337 124x22): every QuantBot difficulty.
         menu.handleMouseLeft(360, 345, true); menu.handleMouseLeft(360, 345, false);

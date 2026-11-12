@@ -92,6 +92,8 @@ inline int exactParameterCount(CMDTYPE commandID) {
         case CMD_WINDTRAP_POWER_UPGRADE:         return 1;
         case CMD_SCOUTPOST_SLOWPOST_UPGRADE:     return 1;
         case CMD_RADAR_RESEARCH:                return 2;
+        case CMD_AI_SUPPORT_ROLE:               return 1;
+        case CMD_RESEARCH_TECH_LEVEL:           return 1;
 
         // The city commands read up to three optional parameters
         // (CitySimulation::executeCityCommand substitutes 0 for missing ones).
@@ -179,8 +181,8 @@ inline bool isAcceptableCommandTotal(std::size_t totalCommands) {
 
 /// Bounds for replay and savegame command streams. These are local files rather than network
 /// input, so they are deliberately generous: at the default game speed 4 million cycles is
-/// about eighteen hours of play. What they stop is a crafted file making CommandManager resize
-/// its per-cycle vector to four billion entries or accumulate commands without end.
+/// about eighteen hours of play. The supported timeline and total command count remain
+/// bounded even when a downloaded replay or a crash-truncated file contains bad records.
 constexpr Uint32 kMaxReplayCycle = 4u * 1000u * 1000u;
 constexpr std::size_t kMaxReplayCommands = 4u * 1000u * 1000u;
 

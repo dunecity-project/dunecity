@@ -28,6 +28,7 @@
 #include <misc/exceptions.h>
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <stdlib.h>
 #include <cstring>
@@ -166,7 +167,7 @@ void AStarSearch::prepare(Map* pMap, UnitBase* pUnit, Coord searchStart, Coord s
 
     //if the unit is not directly next to its destination or it is and the destination is unblocked
     if ((heuristic > 1.5_fix) || (pUnit->canPass(destination.x, destination.y) == true)) {
-        putOnOpenListIfBetter(start, Coord::Invalid(), 0 , heuristic);
+        putOnOpenListIfBetter(getMapData(start), start, Coord::Invalid(), 0, heuristic);
         depthCheckCount.assign(std::min(sizeX, sizeY), 0);
         completed = false;
     } else {
@@ -200,6 +201,19 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
 
     size_t iterations = 0;
 
+    // Entering a tile costs terrainCost straight or SQRT2 * terrainCost diagonally, and
+    // terrainCost depends only on the tile's terrain type and road flag for this unit
+    // (getTerrainDifficulty() is a switch on the type): each pair's two step costs are
+    // worked out on first use in this slice, by the same expressions, instead of for
+    // every neighbour. Turning costs angleDiff() * rotationSpeed, angleDiff() in 0..4.
+    struct StepCost { FixPoint straight, diagonal; };
+    constexpr int terrainTypes = Terrain_WhiteSpiceBloom + 1;
+    std::array<StepCost, 2*terrainTypes> stepCosts;
+    Uint64 stepCostsReady = 0;
+    static_assert(2*terrainTypes <= 64, "one ready bit per step cost entry");
+    std::array<FixPoint, NUM_ANGLES/2 + 1> turnCosts;
+    for (int turn = 0; turn <= NUM_ANGLES/2; ++turn) turnCosts[turn] = turn * rotationSpeed;
+
     {
         while(openList.empty() == false) {
             if(nodesClosedLastStep >= nodeQuota || iterations >= iterationLimit) {
@@ -208,9 +222,10 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
             ++iterations;
 
             Coord currentCoord = extractMin();
+            auto& current = getInitializedMapData(currentCoord);
 
-            if (getMapData(currentCoord).h < smallestHeuristic) {
-                smallestHeuristic = getMapData(currentCoord).h;
+            if (current.h < smallestHeuristic) {
+                smallestHeuristic = current.h;
                 bestCoord = currentCoord;
             }
 
@@ -219,9 +234,9 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
             // exact route. Nodes were passable when opened; movement checks each
             // step again because occupants can change between search slices.
             if(currentCoord == destination
-               || (getMapData(currentCoord).h <= 1.5_fix && !pUnit->canPass(destination.x, destination.y))) {
+               || (current.h <= 1.5_fix && !pUnit->canPass(destination.x, destination.y))) {
                 // Goal or adjacent approach found.
-                smallestHeuristic = getMapData(currentCoord).h;
+                smallestHeuristic = current.h;
                 bestCoord = currentCoord;
                 break;
             }
@@ -230,7 +245,6 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                 // Parent direction, the cost so far and the unit's kind are the same for all
                 // eight neighbours (the current node is off the heap, so nothing below
                 // changes its entry).
-                const auto& current = getMapData(currentCoord);
                 const bool hasParent = current.parentCoord.isValid();
                 const int parentAngle = hasParent
                     ? currentGameMap->getPosAngle(current.parentCoord, currentCoord) : 0;
@@ -253,32 +267,45 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                         FixPoint g = currentG;
 
                         {
-                            FixPoint terrainCost = flying ? 1.0_fix : pUnit->getTerrainDifficulty((TERRAINTYPE) nextTile.getType());
-                            // Road tiles are faster for ground units; reduce path cost to match.
-                            if(!flying && nextTile.isRoad()) {
-                                terrainCost /= ROADSPEEDMULTIPLIER;
-                            }
-                            if((nextCoord.x != currentCoord.x) && (nextCoord.y != currentCoord.y)) {
-                                g += FixPt_SQRT2 * terrainCost;
+                            const int terrain = nextTile.getType();
+                            const bool road = !flying && nextTile.isRoad();
+                            const bool diagonal = (nextCoord.x != currentCoord.x) && (nextCoord.y != currentCoord.y);
+                            auto terrainCostOf = [&]() {
+                                FixPoint terrainCost = flying ? 1.0_fix : pUnit->getTerrainDifficulty((TERRAINTYPE) terrain);
+                                // Road tiles are faster for ground units; reduce path cost to match.
+                                if(road) {
+                                    terrainCost /= ROADSPEEDMULTIPLIER;
+                                }
+                                return terrainCost;
+                            };
+                            if(terrain >= 0 && terrain < terrainTypes) {
+                                const int entry = 2*terrain + (road ? 1 : 0);
+                                if(((stepCostsReady >> entry) & 1) == 0) {
+                                    const FixPoint terrainCost = terrainCostOf();
+                                    stepCosts[entry] = StepCost{terrainCost, FixPt_SQRT2 * terrainCost};
+                                    stepCostsReady |= Uint64(1) << entry;
+                                }
+                                g += diagonal ? stepCosts[entry].diagonal : stepCosts[entry].straight;
                             } else {
-                                g += terrainCost;
+                                const FixPoint terrainCost = terrainCostOf();
+                                g += diagonal ? FixPt_SQRT2 * terrainCost : terrainCost;
                             }
                         }
 
                         if(hasParent)  {
                             //add cost of turning time
-                            g += angleDiff(angle,parentAngle) * rotationSpeed;
+                            g += turnCosts[angleDiff(angle,parentAngle)];
                         }
 
                         FixPoint h = blockDistance(nextCoord, destination);
 
-                        putOnOpenListIfBetter(nextCoord, currentCoord, g, h);
+                        putOnOpenListIfBetter(next, nextCoord, currentCoord, g, h);
                     }
 
                 }
             }
 
-            if (getMapData(currentCoord).bClosed == false) {
+            if (current.bClosed == false) {
 
                 int depth = std::max(abs(currentCoord.x - destination.x), abs(currentCoord.y - destination.y));
 
@@ -327,7 +354,7 @@ AStarSearch::Status AStarSearch::step(Map* pMap, UnitBase* pUnit, size_t nodeQuo
                     }
                 }
 
-                getMapData(currentCoord).bClosed = true;
+                current.bClosed = true;
                 numNodesChecked++;
                 ++nodesClosedLastStep;
             }
@@ -511,16 +538,16 @@ std::unique_ptr<AStarSearch> AStarSearch::load(InputStream& stream) {
             // The heap and the entries index each other; a lie here would let
             // trickleUp/extractMin write through openListIndex out of bounds.
             if(entry.openListIndex >= openCount) {
-                THROW(std::runtime_error, "Suspended search heap index %zu outside the frontier", entry.openListIndex);
+                THROW(std::runtime_error, "Invalid suspended search heap index %u outside the frontier", entry.openListIndex);
             }
             const size_t flatIndex = static_cast<size_t>(search->openList[entry.openListIndex].coord.y) * static_cast<size_t>(mapSizeX)
                                    + static_cast<size_t>(search->openList[entry.openListIndex].coord.x);
             if(flatIndex != index) {
-                THROW(std::runtime_error, "Suspended search heap entry %zu does not point back at its tile", entry.openListIndex);
+                THROW(std::runtime_error, "Suspended search heap entry %u does not point back at its tile", entry.openListIndex);
             }
             ++openListEntries;
         } else if(entry.openListIndex != 0 && entry.openListIndex >= openCount) {
-            THROW(std::runtime_error, "Suspended search stale heap index %zu is out of range", entry.openListIndex);
+            THROW(std::runtime_error, "Suspended search stale heap index %u is out of range", entry.openListIndex);
         }
         // Restored passability is deliberately stale: the next slice's epoch
         // differs, so every touched entry is re-evaluated against the world the
