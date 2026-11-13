@@ -678,6 +678,17 @@ library and framework search paths from the verified candidate's canonical
 `Contents/Frameworks`. Dynamic framework imports such as Sparkle must resolve
 from that receipt-bound package, not an obsolete producer workspace or Homebrew.
 
+Two preconditions come from the consumer itself. It refuses any harness other
+than the producer's exact commit, so once staging HEAD has moved on, run it
+from a disposable source-only clone in leased scratch (`git clone --shared
+--no-checkout "$STAGING" "$SCRATCH/source"`, then `git checkout --detach
+"$CANDIDATE_SOURCE"`); that clone has no build tree and writes nothing to
+staging's `.git`. The fullscreen case reads the real pointer where it rests and
+never moves it, so a pointer parked on a screen edge fails with `Stationary
+fullscreen pointer lies outside the logical viewport`; centre the Mini's
+pointer first. `d559d54c8` passed this way
+(`outputs/pointer-consumer-d559d54c8fe68624c7a3308dc1e6282ce0ea7a12/run.sh`).
+
 `gate-status.json` distinguishes `blocked-prerequisite`, `blocked-environment`,
 `failed-assertion`, other harness/runtime failures and an actual full-menu PASS.
 Compilation-only `prepared-not-run` and `--pointer-sdl-only` never satisfy it.
