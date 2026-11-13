@@ -310,6 +310,10 @@ struct QuantBotConfig {
         /// Classic campaign player-side readiness scales to enemy strength from the first wave.
         /// Hashed; default on. OFF retains the fifteen-minute fixed opening floor; cities are unchanged.
         bool campaignAdaptiveReadiness;
+        /// A campaign player-side house never launches a ground wave smaller than the strongest
+        /// opposing alliance's army (capped at 75% of its own limit), so a low difficulty
+        /// threshold cannot send the starting army into three bases. Hashed; default off.
+        bool campaignAllyStrengthFloor;
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Hashed; default on.
         bool campaignThreatProduction;
