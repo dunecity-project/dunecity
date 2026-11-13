@@ -669,7 +669,8 @@ jobs:
       inputs.android_package_probe != true &&
       (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped') &&
       (needs.select-inputs.outputs.stable != 'true' || needs.release-headless-qualification.result == 'success')
-    timeout-minutes: 60
+    # The nightly tier was cut off at 60 minutes with 18 of 220 tests still to run.
+    timeout-minutes: ${{ needs.select-inputs.outputs.tier == 'nightly' && 240 || 60 }}
     permissions:
       contents: read
     env:
@@ -754,6 +755,19 @@ jobs:
             ${{ runner.temp }}/dunecity-mac-signed-${{ github.run_id }}-${{ github.run_attempt }}/*.json
           if-no-files-found: warn
           retention-days: 30
+      # A failed probe prints only its launcher's traceback; the game's own log says why.
+      - name: Retain nightly probe logs
+        if: always() && needs.select-inputs.outputs.tier == 'nightly'
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-macOS-nightly-logs-${{ github.run_attempt }}
+          path: |
+            build/**/*.log
+            !build/vcpkg_installed/**
+            !build/CMakeFiles/**
+            !build/_deps/**
+          if-no-files-found: warn
+          retention-days: 14
       - name: Record Mac package inputs
         if: always() && needs.select-inputs.outputs.package == 'true' && hashFiles('build/CMakeCache.txt') != ''
         run: python3 scripts/release-automation.py record-build --platform macos-arm64 --build-root build --output build/build-inputs-macos-arm64.json
