@@ -441,8 +441,8 @@ CampaignAllyStrengthFloor=1
 # The three difficulty levers of Easy / Medium / Hard campaign opponents (Brutal has none). Hashed.
 # Harvesters: the most an opponent keeps, however many refineries the mission gives it (0 = no ceiling).
 CampaignEasyHarvesters=1
-CampaignMediumHarvesters=2
-CampaignHardHarvesters=4
+CampaignMediumHarvesters=1
+CampaignHardHarvesters=2
 # WaveValue: the value one ground wave may hold from tech level 8. Earlier missions use
 # (tech level + 4) / 12 of it: 58% at tech 3, 75% at tech 5.
 CampaignEasyWaveValue=1700
@@ -450,9 +450,9 @@ CampaignMediumWaveValue=2500
 CampaignHardWaveValue=3500
 # OpeningDelaySec: seconds waited after the map's first enemy combat reinforcement (plus a 0-2 minute
 # per-house stagger) before the first wave.
-CampaignEasyOpeningDelaySec=180
-CampaignMediumOpeningDelaySec=180
-CampaignHardOpeningDelaySec=180
+CampaignEasyOpeningDelaySec=0
+CampaignMediumOpeningDelaySec=0
+CampaignHardOpeningDelaySec=0
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1
