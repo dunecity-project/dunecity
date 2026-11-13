@@ -390,6 +390,8 @@ private:
     std::map<Uint32, uint64_t> zoneDecisionIds;
     std::map<Uint32, Uint32> lastZoneTraceCycle;
     uint64_t traceDecision(const std::string& event, AITelemetry::Record details) const;
+    // Game-log throttle for "attack_deferred" only; diagnostic, never saved or hashed.
+    mutable Uint32 campaignDeferralLogged = std::numeric_limits<Uint32>::max();
 
     Uint32 ixEligibleSinceCycle = std::numeric_limits<Uint32>::max();
     Uint32 palaceEligibleSinceCycle = std::numeric_limits<Uint32>::max();

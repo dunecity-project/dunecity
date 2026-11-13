@@ -800,6 +800,23 @@ void QuantBot::update() {
 
 
 uint64_t QuantBot::traceDecision(const std::string& event, AITelemetry::Record details) const {
+    // Campaign attack timing and wave sizes also go to the ordinary game log, so one game can
+    // be read start to finish without telemetry: the map trigger, each house's opening, every
+    // wave with its cap, and (once a minute) why a house is not attacking.
+    if (currentGame && campaignPolicyApplies()) {
+        const bool deferred = event == "attack_deferred";
+        const Uint32 now = getGameCycleCount();
+        if (event == "campaign_opening" || event == "campaign_opening_missing_trigger"
+            || event == "ground_hunt" || event == "campaign_wave_end" || event == "campaign_scripted_assault"
+            || (deferred && (campaignDeferralLogged == std::numeric_limits<Uint32>::max()
+                || now - campaignDeferralLogged >= MILLI2CYCLES(60000)))) {
+            if (deferred) campaignDeferralLogged = now;
+            fprintf(stderr, "CAMPAIGN_AI: minute=%.1f cycle=%u house=%d role=%s difficulty=%d event=%s %s\n",
+                now / static_cast<double>(MILLI2CYCLES(60000)), now, getHouse()->getHouseID(),
+                isCampaignEnemy() ? "enemy" : "partner", static_cast<int>(difficulty),
+                event.c_str(), details.json().c_str());
+        }
+    }
     if (!AITelemetry::log().enabled()) return 0;
     details.set("state_id", telemetryState);
     return AITelemetry::log().write(getGameCycleCount(), getHouse()->getHouseID(), getPlayerID(), event, details);
