@@ -869,21 +869,30 @@ bool QuantBot::exhaustedArmyEconomy() const {
     // proves no reachable field; a nonzero total also checks terrain connectivity
     // rather than treating spice on an isolated island as future income.
     if (lastCalculatedSpice > 0) {
-        for (int y = 0; y < currentGameMap->getSizeY(); ++y)
-            for (int x = 0; x < currentGameMap->getSizeX(); ++x) {
-                const auto* tile = currentGameMap->getTile(x, y);
-                if (!tile->hasSpice() || tile->getSpice() <= 0) continue;
-                const int region = currentGameMap->vehicleTerrainRegion(Coord(x, y));
-                if (region == 0) continue;
-                for (const auto* unit : getUnitList())
-                    if (unit->getOwner() == getHouse() && unit->getHealth() > 0
-                        && isHarvesterLikeObject(unit)
-                        && (getHouse()->hasCarryalls()
-                            || currentGameMap->vehicleTerrainRegion(unit->getLocation()) == region)) return false;
-                for (const auto* structure : getStructureList())
-                    if (structure->getOwner() == getHouse() && structure->acceptsHarvesterDropoff()
-                        && currentGameMap->vehicleTerrainRegion(structure->getLocation()) == region) return false;
+        // Where our harvesters and drop-offs can reach is fixed for this call:
+        // collect it once, never per spice tile, or a broke house with a large
+        // army pays tiles x objects on every evaluation.
+        bool carried = false;
+        std::vector<int> regions;
+        for (const auto* unit : getUnitList())
+            if (unit->getOwner() == getHouse() && unit->getHealth() > 0 && isHarvesterLikeObject(unit)) {
+                if (getHouse()->hasCarryalls()) { carried = true; break; }
+                regions.push_back(currentGameMap->vehicleTerrainRegion(unit->getLocation()));
             }
+        if (!carried)
+            for (const auto* structure : getStructureList())
+                if (structure->getOwner() == getHouse() && structure->acceptsHarvesterDropoff())
+                    regions.push_back(currentGameMap->vehicleTerrainRegion(structure->getLocation()));
+        std::sort(regions.begin(), regions.end());
+        if (carried || !regions.empty())
+            for (int y = 0; y < currentGameMap->getSizeY(); ++y)
+                for (int x = 0; x < currentGameMap->getSizeX(); ++x) {
+                    const auto* tile = currentGameMap->getTile(x, y);
+                    if (!tile->hasSpice() || tile->getSpice() <= 0) continue;
+                    const int region = currentGameMap->vehicleTerrainRegion(Coord(x, y));
+                    if (region != 0 && (carried || std::binary_search(regions.begin(), regions.end(), region)))
+                        return false;
+                }
     }
     exhaustedEconomyResult = true;
     return true;
