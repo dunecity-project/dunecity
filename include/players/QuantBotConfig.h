@@ -318,9 +318,6 @@ struct QuantBotConfig {
         /// Easy, Medium and Hard campaign opponents send their first ground wave three minutes
         /// after the established opening. Hashed; default on. Brutal is unchanged.
         bool campaignLaterOpening;
-        /// An Easy, Medium or Hard campaign opponent's military value limit never exceeds
-        /// CampaignDifficultyPolicy::armyCeiling (its final-level size). Hashed; default off.
-        bool campaignEnemyArmyCeiling;
         /// An Easy, Medium or Hard campaign opponent keeps at most
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
         /// however many refineries the mission starts it with. Hashed; default on.
