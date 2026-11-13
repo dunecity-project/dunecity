@@ -69,7 +69,13 @@ void runCampaignPressureProbe(Game& game) {
             bot->difficulty=tier;bot->campaignWave={};bot->attackTimer=INT32_MAX;
             bot->updateCampaignWave();
             require(bot->campaignWave.opening>=30000,"AI opened before map attack trigger");
-            require(bot->campaignWave.opening<=30000+MILLI2CYCLES(120000),"Opening delay exceeds two minutes");
+            const auto& levers=getQuantBotConfig().force;
+            const int leverSeconds=tier==QuantBot::Difficulty::Easy ? levers.campaignEasyOpeningDelaySec
+                : tier==QuantBot::Difficulty::Medium ? levers.campaignMediumOpeningDelaySec
+                : tier==QuantBot::Difficulty::Hard ? levers.campaignHardOpeningDelaySec : 0;
+            require(bot->campaignWave.opening>=30000+MILLI2CYCLES(leverSeconds*1000),"Opening ignored its configured delay");
+            require(bot->campaignWave.opening<=30000+MILLI2CYCLES(120000+leverSeconds*1000),
+                "Opening exceeds its configured delay plus the two-minute stagger");
             if(tier==QuantBot::Difficulty::Brutal) require(bot->campaignWave.opening==30000,"Brutal delayed opening");
         }
     }

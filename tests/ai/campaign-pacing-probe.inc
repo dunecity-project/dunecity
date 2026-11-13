@@ -15,7 +15,11 @@ void runCampaignPacingProbe(Game& game) {
         bot->initialMilitaryValue=1000;bot->lastCalculatedSpice=200000;bot->harvesterLimit=100;
         game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=100;
         bot->update();
-        const int expected=tier==QuantBot::Difficulty::Brutal ? 7 : 2*getQuantBotConfig().getSettings(int(tier)).harvesterLimitPerRefineryMultiplier;
+        const auto& levers=getQuantBotConfig().force;
+        const int lever=tier==QuantBot::Difficulty::Easy ? levers.campaignEasyHarvesters
+            : tier==QuantBot::Difficulty::Medium ? levers.campaignMediumHarvesters : levers.campaignHardHarvesters;
+        const int perRefinery=2*getQuantBotConfig().getSettings(int(tier)).harvesterLimitPerRefineryMultiplier;
+        const int expected=tier==QuantBot::Difficulty::Brutal ? 7 : lever>0 ? std::min(perRefinery,lever) : perRefinery;
         require(bot->harvesterLimit==expected,"High game ceiling replaced campaign difficulty economy cap");
         bot->update();require(bot->harvesterLimit==expected,"Campaign worker cap drifted on next update");
         game.gameInitSettings.gameOptions.maximumNumberOfHarvestersOverride=1;
