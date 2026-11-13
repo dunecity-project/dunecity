@@ -238,7 +238,14 @@ bool QuantBot::isCampaignEnemy() const {
 }
 
 CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
-    return CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),currentGame->techLevel);
+    auto profile=CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),currentGame->techLevel);
+    // The second difficulty lever: the value one ground wave may hold. Easy keeps its smaller
+    // early-mission waves in proportion (900 / 1,200 of 1,700 at the defaults).
+    const auto& force=botConfig().force;
+    if (difficulty==Difficulty::Easy) profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
+    else if (difficulty==Difficulty::Medium) profile.value=force.campaignMediumWaveValue;
+    else if (difficulty==Difficulty::Hard) profile.value=force.campaignHardWaveValue;
+    return profile;
 }
 
 bool QuantBot::campaignCombatUnit(const UnitBase* unit) const {
@@ -391,17 +398,24 @@ void QuantBot::updateCampaignWave() {
             traceDecision("campaign_opening_missing_trigger",AITelemetry::Record());
             return;
         }
-        // CampaignLaterOpening: the player's base starts from a lone yard on late missions and
-        // cannot field a defence by the scripted trigger, whatever its difficulty.
+        // The third difficulty lever: seconds an Easy/Medium/Hard opponent waits after the
+        // map's trigger, on top of its 0-2 minute stagger. Brutal opens on the trigger.
+        const auto& force=botConfig().force;
+        const int waitSeconds=difficulty==Difficulty::Easy ? force.campaignEasyOpeningDelaySec
+            : difficulty==Difficulty::Medium ? force.campaignMediumOpeningDelaySec
+            : difficulty==Difficulty::Hard ? force.campaignHardOpeningDelaySec : 0;
         const auto delay=CampaignDifficultyPolicy::openingDelayMs(static_cast<int>(difficulty),
             getGameInitSettings().getRandomSeed(),anchor,getHouse()->getHouseID())
-            + (botConfig().force.campaignLaterOpening && difficulty != Difficulty::Brutal ? 180000u : 0u);
+            + static_cast<uint32_t>(waitSeconds)*1000u;
         campaignWave.opening=anchor+MILLI2CYCLES(delay);
         campaignWave.initialized=true;
         attackTimer=campaignWave.opening>now ? campaignWave.opening-now : 0;
         traceDecision("campaign_opening",AITelemetry::Record().set("trigger_cycle",anchor)
             .set("delay_ms",delay).set("opening_cycle",campaignWave.opening)
-            .set("early_map_signal",earlySignal));
+            .set("early_map_signal",earlySignal).set("lever_opening_delay_s",waitSeconds)
+            .set("lever_wave_value",profile.limitedWave ? profile.value : -1)
+            .set("harvester_limit",harvesterLimit).set("military_limit",militaryValueLimit)
+            .set("repair_yard_target",initialItemCount[Structure_RepairYard]));
     }
     // Easy/Medium retain their saved break between waves. Hard/Brutal use
     // readiness alone after the opening signal.

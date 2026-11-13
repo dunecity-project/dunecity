@@ -4022,9 +4022,12 @@ Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builde
             && pass.itemCount[Structure_Silo]==getHouse()->getNumItems(Structure_Silo)
             && campaignAvailableToBuild(builder,Structure_Silo) ? Uint32(Structure_Silo) : Uint32(NONE_ID);
     }
+    // A Medium campaign opponent adds a Silo once its storage is 90% full, as SiloFillPercent does.
+    const int fill = botConfig().force.siloFillPercent>0 ? botConfig().force.siloFillPercent
+        : isCampaignEnemy() && difficulty==Difficulty::Medium ? 90 : 0;
     if (builder->isUpgrading() || builder->getProductionQueueSize()!=0
         || !getHouse()->hasPower()
-        || (pass.forecastNetIncome<=0 && botConfig().force.siloFillPercent==0)) return NONE_ID;
+        || (pass.forecastNetIncome<=0 && fill==0)) return NONE_ID;
     int64_t projectedCapacity = capacity;
     const Uint32 last = ModManager::instance().isTornieFamilyContentActive() ? ItemID_LastID : Structure_LastID;
     for (Uint32 item=Structure_FirstID; item<=last; ++item) {
@@ -4037,7 +4040,6 @@ Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builde
     }
     const int ceiling = House::MAX_GAME_CREDITS-getHouse()->getStartingCredits().lround();
     if (projectedCapacity<=0 || projectedCapacity>=ceiling) return NONE_ID;
-    const int fill = botConfig().force.siloFillPercent;
     if (fill>0 && lastCalculatedSpice>0
         && getHouse()->getEarnedCredits()*100 >= FixPoint(int(projectedCapacity))*fill
         && campaignAvailableToBuild(builder,Structure_Silo)

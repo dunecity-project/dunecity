@@ -325,9 +325,14 @@ void QuantBot::update() {
 
         if (campaignCityEconomy()) noteCampaignOriginalState();
 
-		// Allow campaign controllers a repair-yard target, except Medium:
-        // Medium preserves only the count actually present at mission start.
+		// Allow campaign controllers one repair yard. A Medium opponent gets exactly one,
+        // whatever the mission starts it with; Medium support keeps its starting count.
 		// Note: supportMode sets gameMode to Custom, so check currentGame->gameType instead
+        if (difficulty==Difficulty::Medium && isCampaignEnemy() && getHouse()->getTechLevel() > 4) {
+            initialItemCount[Structure_RepairYard] = 1;
+            initialItemCount[Structure_Radar] = std::max(1, initialItemCount[Structure_Radar]);
+            initialItemCount[Structure_LightFactory] = std::max(1, initialItemCount[Structure_LightFactory]);
+        }
 		if (difficulty!=Difficulty::Medium && (initialItemCount[Structure_RepairYard] == 0) && currentGame && campaignPolicyApplies() && getHouse()->getTechLevel() > 4) {
 			initialItemCount[Structure_RepairYard] = 1;
 			if (initialItemCount[Structure_Radar] == 0) {
@@ -613,9 +618,12 @@ void QuantBot::update() {
         // campaign opponent to expand to a skirmish-sized harvester fleet.
         baseHarvesterLimit=std::max(0,diffSettings.harvesterLimitPerRefineryMultiplier
             * initialRefineryBays());
-        if (config.force.campaignEnemyHarvesterCeiling)
-            baseHarvesterLimit=std::min(baseHarvesterLimit,
-                CampaignDifficultyPolicy::harvesterCeiling(static_cast<int>(difficulty)));
+        // The first difficulty lever: at most this many harvesters, however many refineries
+        // the mission gives the opponent (0 = no ceiling).
+        const auto& force=config.force;
+        const int ceiling=difficulty==Difficulty::Easy ? force.campaignEasyHarvesters
+            : difficulty==Difficulty::Medium ? force.campaignMediumHarvesters : force.campaignHardHarvesters;
+        if (ceiling>0) baseHarvesterLimit=std::min(baseHarvesterLimit,ceiling);
     }
 
     if (const int alliedLimit = campaignAllyHarvesterLimit(); alliedLimit > 0) baseHarvesterLimit = alliedLimit;

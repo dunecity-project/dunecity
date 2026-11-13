@@ -315,13 +315,14 @@ struct QuantBotConfig {
         /// threshold cannot send the starting army into three bases. Hashed; default on.
         /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
-        /// Easy, Medium and Hard campaign opponents send their first ground wave three minutes
-        /// after the established opening. Hashed; default on. Brutal is unchanged.
-        bool campaignLaterOpening;
-        /// An Easy, Medium or Hard campaign opponent keeps at most
-        /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
-        /// however many refineries the mission starts it with. Hashed; default on.
-        bool campaignEnemyHarvesterCeiling;
+        /// The three difficulty levers of an Easy / Medium / Hard campaign opponent (Brutal has
+        /// none). Hashed. Harvesters: the most it keeps, however many refineries the mission
+        /// gives it (0 = no ceiling). WaveValue: the value one ground wave may hold.
+        /// OpeningDelaySec: seconds it waits after the map's first enemy combat reinforcement,
+        /// on top of its 0-2 minute stagger, before its first wave.
+        int campaignEasyHarvesters, campaignMediumHarvesters, campaignHardHarvesters;
+        int campaignEasyWaveValue, campaignMediumWaveValue, campaignHardWaveValue;
+        int campaignEasyOpeningDelaySec, campaignMediumOpeningDelaySec, campaignHardOpeningDelaySec;
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Hashed; default on.
         bool campaignThreatProduction;

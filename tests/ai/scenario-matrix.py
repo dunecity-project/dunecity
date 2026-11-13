@@ -98,6 +98,8 @@ SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', '
                  'storage_income_lost', 'power_deficit_cycles', 'required_power_deficit_cycles') + FLEET_VALUES
 REFINERY_FIELDS = ('id', 'category', 'cell', 'seed') + REFINERY_VALUES
 WAVE_FIELDS = ('id', 'category', 'cell', 'seed', 'house', 'event', 'cycle', 'members', 'value')
+# The engine's CAMPAIGN_AI game-log lines (trigger, openings, waves with caps, deferrals), verbatim.
+CAMPAIGN_LOG_FIELDS = ('id', 'category', 'cell', 'seed', 'line')
 # A house is idle when it survives (or lasts) this many game minutes without a sortie or a kill.
 IDLE_MINUTES = 20
 # Full-tier seeds per long ladder cell (short cells: half). Each seed is played twice with the houses
@@ -724,6 +726,8 @@ def play(args, scratch, binary, game):
                     waves.append(dict(metadata, house=event['house'], event=event['event'], cycle=event['cycle'],
                                       members=event['data'].get('members', ''), value=event['data'].get('value', '')))
         append(results / 'waves.csv', WAVE_FIELDS, waves)
+        append(results / 'campaign-ai.csv', CAMPAIGN_LOG_FIELDS,
+               [dict(metadata, line=line[len('CAMPAIGN_AI: '):]) for line in lines if line.startswith('CAMPAIGN_AI: ')])
     append(results / 'houses.csv', HOUSE_FIELDS, house_rows)
     append(results / 'games.csv', GAME_FIELDS, [row])
     finish_game(scratch, out, False)

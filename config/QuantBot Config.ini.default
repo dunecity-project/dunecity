@@ -438,13 +438,20 @@ CampaignAdaptiveReadiness=1
 # opposing alliance (capped at 75% of its own limit). Hashed; OFF preserves the difficulty
 # threshold alone. City campaigns are unchanged.
 CampaignAllyStrengthFloor=1
-# Easy, Medium and Hard campaign opponents send their first ground wave three minutes later.
-# Hashed; OFF preserves the established opening. Brutal is unchanged.
-CampaignLaterOpening=1
-# Easy, Medium and Hard campaign opponents keep at most 1 / 2 / 4 harvesters, their final-level
-# fleet, however many refineries the mission gives them. Hashed; OFF preserves
-# HarvesterLimitMultiplier x starting refineries without a ceiling.
-CampaignEnemyHarvesterCeiling=1
+# The three difficulty levers of Easy / Medium / Hard campaign opponents (Brutal has none). Hashed.
+# Harvesters: the most an opponent keeps, however many refineries the mission gives it (0 = no ceiling).
+CampaignEasyHarvesters=1
+CampaignMediumHarvesters=2
+CampaignHardHarvesters=4
+# WaveValue: the value one ground wave may hold. Easy's early-mission waves scale with it (900/1200 of 1700).
+CampaignEasyWaveValue=1700
+CampaignMediumWaveValue=2500
+CampaignHardWaveValue=3500
+# OpeningDelaySec: seconds waited after the map's first enemy combat reinforcement (plus a 0-2 minute
+# per-house stagger) before the first wave.
+CampaignEasyOpeningDelaySec=180
+CampaignMediumOpeningDelaySec=180
+CampaignHardOpeningDelaySec=180
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1

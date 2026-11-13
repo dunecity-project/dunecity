@@ -24,17 +24,6 @@ inline Profile profile(int difficulty, int tech) {
         default:return {8, 16+stage*4, (16+stage*4)*700, 40000-stage*10000, 0, 300000, 5, 100, false};
     }
 }
-// The most harvesters an Easy, Medium or Hard campaign opponent keeps: its final-level fleet
-// (one refinery there; Hard is topped up to two). A mission that starts an opponent with more
-// refineries otherwise gives it income it cannot spend, so every loss is replaced at once.
-inline int harvesterCeiling(int difficulty) {
-    switch (difficulty) {
-        case 0: return 1;
-        case 1: return 2;
-        case 2: return 4;
-        default:return std::numeric_limits<int>::max();
-    }
-}
 // Seeded offsets keep each house independent and deterministic across peers.
 inline uint32_t staggerMs(uint32_t seed, uint32_t cycle, uint32_t house, uint32_t spanMs) {
     uint32_t value=seed ^ (house+1)*0x9e3779b9u ^ cycle*0x85ebca6bu;
