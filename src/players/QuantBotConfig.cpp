@@ -391,7 +391,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHardWaveValue = 3500;
     force.campaignEasyOpeningDelaySec = 0;
     force.campaignMediumOpeningDelaySec = 0;
-    force.campaignHardOpeningDelaySec = 0;
+    force.campaignHardOpeningDelaySec = 60;
     force.campaignThreatProduction = true;
     force.campaignFundedLightOpening = true;
     force.campaignLightWorkingCash = true;
