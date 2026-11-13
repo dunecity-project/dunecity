@@ -315,6 +315,9 @@ struct QuantBotConfig {
         /// threshold cannot send the starting army into three bases. Hashed; default on.
         /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
+        /// Easy, Medium and Hard campaign opponents send their first ground wave three minutes
+        /// after the established opening. Hashed; default off. Brutal is unchanged.
+        bool campaignLaterOpening;
         /// An Easy, Medium or Hard campaign opponent keeps at most
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
         /// however many refineries the mission starts it with. Hashed; default on.

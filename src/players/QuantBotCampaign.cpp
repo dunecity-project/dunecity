@@ -391,8 +391,11 @@ void QuantBot::updateCampaignWave() {
             traceDecision("campaign_opening_missing_trigger",AITelemetry::Record());
             return;
         }
+        // CampaignLaterOpening: the player's base starts from a lone yard on late missions and
+        // cannot field a defence by the scripted trigger, whatever its difficulty.
         const auto delay=CampaignDifficultyPolicy::openingDelayMs(static_cast<int>(difficulty),
-            getGameInitSettings().getRandomSeed(),anchor,getHouse()->getHouseID());
+            getGameInitSettings().getRandomSeed(),anchor,getHouse()->getHouseID())
+            + (botConfig().force.campaignLaterOpening && difficulty != Difficulty::Brutal ? 180000u : 0u);
         campaignWave.opening=anchor+MILLI2CYCLES(delay);
         campaignWave.initialized=true;
         attackTimer=campaignWave.opening>now ? campaignWave.opening-now : 0;
