@@ -443,8 +443,8 @@ CampaignAllyStrengthFloor=1
 CampaignEasyHarvesters=1
 CampaignMediumHarvesters=1
 CampaignHardHarvesters=2
-# WaveValue: the value one ground wave may hold from tech level 8. Earlier missions use
-# (tech level + 4) / 12 of it: 58% at tech 3, 75% at tech 5.
+# WaveValue: the value one ground wave may hold from tech level 8. Earlier Medium/Hard missions use
+# (tech level + 4) / 12 of it: 58% at tech 3, 75% at tech 5. Easy keeps its staged 900 / 1,200 of 1,700.
 CampaignEasyWaveValue=1700
 CampaignMediumWaveValue=2500
 CampaignHardWaveValue=3500

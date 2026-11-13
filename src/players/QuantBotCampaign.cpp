@@ -240,13 +240,14 @@ bool QuantBot::isCampaignEnemy() const {
 CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
     auto profile=CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),currentGame->techLevel);
     // The second difficulty lever: the value one ground wave may hold on the last missions.
-    // Earlier missions take a share of it, (tech level + 4) / 12, so that the same difficulty
-    // sends 58% waves at tech 3, 75% at tech 5 and full waves from tech 8.
+    // Easy keeps its staged early waves in proportion (900 / 1,200 of 1,700 at the defaults).
+    // Medium and Hard take a share by mission, (tech level + 4) / 12: 58% at tech 3, 75% at
+    // tech 5 and full waves from tech 8.
     const auto& force=botConfig().force;
-    const int configured=difficulty==Difficulty::Easy ? force.campaignEasyWaveValue
-        : difficulty==Difficulty::Medium ? force.campaignMediumWaveValue
-        : difficulty==Difficulty::Hard ? force.campaignHardWaveValue : 0;
-    if (configured>0) profile.value=configured*std::clamp(static_cast<int>(currentGame->techLevel)+4,5,12)/12;
+    if (difficulty==Difficulty::Easy) profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
+    else if (difficulty==Difficulty::Medium || difficulty==Difficulty::Hard)
+        profile.value=(difficulty==Difficulty::Medium ? force.campaignMediumWaveValue : force.campaignHardWaveValue)
+            *std::clamp(static_cast<int>(currentGame->techLevel)+4,5,12)/12;
     return profile;
 }
 
