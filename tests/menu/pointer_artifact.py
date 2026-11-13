@@ -69,11 +69,30 @@ def link_command(commands):
     return command
 
 
-def clean_source(root, build, output):
+def clean_source(root, build, output, *, expected_commit=None, status_output=None):
     sha = check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     require(checksum(sha, 40), 'source must be a full committed SHA')
+    require(expected_commit is None or checksum(expected_commit, 40), 'selected source must be a full committed SHA')
+    context = dict(sourceRoot=str(Path(root).resolve()), sourceCommit=sha, expectedSourceCommit=expected_commit or sha,
+                   buildRoot=str(Path(build).resolve()), outputRoot=str(Path(output).resolve()))
+
+    def blocked(code, reason, **evidence):
+        detail = dict(context, status='blocked-prerequisite', reasonCode=code, **evidence)
+        if status_output is not None:
+            Path(status_output).write_bytes(encoded(detail))
+        require(False, reason + '; ' + json.dumps(detail, sort_keys=True))
+
+    if expected_commit is not None and sha != expected_commit:
+        blocked('source-head-mismatch', 'producer/consumer HEAD differs from the selected source')
     fingerprint = source_fingerprint(root, build, output)
-    require(fingerprint == pinned_source_fingerprint(root, sha), 'producer/consumer source is not the exact committed input')
+    expected = pinned_source_fingerprint(root, sha)
+    if fingerprint != expected:
+        # No file contents or environment secrets: preserve the failed input's
+        # actual roots/hashes and bounded nonignored paths, never normalize it.
+        status = check_output(['git', 'status', '--porcelain=v1', '--untracked-files=all'], cwd=root, text=True).splitlines()
+        blocked('source-fingerprint-mismatch', 'producer/consumer source is not the exact committed input',
+                worktreeFingerprint=fingerprint, committedFingerprint=expected,
+                dirtyPaths=status[:64], dirtyPathCount=len(status))
     return dict(commit=sha, fingerprint=fingerprint)
 
 
@@ -145,8 +164,11 @@ def validate_sdk(sdk, manifest, production, fixture=None):
     return sdk['version']
 
 
-def producer_snapshot(root, build, output):
+def producer_snapshot(root, build, output, *, status_output=None):
     root, build = Path(root).resolve(), Path(build).resolve()
+    selected = os.environ.get('DUNECITY_CANDIDATE_SOURCE')
+    require(checksum(selected, 40), 'normal Mac producer requires its explicit selected candidate source')
+    source = clean_source(root, build, output, expected_commit=selected, status_output=status_output)
     commands = check_output(['ninja', '-C', str(build), '-t', 'commands', TARGET], text=True).splitlines()
     production = link_command(commands)
     archives = {str((build / arg).resolve(strict=True)): arg for arg in production if arg.endswith('.a') and 'SDL' in Path(arg).name}
@@ -181,7 +203,7 @@ def producer_snapshot(root, build, output):
             settings = [sysroot / name for name in ('SDKSettings.json', 'SDKSettings.plist') if (sysroot / name).is_file()]
             require(settings, 'missing compiler platform SDK identity')
             context.update({str(path): file_hash(path) for path in settings})
-    return dict(source=clean_source(root, build, output), commands=commands, productionLink=production,
+    return dict(source=source, commands=commands, productionLink=production,
                 normalizedLink=normalized, sdk=sdk, context=context)
 
 
@@ -333,8 +355,7 @@ def validate_receipt(receipt, manifest, source, candidate_files, binary_hash):
 
 def consume_fixture(archive, manifest_path, manifest_sha256, source_commit, candidate, work, build, output):
     manifest, metadata = authenticate_artifact(archive, manifest_path, manifest_sha256, source_commit)
-    source = clean_source(ROOT, build, output)
-    require(source['commit'] == source_commit, 'consumer checkout differs from candidate source')
+    source = clean_source(ROOT, build, output, expected_commit=source_commit)
     payload = extract_artifact(archive, work)
     receipt = read_json(payload / 'receipt.json')
     validate_receipt(receipt, manifest, source, bundle_files(candidate), file_hash(payload / 'menu-probe'))
@@ -375,6 +396,7 @@ if __name__ == '__main__':
     parser.add_argument('mode', choices=['snapshot'])
     parser.add_argument('--build-dir', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--status-output', type=Path, help='Existing gate-status.json for bounded source-admission failure evidence')
     args = parser.parse_args()
     producer_identity()
-    args.output.write_bytes(encoded(producer_snapshot(ROOT, args.build_dir, args.output.parent)))
+    args.output.write_bytes(encoded(producer_snapshot(ROOT, args.build_dir, args.output.parent, status_output=args.status_output)))

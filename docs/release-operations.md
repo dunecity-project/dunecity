@@ -553,6 +553,69 @@ static SDL hashes. After packaging it compiles the existing full pointer fixture
 through the same frontend. Export refuses drift from that pre-build snapshot.
 No game objects/behaviour are instrumented in the candidate.
 
+Set `CCACHE_DIR` outside the candidate checkout **before** either the normal Mac
+package producer or hosted release-headless qualifier restores its compiler
+cache. The action's supported environment override now selects
+`$RUNNER_TEMP/dunecity-ccache`. Do not add an ignore rule, delete unexpected source
+or relax the source guard to accommodate cached compiler outputs. In failed
+producer 43361782831, checkout/selection/build-inputs all named
+`8291a8142993a43100466f6c5d035e1955faae07`, but the cache action restored its cache
+into the source-root `.ccache` before the pre-build snapshot. That directory was
+not ignored and belonged to the live source fingerprint, not the committed tree.
+The original aggregate failure retained no per-file delta, so this proves a
+wrong input boundary, not the absence of additional differences. Source-admission
+failures now retain `source-head-mismatch` versus `source-fingerprint-mismatch`,
+expected/actual HEAD/root, aggregate hashes and bounded dirty paths in the existing
+`gate-status.json` and error text, never source contents. The real temporary-Git
+regression requires external-cache churn to preserve the exact source identity
+while real untracked source still fails it.
+This failure preceded `cmake --build`: retained Mac artifacts held only
+`build-inputs-macos-arm64.json` and `gate-status.json`, no Mac package, fixture or
+SDK archive/receipt to recover. Preserve the other platforms' successful
+artifacts. A helper-only overlay onto that old source, or reusing those receipts
+under a different source SHA, requires an explicit separately pinned game/helper
+input contract; do not silently substitute either or rebuild unchanged packages.
+
+The Mac CI script enters `tests/performance/probe_profile.py -- COMMAND ...`
+once for the entire lane. It allocates one existing leased
+`scratch_dir('ci-headless-mod-cache')` outside the checkout and exports
+`DUNECITY_HEADLESS_MOD_CACHE` to every preparation/game. Self-hosted runners
+require the registered Scratch lifecycle; only the explicit `github-hosted`
+runner environment permits the standard standalone temporary-directory helper,
+and the selected scope is logged. All cases share the same content-addressed,
+byte-validated publications; placement is not part of their format-2
+binary/source/bundled-input identity. Local/research callers retain their normal
+build-local cache unless they explicitly supply the new override.
+
+Cache readers acquire the scratch root's existing `.cache-reader.lock` SH pin
+before publication/use, then check `.cache-retiring` after locking. The same open
+file description is passed to every native seed/game/controls/measured launch
+and APFS-copy subprocess. Launchers close their descriptor without `LOCK_UN`;
+detached native readers keep the pin independently of session/group membership.
+Publication files remain 0444 and mods directories 0555 while any reader lives.
+The existing owned-process runner still performs cancellation; it is not proof
+that every detached descendant has exited.
+
+Retirement closes admission with `.cache-retiring` before attempting a separate
+EX descriptor for at most ten seconds. Only an acquired exclusive barrier permits
+the fresh canonical, owned, no-symlink cache tree's directory-only owner-write
+transition. Timeout/interruption fails explicitly and retains sealed failed
+scratch; it never thaws a live cache or kills inferred PIDs. The registered
+Scratch `reader_cache` lifecycle later reclaims eligible failed/crashed runs only
+under its own nonblocking EX barrier and existing live-owner/hold/retention rules.
+This requires the matching reader-cache-aware Scratch helper on managed runners.
+Hosted standalone roots use the same stable 0600 lock payload
+`{"format":1,"root":[st_dev,st_ino],"uid":st_uid}`; no cache or lock is adopted
+from a checkout or arbitrary user-selected directory.
+
+This needs no pre-checkout source/helper and remains checkout-safe if abrupt
+termination leaves scratch behind. It does not repair older
+`build/headless-mod-cache` publications: preserve the recorded checkout failure
+and use only the separately authorized, ownership/lease-reviewed migration of
+that exact old tree. Never ignore a failed `git clean`, recursively thaw a
+checkout, or delete other runs. After source handoff, the one focused check is
+`python3 tests/test_probe_profile_lifecycle.py`.
+
 `DuneCity-macOS-pointer-fixture-FULL_SOURCE_SHA-RUN_ATTEMPT` is a **separate standard
 Actions diagnostic artifact**, retained for 90 days. Its single
 `pointer-fixture.tar.gz` contains only the compiled fixture and `receipt.json`;

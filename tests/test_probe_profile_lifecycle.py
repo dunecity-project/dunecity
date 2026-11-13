@@ -135,6 +135,33 @@ class ProbeLifecycleTests(unittest.TestCase):
                 probe.finish_game(kept,game,True)
             self.assertEqual(json.loads((kept/'.agent-lease.json').read_text())['state'],'failed')
             self.assertEqual(probe.require_free_space(0)['min_free_gb'],0)
+            with probe.headless_mod_cache() as cache:
+                lease = json.loads((cache.parent/'.agent-lease.json').read_text())
+                self.assertEqual(lease['state'], 'active')
+                self.assertEqual(lease['pid'], os.getpid())
+                self.assertTrue(lease['reader_cache'])
+                info = cache.parent.stat()
+                self.assertEqual(json.loads((cache.parent/'.cache-reader.lock').read_text()),
+                    {'format': 1, 'root': [info.st_dev, info.st_ino], 'uid': os.getuid()})
+                sealed = cache/'publication/mods'
+                sealed.mkdir(parents=True)
+                (sealed/'asset').write_bytes(b'leased immutable bytes')
+                (sealed/'asset').chmod(0o444)
+                sealed.chmod(0o555)
+                self.assertEqual(sealed.stat().st_mode & 0o222, 0)
+            self.assertFalse(cache.parent.exists())
+            with self.assertRaisesRegex(RuntimeError, 'failed cache lane'):
+                with probe.headless_mod_cache() as cache:
+                    sealed = cache/'publication/mods'
+                    sealed.mkdir(parents=True)
+                    (sealed/'asset').write_bytes(b'failed immutable bytes')
+                    (sealed/'asset').chmod(0o444)
+                    sealed.chmod(0o555)
+                    raise RuntimeError('failed cache lane')
+            self.assertEqual(json.loads((cache.parent/'.agent-lease.json').read_text())['state'], 'failed')
+            self.assertTrue(sealed.stat().st_mode & 0o200)
+            self.assertEqual((sealed/'asset').stat().st_mode & 0o222, 0)
+            probe.remove_tree(cache.parent)
 
     def test_finish_game_deletes_successes_and_keeps_capped_small_failures(self):
         scratch=self.repo/'scratch'
@@ -160,6 +187,12 @@ class ProbeLifecycleTests(unittest.TestCase):
             with probe.scratch_dir('unit') as path:
                 (path/'g').mkdir();probe.finish_game(path,path/'g',True)
             self.assertTrue((path/'failed/g').is_dir());shutil.rmtree(path)
+
+    def test_managed_cache_does_not_silently_fall_back_to_unregistered_scratch(self):
+        with patch.dict(os.environ, {'HOME': str(self.root/'missing-helper')}):
+            with self.assertRaisesRegex(RuntimeError, 'registered agent-workspace scratch'):
+                with probe.headless_mod_cache():
+                    self.fail('An unregistered cache was admitted')
 
     def test_copies_only_the_revisions_the_mods_and_saves_pin(self):
         source=self.root/'player';store=source/'workshop/revisions'
@@ -277,6 +310,343 @@ class SharedHeadlessModTests(unittest.TestCase):
                 {'BALANCE_MOD': 'vanilla', 'BALANCE_REPAIR_CAPACITY_PROBE': '1', 'DUNECITY_SHARED_MODS': '/not-input'},
                 fingerprint or self.fingerprint, lambda lock: None)
         return result, native, copies
+
+    def previous_publication(self, cache):
+        """A real on-disk format-2 publication from a completed earlier consumer."""
+        art_files = {p.relative_to(self.artwork).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                     for p in self.artwork.rglob('*') if p.is_file()}
+        templates = {name: hashlib.sha256((self.runtime / 'config' / (name + '.default')).read_bytes()).hexdigest()
+                     for name in ('ObjectData.ini', 'QuantBot Config.ini')}
+        bundled = hashlib.sha256(json.dumps({'artwork': art_files, 'templates': templates},
+                                           sort_keys=True).encode()).hexdigest()
+        identity = {'format': 2, 'binary': hashlib.sha256(self.binary.read_bytes()).hexdigest(),
+                    'source': self.fingerprint, 'bundled': bundled}
+        key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+        publication = cache / key
+        mods = publication / 'mods'
+        for name in ('vanilla', 'dunecity'):
+            mod = mods / name
+            mod.mkdir(parents=True)
+            for template in templates:
+                (mod / template).write_bytes((self.runtime / 'config' / (template + '.default')).read_bytes())
+            (mod / 'GameOptions.ini').write_text(name + ' native options\n')
+            (mod / 'mod.ini').write_bytes(self.metadata)
+        shutil.copytree(self.artwork, mods / 'dunecity/graphics_skins')
+        files = {p.relative_to(mods).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                 for p in mods.rglob('*') if p.is_file()}
+        (publication / 'manifest.json').write_text(json.dumps({'identity': identity, 'files': files}, sort_keys=True))
+        for path in publication.rglob('*'):
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        return mods, identity
+
+    @unittest.skipUnless(os.name == 'posix', 'persistent Mac/Linux checkout permissions')
+    def test_lane_cache_pin_survives_checkout_and_retires_before_next_preparation(self):
+        import fcntl
+        import subprocess
+        import sys
+
+        source_path = Path(__file__).parent / 'ai/source_provenance.py'
+        source_spec = importlib.util.spec_from_file_location('cache_source_provenance', source_path)
+        source = importlib.util.module_from_spec(source_spec)
+        source_spec.loader.exec_module(source)
+        checkout = self.root / 'checkout'
+
+        def prepare_checkout():
+            checkout.mkdir()
+            subprocess.run(['git', 'init', '--quiet', str(checkout)], check=True)
+            (checkout / 'rules.ini').write_bytes(b'identical source rules\n')
+            generated = checkout / 'build/intermediate'
+            generated.mkdir(parents=True)
+            (generated / 'output').write_bytes(b'disposable build output')
+
+        def fingerprint():
+            return source.source_fingerprint(checkout, checkout / 'build', checkout / 'results')
+
+        def reuse(cache):
+            with probe.headless_mod_reader(cache) as pin:
+                return probe.shared_headless_mods(self.binary, self.build, {}, self.fingerprint,
+                    lambda handle: fcntl.flock(handle, fcntl.LOCK_EX), cache_root=cache,
+                    pass_fds=(pin.fileno(),))
+
+        prepare_checkout()
+        self.fingerprint = fingerprint()
+        with patch.dict(os.environ, {'HOME': str(self.root / 'standalone-home')}):
+            with probe.headless_mod_cache(standalone=True) as first:
+                self.assertFalse(first.is_relative_to(checkout))
+                mods, identity = self.previous_publication(first)
+                self.assertEqual(reuse(first), mods)
+                payload = mods / 'dunecity/graphics_skins/atlas.png'
+                digest = hashlib.sha256(payload.read_bytes()).hexdigest()
+                # An actual live consumer pins the external sealed bytes while
+                # the complete disposable checkout is removed and prepared again.
+                reader = subprocess.Popen([sys.executable, '-c',
+                    'import hashlib,pathlib,sys; p=pathlib.Path(sys.argv[1]); '
+                    'before=p.read_bytes(); print(hashlib.sha256(before).hexdigest(),flush=True); '
+                    'sys.stdin.read(); assert p.read_bytes()==before; '
+                    'assert p.stat().st_mode & 0o222 == 0', str(payload)],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                try:
+                    self.assertEqual(reader.stdout.readline().strip(), digest)
+                    self.assertIsNone(reader.poll())
+                    self.assertEqual(fingerprint(), self.fingerprint)
+                    shutil.rmtree(checkout)
+                    prepare_checkout()
+                    self.assertEqual(fingerprint(), self.fingerprint)
+                    self.assertEqual(hashlib.sha256(payload.read_bytes()).hexdigest(), digest)
+                    self.assertEqual(mods.stat().st_mode & 0o222, 0)
+                    self.assertEqual(payload.stat().st_mode & 0o222, 0)
+                    self.assertEqual(reuse(first), mods)
+                finally:
+                    reader.communicate(input='release', timeout=10)
+                self.assertEqual(reader.returncode, 0)
+                self.assertEqual(mods.stat().st_mode & 0o222, 0)
+                key = mods.parent.name
+            self.assertFalse(first.parent.exists())
+            shutil.rmtree(checkout)
+            prepare_checkout()
+            with probe.headless_mod_cache(standalone=True) as second:
+                next_mods, next_identity = self.previous_publication(second)
+                self.assertNotEqual(first, second)
+                self.assertEqual(next_mods.parent.name, key)
+                self.assertEqual(next_identity, identity)
+                self.assertEqual(reuse(second), next_mods)
+                self.assertEqual(fingerprint(), self.fingerprint)
+            self.assertFalse(second.parent.exists())
+
+    @unittest.skipUnless(os.name == 'posix', 'persistent Mac/Linux checkout permissions')
+    def test_failed_lane_keeps_sweepable_cache_without_unsealing_files(self):
+        with patch.dict(os.environ, {'HOME': str(self.root / 'standalone-home')}):
+            with self.assertRaisesRegex(RuntimeError, 'lane failed'):
+                with probe.headless_mod_cache(standalone=True) as cache:
+                    mods, _ = self.previous_publication(cache)
+                    raise RuntimeError('lane failed')
+            try:
+                self.assertTrue(cache.parent.exists())
+                self.assertTrue(all(path.stat().st_mode & 0o200 for path in cache.rglob('*') if path.is_dir()))
+                self.assertTrue(all(path.stat().st_mode & 0o222 == 0 for path in cache.rglob('*') if path.is_file()))
+                self.assertEqual((mods / 'dunecity/mod.ini').read_bytes(), self.metadata)
+            finally:
+                probe.remove_tree(cache.parent)
+
+    @unittest.skipUnless(os.name == 'posix', 'persistent Mac/Linux process-group lifetime')
+    def test_command_descendant_releases_sealed_bytes_before_lane_cache_retirement(self):
+        import subprocess
+        import sys
+
+        receipt = self.root/'consumer-receipt.json'
+        consumer = '''
+import hashlib, json, pathlib, signal, sys
+payload, receipt = map(pathlib.Path, sys.argv[1:])
+def finish(signum, frame):
+    receipt.write_text(json.dumps({'sha256': hashlib.sha256(payload.read_bytes()).hexdigest(),
+        'file_mode': payload.stat().st_mode, 'directory_mode': payload.parent.stat().st_mode}))
+    raise SystemExit(0)
+signal.signal(signal.SIGTERM, finish)
+signal.alarm(10)
+receipt.with_suffix('.ready').write_text(str(payload))
+while True:
+    signal.pause()
+'''
+        leader = '''
+import os, pathlib, subprocess, sys, time
+sys.path.insert(0, sys.argv[3])
+from probe_profile import headless_mod_reader
+cache = pathlib.Path(os.environ['DUNECITY_HEADLESS_MOD_CACHE'])
+pin = headless_mod_reader(cache)
+payload = cache/'publication/mods/asset'
+payload.parent.mkdir(parents=True)
+payload.write_bytes(b'owned live consumer bytes')
+payload.chmod(0o444)
+payload.parent.chmod(0o555)
+reader = subprocess.Popen([sys.executable, '-c', sys.argv[1], str(payload), sys.argv[2]],
+                          pass_fds=(pin.fileno(),))
+pin.close()
+ready = pathlib.Path(sys.argv[2]).with_suffix('.ready')
+deadline = time.monotonic() + 5
+while not ready.exists():
+    if reader.poll() is not None or time.monotonic() >= deadline:
+        raise RuntimeError('consumer did not become ready')
+    time.sleep(.01)
+# Leave the live reader in the owned group. The existing runner must drain it
+# before the cache context is allowed to change any directory permissions.
+'''
+        environment = dict(os.environ, HOME=str(self.root/'standalone-home'),
+                           RUNNER_ENVIRONMENT='github-hosted')
+        subprocess.run([sys.executable, str(module_path), '--', sys.executable, '-c', leader,
+                        consumer, str(receipt), str(module_path.parent)], env=environment, check=True, timeout=20)
+        result = json.loads(receipt.read_text())
+        self.assertEqual(result['sha256'], hashlib.sha256(b'owned live consumer bytes').hexdigest())
+        self.assertEqual(result['file_mode'] & 0o222, 0)
+        self.assertEqual(result['directory_mode'] & 0o222, 0)
+        payload = Path(receipt.with_suffix('.ready').read_text())
+        self.assertFalse(payload.parents[3].exists())
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX inherited reader pins and detached sessions')
+    def test_detached_reader_survives_launcher_and_blocks_retirement_until_released(self):
+        import subprocess
+        import sys
+
+        ready, release, receipt = (self.root/name for name in ('detached-ready', 'release-reader', 'reader-done'))
+        consumer = '''
+import hashlib, pathlib, signal, sys, time
+payload, ready, release, receipt = map(pathlib.Path, sys.argv[1:])
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+before = payload.read_bytes()
+ready.write_bytes(before)
+deadline = time.monotonic() + 10
+while not release.exists():
+    assert payload.read_bytes() == before
+    assert payload.stat().st_mode & 0o222 == 0
+    assert payload.parent.stat().st_mode & 0o222 == 0
+    if time.monotonic() >= deadline:
+        raise RuntimeError('test reader release deadline')
+    time.sleep(.01)
+receipt.write_text(hashlib.sha256(payload.read_bytes()).hexdigest())
+'''
+        launcher = '''
+import pathlib, subprocess, sys, time
+pin = int(sys.argv[1])
+reader = subprocess.Popen([sys.executable, '-c', *sys.argv[2:]], start_new_session=True, pass_fds=(pin,))
+ready = pathlib.Path(sys.argv[4])
+deadline = time.monotonic() + 5
+while not ready.exists():
+    if reader.poll() is not None or time.monotonic() >= deadline:
+        raise RuntimeError('detached reader failed to start')
+    time.sleep(.01)
+# Exit without waiting: the real reader keeps the inherited open description.
+'''
+        with patch.dict(os.environ, {'HOME': str(self.root/'standalone-home')}):
+            with self.assertRaisesRegex(RuntimeError, 'readers still active'):
+                with probe.headless_mod_cache(standalone=True, retirement_timeout=0) as cache:
+                    pin = probe.headless_mod_reader(cache)
+                    try:
+                        mods, _ = self.previous_publication(cache)
+                        payload = mods/'dunecity/graphics_skins/atlas.png'
+                        child = subprocess.Popen([sys.executable, '-c', launcher, str(pin.fileno()), consumer,
+                            str(payload), str(ready), str(release), str(receipt)], pass_fds=(pin.fileno(),))
+                    finally:
+                        pin.close()
+                    self.assertEqual(child.wait(timeout=10), 0)
+                    self.assertEqual(ready.read_bytes(), payload.read_bytes())
+            try:
+                self.assertEqual(payload.stat().st_mode & 0o222, 0)
+                self.assertEqual(payload.parent.stat().st_mode & 0o222, 0)
+                self.assertTrue((cache.parent/'.cache-retiring').exists())
+                with self.assertRaisesRegex(RuntimeError, 'retiring'):
+                    probe.headless_mod_reader(cache)
+            finally:
+                release.write_text('released')
+                with probe._retiring_cache(cache.parent, probe._cache_root_identity(cache.parent), 5):
+                    self.assertEqual(receipt.read_text(), hashlib.sha256(payload.read_bytes()).hexdigest())
+                    for path in cache.rglob('*'):
+                        if path.is_dir():
+                            path.chmod(path.stat().st_mode | 0o200)
+                    probe.remove_tree(cache)
+                probe.remove_tree(cache.parent)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX cancellation during reader barrier acquisition')
+    def test_interrupted_retirement_keeps_live_reader_bytes_sealed(self):
+        import signal
+        import subprocess
+        import sys
+
+        def interrupt(signum, frame):
+            raise KeyboardInterrupt('cancel retirement')
+
+        signaler = '''
+import os, pathlib, signal, sys, time
+marker, parent = pathlib.Path(sys.argv[1]), int(sys.argv[2])
+deadline = time.monotonic() + 5
+while not marker.exists():
+    if os.getppid() != parent or time.monotonic() >= deadline:
+        raise RuntimeError('retirement did not begin')
+    time.sleep(.01)
+if os.getppid() == parent:
+    os.kill(parent, signal.SIGUSR1)
+'''
+        previous = signal.signal(signal.SIGUSR1, interrupt)
+        pin = None
+        try:
+            with patch.dict(os.environ, {'HOME': str(self.root/'standalone-home')}):
+                with self.assertRaises(KeyboardInterrupt):
+                    with probe.headless_mod_cache(standalone=True, retirement_timeout=5) as cache:
+                        pin = probe.headless_mod_reader(cache)
+                        mods, _ = self.previous_publication(cache)
+                        child = subprocess.Popen([sys.executable, '-c', signaler,
+                            str(cache.parent/'.cache-retiring'), str(os.getpid())])
+                self.assertEqual(child.wait(timeout=5), 0)
+                self.assertEqual(mods.stat().st_mode & 0o222, 0)
+                self.assertEqual((mods/'dunecity/mod.ini').stat().st_mode & 0o222, 0)
+        finally:
+            signal.signal(signal.SIGUSR1, previous)
+            if pin is not None:
+                pin.close()
+                with probe._retiring_cache(cache.parent, probe._cache_root_identity(cache.parent), 5):
+                    for path in cache.rglob('*'):
+                        if path.is_dir():
+                            path.chmod(path.stat().st_mode | 0o200)
+                    probe.remove_tree(cache)
+                probe.remove_tree(cache.parent)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX SIGKILL exit and inherited reader barrier')
+    def test_uncooperative_group_reader_is_unpinned_before_successful_retirement(self):
+        import subprocess
+        import sys
+        sys.path.insert(0, str(module_path.parents[1]/'menu'))
+        from probe_process import ProbeProcesses
+
+        ready = self.root/'uncooperative-ready'
+        consumer = '''
+import pathlib, signal, sys, time
+payload, ready = map(pathlib.Path, sys.argv[1:])
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+assert payload.stat().st_mode & 0o222 == 0
+ready.write_bytes(payload.read_bytes())
+time.sleep(60)
+'''
+        launcher = '''
+import pathlib, subprocess, sys, time
+pin = int(sys.argv[1])
+reader = subprocess.Popen([sys.executable, '-c', *sys.argv[2:]], pass_fds=(pin,))
+ready = pathlib.Path(sys.argv[4])
+deadline = time.monotonic() + 5
+while not ready.exists():
+    if reader.poll() is not None or time.monotonic() >= deadline:
+        raise RuntimeError('group reader failed to start')
+    time.sleep(.01)
+'''
+        with patch.dict(os.environ, {'HOME': str(self.root/'standalone-home')}):
+            with probe.headless_mod_cache(standalone=True, retirement_timeout=5) as cache:
+                with probe.headless_mod_reader(cache) as pin:
+                    mods, _ = self.previous_publication(cache)
+                    payload = mods/'dunecity/mod.ini'
+                    owner = ProbeProcesses(grace=.01)
+                    result = owner.run([sys.executable, '-c', launcher, str(pin.fileno()), consumer,
+                        str(payload), str(ready)], pass_fds=(pin.fileno(),), check=True, timeout=10)
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(ready.read_bytes(), self.metadata)
+                    self.assertEqual(payload.parent.stat().st_mode & 0o222, 0)
+            self.assertFalse(cache.parent.exists())
+
+    @unittest.skipUnless(os.name == 'posix', 'persistent Mac/Linux no-symlink retirement')
+    def test_retirement_rejects_link_before_thawing_any_directory(self):
+        outside = self.root/'outside'
+        outside.mkdir()
+        (outside/'keep').write_bytes(b'not cache data')
+        with patch.dict(os.environ, {'HOME': str(self.root/'standalone-home')}):
+            with self.assertRaisesRegex(RuntimeError, 'Unsafe retired headless cache'):
+                with probe.headless_mod_cache(standalone=True) as cache:
+                    mods, _ = self.previous_publication(cache)
+                    (cache/'linked').symlink_to(outside, target_is_directory=True)
+            try:
+                self.assertEqual(mods.stat().st_mode & 0o222, 0)
+                self.assertEqual((outside/'keep').read_bytes(), b'not cache data')
+            finally:
+                (cache/'linked').unlink()
+                for path in cache.rglob('*'):
+                    if path.is_dir():
+                        path.chmod(path.stat().st_mode | 0o200)
+                probe.remove_tree(cache.parent)
 
     def assert_unpublished(self):
         cache = self.build / 'headless-mod-cache'

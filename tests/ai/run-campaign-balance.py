@@ -47,10 +47,10 @@ if not WINDOWS:
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import copy_revisions, discard_profile_assets, prune_runs, remove_tree, shared_headless_mods  # noqa: E402
+from probe_profile import copy_revisions, discard_profile_assets, headless_mod_reader, prune_runs, remove_tree, shared_headless_mods  # noqa: E402
 
 
-def run_strategy_processes(command, runs, workers, timeout):
+def run_strategy_processes(command, runs, workers, timeout, *, pass_fds=()):
     """Independent native processes; every run owns its profile, cwd and log.
 
     The canonical CTest reserves three scheduler slots. Failed or timed-out
@@ -69,7 +69,7 @@ def run_strategy_processes(command, runs, workers, timeout):
                 if stopping:
                     raise RuntimeError('Strategy batch cancelled after another seed failed')
                 process = subprocess.Popen(command, cwd=case['cwd'], env=case['env'],
-                                           stdout=log, stderr=subprocess.STDOUT)
+                                           stdout=log, stderr=subprocess.STDOUT, pass_fds=pass_fds)
                 active.add(process)
             try:
                 try:
@@ -111,7 +111,7 @@ def run_strategy_processes(command, runs, workers, timeout):
             raise
 
 
-def run_controls_process(command, cwd, env, log_path, timeout):
+def run_controls_process(command, cwd, env, log_path, timeout, *, pass_fds=()):
     """Bound the native input fixture well inside CTest's 600-second deadline.
 
     A timed-out child is sampled before killing only its private process group.
@@ -136,7 +136,7 @@ def run_controls_process(command, cwd, env, log_path, timeout):
         options = (dict(creationflags=subprocess.CREATE_NEW_PROCESS_GROUP) if WINDOWS
                    else dict(start_new_session=True))
         process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                                   stdout=log, stderr=subprocess.STDOUT, **options)
+                                   stdout=log, stderr=subprocess.STDOUT, pass_fds=pass_fds, **options)
         try:
             code = process.wait(timeout=timeout)
         except BaseException as error:
@@ -1067,9 +1067,17 @@ if args.scenario:
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
+cache_reader = None
+cache_fds = ()
 if (headless_assets and args.mod in ('vanilla', 'dunecity')
         and not (args.custom_map or args.load_save or args.save_profile or args.game_options or args.genome_phase_dir)):
-    shared_mods = shared_headless_mods(binary, build, env, source_fingerprint_value, lock_exclusive)
+    if env.get('DUNECITY_HEADLESS_MOD_CACHE'):
+        cache_reader = headless_mod_reader(Path(env['DUNECITY_HEADLESS_MOD_CACHE']))
+        # Close only: LOCK_UN would also unpin inherited native readers.
+        atexit.register(cache_reader.close)
+        cache_fds = (cache_reader.fileno(),)
+    shared_mods = shared_headless_mods(binary, build, env, source_fingerprint_value, lock_exclusive,
+                                     cache_root=env.get('DUNECITY_HEADLESS_MOD_CACHE'), pass_fds=cache_fds)
     if shared_mods is not None:
         env['DUNECITY_SHARED_MODS'] = str(shared_mods)
     elif args.build_only:
@@ -1093,20 +1101,22 @@ if args.strategy_probe:
             env=dict(env, DUNECITY_USERDIR=str(profile), BALANCE_SEED=str(extra), BALANCE_STRATEGY_SECTIONS='3',
                      BALANCE_STRATEGY_MARGIN_ONLY='1', BALANCE_STRATEGY_TRIKES_ONLY=str(int(trikes_only)))))
     run_strategy_processes([str(binary), '--window', '--showlog', '--non-interactive'], strategy_runs,
-                           args.strategy_workers, args.wall_timeout)
+                           args.strategy_workers, args.wall_timeout, pass_fds=cache_fds)
 elif args.controls_probe:
     run_controls_process([str(binary), '--window', '--showlog', '--non-interactive'],
-                         out, env, out/'run.log', args.wall_timeout)
+                         out, env, out/'run.log', args.wall_timeout, pass_fds=cache_fds)
 elif env.get('DUNECITY_SIM_MEASURE'):
     from simulation_measure import measure_process
     measure_process([str(binary), '--window', '--showlog', '--non-interactive'], cwd=out, env=env,
                     log=out/'run.log', timeout=args.wall_timeout,
                     output=Path(env['DUNECITY_SIM_MEASURE']),
-                    sample_seconds=float(env.get('DUNECITY_SIM_SAMPLE_SECONDS', '0')))
+                    sample_seconds=float(env.get('DUNECITY_SIM_SAMPLE_SECONDS', '0')), pass_fds=cache_fds)
 else:
     with (out/'run.log').open('w') as log:
         subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
-                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout)
+                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout,pass_fds=cache_fds)
+if cache_reader is not None:
+    cache_reader.close()
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()
 results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')

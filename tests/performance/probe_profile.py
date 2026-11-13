@@ -63,7 +63,7 @@ def headless_asset_arguments():
     return ['--no-headless-assets'] if os.environ.get('DUNECITY_HEADLESS_ASSETS') == '0' else ['--headless-assets']
 
 
-def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
+def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive, *, cache_root=None, pass_fds=()):
     """Publish complete native rules and installer artwork once, never user mods.
 
     The seed-only engine authors all logical files and declares its artwork
@@ -73,6 +73,9 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
     if not fingerprint:
         return None
     binary, build = Path(binary), Path(build)
+    if cache_root is not None and not pass_fds:
+        raise RuntimeError('A job-scoped shared mod cache requires an inherited reader pin')
+    subprocess_options = {'pass_fds': pass_fds} if pass_fds else {}
     staged = None
 
     def payload_hashes(directory):
@@ -108,7 +111,7 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
         identity = {'format': 2, 'binary': hashlib.sha256(binary.read_bytes()).hexdigest(),
                     'source': fingerprint, 'bundled': bundled}
         key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-        cache = build / 'headless-mod-cache'
+        cache = Path(cache_root) if cache_root is not None else build / 'headless-mod-cache'
         destination = cache / key
         cache.mkdir(parents=True, exist_ok=True)
         with (cache / (key + '.lock')).open('a+b') as handle:
@@ -133,7 +136,7 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                 with (scratch / 'seed.log').open('w') as log:
                     subprocess.run([str(binary), '--window', '--showlog', '--non-interactive'],
                                    cwd=scratch, env=seed_env, stdout=log, stderr=subprocess.STDOUT,
-                                   check=True, timeout=120)
+                                   check=True, timeout=120, **subprocess_options)
                 marker = 'HEADLESS_MOD_ARTWORK_V1: '
                 declarations = [line.split(marker, 1)[1] for line in (scratch / 'seed.log').read_text().splitlines()
                                 if marker in line]
@@ -153,7 +156,7 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                             raise RuntimeError('Native seed rules differ from the trusted bundle')
                 staged = Path(tempfile.mkdtemp(prefix=key + '.incoming-', dir=cache))
                 for name in ('vanilla', 'dunecity'):
-                    clone_tree(native / name, staged / 'mods' / name)
+                    clone_tree(native / name, staged / 'mods' / name, **subprocess_options)
                 target = staged / 'mods/dunecity/graphics_skins'
                 if target.exists() or target.is_symlink():
                     raise RuntimeError('Native seed shadows the staged artwork target')
@@ -181,7 +184,7 @@ def shared_headless_mods(binary, build, env, fingerprint, lock_exclusive):
                     source = previous.parent / 'mods/dunecity/graphics_skins'
                     break
                 print('HEADLESS_MOD_PHASE: staging %d artwork files from %s' % (len(art_files), source), flush=True)
-                clone_tree(source, target)
+                clone_tree(source, target, **subprocess_options)
                 # This local refresh stamp is excluded by both canonical mod
                 # approval and Workshop manifests, and is not installer artwork.
                 stamp = target / cache_stamp
@@ -276,7 +279,7 @@ def managed_profile(profile):
 
 
 @contextmanager
-def scratch_dir(purpose, explicit=None):
+def scratch_dir(purpose, explicit=None, *, require_managed=False, reader_cache=False):
     """Scratch for a batch of games: the explicit directory if given, else a leased one.
 
     The leased run directory (agent-workspace scratch root, e.g.
@@ -288,18 +291,24 @@ def scratch_dir(purpose, explicit=None):
     Results belong in the caller's results directory, never in scratch.
     """
     if explicit:
+        if reader_cache:
+            raise ValueError('A reader cache requires newly allocated scratch')
         path = Path(explicit).resolve()
         path.mkdir(parents=True, exist_ok=True)
         yield path
         return
     module = _installed('scratch')
     managed = module is not None and PROJECT in module.Scratch().projects
+    if require_managed and not managed:
+        raise RuntimeError('This CI lane requires the registered agent-workspace scratch lifecycle')
     if managed:
         scratch = module.Scratch()
         owner = os.environ.get('AGENT_WORKSPACE_OWNER', 'local:%d' % os.getpid())
-        path = scratch.create(PROJECT, owner, purpose)
+        path = scratch.create(PROJECT, owner, purpose, **({'reader_cache': True} if reader_cache else {}))
     else:
         path = Path(tempfile.mkdtemp(prefix='dunecity-' + purpose + '-'))
+    if reader_cache and not managed:
+        _create_cache_reader_lock(path.resolve(strict=True))
     failed = True
     try:
         yield path
@@ -312,6 +321,157 @@ def scratch_dir(purpose, explicit=None):
         elif not failed:
             remove_tree(path)
 
+def _cache_root_identity(root):
+    root = Path(root)
+    info = root.lstat()
+    if (root.resolve(strict=True) != root or not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.getuid()):
+        raise RuntimeError('Unsafe cache lease root: ' + str(root))
+    return [info.st_dev, info.st_ino]
+
+
+def _create_cache_reader_lock(root):
+    identity = _cache_root_identity(root)
+    fd = os.open(root / '.cache-reader.lock', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as handle:
+        json.dump({'format': 1, 'root': identity, 'uid': os.getuid()}, handle)
+
+
+def _open_cache_reader_lock(root, identity=None):
+    current = _cache_root_identity(root)
+    if identity is not None and current != identity:
+        raise RuntimeError('Cache lease root identity changed')
+    fd = os.open(root / '.cache-reader.lock', os.O_RDWR | os.O_NOFOLLOW)
+    handle = os.fdopen(fd, 'r+b')
+    try:
+        info = os.fstat(fd)
+        payload = json.loads(handle.read())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or payload != {'format': 1, 'root': current, 'uid': os.getuid()}):
+            raise RuntimeError('Unsafe cache reader lock')
+        linked = (root / '.cache-reader.lock').lstat()
+        if (linked.st_dev, linked.st_ino) != (info.st_dev, info.st_ino):
+            raise RuntimeError('Cache reader lock identity changed')
+        if _cache_root_identity(root) != current:
+            raise RuntimeError('Cache lease root identity changed')
+        return handle
+    except BaseException:
+        handle.close()
+        raise
+
+
+def _check_cache_reader_lock(root, handle, identity=None):
+    with _open_cache_reader_lock(root, identity) as checked:
+        current, original = os.fstat(checked.fileno()), os.fstat(handle.fileno())
+        if (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino):
+            raise RuntimeError('Cache reader lock identity changed')
+
+
+def headless_mod_reader(cache):
+    """Return an SH pin; close it, never LOCK_UN an inherited open description."""
+    import fcntl
+    cache = Path(cache)
+    if cache.resolve(strict=True) != cache:
+        raise RuntimeError('Linked shared headless cache')
+    root = cache.parent
+    handle = _open_cache_reader_lock(root)
+    try:
+        fcntl.flock(handle, fcntl.LOCK_SH)
+        # Revalidate after acquisition: retirement may have closed admission
+        # while this reader was waiting behind the exclusive barrier.
+        _check_cache_reader_lock(root, handle)
+        if cache.resolve(strict=True) != cache or not cache.is_dir():
+            raise RuntimeError('Shared headless cache identity changed')
+        if os.path.lexists(root / '.cache-retiring'):
+            raise RuntimeError('Shared headless cache is retiring')
+        return handle
+    except BaseException:
+        handle.close()
+        raise
+
+
+@contextmanager
+def _retiring_cache(root, identity, timeout):
+    import fcntl
+    if _cache_root_identity(root) != identity:
+        raise RuntimeError('Cache lease root identity changed')
+    try:
+        fd = os.open(root / '.cache-retiring', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except FileExistsError:
+        marker = (root / '.cache-retiring').lstat()
+        if not stat.S_ISREG(marker.st_mode) or marker.st_uid != os.getuid():
+            raise RuntimeError('Unsafe cache retirement marker')
+    else:
+        os.close(fd)
+    # A separately opened descriptor must wait for every inherited reader FD,
+    # including detached sessions and children still exiting after SIGKILL.
+    with _open_cache_reader_lock(root, identity) as barrier:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(barrier, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError('Cache readers still active; retained sealed scratch')
+                time.sleep(min(.05, remaining))
+        _check_cache_reader_lock(root, barrier, identity)
+        yield
+
+
+
+
+@contextmanager
+def headless_mod_cache(*, standalone=False, retirement_timeout=10):
+    """One external lane cache; retirement waits for actual inherited reader pins.
+
+    A timeout or interrupted barrier leaves sealed failed scratch for the existing
+    registered lifecycle's eligible, pin-aware retirement, not indefinite waiting
+    or an inference that process-group termination drained detached readers.
+    """
+    with scratch_dir('ci-headless-mod-cache', require_managed=not standalone, reader_cache=True) as scratch:
+        root = scratch.resolve(strict=True)
+        root_identity = _cache_root_identity(root)
+        cache = root / 'headless-mod-cache'
+        checkout = Path(os.environ.get('GITHUB_WORKSPACE', Path(__file__).resolve().parents[2])).resolve()
+        if cache.is_relative_to(checkout):
+            raise RuntimeError('CI headless cache must be outside the checkout')
+        cache.mkdir(mode=0o700)
+        identity = cache.stat()
+        print('HEADLESS_MOD_CACHE: %s; %s' %
+              ('explicit standalone permitted' if standalone else 'registered scratch', cache), flush=True)
+        try:
+            yield cache
+        finally:
+            with _retiring_cache(root, root_identity, retirement_timeout):
+                # Only the fresh cache is adopted, with no active native readers.
+                if cache.resolve(strict=True) != cache:
+                    raise RuntimeError('Headless cache root changed')
+                directories = []
+                for path in [cache, *cache.rglob('*')]:
+                    info = path.lstat()
+                    if (stat.S_ISLNK(info.st_mode)
+                            or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode))
+                            or info.st_uid != os.getuid()):
+                        raise RuntimeError('Unsafe retired headless cache entry: ' + str(path))
+                    if path == cache and (info.st_dev, info.st_ino) != (identity.st_dev, identity.st_ino):
+                        raise RuntimeError('Headless cache identity changed')
+                    if stat.S_ISDIR(info.st_mode):
+                        directories.append((path, info.st_mode))
+                for path, mode in directories:
+                    path.chmod(mode | stat.S_IWUSR)
+
+
+def run_with_headless_mod_cache(command, *, standalone=False):
+    """Run the lane; reader pins, not group-exit assumptions, authorize retirement."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'menu'))
+    from probe_process import ProbeProcesses
+    processes = ProbeProcesses()
+    processes.install_signal_handlers()
+    with headless_mod_cache(standalone=standalone) as cache:
+        processes.run(command, env=dict(os.environ, DUNECITY_HEADLESS_MOD_CACHE=str(cache)), check=True)
 
 def finish_game(scratch, out, failed):
     """Call once a game's rows are written: delete its run directory straight away.
@@ -371,13 +531,13 @@ def prune_runs(parent, prefix, keep):
         remove_tree(stale)
 
 
-def clone_tree(source, destination):
+def clone_tree(source, destination, *, pass_fds=()):
     """Copy a directory tree as APFS clones where possible (no extra disk until written)."""
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     if sys.platform == 'darwin':
         done = subprocess.run(['/bin/cp', '-cRp', str(Path(source)) + '/.', str(destination)],
-                              capture_output=True)
+                              capture_output=True, **({'pass_fds': pass_fds} if pass_fds else {}))
         if done.returncode == 0:
             return
     shutil.copytree(source, destination, dirs_exist_ok=True)
@@ -501,3 +661,13 @@ def prepare_profile(profile, source=None, saves=()):
     (profile / 'mods').mkdir(parents=True, exist_ok=True)
     (profile / 'mods/active_mod.txt').write_text(active)
     return active
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3 or sys.argv[1] != '--':
+        raise SystemExit('Usage: probe_profile.py -- COMMAND [ARG ...]')
+    try:
+        run_with_headless_mod_cache(sys.argv[2:],
+            standalone=os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted')
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(error.returncode)

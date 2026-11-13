@@ -22,6 +22,16 @@ if [ "${1:-build}" = feeds ]; then
     done
     exit 0
 fi
+# Lease one outside-checkout cache for every preparation/game in this lane.
+# The private re-entry argument prevents inherited environment from silently
+# replacing the lane's lifecycle with an unowned caller-selected directory.
+if [ "${1:-}" = --leased-headless-cache ]; then
+    shift
+    : "${DUNECITY_HEADLESS_MOD_CACHE:?Missing lane cache lease}"
+else
+    exec python3 tests/performance/probe_profile.py -- \
+        bash "$0" --leased-headless-cache "$@"
+fi
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ENV_HINTS=1
 STABLE="${DUNECITY_RELEASE_BUILD:-OFF}"
 MODE="${1:-build}"
@@ -58,7 +68,8 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 # Snapshot installed static SDL bytes and their SPDX/ABI recipes before the game
 # link. The later diagnostic export refuses any source/toolchain/SDK drift.
 if [ "${PACKAGE_BUILD:-false}" = true ] && [ "$MODE" != release-headless-qualification ]; then
-    python3 tests/menu/pointer_artifact.py snapshot --build-dir build --output build/pointer-producer-inputs.json
+    python3 tests/menu/pointer_artifact.py snapshot --build-dir build --output build/pointer-producer-inputs.json \
+        --status-output "$POINTER_OUT/gate-status.json"
 fi
 cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 python3 scripts/check-build-deps.py build

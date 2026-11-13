@@ -611,5 +611,53 @@ class PointerArtifactTests(unittest.TestCase):
                 pointer.package_executable_hash(package)
 
 
+    def test_external_cache_churn_preserves_source_but_real_untracked_source_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            source = folder/'candidate'
+            source.mkdir()
+            (source/'main.cpp').write_bytes(b'exact committed input\n')
+            subprocess.run(['git', 'init', '-q', str(source)], check=True)
+            subprocess.run(['git', 'config', 'core.excludesFile', os.devnull], cwd=source, check=True)
+            subprocess.run(['git', 'add', 'main.cpp'], cwd=source, check=True)
+            subprocess.run(['git', '-c', 'user.name=Pointer contract test', '-c', 'user.email=pointer-test@invalid',
+                            '-c', 'core.hooksPath='+os.devnull, '-c', 'commit.gpgsign=false',
+                            'commit', '-qm', 'Exact candidate'], cwd=source, check=True)
+            expected = pointer.clean_source(source, source/'build', folder/'evidence')
+            status_output = folder/'gate-status.json'
+            cache = source/'.ccache/0/stats'
+            cache.parent.mkdir(parents=True)
+            cache.write_bytes(b'compiler cache output\n')
+            with self.assertRaisesRegex(RuntimeError, 'source is not the exact committed input') as failure:
+                pointer.clean_source(source, source/'build', folder/'evidence',
+                                     expected_commit=expected['commit'], status_output=status_output)
+            diagnostic = pointer.read_json(status_output)
+            self.assertEqual(diagnostic, json.loads(str(failure.exception).split('; ', 1)[1]))
+            self.assertEqual(diagnostic['status'], 'blocked-prerequisite')
+            self.assertEqual(diagnostic['reasonCode'], 'source-fingerprint-mismatch')
+            self.assertEqual(diagnostic['sourceCommit'], expected['commit'])
+            self.assertEqual(diagnostic['sourceRoot'], str(source.resolve()))
+            self.assertNotEqual(diagnostic['worktreeFingerprint'], diagnostic['committedFingerprint'])
+            self.assertTrue(any('.ccache/0/stats' in path for path in diagnostic['dirtyPaths']))
+            external_cache = folder/'compiler-cache'
+            shutil.move(str(source/'.ccache'), external_cache)
+            for content in (b'new cached object\n', b'more compiler-cache churn\n'):
+                (external_cache/'0/stats').write_bytes(content)
+                self.assertEqual(pointer.clean_source(source, source/'build', folder/'evidence',
+                    expected_commit=expected['commit']), expected)
+            (source/'untracked-source.cpp').write_bytes(b'real untracked source input\n')
+            with self.assertRaisesRegex(RuntimeError, 'source is not the exact committed input'):
+                pointer.clean_source(source, source/'build', folder/'evidence',
+                                     expected_commit=expected['commit'], status_output=status_output)
+            self.assertTrue(any('untracked-source.cpp' in path for path in pointer.read_json(status_output)['dirtyPaths']))
+            with self.assertRaisesRegex(RuntimeError, 'HEAD differs from the selected source'):
+                pointer.clean_source(source, source/'build', folder/'evidence',
+                                     expected_commit='0'*40, status_output=status_output)
+            diagnostic = pointer.read_json(status_output)
+            self.assertEqual(diagnostic['reasonCode'], 'source-head-mismatch')
+            self.assertEqual(diagnostic['sourceCommit'], expected['commit'])
+            self.assertEqual(diagnostic['expectedSourceCommit'], '0'*40)
+
+
 if __name__ == '__main__':
     unittest.main()

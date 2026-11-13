@@ -593,9 +593,12 @@ jobs:
     env:
       DUNECITY_RELEASE_BUILD: 'OFF'
       PACKAGE_BUILD: 'false'
+      DUNECITY_CANDIDATE_SOURCE: ${{ needs.select-inputs.outputs.sha }}
       TEST_TIER: nightly
       HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
+      - name: Keep compiler cache outside candidate source
+        run: printf 'CCACHE_DIR=%s/dunecity-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.select-inputs.outputs.sha }}
@@ -664,6 +667,7 @@ jobs:
       contents: read
     env:
       PACKAGE_BUILD: ${{ needs.select-inputs.outputs.package }}
+      DUNECITY_CANDIDATE_SOURCE: ${{ needs.select-inputs.outputs.sha }}
       MACOS_SKIN_PROBE: ${{ inputs.macos_skin_probe || false }}
       HOMEBREW_NO_AUTO_UPDATE: '1'
       TEST_TIER: ${{ needs.select-inputs.outputs.tier }}
@@ -673,6 +677,9 @@ jobs:
           OUT="$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -p "$OUT"
           printf '%s\n' '{"status":"not-run","reason":"Native GUI gate prerequisites have not completed; inspect the failed prerequisite step"}' > "$OUT/gate-status.json"
+          # ccache-action otherwise restores non-source files into $GITHUB_WORKSPACE/.ccache.
+          # Keep compiler-cache bytes outside the exact committed candidate input.
+          printf 'CCACHE_DIR=%s/dunecity-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.select-inputs.outputs.sha }}

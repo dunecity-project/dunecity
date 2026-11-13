@@ -128,15 +128,15 @@ def _windows_counters(process):
     return memory.rss / (1 << 20), memory.peak_rss / (1 << 20), (ticks(system) + ticks(user)) / 1e7
 
 
-def measure_process(command, *, cwd, env, log, timeout, output, sample_seconds=0):
+def measure_process(command, *, cwd, env, log, timeout, output, sample_seconds=0, pass_fds=()):
     """Accept the runner's log path or an already-open capture stream."""
     context = Path(log).open('w') if isinstance(log, (str, os.PathLike)) else nullcontext(log)
     with context as capture:
         return _measure_process(command, cwd=cwd, env=env, log=capture, timeout=timeout,
-                                output=output, sample_seconds=sample_seconds)
+                                output=output, sample_seconds=sample_seconds, pass_fds=pass_fds)
 
 
-def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds):
+def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds, pass_fds):
     """Run one checked probe and persist measurements even if it fails.
 
     DUNECITY_SIM_MEASURE is deliberately opt-in: ordinary tests do no polling or
@@ -150,7 +150,7 @@ def _measure_process(command, *, cwd, env, log, timeout, output, sample_seconds)
     if sys.platform == 'darwin' and env.get('DUNECITY_SIM_MALLOC_STACKS'):
         env['MallocStackLogging'] = env.pop('DUNECITY_SIM_MALLOC_STACKS')
     sample_cycle = int(env.get('DUNECITY_SIM_SAMPLE_CYCLE') or 0)
-    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT, pass_fds=pass_fds)
     samples, tools, errors = [], [], []
     probe_cpu, peak, returncode = 0.0, 0.0, None
     sample_thread = None
