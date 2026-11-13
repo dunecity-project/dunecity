@@ -53,63 +53,96 @@ timers are unchanged since 1.0.833, and Easy enemies ran 1-2 harvesters each.
 ground waves home until its army matches the strongest opposing alliance, capped
 at 75% of its own limit; `campaign-ally-strength-floor-off` is the control.
 
-Missions 5, 11, 14 and 17 won 137/144 across the four pairs, and missions 8, 14,
-17, 18 and 19 won 119/120 with the harvester ceiling below. Level 8 (missions 20
-and 21) was the exception at 5-14 of 24 per pair, and was already so before the
-partner change: those missions start each opponent with two refineries, so
-Easy/Medium ran 2/4 harvesters, banked 4,000-10,000 idle credits and replaced
-every loss at once, where the level 9 opponents have one refinery and run short.
-`CampaignEnemyHarvesterCeiling` (hashed, default on) keeps an Easy/Medium/Hard
-opponent to its level 9 fleet of 1/2/4 harvesters;
-`campaign-enemy-harvester-ceiling-off` is the control.
+Level 8 (missions 20 and 21) was the exception, and was already so before the
+partner change: those missions start each opponent with two refineries, so the
+opponents ran more harvesters, banked idle credits and replaced every loss at
+once, where the level 9 opponents have one refinery and run short.
 
-| Player v enemy | Level 8 before | Level 8 with ceiling (9001-9004 + 9101-9104) | Level 9 with ceiling |
+An enemy army ceiling (final-level size 6600/8250/10000) was tested twice and
+did not help, so it was removed. Also tried and removed, because none moved a
+result beyond noise: Hard repeat delay +60 s, Hard level 9 army limit 8,000, a
+partner strength floor capped at 95% of its limit or uncapped, a partner wave
+that needs the home troops alone to meet the required army, and a partner Light
+Factory opening with a threat production floor (worse).
+
+### Three opponent levers (2026-11-14)
+
+Stefan's rule: an Easy/Medium/Hard campaign opponent's difficulty is set by
+three levers only, all hashed `[Force Concentration]` integers; Brutal has none.
+There is no outstanding-force or recovery blocking: a wave is limited by its own
+cap only. Added target: Brutal v Hard at least 50% on level 9.
+
+| Lever | Easy | Medium | Hard |
 |---|---|---|---|
-| Easy v Easy | 14/24 | 36/48 | 23/24 |
-| Medium v Easy | 11/24 | 38/48 | 20/24 |
-| Hard v Medium | 8/24 | 34/48 | 16/24 |
-| Hard v Hard | 5/24 | 11/48 | 10/24 |
+| `Campaign<Tier>Harvesters` (most it keeps; 0 = no ceiling) | 1 | 1 | 2 |
+| `Campaign<Tier>WaveValue` (one ground wave, from tech 8) | 1700 | 2500 | 3500 |
+| `Campaign<Tier>OpeningDelaySec` (after the map trigger) | 0 | 0 | 60 |
 
-An enemy army ceiling (final-level size 6600/8250/10000) was tested with the
-harvester ceiling on both seed sets and did not help (35, 29, 34, 15 of 48), so
-it was removed.
+- Wave value by mission: Medium and Hard use (tech level + 4) / 12 of the value
+  (58% at tech 3, 75% at tech 5, full from tech 8). Easy keeps its staged 900 /
+  1,200 / 1,700 and its 3/4/5 unit cap.
+- Opening: the anchor is the map's first enemy combat reinforcement (minute 12 on
+  mission 22), plus a 0-2 minute per-house stagger, plus the delay. Dune Dynasty
+  likewise wakes its AI when the first scheduled reinforcement lands and has no
+  further delay. Missions 1-4 have no trigger and always open in minutes 4-6; a
+  later map without a trigger never attacks.
+- A Medium opponent may build one Repair Yard (tech above 4) and adds a Spice
+  Silo when its storage is 90% full. In 144 Medium bases on missions 11-22 the
+  storage was full twice, so the silo rule rarely acts; the Repair Yard was
+  built by 14 of 15 houses on mission 22 and 3 of 15 on mission 21.
+- No campaign opponent uses coordinated attacks at any difficulty: every
+  coordination path requires a Custom game outside campaign policy.
 
-### Later opening and Brutal v Hard (2026-11-14)
+Win % by level (level 1 = mission 1, 2 = missions 2-4, ... 8 = missions 20-21,
+9 = mission 22), 3 houses x seeds 9301-9303 for every mission, with seeds
+9304-9309 added on levels 8-9 for the six target pairs:
 
-Added target: Brutal v Hard at least 50% on level 9. On 72 games per pair (3
-houses x seeds 9101-9124) the level 9 losses were decided by the first enemy
-waves: every partner tier still holds only its scripted starting army (3,600-
-4,200) at minute 12, while three Hard opponents hold about 30,000 between them.
-`CampaignLaterOpening` (hashed, default on) sends an Easy/Medium/Hard opponent's
-first ground wave three minutes after the established opening; Brutal is
-unchanged and `campaign-later-opening-off` is the control.
+| Player v enemy | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---|---|---|---|---|---|---|---|---|
+| Easy v Easy | 100 | 100 | 96 | 100 | 100 | 100 | 96 | 72 (39/54) | 92 (25/27) |
+| Medium v Easy | 100 | 100 | 96 | 100 | 100 | 100 | 100 | 74 (40/54) | 85 (23/27) |
+| Hard v Easy | 100 | 92 | 100 | 100 | 100 | 100 | 100 | 94 | 88 |
+| Brutal v Easy | 100 | 92 | 100 | 100 | 100 | 100 | 100 | 88 | 88 |
+| Easy v Medium | 100 | 100 | 100 | 100 | 100 | 100 | 92 | 72 | 77 |
+| Medium v Medium | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 74 (40/54) | 70 (19/27) |
+| Hard v Medium | 100 | 92 | 100 | 100 | 100 | 100 | 100 | 94 (51/54) | 70 (19/27) |
+| Brutal v Medium | 100 | 96 | 100 | 100 | 100 | 100 | 100 | 94 | 66 |
+| Easy v Hard | 100 | 100 | 85 | 100 | 96 | 96 | 81 | 44 | 44 |
+| Medium v Hard | 100 | 100 | 96 | 100 | 100 | 100 | 85 | 38 | 44 |
+| Hard v Hard | 100 | 96 | 92 | 100 | 100 | 100 | 96 | 77 (42/54) | 66 (18/27) |
+| Brutal v Hard | 100 | 100 | 88 | 100 | 100 | 100 | 96 | 79 (43/54) | 70 (19/27) |
 
-| Player v enemy | Level 9 before | Level 9 with later opening | Level 8 (seeds 9101-9112) |
-|---|---|---|---|
-| Easy v Easy | 63/72 | 69/72 | 49/72 |
-| Medium v Easy | 57/72 | 68/72 | 54/72 |
-| Hard v Medium | 47/72 | 63/72 | 50/72 |
-| Hard v Hard | not run | 34/72 | 18/72 |
-| Brutal v Hard | 27/72 | 44/72 | 17/72 |
+What each lever did, on missions 20-22 with 36 games per pair and arm:
 
-Missions 5, 11, 17 and 19 with the later opening: 111/120 across the five pairs.
+- Harvesters are the strong lever against Medium and Hard. Hard 4 -> 2 lifted
+  Hard v Hard on level 8 from 7/18 to 16/24; Medium 2 -> 1 lifted Medium v
+  Medium on level 9 from 6/9 to 12/12.
+- Opening delay acts on level 9 only, where three opponents open together
+  against a partner that still holds its scripted starting army. Hard at 0 s
+  gave Brutal v Hard 13/27, 60 s 19/27, 120 s 22/27, 180 s 23/27; level 8 did
+  not move (39-43 of 54).
+- Wave value at 60% changed little on levels 8-9. Scaling it by tech level
+  removed full-size Medium/Hard waves from levels 3 and 5.
 
-Tried on the same seeds and removed, because none moved a result beyond noise:
-Hard repeat delay +60 s, Hard wave value 2,800, Hard harvester cap 3 or 2, Hard
-level 9 army limit 8,000, the enemy army ceiling again (level 8: 50, 48, 55, 21,
-17 of 72), a partner strength floor capped at 95% of its limit or uncapped, a
-partner wave that needs the home troops alone to meet the required army, and a
-partner Light Factory opening with a threat production floor (worse).
+`tests/ai/scenario-matrix.py --attack-events` now returns `campaign-ai.csv`
+(the game's own `CAMPAIGN_AI:` log lines) and
+`tests/ai/campaign-game-report.py RESULTS... [--game REGEX] [--lost]` prints
+one line per game or a full game story from it.
 
-Still open:
+Still open, and not reachable with the three opponent levers:
 
-- Level 8 is below level 9 for every pair. Atreides mission 20 wins 0-1 of 12
-  for every pair: the partner's safely reachable spice ends at about 37,000
-  credits near minute 18-20, its harvesters then refuse the remaining fields
-  because opponent waves cross them, and both opponents keep earning. Against
-  Hard opponents Atreides and Harkonnen mission 21 are also 0 of 12.
-- Partner tiers play the same opening for 10-12 minutes, so Easy and Medium
-  partners are indistinguishable against Easy opponents (both near 95%).
+- Easy and Medium opponents are easier on level 9 than on level 8. The level 8
+  losses are the partner's: Atreides mission 20 wins 0-1 of 9 for every pair
+  but Hard v Medium. The partner attacks two bases with 16 rocket turrets at
+  minute 13-16, loses its army, and its map has only about 45,000 credits of
+  spice, so it cannot rebuild while each opponent regrows on one harvester.
+- Hard and Brutal partners play alike (same wins against Hard opponents), and
+  Easy and Medium partners are close against Easy opponents.
+- Harkonnen mission 22 is the weakest level 9 map: the partner still holds
+  2,500-4,200 army at minute 12 when three opponents open.
+- Atreides mission 4 can run to the 80-minute limit after the opponent has no
+  structures or units left; the mission does not end.
+
 
 
 ## Implemented local candidate: 1.0.672
