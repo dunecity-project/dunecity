@@ -316,7 +316,7 @@ struct QuantBotConfig {
         /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
         /// Easy, Medium and Hard campaign opponents send their first ground wave three minutes
-        /// after the established opening. Hashed; default off. Brutal is unchanged.
+        /// after the established opening. Hashed; default on. Brutal is unchanged.
         bool campaignLaterOpening;
         /// An Easy, Medium or Hard campaign opponent keeps at most
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
