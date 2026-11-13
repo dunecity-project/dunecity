@@ -312,7 +312,8 @@ struct QuantBotConfig {
         bool campaignAdaptiveReadiness;
         /// A campaign player-side house never launches a ground wave smaller than the strongest
         /// opposing alliance's army (capped at 75% of its own limit), so a low difficulty
-        /// threshold cannot send the starting army into three bases. Hashed; default off.
+        /// threshold cannot send the starting army into three bases. Hashed; default on.
+        /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Hashed; default on.

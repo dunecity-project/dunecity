@@ -435,8 +435,9 @@ CampaignMilitaryOpening=1
 # Hashed; OFF preserves the old fixed opening threshold. City campaigns are unchanged.
 CampaignAdaptiveReadiness=1
 # A campaign player-side house holds its ground waves until its army matches the strongest
-# opposing alliance (capped at 75% of its own limit). Hashed; OFF preserves the difficulty threshold alone.
-CampaignAllyStrengthFloor=0
+# opposing alliance (capped at 75% of its own limit). Hashed; OFF preserves the difficulty
+# threshold alone. City campaigns are unchanged.
+CampaignAllyStrengthFloor=1
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1

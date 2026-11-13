@@ -29,6 +29,37 @@ The dated implementation/audit sections below remain historical evidence for
 their named source revisions, not proof that the current engine or either menu
 mode passes every proposed target.
 
+## Vanilla level 9 partner calibration (2026-11-13)
+
+Stefan's targets for idle human plus QuantBot support against QuantBot enemies on
+Vanilla level 9 (mission 22): Easy v Easy at least 50%, Medium v Easy most games,
+Hard v Medium at least 50%, Hard v Hard at least 10%, earlier levels higher.
+Measured with the opt-in `campaign/partner-<tier>-v-quantbot-<tier>/vanilla`
+cells, 3 houses x 8 seeds per pair.
+
+| Player v enemy | Before | `CampaignAllyStrengthFloor` (seeds 9001-9008) | Held out (9101-9108) |
+|---|---|---|---|
+| Easy v Easy | 9/24 | 20/24 | 20/24 |
+| Medium v Easy | 21/24 | 21/24 | 20/24 |
+| Hard v Medium | 19/24 | 17/24 | 16/24 |
+| Hard v Hard | 9/24 | 10/24 | 9/24 |
+
+Cause of the Easy failure: the Easy partner's attack threshold (40% of its small
+limit) was below its scripted starting army, so it sent that army into three
+enemy bases in the first second and had nothing left for the first enemy waves
+at 12 minutes. Enemy settings were not the cause: enemy limits, wave caps and
+timers are unchanged since 1.0.833, and Easy enemies ran 1-2 harvesters each.
+`CampaignAllyStrengthFloor` (hashed, default on) keeps a campaign partner's
+ground waves home until its army matches the strongest opposing alliance, capped
+at 75% of its own limit; `campaign-ally-strength-floor-off` is the control.
+
+Missions 5, 11, 14 and 17 won 137/144 across the four pairs. Level 8 (missions
+20 and 21) is the open exception at 5-14 of 24 per pair, below level 9, and it
+was already so before this change. A tested enemy army ceiling (final-level
+size: 6600/8250/10000) did not improve it and was removed; there the enemies
+hold idle credits and replace every loss, so the next candidates are rebuild
+rate and wave cadence.
+
 
 ## Implemented local candidate: 1.0.672
 

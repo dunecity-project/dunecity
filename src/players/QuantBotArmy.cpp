@@ -962,7 +962,7 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
         }
         const int opponentThreshold = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
         required = adaptive ? std::min(required, opponentThreshold) : opponentThreshold;
-        if (botConfig().force.campaignAllyStrengthFloor)
+        if (botConfig().force.campaignAllyStrengthFloor && !currentGame->isCitySimEnabled())
             required = std::max(required, std::min(strongest, militaryValueLimit * 3 / 4));
     }
     // Once the map is depleted, stop waiting for a larger army. A leftover

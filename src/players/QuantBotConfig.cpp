@@ -382,7 +382,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignPlayerHouse = false;
     force.campaignMilitaryOpening = true;
     force.campaignAdaptiveReadiness = true;
-    force.campaignAllyStrengthFloor = false;
+    force.campaignAllyStrengthFloor = true;
     force.campaignThreatProduction = true;
     force.campaignFundedLightOpening = true;
     force.campaignLightWorkingCash = true;
