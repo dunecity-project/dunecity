@@ -19,6 +19,7 @@ sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import discard_profile_assets, require_free_space, scratch_dir
 from probe_process import processes, run, check_output
 from probe_fixture import prepare_fixture
+import pointer_artifact
 processes.install_signal_handlers()
 parser = argparse.ArgumentParser(description="Render real menus and check setup state in an isolated profile.")
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
@@ -31,36 +32,85 @@ parser.add_argument('--retina-resolution', action='store_true', help='Verify HD 
 parser.add_argument('--pointer-mapping', action='store_true', help='Mini-only native Cocoa/SDL/real-menu mapping regression (moves only its own window, not the physical pointer)')
 parser.add_argument('--runtime-app', type=Path, help='Use and verify this packaged app’s SDL libraries in the native pointer regression')
 parser.add_argument('--pointer-sdl-only', action='store_true', help='Run only the small native SDL boundary phase, without game/mod/font initialization')
+parser.add_argument('--pointer-artifact', type=Path, help='Raw standard GitHub Actions ZIP of the candidate producer’s static SDL fixture; never compiles locally')
+parser.add_argument('--publication-manifest', type=Path, help='Frozen publication-inputs.json containing the diagnostic artifact metadata')
+parser.add_argument('--publication-manifest-sha256', help='Externally trusted SHA256 pin of that publication manifest')
+parser.add_argument('--candidate-source', help='Full candidate source SHA required by the artifact consumer')
+parser.add_argument('--producer-inputs', type=Path, help='Normal Mac producer’s pre-build source/compiler/static SDK snapshot')
+parser.add_argument('--export-pointer-artifact', type=Path, help='Producer-only separate diagnostic output directory')
+parser.add_argument('--package-zip', type=Path, help='Producer-only exact final Mac package ZIP')
 parser.add_argument('--tornie-family', action='store_true', help='Run only the six-edition campaign, custom lobby and map editor matrix')
 parser.add_argument('--terrain-mix', action='store_true', help='Run only the 640x480 Random Skirmish terrain controls, saved choices and layout checks')
 args = parser.parse_args()
+build, out = args.build_dir.resolve(), args.output_dir.resolve()
+out.mkdir(parents=True, exist_ok=True)
+runtime_started = False
+
+def pointer_status(state, **details):
+    if args.pointer_mapping:
+        (out/'gate-status.json').write_text(json.dumps(dict(status=state, actualPackageExecutable=False, **details), indent=2)+'\n')
+
+def pointer_exception(kind, error, traceback):
+    if args.pointer_mapping:
+        logs = '\n'.join(path.read_text(errors='replace') for path in out.glob('run-*.log'))
+        state = ('blocked-prerequisite' if not runtime_started or 'POINTER_PREREQUISITE_BLOCKED:' in str(error)+logs else
+                 'failed-assertion' if 'MENU_PROBE_FAIL:' in logs else 'failed-harness-or-runtime')
+        pointer_status(state, reason=str(error))
+    sys.__excepthook__(kind, error, traceback)
+
+sys.excepthook = pointer_exception
+pointer_status('blocked-prerequisite', reason='Pointer input admission has not completed')
+consumer_options = (args.publication_manifest, args.publication_manifest_sha256, args.candidate_source)
+producer_options = (args.producer_inputs, args.export_pointer_artifact, args.package_zip)
+if args.pointer_artifact:
+    if not all(consumer_options) or not args.pointer_mapping or not args.runtime_app:
+        parser.error('--pointer-artifact requires --pointer-mapping, --runtime-app and all three publication/source pins')
+    if args.prepare_only or args.fixture_dir or args.pointer_sdl_only or any(producer_options):
+        parser.error('Downloaded full pointer diagnostics cannot be compiled, resealed or mixed with local fixture modes')
+elif any(consumer_options):
+    parser.error('Publication/source pins require --pointer-artifact')
+if any(producer_options):
+    if not all(producer_options) or not args.pointer_mapping or not args.runtime_app or args.pointer_sdl_only:
+        parser.error('Producer export requires a full pointer fixture, candidate app, package ZIP and pre-build input snapshot')
+if args.pointer_mapping and (args.retina_resolution or args.terrain_mix or args.tornie_family or args.audio_failure):
+    parser.error('The native pointer fixture cannot be mixed with other menu variants')
 if args.pointer_sdl_only and not args.pointer_mapping:
     parser.error('--pointer-sdl-only requires --pointer-mapping')
-if args.pointer_mapping:
+if args.pointer_mapping and not args.runtime_app:
+    parser.error('--pointer-mapping requires an explicit --runtime-app candidate')
+if args.pointer_mapping and not args.prepare_only:
     if sys.platform != 'darwin' or 'air' in socket.gethostname().lower():
+        pointer_status('blocked-environment', reason='Native pointer input requires an authorized desktop, never the Air')
         print('Native pointer regression requires an authorized Mac desktop, never the MacBook Air.')
         sys.exit(77)
     if os.environ.get('DUNECITY_NATIVE_POINTER_TEST') != '1':
+        pointer_status('blocked-environment', reason='Native own-window input was not explicitly authorized')
         print('Set DUNECITY_NATIVE_POINTER_TEST=1 on the Mini to allow own-window native Cocoa input.')
         sys.exit(77)
-elif args.runtime_app:
+elif args.runtime_app and not args.pointer_mapping:
     parser.error('--runtime-app requires --pointer-mapping')
-build, out = args.build_dir.resolve(), args.output_dir.resolve()
-out.mkdir(parents=True, exist_ok=True)
 # Match the workspace test guard: enforce the floor, sweeping owned stale
 # scratch only if low instead of making every native UI check scan all scratch.
 disk = require_free_space(sweep='if-low')
+if args.export_pointer_artifact:
+    pointer_artifact.producer_identity()
+elif args.pointer_mapping and not args.pointer_artifact:
+    # Refuse a static candidate before even discovering local build commands.
+    # Only the producing workflow may compile its receipt-bound static fixture.
+    pointer_artifact.runtime_environment({}, args.runtime_app)
 if args.pointer_mapping:
     print('POINTER_PREFLIGHT: '+json.dumps(disk, sort_keys=True), flush=True)
-run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = check_output(['ninja','-C',str(build),'-t','commands',target],text=True).splitlines()
-production_link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
-production_link = production_link[production_link.index('&&')+1:]
-production_link = production_link[:production_link.index('&&')]
+commands = []
+production_link = []
+if not args.pointer_artifact:
+    run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
+    commands = check_output(['ninja','-C',str(build),'-t','commands',pointer_artifact.TARGET],text=True).splitlines()
+    production_link = pointer_artifact.link_command(commands)
+target = pointer_artifact.TARGET
 
 def compile_fixture(work):
     source, obj = work/'menu-main.cpp', work/'menu-main.o'
+    recipe = dict(buildRoot=str(build), compile=[])
     if args.pointer_sdl_only:
         source = root/'tests/menu/pointer-sdl-probe.cpp'
     else:
@@ -97,7 +147,9 @@ def compile_fixture(work):
         compile_command.extend(['-DDUNECITY_NATIVE_POINTER_PROBE=1', '-O0'])
     app = work/'menu-probe.app/Contents'
     (app/'MacOS').mkdir(parents=True, exist_ok=True)
-    if not (app/'Resources').exists(): (app/'Resources').symlink_to(build/'bin/dunecity.app/Contents/Resources')
+    resources = (args.runtime_app.resolve()/'Contents/Resources' if args.pointer_mapping and args.runtime_app
+                 else build/'bin/dunecity.app/Contents/Resources')
+    if not (app/'Resources').exists(): (app/'Resources').symlink_to(resources)
     binary = app/'MacOS/menu-probe'
     link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
     link = link[link.index('&&')+1:]
@@ -116,9 +168,10 @@ def compile_fixture(work):
             native_compile[native_compile.index('-o')+1] = str(native_obj)
             native_compile[native_compile.index('-c')+1] = str(root/'tests/menu/mac-pointer-events.mm')
             native_compile[native_compile.index('-c'):native_compile.index('-c')] = ['-x', 'objective-c++', '-fobjc-arc']
+            recipe['compile'].append(native_compile)
             run(native_compile,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
             link.insert(link.index('-o'), str(native_obj))
-            link.extend(['-framework', 'ApplicationServices'])
+        recipe['compile'].append(compile_command)
         run(compile_command,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
         # Drive nested menus synchronously through their real widgets. Only this
         # diagnostic object gains a hook; the production menu loop stays unchanged.
@@ -142,6 +195,7 @@ def compile_fixture(work):
                 if option in menu_compile: menu_compile.remove(option)
             menu_compile[menu_compile.index('-o')+1] = str(menu_obj)
             menu_compile[menu_compile.index('-c')+1] = str(menu_source)
+            recipe['compile'].append(menu_compile)
             run(menu_compile,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
             link = [str(menu_obj) if arg.endswith('/Menu/MenuBase.cpp.o') else arg for arg in link]
         if args.retina_resolution:
@@ -158,17 +212,28 @@ def compile_fixture(work):
             options.extend(['-DSDL_GetDisplayBounds=retinaProbeDisplayBounds',
                             '-DSDL_GetWindowSize=retinaProbeWindowSize',
                             '-DSDL_GetRendererOutputSize=retinaProbeOutputSize'])
+            recipe['compile'].append(options)
             run(options,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
             link = [str(work/'retina-options.o') if arg.endswith('/Menu/OptionsMenu.cpp.o') else arg for arg in link]
         run(link,cwd=build,stdout=log,stderr=subprocess.STDOUT,check=True)
+    recipe['link'] = link
+    (work/'recipe.json').write_bytes(pointer_artifact.encoded(recipe))
 
-fixture_root = args.fixture_dir.resolve() if args.fixture_dir else build / 'menu-probe-fixture'
-binary = prepare_fixture(root, build, out, fixture_root, 'menu-probe.app/Contents/MacOS/menu-probe',
-                         commands, production_link, compile_fixture,
-                         variant={'pointer': args.pointer_mapping, 'sdl_only': args.pointer_sdl_only,
-                                  'retina': args.retina_resolution}, runtime_app=args.runtime_app,
-                         require_prepared=bool(args.fixture_dir and not args.prepare_only))
+proof, receipt_sha256 = None, None
+binary = None
+if not args.pointer_artifact:
+    fixture_root = args.fixture_dir.resolve() if args.fixture_dir else build / 'menu-probe-fixture'
+    binary = prepare_fixture(root, build, out, fixture_root, 'menu-probe.app/Contents/MacOS/menu-probe',
+                             commands, production_link, compile_fixture,
+                             variant={'pointer': args.pointer_mapping, 'sdl_only': args.pointer_sdl_only,
+                                      'retina': args.retina_resolution}, runtime_app=args.runtime_app,
+                             require_prepared=bool(args.fixture_dir and not args.prepare_only))
+    if args.export_pointer_artifact:
+        proof, receipt_sha256 = pointer_artifact.export_fixture(root, build, out, args.producer_inputs,
+            binary, args.runtime_app, args.package_zip, args.export_pointer_artifact)
+        shutil.copyfile(args.export_pointer_artifact/'receipt.json', out/'pointer-producer-receipt.json')
 if args.prepare_only:
+    pointer_status('prepared-not-run', reason='Compiled producer fixture is not GUI coverage')
     print('MENU_FIXTURE_READY: ' + str(binary), flush=True)
     sys.exit(0)
 print('MENU_RUNTIME_PHASE: begin', flush=True)
@@ -211,6 +276,10 @@ def native_desktop():
             if not failed: raise RuntimeError(message)
 family_results = []
 with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) as scratch:
+    if args.pointer_artifact:
+        binary, proof, receipt_sha256 = pointer_artifact.consume_fixture(args.pointer_artifact,
+            args.publication_manifest, args.publication_manifest_sha256, args.candidate_source,
+            args.runtime_app, scratch/'pointer-diagnostic', build, out)
     for width, height in ([(640,480)] if args.retina_resolution or args.terrain_mix else sizes):
         profile = scratch / ('profile-' + str(width) + 'x' + str(height))
         if not args.pointer_sdl_only:
@@ -222,18 +291,8 @@ with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) 
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='unavailable-test-driver' if args.audio_failure else 'dummy', MENU_PROBE_OUT=str(out), MENU_PROBE_WIDTH=str(width), MENU_PROBE_HEIGHT=str(height))
         if args.pointer_mapping:
             env.pop('SDL_VIDEODRIVER', None)
-            env['MENU_POINTER_MAPPING'] = '1'
             if args.runtime_app:
-                runtime = args.runtime_app.resolve()
-                frameworks = runtime/'Contents/Frameworks'
-                if not (runtime/'Contents/MacOS/dunecity').is_file():
-                    raise RuntimeError('Packaged runtime executable is missing: '+str(runtime))
-                env['DYLD_LIBRARY_PATH'] = str(frameworks)
-                env['MENU_POINTER_RUNTIME'] = str(args.runtime_app.resolve())
-                dependencies = check_output(['otool', '-L', str(runtime/'Contents/MacOS/dunecity')], text=True)
-                names = [Path(line.strip().split(' (', 1)[0]).name for line in dependencies.splitlines()[1:]]
-                dynamic = any(name == 'SDL2' or name.startswith(('libSDL2-', 'libSDL2.')) for name in names)
-                env['MENU_POINTER_LINKAGE'] = 'dynamic' if dynamic else 'static'
+                env, dependencies = pointer_artifact.runtime_environment(env, args.runtime_app, proof, receipt_sha256)
                 (out/'candidate-sdl-linkage.txt').write_text(env['MENU_POINTER_LINKAGE']+os.linesep+dependencies)
         if args.retina_resolution: env['MENU_RETINA_RESOLUTION']='1'
         if args.tornie_family: env['MENU_TORNIE_FAMILY']='1'
@@ -244,12 +303,16 @@ with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) 
             # and scans the large community maps at each of three screen sizes.
             runtime_timeout = 90 if args.pointer_mapping else 120 if args.retina_resolution else 420
             with native_desktop():
+                runtime_started = True
                 command = [str(binary), '--showlog', '--non-interactive']
                 if not args.pointer_mapping: command.insert(1, '--window')
                 run(command, phase='MENU_RUNTIME_PHASE', cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=runtime_timeout)
         text = logpath.read_text(errors="replace")
         results = [line for line in text.splitlines() if 'MENU_PROBE_PASS:' in line]
         if len(results) != 1: raise RuntimeError('Missing menu test result; see '+str(logpath))
+        if args.pointer_mapping:
+            pointer_status('passed', coverage='full-menu' if not args.pointer_sdl_only else 'SDL-boundary-only',
+                           releaseGateSatisfied=not args.pointer_sdl_only, receiptSha256=receipt_sha256)
         if not args.pointer_mapping and not args.retina_resolution and not args.terrain_mix and not args.tornie_family:
             versions = [line.split('MENU_VERSION_PASS: ', 1)[1]
                         for line in text.splitlines() if 'MENU_VERSION_PASS: ' in line]

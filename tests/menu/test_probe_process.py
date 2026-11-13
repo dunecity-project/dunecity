@@ -1,5 +1,8 @@
 """Real child-tree cancellation and sealed fixture cache boundary regressions."""
 import concurrent.futures
+import copy
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -8,11 +11,15 @@ import signal
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
 import unittest
+from unittest.mock import patch
+import zipfile
 
 from probe_fixture import file_hash, prepare_fixture
 from probe_process import ProbeProcesses
+import pointer_artifact as pointer
 
 
 TREE = r'''
@@ -357,6 +364,251 @@ class FixtureIdentityTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'seal differs'):
                 prepare(True)
             self.assertTrue(current.with_name('build.log').is_file())
+
+
+class PointerArtifactTests(unittest.TestCase):
+    """Pure contract/extraction checks; never launch a GUI or build an SDK."""
+    def setUp(self):
+        self.source = dict(commit='a'*40, fingerprint='b'*64)
+        self.package = 'DuneCity-1.0.865-macOS.zip'
+        self.files = {'Contents/MacOS/dunecity': 'c'*64, 'Contents/Resources/DUNE.PAK': 'd'*64}
+        self.binary = 'e'*64
+        manifest = pointer.read_json(pointer.ROOT/'vcpkg.json')
+        versions = {item['name']: item['version'] for item in manifest['overrides']}
+        self.sdk = dict(prefix='/producer/build/vcpkg_installed/arm64-osx',
+                        baseline=manifest['builtin-baseline'], archives={}, ports={},
+                        version=versions['sdl2'], headerSha256='f'*64)
+        for library, port in pointer.PORTS.items():
+            if library == 'libSDL2main.a':
+                continue
+            archive_hash = hashlib.sha256(library.encode()).hexdigest()
+            abi = 'portfile.cmake %s\nvcpkg.json %s\ntriplet arm64-osx\ntriplet_abi fixed-triplet-input\n' % ('1'*64, '2'*64)
+            document = dict(packages=[
+                dict(SPDXID='SPDXRef-port', name=port, versionInfo=versions[port],
+                     downloadLocation='git+https://github.com/Microsoft/vcpkg@'+'3'*40),
+                dict(SPDXID='SPDXRef-binary', name=port+':arm64-osx',
+                     versionInfo=hashlib.sha256(abi.encode()).hexdigest()),
+                dict(SPDXID='SPDXRef-resource-0', downloadLocation='git+https://example.org/source@pinned',
+                     checksums=[dict(algorithm='SHA512', checksumValue='4'*128)])], files=[])
+            for name, prefix, checksum in [('portfile.cmake', 'port', '1'*64), ('vcpkg.json', 'port', '2'*64),
+                    ('lib/'+library, 'binary', archive_hash)]:
+                document['files'].append(dict(fileName='./'+name, SPDXID='SPDXRef-'+prefix+'-file-'+name,
+                    checksums=[dict(algorithm='SHA256', checksumValue=checksum)]))
+            if port == 'sdl2':
+                document['files'].append(dict(fileName='./include/SDL2/SDL_version.h', SPDXID='SPDXRef-binary-file-header',
+                    checksums=[dict(algorithm='SHA256', checksumValue=self.sdk['headerSha256'])]))
+            self.sdk['ports'][port] = dict(spdx=document, abiInfo=abi)
+            self.sdk['archives'][self.sdk['prefix']+'/lib/'+library] = dict(
+                port=port, relative='lib/'+library, sha256=archive_hash)
+        self.production = ['/usr/bin/clang++', 'main.cpp.o', *self.sdk['archives'], '-o', pointer.TARGET]
+        self.inputs = dict(source=self.source, commands=['cd /producer/build && '+' '.join(self.production)+' && :'],
+            productionLink=self.production, normalizedLink=self.production, sdk=self.sdk,
+            context={'/usr/bin/clang++': '5'*64, '/producer/build/CMakeCache.txt': '6'*64})
+        producer = dict(repository='dunecity-project/dunecity', runId='123', runAttempt='1',
+            sourceCommit='7'*40, workflowCommit='7'*40,
+            workflowRef='dunecity-project/dunecity/.github/workflows/build.yml@refs/heads/main',
+            checkedOutWorkflowSha256=file_hash(pointer.ROOT/'.github/workflows/build.yml'),
+            frontendSha256=file_hash(pointer.ROOT/'scripts/macos-ci-lane.sh'))
+        self.manifest = dict(schema=1, sourceCommit=self.source['commit'], repository=producer['repository'],
+            runId='123', runAttempt='1', producerSourceCommit=producer['sourceCommit'],
+            producerWorkflowPath='.github/workflows/build.yml', sha256={self.package: '8'*64}, artifacts=[])
+        self.receipt = dict(schema=1, kind='producer-static-sdl-full-menu-pointer-fixture',
+            actualPackageExecutable=False, producer=producer, source=self.source, inputs=self.inputs,
+            inputsSha256=pointer.value_hash(self.inputs),
+            fixture=dict(sha256=self.binary, recipe=dict(buildRoot='/producer/build', compile=[['clang++', '-c', 'fixture.cpp']],
+                         link=[*self.production[:-1], '/producer/fixture/menu-probe']),
+                         inputHashes={path: item['sha256'] for path, item in self.sdk['archives'].items()}),
+            candidate=dict(package=self.package, packageSha256='8'*64, files=self.files))
+
+    def validate(self, receipt=None, manifest=None, source=None, files=None, binary=None):
+        return pointer.validate_receipt(receipt or self.receipt, manifest or self.manifest,
+            source or self.source, files or self.files, binary or self.binary)
+
+    def seal_manifest(self, archive, path):
+        self.manifest['artifacts'] = [dict(id=17,
+            name='DuneCity-macOS-pointer-fixture-'+self.source['commit']+'-1', expired=False,
+            size_in_bytes=archive.stat().st_size, digest='sha256:'+file_hash(archive))]
+        path.write_bytes(pointer.encoded(self.manifest))
+        return file_hash(path)
+
+    def envelope(self, directory, members=None, zip_name=pointer.ARCHIVE):
+        content = io.BytesIO()
+        if members is None:
+            members = [('menu-probe', b'fixture'), ('receipt.json', pointer.encoded(self.receipt))]
+        with tarfile.open(fileobj=content, mode='w:gz') as archive:
+            for name, data in members:
+                item = tarfile.TarInfo(name)
+                item.mode, item.uid, item.gid = 0o777, 12345, 12345
+                if data is None:
+                    item.type, item.linkname = tarfile.SYMTYPE, '/tmp/foreign'
+                    archive.addfile(item)
+                else:
+                    item.size = len(data)
+                    archive.addfile(item, io.BytesIO(data))
+        path = directory/'diagnostic.zip'
+        with zipfile.ZipFile(path, 'w') as archive:
+            archive.writestr(zip_name, content.getvalue())
+        return path
+
+
+    def test_full_receipt_binds_source_producer_candidate_fixture_and_sdk(self):
+        self.assertEqual(self.validate(), self.sdk['version'])
+        variants = []
+        for field in ('runId', 'runAttempt', 'repository', 'workflowCommit', 'checkedOutWorkflowSha256', 'frontendSha256'):
+            value = copy.deepcopy(self.receipt)
+            value['producer'][field] = 'foreign'
+            variants.append(value)
+        value = copy.deepcopy(self.receipt)
+        value['actualPackageExecutable'] = True
+        variants.append(value)
+        value = copy.deepcopy(self.receipt)
+        value['fixture']['inputHashes'].clear()
+        variants.append(value)
+        value = copy.deepcopy(self.receipt)
+        value['candidate']['packageSha256'] = '9'*64
+        variants.append(value)
+        for value in variants:
+            with self.subTest(value=value['producer']), self.assertRaisesRegex(RuntimeError, 'POINTER_PREREQUISITE_BLOCKED'):
+                self.validate(receipt=value)
+        for arguments in [dict(source=dict(commit='0'*40, fingerprint='b'*64)),
+                          dict(files={**self.files, 'Contents/MacOS/dunecity': '0'*64}), dict(binary='0'*64)]:
+            with self.subTest(arguments=arguments), self.assertRaises(RuntimeError):
+                self.validate(**arguments)
+
+    def test_archive_recipe_abi_and_upstream_hashes_are_required(self):
+        first = next(iter(self.sdk['archives']))
+        variants = []
+        for mutation in ('archive', 'abi', 'recipe', 'source', 'header', 'baseline'):
+            sdk = copy.deepcopy(self.sdk)
+            if mutation == 'archive': sdk['archives'][first]['sha256'] = '0'*64
+            if mutation == 'abi': sdk['ports']['sdl2']['abiInfo'] += 'unknown changed\n'
+            if mutation == 'recipe': sdk['ports']['sdl2']['spdx']['files'][0]['checksums'][0]['checksumValue'] = '0'*64
+            if mutation == 'source': sdk['ports']['sdl2']['spdx']['packages'][2]['checksums'] = []
+            if mutation == 'header': sdk['headerSha256'] = '0'*64
+            if mutation == 'baseline': sdk['baseline'] = '0'*40
+            variants.append((mutation, sdk))
+        manifest = pointer.read_json(pointer.ROOT/'vcpkg.json')
+        for name, sdk in variants:
+            with self.subTest(mutation=name), self.assertRaises(RuntimeError):
+                pointer.validate_sdk(sdk, manifest, self.production)
+        for command in [self.production+['/opt/homebrew/lib/libSDL2.dylib'],
+                        self.production+['-lSDL2'], self.production+['-framework', 'SDL2']]:
+            with self.subTest(command=command), self.assertRaisesRegex(RuntimeError, 'foreign, implicit or different SDL'):
+                pointer.validate_sdk(self.sdk, manifest, self.production, command)
+
+    def test_publication_pin_authenticates_raw_actions_zip_and_old_missing_is_blocked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            archive = self.envelope(folder)
+            manifest = folder/'publication-inputs.json'
+            pin = self.seal_manifest(archive, manifest)
+            self.assertEqual(pointer.authenticate_artifact(archive, manifest, pin, self.source['commit'])[1]['id'], 17)
+            with self.assertRaises(RuntimeError):
+                pointer.authenticate_artifact(archive, manifest, '0'*64, self.source['commit'])
+            with self.assertRaises(RuntimeError):
+                pointer.authenticate_artifact(archive, manifest, pin, '0'*40)
+            archive.write_bytes(archive.read_bytes()+b'tampered')
+            with self.assertRaisesRegex(RuntimeError, 'tampered'):
+                pointer.authenticate_artifact(archive, manifest, pin, self.source['commit'])
+            for entries in ([], [dict(self.manifest['artifacts'][0], expired=True)]):
+                self.manifest['artifacts'] = entries
+                manifest.write_bytes(pointer.encoded(self.manifest))
+                with self.assertRaises(RuntimeError):
+                    pointer.authenticate_artifact(archive, manifest, file_hash(manifest), self.source['commit'])
+
+
+    def test_safe_owned_extraction_ignores_archive_permissions_and_rejects_links_traversal_duplicates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            archive = self.envelope(folder)
+            payload = pointer.extract_artifact(archive, folder/'good')
+            self.assertEqual((payload/'menu-probe').stat().st_mode & 0o777, 0o644)
+            self.assertEqual((payload/'menu-probe').stat().st_uid, os.getuid())
+            for index, members in enumerate([
+                    [('../escape', b'foreign'), ('receipt.json', b'{}')],
+                    [('menu-probe', None), ('receipt.json', b'{}')],
+                    [('menu-probe', b'one'), ('menu-probe', b'two'), ('receipt.json', b'{}')]]):
+                archive = self.envelope(folder, members)
+                with self.subTest(index=index), self.assertRaisesRegex(RuntimeError, 'unsafe'):
+                    pointer.extract_artifact(archive, folder/str(index))
+            archive = self.envelope(folder, zip_name='../'+pointer.ARCHIVE)
+            with self.assertRaisesRegex(RuntimeError, 'unsafe'):
+                pointer.extract_artifact(archive, folder/'bad-envelope')
+            archive = self.envelope(folder)
+            with patch.object(pointer, 'MAX_PAYLOAD', 1), self.assertRaisesRegex(RuntimeError, 'oversized'):
+                pointer.extract_artifact(archive, folder/'oversized')
+            with self.assertRaisesRegex(RuntimeError, 'already exists'):
+                pointer.extract_artifact(archive, folder/'good')
+            folder.chmod(0o777)
+            try:
+                with self.assertRaisesRegex(RuntimeError, 'private owned'):
+                    pointer.extract_artifact(archive, folder/'not-private')
+            finally:
+                folder.chmod(0o700)
+
+    def test_static_environment_needs_receipt_and_strips_inherited_dyld_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory)/'candidate.app'
+            app.mkdir()
+            env = dict(DYLD_INSERT_LIBRARIES='/opt/homebrew/foreign.dylib', DYLD_FRAMEWORK_PATH='/opt/homebrew',
+                       MENU_POINTER_VERIFIED_RECEIPT='0'*64, OTHER='retained')
+            static = 'dunecity:\n /usr/lib/libSystem.B.dylib (compatibility version 1.0)\n'
+            with patch.object(pointer, 'check_output', return_value=static):
+                with self.assertRaisesRegex(RuntimeError, 'no local SDK fallback'):
+                    pointer.runtime_environment(env, app)
+                result, _ = pointer.runtime_environment(env, app, self.receipt, '1'*64)
+                self.assertNotIn('DYLD_INSERT_LIBRARIES', result)
+                self.assertNotIn('DYLD_FRAMEWORK_PATH', result)
+                self.assertEqual(result['MENU_POINTER_VERIFIED_RECEIPT'], '1'*64)
+                self.assertEqual(result['MENU_POINTER_LINKAGE'], 'static')
+                self.assertEqual(result['OTHER'], 'retained')
+            with patch.object(pointer, 'check_output', return_value='dunecity:\n @rpath/libSDL2.dylib (compatibility version 1.0)\n'):
+                dynamic, _ = pointer.runtime_environment(env, app)
+                self.assertEqual(dynamic['MENU_POINTER_LINKAGE'], 'dynamic')
+                self.assertNotIn('MENU_POINTER_VERIFIED_RECEIPT', dynamic)
+                with self.assertRaisesRegex(RuntimeError, 'dynamic candidate'):
+                    pointer.runtime_environment(env, app, self.receipt, '1'*64)
+
+    def test_consumer_only_extracts_verified_fixture_and_never_invokes_sdk_frontend(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            candidate = folder/'candidate.app'
+            (candidate/'Contents/MacOS').mkdir(parents=True)
+            (candidate/'Contents/Resources').mkdir()
+            (candidate/'Contents/MacOS/dunecity').write_bytes(b'candidate Mach-O stand-in')
+            (candidate/'Contents/Resources/DUNE.PAK').write_bytes(b'candidate resources')
+            self.files = pointer.bundle_files(candidate)
+            self.receipt['candidate']['files'] = self.files
+            self.receipt['fixture']['sha256'] = hashlib.sha256(b'fixture').hexdigest()
+            archive = self.envelope(folder)
+            manifest = folder/'publication-inputs.json'
+            pin = self.seal_manifest(archive, manifest)
+            output = folder/'evidence'
+            output.mkdir()
+            def commands(command, **kwargs):
+                self.assertEqual(command[:2], ['otool', '-L'])
+                return 'menu-probe:\n /usr/lib/libSystem.B.dylib (compatibility version 1.0)\n'
+            with patch.object(pointer, 'clean_source', return_value=self.source), patch.object(pointer, 'check_output', side_effect=commands):
+                binary, receipt, receipt_hash = pointer.consume_fixture(archive, manifest, pin, self.source['commit'],
+                    candidate, folder/'extracted', folder/'unused-build', output)
+            self.assertEqual(binary.read_bytes(), b'fixture')
+            self.assertFalse(receipt['actualPackageExecutable'])
+            self.assertEqual(receipt_hash, file_hash(output/'pointer-producer-receipt.json'))
+            self.assertEqual((binary.parents[1]/'Resources').resolve(), (candidate/'Contents/Resources').resolve())
+            self.assertFalse((folder/'unused-build').exists())
+
+
+    def test_final_zip_member_is_the_candidate_macho_not_a_filename_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory)/self.package
+            content = b'actual packaged Mach-O bytes'
+            with zipfile.ZipFile(package, 'w') as archive:
+                archive.writestr('dunecity.app/Contents/MacOS/dunecity', content)
+            self.assertEqual(pointer.package_executable_hash(package), hashlib.sha256(content).hexdigest())
+            with zipfile.ZipFile(package, 'w') as archive:
+                archive.writestr('../dunecity.app/Contents/MacOS/dunecity', content)
+            with self.assertRaisesRegex(RuntimeError, 'package Mach-O'):
+                pointer.package_executable_hash(package)
 
 
 if __name__ == '__main__':

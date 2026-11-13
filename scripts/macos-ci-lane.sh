@@ -55,6 +55,11 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
     -DVCPKG_TARGET_TRIPLET=arm64-osx -DDUNECITY_BUILD_TESTS=ON
+# Snapshot installed static SDL bytes and their SPDX/ABI recipes before the game
+# link. The later diagnostic export refuses any source/toolchain/SDK drift.
+if [ "${PACKAGE_BUILD:-false}" = true ] && [ "$MODE" != release-headless-qualification ]; then
+    python3 tests/menu/pointer_artifact.py snapshot --build-dir build --output build/pointer-producer-inputs.json
+fi
 cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
@@ -113,6 +118,16 @@ else
     ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/dunecity-mac-install/dunecity.app" \
         "build/DuneCity-${VERSION}-macOS.zip"
 fi
+# Full pointer logic is compiled only in this normal producer's existing cached
+# frontend/build/SDK context. Nothing diagnostic enters the app or public assets.
+POINTER_APP="$RUNNER_TEMP/dunecity-mac-install/dunecity.app"
+if [ "$STABLE" = ON ]; then POINTER_APP="$RUNNER_TEMP/dunecity-mac-signed-check/dunecity.app"; fi
+POINTER_ARGS=(--pointer-mapping --build-dir build --runtime-app "$POINTER_APP"
+    --producer-inputs build/pointer-producer-inputs.json --package-zip "build/DuneCity-${VERSION}-macOS.zip"
+    --export-pointer-artifact "build/pointer-diagnostic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --output-dir "$POINTER_OUT")
+if [ "$STABLE" != ON ]; then
+    python3 tests/menu/run-menu-probe.py "${POINTER_ARGS[@]}" --prepare-only
+fi
 if [ "$STABLE" = ON ]; then
     # Keep environment coverage distinct from a game assertion. Own-window NSEvents
     # do not require global event-posting permission, but record that permission.
@@ -139,10 +154,7 @@ if not ready:
     raise SystemExit('Packaged GUI coverage BLOCKED: no owned console desktop/display; see environment.json')
 PY
     set +e
-    DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py \
-        --pointer-mapping --size 1440x900 --build-dir build \
-        --runtime-app "$RUNNER_TEMP/dunecity-mac-signed-check/dunecity.app" \
-        --output-dir "$POINTER_OUT" > "$POINTER_OUT/wrapper.log" 2>&1
+    DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py "${POINTER_ARGS[@]}" > "$POINTER_OUT/wrapper.log" 2>&1
     STATUS=$?
     set -e
     cat "$POINTER_OUT/wrapper.log"
@@ -151,18 +163,12 @@ PY
 import json, os, pathlib
 out = pathlib.Path(os.environ['POINTER_OUT'])
 status = int(os.environ['STATUS'])
-logs = '\n'.join(p.read_text(errors='replace') for p in out.glob('run-*.log'))
-assertions = [line for line in logs.splitlines() if 'MENU_PROBE_FAIL:' in line]
-passed = status == 0 and 'MENU_PROBE_PASS:' in logs
-state = 'passed' if passed else ('failed-assertion' if assertions else
-        'blocked-environment' if status == 77 else 'failed-harness-or-runtime')
-(out / 'gate-status.json').write_text(json.dumps(dict(status=state, exitCode=status,
-    assertions=assertions, reason='See retained run-*.log and wrapper.log'), indent=2) + '\n')
+receipt = json.loads((out / 'gate-status.json').read_text())
+state = receipt['status']
+passed = status == 0 and state == 'passed' and receipt.get('releaseGateSatisfied') is True
 print('Packaged pointer gate: ' + state)
-for line in assertions:
-    print('::error title=Packaged native pointer assertion::' + line)
 if status == 0 and not passed:
-    raise SystemExit('Pointer wrapper returned zero without the native PASS marker')
+    raise SystemExit('Pointer wrapper returned zero without the full native gate receipt')
 PY
     if [ "$STATUS" -ne 0 ]; then
         for log in "$POINTER_OUT"/run-*.log; do [ ! -f "$log" ] || cat "$log"; done

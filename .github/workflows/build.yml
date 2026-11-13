@@ -191,6 +191,7 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_ios_staging.py
           python3 -m unittest discover -s tests/performance -p test_fixture_reconstruction.py
           python3 -m unittest discover -s scripts/tests -p test_macos_runtime.py
+          python3 -m unittest discover -s tests/menu -p test_probe_process.py
           python3 tests/desktop-updater/run-appimage-flow.py --output "$RUNNER_TEMP/appimage-update-test"
 
       - name: Configure CMake
@@ -720,6 +721,14 @@ jobs:
             --owner "$OWNER" --repository "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
             --lane macos-build --purpose release --reservation "$DUNECITY_RESERVATION" -- \
             bash "$GITHUB_WORKSPACE/scripts/macos-ci-lane.sh"
+      - name: Retain producer-bound static SDL pointer fixture separately
+        if: always() && needs.select-inputs.outputs.package == 'true' && hashFiles(format('build/pointer-diagnostic-{0}-{1}/pointer-fixture.tar.gz', github.run_id, github.run_attempt)) != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-macOS-pointer-fixture-${{ needs.select-inputs.outputs.sha }}-${{ github.run_attempt }}
+          path: build/pointer-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}/pointer-fixture.tar.gz
+          if-no-files-found: error
+          retention-days: 90
       - name: Retain all packaged GUI and signing diagnostics
         if: always()
         uses: actions/upload-artifact@v7

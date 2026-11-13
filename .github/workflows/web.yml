@@ -22,14 +22,13 @@ concurrency:
 
 jobs:
   select:
-    # A failed post-publication website update must not suppress browser recovery.
-    # PR artifacts never enter a job which can obtain a website deploy credential.
+    # Selection is read-only. The helper authorizes the actual producing run
+    # and immutable publication receipt; presentation titles are not a gate.
+    # PR events never enter the credential-bearing publication path.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.head_repository.full_name == github.repository &&
-       github.event.workflow_run.event != 'pull_request' &&
-       (startsWith(github.event.workflow_run.head_branch, 'v') ||
-        startsWith(github.event.workflow_run.display_title, 'Staging packages')))
+      contains(fromJSON('["push", "schedule", "workflow_dispatch"]'),
+               github.event.workflow_run.event)
     runs-on: ubuntu-latest
     outputs:
       eligible: ${{ steps.select.outputs.eligible }}

@@ -460,6 +460,10 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
+        environment = patch.dict(os.environ, GITHUB_ACTIONS='', GITHUB_JOB='',
+                                 DUNECITY_STAGING_LIFECYCLE='', RUNNER_TEMP='', GITHUB_STEP_SUMMARY='')
+        environment.start()
+        self.addCleanup(environment.stop)
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.tag = automation.snapshot_tag(SHA)
@@ -484,6 +488,10 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
                             assets=[self.asset(path) for path in sorted(self.root.iterdir())])
         self.assertEqual(len(self.release['assets']), 16)
         self.template = copy.deepcopy(self.release)
+        self.pointer = dict(id=442990483, tag_name='latest-dev', target_commitish=OTHER,
+                            draft=False, prerelease=True, body='Historical Linux staging from ' + OTHER,
+                            assets=[dict(name=f'legacy-linux-{number}', size=10) for number in range(4)])
+        self.previous_releases = {}
         self.ref_sha = None
         self.ref_name = 'refs/tags/' + self.tag
         self.pages = None
@@ -513,7 +521,8 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
         transport.start()
         self.addCleanup(transport.stop)
         retention = patch.object(automation, 'prune_staging')
-        retention.start()
+        self.retention_patch = retention
+        self.retention = retention.start()
         self.addCleanup(retention.stop)
 
     def asset(self, path):
@@ -528,7 +537,9 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
             method = argv[3] if argv[2] == '--method' else 'GET'
             path = argv[4] if method != 'GET' else argv[2]
             suffix = path.removeprefix(self.prefix)
-            if method == 'POST':
+            if method + ' ' + suffix in self.failures:
+                code, error = self.failures[method + ' ' + suffix]
+            elif method == 'POST':
                 self.assertEqual(suffix, 'git/refs')
                 self.assertIsNone(self.ref_sha)
                 self.assertIn('ref=refs/tags/' + self.tag, argv)
@@ -537,12 +548,20 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
                 self.ref_sha = SHA
                 self.mutations.append((method, suffix))
             elif method == 'PATCH':
-                self.assertEqual(suffix, 'releases/443652159')
-                self.assertIn('draft=false', argv)
-                self.assertIn('make_latest=false', argv)
-                self.release['draft'] = False
-                self.mutations.append((method, suffix))
-                value = self.release
+                if suffix == 'releases/442990483':
+                    self.assertEqual(argv[5], '-f')
+                    self.assertEqual(len(argv), 7)
+                    self.assertTrue(argv[6].startswith('body='))
+                    self.pointer['body'] = argv[6].removeprefix('body=')
+                    self.mutations.append(('POINTER', 'latest-dev'))
+                    value = self.pointer
+                else:
+                    self.assertEqual(suffix, 'releases/443652159')
+                    self.assertIn('draft=false', argv)
+                    self.assertIn('make_latest=false', argv)
+                    self.release['draft'] = False
+                    self.mutations.append((method, suffix))
+                    value = self.release
             elif suffix in self.failures:
                 code, error = self.failures[suffix]
             elif suffix == 'releases/tags/' + self.tag:
@@ -550,6 +569,13 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
                     code, error = 1, 'gh: Not Found (HTTP 404)'
                 else:
                     value = self.release
+            elif suffix == 'releases/tags/latest-dev':
+                if self.pointer is None:
+                    code, error = 1, 'gh: Not Found (HTTP 404)'
+                else:
+                    value = self.pointer
+            elif suffix.startswith('releases/tags/') and suffix.removeprefix('releases/tags/') in self.previous_releases:
+                value = self.previous_releases[suffix.removeprefix('releases/tags/')]
             elif suffix.startswith('releases?per_page=100&page='):
                 page = int(suffix.rsplit('=', 1)[1])
                 if self.pages is None:
@@ -567,12 +593,23 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
                 self.assertIn(suffix, self.responses)
                 value = self.responses[suffix]
         elif argv[:3] == ('gh', 'release', 'create'):
-            self.assertIsNone(self.release)
-            self.assertEqual(self.ref_sha, SHA)
-            self.assertIn('--draft', argv)
-            self.assertEqual(argv[argv.index('--target') + 1], SHA)
-            self.release = copy.deepcopy(self.template)
-            self.mutations.append(('CREATE', self.tag))
+            if argv[3] == 'latest-dev':
+                self.assertIsNone(self.pointer)
+                self.assertIn('--prerelease', argv)
+                self.assertIn('--latest=false', argv)
+                self.assertNotIn('--draft', argv)
+                self.assertEqual(argv[argv.index('--target') + 1], SHA)
+                self.pointer = dict(id=442990483, tag_name='latest-dev', target_commitish=SHA,
+                                    draft=False, prerelease=True, assets=[],
+                                    body=argv[argv.index('--notes') + 1])
+                self.mutations.append(('CREATE_POINTER', 'latest-dev'))
+            else:
+                self.assertIsNone(self.release)
+                self.assertEqual(self.ref_sha, SHA)
+                self.assertIn('--draft', argv)
+                self.assertEqual(argv[argv.index('--target') + 1], SHA)
+                self.release = copy.deepcopy(self.template)
+                self.mutations.append(('CREATE', self.tag))
         elif argv[:3] == ('gh', 'release', 'upload'):
             self.assertNotIn('--clobber', argv)
             for filename in argv[3:]:
@@ -597,12 +634,217 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
         return subprocess.CompletedProcess(argv, code, json.dumps(value), error)
 
     def publish(self):
-        automation.publish(argparse.Namespace(directory=self.root, sha=SHA, tag=self.tag))
+        return automation.publish(argparse.Namespace(directory=self.root, sha=SHA, tag=self.tag))
 
     def qualified(self):
         self.release['draft'] = False
         self.ref_sha = SHA
         return automation.qualified_staging_snapshot(self.tag, SHA)[0]
+
+    def admit_pointer_writer(self, attempt=2):
+        environment = patch.dict(os.environ, GITHUB_ACTIONS='true', GITHUB_JOB='dev-release',
+                                 DUNECITY_STAGING_LIFECYCLE='true', GITHUB_RUN_ID='41',
+                                 GITHUB_RUN_ATTEMPT=str(attempt))
+        environment.start()
+        self.addCleanup(environment.stop)
+        live = dict(self.retry, status='in_progress', conclusion=None, run_attempt=attempt)
+        self.responses['actions/runs/41'] = live
+        self.responses[f'actions/runs/41/attempts/{attempt}'] = live
+        jobs = [dict(name='dev-release', status='in_progress', conclusion=None)]
+        if attempt == 1:
+            jobs = copy.deepcopy(self.input_jobs) + jobs
+        self.responses[f'actions/runs/41/attempts/{attempt}/jobs?per_page=100'] = {'jobs': jobs}
+
+    def previous_pointer(self, status='ahead', source=OTHER):
+        tag = automation.snapshot_tag(OTHER)
+        self.previous_releases[tag] = dict(tag_name=tag, draft=False, prerelease=True)
+        self.responses['git/ref/tags/' + tag] = dict(object=dict(type='commit', sha=source))
+        self.responses[f'compare/{source}...{SHA}'] = dict(status=status)
+        self.pointer['body'] = automation.staging_pointer_body(self.pointer['body'], tag)
+        return tag
+
+    def reconcile_pointer(self):
+        self.release['draft'] = False
+        self.ref_sha = SHA
+        with redirect_stdout(io.StringIO()):
+            return automation.advance_staging_pointer(self.tag, SHA)
+
+    def test_verified_first_publication_initializes_legacy_pointer_without_relabelling_old_assets(self):
+        self.admit_pointer_writer(attempt=1)
+        legacy = copy.deepcopy(self.pointer)
+        assets = copy.deepcopy(self.release['assets'])
+        with redirect_stdout(io.StringIO()):
+            result = self.publish()
+        self.assertEqual(result['pointer']['status'], 'advanced')
+        self.assertEqual(automation.staging_pointer_tag(self.pointer['body']), self.tag)
+        self.assertIn(legacy['body'], self.pointer['body'])
+        self.assertIn(f'https://github.com/{automation.repository()}/releases/tag/{self.tag}', self.pointer['body'])
+        for key in ('id', 'tag_name', 'target_commitish', 'assets'):
+            self.assertEqual(self.pointer[key], legacy[key])
+        self.assertEqual(self.release['assets'], assets)
+        self.assertEqual((self.root / automation.MANIFEST).read_bytes(), self.original_manifest)
+        self.assertEqual(self.mutations, [
+            ('POST', 'git/refs'), ('PATCH', 'releases/443652159'), ('POINTER', 'latest-dev')])
+
+    def test_existing_published_retry_reconciles_pointer_and_is_idempotent_without_changing_input_bytes(self):
+        self.admit_pointer_writer()
+        self.release['draft'] = False
+        self.ref_sha = SHA
+        frozen = copy.deepcopy(self.release)
+        # The retry's regenerated local receipt must never replace frozen attempt one.
+        self.manifest['runAttempt'] = 2
+        automation.write_json(self.root / automation.MANIFEST, self.manifest)
+        with redirect_stdout(io.StringIO()):
+            first = self.publish()
+            body = self.pointer['body']
+            second = self.publish()
+        self.assertEqual(first['pointer']['status'], 'advanced')
+        self.assertEqual(second['pointer']['status'], 'unchanged')
+        self.assertEqual(self.pointer['body'], body)
+        self.assertEqual(self.pointer['body'].count('dunecity-staging-tag'), 1)
+        self.assertEqual(self.release, frozen)
+        self.assertEqual(self.mutations, [('POINTER', 'latest-dev')])
+        self.assertEqual(json.loads(self.original_manifest)['runAttempt'], 1)
+
+    def test_ahead_source_replaces_managed_link_and_unique_marker_preserving_history(self):
+        self.admit_pointer_writer()
+        previous = self.previous_pointer()
+        legacy_assets = copy.deepcopy(self.pointer['assets'])
+        result = self.reconcile_pointer()
+        self.assertEqual(result['status'], 'advanced')
+        self.assertEqual(result['previousTag'], previous)
+        self.assertEqual(automation.staging_pointer_tag(self.pointer['body']), self.tag)
+        self.assertNotIn(previous, self.pointer['body'])
+        self.assertEqual(self.pointer['body'].count(automation.POINTER_BEGIN), 1)
+        self.assertIn('Historical Linux staging from ' + OTHER, self.pointer['body'])
+        self.assertEqual(self.pointer['assets'], legacy_assets)
+
+    def test_stale_diverged_unknown_or_misidentified_previous_source_preserves_pointer(self):
+        self.admit_pointer_writer()
+        for status in ('behind', 'diverged', 'identical', 'unknown'):
+            with self.subTest(status=status):
+                self.previous_pointer(status)
+                frozen = copy.deepcopy(self.pointer)
+                result = self.reconcile_pointer()
+                self.assertEqual(result['status'], 'held')
+                self.assertIn(status, result['reason'])
+                self.assertEqual(self.pointer, frozen)
+        self.previous_pointer(source='c' * 40)
+        frozen = copy.deepcopy(self.pointer)
+        self.assertEqual(self.reconcile_pointer()['status'], 'held')
+        self.assertEqual(self.pointer, frozen)
+        self.assertEqual(self.mutations, [])
+
+    def test_same_source_different_inputs_or_unpublished_previous_target_is_uncertain_not_replaceable(self):
+        self.admit_pointer_writer()
+        tag = automation.snapshot_tag(SHA, 'older-input-recipe')
+        self.pointer['body'] = f'<!-- dunecity-staging-tag: {tag} -->'
+        self.previous_releases[tag] = dict(tag_name=tag, draft=False, prerelease=True)
+        self.responses['git/ref/tags/' + tag] = dict(object=dict(type='commit', sha=SHA))
+        frozen = copy.deepcopy(self.pointer)
+        result = self.reconcile_pointer()
+        self.assertEqual(result['status'], 'held')
+        self.assertIn('different immutable inputs', result['reason'])
+        self.assertEqual(self.pointer, frozen)
+        for field, value in (('draft', True), ('prerelease', False)):
+            with self.subTest(field=field), patch.dict(self.previous_releases[tag], {field: value}):
+                self.assertEqual(self.reconcile_pointer()['status'], 'held')
+                self.assertEqual(self.pointer, frozen)
+        self.assertEqual(self.mutations, [])
+
+    def test_malformed_or_multiple_markers_and_managed_blocks_never_initialize_or_overwrite(self):
+        self.admit_pointer_writer()
+        marker = f'<!-- dunecity-staging-tag: {self.tag} -->'
+        for body in (marker + marker, '<!-- dunecity-staging-tag: invalid -->', 0, [],
+                     marker + '<!-- dunecity-staging-tag: invalid -->',
+                     automation.POINTER_BEGIN, automation.POINTER_END + marker,
+                     automation.POINTER_BEGIN + marker + automation.POINTER_BEGIN + automation.POINTER_END):
+            with self.subTest(body=body):
+                self.pointer['body'] = body
+                frozen = copy.deepcopy(self.pointer)
+                result = self.reconcile_pointer()
+                self.assertEqual(result['status'], 'held')
+                self.assertEqual(self.pointer, frozen)
+        self.assertEqual(self.mutations, [])
+
+    def test_pointer_lookup_compare_and_patch_api_failures_preserve_previous_marker_with_actual_reason(self):
+        self.admit_pointer_writer()
+        self.previous_pointer()
+        for endpoint in ('releases/tags/latest-dev', f'compare/{OTHER}...{SHA}',
+                         'PATCH releases/442990483'):
+            with self.subTest(endpoint=endpoint):
+                self.failures = {endpoint: (1, 'gh: Forbidden (HTTP 403)')}
+                frozen = copy.deepcopy(self.pointer)
+                result = self.reconcile_pointer()
+                self.assertEqual(result['status'], 'held')
+                self.assertIn('HTTP 403', result['reason'])
+                self.assertEqual(self.pointer, frozen)
+        self.assertEqual(self.mutations, [])
+
+    def test_missing_pointer_release_is_created_as_nonlatest_prerelease_only(self):
+        self.admit_pointer_writer()
+        self.pointer = None
+        result = self.reconcile_pointer()
+        self.assertEqual(result['status'], 'advanced')
+        self.assertTrue(self.pointer['prerelease'])
+        self.assertFalse(self.pointer['draft'])
+        self.assertEqual(self.pointer['assets'], [])
+        self.assertEqual(automation.staging_pointer_tag(self.pointer['body']), self.tag)
+        self.assertEqual(self.mutations, [('CREATE_POINTER', 'latest-dev')])
+
+    def test_missing_serialization_or_wrong_lifecycle_owner_holds_pointer_and_all_retention(self):
+        self.retention_patch.stop()
+        self.release['draft'] = False
+        self.ref_sha = SHA
+        frozen = copy.deepcopy(self.pointer)
+        with redirect_stdout(io.StringIO()):
+            result = self.publish()
+        self.assertEqual(result['pointer']['status'], 'held')
+        self.assertIn('admitted Game staging-lifecycle', result['pointer']['reason'])
+        self.assertEqual(result['retention']['deleted'], [])
+        self.assertEqual(result['retention']['eligible'], [])
+        self.assertIn(result['pointer']['reason'], result['retention']['reason'])
+        self.assertEqual(self.pointer, frozen)
+        self.admit_pointer_writer()
+        for field, value in (('id', 42), ('run_attempt', 3), ('status', 'completed'),
+                             ('path', '.github/workflows/other.yml'),
+                             ('repository', {'full_name': 'wrong/repository'})):
+            with self.subTest(field=field), patch.dict(self.responses['actions/runs/41'], {field: value}):
+                self.assertEqual(self.reconcile_pointer()['status'], 'held')
+                self.assertEqual(self.pointer, frozen)
+        self.assertEqual(self.mutations, [])
+
+    def test_unverified_snapshot_assets_qualification_and_live_publication_cannot_advance_pointer(self):
+        self.admit_pointer_writer()
+        frozen = copy.deepcopy(self.pointer)
+        for name in (automation.BROWSER, 'DuneCity-p2p-service.tar.gz', 'SHA256SUMS'):
+            item = next(asset for asset in self.release['assets'] if asset['name'] == name)
+            with self.subTest(name=name), patch.dict(item, digest='sha256:' + '0' * 64):
+                self.assertEqual(self.reconcile_pointer()['status'], 'held')
+                self.assertEqual(self.pointer, frozen)
+        with patch.dict(self.qualification, conclusion='failure'):
+            self.assertEqual(self.reconcile_pointer()['status'], 'held')
+        live = self.responses['actions/runs/41/attempts/2/jobs?per_page=100']['jobs']
+        for conclusion in ('failure', 'skipped', 'success'):
+            with self.subTest(conclusion=conclusion), patch.dict(live[0], conclusion=conclusion):
+                self.assertEqual(self.reconcile_pointer()['status'], 'held')
+        live.append(dict(name='build-linux', conclusion='failure'))
+        self.assertEqual(self.reconcile_pointer()['status'], 'held')
+        self.assertEqual(self.pointer, frozen)
+        self.assertEqual(self.mutations, [])
+
+    def test_live_first_input_attempt_cannot_publish_pointer_with_failed_skipped_or_missing_inputs(self):
+        self.admit_pointer_writer(attempt=1)
+        jobs = self.responses['actions/runs/41/attempts/1/jobs?per_page=100']['jobs']
+        frozen = copy.deepcopy(self.pointer)
+        for conclusion in ('failure', 'skipped', None):
+            with self.subTest(conclusion=conclusion), patch.dict(jobs[0], conclusion=conclusion):
+                self.assertEqual(self.reconcile_pointer()['status'], 'held')
+                self.assertEqual(self.pointer, frozen)
+        jobs.pop(0)
+        self.assertEqual(self.reconcile_pointer()['status'], 'held')
+        self.assertEqual(self.pointer, frozen)
+        self.assertEqual(self.mutations, [])
 
     def test_draft_404_on_later_page_resumes_by_id_without_rewriting_any_frozen_asset(self):
         unrelated = dict(tag_name=automation.snapshot_tag(OTHER), draft=True)
@@ -850,6 +1092,45 @@ class StagingRetentionTests(unittest.TestCase):
         self.assertEqual(result['deleted'], [])
         self.assertIn('retention held:', result['reason'])
         command.assert_not_called()
+
+    def test_writer_body_is_consumed_as_exact_known_good_pin_without_touching_legacy_release(self):
+        legacy = 'Historical source and attachments remain unchanged.'
+        body = automation.staging_pointer_body(legacy, self.tags[0])
+        body = automation.staging_pointer_body(body, self.tags[1])
+        pointer = dict(tag_name='latest-dev', draft=False, prerelease=True, body=body)
+        self.releases[2]['body'] = '<!-- dunecity-retain: active investigation -->'
+        with patch.dict(os.environ, RUNNER_TEMP='', GITHUB_STEP_SUMMARY=''), \
+             patch.object(automation, 'api', return_value=self.releases), \
+             patch.object(automation, 'optional_release', return_value=pointer), \
+             patch.object(automation, 'staging_consumer_pins', return_value={self.tags[0]}), \
+             patch.object(automation.subprocess, 'run') as command, redirect_stdout(io.StringIO()):
+            result = automation.prune_staging(argparse.Namespace(current=self.tags[-1], dry_run=True))
+        self.assertEqual(result['eligible'], [])
+        self.assertEqual(result['deleted'], [])
+        self.assertIn(self.tags[1], result['held'])
+        self.assertIn(legacy, pointer['body'])
+        self.assertEqual(automation.staging_pointer_tag(pointer['body']), self.tags[1])
+        self.assertEqual(pointer['body'].count('dunecity-staging-tag'), 1)
+        command.assert_not_called()
+
+    def test_missing_malformed_duplicate_and_nonpublic_pointer_authority_retains_all(self):
+        valid = f'<!-- dunecity-staging-tag: {self.tags[0]} -->'
+        cases = [None, dict(draft=False, prerelease=True, body='legacy without marker'),
+                 dict(draft=False, prerelease=True, body=valid + valid),
+                 dict(draft=False, prerelease=True, body='<!-- dunecity-staging-tag: broken -->'),
+                 dict(draft=True, prerelease=True, body=valid),
+                 dict(draft=False, prerelease=False, body=valid)]
+        for pointer in cases:
+            with self.subTest(pointer=pointer), \
+                 patch.dict(os.environ, RUNNER_TEMP='', GITHUB_STEP_SUMMARY=''), \
+                 patch.object(automation, 'api', return_value=self.releases), \
+                 patch.object(automation, 'optional_release', return_value=pointer), \
+                 patch.object(automation.subprocess, 'run') as command, redirect_stdout(io.StringIO()):
+                result = automation.prune_staging(argparse.Namespace(current=self.tags[-1], dry_run=False))
+            self.assertEqual(result['eligible'], [])
+            self.assertEqual(result['deleted'], [])
+            self.assertIn('retention held:', result['reason'])
+            command.assert_not_called()
 
     def test_retired_snapshot_and_unknown_retirement_state_fail_before_expensive_builds(self):
         tag = self.tags[0]

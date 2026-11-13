@@ -36,6 +36,9 @@ STABLE = re.compile(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z')
 SHA = re.compile(r'[0-9a-f]{40}\Z')
 NS = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
 STAGING_TAG = re.compile(r'staging-([0-9a-f]{40})-([0-9a-f]{12})\Z')
+STAGING_POINTER = re.compile(r'<!--\s*dunecity-staging-tag:\s*(staging-[0-9a-f]{40}-[0-9a-f]{12})\s*-->')
+POINTER_BEGIN = '<!-- dunecity-staging-pointer-begin -->'
+POINTER_END = '<!-- dunecity-staging-pointer-end -->'
 IOS_CRON = '23 4 * * 1'
 BUILD_WORKFLOW = '.github/workflows/build.yml'
 CI_JOBS = frozenset(('test-linux', 'relay-tests', 'signaling-tests', 'build-emscripten',
@@ -216,7 +219,7 @@ def qualification_for(sha):
     raise ValueError('No completed successful integration qualification for source ' + sha)
 
 
-def validate_staging_receipts(manifest):
+def validate_staging_receipts(manifest, publication=None):
     """Validate immutable API receipts; package producer HEAD need not be game source."""
     sha = full_sha(manifest['sourceCommit'])
     fields = {'qualificationRunId', 'qualificationRunAttempt', 'qualificationSourceCommit',
@@ -238,9 +241,13 @@ def validate_staging_receipts(manifest):
     pid, pattempt = int(manifest['runId']), int(manifest['runAttempt'])
     if pid <= 0 or pattempt <= 0:
         raise ValueError('Invalid package producer run/attempt')
+    live_inputs = (publication is not None and publication['id'] == pid
+                   and publication['run_attempt'] == pattempt)
     producer = api(f'repos/{repository()}/actions/runs/{pid}/attempts/{pattempt}')
     pjobs = api(f'repos/{repository()}/actions/runs/{pid}/attempts/{pattempt}/jobs?per_page=100')['jobs']
-    if (producer['status'] != 'completed' or producer['id'] != pid
+    if ((producer['status'] != 'completed' and not
+         (live_inputs and producer['status'] == 'in_progress' and producer['conclusion'] is None))
+            or producer['id'] != pid
             or producer['path'] != BUILD_WORKFLOW or producer['run_attempt'] != pattempt
             or producer['repository']['full_name'] != repository()
             or producer['event'] not in ('schedule', 'workflow_dispatch')
@@ -255,39 +262,49 @@ def validate_staging_receipts(manifest):
                 for name in CI_JOBS | {'dev-release'}}
     if any(outcomes[name] != ['success'] for name in CI_JOBS):
         raise ValueError('Package producer input jobs did not all succeed at the frozen attempt')
+    if live_inputs:
+        live = [job for job in pjobs if job['name'] == 'dev-release']
+        if (producer['status'] != 'in_progress' or producer['conclusion'] is not None
+                or len(live) != 1 or live[0]['status'] != 'in_progress' or live[0]['conclusion'] is not None):
+            raise ValueError('Current package publication job is not independently in progress')
+        return
     if producer['conclusion'] == 'success' and outcomes['dev-release'] == ['success']:
         return
     if producer['conclusion'] != 'failure' or outcomes['dev-release'] != ['failure']:
         raise ValueError('Package producer has no successful publication receipt')
     # runAttempt identifies the package inputs, not a later publication retry.
     # Preserve it even when only dev-release was rerun with inherited successes.
-    publication = api(f'repos/{repository()}/actions/runs/{pid}')
-    if (publication['id'] != pid or publication['run_attempt'] <= pattempt
-            or publication['status'] != 'completed' or publication['conclusion'] != 'success'
-            or publication['repository']['full_name'] != repository()
-            or any(publication[key] != producer[key] for key in
+    publication_run = publication or api(f'repos/{repository()}/actions/runs/{pid}')
+    live_retry = publication is not None
+    if (publication_run['id'] != pid or publication_run['run_attempt'] <= pattempt
+            or publication_run['status'] != ('in_progress' if live_retry else 'completed')
+            or publication_run['conclusion'] != (None if live_retry else 'success')
+            or publication_run['repository']['full_name'] != repository()
+            or any(publication_run[key] != producer[key] for key in
                    ('path', 'head_sha', 'head_branch', 'event'))):
         raise ValueError('Package producer publication retry is not independently successful/trusted')
-    retry = publication['run_attempt']
+    retry = publication_run['run_attempt']
     jobs = api(f'repos/{repository()}/actions/runs/{pid}/attempts/{retry}/jobs?per_page=100')['jobs']
-    if ([job['conclusion'] for job in jobs if job['name'] == 'dev-release'] != ['success']
+    live = [job for job in jobs if job['name'] == 'dev-release']
+    if ((live_retry and (len(live) != 1 or live[0]['status'] != 'in_progress' or live[0]['conclusion'] is not None))
+            or (not live_retry and [job['conclusion'] for job in live] != ['success'])
             or any(job['name'] in CI_JOBS and job['conclusion'] != 'success' for job in jobs)):
         raise ValueError('Package producer publication retry contains failed/skipped required jobs')
 
 
-def qualified_staging_snapshot(tag, expected_sha=None):
+def qualified_staging_snapshot(tag, expected_sha=None, publication=None):
     match = STAGING_TAG.fullmatch(tag)
     if not match:
-        raise ValueError('iOS staging requires an immutable qualified staging tag')
+        raise ValueError('Staging requires an immutable qualified staging tag')
     sha = match[1]
     if expected_sha is not None and sha != expected_sha:
-        raise ValueError('iOS source must exactly match this workflow tag commit')
+        raise ValueError('Staging source must exactly match the selected source commit')
     release = optional_release(tag)
     if not release or release['draft'] or not release['prerelease']:
-        raise ValueError('iOS staging snapshot is not a published prerelease')
+        raise ValueError('Staging snapshot is not a published prerelease')
     if resolve_tag(tag) != sha:
         raise ValueError('Staging tag does not identify its advertised source')
-    with tempfile.TemporaryDirectory(prefix='dunecity-ios-inputs-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='dunecity-staging-inputs-') as temporary:
         folder = Path(temporary)
         download_release(tag, folder, [MANIFEST])
         manifest = json.loads((folder / MANIFEST).read_text())
@@ -295,22 +312,28 @@ def qualified_staging_snapshot(tag, expected_sha=None):
     if (manifest['schema'] != 1 or manifest['tag'] != tag or manifest['sourceCommit'] != sha
             or manifest['repository'] != repository() or manifest['releaseBuild'] != 'OFF'
             or tag != snapshot_tag(sha, manifest['recipe']) or manifest['inputIdentity'] != identity):
-        raise ValueError('Published iOS input manifest does not match the staging snapshot')
-    required = desktop_names(manifest['version']) | {BROWSER}
+        raise ValueError('Published input manifest does not match the staging snapshot')
+    required = desktop_names(manifest['version']) | {BROWSER, 'DuneCity-p2p-service.tar.gz'}
     required |= {f'build-inputs-{platform}.json' for platform in
                  ('windows-x64', 'macos-arm64', 'linux-x86_64', 'emscripten')}
     if not isinstance(manifest.get('sha256'), dict) or not required.issubset(manifest['sha256']):
         raise ValueError('Qualified snapshot has an incomplete required platform/input set')
     assets = {item['name']: item for item in release['assets']}
+    if len(assets) != len(release['assets']) or set(assets) != set(manifest['sha256']) | {MANIFEST, 'SHA256SUMS'}:
+        raise ValueError('Qualified snapshot published asset set differs from its manifest')
     for name, checksum in manifest['sha256'].items():
         item = assets.get(name, {})
-        if (not isinstance(checksum, str) or not re.fullmatch(r'[0-9a-f]{64}', checksum)
+        if (Path(name).name != name or not isinstance(checksum, str) or not re.fullmatch(r'[0-9a-f]{64}', checksum)
                 or item.get('size', 0) <= 0 or item.get('digest') != 'sha256:' + checksum):
             raise ValueError('Qualified snapshot published asset is missing/corrupt: ' + name)
-    validate_staging_receipts(manifest)
+    sums = ''.join(f'{checksum}  {name}\n' for name, checksum in sorted(manifest['sha256'].items())).encode()
+    if (assets['SHA256SUMS'].get('size') != len(sums)
+            or assets['SHA256SUMS'].get('digest') != 'sha256:' + hashlib.sha256(sums).hexdigest()):
+        raise ValueError('Qualified snapshot published checksums do not match its manifest')
+    validate_staging_receipts(manifest, publication)
     head = api(f'repos/{repository()}/git/ref/heads/{STAGING}')['object']['sha']
     if sha != head and api(f'repos/{repository()}/compare/{sha}...{head}')['status'] not in ('ahead', 'identical'):
-        raise ValueError('iOS staging source is outside trusted integration history')
+        raise ValueError('Staging source is outside trusted integration history')
     return manifest, head
 
 
@@ -690,7 +713,7 @@ def publish(args):
         raise ValueError('Existing publication channel/tag source differs from selected inputs')
     if existing and not existing['draft']:
         # A later website failure may rerun this job. Read back the frozen set;
-        # never upload, edit notes, retag or change Latest on that recovery edge.
+        # never rewrite immutable inputs or change Latest on that recovery edge.
         with tempfile.TemporaryDirectory(prefix='dunecity-published-inputs-') as temporary:
             frozen = Path(temporary)
             download_release(args.tag, frozen, [MANIFEST])
@@ -702,6 +725,8 @@ def publish(args):
             if assets.get(name, {}).get('digest') != 'sha256:' + checksum:
                 raise ValueError('Published asset readback failed: ' + name)
         print('Published immutable inputs already match; resuming downstream delivery only')
+        if not stable:
+            return complete_staging_publication(args.tag, args.sha)
         return
     if not stable:
         ensure_staging_tag(args.tag, args.sha)
@@ -758,7 +783,127 @@ def publish(args):
         raise ValueError('GitHub Latest did not advance to the verified release')
     print(f'Published {args.tag} from {args.sha}, producing run {manifest["runId"]}')
     if not stable:
-        prune_staging(argparse.Namespace(current=args.tag, dry_run=False))
+        return complete_staging_publication(args.tag, args.sha)
+
+
+def staging_lifecycle_owner():
+    """The existing FIFO dev-release job is the sole pointer/deletion writer."""
+    if (os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_JOB') != 'dev-release'
+            or os.environ.get('DUNECITY_STAGING_LIFECYCLE') != 'true'):
+        raise ValueError('Mutation requires the admitted Game staging-lifecycle job mutex')
+    run_id, attempt = os.environ.get('GITHUB_RUN_ID', ''), os.environ.get('GITHUB_RUN_ATTEMPT', '')
+    if not run_id.isdigit() or not attempt.isdigit() or int(run_id) <= 0 or int(attempt) <= 0:
+        raise ValueError('Cannot establish the current lifecycle run/attempt')
+    owner = api(f'repos/{repository()}/actions/runs/{run_id}')
+    if (owner['id'] != int(run_id) or owner['run_attempt'] != int(attempt)
+            or owner['path'] != BUILD_WORKFLOW or owner['status'] != 'in_progress'
+            or owner['conclusion'] is not None or owner['repository']['full_name'] != repository()):
+        raise ValueError('Cannot establish the current lifecycle owner')
+    return owner
+
+
+def staging_pointer_tag(body, allow_legacy=False):
+    body = '' if body is None else body
+    if not isinstance(body, str):
+        raise ValueError('latest-dev body is not text')
+    markers = STAGING_POINTER.findall(body)
+    if allow_legacy and not markers and 'dunecity-staging-tag' not in body:
+        return None
+    if len(markers) != 1 or body.count('dunecity-staging-tag') != 1:
+        raise ValueError('latest-dev has no unambiguous machine-readable known-good staging tag')
+    return markers[0]
+
+
+def staging_pointer_body(body, tag):
+    """Replace only our bounded block/marker, preserving all historical notes."""
+    previous = staging_pointer_tag(body, allow_legacy=True)
+    block = (f'{POINTER_BEGIN}\n## Current immutable staging snapshot\n\n'
+             f'[{tag}](https://github.com/{repository()}/releases/tag/{tag})\n\n'
+             'This link identifies verified immutable artifact publication, not full UI or production qualification. '
+             'Download current runtime packages from that snapshot. Attachments and source archives on this '
+             'legacy latest-dev release remain historical and do not identify the current runtime.\n\n'
+             f'<!-- dunecity-staging-tag: {tag} -->\n{POINTER_END}')
+    if POINTER_BEGIN in body or POINTER_END in body:
+        if body.count(POINTER_BEGIN) != 1 or body.count(POINTER_END) != 1:
+            raise ValueError('latest-dev managed pointer block is ambiguous')
+        start, end = body.index(POINTER_BEGIN), body.index(POINTER_END)
+        marker = STAGING_POINTER.search(body)
+        if not previous or not marker or not start < marker.start() < end:
+            raise ValueError('latest-dev managed pointer block is malformed')
+        return body[:start] + block + body[end + len(POINTER_END):]
+    if previous:
+        marker = STAGING_POINTER.search(body)
+        return body[:marker.start()] + block + body[marker.end():]
+    return block + ('\n\n' + body if body else '')
+
+
+def advance_staging_pointer(tag, sha):
+    """Reconcile only latest-dev's body after independent immutable verification."""
+    report = dict(status='held', tag=tag, previousTag=None, reason='')
+    errors = (KeyError, TypeError, ValueError, RuntimeError, OSError, subprocess.CalledProcessError)
+    try:
+        owner = staging_lifecycle_owner()
+        qualified_staging_snapshot(tag, full_sha(sha), publication=owner)
+        pointer = optional_release('latest-dev')
+        if pointer and (pointer['draft'] or not pointer['prerelease']):
+            raise ValueError('latest-dev is not a published prerelease pointer')
+        body = pointer.get('body') if pointer else ''
+        body = '' if body is None else body
+        previous = staging_pointer_tag(body, allow_legacy=True)
+        report['previousTag'] = previous
+        if previous:
+            target = optional_release(previous)
+            if not target or target['draft'] or not target['prerelease']:
+                raise ValueError('Previous latest-dev target is not a published staging snapshot')
+            previous_sha = resolve_tag(previous)
+            if previous_sha != STAGING_TAG.fullmatch(previous)[1]:
+                raise ValueError('Previous latest-dev tag does not identify its advertised source')
+            if previous != tag:
+                if previous_sha == sha:
+                    raise ValueError('Previous latest-dev source has different immutable inputs; ordering is uncertain')
+                ancestry = api(f'repos/{repository()}/compare/{previous_sha}...{sha}')['status']
+                if ancestry != 'ahead':
+                    raise ValueError('Refusing latest-dev pointer regression; source ancestry is ' + str(ancestry))
+        updated = staging_pointer_body(body, tag)
+        if pointer and updated == body:
+            report.update(status='unchanged', reason='latest-dev already identifies the verified immutable artifact snapshot')
+        else:
+            if pointer:
+                subprocess.run(['gh', 'api', '--method', 'PATCH',
+                                f'repos/{repository()}/releases/{pointer["id"]}',
+                                '-f', 'body=' + updated], check=True, capture_output=True, text=True)
+            else:
+                # gh creates a missing tag but never moves an existing legacy ref.
+                subprocess.run(['gh', 'release', 'create', 'latest-dev', '--repo', repository(),
+                                '--target', sha, '--prerelease', '--latest=false',
+                                '--title', 'Development staging pointer', '--notes', updated],
+                               check=True, capture_output=True, text=True)
+            observed = optional_release('latest-dev')
+            if (not observed or observed['draft'] or not observed['prerelease']
+                    or observed.get('body') != updated or staging_pointer_tag(observed['body']) != tag
+                    or (pointer and any(observed[key] != pointer[key] for key in
+                                        ('id', 'tag_name', 'target_commitish', 'assets')))
+                    or (not pointer and observed['assets'])):
+                raise ValueError('latest-dev pointer body/channel/history readback failed')
+            report.update(status='advanced', reason='Verified immutable artifact snapshot linked; historical release inputs preserved')
+    except errors as error:
+        detail = (getattr(error, 'stderr', None) or str(error)).strip()
+        report['reason'] = 'pointer held: ' + detail
+    if os.environ.get('RUNNER_TEMP'):
+        write_json(Path(os.environ['RUNNER_TEMP']) / 'staging-pointer.json', report)
+    if os.environ.get('GITHUB_STEP_SUMMARY'):
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+            stream.write('\n### Staging pointer (artifact publication, not UI/production qualification)\n```json\n' +
+                         json.dumps(report, indent=2) + '\n```\n')
+    print(json.dumps(report, indent=2))
+    return report
+
+
+def complete_staging_publication(tag, sha):
+    pointer = advance_staging_pointer(tag, sha)
+    retention = prune_staging(argparse.Namespace(
+        current=tag, dry_run=False, pointer_hold=pointer['reason'] if pointer['status'] == 'held' else ''))
+    return dict(pointer=pointer, retention=retention)
 
 
 def active_runs(repo):
@@ -862,6 +1007,8 @@ def prune_staging(args):
     report = dict(deleted=[], eligible=[], held={}, reason='')
     errors = (KeyError, TypeError, ValueError, RuntimeError, OSError, subprocess.CalledProcessError)
     try:
+        if getattr(args, 'pointer_hold', ''):
+            raise ValueError('latest-dev reconciliation did not complete: ' + args.pointer_hold)
         releases = []
         for page in range(1, 1001):
             batch = api(f'repos/{repository()}/releases?per_page=100&page={page}')
@@ -873,22 +1020,16 @@ def prune_staging(args):
         else:
             raise ValueError('Release pagination is incomplete')
         pointer = optional_release('latest-dev')
+        if not pointer or pointer['draft'] or not pointer['prerelease']:
+            raise ValueError('latest-dev is not a published prerelease pointer')
         body = pointer.get('body') if pointer else None
-        markers = re.findall(r'<!--\s*dunecity-staging-tag:\s*(staging-[0-9a-f]{40}-[0-9a-f]{12})\s*-->', body or '')
-        if len(markers) != 1 or (body or '').count('dunecity-staging-tag') != 1:
-            raise ValueError('latest-dev has no unambiguous machine-readable known-good staging tag')
-        if not any(item['tag_name'] == markers[0] and not item['draft'] and item['prerelease'] for item in releases):
+        known_good = staging_pointer_tag(body)
+        if not any(item['tag_name'] == known_good and not item['draft'] and item['prerelease'] for item in releases):
             raise ValueError('latest-dev known-good target is not a published staging snapshot')
         pins = staging_consumer_pins()
         if not args.dry_run:
-            if (os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_JOB') != 'dev-release'
-                    or os.environ.get('DUNECITY_STAGING_LIFECYCLE') != 'true'):
-                raise ValueError('Deletion requires the admitted Game staging-lifecycle job mutex')
-            producer = api(f'repos/{repository()}/actions/runs/{os.environ["GITHUB_RUN_ID"]}')
-            if (producer['path'] != BUILD_WORKFLOW or producer['status'] != 'in_progress'
-                    or producer['repository']['full_name'] != repository()):
-                raise ValueError('Cannot establish the current lifecycle owner')
-        eligible, report['held'] = staging_retention_plan(releases, args.current, markers[0], pins)
+            staging_lifecycle_owner()
+        eligible, report['held'] = staging_retention_plan(releases, args.current, known_good, pins)
         report['eligible'] = [item['tag_name'] for item in eligible]
         for item in eligible:
             tag = item['tag_name']

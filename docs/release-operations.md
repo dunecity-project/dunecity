@@ -529,71 +529,114 @@ connectivity fail visibly; there is no hidden relay fallback.
 
 ## Native pointer alignment release gate
 
-Before the next production release, require the native mouse/menu regression
-with the candidate's bundled SDL libraries on the Mac mini. It must exercise
-native pointer motion and button down/up through SDL and the real menu hit-test
-path, not inject already-logical SDL events or call widget handlers directly.
-Check off-center controls and control edges with Retina drawable/window scaling,
-letterboxing, and fullscreen/windowed resolution transitions. Record the actual
-window, drawable, logical and viewport sizes and loaded SDL identities.
+Require the native mouse/menu regression on the Mac mini against the candidate's
+exact SDL implementation. Native motion/down/up must cross SDL's live Cocoa
+application dispatcher and the real menu hit-test. Keep the existing off-centre,
+edge/outside, drawable/window scaling, letterbox, render-target restoration,
+fullscreen/windowed and settings-reinitialization assertions unchanged. Log actual
+window/drawable/logical/viewport dimensions, loaded images and `SDL_GetVersion`'s
+resolved Mach-O image. An unavailable sample, skipped opt-in, hidden-window pass
+or SDL-boundary-only run is **not** a passing full release gate.
 
-A hidden-window initialization pass, center-only coordinate check, or skipped
-opt-in test does not satisfy this gate. Keep production held if this check fails
-or cannot run. Never run graphical or pointer-automation checks on the MacBook Air.
+The fixture is **not the actual packaged executable**. Its own-window NSEvents
+execute inside its process; they are not external actual-app input evidence.
+Observe the actual candidate separately. No new Accessibility/global event-posting
+permission, physical-pointer automation or external event framework is required
+or authorized. Never run graphical checks on the Air or change the user's app.
 
-For the registered CTest gate, `DUNECITY_POINTER_RUNTIME_APP` is a CMake `PATH`
-cache entry passed directly to the existing `--runtime-app` CLI. Its default is
-`$<TARGET_BUNDLE_DIR:dunecity>`, preserving CI that already bundles the target app.
-A local Homebrew build's `build-int/bin/dunecity.app` is not a packaged candidate:
-select the dependency-fixed **installed** app explicitly. Do not credit a prior
-packaged-app pass to a CTest command that selected a different, unbundled app.
+### Static SDK: normal producer builds, Mini only consumes
 
-On the mini, with `FINALPIN` set to the full committed candidate SHA and `OWNER`
-to the workspace owner identity, release edit claims first and use the shared
-staging lane. Configure the candidate path **before** the coherent build,
-installation and fixture preparation so their CMake cache identity stays stable.
-For example, the local 1.0.865 candidate sequence is:
+The normal `build-macos` producer uses its existing cached `build`/compiler/vcpkg
+context, not a second SDK or build tree. Before the candidate build it freezes
+source, compiler/toolchain/platform SDK settings, Ninja link recipe and installed
+static SDL hashes. After packaging it compiles the existing full pointer fixture
+through the same frontend. Export refuses drift from that pre-build snapshot.
+No game objects/behaviour are instrumented in the candidate.
+
+`DuneCity-macOS-pointer-fixture-FULL_SOURCE_SHA-RUN_ATTEMPT` is a **separate standard
+Actions diagnostic artifact**, retained for 90 days. Its single
+`pointer-fixture.tar.gz` contains only the compiled fixture and `receipt.json`;
+no SDK, resources, test payload or receipt enters the app/public runtime assets.
+The receipt binds source commit/content fingerprint, producer repository/run/
+attempt/workflow commit, checked-out workflow/frontend hashes, configuration and
+link inputs, final package ZIP, every candidate bundle file (including Mach-O),
+fixture bytes and the actual compile/link commands.
+
+Static SDL identity is not inferred from its filename/version: each archive's
+SHA256 must match its installed vcpkg SPDX binary-file hash; the SPDX binary ABI
+must hash the installed ABI-info bytes, whose port recipe/patch hashes must agree.
+Require pinned port Git objects, hashed upstream resources, the source-controlled
+baseline/overrides and the SDL header hash/version. Missing/uncertain archive
+provenance blocks export/consumption; there is no local/Homebrew SDK fallback.
+At runtime only a receipt-verified fixture may resolve `SDL_GetVersion` to itself,
+and **no dynamic SDL image** may be loaded. All inherited `DYLD_*` and pointer-proof
+environment variables are stripped before installing the verified environment.
+
+The trust root is an independently pinned, frozen `publication-inputs.json`.
+Its existing `artifacts` metadata records the producing run's diagnostic ID,
+name, raw Actions ZIP SHA256 and size without adding diagnostics to release
+assets. Root must review the changed workflow hash and update the protected Mini
+admission gate **before trusting a producer using this contract**.
+
+After the active frozen producer settles, combine source changes into the normal
+shared next batch. Do not cancel/rebuild it, force an old tag, mutate old manifests
+or replace stable assets to manufacture a diagnostic. The observed 31d5b6f30
+package (asset 741573212, static SDL 2.32.10) remains blocked for this coverage:
+the build-int/Homebrew SDL 2.32.72 fixture correctly failed the packaged-library
+guard (`outputs/staging-native-31d5b6f30/pointer/run-1440.log`, line 448).
+Preserve that failure; a named old snapshot without its diagnostic cannot PASS.
+
+For a future produced snapshot, obtain `CANDIDATE_SOURCE`, `REPOSITORY`,
+`DIAGNOSTIC_ID` and the manifest hash from the trusted frozen publication record.
+Keep the actual extracted package in `CANDIDATE_APP`, the frozen manifest in
+`PUBLICATION_MANIFEST`, its **independently trusted** hash in
+`PUBLICATION_MANIFEST_SHA256`, and use dedicated evidence/download paths:
 
 ```sh
-CANDIDATE_PREFIX="/Users/stefan/Documents/projects/outputs/release-1.0.865/macos-local-${FINALPIN}/install"
-CANDIDATE_APP="$CANDIDATE_PREFIX/dunecity.app"
-agent-workspace run --project dunecity --owner "$OWNER" --wait -- \
-  cmake -S . -B build-int -DDUNECITY_POINTER_RUNTIME_APP:PATH="$CANDIDATE_APP"
-agent-workspace stage --project dunecity --owner "$OWNER" --wait --jobs 4 build
-agent-workspace run --project dunecity --owner "$OWNER" --wait -- \
-  cmake --install build-int --config Release --prefix "$CANDIDATE_PREFIX"
-codesign --verify --deep --strict "$CANDIDATE_APP"
+gh api "repos/$REPOSITORY/actions/artifacts/$DIAGNOSTIC_ID/zip" > "$POINTER_ARTIFACT"
 agent-workspace run --project dunecity --owner "$OWNER" --tests --wait -- \
-  env DUNECITY_NATIVE_POINTER_TEST=1 ctest --test-dir build-int \
-  --output-on-failure -R '^native_pointer_mapping_probe$'
-```
-
-The install rules bundle and fix up runtime dependencies; do not copy SDK
-libraries into the build app as a substitute. The gate still requires every
-dynamically loaded SDL library to reside inside the selected app, records its
-runtime identities, and returns skip code 77 without the native opt-in. A skip
-is not a passing release gate. CTest diagnostics remain under
-`build-int/native-pointer-mapping-probe`.
-
-For a direct full regression, retain the same packaged `CANDIDATE_APP` and set
-`EVIDENCE_DIR` to a dedicated results directory:
-
-```sh
-DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py \
-  --pointer-mapping --build-dir build-int \
+  env DUNECITY_NATIVE_POINTER_TEST=1 python3 tests/menu/run-menu-probe.py \
+  --pointer-mapping --pointer-artifact "$POINTER_ARTIFACT" \
+  --publication-manifest "$PUBLICATION_MANIFEST" \
+  --publication-manifest-sha256 "$PUBLICATION_MANIFEST_SHA256" \
+  --candidate-source "$CANDIDATE_SOURCE" \
   --runtime-app "$CANDIDATE_APP" --output-dir "$EVIDENCE_DIR"
 ```
 
-`--pointer-sdl-only` is a fast, no-game-startup diagnostic, not a substitute for
-the full menu gate. Stable macOS CI runs the full packaged-library check before
-artifact upload and retains its diagnostics on failure.
+Download the **raw Actions ZIP** (not `gh run download`'s unpacked contents) so its
+digest remains verifiable. The consumer has no configure/compile/build-dependency
+path: authenticate first, extract only bounded regular files into existing leased,
+private owned scratch using the shared safe-extraction helper, then verify all
+receipt/candidate/source bytes before execution. It reuses candidate resources
+read-only and restores foreground ownership. Receipt/reference, profiles and logs
+remain in evidence; successful leased scratch is removed by the existing helper.
+`gate-status.json` distinguishes `blocked-prerequisite`, `blocked-environment`,
+`failed-assertion`, other harness/runtime failures and an actual full-menu PASS.
+Compilation-only `prepared-not-run` and `--pointer-sdl-only` never satisfy it.
 
-Validate the live SDL Cocoa dispatcher for every native event; AppKit may add a
-KVO subclass during focus/renderer changes without changing SDL's implementation.
-Do not pin an earlier Objective-C class identity. For a test-only recovery against
-unchanged signed/notarized packages, record the package and corrected-helper
-source commits separately and retain every native mapping assertion. Do not
-retag or replace published binaries to repair the test harness.
+The staging-retention helper protects newest-seven/known-good/active-consumer
+snapshots and explicit `dunecity-retain` holds, **not** Actions artifact expiry.
+While a consumer/release owns this evidence, retain the downloaded, digest-verified
+raw diagnostic ZIP with its pinned manifest under the existing artifact hold.
+An expired/missing/unpinned diagnostic is blocked coverage, never a reason to
+rebuild an unchanged published package or silently select a newer fixture.
+
+Narrow source-contract check (no SDK or GUI):
+
+```sh
+PYTHONPATH=tests/menu python3 -m unittest test_probe_process.PointerArtifactTests
+```
+
+### Dynamic packaged SDL
+
+The existing strict packaged-path guard remains: every loaded SDL image and
+`SDL_GetVersion`'s symbol must resolve inside the selected app. The registered
+CTest `DUNECITY_POINTER_RUNTIME_APP:PATH` still selects the dependency-fixed,
+installed app; its default target bundle does not make a Homebrew build an
+official package. This local-build CTest route cannot qualify a static package.
+Validate SDL's live `sendEvent:` implementation for every native event rather
+than pinning an earlier Objective-C class; AppKit may add a KVO subclass during
+focus/renderer transitions. Never weaken dispatcher, geometry or coverage checks.
 
 ## Windows compile caching
 
