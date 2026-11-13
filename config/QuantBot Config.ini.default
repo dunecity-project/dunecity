@@ -443,7 +443,8 @@ CampaignAllyStrengthFloor=1
 CampaignEasyHarvesters=1
 CampaignMediumHarvesters=2
 CampaignHardHarvesters=4
-# WaveValue: the value one ground wave may hold. Easy's early-mission waves scale with it (900/1200 of 1700).
+# WaveValue: the value one ground wave may hold from tech level 8. Earlier missions use
+# (tech level + 4) / 12 of it: 58% at tech 3, 75% at tech 5.
 CampaignEasyWaveValue=1700
 CampaignMediumWaveValue=2500
 CampaignHardWaveValue=3500
