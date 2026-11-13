@@ -241,6 +241,12 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                           kind='campaign', mod='dunecity', partner=partner, enemy_ai='quantbot',
                           enemy_difficulty=enemy_difficulty, minutes=80,
                           full=2 if partner == 'hard' else 1, smoke=0))
+        # Vanilla difficulty calibration (idle human, QuantBot Both support). Only with --cells,
+        # so the fixed full-tier gate keeps its schedule.
+        cells.append(dict(category='campaign', name=f'partner-{partner}-v-quantbot-{enemy_difficulty}',
+                          kind='campaign', mod='vanilla', partner=partner, enemy_ai='quantbot',
+                          enemy_difficulty=enemy_difficulty, minutes=80, full=1, smoke=0,
+                          opt_in=True, measured=True))
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
     # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
     # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
@@ -341,6 +347,8 @@ def schedule(args):
             continue
         if getattr(args, 'cells', None) and not re.search(args.cells, f'{cell["category"]}/{cell["name"]}/{cell["mod"]}'):
             continue
+        if cell.get('opt_in') and not getattr(args, 'cells', None):
+            continue
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
             count = min(count, args.seeds_per_cell)
@@ -431,7 +439,8 @@ def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
                 partner=cell['partner'], enemy_ai=cell['enemy_ai'], enemy_difficulty=cell['enemy_difficulty'],
                 campaign_mode=campaign_mode, ai_only=cell.get('ai_only', False), minutes=cell['minutes'],
                 sides=[(house, 1, 'Q' + cell['partner'][0].upper()), ('enemies', 2, enemy)],
-                expect=('campaign_won',) if cell.get('ai_only') or cell['partner'] == 'hard' else None)
+                expect=('campaign_won',) if (cell.get('ai_only') or cell['partner'] == 'hard')
+                and not cell.get('measured') else None)
 
 
 # ---- Playing ----------------------------------------------------------------------------
