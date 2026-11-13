@@ -32,6 +32,13 @@ if(Python3_Interpreter_FOUND)
     dunecity_add_test(headless integration NAME research_report_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/ai/test_research_report.py)
     set_tests_properties(research_report_contract PROPERTIES TIMEOUT 60)
+    # Every QuantBot boolean must be registered; hosted CI passed without this check.
+    dunecity_add_test(headless integration NAME genome_registry_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/ai/test_genome_model.py)
+    set_tests_properties(genome_registry_contract PROPERTIES TIMEOUT 60)
+    dunecity_add_test(headless integration NAME genome_behaviors_contract COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/ai/test_genome_behaviors.py)
+    set_tests_properties(genome_behaviors_contract PROPERTIES TIMEOUT 60)
 endif()
 
 # Find Catch2 package
