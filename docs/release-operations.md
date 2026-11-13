@@ -221,6 +221,19 @@ The weekly iOS lane exports a signed **internal dev IPA** with unique build
 number and source provenance. It cannot upload, install or claim device coverage.
 Its Mini admission is denied during an active production reservation.
 
+The nightly tier otherwise runs once a day from its cron. Run it on demand,
+without packaging, to reproduce or check a nightly defect:
+
+```sh
+gh workflow run build.yml --repo dunecity-project/dunecity --ref integrate/feature-batch -f nightly_probe=true
+```
+
+It has its own concurrency group, so it neither cancels branch CI nor is
+cancelled by a later push. Job logs are readable only after the whole run
+ends. Cancel normally (`gh run cancel`); a force-cancel discards the logs.
+Build and test jobs use `!cancelled()`, never a bare `always()`, in their job
+condition: a running job whose condition is `always()` ignores cancellation.
+
 Publication/request/pruning use GitHub's shared staging concurrency group with
 `queue: max` and no in-progress cancellation; coalescing belongs before expensive
 builds, not after frozen artifacts exist. Retention keeps the newest seven
