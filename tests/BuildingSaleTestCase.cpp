@@ -55,6 +55,15 @@ TEST_CASE("Pending upgrade refunds preserve starting cash without refunding comp
     CHECK(completed.fromStarting == 0);
 }
 
+TEST_CASE("Sale telemetry attributes only the accepted production share of a pooled refund", "[tornie][sale][refund][ai-telemetry]") {
+    CHECK(BuildingSale::acceptedProductionRefund(4.5_fix, 2_fix, 15.75_fix, 11_fix) == 4.5_fix);
+    CHECK(BuildingSale::acceptedProductionRefund(4.5_fix, 2_fix, 11.125_fix, 11_fix) == 2.125_fix);
+    CHECK(BuildingSale::acceptedProductionRefund(4.5_fix, 2_fix, 1.125_fix, 1.125_fix) == 1.125_fix);
+    // Restored starting cash from an upgrade is not a refund of an earned-funded order.
+    CHECK(BuildingSale::acceptedProductionRefund(4.5_fix, 0, 9_fix, 9_fix) == 0);
+    CHECK(BuildingSale::acceptedProductionRefund(0, 0, 11.25_fix, 9_fix) == 0);
+}
+
 TEST_CASE("Sale and Windtrap commands require exactly one object id on the wire", "[tornie][sale][command]") {
     for(const auto id : {CMD_STRUCTURE_SELL, CMD_WINDTRAP_POWER_UPGRADE, CMD_SCOUTPOST_SLOWPOST_UPGRADE}) {
         CAPTURE(id);

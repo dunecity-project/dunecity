@@ -7,6 +7,8 @@
 #include <chrono>
 #include <map>
 #include <tuple>
+#include <array>
+#include <limits>
 
 namespace AITelemetry {
 
@@ -21,6 +23,32 @@ public:
 private:
     void add(const std::string& key, const std::string& encoded);
     std::string fields;
+};
+
+// Diagnostic counters only: no policy, RNG, savegame or observer state.
+enum class RepairMetric : size_t {
+    CapitalPaidRaw, CapitalRefundRequestedRaw, CapitalRefundActualRaw,
+    HealthRestoredRaw, ServicePaidRaw, Completed, ReturnAttempted, ReleasedGround, HandoffCarrier,
+    Delivered, UsefulDelivered, Aborted, ReturnAborted,
+    LiveCycles, FreeCycles, DamagedCycles, FullReturnCycles, UnfundedCycles, Count
+};
+struct RepairCounters {
+    std::array<int64_t, static_cast<size_t>(RepairMetric::Count)> values{};
+    void add(RepairMetric metric, int64_t amount);
+};
+struct RepairBayMetrics {
+    int house = -1;
+    uint32_t yard = std::numeric_limits<uint32_t>::max();
+    uint32_t startCycle = 0;
+    RepairCounters counters;
+    RepairCounters* houseCounters = nullptr;
+    uint32_t unit = std::numeric_limits<uint32_t>::max();
+    uint64_t job = 0;
+    int64_t restoredRaw = 0, paidRaw = 0;
+    bool completed = false, jobCensored = false;
+    uint32_t builder = std::numeric_limits<uint32_t>::max();
+    int64_t capitalProgressRaw = 0, capitalBaselineRaw = 0;
+    void add(RepairMetric metric, int64_t amount);
 };
 
 // Disk budget of the per-game decision logs under <profile>/ai-decisions: each session is
@@ -54,6 +82,28 @@ public:
     bool performanceDue() const;
     void flushPerformance(uint32_t cycle, bool force = false);
     const std::string& path() const { return filename; }
+    uint64_t repairEpoch() const { return repairEpoch_; }
+    bool repairActive() const { return enabled() && repairActive_; }
+    void beginRepairCapture(uint32_t cycle, bool leftCensored);
+    RepairBayMetrics* repairBay(int house, uint32_t yard, uint32_t cycle, bool baseline);
+    void repairObserve(RepairBayMetrics& bay, uint32_t cycle, uint32_t unit,
+                       int64_t healthRaw, int64_t maxHealthRaw, bool baseline = false);
+    void repairProgress(RepairBayMetrics& bay, uint32_t cycle, int64_t beforeRaw,
+                        int64_t afterRaw, int64_t maxHealthRaw, int64_t paidRaw);
+    void repairPrepareReturn(RepairBayMetrics& bay, uint32_t cycle, uint32_t unit,
+                             bool carrier, int64_t healthRaw, int64_t maxHealthRaw);
+    void repairHandoff(uint32_t cycle, uint32_t unit, bool accepted);
+    void repairDelivered(uint32_t cycle, int house, uint32_t unit, bool alive);
+    void repairReturnAborted(uint32_t cycle, uint32_t unit, const char* reason);
+    void repairJobAborted(RepairBayMetrics& bay, uint32_t cycle, const char* reason);
+    void repairBayClosed(uint32_t cycle, uint32_t yard, const char* reason);
+    void repairCapitalPaid(int house, int64_t paidRaw);
+    void repairCapitalRefund(uint32_t cycle, int house, uint32_t builder, int64_t requestedRaw, int64_t actualRaw);
+    void repairCapitalBaseline(int house, uint32_t builder, int64_t progressRaw);
+    void repairCapitalPlaced(int house, uint32_t builder, uint32_t yard, uint32_t cycle, int64_t progressRaw);
+    void repairCapitalEnded(uint32_t builder);
+    void finishRepairCapture(uint32_t cycle);
+    Record repairQuality(int house, uint32_t cycle) const;
 private:
     struct Metric {
         uint64_t count = 0;
@@ -76,6 +126,26 @@ private:
     std::map<std::string, uint64_t> observationCounts;
     std::map<int, std::map<std::string, int64_t>> economy;
     std::chrono::steady_clock::time_point lastFlush;
+    struct RepairHouseMetrics {
+        RepairCounters counters;
+        int64_t baselineBays = 0, baselinePendingPaidRaw = 0;
+    };
+    struct RepairReturn {
+        int house;
+        uint32_t yard;
+        uint64_t job;
+        bool carrier, useful;
+        int64_t restoredRaw, paidRaw;
+    };
+    void repairReturnCount(const RepairReturn& returning, RepairMetric metric);
+    Record repairBayRecord(const RepairBayMetrics& bay) const;
+    std::map<int, RepairHouseMetrics> repairHouses;
+    std::map<uint32_t, RepairBayMetrics> repairBays;
+    std::map<uint32_t, RepairReturn> repairReturns;
+    std::map<uint32_t, int64_t> repairCapitalBaselines;
+    uint64_t repairEpoch_ = 0, nextRepairJob = 1;
+    uint32_t repairStartCycle = 0, repairEndCycle = 0;
+    bool repairActive_ = false, repairLeftCensored = false, repairClosed = false;
 };
 
 DecisionLog& log();

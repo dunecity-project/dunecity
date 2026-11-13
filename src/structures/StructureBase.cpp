@@ -626,11 +626,20 @@ void StructureBase::doSell() {
     if(auto* port = dynamic_cast<StarPort*>(this)) {
         port->doCancelOrder(); // Returns fully paid orders and their CHOAM stock.
     } else if(auto* builder = dynamic_cast<BuilderBase*>(this)) {
-        const auto pending = BuildingSale::pendingRefund(builder->getProductionQueueSize(),
-            builder->getProductionProgress(), builder->getProductionProgressFromStartingCredits(),
+        const int queueSize = builder->getProductionQueueSize();
+        const auto progress = builder->getProductionProgress();
+        const auto fromStarting = builder->getProductionProgressFromStartingCredits();
+        const auto pending = BuildingSale::pendingRefund(queueSize, progress, fromStarting,
             builder->isUpgrading(), builder->getUpgradeProgress(),
             builder->getUpgradeProgressFromStartingCredits());
-        owner->returnCredits(pending.total, pending.fromStarting);
+        const auto returned = owner->returnCredits(pending.total, pending.fromStarting);
+        if(AITelemetry::log().repairActive() && queueSize > 0 && progress > 0
+           && builder->getCurrentProducedItem() == Structure_RepairYard) {
+            const auto accepted = BuildingSale::acceptedProductionRefund(progress, fromStarting,
+                returned.total, returned.fromStarting);
+            AITelemetry::log().repairCapitalRefund(currentGame->getGameCycleCount(), owner->getHouseID(),
+                builder->getObjectID(), progress.getRawValue(), accepted.getRawValue());
+        }
     }
     owner->recordBuildingSale(refund);
     AchievementEvents::sold(owner, refund);

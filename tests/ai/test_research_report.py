@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import research_report as subject
+from test_dunecity_audit import repair_quality
 
 
 class ResearchReports(unittest.TestCase):
@@ -95,6 +96,86 @@ class ResearchReports(unittest.TestCase):
             self.table(directory, 'games.csv', games)
             self.table(directory, 'houses.csv', houses)
 
+    def repair_data(self, final, snapshots=(), capture_status='complete'):
+        capture = dict(status=capture_status, reasons='' if capture_status == 'complete' else 'capture_limit',
+                       start_cycle=0, end_cycle=100, decisions=[
+            dict(event='repair_capacity', session='ledger', seq=index + 2, cycle=quality['end_cycle'],
+                 house=0, player=1, data=dict(treatment=1, actual=1, quality=quality))
+            for index, quality in enumerate(snapshots)], repair_finals=[] if final is None else [
+            dict(event='game_summary', session='ledger', seq=len(snapshots) + 2, cycle=100,
+                 house=0, data=dict(repair_quality=final))])
+        return dict(games=[self.game()], houses=[self.house()], samples=[],
+                    repairs=[dict(row, id='g1', house='0') for row in subject.repair_observations(capture)])
+
+    def diagnostic_manifest(self, cases=1, index=None):
+        deck = dict(schema_version=1, sample_seed=10, cases=[
+            dict(seed=920903895 + number, format='ffa6', size=128, spice_level='medium', initial_tech=9,
+                 difficulty='brutal') for number in range(cases)])
+        (self.root / 'pilot.json').write_text(json.dumps(deck))
+        self.manifest.update(purpose='diagnostic', diagnostic_house=3,
+            design=dict(cluster_fields=['seed'], stopping='fixed-budget'),
+            budget=dict(max_games=2 if index is not None else cases * 2, max_wall_s=800),
+            stages=dict(pilot=dict(case_manifest='pilot.json', args=[
+                '--mode', 'sample', '--mod', 'dunecity', '--minutes', '30'])))
+        self.manifest['baseline'].update(independent=False, population='targeted FFA6 fixture, not independent evidence')
+        self.manifest['opportunity'].update(metric='repair_serviceable_waiting', aggregation='decision_max')
+        self.manifest['mechanism_metric'].update(metric='repair_quality_useful_delivered_total')
+        self.manifest['guards'] = [dict(metric='repair_quality_service_paid_raw_total', direction='higher', margin=0)]
+        self.manifest.pop('promotion_controls')
+        if index is not None:
+            self.manifest['diagnostic_case_index'] = index
+        self.save_manifest()
+        return deck
+
+    def diagnostic_tables(self, indices=(1,)):
+        deck = json.loads((self.root / 'pilot.json').read_text())
+        arms = {}
+        for arm, directory in (('off', self.off), ('on', self.on)):
+            data = dict(games=[], houses=[], samples=[], repairs=[])
+            for index in indices:
+                case = deck['cases'][index - 1]
+                roster = ('0', '1', '2', '4', '3', '5')
+                shift = (index - 1) % 6
+                roster = roster[shift:] + roster[:shift]
+                teams = {house: str(seat + 1) for seat, house in enumerate(roster)}
+                winner = teams['3'] if arm == 'on' else teams['0']
+                game = self.game('diagnostic-' + str(index), arm=arm, seed=case['seed'], winner=winner,
+                    format='ffa6', size='128', candidate_house='3', candidate_seat='target-house-3',
+                    sample_case=str(index), map_hash='map-' + str(index))
+                configs = [dict(house=house, config_hash='2' * 16 if arm == 'on' and house == '3' else '1' * 16)
+                           for house in roster]
+                game.update(ai_config_hashes=','.join(row['house'] + ':' + row['config_hash'] for row in configs),
+                    ai_config_receipts=json.dumps(configs), genome_phase_receipts=json.dumps([] if arm == 'off' else [
+                        dict(house='3', config_hash='2' * 16, genome='candidate-' + self.manifest['configs']['on'],
+                             controller='0', difficulty='3', phase='opening', cycle='0')]))
+                data['games'].append(game)
+                data['houses'].extend(self.house(game['id'], house=house, team=teams[house],
+                    won=int(teams[house] == winner), seat_style=self.manifest['configs'][arm] if house == '3' else 'control')
+                    for house in roster)
+                final = repair_quality() if arm == 'on' else repair_quality(
+                    health_restored_raw_total=0, service_paid_raw_total=0, completed_total=0,
+                    return_attempted_total=0, released_ground_total=0, delivered_total=0, useful_delivered_total=0,
+                    free_cycles_total=100, damaged_cycles_total=0, full_return_cycles_total=0, unfunded_cycles_total=0)
+                snapshot = repair_quality(end_cycle=25, capture_complete=0, capital_refund_requested_raw_total=0,
+                    capital_refund_actual_raw_total=0, health_restored_raw_total=0, service_paid_raw_total=0,
+                    completed_total=0, return_attempted_total=0, released_ground_total=0, delivered_total=0, useful_delivered_total=0,
+                    live_cycles_total=25, free_cycles_total=5 if arm == 'on' else 25,
+                    damaged_cycles_total=10 if arm == 'on' else 0, full_return_cycles_total=10 if arm == 'on' else 0,
+                    unfunded_cycles_total=0)
+                capture = dict(status='complete', start_cycle=0, end_cycle=100, decisions=[
+                    dict(event='repair_capacity', session='ledger-' + game['id'], seq=seat + 2, cycle=25,
+                         house=int(house), player=seat + 1, data=dict(actual=1, serviceable_waiting=1,
+                         treatment=int(arm == 'on' and house == '3'), quality=snapshot)) for seat, house in enumerate(roster)],
+                    repair_finals=[dict(event='game_summary', session='ledger-' + game['id'], seq=8, cycle=100,
+                                        house=3, data=dict(repair_quality=final))])
+                data['repairs'].extend(dict(row, id=game['id'], house=str(row['house']))
+                                       for row in subject.repair_observations(capture))
+            for name in ('games', 'houses'):
+                self.table(directory, name + '.csv', data[name])
+            self.table(directory, 'repair-capacity.csv', data['repairs'])
+            arms[arm] = data
+        return arms
+
     def test_missing_repair_counts_are_not_zero_or_refinery_usage(self):
         self.paired()
         data = subject.dataset([self.on])
@@ -102,11 +183,14 @@ class ResearchReports(unittest.TestCase):
         self.assertEqual(report['final_fields']['repair_yards']['observed'], 0)
         self.assertIsNone(report['final_fields']['repair_yards']['mean'])
         self.assertEqual(report['final_fields']['occupied_refinery_bays']['mean'], 2)
-        self.assertIn('repair_health_restored', report['missing_repair_usage'])
+        self.assertIn('repair_quality_health_restored_raw_total', report['missing_repair_usage'])
         self.assertIsNone(report['cost']['game_cpu_s'])
         self.assertEqual(report['cost']['game_wall_s'], 20)
         self.assertEqual(report['outcomes']['engine_decided_games'], 2)
         self.assertEqual(report['outcomes']['candidate_house_results'], {'loss': 2})
+        self.assertEqual(report['repair_quality']['status'], {'unknown': 2})
+        self.assertFalse(report['repair_quality']['measurement_ready'])
+        self.assertFalse(report['repair_quality']['useful_service_proven'])
 
     def test_population_score_and_elimination_sentinel_remain_distinct(self):
         game = self.game(winner=0, scored_winner_team='1', win_condition='population')
@@ -196,7 +280,7 @@ class ResearchReports(unittest.TestCase):
                                serviceable_waiting=0, transport_blocked=4, usable_local=2, target=2, reason='idle'))])
         row = subject.repair_observations(capture)[0]
         self.assertEqual(row['repair_completed_waiting'], 1)
-        self.assertNotIn('repair_completed_service', row)
+        self.assertEqual(row['repair_quality_completed_total'], '')
         self.assertEqual(row['capture_status'], 'limited')
         self.assertEqual(row['repair_treatment'], 1)
         self.assertEqual(subject.repair_observations(dict(status='complete', decisions=[])), [])
@@ -213,6 +297,447 @@ class ResearchReports(unittest.TestCase):
         self.assertEqual(set(values.values()), {(3, False)})
         data['repairs'][0]['capture_status'] = 'limited'
         self.assertTrue(subject.measured_metric(data, 'repair_serviceable_waiting', 'decision_mean')[('g1-seat0','0')][1])
+
+    def test_quality_uses_exact_final_q32_totals_not_sparse_stock_means(self):
+        final = repair_quality()
+        earlier = repair_quality(end_cycle=25, capture_complete=0, right_censored_jobs=1, live_bays=2,
+            capital_paid_raw_total=2 ** 53 + 1, capital_refund_requested_raw_total=0, capital_refund_actual_raw_total=0,
+            health_restored_raw_total=2 ** 30 + 1, service_paid_raw_total=2 ** 27 + 1,
+            completed_total=0, return_attempted_total=0, released_ground_total=0, delivered_total=0, useful_delivered_total=0,
+            live_cycles_total=25, free_cycles_total=5, damaged_cycles_total=10, full_return_cycles_total=10)
+        data = self.repair_data(final, [earlier])
+        report = subject.quality_report(data, [])
+        entry = report['repair_quality']['house_games'][0]
+        self.assertEqual(entry['status'], 'measured')  # Running capture_complete=0 is expected.
+        self.assertTrue(report['repair_quality']['ready_for_quality_review'])
+        for key in subject.REPAIR_QUALITY_KEYS:
+            field = 'repair_quality_' + key
+            self.assertEqual(entry['values'][field], final[key])
+            self.assertEqual(report['final_fields'][field]['total'], final[key])
+            self.assertEqual(report['sample_fields'][field]['total'], final[key])
+            self.assertEqual(subject.measured_metric(data, field)[('g1', '0')], (final[key], False))
+        raw = report['final_fields']['repair_quality_capital_paid_raw_total']
+        self.assertEqual(raw['mean_exact'], dict(numerator=2 ** 53 + 3, denominator=1))
+        self.assertIsNone(raw['mean'])
+        self.assertEqual(raw['unit'], 'Q32 credits raw (1 credit = 4294967296)')
+        self.assertEqual(report['final_fields']['repair_quality_health_restored_raw_total']['unit'],
+                         'Q32 HP raw (1 HP = 4294967296)')
+        self.assertEqual(report['final_fields']['repair_quality_damaged_cycles_total']['mean'], 30)
+        self.assertEqual(subject.measured_metric(data, 'repair_actual', 'decision_mean')[('g1', '0')], (1, False))
+        self.assertEqual(json.loads(json.dumps(report))['repair_quality']['house_games'][0]['values']
+                         ['repair_quality_capital_paid_raw_total'], 2 ** 53 + 3)
+
+    def test_cumulative_quality_never_accepts_decision_mean_even_in_guards(self):
+        metric = 'repair_quality_service_paid_raw_total'
+        data = self.repair_data(repair_quality())
+        for aggregation in ('decision_mean', 'decision_last', 'decision_max'):
+            with self.subTest(aggregation=aggregation):
+                with self.assertRaisesRegex(ValueError, 'final cumulative totals'):
+                    subject.measured_metric(data, metric, aggregation)
+                self.manifest['mechanism_metric'].update(metric=metric, aggregation=aggregation)
+                with self.assertRaisesRegex(ValueError, 'final cumulative totals'):
+                    subject.validate_manifest(self.manifest, self.root)
+        self.manifest['mechanism_metric'].update(aggregation='final')
+        self.manifest['guards'] = [dict(metric=metric, direction='higher', margin=0, aggregation='decision_mean')]
+        with self.assertRaisesRegex(ValueError, 'final cumulative totals'):
+            subject.validate_manifest(self.manifest, self.root)
+
+    def test_invalid_partial_and_censored_ledgers_cannot_supply_whole_game_quality(self):
+        changes = (
+            ('unmeasured', 'missing:service_paid_raw_total', dict(service_paid_raw_total=None)),
+            ('invalid', 'invalid:health_restored_raw_total', dict(health_restored_raw_total='0.5')),
+            ('invalid', 'invalid:service_paid_raw_total', dict(service_paid_raw_total=True)),
+            ('invalid', 'invalid:capital_paid_raw_total', dict(capital_paid_raw_total=2 ** 63)),
+            ('invalid', 'invalid:capital_paid_raw_total', dict(capital_paid_raw_total=-1)),
+            ('invalid', 'invalid:completed_total', dict(completed_total=1.0)),
+            ('invalid', 'invalid_bay_cycle_partition', dict(live_cycles_total=101)),
+            ('invalid', 'unfunded_exceeds_damaged_cycles', dict(unfunded_cycles_total=31)),
+            ('invalid', 'actual_refund_exceeds_request', dict(capital_refund_actual_raw_total=2 ** 32)),
+            ('invalid', 'return_outcomes_exceed_attempts', dict(return_aborted_total=1)),
+            ('invalid', 'useful_deliveries_exceed_deliveries', dict(useful_delivered_total=2)),
+            ('invalid', 'ledger_record_cycle_mismatch', dict(end_cycle=99)),
+            ('right-censored', 'ledger_capture_not_closed', dict(capture_complete=0)),
+            ('right-censored', 'unfinished_jobs_or_returns', dict(right_censored_jobs=1)),
+            ('right-censored', 'unfinished_jobs_or_returns', dict(right_censored_returns=1)),
+            ('left-censored', 'left_censored', dict(left_censored=1)))
+        for status, reason, mutation in changes:
+            with self.subTest(reason=reason, mutation=mutation):
+                data = self.repair_data(repair_quality(**mutation))
+                report = subject.quality_report(data, [])
+                entry = report['repair_quality']['house_games'][0]
+                self.assertEqual(entry['status'], status)
+                self.assertIn(reason, entry['reasons'])
+                self.assertFalse(report['repair_quality']['measurement_ready'])
+                self.assertFalse(report['repair_quality']['ready_for_quality_review'])
+                self.assertEqual(report['final_fields']['repair_quality_service_paid_raw_total']['observed'], 0)
+                self.assertTrue(subject.measured_metric(data, 'repair_quality_completed_total')[('g1', '0')][1])
+        for final in (None, {}, [], True):
+            with self.subTest(final=final):
+                report = subject.quality_report(self.repair_data(final), [])
+                self.assertFalse(report['repair_quality']['measurement_ready'])
+                self.assertIsNone(report['final_fields']['repair_quality_completed_total']['total'])
+        clipped = self.repair_data(repair_quality(), capture_status='capture_limit')
+        self.assertEqual(subject.repair_measurements(clipped)[('g1', '0')]['status'], 'right-censored')
+
+    def test_ground_deploy_death_before_release_remains_measured_failed_return(self):
+        final = repair_quality(return_attempted_total=1, released_ground_total=0, handoff_carrier_total=0,
+                               delivered_total=0, useful_delivered_total=0, return_aborted_total=1)
+        data = self.repair_data(final)
+        self.table(self.off, 'repair-capacity.csv', data['repairs'])
+        data['repairs'] = subject.read_table(self.off, 'repair-capacity.csv', ('id', 'house', 'seq'))
+        self.assertEqual(data['repairs'][0]['repair_quality_return_attempted_total'], '1')
+        self.assertEqual(json.loads(data['repairs'][0]['data'])['repair_quality']['return_aborted_total'], 1)
+        report = subject.quality_report(data, [])
+        entry = report['repair_quality']['house_games'][0]
+        self.assertEqual(entry['status'], 'measured')
+        self.assertEqual(entry['reasons'], [])
+        self.assertTrue(report['repair_quality']['measurement_ready'])
+        self.assertFalse(report['repair_quality']['useful_service_proven'])
+        self.assertFalse(report['repair_quality']['ready_for_quality_review'])
+        for key, value in (('return_attempted_total', 1), ('return_aborted_total', 1),
+                           ('released_ground_total', 0), ('handoff_carrier_total', 0),
+                           ('delivered_total', 0), ('useful_delivered_total', 0)):
+            field = 'repair_quality_' + key
+            self.assertEqual(entry['values'][field], value)
+            self.assertEqual(report['final_fields'][field]['total'], value)
+            self.assertEqual(report['final_fields'][field]['unit'], 'count')
+            self.assertEqual(subject.measured_metric(data, field)[('g1', '0')], (value, False))
+
+    def test_ground_abort_missing_or_malformed_attempts_cannot_pass_quality_coverage(self):
+        for label, value, status in (('absent', None, 'unmeasured'), ('null', None, 'unmeasured'),
+                                     ('blank', '', 'unmeasured'), ('fraction', '1.5', 'invalid'),
+                                     ('float', 1.0, 'invalid'), ('boolean', True, 'invalid'),
+                                     ('negative', -1, 'invalid')):
+            with self.subTest(label=label):
+                final = repair_quality(return_attempted_total=1, released_ground_total=0, handoff_carrier_total=0,
+                                       delivered_total=0, useful_delivered_total=0, return_aborted_total=1)
+                if label == 'absent':
+                    final.pop('return_attempted_total')
+                else:
+                    final['return_attempted_total'] = value
+                data = self.repair_data(final)
+                report = subject.quality_report(data, [])
+                entry = report['repair_quality']['house_games'][0]
+                self.assertEqual(entry['status'], status)
+                self.assertIn(('missing:' if status == 'unmeasured' else 'invalid:') + 'return_attempted_total',
+                              entry['reasons'])
+                self.assertEqual(entry['values']['repair_quality_return_aborted_total'], 1)
+                self.assertFalse(report['repair_quality']['measurement_ready'])
+                self.assertFalse(report['repair_quality']['ready_for_quality_review'])
+                self.assertIsNone(report['final_fields']['repair_quality_return_aborted_total']['total'])
+                self.assertEqual(subject.measured_metric(data, 'repair_quality_return_attempted_total')[('g1', '0')],
+                                 (None, True))
+
+    def test_return_outcomes_and_successful_releases_are_independently_bounded_by_attempts(self):
+        for changes, reason in (
+            (dict(return_attempted_total=0), 'return_outcomes_exceed_attempts'),
+            (dict(released_ground_total=2), 'return_releases_exceed_attempts'),
+            (dict(released_ground_total=1, handoff_carrier_total=1), 'return_releases_exceed_attempts'),
+            (dict(return_attempted_total=2, delivered_total=1), 'deliveries_exceed_successful_releases'),
+            (dict(delivered_total=1), 'return_outcomes_exceed_attempts')):
+            with self.subTest(changes=changes):
+                final = repair_quality(return_attempted_total=1, released_ground_total=0, handoff_carrier_total=0,
+                                       delivered_total=0, useful_delivered_total=0, return_aborted_total=1)
+                final.update(changes)
+                data = self.repair_data(final)
+                entry = subject.repair_measurements(data)[('g1', '0')]
+                self.assertEqual(entry['status'], 'invalid')
+                self.assertIn(reason, entry['reasons'])
+                self.assertFalse(subject.quality_report(data, [])['repair_quality']['measurement_ready'])
+        for ground, carrier in ((1, 0), (0, 1)):
+            with self.subTest(ground=ground, carrier=carrier):
+                final = repair_quality(return_attempted_total=1, released_ground_total=ground,
+                                       handoff_carrier_total=carrier, return_aborted_total=0)
+                entry = subject.repair_measurements(self.repair_data(final))[('g1', '0')]
+                self.assertEqual(entry['status'], 'measured')
+                self.assertTrue(entry['useful_service_proven'])
+
+
+    def test_counter_reset_or_changed_baseline_never_uses_max_as_complete_final(self):
+        for field in subject.REPAIR_QUALITY_TOTAL_KEYS:
+            with self.subTest(field=field):
+                final = repair_quality()
+                prior = repair_quality(end_cycle=25, capture_complete=0, **{field: final[field] + 1})
+                entry = subject.repair_measurements(self.repair_data(final, [prior]))[('g1', '0')]
+                self.assertEqual(entry['status'], 'invalid')
+                self.assertIn('decreasing:' + field, entry['reasons'])
+        prior = repair_quality(end_cycle=25, capture_complete=0)
+        data = self.repair_data(repair_quality(baseline_bays=2), [prior])
+        self.assertIn('changed_baseline', subject.repair_measurements(data)[('g1', '0')]['reasons'])
+        data = self.repair_data(repair_quality(), [prior])
+        data['repairs'][-1]['session'] = 'other'
+        self.assertIn('invalid_or_changed_session', subject.repair_measurements(data)[('g1', '0')]['reasons'])
+
+    def test_missing_capture_window_or_final_preserves_censoring_and_unknowns(self):
+        cases = (('capture_start_cycle', None, 'unmeasured', 'missing_capture_start'),
+                 ('capture_end_cycle', None, 'right-censored', 'missing_capture_end'),
+                 ('capture_end_cycle', 101, 'right-censored', 'short_final_window'),
+                 ('repair_quality_start_cycle', 1, 'left-censored', 'partial_start_window'))
+        for field, value, status, reason in cases:
+            with self.subTest(field=field):
+                data = self.repair_data(repair_quality())
+                data['repairs'][0][field] = value
+                entry = subject.repair_measurements(data)[('g1', '0')]
+                self.assertEqual(entry['status'], status)
+                self.assertIn(reason, entry['reasons'])
+        data = self.repair_data(None, [repair_quality(end_cycle=25, capture_complete=0)])
+        entry = subject.repair_measurements(data)[('g1', '0')]
+        self.assertEqual(entry['status'], 'right-censored')
+        self.assertIn('missing_final_ledger', entry['reasons'])
+        self.assertTrue(subject.measured_metric(data, 'repair_quality_completed_total')[('g1', '0')][1])
+        data = self.repair_data(repair_quality())
+        data['repairs'].insert(0, dict(id='g1', house='0', seq=1, cycle=10, data='{}', event='repair_capacity'))
+        entry = subject.repair_measurements(data)[('g1', '0')]
+        self.assertEqual(entry['status'], 'unmeasured')
+        self.assertIn('missing_quality_snapshot', entry['reasons'])
+        historical = self.repair_data(None)
+        historical['houses'][0].update(repair_completed_service='999', repair_health_restored='999')
+        entry = subject.repair_measurements(historical)[('g1', '0')]
+        self.assertEqual(entry['status'], 'unknown')
+        self.assertTrue(all(value is None for value in entry['values'].values()))
+
+    def test_zero_exposure_and_nonuseful_delivery_are_not_useful_service_proof(self):
+        no_exposure = repair_quality(damaged_cycles_total=0, free_cycles_total=50, unfunded_cycles_total=0,
+            health_restored_raw_total=0, service_paid_raw_total=0, completed_total=0, released_ground_total=0,
+            return_attempted_total=0, delivered_total=0, useful_delivered_total=0)
+        for final in (no_exposure, repair_quality(useful_delivered_total=0),
+                      repair_quality(completed_total=0, useful_delivered_total=0)):
+            with self.subTest(final=final):
+                report = subject.quality_report(self.repair_data(final), [])
+                self.assertTrue(report['repair_quality']['measurement_ready'])
+                self.assertFalse(report['repair_quality']['useful_service_proven'])
+                self.assertFalse(report['repair_quality']['ready_for_quality_review'])
+        report = subject.quality_report(self.repair_data(no_exposure), [])
+        self.assertEqual(report['repair_quality']['unexposed_house_games'], 1)
+
+    def test_quality_comparison_uses_exact_valid_final_deltas_not_house_or_snapshot_means(self):
+        for directory, extra in ((self.off, 0), (self.on, 1)):
+            data = self.repair_data(repair_quality(capital_paid_raw_total=2 ** 53 + 3 + extra))
+            for table in ('games', 'houses'):
+                self.table(directory, table + '.csv', data[table])
+            self.table(directory, 'repair-capacity.csv', data['repairs'])
+        report = subject.quality_comparison(self.off, self.on)
+        delta = report['final_stock_changes']['repair_quality_capital_paid_raw_total']
+        self.assertEqual(delta['observed_pairs'], 1)
+        self.assertEqual(delta['total_delta'], 1)
+        self.assertEqual(delta['mean_delta_exact'], dict(numerator=1, denominator=1))
+        self.assertIsNone(delta['mean_delta'])
+
+    def test_quality_attestation_cannot_promote_missing_or_censored_actual_service(self):
+        deck = json.loads((self.root / 'confirmation.json').read_text())
+        deck['cases'].append(dict(deck['cases'][0], seed=1000))
+        (self.root / 'confirmation.json').write_text(json.dumps(deck))
+        self.manifest['budget']['max_games'] = 12
+        self.manifest['design']['paired_cluster_sd'] = .01
+        self.save_manifest()
+        reference = self.root / 'review.txt'
+        reference.write_text('Consumer fixture evidence only; not native service or strength evidence.\n')
+        evidence = {name: dict(passed=True, references=[str(reference)])
+                    for name in ('independent_holdout', 'off_contract', 'mechanism', 'quality_review')}
+        evidence.update({'control:' + name: dict(passed=True, references=[str(reference)])
+                         for name in self.manifest['promotion_controls']})
+        for arm, directory in (('off', self.off), ('on', self.on)):
+            games, houses = [], []
+            for index, seed in enumerate((999, 1000)):
+                for seat in range(2):
+                    selected = str((index + seat) % 2)
+                    winner = int(selected) + 1 if arm == 'on' else 2 - int(selected)
+                    game = self.game('holdout-' + str(seed) + '-' + str(seat), seed=seed, arm=arm, winner=winner,
+                        map_hash='map-' + str(seed), sample_case=str(index + 1), candidate_seat=str(seat), candidate_house=selected)
+                    games.append(game)
+                    houses.extend(self.house(game['id'], house=house, team=str(int(house) + 1),
+                        won=int(int(house) + 1 == winner), triggers='1', repaired=str(int(arm == 'on')),
+                        seat_style=self.manifest['configs'][arm] if house == selected else 'control') for house in ('0', '1'))
+            self.table(directory, 'games.csv', games)
+            self.table(directory, 'houses.csv', houses)
+        missing = subject.experiment_report(self.path, 'confirmation', self.off, self.on, evidence)
+        self.assertEqual(missing['status'], 'confirmed')  # Strength/independence rules do not change.
+        self.assertFalse(missing['facts']['quality_reviewed'])
+        self.assertFalse(missing['facts']['quality_measurements_complete'])
+        self.assertFalse(missing['facts']['promotion_ready'])
+        originals = {}
+        for directory in (self.off, self.on):
+            rows = []
+            for game in subject.dataset([directory])['games']:
+                for row in self.repair_data(repair_quality())['repairs']:
+                    rows.append(dict(row, id=game['id'], house=game['candidate_house'], session='ledger-' + game['id']))
+            originals[directory] = rows
+            self.table(directory, 'repair-capacity.csv', rows)
+        ready = subject.experiment_report(self.path, 'confirmation', self.off, self.on, evidence)
+        self.assertEqual(ready['status'], 'confirmed')
+        self.assertTrue(ready['facts']['quality_reviewed'])
+        self.assertTrue(ready['facts']['promotion_ready'])
+        for field, value in (('repair_quality_service_paid_raw_total', ''),
+                             ('repair_quality_capture_complete', '0'),
+                             ('repair_quality_right_censored_jobs', '1'),
+                             ('repair_quality_left_censored', '1'),
+                             ('repair_quality_useful_delivered_total', '0'),
+                             ('capture_status', 'capture_limit')):
+            with self.subTest(field=field):
+                rows = [dict(row) for row in originals[self.on]]
+                for row in rows:
+                    row[field] = value
+                self.table(self.on, 'repair-capacity.csv', rows)
+                held = subject.experiment_report(self.path, 'confirmation', self.off, self.on, evidence)
+                self.assertEqual(held['status'], 'confirmed')
+                self.assertFalse(held['facts']['quality_reviewed'])
+                self.assertFalse(held['facts']['promotion_ready'])
+        aborted = repair_quality(return_attempted_total=1, released_ground_total=0, handoff_carrier_total=0,
+                                 delivered_total=0, useful_delivered_total=0, return_aborted_total=1)
+        rows = [dict(row) for row in originals[self.on]]
+        for row in rows:
+            row.update({'repair_quality_' + key: value for key, value in aborted.items()})
+            row['data'] = json.dumps(dict(repair_quality=aborted))
+        self.table(self.on, 'repair-capacity.csv', rows)
+        failed_returns = subject.experiment_report(self.path, 'confirmation', self.off, self.on, evidence)
+        self.assertEqual(failed_returns['status'], 'confirmed')
+        self.assertTrue(failed_returns['facts']['quality_measurements_complete'])
+        self.assertFalse(failed_returns['facts']['useful_repair_service_proven'])
+        self.assertFalse(failed_returns['facts']['quality_reviewed'])
+        self.assertFalse(failed_returns['facts']['promotion_ready'])
+        self.assertEqual(failed_returns['quality']['on']['final_fields']['repair_quality_return_aborted_total']['total'],
+                         len(rows))
+        self.assertEqual(failed_returns['quality']['on']['final_fields']['repair_quality_delivered_total']['total'], 0)
+
+
+    def test_diagnostic_manifest_needs_no_fictitious_independence_power_or_confirmation(self):
+        self.diagnostic_manifest()
+        provenance = subject.validate_manifest(self.manifest, self.root)
+        self.assertEqual(provenance['purpose'], 'diagnostic')
+        self.assertEqual(provenance['games_per_case'], 2)
+        self.assertEqual(provenance['decks']['pilot']['case_count'], 1)
+        self.assertEqual(provenance['decks']['pilot']['case_indices'], [1])
+        self.assertNotIn('confirmation', provenance['decks'])
+        self.manifest['budget']['max_games'] = 1
+        with self.assertRaisesRegex(ValueError, 'game budget'):
+            subject.validate_manifest(self.manifest, self.root)
+
+    def test_diagnostic_case_index_selects_original_full_deck_without_reseating_or_budget_inflation(self):
+        deck = self.diagnostic_manifest(cases=128, index=128)
+        provenance = subject.validate_manifest(self.manifest, self.root)
+        self.assertEqual(provenance['decks']['pilot']['case_indices'], [128])
+        self.assertEqual(provenance['decks']['pilot']['source_case_count'], 128)
+        self.assertEqual(provenance['decks']['pilot']['case_count'], 1)
+        self.assertEqual(provenance['decks']['pilot']['seeds'], [deck['cases'][127]['seed']])
+        self.diagnostic_tables(indices=(128,))
+        report = subject.experiment_report(self.path, 'pilot', self.off, self.on)
+        self.assertTrue(report['facts']['transport_verified'])
+        self.assertTrue(report['facts']['actuation_verified'])
+        self.assertEqual(report['expected_games_per_arm'], 1)
+        self.assertEqual(report['metrics']['mechanism_metric']['paired_observations'], 1)
+        self.assertEqual(report['status'], 'inconclusive')
+        self.manifest['stages']['pilot']['args'] += ['--diagnostic-house', '3', '--diagnostic-case-index', '1']
+        with self.assertRaisesRegex(ValueError, 'index argument disagrees'):
+            subject.validate_manifest(self.manifest, self.root)
+
+    def test_diagnostic_purpose_target_index_and_pilot_boundaries_are_fail_closed(self):
+        self.manifest['purpose'] = 'analysis'
+        with self.assertRaisesRegex(ValueError, 'Unsupported.*purpose'):
+            subject.validate_manifest(self.manifest, self.root)
+        self.manifest.pop('purpose')
+        self.manifest['diagnostic_house'] = 3
+        with self.assertRaisesRegex(ValueError, 'requires purpose'):
+            subject.validate_manifest(self.manifest, self.root)
+        self.manifest.pop('diagnostic_house')
+        self.manifest['diagnostic_case_index'] = 1
+        with self.assertRaisesRegex(ValueError, 'requires purpose'):
+            subject.validate_manifest(self.manifest, self.root)
+        self.manifest.pop('diagnostic_case_index')
+        self.manifest['baseline']['independent'] = False
+        with self.assertRaisesRegex(ValueError, 'must be independent'):
+            subject.validate_manifest(self.manifest, self.root)
+        self.diagnostic_manifest()
+        for target in (None, '3', True, 0, 4):
+            with self.subTest(target=target):
+                self.manifest['diagnostic_house'] = target
+                with self.assertRaisesRegex(ValueError, 'physical diagnostic_house 3'):
+                    subject.validate_manifest(self.manifest, self.root)
+        self.manifest['diagnostic_house'] = 3
+        for index in (0, True, '1', 2):
+            with self.subTest(index=index):
+                self.manifest['diagnostic_case_index'] = index
+                with self.assertRaisesRegex(ValueError, 'index|original deck'):
+                    subject.validate_manifest(self.manifest, self.root)
+        self.manifest.pop('diagnostic_case_index')
+        self.manifest['stages']['confirmation'] = dict(self.manifest['stages']['pilot'])
+        with self.assertRaisesRegex(ValueError, 'pilot only'):
+            subject.validate_manifest(self.manifest, self.root)
+        self.manifest['stages'].pop('confirmation')
+        self.manifest['stages']['pilot']['args'] += ['--diagnostic-house', '4']
+        with self.assertRaisesRegex(ValueError, 'target argument disagrees'):
+            subject.validate_manifest(self.manifest, self.root)
+
+    def test_targeted_diagnostic_report_is_descriptive_even_with_apparent_wins_and_attestations(self):
+        self.diagnostic_manifest()
+        self.diagnostic_tables()
+        reference = self.root / 'diagnostic-review.txt'
+        reference.write_text('Consumer fixture only, not native games or independent strength evidence.\n')
+        evidence = {name: dict(passed=True, references=[str(reference)]) for name in (
+            'independent_holdout', 'off_contract', 'mechanism', 'quality_review')}
+        report = subject.experiment_report(self.path, 'pilot', self.off, self.on, evidence)
+        self.assertEqual(report['purpose'], 'diagnostic')
+        self.assertEqual(report['diagnostic_house'], 3)
+        self.assertEqual(report['status'], 'inconclusive')
+        self.assertEqual(report['observations_per_case_per_arm'], 1)
+        self.assertTrue(report['facts']['transport_verified'])
+        self.assertTrue(report['facts']['actuation_verified'])
+        self.assertTrue(report['facts']['quality_measurements_complete'])
+        self.assertFalse(report['facts']['primary_confirmed'])
+        self.assertFalse(report['facts']['power_sufficient'])
+        self.assertFalse(report['facts']['promotion_controls_passed'])
+        self.assertFalse(report['facts']['promotion_ready'])
+        for metric in report['metrics'].values():
+            self.assertEqual(metric['paired_observations'], 1)
+            self.assertIsNone(metric['interval'])
+            self.assertFalse(metric['power_sufficient'])
+            self.assertNotIn('confidence', metric)
+            self.assertTrue(metric['descriptive'])
+        self.assertEqual(report['metrics']['mechanism_metric']['effect'], 1)
+        self.assertEqual(report['metrics']['primary']['effect'], 1)
+        self.assertEqual(report['guards']['repair_quality_service_paid_raw_total']['unit'],
+                         'Q32 credits raw (1 credit = 4294967296)')
+        with self.assertRaisesRegex(ValueError, 'Stage not in'):
+            subject.experiment_report(self.path, 'confirmation', self.off, self.on, evidence)
+        facts = {name: True for name in ('independent_holdout', 'off_contract_verified', 'mechanism_verified',
+            'primary_confirmed', 'power_sufficient', 'guards_complete', 'quality_reviewed', 'promotion_controls_passed')}
+        facts['diagnostic'] = True
+        self.assertEqual(subject.decide('confirmation', facts), 'inconclusive')
+
+    def test_diagnostic_missing_activation_capture_or_quality_cannot_become_zero_or_confirmation(self):
+        self.diagnostic_manifest()
+        originals = self.diagnostic_tables()
+        for mode in ('target', 'phase', 'peer', 'treatment', 'capture', 'quality'):
+            with self.subTest(mode=mode):
+                data = json.loads(json.dumps(originals['on']))
+                if mode == 'target':
+                    data['games'][0]['candidate_house'] = '0'
+                elif mode == 'phase':
+                    data['games'][0]['genome_phase_receipts'] = '[]'
+                elif mode == 'peer':
+                    configs = json.loads(data['games'][0]['ai_config_receipts'])
+                    configs[0]['config_hash'] = '2' * 16
+                    data['games'][0]['ai_config_receipts'] = json.dumps(configs)
+                elif mode == 'treatment':
+                    for row in data['repairs']:
+                        if row['house'] == '3' and row['event'] == 'repair_capacity':
+                            row['repair_treatment'] = 0
+                elif mode == 'capture':
+                    for row in data['repairs']:
+                        row['capture_status'] = 'capture_limit'
+                else:
+                    data['repairs'][-1]['repair_quality_service_paid_raw_total'] = ''
+                for name in ('games', 'houses'):
+                    self.table(self.on, name + '.csv', data[name])
+                self.table(self.on, 'repair-capacity.csv', data['repairs'])
+                report = subject.experiment_report(self.path, 'pilot', self.off, self.on)
+                self.assertEqual(report['status'], 'inconclusive')
+                self.assertFalse(report['facts']['promotion_ready'])
+                if mode in ('target', 'phase', 'peer', 'treatment', 'capture'):
+                    self.assertFalse(report['facts']['actuation_verified'])
+                if mode in ('capture', 'quality'):
+                    self.assertFalse(report['facts']['quality_measurements_complete'])
+                    self.assertIsNone(report['metrics']['mechanism_metric']['effect'])
+                    self.assertGreater(report['metrics']['mechanism_metric']['coverage']['partial_telemetry'], 0)
 
     def test_compressed_tables_preserve_missing_and_conflicting_identity(self):
         self.table(self.off, 'houses.csv', [self.house()])

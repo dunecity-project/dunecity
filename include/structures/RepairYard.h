@@ -23,6 +23,7 @@
 
 class Carryall;
 class GroundUnit;
+namespace AITelemetry { struct RepairBayMetrics; }
 
 class RepairYard final : public StructureBase
 {
@@ -37,10 +38,11 @@ public:
     ObjectInterface* getInterfaceContainer() override;
 
     void deployRepairUnit(Carryall* pCarryall = nullptr);
+    void beginRepairTelemetry(bool baseline);
 
     inline void book() { bookings++; }
     inline void unBook() { if (bookings > 0) --bookings; }
-    inline void assignUnit(ObjectPointer newUnit) { repairUnit = newUnit; repairingAUnit = true; }
+    void assignUnit(ObjectPointer newUnit);
     inline bool isFree() const { return !repairingAUnit; }
     inline int getNumBookings() const { return bookings; }  //number of harvesters goings there
     inline const UnitBase* getRepairUnit() const { return repairUnit.getUnitPointer(); }
@@ -61,11 +63,14 @@ protected:
 
 private:
     GroundUnit* resolveRepairUnit();
-    void clearRepairJob();
+    void clearRepairJob(const char* abortReason);
+    AITelemetry::RepairBayMetrics* repairTelemetry(GroundUnit* unit, bool baseline, bool jobBaseline);
 
     bool            repairingAUnit; ///< Currently repairing?
     ObjectPointer   repairUnit;     ///< The unit to repair
     Uint32          bookings;       ///< Number of bookings for this repair yard
+    AITelemetry::RepairBayMetrics* repairMetrics = nullptr;
+    uint64_t repairMetricsEpoch = 0;
 };
 
 #endif // REPAIRYARD_H

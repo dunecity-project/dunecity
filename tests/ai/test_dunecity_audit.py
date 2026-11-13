@@ -55,6 +55,20 @@ def known_callbacks():
     return events
 
 
+def repair_quality(**changes):
+    """Consumer fixture quantities, never native game or strength evidence."""
+    values = dict.fromkeys(audit['research_report'].REPAIR_QUALITY_KEYS, 0)
+    values.update(version=1, start_cycle=0, end_cycle=100, capture_complete=1,
+                  baseline_bays=1, baseline_pending_paid_raw=2 ** 30, live_bays=1,
+                  capital_paid_raw_total=2 ** 53 + 3, capital_refund_requested_raw_total=2 ** 31 + 7,
+                  capital_refund_actual_raw_total=2 ** 30 + 1, health_restored_raw_total=2 ** 31 + 1,
+                  service_paid_raw_total=2 ** 28 + 1, completed_total=1, return_attempted_total=1, released_ground_total=1,
+                  delivered_total=1, useful_delivered_total=1, live_cycles_total=100,
+                  free_cycles_total=20, damaged_cycles_total=30, full_return_cycles_total=50, unfunded_cycles_total=2)
+    values.update(changes)
+    return values
+
+
 def write_capture(directory, events):
     path = directory / 'profile/ai-decisions/fixture/events.jsonl'
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -230,6 +244,76 @@ class DuneCityAuditTests(unittest.TestCase):
                     self.assertEqual(row['repair_transport_blocked'], '')
                     self.assertEqual(capture['decisions'][0]['data'], payload)
                     self.assertEqual(bool(row['capture_reasons']), status != 'complete')
+
+    def test_nested_repair_quality_and_final_summary_keep_exact_q32_in_existing_csv(self):
+        final = repair_quality()
+        snapshot = repair_quality(end_cycle=25, capture_complete=0, right_censored_jobs=1,
+            capital_paid_raw_total=2 ** 53 + 1, capital_refund_requested_raw_total=0, capital_refund_actual_raw_total=0,
+            health_restored_raw_total=2 ** 30, service_paid_raw_total=2 ** 27,
+            completed_total=0, return_attempted_total=0, released_ground_total=0, delivered_total=0, useful_delivered_total=0,
+            live_cycles_total=25, free_cycles_total=5, damaged_cycles_total=10, full_return_cycles_total=10)
+        records = [('session_start', -1, 0, dict(start_cycle=0)),
+                   ('repair_capacity', 0, 25, dict(treatment=1, actual=1, serviceable_waiting=2, quality=snapshot)),
+                   ('repair_job', 0, 50, dict(yard=12, unit=35, owner=0, action='completed')),
+                   ('repair_yard_quality', 0, 100, dict(yard=12, owner=0, health_restored_raw_total=final['health_restored_raw_total'])),
+                   ('game_summary', -1, 100, dict(houses={house['house']: dict(repair_quality=final) for house in HOUSES})),
+                   ('session_end', -1, 100, {})]
+        events = [dict(schema_version=1, session='quality', seq=seq, cycle=cycle, house=house, player=1, event=name, data=data)
+                  for seq, (name, house, cycle, data) in enumerate(records, 1)]
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary) / 'game'
+            write_capture(out, events)
+            capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+            self.assertEqual(capture['status'], 'complete')
+            self.assertEqual([row['event'] for row in capture['decisions']],
+                             ['repair_capacity', 'repair_job', 'repair_yard_quality'])
+            rows = audit['research_report'].repair_observations(capture)
+            path = out / 'repair-capacity.csv'
+            audit['append'](path, audit['REPAIR_FIELDS'], [dict(id='quality-game', **row) for row in rows])
+            restored = audit['research_report'].read_table(out, path.name, ('id', 'house', 'seq'))
+            self.assertEqual(len(restored), 4)
+            self.assertEqual(restored[0]['event'], 'repair_capacity')
+            self.assertEqual(restored[0]['repair_quality_capture_complete'], '0')
+            self.assertEqual(restored[0]['repair_quality_capital_paid_raw_total'], str(2 ** 53 + 1))
+            finals = [row for row in restored if row['event'] == 'game_summary']
+            for row in finals:
+                self.assertEqual(row['repair_actual'], '')
+                self.assertEqual((row['capture_start_cycle'], row['capture_end_cycle']), ('0', '100'))
+                self.assertEqual(json.loads(row['data'])['repair_quality'], final)
+                for key, value in final.items():
+                    self.assertEqual(row['repair_quality_' + key], str(value))
+            report = audit['research_report'].quality_report(dict(
+                games=[dict(id='quality-game', candidate_house='0')], houses=[dict(id='quality-game', house='0')],
+                samples=[], repairs=restored), [])
+            self.assertTrue(report['repair_quality']['ready_for_quality_review'])
+            self.assertEqual(report['repair_quality']['status'], {'measured': 1})
+            self.assertEqual(report['final_fields']['repair_quality_capital_paid_raw_total']['total'], 2 ** 53 + 3)
+            destination = audit['retain_telemetry'](Path(temporary) / 'results', out)
+            retained = Path(temporary) / 'results' / destination / 'profile/ai-decisions/fixture/events.jsonl'
+            self.assertEqual([row['event'] for row in map(json.loads, retained.read_text().splitlines())],
+                             [row['event'] for row in events])
+
+    def test_loaded_capture_uses_start_cycle_metadata_not_zero_row_cycle(self):
+        quality = repair_quality(start_cycle=40, left_censored=1)
+        events = [dict(schema_version=1, session='loaded', seq=seq, cycle=cycle, house=-1, event=name, data=data)
+                  for seq, (name, cycle, data) in enumerate((
+                      ('session_start', 0, dict(start_cycle=40)),
+                      ('game_summary', 100, dict(houses={house['house']: dict(repair_quality=quality) for house in HOUSES})),
+                      ('session_end', 100, {})), 1)]
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            write_capture(out, events)
+            capture = audit['air_kill_capture'](out, HOUSES, 100, True)
+        self.assertEqual(capture['start_cycle'], 40)
+        self.assertEqual(capture['status'], 'complete')
+        rows = audit['research_report'].repair_observations(capture)
+        self.assertEqual(rows[0]['capture_start_cycle'], 40)
+        data = dict(games=[dict(id='load', candidate_house='0')], houses=[dict(id='load', house='0')],
+                    samples=[], repairs=[dict(dict(id='load', **row), house=str(row['house'])) for row in rows])
+        entry = audit['research_report'].repair_measurements(data)[('load', '0')]
+        self.assertEqual(entry['status'], 'left-censored')
+        self.assertNotIn('partial_start_window', entry['reasons'])
+        self.assertFalse(entry['useful_service_proven'])
 
     def test_population_win_boundary_is_inclusive_and_uses_exact_integer_arithmetic(self):
         for population, winner in ((1199, 0), (1200, 1), (1201, 1)):
@@ -544,6 +628,98 @@ class DuneCityAuditTests(unittest.TestCase):
             args.shard = k, 4
             shard_ids.extend(game['id'] for game in audit['schedule'](args))
         self.assertEqual(Counter(shard_ids), Counter(game['id'] for game in games))
+
+    def test_targeted_diagnostic_preserves_full_deck_original_world_and_physical_house(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest = Path(temporary) / 'cases.json'
+            cases = [dict(seed=900000000 + index, format='ffa6', size=128, spice_level='medium',
+                          initial_tech=9, difficulty='brutal') for index in range(128)]
+            cases[-1]['seed'] = 920903895
+            manifest.write_text(json.dumps(dict(schema_version=1, sample_seed=10, cases=cases)))
+            options = ['--mode', 'sample', '--mod', 'dunecity', '--case-manifest', str(manifest)]
+            ordinary = audit['schedule'](audit['parser'].parse_args(options))
+            args = audit['parser'].parse_args(options + ['--diagnostic-house', '3', '--diagnostic-case-index', '128',
+                                                          '--candidate-style', 'control'])
+            games = audit['schedule'](args)
+            self.assertEqual(len(games), 1)
+            original = ordinary[254]  # Full-deck case index, never a reindexed one-case deck.
+            game = games[0]
+            for field in ('seed', 'sample_case', 'sample_seed', 'sides', 'skirmish', 'format', 'size', 'spice_level',
+                          'initial_tech', 'difficulty', 'base', 'army', 'city', 'minutes', 'require_research'):
+                self.assertEqual(game[field], original[field], field)
+            self.assertEqual((game['sample_case'], game['seed'], game['candidate_house'], game['candidate_seat']),
+                             (128, 920903895, 3, 'target-house-3'))
+            self.assertNotEqual(original['candidate_house'], 3)
+            self.assertEqual(game['id'], original['id'].rsplit('/', 1)[0] + '/target-house-3')
+            command = audit['command'](args, Path('unused-probe'), game, Path(temporary) / 'control')
+            self.assertEqual(command[command.index('--house') + 1], 'fremen')
+            self.assertEqual(command[command.index('--scenario-sides') + 1],
+                             ','.join(f'{house}:{team}:{audit["CLASSES"][tier]}' for house, team, tier in original['sides']))
+            self.assertNotIn('--genome-phase-dir', command)
+            args.candidate_style = 'launcher-kite-off'
+            styled = audit['schedule'](args)[0]
+            self.assertEqual(dict(styled, candidate_style='control'), game)
+            command = audit['command'](args, Path('unused-probe'), styled, Path(temporary) / 'on')
+            schedule = audit['configparser'].ConfigParser()
+            schedule.read(Path(command[command.index('--genome-phase-dir') + 1]) / 'schedule.ini')
+            self.assertEqual(dict(schedule['Genomes']), {'3': 'candidate-launcher-kite-off'})
+            configs = [dict(house=str(audit['HOUSE_IDS'][house]), config_hash='on' if house == 'fremen' else 'native')
+                       for house, _, _ in game['sides']]
+            lines = ['GENOME_PHASE: house=3 genome=candidate-launcher-kite-off phase=opening cycle=0 config_hash=on']
+            self.assertTrue(audit['seat_styles_verified'](styled, dict(config_hash='native', style='default'), configs, lines))
+            with self.assertRaisesRegex(ValueError, 'metadata.*roster disagree'):
+                audit['command'](args, Path('unused-probe'), dict(styled, candidate_house=0), Path(temporary) / 'wrong')
+
+    def test_targeted_diagnostic_is_one_original_per_case_and_shards_do_not_reindex(self):
+        options = ['--mode', 'sample', '--cases', '7', '--sample-formats', 'ffa6']
+        originals = audit['schedule'](audit['parser'].parse_args(options))[::2]
+        args = audit['parser'].parse_args(options + ['--diagnostic-house', '3'])
+        games = audit['schedule'](args)
+        self.assertEqual(len(games), 7)
+        for original, game in zip(originals, games):
+            self.assertEqual(game['sides'], original['sides'])
+            self.assertEqual(game['skirmish'], original['skirmish'])
+            self.assertEqual(game['sample_case'], original['sample_case'])
+            self.assertEqual(game['candidate_house'], 3)
+        shards = []
+        for k in range(1, 4):
+            args.shard = k, 3
+            shards.extend(audit['schedule'](args))
+        self.assertEqual(Counter(game['id'] for game in shards), Counter(game['id'] for game in games))
+
+    def test_diagnostic_rejects_missing_targets_and_conflicting_designs_before_command(self):
+        bad = (
+            (['--diagnostic-house', '3'], 'requires --mode sample'),
+            (['--mode', 'sample', '--diagnostic-house', '3', '--sample-formats', '1v1'], 'absent from original case'),
+            (['--mode', 'sample', '--diagnostic-house', '3', '--style', 'launcher-kite-off'], 'global style'),
+            (['--mode', 'sample', '--diagnostic-house', '3', '--seat-styles', 'control,control'], 'seat/cohort'),
+            (['--mode', 'sample', '--diagnostic-case-index', '1'], 'requires --diagnostic-house'),
+            (['--mode', 'sample', '--diagnostic-house', '3', '--diagnostic-case-index', '0'], 'positive original case'),
+            (['--mode', 'sample', '--cases', '1', '--sample-formats', 'ffa6',
+              '--diagnostic-house', '3', '--diagnostic-case-index', '2'], 'absent from the original case deck'))
+        for argv, reason in bad:
+            with self.subTest(argv=argv):
+                with self.assertRaisesRegex(ValueError, reason):
+                    audit['schedule'](audit['parser'].parse_args(argv))
+
+    def test_generic_sample_comparison_keeps_targeted_diagnostics_descriptive(self):
+        game = audit['schedule'](audit['parser'].parse_args([
+            '--mode', 'sample', '--cases', '1', '--sample-formats', 'ffa6', '--diagnostic-house', '3']))[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            paths = [Path(temporary) / arm for arm in ('off', 'on')]
+            for index, directory in enumerate(paths):
+                directory.mkdir()
+                audit['append'](directory / 'games.csv', audit['GAME_FIELDS'], [dict(game,
+                    error='', observer_mode='on', map_hash='map', options_hash='options', content_hash='content',
+                    object_data_hash='objects', win_condition='conquest', scoring_rule='conquest-placement')])
+                audit['append'](directory / 'houses.csv', audit['HOUSE_FIELDS'], [dict(
+                    id=game['id'], house=3, score=index, drawn=0, won=index, raw_won=index, raw_drawn=0)])
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                audit['sample_comparison'](*paths)
+            self.assertIn('one matched OFF/ON observation per original case', output.getvalue())
+            self.assertIn('targeted diagnostic only', output.getvalue())
+            self.assertNotIn('[95% CI]', output.getvalue())
 
     def test_candidate_style_changes_only_the_config_assignment_not_the_sample(self):
         ordinary = audit['parser'].parse_args(['--mode', 'sample', '--mod', 'both'])

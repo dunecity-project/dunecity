@@ -2,6 +2,14 @@
 
 Manifest/config values are run inputs, not build identities. These reports never
 submit games, build source, change defaults or infer repair use from refinery use.
+Repair quality uses exact raw Q32 final ledgers, not sparse stock means. Complete
+capture, monotonic totals and bay-cycle partitions are required for quality review;
+zero damaged exposure or no actual delivered service is not useful-service proof.
+Return outcomes are bounded by actual attempts. Deliveries additionally require
+successful releases, but a unit can die during ground deployment before any
+release succeeds. Such closed aborts remain measured failures, never deliveries.
+Targeted diagnostic manifests use one original-world OFF/ON observation per case,
+descriptive effects only, and can never become confirmation or promotion evidence.
 """
 import csv
 import gzip
@@ -28,12 +36,27 @@ REPAIR_EVENT_FIELDS = tuple('repair_' + field for field in (
     'treatment', 'actual', 'committed', 'busy', 'completed_waiting', 'serviceable_waiting',
     'transport_blocked', 'transport_inflight', 'access_blocked', 'usable_local', 'busy_local', 'waiting_local',
     'pressure_cycles', 'target', 'reason'))
+REPAIR_QUALITY_KEYS = (
+    'version', 'start_cycle', 'end_cycle', 'left_censored', 'capture_complete',
+    'right_censored_jobs', 'right_censored_returns', 'baseline_bays', 'baseline_pending_paid_raw', 'live_bays',
+    'capital_paid_raw_total', 'capital_refund_requested_raw_total', 'capital_refund_actual_raw_total',
+    'health_restored_raw_total', 'service_paid_raw_total', 'completed_total', 'return_attempted_total', 'released_ground_total',
+    'handoff_carrier_total', 'delivered_total', 'useful_delivered_total', 'aborted_total', 'return_aborted_total',
+    'live_cycles_total', 'free_cycles_total', 'damaged_cycles_total', 'full_return_cycles_total', 'unfunded_cycles_total')
+REPAIR_QUALITY_FIELDS = tuple('repair_quality_' + key for key in REPAIR_QUALITY_KEYS)
+REPAIR_QUALITY_TOTAL_KEYS = tuple(key for key in REPAIR_QUALITY_KEYS if key.endswith('_total'))
+REPAIR_QUALITY_UNITS = {
+    'repair_quality_' + key: ('Q32 HP raw (1 HP = 4294967296)' if key == 'health_restored_raw_total'
+        else 'Q32 credits raw (1 credit = 4294967296)' if '_raw' in key
+        else 'bay-cycles (16 ms)' if key.endswith('_cycles_total')
+        else 'cycles (16 ms)' if key in ('start_cycle', 'end_cycle')
+        else 'schema version' if key == 'version' else '0/1 flag' if key in ('left_censored', 'capture_complete') else 'count')
+    for key in REPAIR_QUALITY_KEYS}
 REPAIR_METRICS = ('repair_yards', 'repair_yards_built', 'repair_yards_queued',
                   'repair_actual', 'repair_committed', 'repair_busy', 'repair_completed_waiting',
                   'repair_serviceable_waiting', 'repair_transport_blocked', 'repair_transport_inflight', 'repair_access_blocked',
                   'repair_usable_local', 'repair_busy_local', 'repair_waiting_local',
-                  'repair_pressure_cycles', 'repair_target', 'repair_completed_service',
-                  'repair_health_restored', 'repair_paid_capital', 'repair_idle_capacity_cycles')
+                  'repair_pressure_cycles', 'repair_target') + REPAIR_QUALITY_FIELDS
 QUALITY_METRICS = REPAIR_METRICS + (
     'refineries', 'refineries_built', 'refinery_bays', 'occupied_refinery_bays',
     'fleet_bay_available_cycles', 'fleet_bay_occupied_cycles', 'carryalls', 'carryalls_built',
@@ -97,6 +120,17 @@ def preregistered_cluster_sd(design):
 
 def validate_manifest(manifest, base):
     require(manifest.get('schema') == SCHEMA, 'Unsupported experiment manifest')
+    diagnostic = manifest.get('purpose') == 'diagnostic'
+    require('purpose' not in manifest or diagnostic, 'Unsupported experiment purpose')
+    if diagnostic:
+        require(type(manifest.get('diagnostic_house')) is int and manifest['diagnostic_house'] == 3,
+                'Diagnostic requires physical diagnostic_house 3')
+        if 'diagnostic_case_index' in manifest:
+            require(type(manifest['diagnostic_case_index']) is int and manifest['diagnostic_case_index'] > 0,
+                    'diagnostic_case_index must be a positive original full-deck index')
+    else:
+        require('diagnostic_house' not in manifest, 'diagnostic_house requires purpose diagnostic')
+        require('diagnostic_case_index' not in manifest, 'diagnostic_case_index requires purpose diagnostic')
     require(re.fullmatch(r'[a-z0-9][a-z0-9-]{2,95}', manifest.get('id', '')), 'Invalid experiment id')
     for field in ('mechanism', 'falsifier', 'scope', 'off_contract', 'stopping_rule'):
         text(manifest.get(field), field)
@@ -107,7 +141,8 @@ def validate_manifest(manifest, base):
     for field in ('release', 'source_commit', 'config_identity', 'population'):
         text(baseline.get(field), 'baseline.' + field)
     require(re.fullmatch(r'[0-9a-f]{40}', baseline['source_commit']), 'Invalid baseline commit')
-    require(baseline.get('independent') is True, 'Loss baseline must be independent of policy tuning')
+    require(type(baseline.get('independent')) is bool if diagnostic else baseline.get('independent') is True,
+            'Declare baseline independence honestly' if diagnostic else 'Loss baseline must be independent of policy tuning')
     for field in ('observed_failure', 'successful_counterexamples', 'negative_learning'):
         require(isinstance(manifest.get(field), list), 'Missing evidence list: ' + field)
     require(manifest['observed_failure'] and manifest['successful_counterexamples'],
@@ -135,6 +170,8 @@ def validate_manifest(manifest, base):
         require(aggregation in ('final', 'decision_max', 'decision_mean', 'decision_last'), 'Invalid metric aggregation')
         if metric['metric'] in REPAIR_EVENT_FIELDS:
             require(aggregation != 'final', 'Repair capacity is a sparse decision stock; declare its aggregation')
+        if metric['metric'] in REPAIR_QUALITY_FIELDS:
+            require(aggregation == 'final', 'Repair quality requires final cumulative totals, never decision-stock aggregation')
     guards = manifest.get('guards')
     require(isinstance(guards, list), 'Missing harm guards')
     for guard in guards:
@@ -142,24 +179,35 @@ def validate_manifest(manifest, base):
         require(guard.get('direction') in ('higher', 'lower'), 'Invalid guard direction')
         margin = number(guard.get('margin'), 'guard.margin')
         require(margin is not None and margin >= 0, 'Invalid harm margin')
+        aggregation = guard.get('aggregation', 'final')
+        require(aggregation in ('final', 'decision_max', 'decision_mean', 'decision_last'), 'Invalid metric aggregation')
+        if guard['metric'] in REPAIR_QUALITY_FIELDS:
+            require(aggregation == 'final', 'Repair quality requires final cumulative totals, never decision-stock aggregation')
     design = manifest.get('design', {})
     clusters = design.get('cluster_fields')
     require(isinstance(clusters, list) and 'seed' in clusters and all(
         field in ('seed', 'map_seed', 'mod', 'sample_case', 'map_hash') for field in clusters),
         'Cluster related seats/maps/seeds; house or seat is not an independent cluster')
-    alpha, power = number(design.get('alpha')), number(design.get('power'))
-    require(alpha is not None and 0 < alpha < .5 and power is not None and .5 < power < 1,
-            'Invalid declared error/power budget')
-    require(type(design.get('finalists')) is int and design['finalists'] >= 1, 'Declare finalists actually confirmed')
+    if not diagnostic:
+        alpha, power = number(design.get('alpha')), number(design.get('power'))
+        require(alpha is not None and 0 < alpha < .5 and power is not None and .5 < power < 1,
+                'Invalid declared error/power budget')
+        require(type(design.get('finalists')) is int and design['finalists'] >= 1, 'Declare finalists actually confirmed')
+        preregistered_cluster_sd(design)
     require(design.get('stopping') == 'fixed-budget', 'Declare fixed budget; no unplanned repeated peeking')
-    preregistered_cluster_sd(design)
     budget = manifest.get('budget', {})
     require(type(budget.get('max_games')) is int and budget['max_games'] > 0, 'Missing game budget')
     require(number(budget.get('max_wall_s')) is not None and budget['max_wall_s'] > 0, 'Missing wall-time budget')
-    require(isinstance(manifest.get('promotion_controls'), list) and manifest['promotion_controls'],
-            'Retain applicable approved promotion controls')
+    if diagnostic:
+        require('promotion_controls' not in manifest or isinstance(manifest['promotion_controls'], list),
+                'Invalid diagnostic control references')
+    else:
+        require(isinstance(manifest.get('promotion_controls'), list) and manifest['promotion_controls'],
+                'Retain applicable approved promotion controls')
     stages = manifest.get('stages', {})
-    require('pilot' in stages and 'confirmation' in stages, 'Pilot and independent confirmation decks required')
+    require(set(stages) == {'pilot'} if diagnostic else 'pilot' in stages and 'confirmation' in stages,
+            'Diagnostic permits pilot only; confirmation/promotion forbidden' if diagnostic
+            else 'Pilot and independent confirmation decks required')
     tuning, decks, total_games = set(), {}, 0
     for stage, specification in stages.items():
         require(stage in ('pilot', 'screen', 'evaluation', 'confirmation'), 'Unknown experiment stage')
@@ -185,24 +233,47 @@ def validate_manifest(manifest, base):
         require(isinstance(argv, list) and argv and all(isinstance(arg, str) for arg in argv), 'Missing audit run arguments')
         allowed = {'--mode', '--mod', '--minutes', '--base', '--army', '--city', '--tech',
                    '--variant', '--game-options', '--capture-mib'}
+        if diagnostic:
+            allowed.update(('--diagnostic-house', '--diagnostic-case-index'))
         require(len(argv) % 2 == 0 and all(argv[index] in allowed and not argv[index + 1].startswith('--')
                 for index in range(0, len(argv), 2)), 'Only explicit audit run arguments are allowed')
         require(len(set(argv[::2])) == len(argv[::2]), 'Repeated run argument')
         require('--mode' in argv and argv[argv.index('--mode') + 1] == 'sample'
                 and '--mod' in argv and argv[argv.index('--mod') + 1] in ('vanilla', 'dunecity'),
                 'Experiment uses one explicit content population and the existing sample audit path')
+        indices = list(range(1, len(cases) + 1))
+        if diagnostic:
+            if '--diagnostic-house' in argv:
+                require(argv[argv.index('--diagnostic-house') + 1] == str(manifest['diagnostic_house']),
+                        'Diagnostic target argument disagrees with manifest')
+            selected = manifest.get('diagnostic_case_index')
+            if '--diagnostic-case-index' in argv:
+                argument = argv[argv.index('--diagnostic-case-index') + 1]
+                require(re.fullmatch(r'[1-9][0-9]*', argument), 'Invalid diagnostic case index argument')
+                require(selected is None or selected == int(argument), 'Diagnostic case index argument disagrees with manifest')
+                selected = int(argument)
+            if selected is not None:
+                require(selected <= len(cases), 'Diagnostic case index is absent from the original deck')
+                indices = [selected]
+            require(all(cases[index - 1].get('format') == 'ffa6' for index in indices),
+                    'Diagnostic house 3 is absent from an original case roster')
+            seeds = {cases[index - 1]['seed'] for index in indices}
         decks[stage] = dict(path=str(path.resolve()), sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-                            seeds=sorted(seeds), case_count=len(cases))
-        total_games += len(cases) * 4  # Two swapped seats in each OFF/ON arm.
+                            seeds=sorted(seeds), case_count=len(indices))
+        if diagnostic:
+            decks[stage].update(case_indices=indices, source_case_count=len(cases))
+        total_games += len(indices) * (2 if diagnostic else 4)
     require(total_games <= budget['max_games'], 'Preregistered decks exceed total game budget')
     require(budget['max_wall_s'] >= total_games, 'Wall budget must allow at least one second per game')
-    require(not (set(decks['confirmation']['seeds']) & tuning), 'Confirmation reuses tuning seed/map clusters')
+    require(diagnostic or not (set(decks['confirmation']['seeds']) & tuning), 'Confirmation reuses tuning seed/map clusters')
     return {'schema': 'dunecity-experiment-provenance/1', 'manifest_sha256': digest(manifest),
             'source_revision': revision, 'configs': manifest['configs'], 'decks': decks,
             'build_identity_inputs': ['source', 'harness', 'assets', 'toolchain', 'platform', 'build_options'],
             'config_values_are_run_inputs': True,
             'effective_config_hashes': manifest.get('effective_config_hashes', {}),
-            'config_calibration_references': manifest.get('config_calibration_references', [])}
+            'config_calibration_references': manifest.get('config_calibration_references', []),
+            **({'purpose': 'diagnostic', 'diagnostic_house': manifest['diagnostic_house'],
+                'observations_per_case_per_arm': 1, 'games_per_case': 2} if diagnostic else {})}
 
 
 def canonical_csv_fields(fields):
@@ -261,20 +332,218 @@ def dataset(directories):
 
 
 def repair_observations(capture):
-    """Retain sparse decision stocks; no missing event becomes zero service."""
+    """Retain decision stocks and final ledgers together without inventing service."""
     rows = []
-    for event in capture.get('decisions', []):
-        if event.get('event') != 'repair_capacity':
+    events = capture.get('decisions', []) + capture.get('repair_finals', [])
+    for event in events:
+        name = event.get('event')
+        if name not in ('repair_capacity', 'game_summary'):
             continue
         row = {field: event.get(field, '') for field in ('session', 'seq', 'cycle', 'house', 'player')}
-        row['capture_status'] = capture['status']
-        row['capture_reasons'] = capture.get('reasons', '')
-        row['data'] = json.dumps(event.get('data', {}), sort_keys=True, separators=(',', ':'))
+        row.update(event=name, capture_status=capture['status'], capture_reasons=capture.get('reasons', ''),
+                   capture_start_cycle=capture.get('start_cycle'), capture_end_cycle=capture.get('end_cycle'))
+        data = event.get('data', {})
+        row['data'] = json.dumps(data, sort_keys=True, separators=(',', ':'))
         for field in REPAIR_EVENT_FIELDS:
-            value = event.get('data', {}).get(field.removeprefix('repair_'), '')
+            value = data.get(field.removeprefix('repair_'), '') if name == 'repair_capacity' else ''
             row[field] = int(value) if isinstance(value, bool) else value
+        quality = data.get('quality' if name == 'repair_capacity' else 'repair_quality')
+        for field, key in zip(REPAIR_QUALITY_FIELDS, REPAIR_QUALITY_KEYS):
+            row[field] = quality.get(key, '') if isinstance(quality, dict) else ''
         rows.append(row)
     return rows
+
+
+def repair_integer(value, field):
+    """Parse ledger integers without a float round-trip or implicit Boolean counts."""
+    if value is None or value == '':
+        return None
+    require(type(value) is int or isinstance(value, str) and re.fullmatch(r'-?(0|[1-9][0-9]*)', value),
+            'Invalid integer ' + field)
+    value = int(value)
+    require(value >= 0 and ('_raw' not in field or value < 2 ** 63), 'Out-of-range ' + field)
+    return value
+
+
+def repair_field_coverage(rows, field):
+    """Across-house summaries of final totals; raw Q32 means remain exact rationals."""
+    values = [row.get(field) for row in rows if row.get(field) is not None]
+    total = sum(values) if values else None
+    return {'observed': len(values), 'eligible': len(rows), 'missing': len(rows) - len(values),
+            'mean': statistics.mean(values) if values and '_raw' not in field else None,
+            'mean_exact': {'numerator': total, 'denominator': len(values)} if values else None,
+            'total': total, 'min': min(values) if values else None, 'max': max(values) if values else None,
+            'unit': REPAIR_QUALITY_UNITS[field], 'aggregation': 'final per-house ledger, never decision mean'}
+
+
+def repair_measurements(data):
+    """Validate one ledger per house-game; retain censored observations as such.
+
+    Sparse gaps between decisions do not lose cumulative exposure. A missing final,
+    changed baseline/session, clipped stream or decreasing counter cannot supply a
+    complete whole-game total. No per-job event count substitutes for paid service.
+    """
+    groups = defaultdict(list)
+    for row in data.get('repairs', []):
+        groups[(row['id'], row['house'])].append(row)
+    result = {}
+    for game, house in selected_houses(data):
+        identity = (house['id'], house['house'])
+        rows = groups.get(identity, [])
+        reasons, snapshots, finals = [], [], []
+        invalid = missing = left = clipped = False
+        previous, baseline, session = None, None, None
+        def record_reason(reason):
+            if reason not in reasons:
+                reasons.append(reason)
+        def order(row):
+            try:
+                return (repair_integer(row.get('seq'), 'seq') or 0, repair_integer(row.get('cycle'), 'cycle') or 0)
+            except ValueError:
+                return (0, 0)
+        for row in sorted(rows, key=order):
+            present = any(row.get(field) not in (None, '') for field in REPAIR_QUALITY_FIELDS)
+            try:
+                raw = json.loads(row.get('data') or '{}')
+                if not isinstance(raw, dict):
+                    invalid = True
+                    record_reason('malformed_data')
+                nested = raw.get('quality' if row.get('event', 'repair_capacity') == 'repair_capacity' else 'repair_quality') if isinstance(raw, dict) else None
+                present |= isinstance(raw, dict) and ('quality' in raw or 'repair_quality' in raw)
+                if isinstance(raw, dict) and ('quality' in raw or 'repair_quality' in raw) and not isinstance(nested, dict):
+                    invalid = True
+                    record_reason('malformed_quality')
+            except (TypeError, ValueError):
+                invalid = True
+                record_reason('malformed_data')
+            if not present:
+                missing = True
+                record_reason('missing_quality_snapshot')
+                continue
+            if finals:
+                invalid = True
+                record_reason('quality_after_final_ledger')
+            values = {}
+            for field, key in zip(REPAIR_QUALITY_FIELDS, REPAIR_QUALITY_KEYS):
+                try:
+                    value = repair_integer(row.get(field), field)
+                except ValueError:
+                    value, invalid = None, True
+                    record_reason('invalid:' + key)
+                values[field] = value
+                if value is None:
+                    missing = True
+                    record_reason('missing:' + key)
+            ledger = {key: values[field] for field, key in zip(REPAIR_QUALITY_FIELDS, REPAIR_QUALITY_KEYS)}
+            if ledger['version'] not in (None, 1) or any(ledger[key] not in (None, 0, 1) for key in ('left_censored', 'capture_complete')):
+                invalid = True
+                record_reason('unsupported_version_or_censor_flag')
+            left |= ledger['left_censored'] == 1
+            if row.get('capture_status') != 'complete' or row.get('capture_reasons'):
+                clipped = True
+                record_reason('incomplete_capture')
+            try:
+                cycle = repair_integer(row.get('cycle'), 'cycle')
+                seq = repair_integer(row.get('seq'), 'seq')
+                start = repair_integer(row.get('capture_start_cycle'), 'capture_start_cycle')
+                end = repair_integer(row.get('capture_end_cycle'), 'capture_end_cycle')
+                require(cycle is not None and seq is not None and seq > 0, 'Missing record position')
+                if start is None:
+                    missing = True
+                    record_reason('missing_capture_start')
+                if end is None:
+                    clipped = True
+                    record_reason('missing_capture_end')
+                if start is not None and end is not None and (start > end or cycle < start or cycle > end):
+                    invalid = True
+                    record_reason('invalid_capture_bounds')
+                if ledger['end_cycle'] is not None and ledger['end_cycle'] != cycle:
+                    invalid = True
+                    record_reason('ledger_record_cycle_mismatch')
+                if ledger['start_cycle'] is not None and ledger['end_cycle'] is not None and ledger['start_cycle'] > ledger['end_cycle']:
+                    invalid = True
+                    record_reason('invalid_ledger_window')
+                if start is not None and ledger['start_cycle'] is not None and ledger['start_cycle'] != start:
+                    left = True
+                    record_reason('partial_start_window')
+                if row.get('event') == 'game_summary':
+                    finals.append(row)
+                    if ledger['capture_complete'] != 1:
+                        clipped = True
+                        record_reason('ledger_capture_not_closed')
+                    if any(ledger[key] is not None and ledger[key] > 0 for key in ('right_censored_jobs', 'right_censored_returns')):
+                        clipped = True
+                        record_reason('unfinished_jobs_or_returns')
+                    if end is not None and cycle != end:
+                        clipped = True
+                        record_reason('short_final_window')
+            except ValueError:
+                invalid = True
+                record_reason('invalid_record_or_capture_bounds')
+            current_baseline = tuple(ledger[key] for key in ('start_cycle', 'left_censored', 'baseline_bays', 'baseline_pending_paid_raw'))
+            if not row.get('session') or session is not None and session != row['session']:
+                invalid = True
+                record_reason('invalid_or_changed_session')
+            session = row.get('session')
+            if baseline is not None and baseline != current_baseline:
+                invalid = True
+                record_reason('changed_baseline')
+            baseline = current_baseline
+            partition = [ledger[key] for key in ('live_cycles_total', 'free_cycles_total', 'damaged_cycles_total', 'full_return_cycles_total')]
+            if all(value is not None for value in partition) and partition[0] != sum(partition[1:]):
+                invalid = True
+                record_reason('invalid_bay_cycle_partition')
+            if ledger['unfunded_cycles_total'] is not None and ledger['damaged_cycles_total'] is not None and ledger['unfunded_cycles_total'] > ledger['damaged_cycles_total']:
+                invalid = True
+                record_reason('unfunded_exceeds_damaged_cycles')
+            if ledger['capital_refund_actual_raw_total'] is not None and ledger['capital_refund_requested_raw_total'] is not None and ledger['capital_refund_actual_raw_total'] > ledger['capital_refund_requested_raw_total']:
+                invalid = True
+                record_reason('actual_refund_exceeds_request')
+            attempts = ledger['return_attempted_total']
+            outcomes = [ledger[key] for key in ('delivered_total', 'return_aborted_total')]
+            releases = [ledger[key] for key in ('released_ground_total', 'handoff_carrier_total')]
+            if outcomes[0] is not None and all(value is not None for value in releases) and outcomes[0] > sum(releases):
+                invalid = True
+                record_reason('deliveries_exceed_successful_releases')
+            if attempts is not None:
+                if all(value is not None for value in outcomes) and sum(outcomes) > attempts:
+                    invalid = True
+                    record_reason('return_outcomes_exceed_attempts')
+                if all(value is not None for value in releases) and sum(releases) > attempts:
+                    invalid = True
+                    record_reason('return_releases_exceed_attempts')
+            if ledger['useful_delivered_total'] is not None and ledger['delivered_total'] is not None and ledger['useful_delivered_total'] > ledger['delivered_total']:
+                invalid = True
+                record_reason('useful_deliveries_exceed_deliveries')
+            if previous is not None:
+                for key in REPAIR_QUALITY_TOTAL_KEYS + ('end_cycle',):
+                    if ledger[key] is not None and previous[key] is not None and ledger[key] < previous[key]:
+                        invalid = True
+                        record_reason('decreasing:' + key)
+            previous = ledger
+            snapshots.append(values)
+        if game.get('error'):
+            invalid = True
+            record_reason('game_error')
+        if len(finals) > 1:
+            invalid = True
+            record_reason('multiple_final_ledgers')
+        if snapshots and not finals:
+            record_reason('missing_final_ledger')
+        if left:
+            record_reason('left_censored')
+        status = ('invalid' if invalid else 'unknown' if not snapshots else 'unmeasured' if missing
+                  else 'left-censored' if left else 'right-censored' if clipped or not finals else 'measured')
+        values = snapshots[-1] if snapshots else {field: None for field in REPAIR_QUALITY_FIELDS}
+        exposed = values['repair_quality_damaged_cycles_total']
+        useful = bool(status == 'measured' and all(values[field] is not None and values[field] > 0 for field in (
+            'repair_quality_damaged_cycles_total', 'repair_quality_health_restored_raw_total',
+            'repair_quality_service_paid_raw_total', 'repair_quality_completed_total', 'repair_quality_useful_delivered_total')))
+        result[identity] = {'id': identity[0], 'house': identity[1], 'status': status, 'reasons': reasons,
+                            'snapshots': len(snapshots), 'final_ledgers': len(finals), 'values': values,
+                            'damaged_exposure_observed': exposed is not None and exposed > 0,
+                            'useful_service_proven': useful}
+    return result
 
 
 def outcome(game, house):
@@ -393,24 +662,44 @@ def quality_report(data, directories, measured=None):
     ids = {(house['id'], house['house']) for house in houses}
     samples = [row for row in data['samples'] if (row['id'], row['house']) in ids]
     repairs = [row for row in data.get('repairs', []) if (row['id'], row['house']) in ids]
-    fields = {field: coverage(houses, field) for field in QUALITY_METRICS}
-    sampled = {field: coverage(repairs if field in REPAIR_EVENT_FIELDS else samples, field)
-               for field in QUALITY_METRICS}
+    stocks = [row for row in repairs if row.get('event', 'repair_capacity') == 'repair_capacity']
+    measurements = repair_measurements(data)
+    def final_values(house):
+        entry = measurements[(house['id'], house['house'])]
+        return entry['values'] if entry['status'] == 'measured' else {}
+    finals = [final_values(house) for house in houses]
+    fields = {field: repair_field_coverage(finals, field) if field in REPAIR_QUALITY_FIELDS else coverage(houses, field)
+              for field in QUALITY_METRICS}
+    sampled = {field: fields[field] if field in REPAIR_QUALITY_FIELDS
+               else coverage(stocks if field in REPAIR_EVENT_FIELDS else samples, field) for field in QUALITY_METRICS}
     by_outcome = defaultdict(list)
     for game, house in selected:
         by_outcome[outcome(game, house)[0]].append(house)
+    entries = list(measurements.values())
+    complete = bool(entries) and all(entry['status'] == 'measured' for entry in entries)
+    useful = any(entry['useful_service_proven'] for entry in entries)
     return {'schema': 'dunecity-quality-report/1', 'houses': len(houses),
             'outcomes': outcome_totals(data),
             'final_fields': fields, 'sample_fields': sampled,
-            'by_outcome': {kind: {field: coverage(rows, field) for field in QUALITY_METRICS}
+            'by_outcome': {kind: {field: repair_field_coverage([final_values(house) for house in rows], field)
+                                  if field in REPAIR_QUALITY_FIELDS else coverage(rows, field) for field in QUALITY_METRICS}
                            for kind, rows in sorted(by_outcome.items())},
             'sampled_house_games': len({(row['id'], row['house']) for row in samples}),
             'repair_observed_house_games': len({(row['id'], row['house']) for row in repairs}),
             'repair_capture_status': dict(Counter(row.get('capture_status', 'unreported') for row in repairs)),
+            'repair_quality': {'eligible_house_games': len(entries),
+                               'status': dict(Counter(entry['status'] for entry in entries)),
+                               'house_games': entries, 'units': REPAIR_QUALITY_UNITS,
+                               'measurement_ready': complete, 'useful_service_proven': useful,
+                               'ready_for_quality_review': complete and useful,
+                               'unexposed_house_games': sum(entry['status'] == 'measured' and not entry['damaged_exposure_observed'] for entry in entries)},
             'missing_repair_usage': [field for field in REPAIR_METRICS if not sampled[field]['observed']],
             'interpretation': ['Refinery fleet_bay_* and occupied_refinery_bays measure harvester unloading, never repair service.',
-                               'Repair capacity rows are sparse decision-time stocks, not continuous occupancy or service completions.',
+                               'Repair capacity stocks are sparse decisions; cumulative repair_quality counters use validated final ledgers only.',
                                'completed_waiting is healed stock awaiting release, not cumulative completed service.',
+                               'Q32 money and HP are exact raw integers; raw means are exact numerator/denominator pairs in the stated unit.',
+                               'Left/right-censored or invalid totals remain visible per house but cannot supply whole-game quality coverage.',
+                               'Zero damaged exposure is not useful-service proof; positive paid healing, completion and useful physical delivery are required.',
                                'fleet_capital_* is replacement asset value, not actual paid capital; accepted orders are commitments.',
                                'Final/survivor means alone cannot establish opportunity cost. Missing demand/usage requires bounded diagnostics.',
                                'No global repair-yard cap follows from a missing or idle-capacity observation.'],
@@ -488,8 +777,17 @@ def loss_audit(directories, baseline_label, expected_source=None):
                        'Raw winner, scored population winner and inactivity/censoring remain separate.']}
 
 
-def clustered_effect(values, design, minimum_effect, planned_clusters=None):
+def clustered_effect(values, design, minimum_effect, planned_clusters=None, diagnostic=False):
     """Independent clusters; observed variance plans future work, never current power."""
+    if diagnostic:
+        clusters = defaultdict(list)
+        for key, value in values:
+            clusters[key].append(value)
+        means = [statistics.mean(rows) for _, rows in sorted(clusters.items())]
+        return {'effect': statistics.mean(means) if means else None, 'clusters': len(means),
+                'paired_observations': len(values), 'interval': None, 'power_sufficient': False,
+                'descriptive': True,
+                'limits': 'Targeted diagnostic: one original-world OFF/ON observation per case. Descriptive only; no confidence, power, general-strength or promotion claim.'}
     sd = preregistered_cluster_sd(design)
     require(planned_clusters is None or type(planned_clusters) is int and planned_clusters >= 0,
             'Invalid frozen cluster budget')
@@ -522,11 +820,16 @@ def clustered_effect(values, design, minimum_effect, planned_clusters=None):
 def measured_metric(data, metric, aggregation='final'):
     """Reduce decision rows once per house/game; never count build passes as trials."""
     selected = list(selected_houses(data))
+    if metric in REPAIR_QUALITY_FIELDS:
+        require(aggregation == 'final', 'Repair quality requires final cumulative totals, never decision-stock aggregation')
+        return {key: (entry['values'][metric] if entry['status'] not in ('unknown', 'invalid') else None,
+                      entry['status'] != 'measured') for key, entry in repair_measurements(data).items()}
     if aggregation == 'final':
         return {(house['id'], house['house']): (number(house.get(metric)), False) for _, house in selected}
     groups = defaultdict(list)
     for row in data.get('repairs', []):
-        groups[(row['id'], row['house'])].append(row)
+        if row.get('event', 'repair_capacity') == 'repair_capacity':
+            groups[(row['id'], row['house'])].append(row)
     result = {}
     for _, house in selected:
         key = (house['id'], house['house'])
@@ -567,9 +870,16 @@ def arm_identity(manifest, data, game, arm, cases):
         houses = ('0', '1', '2', '4', '3', '5')[:count]
         shift = index % count
         houses = houses[shift:] + houses[:shift]
-        position = 0 if seat == 'original' else (2 if case['format'] == '2v2' else count - 1) if seat == 'swapped' else None
-        if position is None or selected != houses[position]:
-            return 'candidate-seat'
+        if manifest.get('purpose') == 'diagnostic':
+            if selected != str(manifest['diagnostic_house']) or selected not in houses or seat != 'target-house-' + selected:
+                return 'candidate-seat'
+            target_tier = 'brutal' if selected == houses[0] else case.get('difficulty', 'brutal')
+            phase_difficulty = str(('easy', 'medium', 'hard', 'brutal').index(target_tier))
+        else:
+            position = 0 if seat == 'original' else (2 if case['format'] == '2v2' else count - 1) if seat == 'swapped' else None
+            if position is None or selected != houses[position]:
+                return 'candidate-seat'
+            phase_difficulty = '3'
         native = game.get('config_hash')
         if not native:
             return 'config-unverified'
@@ -598,7 +908,7 @@ def arm_identity(manifest, data, game, arm, cases):
                 return 'phase-identity'
         elif (len(phases) != 1 or any(phases[0].get(field) != value for field, value in
                 (('house', selected), ('genome', 'candidate-' + style), ('phase', 'opening'),
-                 ('cycle', '0'), ('controller', '0'), ('difficulty', '3'), ('config_hash', effective)))):
+                 ('cycle', '0'), ('controller', '0'), ('difficulty', phase_difficulty), ('config_hash', effective)))):
             return 'phase-identity'
         roster = [row for row in data['houses'] if row['id'] == game['id']]
         if len(roster) != count or {row['house'] for row in roster} != set(houses):
@@ -638,11 +948,12 @@ def actuation_identity(manifest, data, game, arm, base):
                 return False
         elif phases or effective != native:
             return False
-        repair = any(specification['metric'] in REPAIR_METRICS + REPAIR_EVENT_FIELDS for specification in
+        repair = manifest.get('purpose') == 'diagnostic' or any(specification['metric'] in REPAIR_METRICS + REPAIR_EVENT_FIELDS for specification in
                      [manifest[name] for name in ('opportunity', 'mechanism_metric', 'primary')] + manifest['guards'])
         if repair:
             for house in {row['house'] for row in configs}:
-                rows = [row for row in data.get('repairs', []) if row['id'] == game['id'] and row['house'] == house]
+                rows = [row for row in data.get('repairs', []) if row['id'] == game['id'] and row['house'] == house
+                        and row.get('event', 'repair_capacity') == 'repair_capacity']
                 if (not rows or any(row.get('capture_status') != 'complete' for row in rows)
                         or any(not row.get('session') or not row.get('player') for row in rows)
                         or len({row['player'] for row in rows}) != 1):
@@ -689,6 +1000,9 @@ def paired_metrics(manifest, control, candidate, metric, aggregation='final', ca
         a, a_partial = before_values[key]
         b, b_partial = after_values[key]
         partial += int(a_partial or b_partial)
+        if manifest.get('purpose') == 'diagnostic' and (a_partial or b_partial):
+            missing += 1
+            continue
         if a is None or b is None or a < 0 or b < 0:
             missing += 1
             continue
@@ -710,6 +1024,8 @@ def decide(stage, facts):
         return 'opportunity-missing'
     if facts.get('mechanism_adequately_unsupported'):
         return 'mechanism-unsupported'
+    if facts.get('diagnostic'):
+        return 'inconclusive'
     if stage == 'confirmation' and all(facts.get(field) is True for field in (
             'independent_holdout', 'off_contract_verified', 'mechanism_verified', 'primary_confirmed',
             'power_sufficient', 'guards_complete')):
@@ -722,6 +1038,7 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
     manifest = compact_json(path)
     provenance = validate_manifest(manifest, path.parent)
     require(stage in manifest['stages'], 'Stage not in preregistered manifest')
+    diagnostic = manifest.get('purpose') == 'diagnostic'
     evidence = evidence or {}
     control, candidate = dataset([control_directory]), dataset([candidate_directory])
     planned_clusters = len(provenance['decks'][stage]['seeds'])
@@ -732,26 +1049,36 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
         values, matching = paired_metrics(manifest, control, candidate, specification['metric'], specification.get('aggregation', 'final'), expected_deck['cases'])
         if specification['direction'] == 'lower':
             values = [(key, -value) for key, value in values]
-        reports[name] = dict(clustered_effect(values, manifest['design'], specification['minimum_effect'], planned_clusters), coverage=matching)
+        reports[name] = dict(clustered_effect(values, manifest['design'], specification['minimum_effect'], planned_clusters, diagnostic), coverage=matching)
+        if specification['metric'] in REPAIR_QUALITY_UNITS:
+            reports[name]['unit'] = REPAIR_QUALITY_UNITS[specification['metric']]
     guards, harmful, guards_complete = {}, False, True
     for guard in manifest['guards']:
         values, matching = paired_metrics(manifest, control, candidate, guard['metric'], guard.get('aggregation', 'final'), expected_deck['cases'])
         if guard['direction'] == 'lower':
             values = [(key, -value) for key, value in values]
-        result = clustered_effect(values, manifest['design'], max(guard['margin'], manifest['primary']['minimum_effect']), planned_clusters)
+        result = clustered_effect(values, manifest['design'], max(guard['margin'], manifest['primary']['minimum_effect']), planned_clusters, diagnostic)
         result['coverage'] = matching
         guards[guard['metric']] = result
+        if guard['metric'] in REPAIR_QUALITY_UNITS:
+            result['unit'] = REPAIR_QUALITY_UNITS[guard['metric']]
+        if diagnostic:
+            result['observed_margin_breach'] = any(value < -guard['margin'] for _, value in values) if values else None
         guards_complete &= bool(result['interval'] and result['interval'][0] >= -guard['margin']
                                 and complete_matching(matching))
         harmful |= bool(complete_matching(matching) and result['power_sufficient']
                         and result['interval'] and result['interval'][1] < -guard['margin'])
-    opportunity_values = measured_metric(control, manifest['opportunity']['metric'], manifest['opportunity'].get('aggregation', 'final'))
-    opportunities = coverage([{'value': value} for value, _ in opportunity_values.values()], 'value')
+    opportunity_metric = manifest['opportunity']['metric']
+    opportunity_values = measured_metric(control, opportunity_metric, manifest['opportunity'].get('aggregation', 'final'))
+    opportunities = (repair_field_coverage([{opportunity_metric: value} for value, _ in opportunity_values.values()], opportunity_metric)
+                     if opportunity_metric in REPAIR_QUALITY_FIELDS
+                     else coverage([{'value': value} for value, _ in opportunity_values.values()], 'value'))
     opportunity_partial = any(partial for _, partial in opportunity_values.values())
     primary, mechanism = reports['primary'], reports['mechanism_metric']
-    expected_seeds = Counter(str(case['seed']) for case in expected_deck['cases'] for _ in range(2))
-    expected_seats = Counter((str(index), seat) for index in range(1, len(expected_deck['cases']) + 1)
-                             for seat in ('original', 'swapped'))
+    indices = provenance['decks'][stage].get('case_indices', list(range(1, len(expected_deck['cases']) + 1)))
+    seats = ('target-house-' + str(manifest['diagnostic_house']),) if diagnostic else ('original', 'swapped')
+    expected_seeds = Counter(str(expected_deck['cases'][index - 1]['seed']) for index in indices for _ in seats)
+    expected_seats = Counter((str(index), seat) for index in indices for seat in seats)
     deck_complete = all(Counter(game.get('seed') for game, _ in selected_houses(data)) == expected_seeds
                         and Counter((game.get('sample_case'), game.get('candidate_seat'))
                                     for game, _ in selected_houses(data)) == expected_seats
@@ -768,6 +1095,10 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
     actuation_verified = bool(transport_verified and all(
         actuation_identity(manifest, data, game, arm, path.parent)
         for arm, data in (('off', control), ('on', candidate)) for game in data['games']))
+    quality = {'off': quality_report(control, [control_directory]),
+               'on': quality_report(candidate, [candidate_directory], evidence.get('cost'))}
+    quality_complete = all(report['repair_quality']['measurement_ready'] for report in quality.values())
+    useful_service = quality['on']['repair_quality']['useful_service_proven']
     facts = {'transport_verified': transport_verified, 'actuation_verified': actuation_verified,
              'opportunity_complete': actuation_verified and deck_complete and not opportunity_partial
              and complete_matching(reports['opportunity']['coverage'])
@@ -787,33 +1118,52 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
                  and primary['interval'] and primary['interval'][0] > 0
                  and primary['effect'] >= manifest['primary']['minimum_effect']),
              'power_sufficient': primary['power_sufficient'], 'guards_complete': bool(guards_complete),
-             'quality_reviewed': attested('quality_review'),
-             'promotion_controls_passed': all(attested('control:' + name) for name in manifest['promotion_controls'])}
+             'quality_measurements_complete': quality_complete, 'useful_repair_service_proven': useful_service,
+             'quality_reviewed': attested('quality_review') and quality_complete and useful_service,
+             'promotion_controls_passed': not diagnostic and all(attested('control:' + name) for name in manifest.get('promotion_controls', []))}
+    if diagnostic:
+        facts['diagnostic'] = True
+        facts['opportunity_complete'] &= quality_complete
+    status = decide(stage, facts)
+    facts['promotion_ready'] = bool(status == 'confirmed' and facts['quality_reviewed'] and facts['promotion_controls_passed'])
     return {'schema': 'dunecity-experiment-report/1', 'id': manifest['id'], 'stage': stage,
-            'status': decide(stage, facts), 'provenance': provenance, 'facts': facts,
+            'status': status, 'provenance': provenance, 'facts': facts,
+            **({'purpose': 'diagnostic', 'diagnostic_house': manifest['diagnostic_house'],
+                'observations_per_case_per_arm': 1, 'expected_games_per_arm': len(indices),
+                'interpretation': 'Targeted descriptive OFF/ON diagnostic only; never independent confirmation or promotion.'} if diagnostic else {}),
             'metrics': reports, 'guards': guards, 'opportunity_coverage': opportunities,
-            'quality': {'off': quality_report(control, [control_directory]),
-                        'on': quality_report(candidate, [candidate_directory], evidence.get('cost'))},
+            'quality': quality,
             'negative_learning': manifest['negative_learning'],
             'helped_examples': evidence.get('helped_examples', []), 'harmed_examples': evidence.get('harmed_examples', []),
             'recommendation': 'Review mechanism, missing coverage and independent confirmation; default changes remain an explicit integrator decision.',
             'missing_attestations': [key for key in ('independent_holdout', 'off_contract_verified', 'mechanism_verified',
+                                                    'quality_measurements_complete', 'useful_repair_service_proven',
                                                     'quality_reviewed', 'promotion_controls_passed', 'actuation_verified') if not facts[key]]}
 
 
 def quality_comparison(control_directory, candidate_directory):
     """Describe retained winner bundles without pooling colliding OFF/ON game IDs."""
     control, candidate = dataset([control_directory]), dataset([candidate_directory])
-    arms = [{(house['id'], house['house']): house for _, house in selected_houses(data)}
-            for data in (control, candidate)]
+    measurements = [repair_measurements(data) for data in (control, candidate)]
+    arms = [{(house['id'], house['house']): dict(house, **(
+                measurements[index][(house['id'], house['house'])]['values']
+                if measurements[index][(house['id'], house['house'])]['status'] == 'measured'
+                else dict.fromkeys(REPAIR_QUALITY_FIELDS))) for _, house in selected_houses(data)}
+            for index, data in enumerate((control, candidate))]
     shared = sorted(arms[0].keys() & arms[1].keys())
     changes = {}
     for metric in QUALITY_METRICS:
-        pairs = [(number(arms[0][key].get(metric)), number(arms[1][key].get(metric))) for key in shared]
+        pairs = [(arms[0][key].get(metric), arms[1][key].get(metric)) if metric in REPAIR_QUALITY_FIELDS
+                 else (number(arms[0][key].get(metric)), number(arms[1][key].get(metric))) for key in shared]
         measured = [(before, after) for before, after in pairs
                     if before is not None and after is not None and before >= 0 and after >= 0]
         changes[metric] = {'observed_pairs': len(measured), 'eligible_pairs': len(shared),
-                           'mean_delta': statistics.mean(after - before for before, after in measured) if measured else None}
+                           'mean_delta': statistics.mean(after - before for before, after in measured)
+                           if measured and not (metric in REPAIR_QUALITY_FIELDS and '_raw' in metric) else None}
+        if metric in REPAIR_QUALITY_FIELDS:
+            total = sum(after - before for before, after in measured) if measured else None
+            changes[metric].update(unit=REPAIR_QUALITY_UNITS[metric], aggregation='validated final per-house ledger',
+                                   total_delta=total, mean_delta_exact={'numerator': total, 'denominator': len(measured)} if measured else None)
     identities = {}
     for arm, data in (('control', control), ('candidate', candidate)):
         populations = sorted({stratum(game, house) for game, house in selected_houses(data)})

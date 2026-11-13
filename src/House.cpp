@@ -669,7 +669,7 @@ static void checkQuotaWin(House& house) {
     else house.win();
 }
 
-void House::addCredits(FixPoint newCredits, bool wasRefined) {
+FixPoint House::addCredits(FixPoint newCredits, bool wasRefined) {
     if(newCredits > 0) {
         if(wasRefined == true) {
             // Gross statistic: what the refinery processed, before the storage
@@ -682,7 +682,9 @@ void House::addCredits(FixPoint newCredits, bool wasRefined) {
         const FixPoint accepted = acceptEarnedCredits(newCredits);
         storedCredits += accepted;
         checkQuotaWin(*this);
+        return accepted;
     }
+    return 0;
 }
 
 
@@ -721,7 +723,8 @@ void House::addCityTaxReceipts(FixPoint grossAmount) {
 
 
 
-void House::returnCredits(FixPoint newCredits, FixPoint fromStartingCredits) {
+House::CreditPayment House::returnCredits(FixPoint newCredits, FixPoint fromStartingCredits) {
+    CreditPayment returned;
     if(newCredits > 0) {
         AITelemetry::log().account(houseID, "refunded", newCredits.getRawValue());
 
@@ -737,10 +740,13 @@ void House::returnCredits(FixPoint newCredits, FixPoint fromStartingCredits) {
             const FixPoint restored = std::min(startingPart, ceilingRoom);
             startingCredits += restored;
             AITelemetry::log().account(houseID, "refunded_starting", restored.getRawValue());
+            returned.total += restored;
+            returned.fromStarting += restored;
         }
 
-        addCredits(newCredits - startingPart, false);
+        returned.total += addCredits(newCredits - startingPart, false);
     }
+    return returned;
 }
 
 
@@ -1700,6 +1706,9 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
 
             // if this structure was built by a construction yard this construction yard must be informed
             if(pBuilder != nullptr) {
+                if(itemID == Structure_RepairYard && AITelemetry::log().repairActive())
+                    AITelemetry::log().repairCapitalPlaced(houseID, builderID, newObject->getObjectID(),
+                        currentGame->getGameCycleCount(), pBuilder->getProductionProgress().getRawValue());
                 pBuilder->unSetWaitingToPlace();
 
                 if(itemID == Structure_Palace && currentGame->getGameInitSettings().getGameOptions().onlyOnePalace) {

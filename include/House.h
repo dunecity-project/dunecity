@@ -260,16 +260,16 @@ public:
     /// How much more earned income the house can still store right now.
     FixPoint getEarnedCreditRoom() const;
     void enforceCreditCapacity();
-    void addCredits(FixPoint newCredits, bool wasRefined = false);
+    FixPoint addCredits(FixPoint newCredits, bool wasRefined = false);
     void addCityCredits(FixPoint amount);
     void addCityTaxReceipts(FixPoint grossAmount);
-    /// How a withdrawal was funded. Starting cash is storage-exempt, so a
+    /// How a credit movement was funded or refunded. Starting cash is storage-exempt, so a
     /// refund has to know how much of the payment came from that pool: paying
     /// it back as earned income would either destroy it (no refinery yet) or
     /// launder exempt cash into the capacity-limited earned balance.
     struct CreditPayment {
-        FixPoint total = 0;         ///< what was actually withdrawn
-        FixPoint fromStarting = 0;  ///< the part taken from exempt starting cash
+        FixPoint total = 0;         ///< what was actually withdrawn or accepted
+        FixPoint fromStarting = 0;  ///< the exempt starting-cash share of that transfer
     };
     /// Withdraw up to \a amount and report which pools paid for it.
     CreditPayment payCredits(FixPoint amount);
@@ -279,7 +279,7 @@ public:
     /// paid out of starting cash and returns there. The rest is earned income
     /// and stays subject to storage capacity; the total never exceeds the
     /// absolute credit ceiling.
-    void returnCredits(FixPoint newCredits, FixPoint fromStartingCredits = 0);
+    CreditPayment returnCredits(FixPoint newCredits, FixPoint fromStartingCredits = 0);
     FixPoint takeCredits(FixPoint amount);
     void addUnstoredCredits(FixPoint amount);
     void recordBuildingSale(int refund);

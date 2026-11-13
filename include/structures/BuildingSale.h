@@ -38,6 +38,15 @@ inline PendingRefund pendingRefund(int queueSize, FixPoint productionProgress,
     }
     return result;
 }
+/// Attribute the accepted pooled refund in pendingRefund's production-first
+/// order within each provenance pool, without changing the actual credit flow.
+inline FixPoint acceptedProductionRefund(FixPoint productionProgress, FixPoint productionFromStarting,
+                                         FixPoint accepted, FixPoint acceptedFromStarting) {
+    const auto starting = std::clamp(productionFromStarting, FixPoint(0), productionProgress);
+    return std::min(starting, acceptedFromStarting)
+        + std::min(productionProgress - starting, accepted - acceptedFromStarting);
+}
+
 
 } // namespace BuildingSale
 

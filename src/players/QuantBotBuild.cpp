@@ -267,7 +267,8 @@ void QuantBot::planRepairCapacity(BuildPass& pass, std::set<Uint32>& repairQueue
             .set("access_blocked", pass.accessBlockedRepairVehicles)
             .set("usable_local", pass.usableLocalRepairBays).set("busy_local", pass.busyLocalRepairBays)
             .set("waiting_local", pass.waitingLocalRepairVehicles).set("pressure_cycles", pass.repairPressureCycles)
-            .set("target", pass.repairTarget).set("reason", pass.repairCapacityReason));
+            .set("target", pass.repairTarget).set("reason", pass.repairCapacityReason)
+            .set("quality", AITelemetry::log().repairQuality(getHouse()->getHouseID(), getGameCycleCount())));
 }
 
 Coord QuantBot::repairCapacitySite(const BuildPass& pass) {

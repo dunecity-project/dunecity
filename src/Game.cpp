@@ -113,6 +113,7 @@ std::mutex Game::performanceLogMutex;
 #include <structures/ConstructionYard.h>
 #include <units/UnitBase.h>
 #include <structures/BuilderBase.h>
+#include <structures/RepairYard.h>
 #include <structures/Palace.h>
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
@@ -663,6 +664,7 @@ Game::~Game() {
     PathWorkerPool::instance().shutdown();
     finishMatchAnalytics();
     if (AITelemetry::log().enabled()) {
+        AITelemetry::log().finishRepairCapture(gameCycleCount);
         AITelemetry::Record roster;
         // The Natives house is no participant: match reports list the houses that play.
         for (int h = 0; h < NUM_HOUSES; ++h) if (house[h] && !house[h]->isNatives()) {
@@ -676,7 +678,9 @@ Game::~Game() {
             roster.set(std::to_string(h), AITelemetry::Record().set("name", getHouseNameByNumber(static_cast<HOUSETYPE>(h)))
                 .set("team", house[h]->getTeamID()).set("alive", house[h]->isAlive()).set("credits", house[h]->getCredits())
                 .set("actual", actual).set("built", built).set("lost", lost)
-                .set("economy_totals", AITelemetry::log().economyTotals(h)).set("combat_rewards", house[h]->combatRewardStats(objectData))
+                .set("economy_totals", AITelemetry::log().economyTotals(h))
+                .set("repair_quality", AITelemetry::log().repairQuality(h, gameCycleCount))
+                .set("combat_rewards", house[h]->combatRewardStats(objectData))
                 .set("deviation_rewards", house[h]->deviationRewardStats()));
         }
         AITelemetry::log().write(gameCycleCount, -1, -1, "game_summary", AITelemetry::Record()
@@ -1036,6 +1040,18 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             .set("harvester_limit_override", gameInitSettings.getGameOptions().maximumNumberOfHarvestersOverride))
         .set("map_width", currentGameMap ? currentGameMap->getSizeX() : 0)
         .set("map_height", currentGameMap ? currentGameMap->getSizeY() : 0), settings.general.aiDecisionLog);
+    if(AITelemetry::log().enabled()) {
+        auto& telemetry = AITelemetry::log();
+        telemetry.beginRepairCapture(gameCycleCount, WorkshopGameContent::isSave(newGameInitSettings) || gameCycleCount != 0);
+        for(auto* structure : structureList) {
+            if(structure->getItemID() == Structure_RepairYard)
+                static_cast<RepairYard*>(structure)->beginRepairTelemetry(true);
+            if(auto* builder = dynamic_cast<BuilderBase*>(structure);
+               builder && builder->getCurrentProducedItem() == Structure_RepairYard && builder->getProductionProgress() > 0)
+                telemetry.repairCapitalBaseline(builder->getOwner()->getHouseID(), builder->getObjectID(),
+                    builder->getProductionProgress().getRawValue());
+        }
+    }
     startMatchAnalytics();
 }
 

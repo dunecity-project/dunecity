@@ -1,8 +1,10 @@
 import argparse
 import base64
+import copy
 from contextlib import redirect_stdout
 import datetime as dt
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -451,6 +453,323 @@ class FrozenArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'frozen input receipt'):
                 automation.resume(args)
             command.assert_not_called()
+
+
+class DraftPublicationRecoveryTests(unittest.TestCase):
+    """Exercise real publisher/consumer code, replacing only GitHub's transport."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.tag = automation.snapshot_tag(SHA)
+        names = automation.desktop_names(VERSION) | {automation.BROWSER, 'DuneCity-p2p-service.tar.gz'}
+        names |= {f'build-inputs-{platform}.json' for platform in
+                  ('windows-x64', 'macos-arm64', 'linux-x86_64', 'emscripten')}
+        for name in names:
+            (self.root / name).write_bytes(('frozen package ' + name).encode())
+        self.manifest = dict(schema=1, tag=self.tag, sourceCommit=SHA, version=VERSION,
+            repository=automation.repository(), releaseBuild='OFF', recipe=automation.RECIPE,
+            inputIdentity=hashlib.sha256((SHA + '\n' + automation.RECIPE).encode()).hexdigest(),
+            runId=41, runAttempt=1, producerSourceCommit=SHA, producerEvent='workflow_dispatch',
+            producerHeadBranch=automation.STAGING, producerWorkflowPath=automation.BUILD_WORKFLOW,
+            qualificationRunId=11, qualificationRunAttempt=1, qualificationSourceCommit=SHA,
+            sha256={name: automation.digest(self.root / name) for name in sorted(names)})
+        automation.write_json(self.root / automation.MANIFEST, self.manifest)
+        (self.root / 'SHA256SUMS').write_text(''.join(
+            f'{checksum}  {name}\n' for name, checksum in self.manifest['sha256'].items()))
+        self.original_manifest = (self.root / automation.MANIFEST).read_bytes()
+        self.release = dict(id=443652159, tag_name=self.tag, target_commitish=SHA,
+                            draft=True, prerelease=True,
+                            assets=[self.asset(path) for path in sorted(self.root.iterdir())])
+        self.assertEqual(len(self.release['assets']), 16)
+        self.template = copy.deepcopy(self.release)
+        self.ref_sha = None
+        self.ref_name = 'refs/tags/' + self.tag
+        self.pages = None
+        self.failures = {}
+        self.commands = []
+        self.mutations = []
+        self.prefix = f'repos/{automation.repository()}/'
+        self.qualification = dict(id=11, run_attempt=1, status='completed', conclusion='success',
+            path=automation.BUILD_WORKFLOW, head_sha=SHA, head_branch=automation.STAGING,
+            event='push', repository={'full_name': automation.repository()})
+        self.producer = dict(self.qualification, id=41, conclusion='failure', event='workflow_dispatch',
+                             display_title='Staging packages ' + SHA)
+        self.retry = dict(self.producer, run_attempt=2, conclusion='success')
+        self.input_jobs = [dict(name=name, conclusion='success') for name in sorted(automation.CI_JOBS)]
+        self.producer_jobs = self.input_jobs + [dict(name='dev-release', conclusion='failure')]
+        self.retry_jobs = [dict(name='dev-release', conclusion='success')]
+        self.responses = {
+            'actions/runs/11/attempts/1': self.qualification,
+            'actions/runs/11/attempts/1/jobs?per_page=100': {'jobs': copy.deepcopy(self.input_jobs)},
+            'actions/runs/41/attempts/1': self.producer,
+            'actions/runs/41/attempts/1/jobs?per_page=100': {'jobs': self.producer_jobs},
+            'actions/runs/41': self.retry,
+            'actions/runs/41/attempts/2': self.retry,
+            'actions/runs/41/attempts/2/jobs?per_page=100': {'jobs': self.retry_jobs},
+        }
+        transport = patch.object(automation.subprocess, 'run', side_effect=self.command)
+        transport.start()
+        self.addCleanup(transport.stop)
+        retention = patch.object(automation, 'prune_staging')
+        retention.start()
+        self.addCleanup(retention.stop)
+
+    def asset(self, path):
+        return dict(name=path.name, size=path.stat().st_size,
+                    digest='sha256:' + automation.digest(path))
+
+    def command(self, argv, **kwargs):
+        argv = tuple(str(value) for value in argv)
+        self.commands.append(argv)
+        value, error, code = {}, '', 0
+        if argv[:2] == ('gh', 'api'):
+            method = argv[3] if argv[2] == '--method' else 'GET'
+            path = argv[4] if method != 'GET' else argv[2]
+            suffix = path.removeprefix(self.prefix)
+            if method == 'POST':
+                self.assertEqual(suffix, 'git/refs')
+                self.assertIsNone(self.ref_sha)
+                self.assertIn('ref=refs/tags/' + self.tag, argv)
+                self.assertIn('sha=' + SHA, argv)
+                self.assertNotIn('--force', argv)
+                self.ref_sha = SHA
+                self.mutations.append((method, suffix))
+            elif method == 'PATCH':
+                self.assertEqual(suffix, 'releases/443652159')
+                self.assertIn('draft=false', argv)
+                self.assertIn('make_latest=false', argv)
+                self.release['draft'] = False
+                self.mutations.append((method, suffix))
+                value = self.release
+            elif suffix in self.failures:
+                code, error = self.failures[suffix]
+            elif suffix == 'releases/tags/' + self.tag:
+                if self.release is None or self.release['draft']:
+                    code, error = 1, 'gh: Not Found (HTTP 404)'
+                else:
+                    value = self.release
+            elif suffix.startswith('releases?per_page=100&page='):
+                page = int(suffix.rsplit('=', 1)[1])
+                if self.pages is None:
+                    value = [self.release] if self.release else []
+                else:
+                    value = self.pages[page - 1] if page <= len(self.pages) else []
+            elif suffix == 'git/ref/tags/' + self.tag:
+                if self.ref_sha is None:
+                    code, error = 1, 'gh: Not Found (HTTP 404)'
+                else:
+                    value = dict(ref=self.ref_name, object=dict(type='commit', sha=self.ref_sha))
+            elif suffix == 'git/ref/heads/' + automation.STAGING:
+                value = {'object': {'sha': SHA}}
+            else:
+                self.assertIn(suffix, self.responses)
+                value = self.responses[suffix]
+        elif argv[:3] == ('gh', 'release', 'create'):
+            self.assertIsNone(self.release)
+            self.assertEqual(self.ref_sha, SHA)
+            self.assertIn('--draft', argv)
+            self.assertEqual(argv[argv.index('--target') + 1], SHA)
+            self.release = copy.deepcopy(self.template)
+            self.mutations.append(('CREATE', self.tag))
+        elif argv[:3] == ('gh', 'release', 'upload'):
+            self.assertNotIn('--clobber', argv)
+            for filename in argv[3:]:
+                if filename.startswith(str(self.root) + '/'):
+                    item = self.asset(Path(filename))
+                    self.assertNotIn(item['name'], {asset['name'] for asset in self.release['assets']})
+                    self.release['assets'].append(item)
+            self.mutations.append(('UPLOAD', self.tag))
+        elif argv[:3] == ('gh', 'run', 'rerun'):
+            self.assertEqual(argv[3], '41')
+            self.assertIn('--failed', argv)
+            self.assertNotIn('--all', argv)
+            self.mutations.append(('RERUN_FAILED', '41'))
+        elif argv[:3] == ('gh', 'release', 'download'):
+            self.assertEqual(argv[argv.index('--pattern') + 1], automation.MANIFEST)
+            folder = Path(argv[argv.index('--dir') + 1])
+            (folder / automation.MANIFEST).write_bytes(self.original_manifest)
+        else:
+            self.fail('Unexpected GitHub command: ' + repr(argv))
+        if code and kwargs.get('check'):
+            raise subprocess.CalledProcessError(code, argv, output='', stderr=error)
+        return subprocess.CompletedProcess(argv, code, json.dumps(value), error)
+
+    def publish(self):
+        automation.publish(argparse.Namespace(directory=self.root, sha=SHA, tag=self.tag))
+
+    def qualified(self):
+        self.release['draft'] = False
+        self.ref_sha = SHA
+        return automation.qualified_staging_snapshot(self.tag, SHA)[0]
+
+    def test_draft_404_on_later_page_resumes_by_id_without_rewriting_any_frozen_asset(self):
+        unrelated = dict(tag_name=automation.snapshot_tag(OTHER), draft=True)
+        self.pages = [[unrelated] * 100, [self.release]]
+        assets = copy.deepcopy(self.release['assets'])
+        self.publish()
+        self.assertEqual(self.mutations, [('POST', 'git/refs'), ('PATCH', 'releases/443652159')])
+        self.assertEqual(self.release['assets'], assets)
+        self.assertEqual((self.root / automation.MANIFEST).read_bytes(), self.original_manifest)
+        self.assertFalse(any(argv[:2] == ('gh', 'release') for argv in self.commands))
+        self.assertTrue(any('releases?per_page=100&page=2' in argv[-1] for argv in self.commands))
+
+    def test_new_draft_gets_only_its_exact_staging_ref_before_creation(self):
+        self.release = None
+        self.publish()
+        self.assertEqual(self.mutations, [
+            ('POST', 'git/refs'), ('CREATE', self.tag), ('PATCH', 'releases/443652159')])
+        self.assertEqual(self.ref_sha, SHA)
+
+    def test_duplicate_drafts_on_different_pages_are_an_error_before_any_mutation(self):
+        unrelated = dict(tag_name=automation.snapshot_tag(OTHER), draft=True)
+        self.pages = [[copy.deepcopy(self.release)] + [unrelated] * 99, [self.release]]
+        with self.assertRaisesRegex(ValueError, 'Ambiguous release tag'):
+            self.publish()
+        self.assertEqual(self.mutations, [])
+
+    def test_unrelated_draft_is_not_selected_and_listing_disagreement_is_not_hidden(self):
+        self.pages = [[dict(self.release, tag_name=automation.snapshot_tag(OTHER))]]
+        self.assertIsNone(automation.optional_release(self.tag))
+        self.pages = [[dict(self.release, draft=False)]]
+        with self.assertRaisesRegex(ValueError, 'disagrees'):
+            automation.optional_release(self.tag)
+        self.assertEqual(self.mutations, [])
+
+    def test_draft_target_or_existing_ref_mismatch_never_retags_or_publishes(self):
+        self.release['target_commitish'] = OTHER
+        with self.assertRaisesRegex(ValueError, 'source differs'):
+            self.publish()
+        self.release['target_commitish'] = SHA
+        self.ref_sha = OTHER
+        with self.assertRaisesRegex(ValueError, 'Immutable staging tag'):
+            self.publish()
+        self.ref_sha = SHA
+        self.ref_name = 'refs/tags/wrong'
+        with self.assertRaisesRegex(ValueError, 'Ambiguous immutable staging tag'):
+            self.publish()
+        self.assertEqual(self.mutations, [])
+
+    def test_auth_network_and_listing_errors_are_not_treated_as_absent_drafts(self):
+        endpoint = 'releases/tags/' + self.tag
+        for error in ('gh: Forbidden (HTTP 403)', 'dial tcp: network unavailable'):
+            with self.subTest(error=error):
+                self.commands.clear()
+                self.failures[endpoint] = (1, error)
+                with self.assertRaisesRegex(RuntimeError, re.escape(error)):
+                    self.publish()
+                self.assertEqual(len(self.commands), 1)
+        self.failures = {'releases?per_page=100&page=1': (1, 'HTTP 401')}
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.publish()
+        self.assertEqual(self.mutations, [])
+
+    def test_existing_ref_auth_error_does_not_authorize_tag_creation(self):
+        self.failures['git/ref/tags/' + self.tag] = (1, 'HTTP 403')
+        with self.assertRaisesRegex(RuntimeError, 'HTTP 403'):
+            self.publish()
+        self.assertEqual(self.mutations, [])
+
+    def test_partial_draft_uploads_only_missing_files_without_clobber(self):
+        self.ref_sha = SHA
+        missing = self.release['assets'].pop()
+        retained = copy.deepcopy(self.release['assets'])
+        self.publish()
+        upload = next(argv for argv in self.commands if argv[:3] == ('gh', 'release', 'upload'))
+        self.assertEqual(upload[-1], str(self.root / missing['name']))
+        self.assertEqual(self.release['assets'][:-1], retained)
+        self.assertEqual(self.mutations, [('UPLOAD', self.tag), ('PATCH', 'releases/443652159')])
+
+    def test_conflicting_frozen_draft_assets_are_not_replaced(self):
+        self.ref_sha = SHA
+        self.release['assets'][0]['digest'] = 'sha256:' + '0' * 64
+        with self.assertRaisesRegex(ValueError, 'Refusing to rewrite a frozen draft asset'):
+            self.publish()
+        self.assertEqual(self.mutations, [])
+
+    def test_missing_stable_ref_is_never_created_implicitly(self):
+        self.tag = 'v' + VERSION
+        self.manifest.update(tag=self.tag, releaseBuild='ON')
+        automation.write_json(self.root / automation.MANIFEST, self.manifest)
+        self.release = None
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.publish()
+        with self.assertRaisesRegex(ValueError, 'Only the expected immutable staging tag'):
+            automation.ensure_staging_tag(self.tag, SHA)
+        self.assertEqual(self.mutations, [])
+
+    def test_already_published_retry_keeps_input_attempt_one_and_qualifies_retry_two_separately(self):
+        self.release['draft'] = False
+        self.ref_sha = SHA
+        assets = copy.deepcopy(self.release['assets'])
+        self.manifest['runAttempt'] = 2
+        automation.write_json(self.root / automation.MANIFEST, self.manifest)
+        with redirect_stdout(io.StringIO()) as text:
+            self.publish()
+        self.assertIn('already match', text.getvalue())
+        manifest = self.qualified()
+        self.assertEqual(manifest['runAttempt'], 1)
+        self.assertEqual(self.release['assets'], assets)
+        self.assertEqual(self.mutations, [])
+        requested = {argv[2] for argv in self.commands if argv[:2] == ('gh', 'api')}
+        self.assertIn(self.prefix + 'actions/runs/41/attempts/1/jobs?per_page=100', requested)
+        self.assertIn(self.prefix + 'actions/runs/41/attempts/2/jobs?per_page=100', requested)
+
+    def test_publication_retry_cannot_resurrect_failed_or_skipped_original_inputs(self):
+        for job in self.input_jobs:
+            for conclusion in ('failure', 'skipped'):
+                with self.subTest(name=job['name'], conclusion=conclusion), \
+                     patch.dict(job, conclusion=conclusion):
+                    with self.assertRaisesRegex(ValueError, 'frozen attempt'):
+                        self.qualified()
+        missing = self.producer_jobs.pop(0)
+        with self.assertRaisesRegex(ValueError, 'frozen attempt'):
+            self.qualified()
+        self.producer_jobs.append(missing)
+        self.producer_jobs.append(dict(missing, conclusion='skipped'))
+        with self.assertRaisesRegex(ValueError, 'frozen attempt'):
+            self.qualified()
+
+    def test_relabelling_inputs_as_retry_two_cannot_inherit_attempt_one_successes(self):
+        self.manifest['runAttempt'] = 2
+        with self.assertRaisesRegex(ValueError, 'frozen attempt'):
+            automation.validate_staging_receipts(self.manifest)
+
+    def test_retry_may_inherit_absent_successes_but_never_override_explicit_failure_or_skip(self):
+        for name in sorted(automation.CI_JOBS):
+            for conclusion in ('failure', 'skipped'):
+                with self.subTest(name=name, conclusion=conclusion):
+                    self.retry_jobs[:] = [dict(name='dev-release', conclusion='success'),
+                                         dict(name=name, conclusion=conclusion)]
+                    with self.assertRaisesRegex(ValueError, 'failed/skipped'):
+                        self.qualified()
+
+    def test_retry_must_be_successful_at_the_same_run_source_and_workflow(self):
+        for field, value in (('id', 42), ('run_attempt', 1), ('head_sha', OTHER),
+                             ('head_branch', 'untrusted'), ('event', 'push'),
+                             ('path', '.github/workflows/other.yml'),
+                             ('repository', {'full_name': 'wrong/repository'}),
+                             ('status', 'in_progress'), ('conclusion', 'failure')):
+            with self.subTest(field=field), patch.dict(self.retry, {field: value}):
+                with self.assertRaisesRegex(ValueError, 'publication retry'):
+                    self.qualified()
+        for conclusion in ('failure', 'skipped'):
+            self.retry_jobs[:] = [dict(name='dev-release', conclusion=conclusion)]
+            with self.assertRaisesRegex(ValueError, 'publication retry'):
+                self.qualified()
+        self.retry_jobs.clear()
+        with self.assertRaisesRegex(ValueError, 'publication retry'):
+            self.qualified()
+
+
+    def test_frozen_staging_producer_recovery_reruns_only_failed_jobs_not_platforms(self):
+        self.responses['actions/runs/41'] = self.producer
+        automation.resume(argparse.Namespace(channel='build', run_id='41', tag=None))
+        self.assertEqual(self.mutations, [('RERUN_FAILED', '41')])
+        self.assertEqual(self.producer_jobs[-1], dict(name='dev-release', conclusion='failure'))
+        self.assertTrue(all(job['conclusion'] == 'success' for job in self.input_jobs))
+        self.assertFalse(any(argv[:3] == ('gh', 'workflow', 'run') for argv in self.commands))
 
 
 class StagingRetentionTests(unittest.TestCase):

@@ -247,7 +247,9 @@ void BuilderBase::init() {
     aBuilder = true;
 }
 
-BuilderBase::~BuilderBase() = default;
+BuilderBase::~BuilderBase() {
+    AITelemetry::log().repairCapitalEnded(getObjectID());
+}
 
 
 void BuilderBase::save(OutputStream& stream) const {
@@ -352,7 +354,11 @@ void BuilderBase::removeItem(std::list<BuildItem>& buildItemList, std::list<Buil
 
 void BuilderBase::refundProductionProgress() {
     if(owner != nullptr) {
-        owner->returnCredits(productionProgress, productionProgressFromStartingCredits);
+        const auto requested = productionProgress;
+        const auto returned = owner->returnCredits(productionProgress, productionProgressFromStartingCredits);
+        if(currentProducedItem == Structure_RepairYard && AITelemetry::log().repairActive())
+            AITelemetry::log().repairCapitalRefund(currentGame->getGameCycleCount(), owner->getHouseID(),
+                getObjectID(), requested.getRawValue(), returned.total.getRawValue());
     }
     clearProductionProgress();
 }
@@ -363,6 +369,10 @@ void BuilderBase::setOwner(House *no) {
     // owner. Keep the progress, but drop its claim on the new owner's exempt
     // starting cash, so capturing a builder cannot mint starting credits.
     if(no != this->owner) {
+        if(no && currentProducedItem == Structure_RepairYard && AITelemetry::log().repairActive()) {
+            AITelemetry::log().repairCapitalEnded(getObjectID());
+            AITelemetry::log().repairCapitalBaseline(no->getHouseID(), getObjectID(), productionProgress.getRawValue());
+        }
         productionProgressFromStartingCredits = 0;
         upgradeProgressFromStartingCredits = 0;
         for(auto& order : currentProductionQueue) {
@@ -464,6 +474,8 @@ void BuilderBase::updateProductionProgress() {
                 }*/
 
             }
+            if(currentProducedItem == Structure_RepairYard && AITelemetry::log().repairActive())
+                AITelemetry::log().repairCapitalPaid(owner->getHouseID(), (productionProgress - oldProgress).getRawValue());
             if (AITelemetry::log().enabled() && (currentProducedItem == Structure_WindTrap || currentProducedItem == Structure_NuclearPlant
                 || currentProducedItem == Structure_AdvancedWindTrap
                 || currentProducedItem == Structure_AdvancedWindTrapMK2

@@ -9,6 +9,15 @@ accepted commitments, exact first-owned/completed technology and four-minute
 quote-budget opportunities. Raw engine outcomes and placement scores remain alongside
 the audit-only DuneCity population adjudication.
 
+repair-capacity.csv retains sparse capacity stocks and final per-house repair_quality
+ledgers in the same capture. Q32 money/HP remains exact raw integers; cumulative
+service/capital/bay-cycle counters are final totals, not decision-stock averages.
+Loaded, clipped, incomplete and historical unmeasured captures cannot prove quality.
+--diagnostic-house 3 selects the physical Fremen controller in each original sample
+world without reseating peers. --diagnostic-case-index selects a 1-based case only
+after full-deck world derivation. Targeted diagnostics are descriptive, not strength
+confirmation or permission to promote.
+
 Fleet metrics are pure per-tick observations, not AI estimates. samples.csv and
 houses.csv retain gross refined-spice credits (also exact Q32 refined_spice_raw),
 asset replacement capital, original-house harvester losses and unload-start to
@@ -80,7 +89,8 @@ TROOPER_ENEMY_AIR_FIELDS = {item: 'trooper_' + field for item, field in ENEMY_AI
 AIR_COUNT_FIELDS = tuple(ENEMY_AIR_FIELDS.values()) + tuple(TROOPER_ENEMY_AIR_FIELDS.values())
 AIR_ATTRIBUTION_FIELDS = ('air_kill_attribution_complete', 'air_kill_unknown_attribution')
 REFINERY_FIELDS = META + REFINERY_VALUES
-REPAIR_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'player', 'capture_status', 'capture_reasons', 'data') + research_report.REPAIR_EVENT_FIELDS
+REPAIR_FIELDS = META + ('session', 'seq', 'cycle', 'house', 'player', 'event', 'capture_status', 'capture_reasons',
+                        'capture_start_cycle', 'capture_end_cycle', 'data') + research_report.REPAIR_EVENT_FIELDS + research_report.REPAIR_QUALITY_FIELDS
 GAME_FIELDS = META + ('sides', 'map_seed', 'terrain_attempts', 'skipped', 'outcome', 'winner_team', 'minutes',
                       'loop_ms', 'wall_s', 'digest', 'attack_telemetry', 'error', 'config_hash', 'options_hash',
                       'map_hash', 'content_hash', 'object_data_hash', 'ai_config_hashes', 'probe_sha256',
@@ -253,7 +263,8 @@ def air_kill_capture(out, houses, final_cycle, enabled):
         return dict(status='disabled', reasons='', attribution='disabled', unknown_attribution='', events=[], decisions=[], combat=[])
     paths = sorted((out / 'profile').rglob('events.jsonl'))
     teams = {int(house['house']): int(house['team']) for house in houses}
-    reasons, events, decisions = [], [], []
+    reasons, events, decisions, repair_finals = [], [], [], []
+    capture_start, capture_end = None, None
     combat, first_contact = {}, {}
     limited = False
     if len(paths) != 1:
@@ -280,12 +291,17 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                     name, data = event['event'], event['data']
                     if name == 'session_start':
                         started += 1
+                        capture_start = data.get('start_cycle', cycle)
                     elif name == 'session_end':
                         ended += 1
                         end_cycle = cycle
                     elif name == 'game_summary':
                         summaries += 1
                         summary_houses.update(int(house) for house in data['houses'])
+                        for house, final in data['houses'].items():
+                            if isinstance(final, dict) and 'repair_quality' in final:
+                                repair_finals.append(dict(session=event['session'], seq=seq, cycle=cycle,
+                                    house=int(house), event='game_summary', data=dict(repair_quality=final['repair_quality'])))
                     elif name == 'capture_limit':
                         limited = True
                     elif name == 'simulation_exception':
@@ -297,9 +313,9 @@ def air_kill_capture(out, houses, final_cycle, enabled):
                                    'construction_completed', 'ground_hunt', 'team_attack', 'team_help',
                                    'starport_purchase', 'starport_cash_stockpile',
                                    'income_tech_state', 'income_tech_hold', 'income_tech_early',
-                                   'base_scramble', 'repair_capacity') or (name == 'attack_deferred'
+                                   'base_scramble', 'repair_capacity', 'repair_job', 'repair_yard_quality') or (name == 'attack_deferred'
                                    and data.get('reason') == 'team_wait_partner'):
-                        if name != 'repair_capacity' and 'state' not in data and data.get('state_id') in states:
+                        if name not in ('repair_capacity', 'repair_job', 'repair_yard_quality') and 'state' not in data and data.get('state_id') in states:
                             state_cycle, state = states[data['state_id']]
                             data = dict(data, state=state, state_cycle=state_cycle)
                         decisions.append(dict(session=event['session'], seq=seq, cycle=cycle, house=int(event['house']),
@@ -354,6 +370,7 @@ def air_kill_capture(out, houses, final_cycle, enabled):
             reasons.append('short_capture')
         if set(teams) - summary_houses:
             reasons.append('incomplete_final_roster')
+        capture_end = end_cycle
     if limited:
         reasons.append('capture_limit')
     complete = not reasons
@@ -364,6 +381,7 @@ def air_kill_capture(out, houses, final_cycle, enabled):
     for row in combat.values():
         row['capture_status'] = status
     return dict(status=status, reasons=','.join(dict.fromkeys(reasons)), events=events, decisions=decisions,
+                repair_finals=repair_finals, start_cycle=capture_start, end_cycle=capture_end,
                 combat=list(combat.values()), attribution=('unknown' if unknown else 'complete') if complete else status,
                 unknown_attribution=unknown if paths else '')
 
@@ -857,9 +875,38 @@ def seat_style_schedule(args, games):
     return scheduled
 
 
+def diagnostic_target(args):
+    target = getattr(args, 'diagnostic_house', None)
+    index = getattr(args, 'diagnostic_case_index', None)
+    if target is None:
+        if index is not None:
+            raise ValueError('--diagnostic-case-index requires --diagnostic-house')
+        return None
+    if type(target) is not int or target != 3 or args.mode != 'sample':
+        raise ValueError('--diagnostic-house 3 requires --mode sample')
+    if args.style or getattr(args, 'seat_styles', None):
+        raise ValueError('--diagnostic-house cannot be combined with global style or seat/cohort designs')
+    if index is not None and (type(index) is not int or index < 1):
+        raise ValueError('--diagnostic-case-index must be a positive original case index')
+    return target
+
+
 def schedule(args):
+    target = diagnostic_target(args)
     games = (team_study_schedule(args) if args.mode == 'team-study'
              else sample_schedule(args) if args.mode == 'sample' else matrix_schedule(args))
+    if target is not None:
+        index = getattr(args, 'diagnostic_case_index', None)
+        originals = [game for game in games if game['candidate_seat'] == 'original'
+                     and (index is None or game['sample_case'] == index)]
+        if not originals:
+            raise ValueError('--diagnostic-case-index is absent from the original case deck')
+        games = []
+        for game in originals:
+            if not any(HOUSE_IDS[house] == target for house, _, _ in game['sides']):
+                raise ValueError(f'Diagnostic house {target} is absent from original case {game["sample_case"]}')
+            games.append(dict(game, id=game['id'].rsplit('/', 1)[0] + f'/target-house-{target}',
+                              candidate_house=target, candidate_seat=f'target-house-{target}'))
     games = seat_style_schedule(args, games)
     if args.shard:
         k, n = args.shard
@@ -1042,6 +1089,11 @@ def seat_style_inputs(args, game, out):
 
 
 def command(args, binary, game, out):
+    target = diagnostic_target(args)
+    if target is not None and (game.get('candidate_house') != target
+            or game.get('candidate_seat') != f'target-house-{target}'
+            or not any(HOUSE_IDS[house] == target for house, _, _ in game['sides'])):
+        raise ValueError('Diagnostic target metadata and actual controller roster disagree')
     sides = ','.join(f'{house}:{team}:{CLASSES[level]}' for house, team, level in game['sides'])
     tracked = next((house for house, _, _ in game['sides']
                     if HOUSE_IDS[house] == game.get('candidate_house')), game['sides'][0][0])
@@ -1472,8 +1524,12 @@ def sample_coverage(games):
 
 def sample_report(games, houses):
     by_house = {(row['id'], row['house']): row for row in houses}
-    print('Sampler: one Brutal candidate seat; difficulty strata describe the other controllers. '
-          'Errors/missing candidate evidence are unmeasured, never counted as losses or zero scores.')
+    if any(str(game.get('candidate_seat', '')).startswith('target-house-') for game in games):
+        print('Targeted diagnostic: physical house 3, one original world per selected case; '
+              'descriptive outcomes only, never independent strength confirmation or promotion.')
+    else:
+        print('Sampler: one Brutal candidate seat; difficulty strata describe the other controllers. '
+              'Errors/missing candidate evidence are unmeasured, never counted as losses or zero scores.')
     print('DuneCity time limits: a team wins with population >= 1.2 times every rival; '
           'raw conquest outcomes/draws remain available separately. Classic scoring is unchanged.')
     print('| Mod | Factor | Stratum | Games | Measured | Candidate wins | Conquest wins | Population wins | Draws | Raw draws | Mean score | Mean min | Research verified |')
@@ -1526,9 +1582,17 @@ def sample_comparison(control, candidate):
           f'control-only {len(games[0].keys() - games[1].keys())}, '
           f'candidate-only {len(games[1].keys() - games[0].keys())}. '
           'Pairing requires identical factors, map, options, content and scoring rule, not identical policy/source hashes.')
-    print('Intervals resample sampled cases, keeping the two swapped seats together; '
-          'no supported regression is not proof of equivalence.')
-    print('| Mod | Factor | Stratum | Matched/available seats | Cases | Score control -> candidate | Paired delta [95% CI] | Candidate wins control -> candidate | Conquest wins | Population wins | Verdict |')
+    diagnostic = any(str(game.get('candidate_seat', '')).startswith('target-house-')
+                     for arm in games for game in arm.values())
+    if diagnostic:
+        print('Targeted diagnostic: one matched OFF/ON observation per original case; descriptive only. '
+              'No confidence interval, powered/general-strength claim or promotion follows.')
+    else:
+        print('Intervals resample sampled cases, keeping the two swapped seats together; '
+              'no supported regression is not proof of equivalence.')
+    delta_heading = 'Paired delta (descriptive)' if diagnostic else 'Paired delta [95% CI]'
+    print('| Mod | Factor | Stratum | Matched/available seats | Cases | Score control -> candidate | '
+          + delta_heading + ' | Candidate wins control -> candidate | Conquest wins | Population wins | Verdict |')
     print('|---|---|---|---|---|---|---|---|---|---|---|')
     matched = set(valid)
     available = {**games[0], **games[1]}
@@ -1545,7 +1609,14 @@ def sample_comparison(control, candidate):
                   statistics.mean(float(pair[0]['score']) for pair in group),
                   all(pair[1]['drawn'] == '1' for pair in group),
                   all(pair[0]['drawn'] == '1' for pair in group)) for group in by_case.values()]
-        result = match_score.compare(pairs, 9101)
+        if diagnostic:
+            before, after = (statistics.mean(pair[index] for pair in pairs) for index in (1, 0))
+            delta, verdict = f'{after - before:+.3f} (descriptive)', 'targeted diagnostic only'
+        else:
+            result = match_score.compare(pairs, 9101)
+            before, after = result.control, result.candidate
+            delta = f'{result.difference:+.3f} [{result.low:+.3f}, {result.high:+.3f}]'
+            verdict = result.verdict
         wins = [sum(source[(game['id'], game['candidate_house'])]['won'] == '1' for game in rows)
                 for source in houses]
         conquest = [sum((source[(game['id'], game['candidate_house'])].get('raw_won')
@@ -1555,10 +1626,9 @@ def sample_comparison(control, candidate):
                           and arm[game['id']].get('win_condition') == 'population' for game in rows)
                       for arm, source in zip(games, houses)]
         print(f'| {mod} | {factor} | {level} | {len(rows)}/{len(group)} | {len(pairs)} | '
-              f'{result.control:+.3f} -> {result.candidate:+.3f} | '
-              f'{result.difference:+.3f} [{result.low:+.3f}, {result.high:+.3f}] | '
+              f'{before:+.3f} -> {after:+.3f} | {delta} | '
               f'{wins[0]} -> {wins[1]} | {conquest[0]} -> {conquest[1]} | '
-              f'{population[0]} -> {population[1]} | {result.verdict} |')
+              f'{population[0]} -> {population[1]} | {verdict} |')
 
 
 def seat_style_report(games, houses):
@@ -2202,6 +2272,10 @@ parser.add_argument('--sample-seed', type=int, default=9101, help='sample: repro
 parser.add_argument('--case-manifest', type=Path,
                     help='sample only: explicit schema-v1 case JSON for common-seed screens; '
                          'format/size/spice/tech/composition are recorded in the manifest and start receipts')
+parser.add_argument('--diagnostic-house', type=int, choices=(3,),
+                    help='sample only: target physical house 3 in original worlds; never reseat native peers')
+parser.add_argument('--diagnostic-case-index', type=int,
+                    help='with --diagnostic-house: select this 1-based index after full-deck world derivation')
 parser.add_argument('--sample-enemy', choices=('easy', 'medium', 'hard', 'brutal'),
                     help='sample: fix every non-candidate controller to this tier; factor/map draws stay unchanged')
 parser.add_argument('--sample-formats', nargs='+', choices=('1v1', '2v2', 'ffa4', 'ffa6'), default=None,
@@ -2267,6 +2341,10 @@ if args.mod == 'both' and args.mode not in ('sample', 'team-study') or args.mode
     parser.error('--mode sample|team-study accepts --mod vanilla|dunecity|both')
 if args.candidate_style and args.mode not in ('sample', 'team-study'):
     parser.error('--candidate-style requires --mode sample|team-study')
+try:
+    diagnostic_target(args)
+except ValueError as exc:
+    parser.error(str(exc))
 if args.sample_game_seed_base is not None and not 0 <= args.sample_game_seed_base <= 0xffffffff-args.cases+1:
     parser.error('--sample-game-seed-base range must fit unsigned 32-bit seeds')
 if args.game_seed_base is not None and (

@@ -17,6 +17,7 @@
 
 #include <structures/RepairYard.h>
 #include <structures/RepairYardJob.h>
+#include <players/AIDecisionLog.h>
 
 #include <globals.h>
 
@@ -67,21 +68,54 @@ void RepairYard::init() {
 
 RepairYard::~RepairYard() {
     auto* unit = resolveRepairUnit();
-    clearRepairJob();
+    repairTelemetry(unit, false, false);
+    clearRepairJob("yard_destroyed");
+    if(currentGame) AITelemetry::log().repairBayClosed(currentGame->getGameCycleCount(), getObjectID(), "yard_destroyed");
+    repairMetrics = nullptr;
     if (unit) unit->destroy();
 }
 
 GroundUnit* RepairYard::resolveRepairUnit() {
     return RepairYardJob::resolve(repairingAUnit,
         [&] { return dynamic_cast<GroundUnit*>(repairUnit.getObjPointer()); },
-        [&] { clearRepairJob(); });
+        [&] { clearRepairJob("unit_missing"); });
 }
 
-void RepairYard::clearRepairJob() {
+void RepairYard::clearRepairJob(const char* abortReason) {
+    auto& telemetry = AITelemetry::log();
+    if(abortReason && telemetry.repairActive() && repairMetrics && repairMetricsEpoch == telemetry.repairEpoch())
+        telemetry.repairJobAborted(*repairMetrics, currentGame->getGameCycleCount(), abortReason);
     RepairYardJob::finish(repairingAUnit, bookings);
     repairUnit.pointTo(NONE_ID);
     firstAnimFrame = curAnimFrame = 2;
     lastAnimFrame = 3;
+}
+
+AITelemetry::RepairBayMetrics* RepairYard::repairTelemetry(GroundUnit* unit, bool baseline, bool jobBaseline) {
+    auto& telemetry = AITelemetry::log();
+    if(!telemetry.repairActive()) return nullptr;
+    if(!repairMetrics || repairMetricsEpoch != telemetry.repairEpoch() || repairMetrics->house != owner->getHouseID()) {
+        repairMetrics = telemetry.repairBay(owner->getHouseID(), getObjectID(), currentGame->getGameCycleCount(), baseline);
+        repairMetricsEpoch = telemetry.repairEpoch();
+    }
+    const auto unitID = unit ? unit->getObjectID() : NONE_ID;
+    if(repairMetrics && repairMetrics->unit != unitID)
+        telemetry.repairObserve(*repairMetrics, currentGame->getGameCycleCount(), unitID,
+            unit ? unit->getHealth().getRawValue() : 0,
+            unit ? FixPoint(unit->getMaxHealth()).getRawValue() : 0, baseline || jobBaseline);
+    return repairMetrics;
+}
+
+void RepairYard::beginRepairTelemetry(bool baseline) {
+    auto* unit = dynamic_cast<GroundUnit*>(repairingAUnit ? repairUnit.getObjPointer() : nullptr);
+    repairTelemetry(unit, baseline, baseline);
+}
+
+void RepairYard::assignUnit(ObjectPointer newUnit) {
+    repairUnit = newUnit;
+    repairingAUnit = true;
+    auto* unit = dynamic_cast<GroundUnit*>(repairUnit.getObjPointer());
+    repairTelemetry(unit, false, unit && unit->getTarget() != this);
 }
 
 void RepairYard::save(OutputStream& stream) const {
@@ -103,13 +137,19 @@ ObjectInterface* RepairYard::getInterfaceContainer() {
 
 void RepairYard::deployRepairUnit(Carryall* pCarryall) {
     UnitBase* pRepairUnit = resolveRepairUnit();
-    clearRepairJob();
+    auto* metrics = repairTelemetry(static_cast<GroundUnit*>(pRepairUnit), false, false);
+    clearRepairJob(nullptr);
     if (!pRepairUnit) {
         if (pCarryall) pCarryall->setTarget(nullptr);
         return;
     }
+    if(metrics) AITelemetry::log().repairPrepareReturn(*metrics, currentGame->getGameCycleCount(),
+        pRepairUnit->getObjectID(), pCarryall != nullptr, pRepairUnit->getHealth().getRawValue(),
+        FixPoint(pRepairUnit->getMaxHealth()).getRawValue());
     if(pCarryall != nullptr) {
         pCarryall->giveCargo(pRepairUnit);
+        if(metrics) AITelemetry::log().repairHandoff(currentGame->getGameCycleCount(),
+            pRepairUnit->getObjectID(), pRepairUnit->isPickedUp());
         pCarryall->setTarget(nullptr);
         pCarryall->setDestination(pRepairUnit->getGuardPoint());
     } else {
@@ -129,6 +169,15 @@ void RepairYard::deployRepairUnit(Carryall* pCarryall) {
 
 void RepairYard::updateStructureSpecificStuff() {
     GroundUnit* pRepairUnit = resolveRepairUnit();
+    auto* metrics = repairTelemetry(pRepairUnit, false, false);
+    const bool measuredLive = metrics && getHealth() > 0;
+    const bool damaged = measuredLive && pRepairUnit && pRepairUnit->getHealth() < pRepairUnit->getMaxHealth();
+    if(measuredLive) {
+        metrics->add(AITelemetry::RepairMetric::LiveCycles, 1);
+        metrics->add(!pRepairUnit ? AITelemetry::RepairMetric::FreeCycles
+            : damaged ? AITelemetry::RepairMetric::DamagedCycles : AITelemetry::RepairMetric::FullReturnCycles, 1);
+    }
+    bool repairPaid = false;
     if(repairingAUnit) {
         if(curAnimFrame < 6) {
             firstAnimFrame = 6;
@@ -150,7 +199,17 @@ void RepairYard::updateStructureSpecificStuff() {
                 && owner->hasRadarSpecialization(HOUSE_NEUTRAL)
                 && currentGame->getGameCycleCount() % 4 == 0 ? 2 : 1;
             for(int step = 0; step < steps && pRepairUnit->getHealth() < pRepairUnit->getMaxHealth(); ++step) {
-                if(owner->takeCredits(UNIT_REPAIRCOST) > 0) pRepairUnit->addHealth();
+                const auto payment = owner->takeCredits(UNIT_REPAIRCOST);
+                if(payment > 0) {
+                    if(metrics) {
+                        const auto before = pRepairUnit->getHealth();
+                        pRepairUnit->addHealth();
+                        AITelemetry::log().repairProgress(*metrics, currentGame->getGameCycleCount(),
+                            before.getRawValue(), pRepairUnit->getHealth().getRawValue(),
+                            FixPoint(pRepairUnit->getMaxHealth()).getRawValue(), payment.getRawValue());
+                        repairPaid = true;
+                    } else pRepairUnit->addHealth();
+                }
             }
         } else {
             // Unit is fully repaired - handle deployment
@@ -193,4 +252,5 @@ void RepairYard::updateStructureSpecificStuff() {
             deployRepairUnit();
         }
     }
+    if(measuredLive && damaged && !repairPaid) metrics->add(AITelemetry::RepairMetric::UnfundedCycles, 1);
 }

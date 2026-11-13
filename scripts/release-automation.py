@@ -58,10 +58,29 @@ def optional_release(tag):
     result = subprocess.run(['gh', 'api', f'repos/{repository()}/releases/tags/{tag}'],
                             capture_output=True, text=True)
     if result.returncode == 0:
-        return json.loads(result.stdout)
-    if 'HTTP 404' in result.stderr:
-        return None
-    raise RuntimeError(result.stderr.strip())
+        release = json.loads(result.stdout)
+        if release['tag_name'] != tag:
+            raise ValueError('Release lookup returned a different tag')
+        return release
+    if 'HTTP 404' not in result.stderr:
+        raise RuntimeError(result.stderr.strip())
+    # The tag endpoint only returns published releases. Drafts need a complete
+    # listing: stopping at the first match could silently choose a duplicate.
+    matches = []
+    for page in range(1, 1001):
+        batch = api(f'repos/{repository()}/releases?per_page=100&page={page}')
+        if not isinstance(batch, list):
+            raise ValueError('Release listing is incomplete')
+        matches.extend(item for item in batch if item['tag_name'] == tag)
+        if len(batch) < 100:
+            break
+    else:
+        raise ValueError('Release pagination is incomplete')
+    if len(matches) > 1:
+        raise ValueError('Ambiguous release tag: ' + tag)
+    if matches and not matches[0]['draft']:
+        raise ValueError('Published release tag lookup disagrees with release listing')
+    return matches[0] if matches else None
 
 
 def require_unretired_staging(sha, release):
@@ -85,6 +104,24 @@ def resolve_tag(tag):
     if obj['type'] != 'commit':
         raise ValueError('Publication tag does not identify a source commit')
     return full_sha(obj['sha'])
+
+
+def ensure_staging_tag(tag, sha):
+    """Create only the expected immutable staging ref; never move any existing ref."""
+    if tag != snapshot_tag(full_sha(sha)):
+        raise ValueError('Only the expected immutable staging tag may be created')
+    result = subprocess.run(['gh', 'api', f'repos/{repository()}/git/ref/tags/{tag}'],
+                            capture_output=True, text=True)
+    if result.returncode == 0:
+        if json.loads(result.stdout)['ref'] != 'refs/tags/' + tag:
+            raise ValueError('Ambiguous immutable staging tag state')
+    elif 'HTTP 404' in result.stderr:
+        subprocess.run(['gh', 'api', '--method', 'POST', f'repos/{repository()}/git/refs',
+                        '-f', 'ref=refs/tags/' + tag, '-f', 'sha=' + sha], check=True)
+    else:
+        raise RuntimeError('Cannot establish immutable staging tag state: ' + result.stderr.strip())
+    if resolve_tag(tag) != sha:
+        raise ValueError('Immutable staging tag does not point at the selected source')
 
 
 def digest(path):
@@ -203,7 +240,7 @@ def validate_staging_receipts(manifest):
         raise ValueError('Invalid package producer run/attempt')
     producer = api(f'repos/{repository()}/actions/runs/{pid}/attempts/{pattempt}')
     pjobs = api(f'repos/{repository()}/actions/runs/{pid}/attempts/{pattempt}/jobs?per_page=100')['jobs']
-    if (producer['status'] != 'completed' or producer['conclusion'] != 'success'
+    if (producer['status'] != 'completed' or producer['id'] != pid
             or producer['path'] != BUILD_WORKFLOW or producer['run_attempt'] != pattempt
             or producer['repository']['full_name'] != repository()
             or producer['event'] not in ('schedule', 'workflow_dispatch')
@@ -212,10 +249,30 @@ def validate_staging_receipts(manifest):
             or producer['head_sha'] != manifest['producerSourceCommit']
             or producer['event'] != manifest['producerEvent']
             or producer['head_branch'] != manifest['producerHeadBranch']
-            or producer['path'] != manifest['producerWorkflowPath']
-            or not (CI_JOBS | {'dev-release'}).issubset(
-                {job['name'] for job in pjobs if job['conclusion'] == 'success'})):
+            or producer['path'] != manifest['producerWorkflowPath']):
         raise ValueError('Package producer is not independently successful/trusted')
+    outcomes = {name: [job['conclusion'] for job in pjobs if job['name'] == name]
+                for name in CI_JOBS | {'dev-release'}}
+    if any(outcomes[name] != ['success'] for name in CI_JOBS):
+        raise ValueError('Package producer input jobs did not all succeed at the frozen attempt')
+    if producer['conclusion'] == 'success' and outcomes['dev-release'] == ['success']:
+        return
+    if producer['conclusion'] != 'failure' or outcomes['dev-release'] != ['failure']:
+        raise ValueError('Package producer has no successful publication receipt')
+    # runAttempt identifies the package inputs, not a later publication retry.
+    # Preserve it even when only dev-release was rerun with inherited successes.
+    publication = api(f'repos/{repository()}/actions/runs/{pid}')
+    if (publication['id'] != pid or publication['run_attempt'] <= pattempt
+            or publication['status'] != 'completed' or publication['conclusion'] != 'success'
+            or publication['repository']['full_name'] != repository()
+            or any(publication[key] != producer[key] for key in
+                   ('path', 'head_sha', 'head_branch', 'event'))):
+        raise ValueError('Package producer publication retry is not independently successful/trusted')
+    retry = publication['run_attempt']
+    jobs = api(f'repos/{repository()}/actions/runs/{pid}/attempts/{retry}/jobs?per_page=100')['jobs']
+    if ([job['conclusion'] for job in jobs if job['name'] == 'dev-release'] != ['success']
+            or any(job['name'] in CI_JOBS and job['conclusion'] != 'success' for job in jobs)):
+        raise ValueError('Package producer publication retry contains failed/skipped required jobs')
 
 
 def qualified_staging_snapshot(tag, expected_sha=None):
@@ -627,7 +684,9 @@ def publish(args):
     if not stable and args.tag != snapshot_tag(args.sha):
         raise ValueError('Development publication requires its immutable source/input tag')
     existing = optional_release(args.tag)
-    if existing and (existing['prerelease'] == stable or resolve_tag(args.tag) != args.sha):
+    if existing and (existing['prerelease'] == stable
+                     or (existing['draft'] and existing['target_commitish'] != args.sha)
+                     or (not existing['draft'] and resolve_tag(args.tag) != args.sha)):
         raise ValueError('Existing publication channel/tag source differs from selected inputs')
     if existing and not existing['draft']:
         # A later website failure may rerun this job. Read back the frozen set;
@@ -644,6 +703,10 @@ def publish(args):
                 raise ValueError('Published asset readback failed: ' + name)
         print('Published immutable inputs already match; resuming downstream delivery only')
         return
+    if not stable:
+        ensure_staging_tag(args.tag, args.sha)
+    elif resolve_tag(args.tag) != args.sha:
+        raise ValueError('Stable tag does not point at the selected source')
     files = [str(path) for path in paths.values()] + [str(directory / MANIFEST), str(directory / 'SHA256SUMS')]
     notes = (f'Frozen source {args.sha}; producing run {manifest["runId"]}. '
              'All desktop platforms complete; mobile channels are independent.\n\n')
@@ -651,27 +714,45 @@ def publish(args):
     if stable and release_notes.exists():
         notes += release_notes.read_text()
     if existing:
-        subprocess.run(['gh', 'release', 'upload', args.tag, '--repo', repository(), '--clobber', *files], check=True)
-        subprocess.run(['gh', 'release', 'edit', args.tag, '--repo', repository(), '--notes', notes], check=True)
+        assets = {item['name']: item for item in existing['assets']}
+        if len(assets) != len(existing['assets']) or set(assets) - {Path(item).name for item in files}:
+            raise ValueError('Draft contains assets outside the selected immutable package set')
+        pending = []
+        for filename in files:
+            path = Path(filename)
+            item = assets.get(path.name)
+            if item is None:
+                pending.append(filename)
+            elif item['size'] != path.stat().st_size or item.get('digest') != 'sha256:' + digest(path):
+                raise ValueError('Refusing to rewrite a frozen draft asset: ' + path.name)
+        if pending:
+            subprocess.run(['gh', 'release', 'upload', args.tag, '--repo', repository(), *pending], check=True)
+            remote = optional_release(args.tag)
+        else:
+            remote = existing
     else:
         subprocess.run(['gh', 'release', 'create', args.tag, '--repo', repository(), '--target', args.sha,
                         '--draft', '--title', ('Dune City ' if stable else 'Staging ') + args.tag,
                         '--notes', notes,
                         *([] if stable else ['--prerelease', '--latest=false']), *files], check=True)
+        remote = optional_release(args.tag)
     if resolve_tag(args.tag) != args.sha:
         raise ValueError('Uploaded draft tag does not point at the selected source')
-    remote = optional_release(args.tag)
+    if (not remote or not remote['draft'] or remote['prerelease'] == stable
+            or remote['target_commitish'] != args.sha
+            or (existing and remote['id'] != existing['id'])):
+        raise ValueError('Draft publication identity/channel/source readback failed')
     assets = {item['name']: item for item in remote['assets']}
-    if set(assets) != {Path(item).name for item in files}:
+    if len(assets) != len(remote['assets']) or set(assets) != {Path(item).name for item in files}:
         raise ValueError('Draft contains assets outside the selected immutable package set')
     for path in [Path(item) for item in files]:
         item = assets.get(path.name)
         if not item or item['size'] != path.stat().st_size or item.get('digest') != 'sha256:' + digest(path):
             raise ValueError('Draft upload readback failed: ' + path.name)
-    subprocess.run(['gh', 'release', 'edit', args.tag, '--repo', repository(), '--draft=false',
-                    '--latest' if stable else '--latest=false'], check=True)
+    subprocess.run(['gh', 'api', '--method', 'PATCH', f'repos/{repository()}/releases/{remote["id"]}',
+                    '-F', 'draft=false', '-f', 'make_latest=' + ('true' if stable else 'false')], check=True)
     release = optional_release(args.tag)
-    if release['draft'] or release['prerelease'] == stable:
+    if not release or release['id'] != remote['id'] or release['draft'] or release['prerelease'] == stable:
         raise ValueError('Published release channel readback failed')
     if stable and api(f'repos/{repository()}/releases/latest')['tag_name'] != args.tag:
         raise ValueError('GitHub Latest did not advance to the verified release')

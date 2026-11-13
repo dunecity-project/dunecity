@@ -673,6 +673,9 @@ void UnitBase::deploy(const Coord& newLocation) {
                 currentGameMap->getTile(location)->triggerSpecialBloom(getOwner());
             }
         }
+        if(AITelemetry::log().repairActive())
+            AITelemetry::log().repairDelivered(currentGame->getGameCycleCount(), owner->getHouseID(),
+                getObjectID(), isActive() && getHealth() > 0);
 
         // Offline observation has no controlling player: Game::setupSpectatorView()
         // only builds the detached view object after the map has been loaded, so
@@ -686,6 +689,7 @@ void UnitBase::deploy(const Coord& newLocation) {
 }
 
 void UnitBase::cancelDeployment() {
+    if(currentGame) AITelemetry::log().repairReturnAborted(currentGame->getGameCycleCount(), getObjectID(), "deployment_cancelled");
     setTarget(nullptr);
 
     if(currentGameMap != nullptr) {
@@ -700,6 +704,7 @@ void UnitBase::cancelDeployment() {
 }
 
 void UnitBase::destroy() {
+    if(currentGame) AITelemetry::log().repairReturnAborted(currentGame->getGameCycleCount(), getObjectID(), "unit_destroyed");
     AchievementEvents::lost(this);
     if (currentGame && owner) AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1,
         "object_destroyed", AITelemetry::Record().set("object", objectID).set("item", itemID)
@@ -761,6 +766,7 @@ void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
         setDestination(location);
         clearPath();
         doSetAttackMode(GUARD);
+        AITelemetry::log().repairReturnAborted(currentGame->getGameCycleCount(), getObjectID(), "owner_changed");
         owner = newOwner;
 
         graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
@@ -799,6 +805,7 @@ void UnitBase::deviate(House* newOwner, Uint32 deviatorObjectID) {
 
 void UnitBase::transferOwnership(House* newOwner) {
     if(newOwner == nullptr || (owner == newOwner && originalHouseID == newOwner->getHouseID())) return;
+    AITelemetry::log().repairReturnAborted(currentGame->getGameCycleCount(), getObjectID(), "owner_changed");
     leaveFormation();
     removeFromSelectionLists();
     // The counts follow the original house (registerUnit); move them without a loss or a build.
@@ -3068,6 +3075,7 @@ void UnitBase::quitDeviation() {
         setTarget(nullptr);
         setGuardPoint(location);
         setDestination(location);
+        AITelemetry::log().repairReturnAborted(currentGame->getGameCycleCount(), getObjectID(), "owner_changed");
         owner = currentGame->getHouse(originalHouseID);
         graphic = pGFXManager->getObjPic(graphicID,getOwner()->getHouseID());
         deviationTimer = INVALID;
