@@ -70,10 +70,46 @@ opponent to its level 9 fleet of 1/2/4 harvesters;
 | Hard v Medium | 8/24 | 34/48 | 16/24 |
 | Hard v Hard | 5/24 | 11/48 | 10/24 |
 
-Still open: level 8 remains below level 9 for Easy v Easy and Hard v Hard (the
-Hard ceiling of 4 equals what Hard already ran there). An enemy army ceiling
-(final-level size 6600/8250/10000) was tested with the harvester ceiling on both
-seed sets and did not help (35, 29, 34, 15 of 48), so it was removed.
+An enemy army ceiling (final-level size 6600/8250/10000) was tested with the
+harvester ceiling on both seed sets and did not help (35, 29, 34, 15 of 48), so
+it was removed.
+
+### Later opening and Brutal v Hard (2026-11-14)
+
+Added target: Brutal v Hard at least 50% on level 9. On 72 games per pair (3
+houses x seeds 9101-9124) the level 9 losses were decided by the first enemy
+waves: every partner tier still holds only its scripted starting army (3,600-
+4,200) at minute 12, while three Hard opponents hold about 30,000 between them.
+`CampaignLaterOpening` (hashed, default on) sends an Easy/Medium/Hard opponent's
+first ground wave three minutes after the established opening; Brutal is
+unchanged and `campaign-later-opening-off` is the control.
+
+| Player v enemy | Level 9 before | Level 9 with later opening | Level 8 (seeds 9101-9112) |
+|---|---|---|---|
+| Easy v Easy | 63/72 | 69/72 | 49/72 |
+| Medium v Easy | 57/72 | 68/72 | 54/72 |
+| Hard v Medium | 47/72 | 63/72 | 50/72 |
+| Hard v Hard | not run | 34/72 | 18/72 |
+| Brutal v Hard | 27/72 | 44/72 | 17/72 |
+
+Missions 5, 11, 17 and 19 with the later opening: 111/120 across the five pairs.
+
+Tried on the same seeds and removed, because none moved a result beyond noise:
+Hard repeat delay +60 s, Hard wave value 2,800, Hard harvester cap 3 or 2, Hard
+level 9 army limit 8,000, the enemy army ceiling again (level 8: 50, 48, 55, 21,
+17 of 72), a partner strength floor capped at 95% of its limit or uncapped, a
+partner wave that needs the home troops alone to meet the required army, and a
+partner Light Factory opening with a threat production floor (worse).
+
+Still open:
+
+- Level 8 is below level 9 for every pair. Atreides mission 20 wins 0-1 of 12
+  for every pair: the partner's safely reachable spice ends at about 37,000
+  credits near minute 18-20, its harvesters then refuse the remaining fields
+  because opponent waves cross them, and both opponents keep earning. Against
+  Hard opponents Atreides and Harkonnen mission 21 are also 0 of 12.
+- Partner tiers play the same opening for 10-12 minutes, so Easy and Medium
+  partners are indistinguishable against Easy opponents (both near 95%).
 
 
 ## Implemented local candidate: 1.0.672
