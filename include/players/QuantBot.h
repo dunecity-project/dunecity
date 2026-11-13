@@ -1701,8 +1701,10 @@ private:
     static int assemblyRadius(int members);
     int assemblyForceSize() const;
     int armyAssemblyRadius() const;
-    /// One bounded scan per pass: tiles within \a radius of \a anchor that are
-    /// on the map, not mountain, not built on and not in observed danger.
+    /// On the map, not mountain, not built on or planned, an allowed staging
+    /// tile and not in observed danger.
+    bool assemblySlotOpen(Coord p) const;
+    /// One bounded scan per pass: the open tiles within \a radius of \a anchor.
     std::vector<Coord> assemblySlots(Coord anchor, int radius) const;
     /// Is this unit ours to order right now?
     bool orderableCombatUnit(const UnitBase* unit) const;

@@ -3107,10 +3107,34 @@ int QuantBot::armyAssemblyRadius() const {
     const int limit=2*std::max(getMap().getSizeX(), getMap().getSizeY());
     // Count terrain capacity, including occupied but standable land. A clipped
     // circle at a map edge or a built-up colony may not fit the required share.
-    // Geometric growth bounds the scans; each is clipped to the actual map.
-    while (radius < limit && int(assemblySlots(anchor,radius).size()) < needed)
+    // Each growth step tests only the ring the previous radius left out, so a
+    // tile is examined at most once however far the radius has to grow.
+    const int w=getMap().getSizeX(), h=getMap().getSizeY();
+    int farthest=0;
+    for (const Coord corner : {Coord(0,0), Coord(w-1,0), Coord(0,h-1), Coord(w-1,h-1)})
+        farthest=std::max(farthest, int(blockDistance(anchor,corner).lround()));
+    int capacity=0, counted=-1;
+    while (radius < limit) {
+        for (int y=std::max(0,anchor.y-radius); y<=std::min(h-1,anchor.y+radius); ++y)
+          for (int x=std::max(0,anchor.x-radius); x<=std::min(w-1,anchor.x+radius); ++x) {
+            const Coord p(x,y);
+            const int distance=blockDistance(anchor,p).lround();
+            if (distance > counted && distance <= radius && assemblySlotOpen(p)) ++capacity;
+        }
+        counted=radius;
+        if (capacity >= needed) break;
+        // The whole map is counted and still too small: no larger radius helps.
+        if (counted >= farthest) return limit;
         radius=std::min(limit,radius+std::max(1,radius/4));
+    }
     return radius;
+}
+
+bool QuantBot::assemblySlotOpen(Coord p) const {
+    if (!getMap().tileExists(p)) return false;
+    const auto* tile = getMap().getTile(p);
+    if (tile->isMountain() || tile->hasAStructure() || tile->isSpiceBloom() || onPlannedSite(p)) return false;
+    return offensiveAssemblySlot(p) && dangerAt(p) == 0;
 }
 
 std::vector<Coord> QuantBot::assemblySlots(Coord anchor, int radius) const {
@@ -3122,17 +3146,12 @@ std::vector<Coord> QuantBot::assemblySlots(Coord anchor, int radius) const {
     for (int y=std::max(0,anchor.y-r); y<=std::min(getMap().getSizeY()-1,anchor.y+r); ++y)
       for (int x=std::max(0,anchor.x-r); x<=std::min(getMap().getSizeX()-1,anchor.x+r); ++x) {
         const Coord p(x,y);
-        if (!getMap().tileExists(p)) continue;
         // The same combat distance metric the arrival and "already walking
         // home" tests use. A box corner is further away than the radius under
         // that metric, so a unit sent there would never count as home and would
         // be reordered on every pass.
         if (blockDistance(anchor, p).lround() > r) continue;
-        const auto* tile = getMap().getTile(p);
-        if (tile->isMountain() || tile->hasAStructure() || tile->isSpiceBloom() || onPlannedSite(p)) continue;
-        if (!offensiveAssemblySlot(p)) continue;
-        if (dangerAt(p) != 0) continue;
-        slots.push_back(p);
+        if (assemblySlotOpen(p)) slots.push_back(p);
     }
     return slots;
 }
