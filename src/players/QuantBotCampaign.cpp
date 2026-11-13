@@ -238,10 +238,7 @@ bool QuantBot::isCampaignEnemy() const {
 }
 
 CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
-    auto profile = CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),currentGame->techLevel);
-    const int relief = difficulty == Difficulty::Hard ? botConfig().force.campaignHardPressure : 0;
-    if (relief == 2 || relief == 4) profile.value = 2800;
-    return profile;
+    return CampaignDifficultyPolicy::profile(static_cast<int>(difficulty),currentGame->techLevel);
 }
 
 bool QuantBot::campaignCombatUnit(const UnitBase* unit) const {
@@ -394,10 +391,8 @@ void QuantBot::updateCampaignWave() {
             traceDecision("campaign_opening_missing_trigger",AITelemetry::Record());
             return;
         }
-        const int relief = difficulty == Difficulty::Hard ? botConfig().force.campaignHardPressure : 0;
         const auto delay=CampaignDifficultyPolicy::openingDelayMs(static_cast<int>(difficulty),
-            getGameInitSettings().getRandomSeed(),anchor,getHouse()->getHouseID())
-            + (relief == 3 || relief == 4 ? 180000u : 0u);
+            getGameInitSettings().getRandomSeed(),anchor,getHouse()->getHouseID());
         campaignWave.opening=anchor+MILLI2CYCLES(delay);
         campaignWave.initialized=true;
         attackTimer=campaignWave.opening>now ? campaignWave.opening-now : 0;
