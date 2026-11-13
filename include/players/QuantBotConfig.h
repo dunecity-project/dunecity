@@ -315,6 +315,10 @@ struct QuantBotConfig {
         /// threshold cannot send the starting army into three bases. Hashed; default on.
         /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
+        /// Trial relief of Hard campaign opponents' wave pressure: 0 = unchanged; 1 = waves every
+        /// 2-4 minutes per house instead of 1-3; 2 = wave value 2800 instead of 3500; 3 = first
+        /// wave three minutes later; 4 = all three. Hashed; default 0.
+        int campaignHardPressure;
         /// An Easy, Medium or Hard campaign opponent keeps at most
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
         /// however many refineries the mission starts it with. Hashed; default on.

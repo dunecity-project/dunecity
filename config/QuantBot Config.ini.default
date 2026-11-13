@@ -438,6 +438,9 @@ CampaignAdaptiveReadiness=1
 # opposing alliance (capped at 75% of its own limit). Hashed; OFF preserves the difficulty
 # threshold alone. City campaigns are unchanged.
 CampaignAllyStrengthFloor=1
+# Trial relief of Hard campaign opponents' waves: 0=unchanged, 1=every 2-4 minutes per house
+# (not 1-3), 2=wave value 2800 (not 3500), 3=first wave three minutes later, 4=all three. Hashed.
+CampaignHardPressure=0
 # Easy, Medium and Hard campaign opponents keep at most 1 / 2 / 4 harvesters, their final-level
 # fleet, however many refineries the mission gives them. Hashed; OFF preserves
 # HarvesterLimitMultiplier x starting refineries without a ceiling.

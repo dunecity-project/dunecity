@@ -1903,9 +1903,11 @@ void QuantBot::launchGroundHunt() {
             .set("target_house", observedFront ? observedFront->getOwner()->getHouseID() : -1));
     }
     if (limited && profile.limitedWave) {
+        const int relief = difficulty == Difficulty::Hard ? botConfig().force.campaignHardPressure : 0;
         attackTimer=MILLI2CYCLES(CampaignDifficultyPolicy::repeatDelayMs(
             static_cast<int>(difficulty),
-            getGameInitSettings().getRandomSeed(),getGameCycleCount(),getHouse()->getHouseID()));
+            getGameInitSettings().getRandomSeed(),getGameCycleCount(),getHouse()->getHouseID())
+            + (relief == 1 || relief == 4 ? 60000u : 0u));
         traceDecision("attack_schedule",AITelemetry::Record().set("delay_cycles",attackTimer)
             .set("reason","next_wave_after_dispatch"));
     }
