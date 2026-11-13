@@ -550,24 +550,33 @@ class PointerArtifactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             app = Path(directory)/'candidate.app'
             app.mkdir()
-            env = dict(DYLD_INSERT_LIBRARIES='/opt/homebrew/foreign.dylib', DYLD_FRAMEWORK_PATH='/opt/homebrew',
+            frameworks = app/'Contents/Frameworks'
+            frameworks.mkdir(parents=True)
+            alias = Path(directory)/'candidate-alias.app'
+            alias.symlink_to(app, target_is_directory=True)
+            env = dict(DYLD_INSERT_LIBRARIES='/opt/homebrew/foreign.dylib', DYLD_LIBRARY_PATH='/opt/homebrew/lib',
+                       DYLD_FRAMEWORK_PATH='/opt/homebrew', DYLD_FALLBACK_FRAMEWORK_PATH='/opt/homebrew',
                        MENU_POINTER_VERIFIED_RECEIPT='0'*64, OTHER='retained')
             static = 'dunecity:\n /usr/lib/libSystem.B.dylib (compatibility version 1.0)\n'
             with patch.object(pointer, 'check_output', return_value=static):
                 with self.assertRaisesRegex(RuntimeError, 'no local SDK fallback'):
-                    pointer.runtime_environment(env, app)
-                result, _ = pointer.runtime_environment(env, app, self.receipt, '1'*64)
+                    pointer.runtime_environment(env, alias)
+                result, _ = pointer.runtime_environment(env, alias, self.receipt, '1'*64)
                 self.assertNotIn('DYLD_INSERT_LIBRARIES', result)
-                self.assertNotIn('DYLD_FRAMEWORK_PATH', result)
+                self.assertEqual(result['DYLD_LIBRARY_PATH'], str(frameworks.resolve()))
+                self.assertEqual(result['DYLD_FRAMEWORK_PATH'], str(frameworks.resolve()))
+                self.assertNotIn('DYLD_FALLBACK_FRAMEWORK_PATH', result)
                 self.assertEqual(result['MENU_POINTER_VERIFIED_RECEIPT'], '1'*64)
                 self.assertEqual(result['MENU_POINTER_LINKAGE'], 'static')
                 self.assertEqual(result['OTHER'], 'retained')
             with patch.object(pointer, 'check_output', return_value='dunecity:\n @rpath/libSDL2.dylib (compatibility version 1.0)\n'):
-                dynamic, _ = pointer.runtime_environment(env, app)
+                dynamic, _ = pointer.runtime_environment(env, alias)
+                self.assertEqual(dynamic['DYLD_LIBRARY_PATH'], str(frameworks.resolve()))
+                self.assertEqual(dynamic['DYLD_FRAMEWORK_PATH'], str(frameworks.resolve()))
                 self.assertEqual(dynamic['MENU_POINTER_LINKAGE'], 'dynamic')
                 self.assertNotIn('MENU_POINTER_VERIFIED_RECEIPT', dynamic)
                 with self.assertRaisesRegex(RuntimeError, 'dynamic candidate'):
-                    pointer.runtime_environment(env, app, self.receipt, '1'*64)
+                    pointer.runtime_environment(env, alias, self.receipt, '1'*64)
 
     def test_consumer_only_extracts_verified_fixture_and_never_invokes_sdk_frontend(self):
         with tempfile.TemporaryDirectory() as directory:

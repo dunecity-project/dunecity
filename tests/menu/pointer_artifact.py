@@ -379,6 +379,7 @@ def runtime_environment(env, candidate, proof=None, receipt_sha256=None):
     env = {key: value for key, value in env.items()
            if not key.startswith(('DYLD_', 'MENU_POINTER_'))}
     runtime = Path(candidate).resolve(strict=True)
+    frameworks = str((runtime / 'Contents/Frameworks').resolve())
     dependencies = check_output(['otool', '-L', str(runtime / 'Contents/MacOS/dunecity')], text=True)
     names = [Path(line.strip().split(' (', 1)[0]).name for line in dependencies.splitlines()[1:]]
     dynamic = any(name == 'SDL2' or name.startswith(('libSDL2-', 'libSDL2.')) for name in names)
@@ -386,7 +387,8 @@ def runtime_environment(env, candidate, proof=None, receipt_sha256=None):
         require(not dynamic and checksum(receipt_sha256), 'verified static receipt cannot authorize a dynamic candidate')
         env.update(MENU_POINTER_VERIFIED_RECEIPT=receipt_sha256, MENU_POINTER_SDL_VERSION=proof['inputs']['sdk']['version'])
     env.update(MENU_POINTER_MAPPING='1', MENU_POINTER_RUNTIME=str(runtime),
-               MENU_POINTER_LINKAGE='dynamic' if dynamic else 'static', DYLD_LIBRARY_PATH=str(runtime / 'Contents/Frameworks'))
+               MENU_POINTER_LINKAGE='dynamic' if dynamic else 'static',
+               DYLD_LIBRARY_PATH=frameworks, DYLD_FRAMEWORK_PATH=frameworks)
     require(dynamic or proof is not None, 'static SDL candidate requires its own producer-built diagnostic; no local SDK fallback')
     return env, dependencies
 

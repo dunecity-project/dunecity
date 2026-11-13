@@ -673,6 +673,11 @@ private owned scratch using the shared safe-extraction helper, then verify all
 receipt/candidate/source bytes before execution. It reuses candidate resources
 read-only and restores foreground ownership. Receipt/reference, profiles and logs
 remain in evidence; successful leased scratch is removed by the existing helper.
+The launch environment discards inherited `DYLD_*` authority, then derives both
+library and framework search paths from the verified candidate's canonical
+`Contents/Frameworks`. Dynamic framework imports such as Sparkle must resolve
+from that receipt-bound package, not an obsolete producer workspace or Homebrew.
+
 `gate-status.json` distinguishes `blocked-prerequisite`, `blocked-environment`,
 `failed-assertion`, other harness/runtime failures and an actual full-menu PASS.
 Compilation-only `prepared-not-run` and `--pointer-sdl-only` never satisfy it.
