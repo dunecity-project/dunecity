@@ -47,6 +47,10 @@ on:
         description: 'Validate unsigned hosted Mac rendering/performance only; publish nothing.'
         type: boolean
         default: false
+      nightly_probe:
+        description: 'Run the nightly test tier now; publish nothing.'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -175,7 +179,7 @@ jobs:
           sudo apt-get install -y \
             libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libcurl4-openssl-dev libssl-dev python3-cryptography \
-            catch2
+            catch2 libminiupnpc-dev
 
       # Native packet tests need headers; framing vectors also need the SDK's
       # ESM exports, produced by its prepare script.

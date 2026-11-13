@@ -126,6 +126,25 @@ class StagingSelectionTests(unittest.TestCase):
             self.assertFalse(selected['package'])
             self.assertEqual(selected['tier'], 'nightly')
 
+    def nightly_probe_plan(self, directory, **inputs):
+        event = Path(directory) / 'event.json'
+        automation.write_json(event, {'inputs': dict(nightly_probe='true', **inputs)})
+        selected = Path(directory) / 'selection.json'
+        with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event), GITHUB_EVENT_NAME='workflow_dispatch',
+                        GITHUB_REF='refs/heads/' + automation.STAGING, GITHUB_SHA=SHA, GITHUB_RUN_ID='8',
+                        GITHUB_OUTPUT='', GITHUB_STEP_SUMMARY=''):
+            automation.plan(argparse.Namespace(output=selected))
+        return json.loads(selected.read_text())
+
+    def test_nightly_probe_selects_the_nightly_tier_and_never_packages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = self.nightly_probe_plan(directory)
+            self.assertEqual((selected['tier'], selected['run'], selected['package'], selected['staging']),
+                             ('nightly', True, False, False))
+            self.assertEqual(selected['sha'], SHA)
+            with self.assertRaisesRegex(ValueError, 'runs alone'):
+                self.nightly_probe_plan(directory, macos_skin_probe='true')
+
     def test_documentation_filter_does_not_skip_build_or_signing_inputs(self):
         self.assertTrue(automation.docs_only(['docs/release-operations.md', 'HANDOVER.md']))
         self.assertFalse(automation.docs_only(['README.md'] * 300))

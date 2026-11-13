@@ -488,6 +488,12 @@ def plan(args):
         nightly = event.get('schedule') == '47 3 * * *'
         values.update(sha=sha, run=package or nightly, package=package, stable=False, staging=True,
                       tag=snapshot_tag(sha), reason=reason, tier='nightly' if nightly else 'integration')
+    if str(inputs.get('nightly_probe', '')).lower() == 'true':
+        # The nightly tier otherwise runs once a day from its cron, so a defect
+        # in it could not be reproduced or checked on demand.
+        if probes or packaging or stable or name != 'workflow_dispatch':
+            raise ValueError('The nightly tier probe runs alone and publishes nothing')
+        values.update(tier='nightly', reason='nightly tier on demand')
     write_json(args.output, values)
     emit(values)
 
