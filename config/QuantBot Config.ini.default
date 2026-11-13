@@ -459,11 +459,12 @@ CampaignHelperEasyHarvesters=0
 CampaignHelperMediumHarvesters=0
 CampaignHelperHardHarvesters=0
 CampaignHelperBrutalHarvesters=0
-# ArmyValue: its army value limit (0 = the map-size limit of a custom game: 8000 / 12000 / 20000 / 40000 on 64x64).
-CampaignHelperEasyArmyValue=0
-CampaignHelperMediumArmyValue=0
-CampaignHelperHardArmyValue=0
-CampaignHelperBrutalArmyValue=0
+# FactoryRefineries: it builds its first combat factory once it has this many refineries
+# (0 = when the factory and a first unit are funded beside its economy reserves).
+CampaignHelperEasyFactoryRefineries=0
+CampaignHelperMediumFactoryRefineries=0
+CampaignHelperHardFactoryRefineries=0
+CampaignHelperBrutalFactoryRefineries=0
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1
