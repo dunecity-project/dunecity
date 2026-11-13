@@ -314,6 +314,9 @@ struct QuantBotConfig {
         /// opposing alliance's army (capped at 75% of its own limit), so a low difficulty
         /// threshold cannot send the starting army into three bases. Hashed; default off.
         bool campaignAllyStrengthFloor;
+        /// An Easy, Medium or Hard campaign opponent's military value limit never exceeds
+        /// CampaignDifficultyPolicy::armyCeiling (its final-level size). Hashed; default off.
+        bool campaignEnemyArmyCeiling;
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Hashed; default on.
         bool campaignThreatProduction;

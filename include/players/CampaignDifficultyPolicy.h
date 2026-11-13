@@ -24,6 +24,17 @@ inline Profile profile(int difficulty, int tech) {
         default:return {8, 16+stage*4, (16+stage*4)*700, 40000-stage*10000, 0, 300000, 5, 100, false};
     }
 }
+// The largest army value an Easy, Medium or Hard campaign opponent builds up to: what it
+// reaches on the final level, so a large scripted starting army on an earlier mission
+// cannot multiply into a stronger opponent than the last one. Brutal has no ceiling.
+inline int armyCeiling(int difficulty) {
+    switch (difficulty) {
+        case 0: return 6600;
+        case 1: return 8250;
+        case 2: return 10000;
+        default:return std::numeric_limits<int>::max();
+    }
+}
 // Seeded offsets keep each house independent and deterministic across peers.
 inline uint32_t staggerMs(uint32_t seed, uint32_t cycle, uint32_t house, uint32_t spanMs) {
     uint32_t value=seed ^ (house+1)*0x9e3779b9u ^ cycle*0x85ebca6bu;
