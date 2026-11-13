@@ -1493,6 +1493,18 @@ void QuantBot::launchGroundHunt() {
             if (cheapest) {selected.push_back(cheapest->id);++pressure.units;pressure.value+=cheapest->value;}
         }
     } else if (campaignPolicyApplies()) {
+        // CampaignAllyWaveReadiness: the troops at home must themselves be a wave (1) or half
+        // of one (2), so that each minute's new units are not fed out one batch at a time.
+        if (const int level=botConfig().force.campaignAllyWaveReadiness;
+            level>0 && isAlliedWithHuman() && !currentGame->isCitySimEnabled()) {
+            requiredReady=campaignRequiredArmy(houseAttackThreshold())/level;
+            if (availableValue<requiredReady) {
+                traceDecision("attack_deferred",AITelemetry::Record().set("reason","wave_readiness")
+                    .set("available_value",availableValue).set("required_military",requiredReady)
+                    .set("committed_value",committedValue));
+                return;
+            }
+        }
         // Shared-house helpers retain a modest home reserve, without enemy caps.
         selected=SimpleArmyPolicy::limitedAttack(armyValue,committedValue,100-profile.reservePercent,candidates);
     } else {
