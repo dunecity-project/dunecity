@@ -236,11 +236,12 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
     cells.append(dict(category='campaign', name=f'player-brutal-v-quantbot-{enemy_difficulty}',
                       kind='campaign', mod='vanilla', partner='brutal', enemy_ai='quantbot',
                       enemy_difficulty=enemy_difficulty, ai_only=True, minutes=80, full=1, smoke=0))
-    for partner in ('hard', 'medium', 'easy'):
-        cells.append(dict(category='campaign', name=f'partner-{partner}-v-quantbot-{enemy_difficulty}',
-                          kind='campaign', mod='dunecity', partner=partner, enemy_ai='quantbot',
-                          enemy_difficulty=enemy_difficulty, minutes=80,
-                          full=2 if partner == 'hard' else 1, smoke=0))
+    for partner in ('brutal', 'hard', 'medium', 'easy'):
+        if partner != 'brutal':
+            cells.append(dict(category='campaign', name=f'partner-{partner}-v-quantbot-{enemy_difficulty}',
+                              kind='campaign', mod='dunecity', partner=partner, enemy_ai='quantbot',
+                              enemy_difficulty=enemy_difficulty, minutes=80,
+                              full=2 if partner == 'hard' else 1, smoke=0))
         # Vanilla difficulty calibration (idle human, QuantBot Both support). Only with --cells,
         # so the fixed full-tier gate keeps its schedule.
         cells.append(dict(category='campaign', name=f'partner-{partner}-v-quantbot-{enemy_difficulty}',
