@@ -383,7 +383,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignMilitaryOpening = true;
     force.campaignAdaptiveReadiness = true;
     force.campaignAllyStrengthFloor = true;
-    force.campaignEnemyHarvesterCeiling = false;
+    force.campaignEnemyHarvesterCeiling = true;
     force.campaignThreatProduction = true;
     force.campaignFundedLightOpening = true;
     force.campaignLightWorkingCash = true;

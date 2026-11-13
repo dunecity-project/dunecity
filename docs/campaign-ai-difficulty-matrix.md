@@ -53,12 +53,27 @@ timers are unchanged since 1.0.833, and Easy enemies ran 1-2 harvesters each.
 ground waves home until its army matches the strongest opposing alliance, capped
 at 75% of its own limit; `campaign-ally-strength-floor-off` is the control.
 
-Missions 5, 11, 14 and 17 won 137/144 across the four pairs. Level 8 (missions
-20 and 21) is the open exception at 5-14 of 24 per pair, below level 9, and it
-was already so before this change. A tested enemy army ceiling (final-level
-size: 6600/8250/10000) did not improve it and was removed; there the enemies
-hold idle credits and replace every loss, so the next candidates are rebuild
-rate and wave cadence.
+Missions 5, 11, 14 and 17 won 137/144 across the four pairs, and missions 8, 14,
+17, 18 and 19 won 119/120 with the harvester ceiling below. Level 8 (missions 20
+and 21) was the exception at 5-14 of 24 per pair, and was already so before the
+partner change: those missions start each opponent with two refineries, so
+Easy/Medium ran 2/4 harvesters, banked 4,000-10,000 idle credits and replaced
+every loss at once, where the level 9 opponents have one refinery and run short.
+`CampaignEnemyHarvesterCeiling` (hashed, default on) keeps an Easy/Medium/Hard
+opponent to its level 9 fleet of 1/2/4 harvesters;
+`campaign-enemy-harvester-ceiling-off` is the control.
+
+| Player v enemy | Level 8 before | Level 8 with ceiling (9001-9004 + 9101-9104) | Level 9 with ceiling |
+|---|---|---|---|
+| Easy v Easy | 14/24 | 36/48 | 23/24 |
+| Medium v Easy | 11/24 | 38/48 | 20/24 |
+| Hard v Medium | 8/24 | 34/48 | 16/24 |
+| Hard v Hard | 5/24 | 11/48 | 10/24 |
+
+Still open: level 8 remains below level 9 for Easy v Easy and Hard v Hard (the
+Hard ceiling of 4 equals what Hard already ran there). An enemy army ceiling
+(final-level size 6600/8250/10000) was tested with the harvester ceiling on both
+seed sets and did not help (35, 29, 34, 15 of 48), so it was removed.
 
 
 ## Implemented local candidate: 1.0.672
