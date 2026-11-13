@@ -613,6 +613,9 @@ void QuantBot::update() {
         // campaign opponent to expand to a skirmish-sized harvester fleet.
         baseHarvesterLimit=std::max(0,diffSettings.harvesterLimitPerRefineryMultiplier
             * initialRefineryBays());
+        if (config.force.campaignEnemyHarvesterCeiling)
+            baseHarvesterLimit=std::min(baseHarvesterLimit,
+                CampaignDifficultyPolicy::harvesterCeiling(static_cast<int>(difficulty)));
     }
 
     if (const int alliedLimit = campaignAllyHarvesterLimit(); alliedLimit > 0) baseHarvesterLimit = alliedLimit;

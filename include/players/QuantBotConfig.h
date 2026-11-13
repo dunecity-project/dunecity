@@ -315,6 +315,10 @@ struct QuantBotConfig {
         /// threshold cannot send the starting army into three bases. Hashed; default on.
         /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
+        /// An Easy, Medium or Hard campaign opponent keeps at most
+        /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
+        /// however many refineries the mission starts it with. Hashed; default off.
+        bool campaignEnemyHarvesterCeiling;
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Hashed; default on.
         bool campaignThreatProduction;

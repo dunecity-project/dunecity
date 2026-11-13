@@ -438,6 +438,10 @@ CampaignAdaptiveReadiness=1
 # opposing alliance (capped at 75% of its own limit). Hashed; OFF preserves the difficulty
 # threshold alone. City campaigns are unchanged.
 CampaignAllyStrengthFloor=1
+# Easy, Medium and Hard campaign opponents keep at most 1 / 2 / 4 harvesters, their final-level
+# fleet, however many refineries the mission gives them. Hashed; OFF preserves
+# HarvesterLimitMultiplier x starting refineries without a ceiling.
+CampaignEnemyHarvesterCeiling=0
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1
