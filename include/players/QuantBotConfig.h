@@ -318,6 +318,9 @@ struct QuantBotConfig {
         /// Easy, Medium and Hard campaign opponents send their first ground wave three minutes
         /// after the established opening. Hashed; default on. Brutal is unchanged.
         bool campaignLaterOpening;
+        /// Trial, default 0: the campaign partner's strength floor is capped at 95% of its own
+        /// limit (1) or not capped at all (2) instead of 75%. Hashed.
+        int campaignAllyPatience;
         /// An Easy, Medium or Hard campaign opponent keeps at most
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
         /// however many refineries the mission starts it with. Hashed; default on.
