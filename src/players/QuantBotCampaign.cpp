@@ -401,9 +401,11 @@ void QuantBot::updateCampaignWave() {
             return;
         }
         // The third difficulty lever: seconds an Easy/Medium/Hard opponent waits after the
-        // map's trigger, on top of its 0-2 minute stagger. Brutal opens on the trigger.
+        // map's reinforcement trigger, on top of its 0-2 minute stagger. Brutal opens on the
+        // trigger. Missions 1-4 have no trigger and keep their fixed minute 4-6 opening.
         const auto& force=botConfig().force;
-        const int waitSeconds=difficulty==Difficulty::Easy ? force.campaignEasyOpeningDelaySec
+        const int waitSeconds=earlySignal ? 0
+            : difficulty==Difficulty::Easy ? force.campaignEasyOpeningDelaySec
             : difficulty==Difficulty::Medium ? force.campaignMediumOpeningDelaySec
             : difficulty==Difficulty::Hard ? force.campaignHardOpeningDelaySec : 0;
         const auto delay=CampaignDifficultyPolicy::openingDelayMs(static_cast<int>(difficulty),
