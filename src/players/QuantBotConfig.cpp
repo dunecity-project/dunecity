@@ -1088,7 +1088,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     force.campaignAllyStrengthFloor = iniFile.getBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
     force.campaignHardPressure = std::clamp(
-        iniFile.getIntValue("Force Concentration", "CampaignHardPressure", force.campaignHardPressure), 0, 4);
+        iniFile.getIntValue("Force Concentration", "CampaignHardPressure", force.campaignHardPressure), 0, 8);
     force.campaignEnemyHarvesterCeiling = iniFile.getBoolValue("Force Concentration", "CampaignEnemyHarvesterCeiling", force.campaignEnemyHarvesterCeiling);
     force.campaignThreatProduction = iniFile.getBoolValue("Force Concentration", "CampaignThreatProduction", force.campaignThreatProduction);
     force.campaignFundedLightOpening = iniFile.getBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);

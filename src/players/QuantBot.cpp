@@ -397,7 +397,7 @@ void QuantBot::update() {
 			}
 			else if (difficulty == Difficulty::Hard) {
 				initialItemCount[Structure_Refinery] = 2;
-				militaryValueLimit = 10000;
+				militaryValueLimit = config.force.campaignHardPressure >= 7 ? 8000 : 10000;
                 harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialRefineryBays();
 				logDebug("  Mission 21+ override: Refineries=2, MilitaryValueLimit=10000");
 			}
@@ -616,6 +616,9 @@ void QuantBot::update() {
         if (config.force.campaignEnemyHarvesterCeiling)
             baseHarvesterLimit=std::min(baseHarvesterLimit,
                 CampaignDifficultyPolicy::harvesterCeiling(static_cast<int>(difficulty)));
+        if (difficulty == Difficulty::Hard && config.force.campaignHardPressure >= 5)
+            baseHarvesterLimit=std::min(baseHarvesterLimit,
+                config.force.campaignHardPressure == 5 || config.force.campaignHardPressure == 7 ? 3 : 2);
     }
 
     if (const int alliedLimit = campaignAllyHarvesterLimit(); alliedLimit > 0) baseHarvesterLimit = alliedLimit;
