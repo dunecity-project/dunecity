@@ -192,6 +192,12 @@ public:
     bool campaignCombatBudgetActive() const;
     int getCityPopulationLimit(int mapArea) const override;
     int campaignAllyHarvesterLimit() const;
+    /// CampaignEarlyDefence: refineries the human's campaign partner founds before its first
+    /// combat producer (Easy 3, others 2; 1 with the switch off).
+    int campaignProducerRefineries() const;
+    /// CampaignEarlyDefence: the partner's army is below its difficulty's ready share of the
+    /// military limit, so its producers spend as they do under a live base attack.
+    bool campaignBelowDefenceFloor() const;
     bool canAddRepairYard(int includingQueued) const;
     bool economicFleetRatioActive() const;
     /// The active fleet-ratio treatment: EconomicFleetRatios' configured values, or

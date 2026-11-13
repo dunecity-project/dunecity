@@ -450,7 +450,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     if (botConfig().force.campaignMilitaryOpening && !pass.citySimEnabled
         && campaignPolicyApplies() && isAlliedWithHuman()
         && !builderOnly() && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
-        && pass.itemCount[Structure_Refinery] > 0
+        && pass.itemCount[Structure_Refinery] >= campaignProducerRefineries()
         && pass.itemCount[Structure_LightFactory] == 0 && pass.itemCount[Structure_HeavyFactory] == 0
         && pass.itemCount[Structure_Barracks] == 0 && pass.itemCount[Structure_WOR] == 0) {
         const int house = getHouse()->getHouseID();
@@ -459,7 +459,8 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             const auto& spec = data[producer][house];
             if (!spec.enabled || spec.builder != int(turn.pBuilder->getItemID())
                 || spec.techLevel > getHouse()->getTechLevel()) continue;
-            if (producer == Structure_LightFactory && botConfig().force.campaignFundedLightOpening) {
+            if (producer == Structure_LightFactory && botConfig().force.campaignFundedLightOpening
+                && !botConfig().force.campaignEarlyDefence) {
                 // A paid-for empty factory is not a replacement army. Leave the
                 // yard to its normal economy until a legal first vehicle fits
                 // beside the cash that its producer would have to protect.

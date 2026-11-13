@@ -315,6 +315,11 @@ struct QuantBotConfig {
         /// threshold cannot send the starting army into three bases. Hashed; default on.
         /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
+        /// A campaign player-side house founds its first combat producer after two refineries
+        /// (Easy three) instead of four, saves for it, and funds combat production as under a
+        /// live base attack until its army reaches the difficulty's ready share of its limit.
+        /// Hashed; default off. Cities are unchanged.
+        bool campaignEarlyDefence;
         /// An Easy, Medium or Hard campaign opponent keeps at most
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
         /// however many refineries the mission starts it with. Hashed; default on.

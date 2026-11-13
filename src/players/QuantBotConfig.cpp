@@ -383,6 +383,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignMilitaryOpening = true;
     force.campaignAdaptiveReadiness = true;
     force.campaignAllyStrengthFloor = true;
+    force.campaignEarlyDefence = false;
     force.campaignEnemyHarvesterCeiling = true;
     force.campaignThreatProduction = true;
     force.campaignFundedLightOpening = true;
@@ -814,6 +815,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
         iniFile.setBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
         iniFile.setBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
+        iniFile.setBoolValue("Force Concentration", "CampaignEarlyDefence", force.campaignEarlyDefence);
         iniFile.setBoolValue("Force Concentration", "CampaignEnemyHarvesterCeiling", force.campaignEnemyHarvesterCeiling);
         iniFile.setBoolValue("Force Concentration", "CampaignThreatProduction", force.campaignThreatProduction);
         iniFile.setBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);
@@ -1085,6 +1087,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignMilitaryOpening = iniFile.getBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
     force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     force.campaignAllyStrengthFloor = iniFile.getBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
+    force.campaignEarlyDefence = iniFile.getBoolValue("Force Concentration", "CampaignEarlyDefence", force.campaignEarlyDefence);
     force.campaignEnemyHarvesterCeiling = iniFile.getBoolValue("Force Concentration", "CampaignEnemyHarvesterCeiling", force.campaignEnemyHarvesterCeiling);
     force.campaignThreatProduction = iniFile.getBoolValue("Force Concentration", "CampaignThreatProduction", force.campaignThreatProduction);
     force.campaignFundedLightOpening = iniFile.getBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);
@@ -1710,6 +1713,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignMilitaryOpening", force.campaignMilitaryOpening);
     addNamed("campaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     addNamed("campaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
+    addNamed("campaignEarlyDefence", force.campaignEarlyDefence);
     addNamed("campaignEnemyHarvesterCeiling", force.campaignEnemyHarvesterCeiling);
     addNamed("campaignThreatProduction", force.campaignThreatProduction);
     addNamed("campaignFundedLightOpening", force.campaignFundedLightOpening);
