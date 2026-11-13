@@ -453,6 +453,17 @@ CampaignHardWaveValue=3500
 CampaignEasyOpeningDelaySec=0
 CampaignMediumOpeningDelaySec=0
 CampaignHardOpeningDelaySec=60
+# The levers of a campaign helper (a QuantBot on the player's side in a campaign), by its difficulty. Hashed.
+# Harvesters: the most it keeps (0 = the spice budget alone).
+CampaignHelperEasyHarvesters=0
+CampaignHelperMediumHarvesters=0
+CampaignHelperHardHarvesters=0
+CampaignHelperBrutalHarvesters=0
+# ArmyValue: its army value limit (0 = the map-size limit of a custom game: 8000 / 12000 / 20000 / 40000 on 64x64).
+CampaignHelperEasyArmyValue=0
+CampaignHelperMediumArmyValue=0
+CampaignHelperHardArmyValue=0
+CampaignHelperBrutalArmyValue=0
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1

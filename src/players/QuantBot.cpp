@@ -627,6 +627,19 @@ void QuantBot::update() {
     }
 
     if (const int alliedLimit = campaignAllyHarvesterLimit(); alliedLimit > 0) baseHarvesterLimit = alliedLimit;
+    // Campaign helper levers by its difficulty: a harvester ceiling and an army value limit.
+    if (campaignPolicyApplies() && isAlliedWithHuman() && !builderOnly()) {
+        const auto& force=config.force;
+        const int tier=static_cast<int>(difficulty);
+        const int harvesters[]={force.campaignHelperEasyHarvesters,force.campaignHelperMediumHarvesters,
+            force.campaignHelperHardHarvesters,force.campaignHelperBrutalHarvesters};
+        const int armyValue[]={force.campaignHelperEasyArmyValue,force.campaignHelperMediumArmyValue,
+            force.campaignHelperHardArmyValue,force.campaignHelperBrutalArmyValue};
+        if (tier>=0 && tier<4) {
+            if (harvesters[tier]>0) baseHarvesterLimit=std::min(baseHarvesterLimit,harvesters[tier]);
+            if (armyValue[tier]>0) militaryValueLimit=armyValue[tier];
+        }
+    }
     // The explicit Game Options ceiling also constrains each AI target.
     if (getHouse()->getMaxHarvesters() > 0)
         baseHarvesterLimit = std::min(baseHarvesterLimit, getHouse()->getMaxHarvesters());
