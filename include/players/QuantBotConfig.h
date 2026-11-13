@@ -318,10 +318,6 @@ struct QuantBotConfig {
         /// Easy, Medium and Hard campaign opponents send their first ground wave three minutes
         /// after the established opening. Hashed; default on. Brutal is unchanged.
         bool campaignLaterOpening;
-        /// A campaign partner launches a ground wave only when the troops at home alone meet
-        /// its required army (1) or half of it (2), instead of sending each minute's new
-        /// units after a wave that has already left. Hashed; 0 = off (default).
-        int campaignAllyWaveReadiness;
         /// An Easy, Medium or Hard campaign opponent keeps at most
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
         /// however many refineries the mission starts it with. Hashed; default on.

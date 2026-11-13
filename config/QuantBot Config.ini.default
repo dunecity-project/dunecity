@@ -441,9 +441,6 @@ CampaignAllyStrengthFloor=1
 # Easy, Medium and Hard campaign opponents send their first ground wave three minutes later.
 # Hashed; OFF preserves the established opening. Brutal is unchanged.
 CampaignLaterOpening=1
-# A campaign partner's ground wave needs the troops at home alone to meet its required army
-# (1) or half of it (2); 0 = off: new units follow a departed wave one batch at a time. Hashed.
-CampaignAllyWaveReadiness=0
 # Easy, Medium and Hard campaign opponents keep at most 1 / 2 / 4 harvesters, their final-level
 # fleet, however many refineries the mission gives them. Hashed; OFF preserves
 # HarvesterLimitMultiplier x starting refineries without a ceiling.
