@@ -438,11 +438,6 @@ CampaignAdaptiveReadiness=1
 # opposing alliance (capped at 75% of its own limit). Hashed; OFF preserves the difficulty
 # threshold alone. City campaigns are unchanged.
 CampaignAllyStrengthFloor=1
-# A campaign player-side house founds its first combat producer after two refineries (Easy three)
-# and funds combat production first until its army reaches the difficulty's ready share of its
-# limit, so it holds a defence before the first enemy wave. Hashed; OFF preserves the
-# four-refinery economy opening. City campaigns are unchanged.
-CampaignEarlyDefence=0
 # Easy, Medium and Hard campaign opponents keep at most 1 / 2 / 4 harvesters, their final-level
 # fleet, however many refineries the mission gives them. Hashed; OFF preserves
 # HarvesterLimitMultiplier x starting refineries without a ceiling.

@@ -227,21 +227,6 @@ int QuantBot::campaignAllyHarvesterLimit() const {
         ? 20 : 0;
 }
 
-int QuantBot::campaignProducerRefineries() const {
-    if (!botConfig().force.campaignEarlyDefence) return 1;
-    return difficulty == Difficulty::Easy || difficulty == Difficulty::Defend ? 3 : 2;
-}
-
-bool QuantBot::campaignBelowDefenceFloor() const {
-    if (!botConfig().force.campaignEarlyDefence || !currentGame || currentGame->isCitySimEnabled()
-        || builderOnly() || !campaignPolicyApplies() || !isAlliedWithHuman()) return false;
-    // The army this difficulty calls ready (QuantBotArmy.cpp, houseAttackThreshold): Easy 4000,
-    // Medium 4800, Hard 6000, Brutal 10000 on a 64x64 mission.
-    const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
-    const FixPoint share = FixPoint(static_cast<int>(settings.attackThresholdPercent * 100)) / 100;
-    return militaryUnitValue() < (militaryValueLimit * share).lround();
-}
-
 bool QuantBot::campaignPolicyApplies() const {
     return currentGame && (isCampaignGameType(currentGame->gameType)
         || (isScenarioGameType(currentGame->gameType) && botConfig().force.singleMissionCampaignPolicy));

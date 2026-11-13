@@ -3319,9 +3319,9 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 groundEconomyThreat = true;
         }
     }
-    pass.campaignThreatProduction = (botConfig().force.campaignThreatProduction && pass.defendingEconomy
+    pass.campaignThreatProduction = botConfig().force.campaignThreatProduction && pass.defendingEconomy
         && !pass.citySimEnabled && !builderOnly()
-        && campaignPolicyApplies() && isAlliedWithHuman()) || campaignBelowDefenceFloor();
+        && campaignPolicyApplies() && isAlliedWithHuman();
     pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth
         && groundEconomyThreat && ownGroundArmyValue()
             < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());
