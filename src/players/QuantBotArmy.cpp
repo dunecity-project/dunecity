@@ -962,13 +962,8 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
         }
         const int opponentThreshold = std::min(std::max(2000, strongest * 5 / 4), militaryValueLimit * 3 / 4);
         required = adaptive ? std::min(required, opponentThreshold) : opponentThreshold;
-        if (botConfig().force.campaignAllyStrengthFloor && !currentGame->isCitySimEnabled()) {
-            // CampaignAllyPatience trial: 1 waits for 95% of the own limit, 2 for parity outright.
-            const int patience = botConfig().force.campaignAllyPatience;
-            const int cap = patience == 2 ? std::numeric_limits<int>::max()
-                : patience == 1 ? militaryValueLimit * 19 / 20 : militaryValueLimit * 3 / 4;
-            required = std::max(required, std::min(strongest, cap));
-        }
+        if (botConfig().force.campaignAllyStrengthFloor && !currentGame->isCitySimEnabled())
+            required = std::max(required, std::min(strongest, militaryValueLimit * 3 / 4));
     }
     // Once the map is depleted, stop waiting for a larger army. A leftover
     // cash balance or a few cheap survivors must not keep the game idle.
