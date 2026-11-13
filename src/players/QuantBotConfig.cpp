@@ -1101,18 +1101,16 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignMilitaryOpening = iniFile.getBoolValue("Force Concentration", "CampaignMilitaryOpening", force.campaignMilitaryOpening);
     force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     force.campaignAllyStrengthFloor = iniFile.getBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
-    auto campaignLever = [&](const char* key, int& value, int low, int high) {
-        value = std::clamp(iniFile.getIntValue("Force Concentration", key, value), low, high);
-    };
-    campaignLever("CampaignEasyHarvesters", force.campaignEasyHarvesters, 0, 40);
-    campaignLever("CampaignMediumHarvesters", force.campaignMediumHarvesters, 0, 40);
-    campaignLever("CampaignHardHarvesters", force.campaignHardHarvesters, 0, 40);
-    campaignLever("CampaignEasyWaveValue", force.campaignEasyWaveValue, 300, 100000);
-    campaignLever("CampaignMediumWaveValue", force.campaignMediumWaveValue, 300, 100000);
-    campaignLever("CampaignHardWaveValue", force.campaignHardWaveValue, 300, 100000);
-    campaignLever("CampaignEasyOpeningDelaySec", force.campaignEasyOpeningDelaySec, 0, 1800);
-    campaignLever("CampaignMediumOpeningDelaySec", force.campaignMediumOpeningDelaySec, 0, 1800);
-    campaignLever("CampaignHardOpeningDelaySec", force.campaignHardOpeningDelaySec, 0, 1800);
+    // Literal keys, one per line: the genome inventory reads these statements.
+    force.campaignEasyHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyHarvesters", force.campaignEasyHarvesters), 0, 40);
+    force.campaignMediumHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignMediumHarvesters", force.campaignMediumHarvesters), 0, 40);
+    force.campaignHardHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHardHarvesters", force.campaignHardHarvesters), 0, 40);
+    force.campaignEasyWaveValue = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyWaveValue", force.campaignEasyWaveValue), 300, 100000);
+    force.campaignMediumWaveValue = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignMediumWaveValue", force.campaignMediumWaveValue), 300, 100000);
+    force.campaignHardWaveValue = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHardWaveValue", force.campaignHardWaveValue), 300, 100000);
+    force.campaignEasyOpeningDelaySec = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyOpeningDelaySec", force.campaignEasyOpeningDelaySec), 0, 1800);
+    force.campaignMediumOpeningDelaySec = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignMediumOpeningDelaySec", force.campaignMediumOpeningDelaySec), 0, 1800);
+    force.campaignHardOpeningDelaySec = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHardOpeningDelaySec", force.campaignHardOpeningDelaySec), 0, 1800);
     force.campaignThreatProduction = iniFile.getBoolValue("Force Concentration", "CampaignThreatProduction", force.campaignThreatProduction);
     force.campaignFundedLightOpening = iniFile.getBoolValue("Force Concentration", "CampaignFundedLightOpening", force.campaignFundedLightOpening);
     force.campaignLightWorkingCash = iniFile.getBoolValue("Force Concentration", "CampaignLightWorkingCash", force.campaignLightWorkingCash);
