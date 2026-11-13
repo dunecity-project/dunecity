@@ -402,9 +402,6 @@ void QuantBot::update() {
 				logDebug("  Mission 21+ override: Refineries=2, MilitaryValueLimit=10000");
 			}
 		}
-        if (config.force.campaignEnemyArmyCeiling && difficulty != Difficulty::Defend)
-            militaryValueLimit = std::min(militaryValueLimit,
-                CampaignDifficultyPolicy::armyCeiling(static_cast<int>(difficulty)));
 
 		// Refinery top-up: Ensure AI has at least the minimum refineries for difficulty
         if (diffSettings.refineryMinimum > 0 && initialRefineryBays() < diffSettings.refineryMinimum) {

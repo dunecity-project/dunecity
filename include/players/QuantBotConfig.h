@@ -319,9 +319,6 @@ struct QuantBotConfig {
         /// CampaignDifficultyPolicy::harvesterCeiling harvesters (its final-level fleet),
         /// however many refineries the mission starts it with. Hashed; default off.
         bool campaignEnemyHarvesterCeiling;
-        /// An Easy, Medium or Hard campaign opponent's military value limit never exceeds
-        /// CampaignDifficultyPolicy::armyCeiling (its final-level size). Hashed; default off.
-        bool campaignEnemyArmyCeiling;
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Hashed; default on.
         bool campaignThreatProduction;
