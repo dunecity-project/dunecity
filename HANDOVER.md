@@ -1,3 +1,32 @@
+## 2026-11-14 - Original Campaign AI restoration (next batch, not 1.0.868)
+
+Stefan requested the selectable Campaign AI use original Dune II behaviour;
+QuantBot remains separate. Implementation follows pinned Dune Dynasty original
+branches and executes the user's `DUNE.PAK/TEAM.EMC` team script. It restores
+production choice/order, individual produced-unit Hunt, authored mission teams,
+five-slot rebuilding, free factory upgrades and original base-attack behaviour.
+See `docs/original-campaign-ai.md` for references and explicit engine adaptations.
+No extracted commercial script is committed.
+
+New games use hashed `OriginalCampaignAI=true`; OFF and pre-9886 saves retain
+the previous controller. Save format 9886 and protocol 125 are reserved for this
+feature. Shipped default INI bytes stay unchanged for old-save content identity.
+Script-owned attack targets survive autonomous target refresh without taking
+authority over explicit player orders. Other controller target selection is inert.
+
+Source-only checkout: `/Users/stefan/Documents/projects/dunecity-original-campaign`
+(`task/original-campaign-ai`) on claw.local. The separately owned 1.0.868 candidate
+`8ecc2d433ab2e9f45978bceb01a4a46afa6fcdf2` was merged here; staging and its sole
+native `build-int` remain with the release coordinator until its handoff.
+Two bounded independent OMP reviews informed fixes; Codex owns integration.
+
+Focused checks at `41d34ddcb`: 5/5 AWS CTest gates, including 25 mission/mod/control
+cases, identical three-house QuantBot OFF/ON digests, original repeatability,
+legacy stream boundaries and real live/checkpoint/ordinary-save continuation.
+The combined-source rerun and required broad/native gates are tracked in
+`/Users/stefan/Documents/projects/outputs/campaign-original-ai/validation.md`.
+Do not infer deployment, merge or complete regression from the focused pass.
+
 ## 2026-11-14 - 1.0.867 published; 1.0.866 was tagged but never published
 
 Tag `v1.0.867` at `cd2c86f2c91c5be77e31d385e373c87394501a1d` is published
