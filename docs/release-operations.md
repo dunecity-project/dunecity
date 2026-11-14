@@ -221,17 +221,17 @@ implementation reuses exact source SHAs only. Documentation can ship separately
 without changing the frozen game candidate; cross-SHA equivalence is not automated.
 
 Green integration CI starts **Qualify release candidate** automatically after this
-workflow is deployed on the default `integrate/feature-batch` branch. For an explicit older green integration
+workflow is deployed on the default `main` branch. For an explicit older green integration
 candidate, first check whether its qualification is already running, then:
 
 ```sh
-gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref integrate/feature-batch -f sha="$FULL_SHA"
+gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref main -f sha="$FULL_SHA"
 # After completion, this is the concrete readiness check, before creating a tag:
 python3 scripts/release-automation.py reuse-qualification --sha "$FULL_SHA" --directory "$EVIDENCE_DIR/qualification"
 ```
 
 The Mini is optional capacity. The host gate admits only the separately hash-approved
-qualification workflow on `integrate/feature-batch`, with a successful candidate
+qualification workflow on `main`, with a successful candidate
 selection and no production reservation. The workspace and queue atomically admit
 one verification lane without waiting; a refusal triggers a hosted run. An offline
 or occupied runner gets a two-minute queue window, then a hosted dispatch and
