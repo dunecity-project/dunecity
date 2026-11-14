@@ -395,6 +395,21 @@ struct QuantBotConfig {
         /// attack: 0=OFF (the difficulty's own ceiling, 30,000 for Brutal on a 64x64 map against
         /// 15,000 for Hard). Home defence, wave sizing and enemies are unchanged.
         int campaignHelperReadinessCap;
+        /// Classic campaign support whose own ground army is below this value, with a Starport,
+        /// imports heavy ground combat units (Tank, Siege Tank, Launcher and the house's special
+        /// heavies when listed) at any price up to list price, as many as cash, stock and the
+        /// remaining value allow in one order, after its first six harvesters and two carryalls
+        /// and before further worker and transport imports: 0=OFF. Enemies are unchanged.
+        int campaignHelperStarportArmy;
+        /// Classic campaign support below its army target (CampaignHelperStarportArmy when set,
+        /// otherwise its campaignHelper*ArmyFloor) orders no harvester beyond six and no carryall
+        /// beyond two, owned or queued, from any producer. Replacements up to six stay allowed.
+        bool campaignHelperImportCap;
+        /// Classic campaign support with a Starport and no Heavy Factory, built, queued or lost,
+        /// orders its first Heavy Factory only after the first Repair Yard is built or queued
+        /// (when it can build one) and the Starport offers no heavy combat unit at or below list
+        /// price, or cash exceeds 2,500. Shared prerequisites and the Repair Yard are unaffected.
+        bool campaignHelperFactoryLast;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

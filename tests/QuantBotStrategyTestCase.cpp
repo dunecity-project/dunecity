@@ -2396,6 +2396,94 @@ TEST_CASE("Campaign helper readiness cap persists OFF and credit values with dis
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign helper Starport army persists OFF and credit values with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperStarportArmy == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-starport-army-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int target : {0, 8000, 12000}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperStarportArmy=" << target << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperStarportArmy == target);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperStarportArmy = target;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), target).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperStarportArmy == target);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCampaignHelperStarportArmy=250000\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.campaignHelperStarportArmy == 200000);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper import cap persists OFF and ON with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperImportCap);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-import-cap-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperImportCap=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperImportCap == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperImportCap = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperImportCap == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper factory last persists OFF and ON with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperFactoryLast);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-factory-last-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperFactoryLast=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperFactoryLast == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperFactoryLast = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperFactoryLast == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign helper rock hold persists OFF and every level with distinct hashes",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;

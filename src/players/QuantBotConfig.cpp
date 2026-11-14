@@ -422,6 +422,9 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperRockHold = 0;
     force.campaignHelperFactoryFirst = false;
     force.campaignHelperReadinessCap = 0;
+    force.campaignHelperStarportArmy = 0;
+    force.campaignHelperImportCap = false;
+    force.campaignHelperFactoryLast = false;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
@@ -882,6 +885,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CampaignHelperRockHold", force.campaignHelperRockHold);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperFactoryFirst", force.campaignHelperFactoryFirst);
         iniFile.setIntValue("Force Concentration", "CampaignHelperReadinessCap", force.campaignHelperReadinessCap);
+        iniFile.setIntValue("Force Concentration", "CampaignHelperStarportArmy", force.campaignHelperStarportArmy);
+        iniFile.setBoolValue("Force Concentration", "CampaignHelperImportCap", force.campaignHelperImportCap);
+        iniFile.setBoolValue("Force Concentration", "CampaignHelperFactoryLast", force.campaignHelperFactoryLast);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1186,6 +1192,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignHelperFactoryFirst = iniFile.getBoolValue("Force Concentration", "CampaignHelperFactoryFirst", force.campaignHelperFactoryFirst);
     force.campaignHelperReadinessCap = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperReadinessCap", force.campaignHelperReadinessCap), 0, 200000);
+    force.campaignHelperStarportArmy = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignHelperStarportArmy", force.campaignHelperStarportArmy), 0, 200000);
+    force.campaignHelperImportCap = iniFile.getBoolValue("Force Concentration", "CampaignHelperImportCap", force.campaignHelperImportCap);
+    force.campaignHelperFactoryLast = iniFile.getBoolValue("Force Concentration", "CampaignHelperFactoryLast", force.campaignHelperFactoryLast);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1836,6 +1846,9 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHelperRockHold", force.campaignHelperRockHold);
     addNamed("campaignHelperFactoryFirst", force.campaignHelperFactoryFirst);
     addNamed("campaignHelperReadinessCap", force.campaignHelperReadinessCap);
+    addNamed("campaignHelperStarportArmy", force.campaignHelperStarportArmy);
+    addNamed("campaignHelperImportCap", force.campaignHelperImportCap);
+    addNamed("campaignHelperFactoryLast", force.campaignHelperFactoryLast);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);

@@ -266,6 +266,14 @@ struct QuantBot::BuildPass {
     bool campaignThreatProduction{};
     // CampaignHelperFactoryFirst: support house below its army floor still lacks a Heavy Factory.
     bool campaignHelperFactoryFirst{};
+    // CampaignHelperStarportArmy: support house's ground army value short of that target
+    // (0 = switch off, out of scope or target met). The Starport imports heavies against it.
+    int64_t campaignHelperStarportDeficit{};
+    // CampaignHelperImportCap: support house below its army target; no seventh harvester
+    // or third carryall, owned or queued.
+    bool campaignHelperImportCap{};
+    // CampaignHelperFactoryLast: support house with a Starport holds its first Heavy Factory.
+    bool campaignHelperFactoryLast{};
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
     bool vanillaFfaLargeScope{};

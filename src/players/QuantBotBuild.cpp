@@ -3357,6 +3357,42 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         && campaignEconomySupport() && pass.itemCount[Structure_HeavyFactory] == 0
         && data[Structure_HeavyFactory][houseID].enabled
         && data[Structure_HeavyFactory][houseID].techLevel <= getHouse()->getTechLevel();
+    // CampaignHelperStarportArmy / ImportCap / FactoryLast (default off,
+    // docs/campaign-support-research.md, "Starport army"): the support house raises its early
+    // army through the Starport. Each switch is the first operand; when all three are off
+    // nothing below calls anything.
+    const int starportArmy = helperForce.campaignHelperStarportArmy;
+    const bool helperImportScope = (starportArmy > 0 || helperForce.campaignHelperImportCap)
+        && campaignEconomySupport();
+    const int64_t helperArmy = helperImportScope ? ownGroundArmyValue() : 0;
+    pass.campaignHelperStarportDeficit = starportArmy > 0 && helperImportScope
+        ? std::max<int64_t>(0, starportArmy - helperArmy) : 0;
+    pass.campaignHelperImportCap = helperForce.campaignHelperImportCap && helperImportScope
+        && (starportArmy > 0 ? helperArmy < starportArmy : armyFloor > 0 && helperArmy < armyFloor);
+    if (helperForce.campaignHelperFactoryLast && campaignEconomySupport()
+        && getHouse()->getNumItems(Structure_StarPort) > 0
+        && pass.itemCount[Structure_HeavyFactory] == 0
+        && getHouse()->getNumLostItems(Structure_HeavyFactory) == 0) {
+        // A Repair Yard the house cannot add does not hold the factory forever.
+        const bool repairMissing = pass.itemCount[Structure_RepairYard] == 0 && repairYardAdmitted(pass)
+            && data[Structure_RepairYard][houseID].enabled
+            && data[Structure_RepairYard][houseID].techLevel <= getHouse()->getTechLevel();
+        // A heavy combat unit in stock at or below its list price, cash permitting or not.
+        auto heavyOffer = [&]() {
+            const Choam& choam = getHouse()->getChoam();
+            for (const auto* structure : getStructureList()) {
+                if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_StarPort
+                    || structure->getHealth() <= 0) continue;
+                for (const auto& offer : static_cast<const BuilderBase*>(structure)->getBuildList())
+                    if (QuantBotBuildPolicy::campaignHelperHeavyImport(offer.itemID) && offer.price > 0
+                        && int(offer.price) <= data[offer.itemID][houseID].price
+                        && choam.getNumAvailable(offer.itemID) > 0) return true;
+            }
+            return false;
+        };
+        pass.campaignHelperFactoryLast = repairMissing
+            || (getHouse()->getCredits() <= 2500 && heavyOffer());
+    }
     pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth
         && groundEconomyThreat && ownGroundArmyValue()
             < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());

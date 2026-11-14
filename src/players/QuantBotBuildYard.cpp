@@ -2460,6 +2460,17 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
 void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    // CampaignHelperFactoryLast (default off): the support house's first Heavy Factory waits
+    // for its first Repair Yard and for the Starport to run out of heavy imports at or below
+    // list price (or cash above 2,500). Every selector's choice is vetted here; the rule that
+    // chose it keeps any hold it set, and its prerequisites are unaffected.
+    if (pass.campaignHelperFactoryLast && yardTurn.itemID == Structure_HeavyFactory) {
+        traceDecision("construction_rejected", AITelemetry::Record()
+            .set("builder", turn.pBuilder->getObjectID()).set("item", yardTurn.itemID)
+            .set("rule", yardTurn.structureRule).set("reason", "campaign_helper_factory_last"));
+        yardTurn.itemID = NONE_ID;
+        yardTurn.crimeServiceSite = Coord::Invalid();
+    }
     // Common admission applies even to prerequisite and capital selectors.
     if (yardTurn.itemID == Structure_RepairYard && pass.repairCapacityDemand
         && !repairYardAdmitted(pass)) {

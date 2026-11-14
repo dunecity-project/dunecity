@@ -78,6 +78,12 @@ inline bool militaryItem(Uint32 item) {
         && item != Unit_CapacityHarvester && item != Unit_FastHarvester
         && item != Unit_MCV && item != Unit_Sandworm;
 }
+/// CampaignHelperStarportArmy/FactoryLast: the heavy ground combat imports (Heavy Factory
+/// tanks and the house specials); trikes, quads, infantry and aircraft are excluded.
+inline bool campaignHelperHeavyImport(Uint32 item) {
+    return item == Unit_Tank || item == Unit_SiegeTank || item == Unit_Launcher
+        || item == Unit_Devastator || item == Unit_SonicTank || item == Unit_Deviator;
+}
 inline QuantBotSpendingPolicy::Bucket spendingBucket(Uint32 item) {
     using Bucket = QuantBotSpendingPolicy::Bucket;
     if (militaryItem(item) || item == Structure_GunTurret || item == Structure_RocketTurret

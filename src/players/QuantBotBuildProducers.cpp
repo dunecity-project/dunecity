@@ -223,6 +223,11 @@ bool QuantBot::vanillaBoomUpgradeAdmitted(BuildPass& pass, const BuilderBase* bu
 
 // Record actual queue acceptance for unit and structure production.
 bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32 itemID, int sourceLine, const char* rule) {
+    // CampaignHelperImportCap (default off): below its army target the support house orders
+    // no seventh harvester and no third carryall, owned or queued, from any producer.
+    if (pass.campaignHelperImportCap
+        && ((itemID == Unit_Harvester && pass.itemCount[Unit_Harvester] >= 6)
+            || (itemID == Unit_Carryall && pass.itemCount[Unit_Carryall] >= 2))) return false;
     // The experimental arms affect only the human helper; opponents retain
     // their normal policy, so this measures the helper's power investment.
     if (botConfig().force.campaignPowerExperiment > 0 && campaignPolicyApplies()
@@ -1921,12 +1926,62 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             getHouse()->getNumItems(Structure_RepairYard));
         if (pass.itemCount[Unit_Carryall] == 0 && transportUseful)
             buyEconomicImport(Unit_Carryall, "first_economic_transport");
-        while (pass.itemCount[Unit_Harvester] < workerTarget) {
+        // CampaignHelperStarportArmy (default off): below its army target the support house's
+        // own heavy imports come after its first six harvesters and two carryalls, and before
+        // any further worker or transport import.
+        const int priorityWorkers = pass.campaignHelperStarportDeficit > 0
+            ? std::min(workerTarget, 6) : workerTarget;
+        const int priorityTransports = pass.campaignHelperStarportDeficit > 0
+            ? std::min(pass.transportTarget, 2) : pass.transportTarget;
+        while (pass.itemCount[Unit_Harvester] < priorityWorkers) {
             if (!buyEconomicImport(Unit_Harvester, "starport_spice_economy")) break;
         }
         while (!pass.vanillaBoomArmy && transportUseful && harvesterInvestmentReserve(pass) == 0
-            && pass.itemCount[Unit_Carryall] < pass.transportTarget)
+            && pass.itemCount[Unit_Carryall] < priorityTransports)
             if (!buyEconomicImport(Unit_Carryall, "starport_transport_capacity")) break;
+        if (pass.campaignHelperStarportDeficit > 0) {
+            // Heavy ground combat units at any price up to list price (cheapest relative
+            // price first), as many as cash, stock, unit limits and the remaining army value
+            // allow in this one order. The reserve for a pending yard structure stays intact.
+            std::vector<Uint32> heavies;
+            for (const auto& offer : pStarPort->getBuildList()) {
+                const int price = purchasePrice(turn.pBuilder, offer.itemID);
+                if (QuantBotBuildPolicy::campaignHelperHeavyImport(offer.itemID)
+                    && price > 0 && price <= data[offer.itemID][houseID].price) heavies.push_back(offer.itemID);
+            }
+            std::sort(heavies.begin(), heavies.end(), [&](Uint32 a, Uint32 b) {
+                const int64_t left = int64_t(purchasePrice(turn.pBuilder,a)) * data[b][houseID].price;
+                const int64_t right = int64_t(purchasePrice(turn.pBuilder,b)) * data[a][houseID].price;
+                return left != right ? left < right : a < b;
+            });
+            const int armyReserve = std::max(capitalReserve(pass, turn.pBuilder->getObjectID()),
+                cityBootstrapReserve(pass));
+            int64_t remaining = pass.campaignHelperStarportDeficit;
+            for (Uint32 unit : heavies) {
+                const int price = purchasePrice(turn.pBuilder, unit);
+                const int value = data[unit][houseID].price;
+                while (remaining > 0 && pass.money + turn.reserve.reserved - armyReserve >= price
+                    && choam.getNumAvailable(unit) > 0
+                    && int64_t(pass.militaryValue) + value <= pass.militaryBudget
+                    && !getHouse()->isUnitLimitReached(unit)) {
+                    const int availableReserve = std::max(0, turn.reserve.reserved - armyReserve);
+                    pass.money += availableReserve;
+                    const bool accepted = produceItemWithLogging(pass, turn, unit, __LINE__,
+                        "campaign_helper_starport_army");
+                    pass.money -= availableReserve;
+                    if (!accepted) break;
+                    ++pass.itemCount[unit];
+                    pass.militaryValue += value;
+                    remaining -= value;
+                }
+            }
+            while (pass.itemCount[Unit_Harvester] < workerTarget) {
+                if (!buyEconomicImport(Unit_Harvester, "starport_spice_economy")) break;
+            }
+            while (!pass.vanillaBoomArmy && transportUseful && harvesterInvestmentReserve(pass) == 0
+                && pass.itemCount[Unit_Carryall] < pass.transportTarget)
+                if (!buyEconomicImport(Unit_Carryall, "starport_transport_capacity")) break;
+        }
 
         // Imports are opportunistic: every discounted combat type
         // is eligible, regardless of the factory composition targets.
