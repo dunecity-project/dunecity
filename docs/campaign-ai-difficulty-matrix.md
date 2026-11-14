@@ -117,14 +117,16 @@ outstanding-force or recovery blocking: an enemy wave is limited by its own cap.
   for Hard/Brutal helpers (no effect against Brutal enemies).
 
 Measured win % (games), 3 houses x seeds 9601-9603 on every mission and seeds
-9604-9609 added on missions 20-22. Helper rows, enemy columns:
+9604-9609 added on missions 20-22. Levels 1-3 were measured again after the
+quota saving rule below; that rule cannot act on later missions, which carry no
+quota. Helper rows, enemy columns:
 
 | Levels | Helper | Easy | Medium | Hard | Brutal |
 |---|---|---|---|---|---|
-| 1-3 (63) | Easy | 98 | 100 | 93 | 80 |
-| | Medium | 100 | 98 | 96 | 80 |
-| | Hard | 92 | 100 | 90 | 84 |
-| | Brutal | 93 | 98 | 95 | 84 |
+| 1-3 (63) | Easy | 98 | 100 | 93 | 84 |
+| | Medium | 100 | 98 | 96 | 85 |
+| | Hard | 98 | 100 | 95 | 87 |
+| | Brutal | 98 | 98 | 98 | 87 |
 | 4-6 (81) | Easy | 100 | 95 | 59 | 9 |
 | | Medium | 100 | 97 | 71 | 19 |
 | | Hard | 100 | 100 | 95 | 20 |
@@ -162,11 +164,23 @@ Still open:
   losses to Medium enemies are there, with 3,400-4,700 army at minute 12.
 - Atreides mission 20: the helper attacks two bases with 16 rocket turrets at
   minute 13-16 and its map has about 45,000 credits of spice.
-- Missions 3-4 carry a 2,700 credit quota. On Atreides mission 4 the game runs
-  on after the enemy has no structures or units left; Hard and Brutal helpers
-  hold almost no credits and reach the 80-minute limit in most games, while
-  Easy and Medium helpers win by minute 16. The helper has no quota rule; the
-  quota link is inferred from these logs, not yet traced in code.
+- Ordos mission 4, seed 9602, against a Hard enemy: the helper loses all but
+  two structures to the minute 4 opening, keeps 1,009 credits it does not
+  spend, and the enemy holds 700 army it does not send. The game runs to the
+  80-minute limit for every helper difficulty.
+
+Quota saving (`CampaignHelperQuotaSaving`, hashed, default on): missions 1-4
+carry a credit quota (1,000 or 2,700). Mission 1 and Atreides mission 4 have
+win flags 6, so destroying the enemy does not end them; only the house's banked
+credits do (`checkQuotaWin` in `src/House.cpp`). Hard and Brutal helpers spent
+every credit: on Atreides mission 4 the enemy was gone by minute 12, the helper
+bought 9-10 harvesters and 8,000-9,300 army, the map's 15,000 spice ran out by
+minute 18 and the game reached the 80-minute limit in 12 of 24 Hard/Brutal
+helper games. A helper sharing the player's house now stops placing orders
+once half the quota is banked, or once the map holds less than three times
+the spice still needed. After the fix all 48 Atreides mission 4 games are won,
+and quota missions overall went from 537 to 558 wins of 576 (time limits 21 to
+4, all four on Ordos mission 4 seed 9602 above).
 
 
 
