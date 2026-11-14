@@ -901,12 +901,12 @@ void CampaignAIPlayer::updateScenarioTeams() {
                     for(Uint32 id : team.members) {
                         const auto* unit = static_cast<const UnitBase*>(getObject(id));
                         if(!unit || !unit->isRespondable() || unit->wasForced() || !unit->canAttack(target)) continue;
-                        if(unit->getTarget() == target && (unit->isMoving()
-                            || blockDistanceApprox(unit->getLocation(), target->getLocation()) >= unit->getWeaponRange())) continue;
                         // Dune II ACTION_ATTACK pursues beyond a guard point.
                         // HUNT supplies that movement here; the team target is
                         // retained by targeting() without marking a player order.
-                        doSetAttackMode(unit, HUNT);
+                        if(unit->getAttackMode() != HUNT) doSetAttackMode(unit, HUNT);
+                        if(unit->getTarget() == target && (unit->isMoving()
+                            || blockDistanceApprox(unit->getLocation(), target->getLocation()) >= unit->getWeaponRange())) continue;
                         doAttackObject(unit, target, false);
                     }
                     return 0;

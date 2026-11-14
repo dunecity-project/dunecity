@@ -141,6 +141,9 @@ void runOriginalCampaignProbe(Game& game) {
     const auto attackInstruction = std::find(bot->teamProgram.words.begin(), bot->teamProgram.words.end(), 0x4e07);
     require(attackInstruction != bot->teamProgram.words.end(), "original TEAM.EMC has no ATTACK callback");
     team.script.pc = static_cast<Uint32>(attackInstruction - bot->teamProgram.words.begin());
+    // A guard can already have this target (for example just after it retreats).
+    // The script must lift the guard leash even when it can keep the route.
+    authored->doAttackObject(distantEnemy, false);
     bot->nextTeamTick = 0; bot->updateScenarioTeams();
     require(authored->getAttackMode() == HUNT && authored->getTarget() == distantEnemy && !authored->wasForced(),
         "script attack did not replace the guard leash with autonomous pursuit");
