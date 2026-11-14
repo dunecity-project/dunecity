@@ -160,10 +160,16 @@ void runStarportEconomyProbe(Game& game) {
     bot->rockExpansionSite = Coord::Invalid(); bot->rockSurveyCycle = game.getGameCycleCount();
     const int workerPrice = game.objectData.data[Unit_Harvester][HOUSE_HARKONNEN].price;
     house->takeCredits(house->getCredits()); house->addCredits(workerPrice);
+    // This case isolates the worker reserve from the helper army floor lever, under which a
+    // Brutal helper without an army funds ground units before workers.
+    const auto savedWorkerConfig = bot->configOverride;
+    auto workerConfig = std::make_shared<QuantBotConfig>(bot->botConfig());
+    workerConfig->force.campaignHelperBrutalArmyFloor = 0;
+    bot->configOverride = workerConfig;
     savedStructures = structureList;
     structureList.clear(); structureList.push_back(factory);
-    try { bot->build(4000); } catch (...) { structureList = savedStructures; throw; }
-    structureList = savedStructures;
+    try { bot->build(4000); } catch (...) { structureList = savedStructures; bot->configOverride = savedWorkerConfig; throw; }
+    structureList = savedStructures; bot->configOverride = savedWorkerConfig;
     if (factory->getCurrentProducedItem() != Unit_Harvester || factory->isUpgrading())
         throw std::runtime_error("Factory failed to spend protected worker cash on a harvester");
     SDL_Log("FACTORY_WORKER_RESERVE_PASS: one worker's cash funds a harvester before military or upgrades");
