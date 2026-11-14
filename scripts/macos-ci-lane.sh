@@ -81,7 +81,7 @@ if [ "$MODE" = release-headless-qualification ]; then
     # CTest 8 means test failures; only exact committed decisions can accept them.
     # Launch/configuration failures and incomplete/skipped XML still fail closed.
     if [ "$ctest_status" -ne 0 ] && [ "$ctest_status" -ne 8 ]; then exit "$ctest_status"; fi
-    python3 scripts/release-automation.py check-headless --directory build
+    python3 scripts/release-automation.py check-headless --directory build --ctest-status "$ctest_status"
     build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
     exit 0
 fi

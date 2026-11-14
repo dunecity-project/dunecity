@@ -594,12 +594,13 @@ def reservation_token(args):
     print(release_token(state, args.sha, run('git', 'rev-parse', 'HEAD')))
 
 
-def exception_policy(sha):
+def exception_policy(sha, runner_image_version=None):
     """Only committed, explicitly scoped decisions can accept a known failure."""
     policy = json.loads(run('git', 'show', full_sha(sha) + ':' + EXCEPTIONS))
     if policy.get('schema') != 1 or not isinstance(policy.get('exceptions'), list):
         raise ValueError('Invalid qualification exception policy')
     decisions = {}
+    runner_image_version = runner_image_version or os.environ.get('ImageVersion')
     for item in policy['exceptions']:
         name = item['test']
         if (not name or name in decisions or not item.get('owner') or not item.get('reason')
@@ -607,6 +608,8 @@ def exception_policy(sha):
                 or not re.fullmatch(r'[0-9a-f]{64}', item.get('failureSha256', ''))
                 or not set(EXCEPTION_INPUTS).issubset(item.get('inputTree', {}))):
             raise ValueError('Incomplete/duplicate known-failure decision')
+        if not item.get('runnerImageVersion') or item['runnerImageVersion'] != runner_image_version:
+            raise ValueError('Known-failure toolchain image changed: ' + name)
         for path, expected in item['inputTree'].items():
             if path.startswith(('/', '-')) or '..' in Path(path).parts:
                 raise ValueError('Invalid exception input path')
@@ -725,7 +728,7 @@ def verify_headless_qualification(paths, sha, authenticate=True):
             raise ValueError('Hosted headless qualification belongs to a different producing run')
         decisions = {}
     else:
-        decisions = exception_policy(sha)
+        decisions = exception_policy(sha, receipt.get('runnerImageVersion'))
         if authenticate:
             original = qualification_artifact(qualification_producer(receipt, sha))
             if any(paths[name].read_bytes() != original[name] for name in QUALIFY_FILES):
@@ -734,13 +737,26 @@ def verify_headless_qualification(paths, sha, authenticate=True):
         raise ValueError('Hosted headless qualification receipt does not match its frozen test results')
 
 
+def qualification_runs():
+    # GitHub run search is bounded at 1000; never mistake a truncated history
+    # for proof that qualification does not exist.
+    for page in range(1, 11):
+        data = api(f'repos/{repository()}/actions/workflows/qualify-release.yml/runs?status=success&per_page=100&page={page}')
+        batch = data['workflow_runs']
+        yield from batch
+        if len(batch) < 100:
+            return
+    raise ValueError('Qualification search is truncated; provide the frozen --run-id')
+
+
 def reuse_qualification(args):
     sha = full_sha(args.sha)
     prefix = f'repos/{repository()}'
-    runs = api(f'{prefix}/actions/workflows/qualify-release.yml/runs?status=success&per_page=100')['workflow_runs']
+    run_id = getattr(args, 'run_id', None)
+    runs = [api(f'{prefix}/actions/runs/{int(run_id)}')] if run_id else qualification_runs()
     # A run's head SHA is the control workflow, not necessarily its candidate.
     for producer in runs:
-        if producer.get('display_title') != 'Qualify ' + sha:
+        if not run_id and producer.get('display_title') != 'Qualify ' + sha:
             continue  # Discovery hint only; the receipt/API still establish trust.
         try:
             contents = qualification_artifact(producer)
@@ -766,6 +782,13 @@ def reuse_qualification(args):
             print('Ignoring unusable qualification: ' + str(error), file=sys.stderr)
     raise ValueError('No reusable headless qualification for ' + sha +
                      '; qualify this frozen integration candidate before creating a production tag')
+
+
+def check_headless(args):
+    result = headless_qualification(args.directory, exception_policy(run('git', 'rev-parse', 'HEAD')))
+    if args.ctest_status not in (0, 8) or (args.ctest_status == 8 and result['status'] != 'accepted-known-failures'):
+        raise ValueError('CTest exit status is not explained by accepted test failures')
+    print(json.dumps(result, indent=2))
 
 
 def select_qualification(args):
@@ -1537,8 +1560,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('select-qualification'); p.set_defaults(func=select_qualification)
-    p = commands.add_parser('reuse-qualification'); p.add_argument('--sha', required=True); p.add_argument('--directory', type=Path, required=True); p.set_defaults(func=reuse_qualification)
-    p = commands.add_parser('check-headless'); p.add_argument('--directory', type=Path, required=True); p.set_defaults(func=lambda a: print(json.dumps(headless_qualification(a.directory, exception_policy(run('git', 'rev-parse', 'HEAD'))), indent=2)))
+    p = commands.add_parser('reuse-qualification'); p.add_argument('--sha', required=True); p.add_argument('--directory', type=Path, required=True); p.add_argument('--run-id', type=int); p.set_defaults(func=reuse_qualification)
+    p = commands.add_parser('check-headless'); p.add_argument('--directory', type=Path, required=True); p.add_argument('--ctest-status', type=int, default=0); p.set_defaults(func=check_headless)
     p = commands.add_parser('plan'); p.add_argument('--output', type=Path, default=Path('selection.json')); p.set_defaults(func=plan)
     p = commands.add_parser('dispatch-staging'); p.add_argument('--sha', required=True); p.set_defaults(func=dispatch_staging)
     p = commands.add_parser('manifest'); p.add_argument('--directory', type=Path, required=True); p.add_argument('--sha', required=True); p.add_argument('--tag', required=True); p.add_argument('--stable', action='store_true'); p.set_defaults(func=make_manifest)

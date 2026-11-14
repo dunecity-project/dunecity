@@ -1418,18 +1418,50 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
 
     def test_exception_scope_drift_or_missing_owner_is_rejected(self):
         item = dict(test='case', failureSha256='a' * 64, owner='Stefan', reason='fixture',
-                    trackingUrl='https://example.test/decision', inputTree={p: p + '-tree' for p in automation.EXCEPTION_INPUTS})
+                    trackingUrl='https://example.test/decision', runnerImageVersion='fixture-image',
+                    inputTree={p: p + '-tree' for p in automation.EXCEPTION_INPUTS})
         policy = dict(schema=1, exceptions=[item])
         def git(*args):
             return json.dumps(policy) if args[1] == 'show' else args[-1] + '-tree'
-        with patch.object(automation, 'run', side_effect=git):
+        with patch.object(automation, 'run', side_effect=git), patch.dict(os.environ, ImageVersion='fixture-image'):
             self.assertEqual(automation.exception_policy(SHA), {'case': item})
+            with self.assertRaisesRegex(ValueError, 'toolchain image changed'):
+                automation.exception_policy(SHA, 'new-image')
             item['inputTree']['src'] = 'old-tree'
             with self.assertRaisesRegex(ValueError, 'scope changed'):
                 automation.exception_policy(SHA)
             item['owner'] = ''
             with self.assertRaisesRegex(ValueError, 'Incomplete'):
                 automation.exception_policy(SHA)
+
+    def test_unexplained_ctest_failure_cannot_be_hidden_by_green_xml(self):
+        with patch.object(automation, 'exception_policy', return_value={}), \
+             patch.object(automation, 'run', return_value=SHA):
+            for code in (8, 1, 2):
+                with self.subTest(code=code), self.assertRaisesRegex(ValueError, 'exit status'):
+                    automation.check_headless(argparse.Namespace(directory=self.root, ctest_status=code))
+
+    def test_full_reuse_writes_only_authenticated_exact_source_evidence(self):
+        self.reusable()
+        producer = self.producer()
+        base = self.api_for(producer)
+        def response(path):
+            if '/runs?status=success' in path:
+                return {'workflow_runs': [producer]}
+            return base(path)
+        contents = {name: path.read_bytes() for name, path in self.paths.items()}
+        destination = self.root / 'consumed'
+        with patch.object(automation, 'api', side_effect=response), \
+             patch.object(automation, 'qualification_artifact', return_value=contents), \
+             patch.object(automation, 'exception_policy', return_value={}):
+            automation.reuse_qualification(argparse.Namespace(sha=SHA, directory=destination))
+            self.assertEqual({p.name: p.read_bytes() for p in destination.iterdir()}, contents)
+            receipt = json.loads(contents[automation.HEADLESS_RECEIPT])
+            receipt['sourceCommit'] = OTHER
+            contents[automation.HEADLESS_RECEIPT] = json.dumps(receipt).encode()
+            with self.assertRaisesRegex(ValueError, 'No reusable'):
+                automation.reuse_qualification(argparse.Namespace(sha=SHA, directory=self.root / 'wrong-source'))
+            self.assertFalse((self.root / 'wrong-source').exists())
 
     def test_headless_labels_must_exclude_gui_and_every_test_must_be_nightly(self):
         for labels in (['headless', 'nightly', 'gui'], ['headless']):

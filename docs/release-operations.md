@@ -235,6 +235,8 @@ identity and complete non-skipped CTest results. A missing, expired, changed or
 failed receipt stops production immediately, before any platform job. It never
 silently launches another broad suite. Preserve the frozen evidence; an expired
 Actions artifact currently needs a new qualification before a new release.
+For archived history, pass `--run-id` from the frozen record; discovery paginates
+and refuses to treat truncated history as missing qualification.
 A successful staging-to-main promotion at the **same SHA** skips duplicate platform
 CI. Unknown/failed evidence falls back to running CI, never to a guessed pass.
 
@@ -256,7 +258,8 @@ waiting for game tests. Keep private signing operations in the existing Mini lan
 ### Carry an explicit known-failure decision forward
 
 `releases/qualification-exceptions.json` starts empty. A reviewed entry requires
-`test`, `failureSha256`, `owner`, `reason`, `trackingUrl` and `inputTree`.
+`test`, `failureSha256`, `owner`, `reason`, `trackingUrl`, `runnerImageVersion`
+and `inputTree`.
 The owner and linked durable decision must establish explicit acceptance; agents
 must not add an exception merely to make CI green. `failureSha256` is produced by
 `failure_digest` from the failure/error metadata **and full captured test output**.
@@ -266,7 +269,8 @@ input paths may tighten the scope. Freeze these values when the decision is made
 
 The qualifier compares those Git objects at the new candidate before accepting
 anything. Changed game, test, asset, dependency, harness or workflow inputs invalidate
-the decision. Changed failure output also blocks. Skips and missing/duplicate tests
+the decision. The hosted toolchain image must also match `runnerImageVersion`
+from the original receipt. Changed failure output also blocks. Skips and missing/duplicate tests
 are never accepted. The original JUnit remains FAIL; the receipt reports
 `accepted-known-failures` and includes the decision, rather than rewriting it as PASS.
 A passing test needs no exception. A stale entry must be reviewed/removed before the
