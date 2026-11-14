@@ -1222,7 +1222,9 @@ class HostedHeadlessQualificationTests(unittest.TestCase):
         args = argparse.Namespace(platform='macos-arm64-headless-qualification', build_root=self.root,
                                   output=self.root / automation.HEADLESS_RECEIPT)
         with patch.dict(os.environ, DUNECITY_RELEASE_BUILD='OFF', PACKAGE_BUILD='false',
-                        GITHUB_RUN_ID='41', GITHUB_RUN_ATTEMPT='1'), \
+                        GITHUB_RUN_ID='41', GITHUB_RUN_ATTEMPT='1', RUNNER_NAME='hosted-test',
+                        RUNNER_ENVIRONMENT='github-hosted', RUNNER_ARCH='ARM64',
+                        ImageOS='macos15', ImageVersion='fixture-image'), \
              patch.object(automation, 'exception_policy', return_value={}), \
              patch.object(automation, 'run', side_effect=lambda *command: SHA if command[0] == 'git' else 'cmake fixture'):
             automation.record_build(args)
