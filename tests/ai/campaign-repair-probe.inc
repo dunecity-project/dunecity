@@ -12,6 +12,9 @@ void runCampaignRepairProbe(Game& game) {
         }
     require(partner && enemy,"Repair fixture requires both campaign roles");
     for(auto* bot:{partner,enemy}) {
+        auto& force = const_cast<QuantBotConfig&>(bot->botConfig()).force;
+        const bool savedRoleFix = force.campaignRepairRoleFix;
+        force.campaignRepairRoleFix = false; // Historical OFF control below.
         bot->difficulty=QuantBot::Difficulty::Hard;
         auto* house=const_cast<House*>(bot->getHouse());
         auto place=[&](Uint32 item) {
@@ -90,6 +93,28 @@ void runCampaignRepairProbe(Game& game) {
                 for(const auto& item:builder->currentProductionQueue)
                     if(item.itemID==Structure_RepairYard) ++queued;
         require(queued==1,"Repair planning duplicated an already queued yard");
+        // Role-scoped policy: every human helper may establish repairs; only
+        // an Easy campaign enemy is barred. Verify real queues, not just a
+        // predicate, and retain the OFF checks above as the negative control.
+        force.campaignRepairRoleFix = true;
+        for (auto tier : {QuantBot::Difficulty::Easy, QuantBot::Difficulty::Medium,
+                          QuantBot::Difficulty::Hard, QuantBot::Difficulty::Brutal}) {
+            for (auto* building : structureList) if (building->getOwner() == house)
+                if (auto* builder = dynamic_cast<BuilderBase*>(building)) {
+                    while (builder->getProductionQueueSize()) builder->doCancelItem(builder->getCurrentProducedItem());
+                    bot->builderPlaceLocations.erase(builder->getObjectID());
+                    bot->reservedStructures.erase(builder->getObjectID());
+                }
+            bot->difficulty = tier;
+            bot->initialItemCount[Structure_RepairYard] = 0;
+            house->addCredits(10000);
+            const bool denied = bot->isCampaignEnemy() && tier == QuantBot::Difficulty::Easy;
+            require(bot->canAddRepairYard(0) != denied, "Repair restriction crossed campaign role boundary");
+            bot->build(4000);
+            require((yard->getCurrentProducedItem() == Structure_RepairYard) != denied,
+                "Role-scoped repair policy produced the wrong construction order");
+        }
+        force.campaignRepairRoleFix = savedRoleFix;
         SDL_Log("CAMPAIGN_REPAIR_PASS: tier=%d enemy=%d missing yard queued once",int(bot->difficulty),bot->isCampaignEnemy());
     }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=repair outcome=passed");

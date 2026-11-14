@@ -320,6 +320,10 @@ struct QuantBotConfig {
         /// three times the spice still needed, so the mission can be won on credits.
         /// Hashed; default on. OFF retains unrestricted spending.
         bool campaignHelperQuotaSaving;
+        /// Repair-yard denial is exclusive to Easy campaign enemies. Hashed OFF/ON control.
+        bool campaignRepairRoleFix;
+        /// Campaign yards upgrade only out of surplus after income and power. Hashed OFF/ON control.
+        bool campaignDeferredYardUpgrade;
         /// The three difficulty levers of an Easy / Medium / Hard campaign opponent (Brutal has
         /// none). Hashed. Harvesters: the most it keeps, however many refineries the mission
         /// gives it (0 = no ceiling). WaveValue: the value one ground wave may hold; Easy keeps

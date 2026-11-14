@@ -549,6 +549,12 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
 bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine) {
     if (!vanillaBoomUpgradeAdmitted(pass, turn.pBuilder)) return false;
     const int price=turn.pBuilder->getUpgradeCost();
+    if (botConfig().force.campaignDeferredYardUpgrade && campaignPolicyApplies()
+        && turn.pBuilder->getItemID() == Structure_ConstructionYard
+        && !QuantBotBuildPolicy::campaignYardUpgradeFunded(getHouse()->hasPower(),
+            pass.citySimEnabled ? pass.forecastNetIncome > 0
+                : getAIRefineryBays() > 0 && pass.actualHarvesters > 0,
+            openingWorkersNeeded(pass), pass.money, price, pass.economyReserve)) return false;
     const bool simpleProject = pass.techSavings && pass.techSavingActive
         && pass.techUpgrade && pass.techCandidate.builder == turn.pBuilder->getObjectID();
     const bool affordable = (simpleProject ? getHouse()->getCredits() : pass.money) >= price;
@@ -575,7 +581,8 @@ bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 
         || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize()!=0
         || !vanillaBoomAdmits(pass, item)
         || !campaignAvailableToBuild(turn.pBuilder,item) || !cityAdmitsStructure(pass, item)) return false;
-    if (item == Structure_RepairYard && pass.repairCapacityDemand && !repairYardAdmitted(pass)) return false;
+    if (item == Structure_RepairYard && (pass.repairCapacityDemand || botConfig().force.campaignRepairRoleFix)
+        && !repairYardAdmitted(pass)) return false;
     planningBuilder=turn.pBuilder->getObjectID();
     clearPlacementCache(false,true);
     const Coord site=item==Structure_RepairYard && pass.repairCapacityDemand ? repairCapacitySite(pass)
@@ -625,6 +632,14 @@ bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 
 bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    // An optional concrete unlock must not own a cash-poor campaign yard's
+    // turn. Keep founding with single slabs while income/power recover.
+    if (botConfig().force.campaignDeferredYardUpgrade && campaignPolicyApplies()
+        && !QuantBotBuildPolicy::campaignYardUpgradeFunded(getHouse()->hasPower(),
+            pass.citySimEnabled ? pass.forecastNetIncome > 0
+                : getAIRefineryBays() > 0 && pass.actualHarvesters > 0,
+            openingWorkersNeeded(pass), pass.money, turn.pBuilder->getUpgradeCost(), pass.economyReserve))
+        return false;
     // Bulk concrete comes before anything optional this yard could
     // buy, in every mode and at every difficulty, as soon as the
     // technology allows it. Every ordinary building now waits for a
@@ -867,14 +882,15 @@ Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
 bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
-    // Hard/Brutal establish repair capacity; Medium only replaces an authored
-    // yard before optional expansion, including its missing prerequisites.
+    // Establish the first repair yard, including missing prerequisites.
+    // Only Easy campaign enemies are denied it by the corrected role policy.
     // Count queued structures and preserve normal costs/placement rules.
     if (campaignPolicyApplies()
         && !(pass.cityGrowthProtected && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID())
         && !(capitalPending(pass) && pass.capitalCandidates[pass.capitalChoice].item==Unit_Carryall)
-        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal
-            || (difficulty==Difficulty::Medium && initialItemCount[Structure_RepairYard]>0))
+        && (botConfig().force.campaignRepairRoleFix ? repairYardAdmitted(pass)
+            : (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal
+                || (difficulty==Difficulty::Medium && initialItemCount[Structure_RepairYard]>0)))
         && data[Structure_RepairYard][houseID].enabled
         && getHouse()->getTechLevel()>=data[Structure_RepairYard][houseID].techLevel
         && turn.pBuilder->getItemID()==Structure_ConstructionYard

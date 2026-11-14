@@ -694,6 +694,12 @@ inline bool repairWhenWealthy(int availableMoney) { return availableMoney > 5000
 // `anotherYardUpgrading` keeps parallel yards from all stopping at once. It is
 // transient by construction — an upgrade finishes — so every yard reaches the
 // level in turn and none is locked out permanently.
+inline bool campaignYardUpgradeFunded(bool powered, bool earningIncome, bool workersNeeded,
+                                      int spendable, int upgradeCost, int economyReserve) {
+    return powered && earningIncome && !workersNeeded && upgradeCost > 0
+        && int64_t(spendable) >= int64_t(upgradeCost) + std::max(2000, economyReserve);
+}
+
 inline bool upgradeYardForBulkSlab(bool concreteRequired, bool bulkSlabAvailable,
                                    int currentUpgradeLevel, int requiredUpgradeLevel,
                                    int maxUpgradeLevel, int credits, int upgradeCost,

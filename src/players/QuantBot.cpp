@@ -325,6 +325,16 @@ void QuantBot::update() {
 
         if (campaignCityEconomy()) noteCampaignOriginalState();
 
+        if (botConfig().force.campaignRepairRoleFix) {
+            // Helpers of every tier and Medium+ enemies may establish repairs.
+            // Easy enemies retain their authored setup without adding a yard.
+            if (campaignPolicyApplies() && getHouse()->getTechLevel() > 4
+                && !(isCampaignEnemy() && difficulty == Difficulty::Easy)) {
+                initialItemCount[Structure_RepairYard] = std::max(1, initialItemCount[Structure_RepairYard]);
+                initialItemCount[Structure_Radar] = std::max(1, initialItemCount[Structure_Radar]);
+                initialItemCount[Structure_LightFactory] = std::max(1, initialItemCount[Structure_LightFactory]);
+            }
+        } else {
 		// Allow campaign controllers one repair yard. A Medium opponent gets exactly one,
         // whatever the mission starts it with; Medium support keeps its starting count.
 		// Note: supportMode sets gameMode to Custom, so check currentGame->gameType instead
@@ -345,6 +355,8 @@ void QuantBot::update() {
 
 			logDebug("Allow Campaign AI one Repair Yard (support: %s)", builderOnly() ? "yes" : "no");
 		}
+
+        }
 
 		// Calculate the total military value of the player
 		initialMilitaryValue = 0;

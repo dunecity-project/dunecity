@@ -280,6 +280,12 @@ Coord QuantBot::repairCapacitySite(const BuildPass& pass) {
 }
 
 bool QuantBot::canAddRepairYard(int includingQueued) const {
+    if (botConfig().force.campaignRepairRoleFix) {
+        // Difficulty handicaps belong to the enemy controller, never its
+        // human partner. Custom games have no campaign repair restriction.
+        if (isCampaignEnemy() && difficulty == Difficulty::Easy) return false;
+        return !economicFleetRatioActive() || includingQueued < fleetRatioTreatment().repairYards;
+    }
     if (economicFleetRatioActive())
         return includingQueued < fleetRatioTreatment().repairYards;
     return (currentGame && currentGame->isCitySimEnabled())

@@ -384,6 +384,8 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignAdaptiveReadiness = true;
     force.campaignAllyStrengthFloor = true;
     force.campaignHelperQuotaSaving = true;
+    force.campaignDeferredYardUpgrade = false;
+    force.campaignRepairRoleFix = false;
     force.campaignEasyHarvesters = 1;
     force.campaignMediumHarvesters = 2;
     force.campaignHardHarvesters = 4;
@@ -832,6 +834,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
         iniFile.setBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
+        iniFile.setBoolValue("Force Concentration", "CampaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
+        iniFile.setBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
         iniFile.setIntValue("Force Concentration", "CampaignEasyHarvesters", force.campaignEasyHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignMediumHarvesters", force.campaignMediumHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignHardHarvesters", force.campaignHardHarvesters);
@@ -1120,6 +1124,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     force.campaignAllyStrengthFloor = iniFile.getBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
     force.campaignHelperQuotaSaving = iniFile.getBoolValue("Force Concentration", "CampaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
+    force.campaignDeferredYardUpgrade = iniFile.getBoolValue("Force Concentration", "CampaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
+    force.campaignRepairRoleFix = iniFile.getBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
     // Literal keys, one per line: the genome inventory reads these statements.
     force.campaignEasyHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyHarvesters", force.campaignEasyHarvesters), 0, 40);
     force.campaignMediumHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignMediumHarvesters", force.campaignMediumHarvesters), 0, 40);
@@ -1763,6 +1769,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     addNamed("campaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
     addNamed("campaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
+    addNamed("campaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
+    addNamed("campaignRepairRoleFix", force.campaignRepairRoleFix);
     addNamed("campaignEasyHarvesters", force.campaignEasyHarvesters);
     addNamed("campaignMediumHarvesters", force.campaignMediumHarvesters);
     addNamed("campaignHardHarvesters", force.campaignHardHarvesters);
