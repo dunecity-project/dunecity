@@ -391,6 +391,10 @@ struct QuantBotConfig {
         /// ladder, a third refinery, the first Repair Yard and imports beyond six harvesters.
         /// Independent hashed candidate, default off; inert without Heavy Factory tech.
         bool campaignHelperFactoryFirst;
+        /// Classic campaign support never waits for more than this army value before a ground
+        /// attack: 0=OFF (the difficulty's own ceiling, 30,000 for Brutal on a 64x64 map against
+        /// 15,000 for Hard). Home defence, wave sizing and enemies are unchanged.
+        int campaignHelperReadinessCap;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

@@ -971,6 +971,10 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     // Delay this fallback beyond the initial spice scan and opening phase.
     if (getGameCycleCount() >= MILLI2CYCLES(15 * 60000) && lastCalculatedSpice == 0)
         required = 0;
+    // CampaignHelperReadinessCap (default 0 = off): a support house stops waiting once its
+    // army reaches this value, whatever the enemy alliance holds.
+    if (const int cap = botConfig().force.campaignHelperReadinessCap; cap > 0 && campaignEconomySupport())
+        required = std::min(required, cap);
     return required;
 }
 

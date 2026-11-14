@@ -2370,6 +2370,32 @@ TEST_CASE("Campaign home fields require initial spice and a legally low-tech ope
     REQUIRE_FALSE(homeFieldOpeningScope(0, false, 3, 8));
 }
 
+TEST_CASE("Campaign helper readiness cap persists OFF and credit values with distinct hashes",
+          "[ai][campaign][attack][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperReadinessCap == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-readiness-cap-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int cap : {0, 10000, 15000}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperReadinessCap=" << cap << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperReadinessCap == cap);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperReadinessCap = cap;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), cap).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperReadinessCap == cap);
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign helper rock hold persists OFF and every level with distinct hashes",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;
