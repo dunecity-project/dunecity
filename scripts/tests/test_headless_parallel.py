@@ -4,6 +4,8 @@ The tiny workers stand in for games; native game correctness and contention are
 validated separately on the frozen shared build. No game is compiled here.
 """
 from pathlib import Path
+import importlib.util
+import json
 import re
 import shutil
 import subprocess
@@ -12,7 +14,8 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-CASES = ('quantbot_custom_attack', 'quantbot_police_placement', 'quantbot_battery_clearance')
+CASES = ('quantbot_custom_attack', 'quantbot_police_placement', 'quantbot_battery_clearance',
+         'trooper_anti_air_probe', 'community_maps_startup', 'body_angle_probe')
 WORKER = '''import fcntl, sys, time
 with open(sys.argv[1], 'a') as log:
     for event in ('start', 'end'):
@@ -54,6 +57,35 @@ class SchedulingTests(unittest.TestCase):
 
     def test_hosted_budget_does_not_oversubscribe_games(self):
         self.assertEqual(self.peak(2), 1)
+
+
+class MacDependencyCacheTests(unittest.TestCase):
+    def key(self, manifest):
+        spec = importlib.util.spec_from_file_location('dependency_key', ROOT / 'scripts/vcpkg-dependency-key.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'vcpkg.json'
+            path.write_text(json.dumps(manifest))
+            return module.dependency_key(path)
+
+    def test_release_bump_reuses_unchanged_dependencies(self):
+        manifest = json.loads((ROOT / 'vcpkg.json').read_text())
+        before = self.key(manifest)
+        manifest['version'] = '99.0.0'
+        self.assertEqual(before, self.key(manifest))
+
+    def test_dependency_change_invalidates_cache(self):
+        manifest = json.loads((ROOT / 'vcpkg.json').read_text())
+        before = self.key(manifest)
+        manifest['dependencies'].append('new-dependency')
+        self.assertNotEqual(before, self.key(manifest))
+
+    def test_registry_baseline_change_invalidates_cache(self):
+        manifest = json.loads((ROOT / 'vcpkg.json').read_text())
+        before = self.key(manifest)
+        manifest['builtin-baseline'] = '0' * 40
+        self.assertNotEqual(before, self.key(manifest))
 
 
 if __name__ == '__main__':
