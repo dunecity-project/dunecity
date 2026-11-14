@@ -360,7 +360,8 @@ private:
      * Used to verify a received mod while it is still staged, before anything is installed.
      */
     std::string computeCombinedChecksumForDirectory(const std::string& modName,
-                                                    const std::filesystem::path& directory) const;
+                                                    const std::filesystem::path& directory,
+                                                    const std::string& quantBotHashOverride = "") const;
 
     /**
      * Returns true when the installed mod's ObjectData.ini canonical hash

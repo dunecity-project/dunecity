@@ -204,7 +204,7 @@ Still open:
   that removing the floor improves results.
 - The Hard enemy wave default increases from 3500 to 4000 for 1.0.868.
   Historical results above used 3500 and must not be presented as measured
-  performance of the new default. Unpinned 1.0.867 Vanilla/Dune City saves
+  performance of the new default. Unpinned 1.0.867 saves
   accept this exact config migration only after reconstructing and matching
   the entire old checksum; unrelated content mismatches still fail. Saves
   with immutable Workshop revisions retain their exact pinned content.

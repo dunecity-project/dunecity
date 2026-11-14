@@ -1086,12 +1086,11 @@ ModChecksums ModManager::getEffectiveChecksums() const {
 }
 
 bool ModManager::matchesPre868CampaignWaveChecksum(const std::string& checksum) const {
-    if(activeMod != "vanilla" && activeMod != "dunecity") return false;
     const auto previous = hashFileCanonical(getActiveQuantBotConfigPath(), true);
     if(previous.empty() || previous == "FILE_NOT_FOUND") return false;
-    const auto current = getEffectiveChecksums();
-    return checksum == combineChecksumParts(current.objectData, previous,
-        current.gameOptions, current.customHouse, "");
+    // Reuse full directory verification, including Tornie-family manifests,
+    // engine compatibility and custom-house content. Only this one hash differs.
+    return checksum == computeCombinedChecksumForDirectory(activeMod,getModPath(activeMod),previous);
 }
 
 std::string ModManager::hashFileCanonical(const std::string& path, bool pre868CampaignWave) {
@@ -1195,7 +1194,8 @@ std::string ModManager::combineChecksumParts(const std::string& objectDataHash,
 }
 
 std::string ModManager::computeCombinedChecksumForDirectory(const std::string& modName,
-                                                            const std::filesystem::path& directory) const {
+                                                            const std::filesystem::path& directory,
+                                                            const std::string& quantBotHashOverride) const {
     // Mirrors updateChecksums(), but resolves the mod's own files inside 'directory' instead
     // of inside the installed mod, so a staged payload can be checked before it is installed.
     const std::string root = directory.string();
@@ -1216,8 +1216,9 @@ std::string ModManager::computeCombinedChecksumForDirectory(const std::string& m
 
     const std::string objectDataHash =
         hashFileCanonical(resolveWithFallback(OBJECT_DATA_FILE, OBJECT_DATA_DEFAULT));
-    const std::string quantBotHash =
-        hashFileCanonical(resolveWithFallback(QUANTBOT_CONFIG_FILE, QUANTBOT_CONFIG_DEFAULT));
+    const std::string quantBotHash = quantBotHashOverride.empty()
+        ? hashFileCanonical(resolveWithFallback(QUANTBOT_CONFIG_FILE, QUANTBOT_CONFIG_DEFAULT))
+        : quantBotHashOverride;
 
     std::string gameOptionsPath = root + "/" + GAME_OPTIONS_FILE;
     if (!existsFile(gameOptionsPath) && modName != VANILLA_MOD_NAME) {
