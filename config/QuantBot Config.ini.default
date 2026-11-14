@@ -452,7 +452,7 @@ CampaignHardHarvesters=4
 # proportion (900 / 1,200 of 1,700).
 CampaignEasyWaveValue=1700
 CampaignMediumWaveValue=2500
-CampaignHardWaveValue=4000
+CampaignHardWaveValue=3500
 # OpeningDelaySec: seconds waited after the map's first enemy combat reinforcement (plus a 0-2 minute
 # per-house stagger) before the first wave. Missions 1-4 have no such trigger and always open in minutes 4-6.
 CampaignEasyOpeningDelaySec=0

@@ -2264,6 +2264,27 @@ TEST_CASE("Medium and Hard campaign waves use fixed credits and independent open
     CHECK(openingDelayMs(2,1599783965,45000,0)!=openingDelayMs(2,1599783965,45000,1));
 }
 
+TEST_CASE("Campaign house budgets soften added bases while total pressure increases", "[quantbot][campaign]") {
+    using CampaignDifficultyPolicy::hardWaveValue;
+    for(int bases:{0,1,2,3,4,8}) CHECK(hardWaveValue(3500,bases,0)==3500);
+    for(int arm:{1,2}) {
+        CHECK(hardWaveValue(3500,1,arm)==4000);
+        CHECK(hardWaveValue(3500,0,arm)==hardWaveValue(3500,1,arm));
+        int previous=hardWaveValue(3500,1,arm);
+        for(int bases=2;bases<=8;++bases) {
+            const int value=hardWaveValue(3500,bases,arm);
+            CHECK(value<=previous);
+            CHECK(bases*value>(bases-1)*previous);
+            CHECK(hardWaveValue(7000,bases,arm)==2*value);
+            previous=value;
+        }
+    }
+    CHECK(hardWaveValue(3500,2,1)==3000);
+    CHECK(hardWaveValue(3500,3,1)==2500);
+    CHECK(hardWaveValue(3500,2,2)==3250);
+    CHECK(hardWaveValue(3500,3,2)==3000);
+}
+
 TEST_CASE("Custom attacks commit a strict share of the owned ground army", "[quantbot][army][regression]") {
     using namespace SimpleArmyPolicy;
     std::vector<Responder> infantry;

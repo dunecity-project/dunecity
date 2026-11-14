@@ -1085,15 +1085,7 @@ ModChecksums ModManager::getEffectiveChecksums() const {
     return cachedChecksums;
 }
 
-bool ModManager::matchesPre868CampaignWaveChecksum(const std::string& checksum) const {
-    const auto previous = hashFileCanonical(getActiveQuantBotConfigPath(), true);
-    if(previous.empty() || previous == "FILE_NOT_FOUND") return false;
-    // Reuse full directory verification, including Tornie-family manifests,
-    // engine compatibility and custom-house content. Only this one hash differs.
-    return checksum == computeCombinedChecksumForDirectory(activeMod,getModPath(activeMod),previous);
-}
-
-std::string ModManager::hashFileCanonical(const std::string& path, bool pre868CampaignWave) {
+std::string ModManager::hashFileCanonical(const std::string& path) {
     // Compute canonical FNV-1a hash of an INI-style file.
     // "Canonical" means: skip comments, skip empty lines, trim whitespace,
     // so cosmetic edits don't change the hash.
@@ -1104,8 +1096,6 @@ std::string ModManager::hashFileCanonical(const std::string& path, bool pre868Ca
 
     std::string contents;
     std::string line;
-    std::string section;
-    int migratedWaveKeys = 0;
     while (std::getline(file, line)) {
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
@@ -1133,17 +1123,10 @@ std::string ModManager::hashFileCanonical(const std::string& path, bool pre868Ca
         }
 
         if (!line.empty()) {
-            if(line.front() == '[') section = line;
-            if(pre868CampaignWave && section == "[Force Concentration]"
-               && line == "CampaignHardWaveValue=4000") {
-                line = "CampaignHardWaveValue=3500";
-                ++migratedWaveKeys;
-            }
             contents += line + '\n';
         }
     }
     file.close();
-    if(pre868CampaignWave && migratedWaveKeys != 1) return "";
 
     uint64_t hash = 14695981039346656037ULL;
     const uint64_t prime = 1099511628211ULL;
@@ -1194,8 +1177,7 @@ std::string ModManager::combineChecksumParts(const std::string& objectDataHash,
 }
 
 std::string ModManager::computeCombinedChecksumForDirectory(const std::string& modName,
-                                                            const std::filesystem::path& directory,
-                                                            const std::string& quantBotHashOverride) const {
+                                                            const std::filesystem::path& directory) const {
     // Mirrors updateChecksums(), but resolves the mod's own files inside 'directory' instead
     // of inside the installed mod, so a staged payload can be checked before it is installed.
     const std::string root = directory.string();
@@ -1216,9 +1198,8 @@ std::string ModManager::computeCombinedChecksumForDirectory(const std::string& m
 
     const std::string objectDataHash =
         hashFileCanonical(resolveWithFallback(OBJECT_DATA_FILE, OBJECT_DATA_DEFAULT));
-    const std::string quantBotHash = quantBotHashOverride.empty()
-        ? hashFileCanonical(resolveWithFallback(QUANTBOT_CONFIG_FILE, QUANTBOT_CONFIG_DEFAULT))
-        : quantBotHashOverride;
+    const std::string quantBotHash =
+        hashFileCanonical(resolveWithFallback(QUANTBOT_CONFIG_FILE, QUANTBOT_CONFIG_DEFAULT));
 
     std::string gameOptionsPath = root + "/" + GAME_OPTIONS_FILE;
     if (!existsFile(gameOptionsPath) && modName != VANILLA_MOD_NAME) {

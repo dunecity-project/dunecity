@@ -7,33 +7,6 @@
 
 void runCampaignPressureProbe(Game& game) {
     auto require=[](bool ok,const char* reason){if(!ok){SDL_Log("PRESSURE_FAIL: %s",reason);throw std::runtime_error(reason);}};
-    {
-        auto& mods=ModManager::instance();
-        const auto current=mods.getEffectiveChecksums();
-        const auto oldQB=ModManager::hashFileCanonical(mods.getActiveQuantBotConfigPath(),true);
-        require(!oldQB.empty() && oldQB!=current.quantBotConfig,"Hard 4000 default was not installed");
-        const auto oldChecksum=ModManager::combineChecksumParts(current.objectData,oldQB,
-            current.gameOptions,current.customHouse,"");
-        auto saved=game.gameInitSettings;
-        saved.setModRevision("",0);
-        saved.setSavedGameVersion("1.0.867");
-        saved.setModIdentity(mods.getActiveModName(),oldChecksum);
-        WorkshopGameContent::resolveMod(saved,false);
-        require(saved.getModChecksum()==current.combined,"Old save checksum was not migrated");
-        for(const auto& version:{"", "1.0.868"}) {
-            saved.setSavedGameVersion(version);
-            saved.setModIdentity(mods.getActiveModName(),oldChecksum);
-            bool rejected=false;
-            try { WorkshopGameContent::resolveMod(saved,false); } catch(const std::runtime_error&) { rejected=true; }
-            require(rejected,"Old checksum accepted for a new game or new-version save");
-        }
-        saved.setSavedGameVersion("1.0.867");
-        saved.setModIdentity(mods.getActiveModName(),"0000000000000000");
-        bool rejected=false;
-        try { WorkshopGameContent::resolveMod(saved,false); } catch(const std::runtime_error&) { rejected=true; }
-        require(rejected,"Unrelated old content mismatch was accepted");
-        SDL_Log("CAMPAIGN_WAVE_SAVE_COMPAT_PASS: mod=%s",mods.getActiveModName().c_str());
-    }
     std::vector<QuantBot*> enemies;
     QuantBot* partner=nullptr;
     for (int h=0;h<NUM_HOUSES;++h) if (auto* house=game.getHouse(h))
@@ -179,18 +152,37 @@ void runCampaignPressureProbe(Game& game) {
     unitList.clear();for(auto* unit:assaultArmy)unitList.push_back(unit);
     try {
         game.techLevel=9;
-        const int hardDefault=getQuantBotConfig().force.campaignHardWaveValue;
-        require(hardDefault==4000,"Hard wave default is not 4000");
-        for(int cap:{3500,4000}) {
-            getQuantBotConfig().force.campaignHardWaveValue=cap;
+        // Exercise counting and real dispatches with empty/wall-only slots,
+        // then one, two and three enemy bases. Helpers and city games stay unchanged.
+        std::vector<std::pair<House*,int>> baseHouses;
+        for(int h=0;h<NUM_HOUSES;++h) if(auto* house=game.getHouse(h))
+            if(!house->isNatives() && house->getTeamID()==enemies[0]->getHouse()->getTeamID())
+                baseHouses.emplace_back(house,house->numStructures);
+        require(baseHouses.size()>=3,"House-wave fixture needs three enemy house slots");
+        const int savedExperiment=getQuantBotConfig().force.campaignHouseWaveExperiment;
+        const auto partnerDifficulty=partner->difficulty;
+        partner->difficulty=QuantBot::Difficulty::Hard;
+        for(int arm:{0,1,2}) for(int bases:{1,2,3}) {
+            getQuantBotConfig().force.campaignHouseWaveExperiment=arm;
+            for(size_t i=0;i<baseHouses.size();++i)
+                baseHouses[i].first->numStructures=baseHouses[i].first->getNumItems(Structure_Wall)+(int(i)<bases);
             reset(QuantBot::Difficulty::Hard);
             auto* bot=enemies[0];bot->militaryValueLimit=12000;bot->launchGroundHunt();
+            const int expected=game.isCitySimEnabled() ? 3500
+                : CampaignDifficultyPolicy::hardWaveValue(3500,bases,arm);
             const int price=game.objectData.data[Unit_Tank][bot->getHouse()->getHouseID()].price;
-            require(bot->campaignWave.members.size()==size_t(cap/price),"Hard wave ignored configured credit cap");
-            SDL_Log("CAMPAIGN_HARD_WAVE_PASS: cap=%d tanks=%zu value=%zu",cap,
-                bot->campaignWave.members.size(),bot->campaignWave.members.size()*price);
+            require(bot->campaignProfile().value==expected,"Wrong enemy base count or scope");
+            require(bot->campaignWave.members.size()==size_t(expected/price),"House budget did not bound actual dispatch");
+            require(partner->campaignProfile().value==3500,"Helper inherited enemy base scaling");
+            game.gameType=GameType::CustomGame;
+            require(bot->campaignProfile().value==3500,"Custom game inherited campaign scaling");
+            game.gameType=originalGameType;
+            SDL_Log("CAMPAIGN_HOUSE_WAVE_PASS: arm=%d bases=%d cap=%d sent=%zu city=%d",arm,bases,expected,
+                bot->campaignWave.members.size(),int(game.isCitySimEnabled()));
         }
-        getQuantBotConfig().force.campaignHardWaveValue=hardDefault;
+        for(auto [house,count]:baseHouses) house->numStructures=count;
+        partner->difficulty=partnerDifficulty;
+        getQuantBotConfig().force.campaignHouseWaveExperiment=savedExperiment;
         for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
             reset(tier);
             auto* bot=enemies[0];
@@ -244,7 +236,7 @@ void runCampaignPressureProbe(Game& game) {
             reset(tier);
             for(size_t i=0;i<enemies.size();++i) {
                 auto* bot=enemies[i];bot->militaryValueLimit=12000;bot->launchGroundHunt();
-                const size_t expected=tier==QuantBot::Difficulty::Hard ? 4000/game.objectData.data[Unit_Tank][bot->getHouse()->getHouseID()].price : 40;
+                const size_t expected=tier==QuantBot::Difficulty::Hard ? 3500/game.objectData.data[Unit_Tank][bot->getHouse()->getHouseID()].price : 40;
                 require(bot->campaignWave.members.size()==expected,"Hard/Brutal failed army commitment or house concurrency");
                 const auto members=bot->campaignWave.members;
                 bot->launchGroundHunt();

@@ -244,7 +244,19 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
     const auto& force=botConfig().force;
     if (difficulty==Difficulty::Easy) profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
     else if (difficulty==Difficulty::Medium) profile.value=force.campaignMediumWaveValue;
-    else if (difficulty==Difficulty::Hard) profile.value=force.campaignHardWaveValue;
+    else if (difficulty==Difficulty::Hard) {
+        profile.value=force.campaignHardWaveValue;
+        if(force.campaignHouseWaveExperiment && isCampaignEnemy() && !currentGame->isCitySimEnabled()) {
+            int bases=0;
+            for(int h=0;h<NUM_HOUSES;++h) {
+                const auto* house=getHouse(h);
+                if(house && !house->isNatives() && house->isAlive()
+                   && house->getTeamID()==getHouse()->getTeamID()
+                   && house->getNumStructures()>house->getNumItems(Structure_Wall)) ++bases;
+            }
+            profile.value=CampaignDifficultyPolicy::hardWaveValue(profile.value,bases,force.campaignHouseWaveExperiment);
+        }
+    }
     return profile;
 }
 

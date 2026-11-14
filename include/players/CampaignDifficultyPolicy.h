@@ -12,6 +12,15 @@ struct Profile {
     int enemyCommitPercent;
     bool limitedWave;
 };
+// Per-house budgets: more enemy bases still add pressure, but less than
+// multiplying the single-house wave unchanged. Custom base values scale equally.
+inline int hardWaveValue(int configured, int bases, int experiment) {
+    if(experiment == 0) return configured;
+    const int value = bases <= 1 ? 4000
+        : bases == 2 ? (experiment == 1 ? 3000 : 3250)
+        : (experiment == 1 ? 2500 : 3000);
+    return int(int64_t(configured) * value / 3500);
+}
 // Mission-scale trial values, in game time. Never grant free units/resources.
 inline Profile profile(int difficulty, int tech) {
     const int stage = tech <= 3 ? 0 : tech <= 6 ? 1 : 2;
@@ -20,7 +29,7 @@ inline Profile profile(int difficulty, int tech) {
         // half-ready-army budget still retains defenders.
         case 0: return {1, 3+stage, stage==2 ? 1700 : (3+stage)*300, 180000-stage*30000, 120000, 150000, 25, 50, true};
         case 1: return {1, std::numeric_limits<int>::max(), 2500, 120000-stage*15000, 120000, 180000, 15, 100, true};
-        case 2: return {2, std::numeric_limits<int>::max(), 4000, 75000-stage*15000, 120000, 240000, 10, 100, true};
+        case 2: return {2, std::numeric_limits<int>::max(), 3500, 75000-stage*15000, 120000, 240000, 10, 100, true};
         default:return {8, 16+stage*4, (16+stage*4)*700, 40000-stage*10000, 0, 300000, 5, 100, false};
     }
 }
