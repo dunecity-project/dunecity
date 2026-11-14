@@ -580,7 +580,7 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --skirmish size=96,base=small,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
         set_tests_properties(tile_non_infantry_lookup PROPERTIES TIMEOUT 300 PROCESSORS 2)
         set_tests_properties(cross_platform_city_medium PROPERTIES
-            TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "BALANCE_DUNECITY_AUDIT=1")
+            TIMEOUT 300 PROCESSORS 2 ENVIRONMENT "BALANCE_DUNECITY_AUDIT=1")
     endif()
 endif()
 
@@ -1025,7 +1025,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --${ai_probe}-probe --repeatable
                     --level 9 --mod ${ai_mod} --build-dir ${CMAKE_BINARY_DIR}
                     --output-dir ${CMAKE_BINARY_DIR}/${ai_probe}-${ai_mod}-probe)
-                set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+                if(ai_capability STREQUAL "headless")
+                    set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 PROCESSORS 2)
+                else()
+                    set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+                endif()
             endforeach()
         endforeach()
         # Genuine tech-1 city/classic economies, the registered difficulty and
@@ -1274,7 +1278,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
                 --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retreat-preserve-${preserve_mod}-probe)
             set_tests_properties(quantbot_retreat_preserve_${preserve_mod} PROPERTIES
-                TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "BALANCE_RETREAT_PRESERVE_ONLY=1")
+                TIMEOUT 300 PROCESSORS 2 ENVIRONMENT "BALANCE_RETREAT_PRESERVE_ONLY=1")
         endforeach()
         # Custom Hard/Brutal whole-army dispatch: one attack sends every
         # available combat troop to engine Hunt - idle, targeting, moving,
