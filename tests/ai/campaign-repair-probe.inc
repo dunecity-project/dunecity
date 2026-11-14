@@ -20,6 +20,12 @@ void runCampaignRepairProbe(Game& game) {
         force.campaignDeferredYardUpgrade = false;
         force.campaignRepairRoleFix = false; // Historical OFF control below.
         bot->difficulty=QuantBot::Difficulty::Hard;
+        // City campaign enemies retain their authored technology permissions.
+        // Give this queue fixture the repair chain; role restrictions are tested below.
+        if (bot == enemy && game.isCitySimEnabled()) {
+            bot->campaignOriginalStructures.insert(Structure_Radar);
+            bot->campaignOriginalStructures.insert(Structure_RepairYard);
+        }
         auto* house=const_cast<House*>(bot->getHouse());
         auto place=[&](Uint32 item) {
             for(int y=1;y<currentGameMap->getSizeY()-4;y+=4)
