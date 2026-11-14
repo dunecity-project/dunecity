@@ -1318,7 +1318,7 @@ class QualificationAdmissionTests(unittest.TestCase):
                 raise AssertionError(path)
             with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event_path), GITHUB_EVENT_NAME=name,
                             GITHUB_REF=ref, GITHUB_SHA=OTHER), \
-                 patch.object(automation, 'api', side_effect=api), \
+                 patch.object(automation, 'qualification_api', side_effect=api), \
                  patch.object(automation, 'qualification_for', return_value={'id': 41}) as green, \
                  patch.object(automation, 'reuse_qualification', side_effect=None if reusable else ValueError('none')), \
                  patch.object(automation, 'emit') as emit:
@@ -1388,7 +1388,7 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
         contents = {name: path.read_bytes() for name, path in self.paths.items()}
         with patch.dict(os.environ, GITHUB_RUN_ID='999'), \
              patch.object(automation, 'exception_policy', return_value={}), \
-             patch.object(automation, 'api', side_effect=self.api_for(producer)), \
+             patch.object(automation, 'qualification_api', side_effect=self.api_for(producer)), \
              patch.object(automation, 'qualification_artifact', return_value=contents):
             automation.verify_headless_qualification(self.paths, SHA)
             receipt['runnerImageVersion'] = 'tampered'
@@ -1402,13 +1402,13 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
                              ('head_repository', {'full_name': 'fork/dunecity'}), ('conclusion', 'failure'),
                              ('workflow_id', 99), ('run_attempt', 2), ('id', 42), ('path', automation.BUILD_WORKFLOW)]:
             producer = self.producer(); producer[field] = value
-            with self.subTest(field=field), patch.object(automation, 'api', side_effect=self.api_for(producer)), \
+            with self.subTest(field=field), patch.object(automation, 'qualification_api', side_effect=self.api_for(producer)), \
                  self.assertRaisesRegex(ValueError, 'Untrusted'):
                 automation.qualification_producer(receipt, SHA)
         base = self.api_for(self.producer())
         for suffix, result in [('/attempts/1/jobs?per_page=100', {'jobs': []}),
                                ('?ref=' + OTHER, {'sha': 'changed-recipe'})]:
-            with patch.object(automation, 'api', side_effect=lambda path: result if path.endswith(suffix) else base(path)), \
+            with patch.object(automation, 'qualification_api', side_effect=lambda path: result if path.endswith(suffix) else base(path)), \
                  self.assertRaises(ValueError):
                 automation.qualification_producer(receipt, SHA)
 
@@ -1426,8 +1426,8 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
         artifact = dict(id=50, name=automation.QUALIFY_ARTIFACT + '-1', expired=False,
                         size_in_bytes=len(raw), digest='sha256:' + automation.hashlib.sha256(raw).hexdigest())
         listing = {'total_count': 1, 'artifacts': [artifact]}
-        with patch.object(automation, 'api', return_value=listing), \
-             patch.object(automation.subprocess, 'check_output', return_value=raw):
+        with patch.object(automation, 'qualification_api', return_value=listing), \
+             patch.object(automation, 'qualification_read', return_value=raw):
             self.assertEqual(set(automation.qualification_artifact(self.producer())), set(automation.QUALIFY_FILES))
             artifact['expired'] = True
             with self.assertRaisesRegex(ValueError, 'expired'):
@@ -1437,14 +1437,14 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
                 automation.qualification_artifact(self.producer())
         raw = self.zip_evidence('../escape')
         artifact['digest'] = 'sha256:' + automation.hashlib.sha256(raw).hexdigest()
-        with patch.object(automation, 'api', return_value=listing), \
-             patch.object(automation.subprocess, 'check_output', return_value=raw), \
+        with patch.object(automation, 'qualification_api', return_value=listing), \
+             patch.object(automation, 'qualification_read', return_value=raw), \
              self.assertRaisesRegex(ValueError, 'contents'):
             automation.qualification_artifact(self.producer())
 
     def test_missing_qualification_never_starts_a_build(self):
         args = argparse.Namespace(sha=SHA, directory=self.root / 'reuse')
-        with patch.object(automation, 'api', return_value={'workflow_runs': []}), \
+        with patch.object(automation, 'qualification_api', return_value={'workflow_runs': []}), \
              patch.object(automation.subprocess, 'run') as command, \
              self.assertRaisesRegex(ValueError, 'before creating a production tag'):
             automation.reuse_qualification(args)
@@ -1454,7 +1454,7 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
     def test_known_failure_requires_exact_output_and_retains_fail(self):
         tree = automation.ET.fromstring(self.xml)
         automation.ET.SubElement(tree[0], 'failure', {'message': 'fixture failure'})
-        automation.ET.SubElement(tree[0], 'system-out').text = 'expected=18 actual=21'
+        automation.ET.SubElement(tree[0], 'system-out').text = 'path=/tmp/run-abc time=123\nPROBE_FAIL: expected=18 actual=21'
         signature = automation.failure_digest(tree[0])
         self.paths[automation.HEADLESS_RESULTS].write_text(automation.ET.tostring(tree, encoding='unicode'))
         decision = dict(test=self.names[0], failureSha256=signature, owner='Stefan',
@@ -1463,7 +1463,9 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
         self.assertEqual(result['status'], 'accepted-known-failures')
         self.assertEqual(result['acceptedFailures'], [decision])
         self.assertIn('<failure', self.paths[automation.HEADLESS_RESULTS].read_text())
-        tree[0].find('system-out').text = 'new regression'
+        tree[0].find('system-out').text = 'path=/tmp/run-xyz time=999\nPROBE_FAIL: expected=18 actual=21'
+        self.assertEqual(automation.failure_digest(tree[0]), signature)
+        tree[0].find('system-out').text = 'PROBE_FAIL: new regression'
         self.paths[automation.HEADLESS_RESULTS].write_text(automation.ET.tostring(tree, encoding='unicode'))
         with self.assertRaisesRegex(ValueError, 'unaccepted failure'):
             automation.headless_qualification(self.root, {self.names[0]: decision})
@@ -1486,6 +1488,23 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
             with self.assertRaisesRegex(ValueError, 'Incomplete'):
                 automation.exception_policy(SHA)
 
+    def test_github_read_retries_only_transient_server_failures_and_is_bounded(self):
+        transient = subprocess.CalledProcessError(1, ['gh', 'api'], stderr=b'HTTP 502 Bad Gateway')
+        with patch.object(automation.subprocess, 'check_output', side_effect=[transient, b'{"ok":true}']) as request, \
+             patch.object(automation.time, 'sleep') as sleep:
+            self.assertEqual(automation.qualification_api('fixture'), {'ok': True})
+            self.assertEqual(request.call_count, 2); sleep.assert_called_once_with(1)
+        with patch.object(automation.subprocess, 'check_output', side_effect=transient) as request, \
+             patch.object(automation.time, 'sleep'), self.assertRaises(subprocess.CalledProcessError):
+            automation.qualification_api('fixture')
+        self.assertEqual(request.call_count, 3)
+        for status in (401, 403, 404):
+            failure = subprocess.CalledProcessError(1, ['gh', 'api'], stderr=f'HTTP {status}'.encode())
+            with patch.object(automation.subprocess, 'check_output', side_effect=failure) as request, \
+                 patch.object(automation.time, 'sleep') as sleep, self.assertRaises(subprocess.CalledProcessError):
+                automation.qualification_api('fixture')
+            self.assertEqual(request.call_count, 1); sleep.assert_not_called()
+
     def test_unexplained_ctest_failure_cannot_be_hidden_by_green_xml(self):
         with patch.object(automation, 'exception_policy', return_value={}), \
              patch.object(automation, 'run', return_value=SHA):
@@ -1503,7 +1522,7 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
             return base(path)
         contents = {name: path.read_bytes() for name, path in self.paths.items()}
         destination = self.root / 'consumed'
-        with patch.object(automation, 'api', side_effect=response), \
+        with patch.object(automation, 'qualification_api', side_effect=response), \
              patch.object(automation, 'qualification_artifact', return_value=contents), \
              patch.object(automation, 'exception_policy', return_value={}):
             automation.reuse_qualification(argparse.Namespace(sha=SHA, directory=destination))

@@ -214,7 +214,8 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
 ### Select a qualified candidate, then release it
 
 Freeze the numeric version, combined defaults and full commit **before** qualification.
-Changes unrelated to a blocked release join the next batch. Source changes create a
+The version-bump commit must pass integration CI; a `[skip ci]` commit cannot
+qualify. Changes unrelated to a blocked release join the next batch. Source changes create a
 new candidate; never move a published tag or relabel old test evidence. This first
 implementation reuses exact source SHAs only. Documentation can ship separately
 without changing the frozen game candidate; cross-SHA equivalence is not automated.
@@ -231,8 +232,10 @@ python3 scripts/release-automation.py reuse-qualification --sha "$FULL_SHA" --di
 
 This verifies the exact source, trusted repository/workflow/attempt, successful
 required jobs, identical control recipe, immutable Actions artifact digest, CMake
-identity and complete non-skipped CTest results. A missing, expired, changed or
-failed receipt stops production immediately, before any platform job. It never
+identity and complete non-skipped CTest results. Read-only GitHub 500/502/503/504 failures receive at most three attempts with
+one- and two-second delays; authentication, missing inputs and other failures
+remain errors. A missing, expired, changed or failed receipt stops production
+immediately, before any platform job. It never
 silently launches another broad suite. Preserve the frozen evidence; an expired
 Actions artifact currently needs a new qualification before a new release.
 For archived history, pass `--run-id` from the frozen record; discovery paginates
@@ -242,7 +245,10 @@ CI. Unknown/failed evidence falls back to running CI, never to a guessed pass.
 
 Production still builds official-identity packages, signs/notarizes them, checks the
 actual package, publishes and verifies live channels. Dev qualification is not
-proof of signed package behaviour. Check signing identity/keychain and Apple
+proof of signed package behaviour. Gate scripts and exception policy are owned by
+the reviewed candidate, as in the previous tag workflow; their digests are visible
+in the receipt. This is source provenance, not an independent sandbox for hostile
+repository maintainers. Check signing identity/keychain and Apple
 notary account readiness at candidate selection, so account failures surface before
 waiting for game tests. Keep private signing operations in the existing Mini lane.
 
@@ -262,7 +268,10 @@ waiting for game tests. Keep private signing operations in the existing Mini lan
 and `inputTree`.
 The owner and linked durable decision must establish explicit acceptance; agents
 must not add an exception merely to make CI green. `failureSha256` is produced by
-`failure_digest` from the failure/error metadata **and full captured test output**.
+`failure_digest` from the failure/error metadata and all structured `*_FAIL:`,
+`FAIL:`, `*_ERROR:` and `ERROR:` lines. Random scratch paths and timings outside
+those markers do not change the signature; changed or additional markers block.
+A test without stable markers cannot use an exception. Raw output is always retained.
 For every path in `EXCEPTION_INPUTS`, `inputTree[path]` is the exact output of
 `git ls-tree BASELINE_SHA -- PATH` (empty only when that input was absent). Additional
 input paths may tighten the scope. Freeze these values when the decision is made.
@@ -283,6 +292,12 @@ main admission. These are bounded contract tests, not proof that every game or
 publication service is correct. Verify the first real qualifier and production
 consumer after rollout; retain the old active-release workflow binding until its
 coordinator hands off, then review/rebind the new `build.yml` hash on Mini.
+During a main-only rollout with staging still frozen on the previous release,
+that old staging source has no matching qualification recipe. Its existing release
+keeps its original gate; bring staging forward as the first step after the release
+handoff to activate the new automatic headless scope. Hosted GUI nightly still
+contains the existing hardware-sensitive performance gate; that pre-existing
+limitation is separate from headless qualification and must remain visible.
 
 Staging and recovery use the existing automation, with `FULL_SHA` set to the
 committed, qualified source and the workflows first deployed on default `main`:

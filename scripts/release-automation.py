@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -215,16 +216,17 @@ def integration_green(source_run, jobs, sha):
             and required.issubset({job['name'] for job in jobs if job['conclusion'] == 'success'}))
 
 
-def qualification_for(sha):
+def qualification_for(sha, read=None):
     """Find successful source CI, independently of the packaging control revision."""
+    read = read or api
     full_sha(sha)
     branch = urllib.parse.quote(STAGING, safe='')
-    runs = api(f'repos/{repository()}/actions/workflows/build.yml/runs?branch={branch}&head_sha={sha}&event=push&status=success&per_page=100')['workflow_runs']
+    runs = read(f'repos/{repository()}/actions/workflows/build.yml/runs?branch={branch}&head_sha={sha}&event=push&status=success&per_page=100')['workflow_runs']
     for candidate in runs:
         if (candidate['status'] != 'completed' or candidate['conclusion'] != 'success'
                 or candidate['path'] != BUILD_WORKFLOW):
             continue
-        jobs = api(f'repos/{repository()}/actions/runs/{candidate["id"]}/attempts/{candidate["run_attempt"]}/jobs?per_page=100')['jobs']
+        jobs = read(f'repos/{repository()}/actions/runs/{candidate["id"]}/attempts/{candidate["run_attempt"]}/jobs?per_page=100')['jobs']
         if integration_green(candidate, jobs, sha):
             return candidate
     raise ValueError('No completed successful integration qualification for source ' + sha)
@@ -622,14 +624,18 @@ def exception_policy(sha, runner_image_version=None):
 
 
 def failure_digest(case):
-    # Includes failure type/message and full test output; never just an empty
-    # CTest <failure/> element, which would accept every failure of that test.
-    output = case.findtext('system-out', '')
-    if not output.strip():
-        raise ValueError('A known failure requires captured test output')
-    evidence = [(child.tag, sorted(child.attrib.items()), ''.join(child.itertext()))
-                for child in case if child.tag in ('failure', 'error', 'system-out', 'system-err')]
+    # Probe logs include random scratch paths/timings. Only explicit failure
+    # markers form the signature; retain the full raw XML separately. Tests
+    # without stable structured markers cannot receive a carry-forward waiver.
+    output = case.findtext('system-out', '') + '\n' + case.findtext('system-err', '')
+    markers = re.findall(r'\b(?:[A-Z][A-Z0-9_]*_)?(?:FAIL|ERROR):[^\r\n]+', output)
+    if not markers:
+        raise ValueError('A known failure requires structured FAIL/ERROR markers')
+    evidence = dict(markers=sorted(line.strip() for line in markers),
+                    failures=[(child.tag, sorted(child.attrib.items()), ''.join(child.itertext()))
+                              for child in case if child.tag in ('failure', 'error')])
     return hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
+
 
 
 def headless_qualification(directory, decisions=None):
@@ -663,14 +669,30 @@ def headless_qualification(directory, decisions=None):
     return result
 
 
+def qualification_read(*command):
+    """Bounded retries for read-only GitHub 5xx failures, never for auth/404."""
+    for attempt in range(3):
+        try:
+            return subprocess.check_output(command, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or b'').decode(errors='replace')
+            if attempt == 2 or not re.search(r'HTTP (?:500|502|503|504)\b', detail):
+                raise
+            time.sleep(attempt + 1)
+
+
+def qualification_api(path):
+    return json.loads(qualification_read('gh', 'api', path))
+
+
 def qualification_producer(receipt, sha):
     """Authenticate the frozen producing attempt, independently of this run."""
     qid, attempt = int(receipt['qualifyingRunId']), int(receipt['qualifyingRunAttempt'])
     if qid <= 0 or attempt <= 0:
         raise ValueError('Invalid qualification producing run/attempt')
     prefix = f'repos/{repository()}'
-    producer = api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}')
-    workflow = api(f'{prefix}/actions/workflows/qualify-release.yml')
+    producer = qualification_api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}')
+    workflow = qualification_api(f'{prefix}/actions/workflows/qualify-release.yml')
     if (producer['id'] != qid or producer['run_attempt'] != attempt
             or producer['workflow_id'] != workflow['id'] or producer['path'] != QUALIFY_WORKFLOW
             or producer['status'] != 'completed' or producer['conclusion'] != 'success'
@@ -679,11 +701,11 @@ def qualification_producer(receipt, sha):
             or producer['head_repository']['full_name'] != repository()):
         raise ValueError('Untrusted or unsuccessful qualification producer')
     # The trusted control workflow and candidate must use the same recipe.
-    source_blob = api(f'{prefix}/contents/{QUALIFY_WORKFLOW}?ref={sha}')['sha']
-    control_blob = api(f'{prefix}/contents/{QUALIFY_WORKFLOW}?ref={full_sha(producer["head_sha"])}')['sha']
+    source_blob = qualification_api(f'{prefix}/contents/{QUALIFY_WORKFLOW}?ref={sha}')['sha']
+    control_blob = qualification_api(f'{prefix}/contents/{QUALIFY_WORKFLOW}?ref={full_sha(producer["head_sha"])}')['sha']
     if source_blob != control_blob:
         raise ValueError('Qualification control recipe differs from candidate')
-    jobs = api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}/jobs?per_page=100')['jobs']
+    jobs = qualification_api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}/jobs?per_page=100')['jobs']
     if not {'select-candidate', 'qualify'}.issubset({j['name'] for j in jobs if j['conclusion'] == 'success'}):
         raise ValueError('Qualification producer lacks successful required jobs')
     return producer
@@ -691,7 +713,7 @@ def qualification_producer(receipt, sha):
 
 def qualification_artifact(producer):
     prefix = f'repos/{repository()}'
-    listing = api(f'{prefix}/actions/runs/{producer["id"]}/artifacts?per_page=100')
+    listing = qualification_api(f'{prefix}/actions/runs/{producer["id"]}/artifacts?per_page=100')
     if listing['total_count'] > 100:
         raise ValueError('Ambiguous qualification artifact listing')
     name = QUALIFY_ARTIFACT + '-' + str(producer['run_attempt'])
@@ -701,7 +723,7 @@ def qualification_artifact(producer):
     artifact = matches[0]
     if artifact['size_in_bytes'] > 16 * 1024 * 1024:
         raise ValueError('Qualification artifact exceeds evidence size bound')
-    raw = subprocess.check_output(['gh', 'api', f'{prefix}/actions/artifacts/{artifact["id"]}/zip'])
+    raw = qualification_read('gh', 'api', f'{prefix}/actions/artifacts/{artifact["id"]}/zip')
     if artifact.get('digest') != 'sha256:' + hashlib.sha256(raw).hexdigest():
         raise ValueError('Qualification artifact digest mismatch')
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
@@ -741,7 +763,7 @@ def qualification_runs():
     # GitHub run search is bounded at 1000; never mistake a truncated history
     # for proof that qualification does not exist.
     for page in range(1, 11):
-        data = api(f'repos/{repository()}/actions/workflows/qualify-release.yml/runs?status=success&per_page=100&page={page}')
+        data = qualification_api(f'repos/{repository()}/actions/workflows/qualify-release.yml/runs?status=success&per_page=100&page={page}')
         batch = data['workflow_runs']
         yield from batch
         if len(batch) < 100:
@@ -753,7 +775,7 @@ def reuse_qualification(args):
     sha = full_sha(args.sha)
     prefix = f'repos/{repository()}'
     run_id = getattr(args, 'run_id', None)
-    runs = [api(f'{prefix}/actions/runs/{int(run_id)}')] if run_id else qualification_runs()
+    runs = [qualification_api(f'{prefix}/actions/runs/{int(run_id)}')] if run_id else qualification_runs()
     # A run's head SHA is the control workflow, not necessarily its candidate.
     for producer in runs:
         if not run_id and producer.get('display_title') != 'Qualify ' + sha:
@@ -800,7 +822,7 @@ def select_qualification(args):
             emit(dict(run=False, sha=''))
             return
         sha = full_sha(source['head_sha'])
-        latest = api(f'repos/{repository()}/git/ref/heads/{STAGING}')['object']['sha']
+        latest = qualification_api(f'repos/{repository()}/git/ref/heads/{STAGING}')['object']['sha']
         if sha != latest:
             emit(dict(run=False, sha=sha))  # Coalesce superseded automatic candidates.
             return
@@ -808,9 +830,9 @@ def select_qualification(args):
         if os.environ['GITHUB_REF'] not in ('refs/heads/main', 'refs/heads/' + STAGING):
             raise ValueError('Qualification must be dispatched from trusted main/integration')
         sha = full_sha(event['inputs']['sha'])
-    qualification_for(sha)  # Verify every required platform/test job, not just a green badge.
+    qualification_for(sha, read=qualification_api)  # Verify every required platform/test job, not just a green badge.
     prefix = f'repos/{repository()}/contents/{QUALIFY_WORKFLOW}?ref='
-    if api(prefix + sha)['sha'] != api(prefix + full_sha(os.environ['GITHUB_SHA']))['sha']:
+    if qualification_api(prefix + sha)['sha'] != qualification_api(prefix + full_sha(os.environ['GITHUB_SHA']))['sha']:
         raise ValueError('Candidate and control qualification recipes differ; integrate the workflow first')
     # Serialized duplicate notifications consume an existing successful receipt.
     with tempfile.TemporaryDirectory(prefix='qualification-discovery-') as directory:
@@ -841,6 +863,8 @@ def record_build(args):
     if args.platform == 'macos-arm64-headless-qualification':
         result.update(qualification=headless_qualification(args.build_root, exception_policy(result['sourceCommit'])),
                       qualificationWorkflow=QUALIFY_WORKFLOW,
+                      qualificationGateSha256={name: digest(ROOT / name) for name in
+                                               ('scripts/release-automation.py', 'scripts/macos-ci-lane.sh', EXCEPTIONS)},
                       packageBuild=os.environ.get('PACKAGE_BUILD', 'false') == 'true',
                       qualifyingRunId=os.environ.get('GITHUB_RUN_ID'),
                       qualifyingRunAttempt=os.environ.get('GITHUB_RUN_ATTEMPT'))
