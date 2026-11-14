@@ -1,3 +1,57 @@
+## 2026-11-14 - 1.0.867 published; 1.0.866 was tagged but never published
+
+Tag `v1.0.867` at `cd2c86f2c91c5be77e31d385e373c87394501a1d` is published
+(Latest, 25 assets, 2026-11-14T06:28:02Z). Protocol 123, save format 9885.
+Tag run `43558741009`: hosted Mac gate 138/138 in 2,831 s after a 16 min cold
+build; Mini lane 18.5 min (integration 38/38, `native_multiplayer_join_modes`
+passed for real in 112 s, `perf_regression` 96 s, Developer ID signed,
+notarized, stapled, packaged pointer gate passed). Live checks at 17:45 AEDT:
+`release-automation.py verify v1.0.867 --live` passed; `/play/build.json`
+reports 1.0.867 at `cd2c86f2c` and all eight served files match; a real browser
+reached the main menu showing `App v1.0.867`; SourceForge `dunecity/1.0.867`
+holds seven packages, README and checksums with all three platform defaults;
+both website download pages say 1.0.867. Browser publisher `43566515010`,
+SourceForge sync `43566515051`, website deploys `43566636146`/`43566673692`.
+
+Contents since 1.0.865: campaign opponent and helper levers by difficulty
+(Brutal opponents unchanged), helper quota saving, Single mission campaign
+policy, two AI performance fixes, software renderer fallback for headless
+runs, SimCity labels renamed to Classic, bundled city map renamed.
+
+What went wrong, in order:
+
+- Mini signing keychain no longer opened with the saved password; rebuilt from
+  the encrypted identity backup. Unlock state is per security session.
+- Apple notary service returned HTTP 403 until the account holder accepted a
+  new agreement (cleared 14:33).
+- `v1.0.866` (`4288daf6d`, run `43552104028`) failed its hosted Mac gate after
+  49 minutes with no test failure: `native_multiplayer_join_modes` skipped
+  because hosted macOS has no PHP, and the gate rejects any skip. Nothing was
+  published; the tag is left in place, unmoved. `cd2c86f2c` excludes the
+  `network` label from the hosted gate and runs that test in the stable Mini
+  lane, which fails on a skip or missing PHP.
+- Tag runs cannot read the staging branch's build cache, so the hosted Mac
+  build was cold (16 to 21 min) on both tags.
+- `sign-desktop-updates` attempt 1 failed: artifacts downloaded into the
+  runner's checkout made the workspace gate see uncommitted files. Mini-only
+  workaround: `/update-input/` and `/update-feeds/` in that clone's
+  `.git/info/exclude`; attempt 2 passed from the frozen artifacts. The lasting
+  fix (downloads under `RUNNER_TEMP`) is PR 126.
+- The release job's website rewrite updated links but not the visible version
+  text, because its patterns targeted wordings the pages no longer use.
+  Corrected by hand in `dunelegacy.com` `b528c2a2b`; helper in PR 126.
+
+Tests changed before tagging: three stale probe contracts (`c2209694c`), the
+starport probe isolates the Brutal helper army floor (`d0643ccd4`), and
+`quantbot_trooper_support` was removed on the owner's instruction
+(`4288daf6d`). Known issue carried: Ordos mission 4, seed 9602, Hard opponent
+with an idle human reaches the harness's 80-minute limit; it predates the
+campaign batch.
+
+Held: Android (signer on the offline PC, phone test, explicit publish);
+TestFlight (not attempted); Windows on a real GPU and physical iPhone/iPad
+(no hardware). Full record: `~/Documents/projects/outputs/release-1.0.866/gates.md`.
+
 ## 2026-11-12 - 1.0.865 published; Mac pointer gate recovered without changing packages
 
 PR #122 merged at `ad4d1a522814ceb4f4fd492c3cf674e1d36bfa56`; tag
