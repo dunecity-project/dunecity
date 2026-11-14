@@ -655,6 +655,9 @@ bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {
     // An optional concrete unlock must not own a cash-poor campaign yard's
     // turn. Keep founding with single slabs while income/power recover.
     if (!campaignYardUpgradeReady(pass, turn.pBuilder)) return false;
+    // CampaignHelperNoConcrete (default off): a support house that lays no slab needs no
+    // bulk-slab upgrade, so the upgrade never owns its yard's turn.
+    if (campaignHelperNoConcrete()) return false;
     // Bulk concrete comes before anything optional this yard could
     // buy, in every mode and at every difficulty, as soon as the
     // technology allows it. Every ordinary building now waits for a
@@ -925,6 +928,11 @@ bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
         && pass.itemCount[Structure_RepairYard]==0
         // CampaignHelperFactoryFirst: the first Heavy Factory is ordered before this walk.
         && !pass.campaignHelperFactoryFirst
+        // CampaignHelperEarlyStarport: the remaining opening refineries come before this walk.
+        && !(pass.campaignHelperEarlyStarport > 0
+            && pass.itemCount[Structure_Refinery] < QuantBotBuildPolicy::supplierRefineryGoal(
+                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                pass.fleetRatios, pass.fleetRefineryTarget))
         && getAIRefineryBays()>0
         && getAIHarvesterCount()>0
         && ((gameMode == GameMode::Campaign && !pass.citySimEnabled && difficulty != Difficulty::Brutal)

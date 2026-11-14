@@ -4675,6 +4675,23 @@ void QuantBot::retreatAllUnits() {
                             && pHarvester->getAmountOfSpice() >= pHarvester->getSpiceCapacity()/2) {
                             doReturn(pHarvester);
                         }
+                        // CampaignHelperEarlyUnload (default off): until its fourth refinery is
+                        // built, the support house banks partial loads so the next refinery is
+                        // funded sooner. Only a worker harvesting or standing idle in the field;
+                        // returning, carried, awaiting pickup and human-ordered ones keep their
+                        // orders. The switch is tested first, before any call.
+                        if (botConfig().force.campaignHelperEarlyUnload > 0 && campaignEconomySupport()
+                            && getHouse()->getNumItems(Structure_Refinery) > 0
+                            && getHouse()->getNumItems(Structure_Refinery) < 4
+                            && !pHarvester->isReturning() && !pHarvester->isPickedUp()
+                            && !pHarvester->isAwaitingPickup() && !pHarvester->wasForced()
+                            && (pHarvester->isHarvesting() || !pHarvester->isMoving())
+                            && pHarvester->getAmountOfSpice() > 0
+                            && pHarvester->getAmountOfSpice() * 100
+                                >= pHarvester->getSpiceCapacity() * botConfig().force.campaignHelperEarlyUnload
+                            && unitRole(pHarvester, {UnitRole::Human}) == UnitRole::Free) {
+                            doReturn(pHarvester);
+                        }
 
                         // Check if harvester is stuck: not moving for extended period
                         // (Regardless of what it THINKS it's doing - harvesting/returning/idle)

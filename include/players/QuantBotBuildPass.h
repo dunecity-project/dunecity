@@ -274,6 +274,9 @@ struct QuantBot::BuildPass {
     bool campaignHelperImportCap{};
     // CampaignHelperFactoryLast: support house with a Starport holds its first Heavy Factory.
     bool campaignHelperFactoryLast{};
+    // CampaignHelperEarlyStarport: support house's refineries before its Starport (0 = off or
+    // out of scope); the remaining opening refineries follow the port, before the Repair Yard.
+    int campaignHelperEarlyStarport{};
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
     bool vanillaFfaLargeScope{};

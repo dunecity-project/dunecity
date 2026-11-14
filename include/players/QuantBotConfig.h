@@ -410,6 +410,21 @@ struct QuantBotConfig {
         /// (when it can build one) and the Starport offers no heavy combat unit at or below list
         /// price, or cash exceeds 2,500. Shared prerequisites and the Repair Yard are unaffected.
         bool campaignHelperFactoryLast;
+        /// Classic campaign support with fewer than four refineries built sends a harvester that
+        /// is harvesting or idle in the field home to unload once its cargo reaches this percent
+        /// of capacity: 0=OFF. Returning, docked, carried and human-ordered harvesters are untouched.
+        int campaignHelperEarlyUnload;
+        /// Classic campaign support never orders concrete (no Slab1/Slab4, no bulk-slab yard
+        /// upgrade) and places its buildings on bare rock. Enemies are unchanged.
+        bool campaignHelperNoConcrete;
+        /// Classic campaign support's Starport opening ladder orders the Starport once this many
+        /// refineries are built or queued, then the remaining opening refineries, then the
+        /// Repair Yard: 0=OFF (all opening refineries first). 1..4.
+        int campaignHelperEarlyStarport;
+        /// Classic campaign support sites its Repair Yard deep behind its own buildings, away
+        /// from the base edge facing the nearest visible enemy (map centre when none), never on
+        /// the shallowest legal site when a deeper one exists. Other placement is unchanged.
+        bool campaignHelperProtectedRepair;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

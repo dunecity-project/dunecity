@@ -2484,6 +2484,128 @@ TEST_CASE("Campaign helper factory last persists OFF and ON with distinct hashes
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign helper early unload persists OFF and percent values with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperEarlyUnload == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-early-unload-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int percent : {0, 40, 60}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperEarlyUnload=" << percent << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperEarlyUnload == percent);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperEarlyUnload = percent;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), percent).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperEarlyUnload == percent);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCampaignHelperEarlyUnload=250\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.campaignHelperEarlyUnload == 100);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper no concrete persists OFF and ON with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperNoConcrete);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-no-concrete-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperNoConcrete=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperNoConcrete == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperNoConcrete = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperNoConcrete == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper early Starport persists OFF and every level with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperEarlyStarport == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-early-starport-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int refineries : {0, 1, 2, 3, 4}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperEarlyStarport=" << refineries << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperEarlyStarport == refineries);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperEarlyStarport = refineries;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), refineries).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperEarlyStarport == refineries);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCampaignHelperEarlyStarport=9\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.campaignHelperEarlyStarport == 4);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper protected repair persists OFF and ON with distinct hashes",
+          "[ai][campaign][defence][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperProtectedRepair);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-protected-repair-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperProtectedRepair=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperProtectedRepair == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperProtectedRepair = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperProtectedRepair == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign helper rock hold persists OFF and every level with distinct hashes",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;

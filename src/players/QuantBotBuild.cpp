@@ -39,6 +39,10 @@ bool QuantBot::campaignEconomySupport() const {
         && campaignPolicyApplies() && isAlliedWithHuman();
 }
 
+bool QuantBot::campaignHelperNoConcrete() const {
+    return botConfig().force.campaignHelperNoConcrete && campaignEconomySupport();
+}
+
 int QuantBot::campaignRefineryReplacementCost(BuildPass& pass) {
     if (!botConfig().force.campaignRefineryDefence || !campaignEconomySupport()
         || lastCalculatedSpice <= 0 || getHouse()->getNumLostItems(Structure_Refinery) == 0)
@@ -3393,6 +3397,10 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         pass.campaignHelperFactoryLast = repairMissing
             || (getHouse()->getCredits() <= 2500 && heavyOffer());
     }
+    // CampaignHelperEarlyStarport (default off): the support house's Starport after this many
+    // refineries (chooseYardCoreEconomy); the switch is tested before anything is called.
+    pass.campaignHelperEarlyStarport = helperForce.campaignHelperEarlyStarport > 0 && campaignEconomySupport()
+        ? helperForce.campaignHelperEarlyStarport : 0;
     pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth
         && groundEconomyThreat && ownGroundArmyValue()
             < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());
@@ -3598,7 +3606,9 @@ int QuantBot::purchasePrice(const BuilderBase* builder, Uint32 item) {
 // An incomplete plan defers the building; it never places it bare.
 QuantBotFoundationPolicy::Plan QuantBot::foundationPlan(const BuilderBase* builder, Uint32 item, Coord site, const std::vector<Uint32>& clearedZones) {
     QuantBotFoundationPolicy::Plan plan;
-    if (!getGameInitSettings().getGameOptions().concreteRequired
+    // CampaignHelperNoConcrete (default off): that support house plans no foundation at all,
+    // so every building is ordered and placed directly on bare rock.
+    if (!getGameInitSettings().getGameOptions().concreteRequired || campaignHelperNoConcrete()
         || !QuantBotBuildPolicy::foundationRequiredForItem(item) || !site.isValid()) {
         plan.complete=true;
         return plan;
@@ -3779,7 +3789,8 @@ int QuantBot::buildingCapitalCost(BuildPass& pass, Uint32 item) {
     const Coord size=getStructureSize(item);
     const int power=pass.citySimEnabled || pass.powerRules ? std::max(0,data[item][houseID].power) : 0;
     // Without concrete there is no foundation to budget for.
-    const int foundation=getGameInitSettings().getGameOptions().concreteRequired
+    // CampaignHelperNoConcrete (default off): nor for a support house that never lays any.
+    const int foundation=getGameInitSettings().getGameOptions().concreteRequired && !campaignHelperNoConcrete()
         ? size.x*size.y*data[Structure_Slab1][houseID].price : 0;
     return data[item][houseID].price + foundation
         + (power*pass.generationCostPerThousand+999)/1000;

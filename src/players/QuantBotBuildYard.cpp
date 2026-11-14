@@ -1395,11 +1395,22 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
                 && pass.itemCount[Structure_HeavyFactory] == 0
                 && data[Structure_LightFactory][houseID].enabled
                 && getHouse()->getTechLevel() >= data[Structure_LightFactory][houseID].techLevel;
-            step = pass.itemCount[Structure_Refinery] < refineryGoal ? Structure_Refinery
+            // CampaignHelperEarlyStarport (default off): the port once that many refineries
+            // are built or queued; the rest of the goal follows the port (below).
+            const int portRefineries = pass.campaignHelperEarlyStarport > 0
+                ? std::min(pass.campaignHelperEarlyStarport, refineryGoal) : refineryGoal;
+            step = pass.itemCount[Structure_Refinery] < portRefineries ? Structure_Refinery
                 : campaignFactory ? Structure_LightFactory
                 : pass.vanillaFfaStarportDeferred ? NONE_ID : Structure_StarPort;
             if (step == NONE_ID && pass.vanillaFfaWaveCapitalReserve > 0)
                 step = Structure_RepairYard;
+        } else if (pass.campaignHelperEarlyStarport > 0
+            && pass.itemCount[Structure_Refinery] < QuantBotBuildPolicy::supplierRefineryGoal(
+                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                pass.fleetRatios, pass.fleetRefineryTarget)) {
+            // CampaignHelperEarlyStarport: the port came early; finish the opening
+            // refineries before its Repair Yard.
+            step = Structure_Refinery;
         } else if (getHouse()->getNumItems(Structure_RepairYard) == 0
             && repairYardAdmitted(pass)
             && data[Structure_RepairYard][houseID].enabled
@@ -2941,7 +2952,9 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         bool needsConcreteExpansion = getGameInitSettings().getGameOptions().concreteRequired
             && QuantBotBuildPolicy::foundationRequiredForItem(yardTurn.itemID);
 
-        if (needsConcreteExpansion && campaignAvailableToBuild(turn.pBuilder,Structure_Slab1)) {
+        // CampaignHelperNoConcrete (default off): that support house never lays a slab.
+        if (needsConcreteExpansion && !campaignHelperNoConcrete()
+            && campaignAvailableToBuild(turn.pBuilder,Structure_Slab1)) {
             Coord slabLocation = findSlabPlaceLocation(Structure_Slab1);
             if (slabLocation.isValid()) {
                 produceItemWithLogging(pass, turn, Structure_Slab1,__LINE__,"concrete_expansion");
@@ -2983,7 +2996,7 @@ void QuantBot::useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn
     // City yards use the demand-ranked fallback before placement above.
     // Outside city mode an otherwise idle yard can extend concrete, but
     // only where concrete means something.
-    if (!yardTurn.isCitySim && getGameInitSettings().getGameOptions().concreteRequired
+    if (!yardTurn.isCitySim && getGameInitSettings().getGameOptions().concreteRequired && !campaignHelperNoConcrete()
         && !yardTurn.skipRemainingStructureLogic && pass.money > 500 && turn.pBuilder->getProductionQueueSize() < 1
         && yardTurn.itemID == NONE_ID && campaignAvailableToBuild(turn.pBuilder,Structure_Slab1)) {
         Coord slabLocation = findSlabPlaceLocation(Structure_Slab1);
