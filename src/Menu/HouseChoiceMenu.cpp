@@ -253,10 +253,10 @@ void HouseChoiceMenu::onPartnerChanged(bool /*interactive*/) {
 void HouseChoiceMenu::onEnemyChanged(bool /*interactive*/) {
     s_enemyClass = enemySelector.getPlayerClass();
     const std::pair<const char*, const char*> descriptions[] = {
-        {"qBotEasy",         "Small waves and a limited economy.\nEach enemy house attacks independently."},
-        {"qBotMedium",       "Larger waves than Easy.\nEach enemy house attacks independently."},
-        {"qBotHard",         "Stronger economy and capped waves.\nEnemy houses can attack together."},
-        {"qBotBrutal",       "No ground-wave value cap.\nEnemy houses can attack together."},
+        {"qBotEasy",         "Small waves and a limited economy.\nEnemy houses can attack at the same time."},
+        {"qBotMedium",       "Larger waves than Easy.\nEnemy houses can attack at the same time."},
+        {"qBotHard",         "Stronger economy and capped waves.\nEnemy houses can attack at the same time."},
+        {"qBotBrutal",       "No limit on ground wave size.\nEnemy houses can attack at the same time."},
         {"qBotDefend",       "Builds and defends without main assaults."},
         {"CampaignAIPlayer", "Uses the original campaign AI behaviour."}
     };
