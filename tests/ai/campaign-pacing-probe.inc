@@ -44,8 +44,15 @@ void runCampaignPacingProbe(Game& game) {
         require(partner->harvesterLimit==expected && partnerHouse->getMaxHarvesters()==0,
             "Friendly Brutal default did not distinguish campaign levels seven and eight/nine");
     }
-    partner->difficulty=QuantBot::Difficulty::Hard;partner->update();
-    require(partnerHouse->getMaxHarvesters()==0 && partner->harvesterLimit==100,"Hard retained the old default engine ceiling");
+    // Each helper difficulty keeps at most its configured harvester ceiling (0 = the spice budget).
+    for (auto tier : {QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
+        const auto& levers=getQuantBotConfig().force;
+        const int lever=tier==QuantBot::Difficulty::Easy ? levers.campaignHelperEasyHarvesters
+            : tier==QuantBot::Difficulty::Medium ? levers.campaignHelperMediumHarvesters : levers.campaignHelperHardHarvesters;
+        partner->difficulty=tier;partner->lastCalculatedSpice=200000;partner->update();
+        require(partnerHouse->getMaxHarvesters()==0 && partner->harvesterLimit==(lever>0 ? std::min(100,lever) : 100),
+            "Helper ignored its difficulty harvester ceiling or kept the old engine ceiling");
+    }
     partner->difficulty=QuantBot::Difficulty::Brutal;
     partner->lastCalculatedSpice=18000;partner->update();
     require(partner->harvesterLimit==9 && partnerHouse->getMaxHarvesters()==0,"Maximum20 became a mandatory worker target");

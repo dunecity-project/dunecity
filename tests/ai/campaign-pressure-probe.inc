@@ -357,6 +357,9 @@ void runCampaignPressureProbe(Game& game) {
         const Uint32 savedCycle=game.gameCycleCount;
         auto config=std::make_shared<QuantBotConfig>(partner->botConfig());
         config->force.campaignCombatBudget=true;
+        // This case isolates the combat budget from the helper difficulty ceilings.
+        config->force.campaignHelperEasyHarvesters=config->force.campaignHelperMediumHarvesters=0;
+        config->force.campaignHelperHardHarvesters=config->force.campaignHelperBrutalHarvesters=0;
         partner->configOverride=config;
         partner->initialMilitaryValue=0;
         partner->initialItemCount[Structure_HeavyFactory]=0;
