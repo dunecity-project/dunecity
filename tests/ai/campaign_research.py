@@ -166,9 +166,10 @@ def game_evidence(directory):
         require(house != '', 'Missing tracked house identity')
         own = sorted([s for s in samples[gid] if s.get('house') == house], key=lambda s: number(s.get('minute')) or 0)
         metrics = {}
-        for field in ('credits', 'army_value', 'harvesters', 'repair_yards', 'spice_gross', 'loss_value', 'kill_value'):
+        for field in ('credits', 'army_value', 'harvesters', 'repair_yards', 'spice_gross', 'loss_value', 'kill_value', 'refineries', 'yard_level', 'heavy', 'ix', 'power', 'need', 'spent_total', 'harvesters_lost', 'carryalls'):
             values = [number(s.get(field)) for s in own]
-            metrics[field] = dict(final=values[-1] if values else None, peak=max((v for v in values if v is not None), default=None))
+            metrics[field] = dict(final=values[-1] if values else None, peak=max((v for v in values if v is not None), default=None),
+                                  first_sampled_positive_minute=next((number(row.get('minute')) for row, value in zip(own, values) if value is not None and value > 0), None))
         parsed, malformed = [], 0
         for event in events[gid]:
             try:
@@ -186,6 +187,9 @@ def game_evidence(directory):
             issues.append('truncated-player-samples')
         if row.get('category') == 'campaign' and not parsed: issues.append('missing-campaign-events')
         if malformed: issues.append('malformed-events')
+        minutes = [number(s.get('minute')) for s in own]
+        if any(v is None for v in minutes) or len(set(minutes)) != len(minutes): issues.append('invalid-or-duplicate-samples')
+        if len(minutes) > 1 and all(v is not None for v in minutes) and any(b - a > 2 for a, b in zip(minutes, minutes[1:])): issues.append('sample-gaps')
         result[gid] = dict(id=gid, identity={k: row.get(k, '') for k in IDENTITY}, source=row.get('source_commit'),
             source_fingerprint=row.get('source_fingerprint'), digest=row.get('digest'), outcome=row.get('outcome'),
             minutes=number(row.get('minutes')), helper_house=house, helper_style=row.get('helper_style'),
@@ -215,6 +219,13 @@ def pair_records(left, right, historical=False):
         change = None if old is None or new is None else old['outcome'] + '->' + new['outcome']
         # Every game needs review; changed outcomes and economic/army regressions are prominent.
         record = dict(id=gid, before=old, after=new, outcome_change=change, issues=issues)
+        record['flags'] = []
+        if old and new:
+            if old['outcome'] == 'won' and new['outcome'] != 'won': record['flags'].append('lost-baseline-win')
+            if old['outcome'] == new['outcome'] == 'won' and old['minutes'] and new['minutes'] > old['minutes'] * 1.2: record['flags'].append('win-over-20-percent-slower')
+            record['metric_changes'] = {k: {v: new['metrics'][k][v] - old['metrics'][k][v]
+                if new['metrics'][k][v] is not None and old['metrics'][k][v] is not None else None for v in ('final', 'peak')}
+                for k in old['metrics'] if k in new['metrics']}
         record['review_key'] = digest(record)
         records.append(record)
     return records
@@ -236,6 +247,11 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
         for gid, game in games.items():
             if gid not in expected or game['source'] != provenance['source_revision'] or game['helper_style'] != m['configs'][arm]:
                 complete = False
+            if gid in expected:
+                case = expected[gid]
+                wanted = dict(seed=str(case['seed']), mod=case['mod'], map=f"{case['house']} level {level(case['mission'])} mission {case['mission']}",
+                              limit=str(case['minutes']), campaign_mode=case['mode'], partner=case['helper'], enemy_ai='quantbot', enemy_difficulty=case['enemy'])
+                if any(game['identity'].get(k) != v for k, v in wanted.items()): complete = False
             # Require actual helper and all enemy configuration hashes, not requested style labels.
             if game['helper_house'] not in game['configs'] or not game['setup'].get('config_hash'):
                 complete = False
@@ -293,6 +309,18 @@ def control_report(before, after, schedule_path, kind, candidate_config, reviews
     rows = pair_records(left, right, historical=kind == 'historical')
     ids = {r['id'] for r in expected}
     complete = len(ids) == len(expected) and set(left) == set(right) == ids and bool(rows) and all(not r['issues'] for r in rows)
+    for expected_row in expected:
+        for data in (left, right):
+            actual = data.get(expected_row['id'])
+            if actual is None: continue
+            for key in ('seed', 'mod', 'map'):
+                if key not in expected_row or str(expected_row[key]) != actual['identity'][key]: complete = False
+            if str(expected_row.get('minutes', '')) != actual['identity']['limit']: complete = False
+            if 'sides' in expected_row:
+                sides = expected_row['sides']
+                wanted = sides if isinstance(sides, str) else ' '.join(':'.join(map(str, side)) for side in sides)
+                if wanted != actual['identity']['sides']: complete = False
+            else: complete = False
     sources = {r['source'] for r in right.values()}
     complete &= len(sources) == 1 and all(r['helper_style'] == candidate_config or r['setup'].get('style') == candidate_config for r in right.values())
     if kind == 'historical':

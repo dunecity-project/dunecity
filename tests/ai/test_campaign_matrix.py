@@ -43,6 +43,28 @@ def balance_arguments(options):
 
 
 class CampaignCoverageTests(unittest.TestCase):
+    def test_helper_style_cannot_leak_into_global_or_ai_only_setup(self):
+        args = balance_arguments(['--scenario', '--helper-style', 'campaign-power-surplus'])
+        self.assertEqual(args.helper_style, 'campaign-power-surplus')
+        for extra in (['--scenario-style', 'campaign-power-one'], ['--campaign-ai-only'], ['--scenario-sides', 'harkonnen:1:qBotHard']):
+            with self.assertRaises(SystemExit):
+                balance_arguments(['--scenario', '--helper-style', 'campaign-power-surplus', *extra])
+
+    def test_campaign_deck_preserves_explicit_cases_and_shards(self):
+        import tempfile, json
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'deck.json'
+            path.write_text(json.dumps({'schema': 'campaign-research-cases/1', 'cases': [
+                dict(house='harkonnen', mission=n, seed=9901, helper='brutal', enemy='hard', mode='full', mod='vanilla', minutes=80)
+                for n in (20, 21)]}))
+            args = SimpleNamespace(case_manifest=path, shard=None)
+            games = matrix['schedule'](args)
+            self.assertEqual([g['mission'] for g in games], [20, 21])
+            self.assertTrue(all(g['ai_only'] is False and g['enemy_ai'] == 'quantbot' for g in games))
+            args.shard=(2, 2)
+            self.assertEqual(matrix['schedule'](args), [games[1]])
+
     def test_balance_cli_accepts_quantbot_tiers_and_ai_only_in_both_modes(self):
         for mode in ('full', 'single'):
             for tier in ('easy', 'medium', 'hard', 'brutal'):
