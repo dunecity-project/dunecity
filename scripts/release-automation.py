@@ -11,6 +11,7 @@ import argparse
 import base64
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ import tempfile
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 STAGING = 'integrate/feature-batch'
@@ -32,6 +34,15 @@ MANIFEST = 'publication-inputs.json'
 HEADLESS_PLAN = 'macos-headless-plan.json'
 HEADLESS_RESULTS = 'macos-headless-results.xml'
 HEADLESS_RECEIPT = 'macos-headless-qualification.json'
+QUALIFY_WORKFLOW = '.github/workflows/qualify-release.yml'
+QUALIFY_ARTIFACT = 'DuneCity-macOS-headless-qualification'
+QUALIFY_FILES = (HEADLESS_PLAN, HEADLESS_RESULTS, HEADLESS_RECEIPT)
+EXCEPTIONS = 'releases/qualification-exceptions.json'
+# Conservative dependency scope: an exception cannot survive a changed game,
+# test, dependency recipe or harness. No inference of equivalence from filenames.
+EXCEPTION_INPUTS = ('src', 'include', 'tests', 'cmake', 'CMakeLists.txt', 'vcpkg.json',
+                    'vcpkg-configuration.json', 'scripts', '.github/workflows', 'data', 'mods',
+                    'config', 'tools', 'platform', 'IDE', 'imported_sprites', 'web')
 STABLE = re.compile(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z')
 SHA = re.compile(r'[0-9a-f]{40}\Z')
 NS = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
@@ -453,11 +464,18 @@ def plan(args):
         if head['ref'] == STAGING and head['repo']['full_name'] == repository():
             values.update(run=False, reason='integration push covers this source; PR does not duplicate it')
     if name == 'push' and ref == 'refs/heads/main':
-        before = event.get('before', '')
-        if SHA.fullmatch(before) and before != '0' * 40:
-            changed = api(f'repos/{repository()}/compare/{before}...{sha}').get('files', [])
-            if docs_only([item['filename'] for item in changed]):
-                values.update(run=False, reason='main documentation-only change: no duplicate platform build')
+        try:
+            qualified = qualification_for(sha)
+        except (ValueError, subprocess.CalledProcessError):
+            qualified = None  # Unavailable/ambiguous evidence means run CI.
+        if qualified:
+            values.update(run=False, reason='exact source already passed integration CI: ' + str(qualified['id']))
+        else:
+            before = event.get('before', '')
+            if SHA.fullmatch(before) and before != '0' * 40:
+                changed = api(f'repos/{repository()}/compare/{before}...{sha}').get('files', [])
+                if docs_only([item['filename'] for item in changed]):
+                    values.update(run=False, reason='main documentation-only change: no duplicate platform build')
     packaging = name == 'schedule' or (name == 'workflow_dispatch' and bool(inputs.get('staging_sha')))
     if packaging:
         if probes:
@@ -494,6 +512,10 @@ def plan(args):
         if probes or packaging or stable or name != 'workflow_dispatch':
             raise ValueError('The nightly tier probe runs alone and publishes nothing')
         values.update(tier='nightly', reason='nightly tier on demand')
+    if stable:
+        # Fail before admitting any platform/package job, not after signing work.
+        with tempfile.TemporaryDirectory(prefix='release-readiness-') as directory:
+            reuse_qualification(argparse.Namespace(sha=sha, directory=Path(directory)))
     write_json(args.output, values)
     emit(values)
 
@@ -572,37 +594,209 @@ def reservation_token(args):
     print(release_token(state, args.sha, run('git', 'rev-parse', 'HEAD')))
 
 
-def headless_qualification(directory):
-    """Freeze the actual CTest label selection and successful, non-skipped execution."""
+def exception_policy(sha):
+    """Only committed, explicitly scoped decisions can accept a known failure."""
+    policy = json.loads(run('git', 'show', full_sha(sha) + ':' + EXCEPTIONS))
+    if policy.get('schema') != 1 or not isinstance(policy.get('exceptions'), list):
+        raise ValueError('Invalid qualification exception policy')
+    decisions = {}
+    for item in policy['exceptions']:
+        name = item['test']
+        if (not name or name in decisions or not item.get('owner') or not item.get('reason')
+                or not item.get('trackingUrl', '').startswith('https://')
+                or not re.fullmatch(r'[0-9a-f]{64}', item.get('failureSha256', ''))
+                or not set(EXCEPTION_INPUTS).issubset(item.get('inputTree', {}))):
+            raise ValueError('Incomplete/duplicate known-failure decision')
+        for path, expected in item['inputTree'].items():
+            if path.startswith(('/', '-')) or '..' in Path(path).parts:
+                raise ValueError('Invalid exception input path')
+            # ls-tree also represents an absent optional input unambiguously.
+            actual = run('git', 'ls-tree', sha, '--', path)
+            if actual != expected:
+                raise ValueError('Known-failure input scope changed: ' + name + ': ' + path)
+        decisions[name] = item
+    return decisions
+
+
+def failure_digest(case):
+    # Includes failure type/message and full test output; never just an empty
+    # CTest <failure/> element, which would accept every failure of that test.
+    output = case.findtext('system-out', '')
+    if not output.strip():
+        raise ValueError('A known failure requires captured test output')
+    evidence = [(child.tag, sorted(child.attrib.items()), ''.join(child.itertext()))
+                for child in case if child.tag in ('failure', 'error', 'system-out', 'system-err')]
+    return hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
+
+
+def headless_qualification(directory, decisions=None):
+    """Freeze actual coverage; retain FAIL separately from explicit acceptance."""
+    decisions = decisions or {}
     plan = json.loads((directory / HEADLESS_PLAN).read_text())
     selected = plan['tests']
     names = [item['name'] for item in selected]
     labels = [set(next((prop['value'] for prop in item['properties'] if prop['name'] == 'LABELS'), []))
               for item in selected]
-    if (not names or len(set(names)) != len(names) or any('headless' not in values for values in labels)
-            or not any('nightly' in values for values in labels)):
+    if (not names or len(set(names)) != len(names)
+            or any(not {'headless', 'nightly'}.issubset(values) or 'gui' in values for values in labels)):
         raise ValueError('Hosted qualification must select nonempty headless nightly coverage')
     cases = list(ET.parse(directory / HEADLESS_RESULTS).getroot().iter('testcase'))
     if (sorted(item.get('name') for item in cases) != sorted(names)
-            or any(item.get('status', 'run') not in ('run', 'passed') for item in cases)
-            or any(child.tag in ('failure', 'error', 'skipped') for item in cases for child in item.iter())):
+            or any(item.get('status', 'run') not in ('run', 'passed', 'fail') for item in cases)
+            or any(child.tag == 'skipped' for item in cases for child in item.iter())):
         raise ValueError('Hosted headless qualification is failed, skipped, missing or incomplete')
-    return dict(status='success', capability='headless', tier='nightly', tests=sorted(names),
-                planSha256=digest(directory / HEADLESS_PLAN), resultsSha256=digest(directory / HEADLESS_RESULTS))
+    accepted = []
+    for case in cases:
+        if case.get('status') == 'fail' or any(child.tag in ('failure', 'error') for child in case.iter()):
+            decision = decisions.get(case.get('name'))
+            if not decision or decision['failureSha256'] != failure_digest(case):
+                raise ValueError('Hosted headless qualification is failed, skipped or has an unaccepted failure: ' + case.get('name', ''))
+            accepted.append(decision)
+    result = dict(status='accepted-known-failures' if accepted else 'success', capability='headless',
+                  tier='nightly', tests=sorted(names), planSha256=digest(directory / HEADLESS_PLAN),
+                  resultsSha256=digest(directory / HEADLESS_RESULTS))
+    if accepted:
+        result['acceptedFailures'] = sorted(accepted, key=lambda item: item['test'])
+    return result
 
 
-def verify_headless_qualification(paths, sha):
+def qualification_producer(receipt, sha):
+    """Authenticate the frozen producing attempt, independently of this run."""
+    qid, attempt = int(receipt['qualifyingRunId']), int(receipt['qualifyingRunAttempt'])
+    if qid <= 0 or attempt <= 0:
+        raise ValueError('Invalid qualification producing run/attempt')
+    prefix = f'repos/{repository()}'
+    producer = api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}')
+    workflow = api(f'{prefix}/actions/workflows/qualify-release.yml')
+    if (producer['id'] != qid or producer['run_attempt'] != attempt
+            or producer['workflow_id'] != workflow['id'] or producer['path'] != QUALIFY_WORKFLOW
+            or producer['status'] != 'completed' or producer['conclusion'] != 'success'
+            or producer['event'] not in ('workflow_run', 'workflow_dispatch')
+            or producer['head_branch'] not in ('main', STAGING)
+            or producer['head_repository']['full_name'] != repository()):
+        raise ValueError('Untrusted or unsuccessful qualification producer')
+    # The trusted control workflow and candidate must use the same recipe.
+    source_blob = api(f'{prefix}/contents/{QUALIFY_WORKFLOW}?ref={sha}')['sha']
+    control_blob = api(f'{prefix}/contents/{QUALIFY_WORKFLOW}?ref={full_sha(producer["head_sha"])}')['sha']
+    if source_blob != control_blob:
+        raise ValueError('Qualification control recipe differs from candidate')
+    jobs = api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}/jobs?per_page=100')['jobs']
+    if not {'select-candidate', 'qualify'}.issubset({j['name'] for j in jobs if j['conclusion'] == 'success'}):
+        raise ValueError('Qualification producer lacks successful required jobs')
+    return producer
+
+
+def qualification_artifact(producer):
+    prefix = f'repos/{repository()}'
+    listing = api(f'{prefix}/actions/runs/{producer["id"]}/artifacts?per_page=100')
+    if listing['total_count'] > 100:
+        raise ValueError('Ambiguous qualification artifact listing')
+    name = QUALIFY_ARTIFACT + '-' + str(producer['run_attempt'])
+    matches = [item for item in listing['artifacts'] if item['name'] == name]
+    if len(matches) != 1 or matches[0]['expired']:
+        raise ValueError('Qualification artifact missing, expired or ambiguous')
+    artifact = matches[0]
+    if artifact['size_in_bytes'] > 16 * 1024 * 1024:
+        raise ValueError('Qualification artifact exceeds evidence size bound')
+    raw = subprocess.check_output(['gh', 'api', f'{prefix}/actions/artifacts/{artifact["id"]}/zip'])
+    if artifact.get('digest') != 'sha256:' + hashlib.sha256(raw).hexdigest():
+        raise ValueError('Qualification artifact digest mismatch')
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        entries = archive.infolist()
+        if (sorted(entry.filename for entry in entries) != sorted(QUALIFY_FILES)
+                or any(entry.file_size > 16 * 1024 * 1024 or entry.is_dir() for entry in entries)
+                or sum(entry.file_size for entry in entries) > 16 * 1024 * 1024):
+            raise ValueError('Unexpected qualification artifact contents')
+        return {entry.filename: archive.read(entry) for entry in entries}
+
+
+def verify_headless_qualification(paths, sha, authenticate=True):
     receipt = json.loads(paths[HEADLESS_RECEIPT].read_text())
     if (receipt['sourceCommit'] != sha or receipt['releaseBuild'] != 'OFF'
             or receipt['platform'] != 'macos-arm64-headless-qualification' or receipt.get('packageBuild') is not False
             or receipt['configuration'].get('DUNECITY_RELEASE_BUILD:BOOL') != 'OFF'
             or receipt['configuration'].get('DUNECITY_BUILD_TESTS:BOOL') != 'ON'):
         raise ValueError('Hosted headless qualification source/configuration mismatch')
-    if (int(receipt['qualifyingRunId']) <= 0 or int(receipt['qualifyingRunAttempt']) <= 0
-            or (os.environ.get('GITHUB_RUN_ID') and str(receipt['qualifyingRunId']) != os.environ['GITHUB_RUN_ID'])):
-        raise ValueError('Hosted headless qualification belongs to a different producing run')
-    if receipt['qualification'] != headless_qualification(paths[HEADLESS_RECEIPT].parent):
+    if receipt.get('qualificationWorkflow') != QUALIFY_WORKFLOW:
+        # Existing immutable releases used same-run qualification. Do not
+        # reinterpret them as reusable cross-run evidence.
+        if (int(receipt['qualifyingRunId']) <= 0 or int(receipt['qualifyingRunAttempt']) <= 0
+                or (os.environ.get('GITHUB_RUN_ID') and str(receipt['qualifyingRunId']) != os.environ['GITHUB_RUN_ID'])):
+            raise ValueError('Hosted headless qualification belongs to a different producing run')
+        decisions = {}
+    else:
+        decisions = exception_policy(sha)
+        if authenticate:
+            original = qualification_artifact(qualification_producer(receipt, sha))
+            if any(paths[name].read_bytes() != original[name] for name in QUALIFY_FILES):
+                raise ValueError('Qualification evidence differs from immutable producer artifact')
+    if receipt['qualification'] != headless_qualification(paths[HEADLESS_RECEIPT].parent, decisions):
         raise ValueError('Hosted headless qualification receipt does not match its frozen test results')
+
+
+def reuse_qualification(args):
+    sha = full_sha(args.sha)
+    prefix = f'repos/{repository()}'
+    runs = api(f'{prefix}/actions/workflows/qualify-release.yml/runs?status=success&per_page=100')['workflow_runs']
+    # A run's head SHA is the control workflow, not necessarily its candidate.
+    for producer in runs:
+        if producer.get('display_title') != 'Qualify ' + sha:
+            continue  # Discovery hint only; the receipt/API still establish trust.
+        try:
+            contents = qualification_artifact(producer)
+            receipt = json.loads(contents[HEADLESS_RECEIPT])
+            if receipt['sourceCommit'] != sha:
+                continue
+            if (str(receipt['qualifyingRunId']) != str(producer['id'])
+                    or int(receipt['qualifyingRunAttempt']) != producer['run_attempt']
+                    or receipt.get('qualificationWorkflow') != QUALIFY_WORKFLOW):
+                raise ValueError('Qualification receipt producer mismatch')
+            qualification_producer(receipt, sha)
+            with tempfile.TemporaryDirectory(prefix='qualification-') as directory:
+                paths = {name: Path(directory) / name for name in QUALIFY_FILES}
+                for name, path in paths.items():
+                    path.write_bytes(contents[name])
+                verify_headless_qualification(paths, sha, authenticate=False)
+                args.directory.mkdir(parents=True, exist_ok=True)
+                for name, path in paths.items():
+                    shutil.copyfile(path, args.directory / name)
+            print(f'Qualified {sha}: run {producer["id"]}, attempt {producer["run_attempt"]}; no build or test rerun')
+            return
+        except (KeyError, ValueError) as error:
+            print('Ignoring unusable qualification: ' + str(error), file=sys.stderr)
+    raise ValueError('No reusable headless qualification for ' + sha +
+                     '; qualify this frozen integration candidate before creating a production tag')
+
+
+def select_qualification(args):
+    event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+    if os.environ['GITHUB_EVENT_NAME'] == 'workflow_run':
+        source = event['workflow_run']
+        if (source['head_branch'] != STAGING or source['event'] != 'push'
+                or source['conclusion'] != 'success' or source['head_repository']['full_name'] != repository()):
+            emit(dict(run=False, sha=''))
+            return
+        sha = full_sha(source['head_sha'])
+        latest = api(f'repos/{repository()}/git/ref/heads/{STAGING}')['object']['sha']
+        if sha != latest:
+            emit(dict(run=False, sha=sha))  # Coalesce superseded automatic candidates.
+            return
+    else:
+        if os.environ['GITHUB_REF'] not in ('refs/heads/main', 'refs/heads/' + STAGING):
+            raise ValueError('Qualification must be dispatched from trusted main/integration')
+        sha = full_sha(event['inputs']['sha'])
+    qualification_for(sha)  # Verify every required platform/test job, not just a green badge.
+    prefix = f'repos/{repository()}/contents/{QUALIFY_WORKFLOW}?ref='
+    if api(prefix + sha)['sha'] != api(prefix + full_sha(os.environ['GITHUB_SHA']))['sha']:
+        raise ValueError('Candidate and control qualification recipes differ; integrate the workflow first')
+    # Serialized duplicate notifications consume an existing successful receipt.
+    with tempfile.TemporaryDirectory(prefix='qualification-discovery-') as directory:
+        try:
+            reuse_qualification(argparse.Namespace(sha=sha, directory=Path(directory)))
+        except ValueError:
+            emit(dict(run=True, sha=sha))
+        else:
+            emit(dict(run=False, sha=sha))
 
 
 def record_build(args):
@@ -622,7 +816,8 @@ def record_build(args):
                              if key.startswith(('CMAKE_C_COMPILER:', 'CMAKE_CXX_COMPILER:', 'CMAKE_TOOLCHAIN_FILE:'))
                              and Path(value).is_file()})
     if args.platform == 'macos-arm64-headless-qualification':
-        result.update(qualification=headless_qualification(args.build_root),
+        result.update(qualification=headless_qualification(args.build_root, exception_policy(result['sourceCommit'])),
+                      qualificationWorkflow=QUALIFY_WORKFLOW,
                       packageBuild=os.environ.get('PACKAGE_BUILD', 'false') == 'true',
                       qualifyingRunId=os.environ.get('GITHUB_RUN_ID'),
                       qualifyingRunAttempt=os.environ.get('GITHUB_RUN_ATTEMPT'))
@@ -1341,6 +1536,9 @@ def resume(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
+    p = commands.add_parser('select-qualification'); p.set_defaults(func=select_qualification)
+    p = commands.add_parser('reuse-qualification'); p.add_argument('--sha', required=True); p.add_argument('--directory', type=Path, required=True); p.set_defaults(func=reuse_qualification)
+    p = commands.add_parser('check-headless'); p.add_argument('--directory', type=Path, required=True); p.set_defaults(func=lambda a: print(json.dumps(headless_qualification(a.directory, exception_policy(run('git', 'rev-parse', 'HEAD'))), indent=2)))
     p = commands.add_parser('plan'); p.add_argument('--output', type=Path, default=Path('selection.json')); p.set_defaults(func=plan)
     p = commands.add_parser('dispatch-staging'); p.add_argument('--sha', required=True); p.set_defaults(func=dispatch_staging)
     p = commands.add_parser('manifest'); p.add_argument('--directory', type=Path, required=True); p.add_argument('--sha', required=True); p.add_argument('--tag', required=True); p.add_argument('--stable', action='store_true'); p.set_defaults(func=make_manifest)

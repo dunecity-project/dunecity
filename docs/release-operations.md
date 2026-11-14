@@ -1,6 +1,6 @@
 # Release and hosting operations
 
-Operating contract updated 2026-11-13. This is the entry point for Codex, Claude,
+Operating contract updated 2026-11-14. This is the entry point for Codex, Claude,
 Hermes and human maintainers. Check current branches, workflows and release state
 before acting; historical version numbers/run IDs below are examples, not defaults.
 
@@ -193,8 +193,12 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
   the website repository; verified immutable archives download into temporary
   storage. Never commit WASM/data snapshots into its Git history. `/play-staging`
   isolates dev/SHA identity, caches, saves and signaling from stable `/play`.
-- Stable headless-nightly qualification runs on hosted Mac at the exact source
-  SHA before the Mini lane. Long QuantBot/Atreides/scenario/FFA checks stay there;
+- Headless-nightly qualification runs **before production selection**, after green
+  integration CI, in `qualify-release.yml` on hosted Mac. It runs once per frozen
+  source, independently of packaging. Automatic requests coalesce to the newest
+  pending integration commit; an explicit candidate is never cancelled by pushes.
+  Daily Mac nightly owns GUI-only coverage; Linux nightly remains separate platform
+  coverage. Production consumes qualification evidence and does not rerun that suite.
   Mini retains bounded native integration, calibrated GUI/performance/skin and
   packaged-pointer verification. Qualification metadata, plan and JUnit digests
   must agree before Latest.
@@ -206,6 +210,75 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
   A channel is complete only after verifying its live destination/source/digest;
   resume from those facts rather than restarting the entire release. Missing
   Android signer/phone approval holds Android alone, not every other channel.
+
+### Select a qualified candidate, then release it
+
+Freeze the numeric version, combined defaults and full commit **before** qualification.
+Changes unrelated to a blocked release join the next batch. Source changes create a
+new candidate; never move a published tag or relabel old test evidence. This first
+implementation reuses exact source SHAs only. Documentation can ship separately
+without changing the frozen game candidate; cross-SHA equivalence is not automated.
+
+Green integration CI starts **Qualify release candidate** automatically after this
+workflow is deployed on default `main`. For an explicit older green integration
+candidate, first check whether its qualification is already running, then:
+
+```sh
+gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref main -f sha="$FULL_SHA"
+# After completion, this is the concrete readiness check, before creating a tag:
+python3 scripts/release-automation.py reuse-qualification --sha "$FULL_SHA" --directory "$EVIDENCE_DIR/qualification"
+```
+
+This verifies the exact source, trusted repository/workflow/attempt, successful
+required jobs, identical control recipe, immutable Actions artifact digest, CMake
+identity and complete non-skipped CTest results. A missing, expired, changed or
+failed receipt stops production immediately, before any platform job. It never
+silently launches another broad suite. Preserve the frozen evidence; an expired
+Actions artifact currently needs a new qualification before a new release.
+A successful staging-to-main promotion at the **same SHA** skips duplicate platform
+CI. Unknown/failed evidence falls back to running CI, never to a guessed pass.
+
+Production still builds official-identity packages, signs/notarizes them, checks the
+actual package, publishes and verifies live channels. Dev qualification is not
+proof of signed package behaviour. Check signing identity/keychain and Apple
+notary account readiness at candidate selection, so account failures surface before
+waiting for game tests. Keep private signing operations in the existing Mini lane.
+
+| Scope | Owner/run | Reuse rule |
+| --- | --- | --- |
+| Ordinary source/platform integration | staging push | exact SHA; main promotion reuses |
+| Mac headless nightly | pre-production qualifier | exact source + recipe + complete result artifact |
+| Mac GUI nightly | daily nightly | separate GUI scope; no headless replay |
+| Linux nightly | daily nightly | separate platform coverage |
+| Official package, signing and packaged smoke | production | exact official package; never inferred from dev tests |
+| Delivery recovery | existing publication workflows | immutable successful artifacts; no rebuild |
+
+### Carry an explicit known-failure decision forward
+
+`releases/qualification-exceptions.json` starts empty. A reviewed entry requires
+`test`, `failureSha256`, `owner`, `reason`, `trackingUrl` and `inputTree`.
+The owner and linked durable decision must establish explicit acceptance; agents
+must not add an exception merely to make CI green. `failureSha256` is produced by
+`failure_digest` from the failure/error metadata **and full captured test output**.
+For every path in `EXCEPTION_INPUTS`, `inputTree[path]` is the exact output of
+`git ls-tree BASELINE_SHA -- PATH` (empty only when that input was absent). Additional
+input paths may tighten the scope. Freeze these values when the decision is made.
+
+The qualifier compares those Git objects at the new candidate before accepting
+anything. Changed game, test, asset, dependency, harness or workflow inputs invalidate
+the decision. Changed failure output also blocks. Skips and missing/duplicate tests
+are never accepted. The original JUnit remains FAIL; the receipt reports
+`accepted-known-failures` and includes the decision, rather than rewriting it as PASS.
+A passing test needs no exception. A stale entry must be reviewed/removed before the
+next qualifier; it is never silently expanded. Decisions can carry forward unchanged
+without another approval while their recorded scope and failure remain identical.
+
+Safety checks exercise wrong source/repository/workflow/attempt, failed jobs,
+modified/expired artifacts, incomplete coverage, changed exceptions and duplicate
+main admission. These are bounded contract tests, not proof that every game or
+publication service is correct. Verify the first real qualifier and production
+consumer after rollout; retain the old active-release workflow binding until its
+coordinator hands off, then review/rebind the new `build.yml` hash on Mini.
 
 Staging and recovery use the existing automation, with `FULL_SHA` set to the
 committed, qualified source and the workflows first deployed on default `main`:

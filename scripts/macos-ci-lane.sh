@@ -75,14 +75,20 @@ cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
     ctest --test-dir build --show-only=json-v1 -L headless -L nightly > build/macos-headless-plan.json
+    ctest_status=0
     ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 \
-        -L headless -L nightly --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml"
+        -L headless -L nightly --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml" || ctest_status=$?
+    # CTest 8 means test failures; only exact committed decisions can accept them.
+    # Launch/configuration failures and incomplete/skipped XML still fail closed.
+    if [ "$ctest_status" -ne 0 ] && [ "$ctest_status" -ne 8 ]; then exit "$ctest_status"; fi
+    python3 scripts/release-automation.py check-headless --directory build
     build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
     exit 0
 fi
 ctest --test-dir build --output-on-failure --no-tests=error -L integration -LE gui
 if [ "${TEST_TIER:-integration}" = nightly ]; then
-    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly
+    # Headless nightly is owned by qualify-release.yml; this lane owns GUI nightly.
+    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly -L gui
 fi
 build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
 if [ "$STABLE" = ON ] || [ "${MACOS_SKIN_PROBE:-false}" = true ]; then
