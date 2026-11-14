@@ -48,6 +48,24 @@ Mods whose factory has no legal original unit may build a legal replacement
 combat unit using the same random/priority selection rule. That extension never
 changes the original roster's candidate order or random draws.
 
-Implementation and validation are in progress. The separately frozen 1.0.868
-release is not changed by this work. New state requires explicit save-version
-coordination; older saves must retain the previous controller behaviour.
+New games default to `OriginalCampaignAI=true` in `[General Behavior]` of the
+runtime QuantBot configuration; `false` selects the previous controller for
+controlled comparisons. QuantBot remains a separate controller. Do not add the
+switch to the shipped default INI: changing that asset's checksum would reject
+older campaign saves. The switch is included in the network configuration hash.
+Save format 9886 persists the selected mode and team VM state; older saves select
+the legacy mode. Protocol 125 separates these decisions from older network peers.
+
+Validation on source `41d34ddcb2ccaf1a85daad4915db8d144c9a60ba` (2026-11-14):
+AWS CTest `20261114T185742-original-campaign-final-25bc98`, **5/5 passed**.
+The runtime fixture covers produced Hunt, authored guards/team pursuit, rebuild
+slots, scoped free upgrades, old controller stream boundaries and real saved-world
+continuation (live/checkpoint and repeated ordinary loads, 1500 cycles each).
+The 25-match fixture covers all three houses at levels 1/4/9, legacy mode,
+DuneCity/Tornie content and repeatability. All three QuantBot OFF/ON controls have
+identical final simulation digests. Policy/VM and config registry checks pass.
+These checks do not assert identical combat to the original executable or a
+particular win rate against QuantBot.
+
+The separately frozen 1.0.868 release is not changed by this feature. Combined
+broad/native regression and staging integration remain pending at this snapshot.

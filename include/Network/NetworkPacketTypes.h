@@ -378,6 +378,8 @@
 //      would desync. Private development identity and save format remain unchanged.
 // 123: QuantBot repair-capacity demand treatment and its saved/runtime pressure
 //      clock; observer runtime 9 carries the same continuation state (save 9885).
+// 125: Original Campaign AI production and authored TEAM.EMC execution, including
+//      saved team state (9886), free upgrades and script-owned attack targets.
 #define NETWORK_PROTOCOL_VERSION            125
 
 // Mod transfer limits
