@@ -472,6 +472,7 @@ parser.add_argument('--strategic-site-probe', action='store_true',
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
+parser.add_argument('--original-campaign-probe', action='store_true', help='Verify original Campaign AI rules and saved state')
 parser.add_argument('--repair-capacity-probe', action='store_true',
                     help='Verify demand-driven repair capacity, shared pending orders and saved pressure')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
@@ -1052,6 +1053,7 @@ if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'
 if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
+if args.original_campaign_probe: env['BALANCE_ORIGINAL_CAMPAIGN_PROBE'] = '1'
 if args.repair_capacity_probe: env['BALANCE_REPAIR_CAPACITY_PROBE'] = '1'
 if args.scenario:
     env['BALANCE_SCENARIO'] = '1'

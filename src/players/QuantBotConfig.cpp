@@ -501,6 +501,7 @@ QuantBotConfig::QuantBotConfig() {
     policeFundingRecovery = true;
     deviatedHarvesterEarlyReturn = true;
     civWarsStrategy = false;                   // Experimental: mirrors did not meet the finishing gate.
+    originalCampaignAI = true;                 // Explicit restoration of selectable Campaign AI.
     // Attack waves hunt without a formation: in the formation research (docs/formations.md,
     // "Formation research") plain engine-Hunt waves beat every formation shape.
     waveFormation = kWaveFormationNone;
@@ -764,6 +765,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("General Behavior", "PoliceFundingRecovery", policeFundingRecovery);
         iniFile.setBoolValue("General Behavior", "DeviatedHarvesterEarlyReturn", deviatedHarvesterEarlyReturn);
         iniFile.setBoolValue("Civ Wars", "Strategy", civWarsStrategy);
+        iniFile.setBoolValue("General Behavior", "OriginalCampaignAI", originalCampaignAI);
 
         // === FORCE CONCENTRATION ===
         iniFile.setBoolValue("Force Concentration", "FocusFire", force.focusFire);
@@ -1163,6 +1165,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.defencePrerequisites = iniFile.getBoolValue("Force Concentration", "DefencePrerequisites", force.defencePrerequisites);
     force.hardCityMatch = iniFile.getBoolValue("Force Concentration", "HardCityMatch", force.hardCityMatch);
     civWarsStrategy = iniFile.getBoolValue("Civ Wars", "Strategy", civWarsStrategy);
+    originalCampaignAI = iniFile.getBoolValue("General Behavior", "OriginalCampaignAI", originalCampaignAI);
     force.researchLab = iniFile.getBoolValue("Force Concentration", "ResearchLab", force.researchLab);
     force.researchLabProgression = iniFile.getBoolValue("Force Concentration", "ResearchLabProgression", force.researchLabProgression);
     force.cityGrowthPower = iniFile.getBoolValue("Force Concentration", "CityGrowthPower", force.cityGrowthPower);
@@ -1875,6 +1878,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("mediumClassic", force.mediumClassic);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
+    addNamed("originalCampaignAI", originalCampaignAI);
     configStr += "|STRATEGY";
     addNamed("random", strategy.random);
     addNamed("fixedMix", static_cast<int>(strategy.fixedMix));

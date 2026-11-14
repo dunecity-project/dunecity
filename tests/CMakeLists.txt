@@ -49,6 +49,15 @@ endif()
 # Find Catch2 package
 find_package(Catch2 3 REQUIRED)
 
+if(NOT EMSCRIPTEN AND NOT ANDROID AND Python3_Interpreter_FOUND AND CMAKE_GENERATOR STREQUAL "Ninja")
+    dunecity_add_test(headless integration NAME original_campaign_ai
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
+        --original-campaign-probe --repeatable --headless-assets --enemy-ai campaign
+        --house harkonnen --level 9 --mod vanilla --minutes 1
+        --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/original-campaign-ai-probe)
+    set_tests_properties(original_campaign_ai PROPERTIES TIMEOUT 300 PROCESSORS 2)
+endif()
+
 # Isolate video initialization and hint state from the larger simulation suite.
 if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     add_executable(renderer_initialization_tests RendererInitializationTestCase.cpp)
@@ -65,6 +74,8 @@ add_executable(dunelegacy_tests)
 target_sources(dunelegacy_tests
     PRIVATE
         WorkshopStoreTestCase.cpp
+        OriginalCampaignPolicyTestCase.cpp
+        OriginalTeamScriptTestCase.cpp
         VersionTestCase.cpp
         SoundtrackPackTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/music/SoundtrackPack.cpp
@@ -325,6 +336,7 @@ endforeach()
 dunecity_add_test(headless nightly NAME civilization_wars_tests COMMAND dunelegacy_tests "[civwars]")
 # Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
 dunecity_add_test(headless integration NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
+dunecity_add_test(headless integration NAME original_campaign_policy COMMAND dunelegacy_tests "[campaign-ai]")
 
 # Sidebar build grid geometry (docs/sidebar-grid.md): slots, hit-testing, row scrolling.
 dunecity_add_test(headless integration NAME sidebar_grid_tests COMMAND dunelegacy_tests "[sidebar-grid]")

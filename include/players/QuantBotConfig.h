@@ -640,6 +640,11 @@ struct QuantBotConfig {
     /// Defaults off; opt-in requires two occupied opposing initial houses and Research Lab.
     /// Lane assumptions also require the map marker. Hashed and inert outside those rules.
     bool civWarsStrategy;
+    /// [General Behavior] OriginalCampaignAI. New Campaign AI games use original
+    /// Dune II rules; false retains the old approximation. Saved per controller.
+    /// Hashed for peers; does not affect QuantBot decisions. Code default only
+    /// to preserve historical campaign mod checksums.
+    bool originalCampaignAI;
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
     /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
     /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into

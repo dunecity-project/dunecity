@@ -47,6 +47,7 @@
 #include "campaign-defence-probe.inc"
 #include "campaign-pacing-probe.inc"
 #include "campaign-repair-probe.inc"
+#include "original-campaign-probe.inc"
 #include "campaign-helper-economy-probe.inc"
 #include "city-income-probe.inc"
 #include "credit-storage-probe.inc"
@@ -481,6 +482,11 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_REPAIR_PROBE")) {
         runCampaignRepairProbe(*game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_ORIGINAL_CAMPAIGN_PROBE")) {
+        runOriginalCampaignProbe(*game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }

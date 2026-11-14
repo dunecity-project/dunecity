@@ -378,7 +378,7 @@
 //      would desync. Private development identity and save format remain unchanged.
 // 123: QuantBot repair-capacity demand treatment and its saved/runtime pressure
 //      clock; observer runtime 9 carries the same continuation state (save 9885).
-#define NETWORK_PROTOCOL_VERSION            123
+#define NETWORK_PROTOCOL_VERSION            125
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
