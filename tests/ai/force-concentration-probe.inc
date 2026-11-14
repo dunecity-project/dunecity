@@ -721,7 +721,8 @@ void runForceConcentrationProbe(Game& game) {
                 bot->saveDefenceMemory(trailer);
                 constexpr size_t kStrategyBytes=3+20; // 9865: picked flag, mix, tempo; 9868: 10 x Uint16 ratios
                 constexpr size_t kFamilyBytes = sizeof(Uint32) * (Unit_TameSandworm - Structure_LastID);
-                constexpr size_t kLaterTails = kStrategyBytes + kFamilyBytes;
+                constexpr size_t kRepairPressureBytes = 2 * sizeof(Uint32); // 9885: yard and start cycle
+                constexpr size_t kLaterTails = kStrategyBytes + kFamilyBytes + kRepairPressureBytes;
                 require(trailer.getDataLength()+kLaterTails<bytes.size(),"The 9864 trailer is not part of the save");
                 const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength()-kLaterTails);
                 currentGame->loadedSavegameVersion=9863;
