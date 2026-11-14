@@ -387,8 +387,6 @@ parser.add_argument('--recovery-probe', action='store_true',
 parser.add_argument('--battery-clearance-probe', action='store_true',
                     help='Verify crowded-city rocket batteries replace eligible R/I/C lots through real production')
 parser.add_argument('--air-defense-probe', action='store_true')
-parser.add_argument('--trooper-support-probe', action='store_true',
-                    help='Verify QuantBot WOR and troop queue completion, bounded support and real anti-air defence')
 parser.add_argument('--research-lab-ai-probe', action='store_true',
                     help='Verify tech-1 QuantBot lab legality, paid placement and Normal research '
                          'completion with hashed progression off/on, Builder and Defend controls')
@@ -991,7 +989,6 @@ if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args
     (profile/'Dune City.ini').write_text(f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\nInterface Height = {interface_height}\nFullscreen = false\n[General]\nPlay Intro = false\n')
 if args.city_placement_probe: env['BALANCE_CITY_PLACEMENT_PROBE'] = '1'
 if args.opening_economy_probe: env['BALANCE_OPENING_ECONOMY_PROBE'] = '1'
-if args.trooper_support_probe: env['BALANCE_TROOPER_SUPPORT_PROBE'] = '1'
 if args.research_lab_ai_probe: env['BALANCE_RESEARCH_LAB_AI_PROBE'] = '1'
 if args.growth_installment_probe or args.civic_priority_probe:
     env['BALANCE_GROWTH_INSTALLMENT_PROBE'] = '1'

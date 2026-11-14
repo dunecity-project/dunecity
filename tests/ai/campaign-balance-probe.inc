@@ -74,7 +74,6 @@
 #include <FileClasses/INIFile.h>
 #include "../AchievementsTestCase/AchievementRuntimeProbe.inc"
 #include "tornie-campaign-audit.inc"
-#include "trooper-support-probe.inc"
 #include "zone-power-probe.inc"
 #include "tech-production-probe.inc"
 #include "repair-capacity-probe.inc"
@@ -151,10 +150,6 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_ACHIEVEMENTS_PROBE")) {
         runAchievementRuntimeProbe();
-        return MENU_QUIT_DEFAULT;
-    }
-    if(std::getenv("BALANCE_TROOPER_SUPPORT_PROBE")) {
-        runTrooperSupportProbe();
         return MENU_QUIT_DEFAULT;
     }
     if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {

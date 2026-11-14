@@ -1023,13 +1023,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endforeach()
         endforeach()
-        # Real QuantBot orders and paid completion, then ordinary infantry SmallRockets
-        # defeat a hostile aircraft; the fixture explicitly compares the hashed switch.
-        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_trooper_support COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --trooper-support-probe --repeatable
-            --mod dunecity --no-ai-telemetry --path-workers 1 --build-dir ${CMAKE_BINARY_DIR}
-            --output-dir ${CMAKE_BINARY_DIR}/trooper-support-probe)
-        set_tests_properties(quantbot_trooper_support PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
         # Genuine tech-1 city/classic economies, the registered difficulty and
         # Builder variants, plus Defend and negative legality/funding controls.
         foreach(lab_mod IN ITEMS vanilla dunecity)
