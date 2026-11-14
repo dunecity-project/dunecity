@@ -378,6 +378,10 @@
 //      would desync. Private development identity and save format remain unchanged.
 // 123: QuantBot repair-capacity demand treatment and its saved/runtime pressure
 //      clock; observer runtime 9 carries the same continuation state (save 9885).
+// 124: Campaign QuantBots build Repair Yards for every helper and for Medium and
+//      harder opponents (only Easy opponents are denied), and defer Construction Yard
+//      upgrades until power, income and a cash reserve exist. Older peers queue
+//      different AI construction and would desync. Save format unchanged.
 // 125: Original Campaign AI production and authored TEAM.EMC execution, including
 //      saved team state (9886), free upgrades and script-owned attack targets.
 #define NETWORK_PROTOCOL_VERSION            125

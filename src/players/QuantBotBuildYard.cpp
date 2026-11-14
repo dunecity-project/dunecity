@@ -233,7 +233,7 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
     else if (turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
         && !turn.pBuilder->isUpgrading()
         && pass.itemCount[Unit_Harvester] >= harvesterLimit
-        && pass.money > 1500) {  // Don't upgrade if low on money (need money for structures/units)
+        && pass.money > 1500 && campaignYardUpgradeReady(pass, turn.pBuilder)) {  // Don't upgrade if low on money (need money for structures/units)
 
         upgradeWithLogging(pass, turn, __LINE__);
         logDebug("PRODUCTION: Upgrading CY to level %d, credits: %d", turn.pBuilder->getCurrentUpgradeLevel() + 1, pass.money);
@@ -991,7 +991,8 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
         && !yardTurn.urgentProtection && yardTurn.civicClaimsYard) {
         if (yardTurn.civicPlan.upgrade) {
             const int cost = turn.pBuilder->getUpgradeCost();
-            if (cost > 0 && (pass.money >= cost || pass.cashFlow.projectedCash >= cost)) {
+            if (campaignYardUpgradeReady(pass, turn.pBuilder)
+                && cost > 0 && (pass.money >= cost || pass.cashFlow.projectedCash >= cost)) {
                 yardTurn.serviceSavingHold = true;
                 yardTurn.skipRemainingStructureLogic = true;
                 yardTurn.structureRule = "unlock_demanded_civic";
@@ -1063,7 +1064,8 @@ void QuantBot::chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, Yar
             yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
             yardTurn.structureRule="save_early_rocket";
         } else if (service.kind==std::string("expansion_upgrade") || defenceUpgrade || boldUpgrade) {
-            yardTurn.skipRemainingStructureLogic=true;yardTurn.serviceSavingHold=true;
+            yardTurn.skipRemainingStructureLogic=campaignYardUpgradeReady(pass, turn.pBuilder);
+            yardTurn.serviceSavingHold=yardTurn.skipRemainingStructureLogic;
             yardTurn.structureRule=defenceUpgrade ? "save_defence_upgrade" : "save_expansion_upgrade";
             if (pass.money>=service.price && turn.pBuilder->getHealth()>=turn.pBuilder->getMaxHealth()
                 && upgradeWithLogging(pass, turn, __LINE__)) {
@@ -1187,7 +1189,8 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             if (turn.pBuilder->getCurrentUpgradeLevel()<data[step][houseID].upgradeLevel
                 && turn.pBuilder->getMaxUpgradeLevel()>=data[step][houseID].upgradeLevel) {
                 const int cost=turn.pBuilder->getUpgradeCost();
-                if (cost>0 && (pass.money>=cost || pass.cashFlow.projectedCash>=cost)
+                if (campaignYardUpgradeReady(pass, turn.pBuilder)
+                    && cost>0 && (pass.money>=cost || pass.cashFlow.projectedCash>=cost)
                     && spendingAdmits(pass,turn.pBuilder->getItemID(),cost,true)) {
                     yardTurn.serviceSavingHold=proactiveSavingHold(pass, cost);yardTurn.skipRemainingStructureLogic=true;
                     yardTurn.structureRule=supplyingWorkers ? "unlock_opening_supplier" : "unlock_core_defence";
@@ -1826,7 +1829,8 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         const int upgradeStep=turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
             && turn.pBuilder->getMaxUpgradeLevel()>=rocketUpgrade ? turn.pBuilder->getUpgradeCost() : 0;
         const int wanted=upgradeStep>0 ? upgradeStep : data[Structure_RocketTurret][houseID].price;
-        if (pass.money<wanted && pass.cashFlow.projectedCash>=wanted
+        if ((upgradeStep == 0 || campaignYardUpgradeReady(pass, turn.pBuilder))
+            && pass.money<wanted && pass.cashFlow.projectedCash>=wanted
             && proactiveSavingHold(pass, wanted)
             && data[Structure_RocketTurret][houseID].enabled
             && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel())

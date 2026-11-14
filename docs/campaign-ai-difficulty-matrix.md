@@ -116,10 +116,17 @@ outstanding-force or recovery blocking: an enemy wave is limited by its own cap.
   buying refineries and the factory stays idle), and `CampaignCombatBudget`
   for Hard/Brutal helpers (no effect against Brutal enemies).
 
-Measured win % (games), 3 houses x seeds 9601-9603 on every mission and seeds
-9604-9609 added on missions 20-22. Levels 1-3 were measured again after the
-quota saving rule below; that rule cannot act on later missions, which carry no
-quota. Helper rows, enemy columns:
+Measured win % (games). **Scope: Full campaign, Vanilla rules, idle human,
+helper role Both.** These are historical measurements of that one setup. They
+are not Single mission results and not odds for the current release.
+
+- Source: levels 4-9 were measured at `264f44e0a`; levels 1-3 were measured
+  again at `f3c3cc09a`, after the quota saving rule below (that rule cannot act
+  on later missions, which carry no quota). No released build was measured.
+- Seeds: 3 houses x seeds 9601-9603 on every mission, with seeds 9604-9609
+  added on missions 20-22.
+
+Helper rows, enemy columns:
 
 | Levels | Helper | Easy | Medium | Hard | Brutal |
 |---|---|---|---|---|---|
@@ -143,6 +150,39 @@ quota. Helper rows, enemy columns:
 | | Medium | 96 | 62 | 0 | 0 |
 | | Hard | 96 | 77 | 40 | 0 |
 | | Brutal | 92 | 77 | 51 | 0 |
+
+An average over a level hides single maps. The level 9 cell for a Hard helper
+against Medium enemies is 21 of 27 (shown as 77), but on Harkonnen mission 22
+that same pairing won 4 of 9. In the logged seed 9603 game, three Medium
+houses launched waves within a minute of each other. Read a cell as "this
+share of these maps and seeds", not as the chance of winning any given
+mission.
+
+#### Single mission, repair and yard-upgrade fixes (2026-11-14, 1.0.868)
+
+A separate, smaller measurement made for the 1.0.868 fixes
+(`CampaignRepairRoleFix`, `CampaignDeferredYardUpgrade`). Scope: Single
+mission, Vanilla rules, idle human, helper role Both, missions 14, 20 and 22,
+three houses, seeds 9701-9704, 80-minute limit, concrete on, powered turrets
+off. Source `2778733d3`; all four arms ran on the same build. Wins of 36:
+
+| Helper v enemy | Both off | Repair only | Deferred upgrade only | Both on |
+|---|---:|---:|---:|---:|
+| Hard v Medium | 31 | 31 | 32 | 32 |
+| Medium v Hard | 10 | 17 | 10 | 16 |
+
+- Medium helper against Hard enemies, both on against both off: six losses
+  became wins and none went the other way (paired mean +0.33, bootstrap 95%
+  interval +0.11 to +0.61).
+- Hard helper against Medium enemies: three improvements and two regressions;
+  no improvement is established.
+- A Medium helper lost all 12 tested mission 22 games in every arm. That is a
+  bounded observation, not proof that the mission cannot be won.
+- Other maps, helper roles, options, the DuneCity ruleset and an active human
+  were not measured.
+
+Evidence: `~/Documents/projects/outputs/wtfrepairyard-20261114/release-handoff.md`
+and `stats-audit.md` in the same directory.
 
 `tests/ai/scenario-matrix.py --attack-events` returns `campaign-ai.csv` (the
 game's own `CAMPAIGN_AI:` log lines) and

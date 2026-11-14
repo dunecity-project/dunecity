@@ -2532,6 +2532,19 @@ TEST_CASE("The yard unlocks bulk concrete as soon as the technology allows", "[q
 }
 
 // ---------------------------------------------------------------------------
+// Campaign upgrades must leave cash for the economy, including at a low-cash
+// mission start where single slabs remain a legal way to build a refinery.
+TEST_CASE("Campaign yard upgrades spend only established economic surplus", "[QuantBotBuildPolicy]") {
+    using QuantBotBuildPolicy::campaignYardUpgradeFunded;
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, false, false, 1000, 500, 0));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, true, true, 5000, 500, 2000));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(false, true, false, 5000, 500, 2000));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, true, false, 2499, 500, 2000));
+    REQUIRE(campaignYardUpgradeFunded(true, true, false, 2500, 500, 2000));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, true, false, 3500, 500, 4000));
+    REQUIRE(campaignYardUpgradeFunded(true, true, false, 4500, 500, 4000));
+}
+
 // Foundation planning
 // ---------------------------------------------------------------------------
 

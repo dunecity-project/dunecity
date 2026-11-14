@@ -2073,6 +2073,7 @@ private:
     /// Starport purchases.
     void buildStarPort(BuildPass& pass, BuilderTurn& turn);
     bool produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32 itemID, int sourceLine, const char* rule = "unit_mix_or_prerequisite");
+    bool campaignYardUpgradeReady(BuildPass& pass, const BuilderBase* builder);
     bool upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine);
     bool queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 item, int sourceLine, const char* rule="campaign_rebuild");
     bool queueCampaignWindtrap(BuildPass& pass, BuilderTurn& turn, int nextDemand);
