@@ -12,6 +12,11 @@ on:
         description: 'Full SHA of a green integration candidate; freeze version/defaults first.'
         type: string
         required: true
+      backend:
+        description: 'Prefer the Mini when available; hosted is the bounded fallback.'
+        type: choice
+        options: [auto, hosted]
+        default: auto
 
 permissions:
   contents: read
@@ -20,7 +25,7 @@ permissions:
 # Keep one automatic qualifier running and only the newest pending candidate.
 # Explicit frozen candidates use their own group and cannot be displaced by pushes.
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && format('qualification-{0}', inputs.sha) || 'qualification-auto' }}
+  group: ${{ github.event_name == 'workflow_dispatch' && format('qualification-{0}-{1}', inputs.sha, inputs.backend || 'auto') || 'qualification-auto' }}
   cancel-in-progress: false
 
 jobs:
@@ -29,6 +34,7 @@ jobs:
     outputs:
       run: ${{ steps.select.outputs.run }}
       sha: ${{ steps.select.outputs.sha }}
+      backend: ${{ inputs.backend == 'hosted' && 'hosted' || 'mini' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -41,8 +47,10 @@ jobs:
   qualify:
     needs: [select-candidate]
     if: needs.select-candidate.outputs.run == 'true'
-    runs-on: macos-15
-    timeout-minutes: 120
+    runs-on: ${{ needs.select-candidate.outputs.backend == 'mini' && fromJSON('["self-hosted", "macOS", "ARM64", "dunecity-builder"]') || fromJSON('["macos-15"]') }}
+    timeout-minutes: ${{ needs.select-candidate.outputs.backend == 'mini' && 60 || 120 }}
+    outputs:
+      admitted: ${{ steps.admission.outputs.admitted }}
     env:
       DUNECITY_RELEASE_BUILD: 'OFF'
       PACKAGE_BUILD: 'false'
@@ -51,7 +59,13 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - name: Keep compiler cache outside candidate source
-        run: printf 'CCACHE_DIR=%s/dunecity-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+        run: |
+          printf 'CCACHE_DIR=%s/dunecity-qualification-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            echo "QUALIFICATION_VCPKG_CACHE=$HOME/.cache/dunecity-qualification/vcpkg/archives" >> "$GITHUB_ENV"
+          else
+            echo "QUALIFICATION_VCPKG_CACHE=$HOME/.cache/vcpkg/archives" >> "$GITHUB_ENV"
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.select-candidate.outputs.sha }}
@@ -59,12 +73,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Require the declared hosted Mac architecture
+      - name: Require the declared Mac architecture
         run: test "$(uname -m)" = arm64
       - name: Restore compiled Mac objects
         uses: hendrikmuhs/ccache-action@v1
         with:
-          key: macos-arm64-${{ hashFiles('vcpkg.json') }}
+          key: ${{ runner.environment == 'self-hosted' && 'qualification-mini' || 'macos' }}-arm64-${{ hashFiles('vcpkg.json') }}
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -72,14 +86,33 @@ jobs:
       - name: Restore dependency binaries
         uses: actions/cache@v6
         with:
-          path: ~/.cache/vcpkg/archives
-          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json') }}
+          path: ${{ env.QUALIFICATION_VCPKG_CACHE }}
+          key: ${{ runner.environment == 'self-hosted' && 'vcpkg-qualification-mini' || 'vcpkg-macos' }}-arm64-${{ hashFiles('vcpkg.json') }}
       - name: Enable portable dependency cache
         run: |
-          mkdir -p "$HOME/.cache/vcpkg/archives"
-          echo "VCPKG_BINARY_SOURCES=clear;files,$HOME/.cache/vcpkg/archives,readwrite" >> "$GITHUB_ENV"
+          mkdir -p "$QUALIFICATION_VCPKG_CACHE"
+          echo "VCPKG_BINARY_SOURCES=clear;files,$QUALIFICATION_VCPKG_CACHE,readwrite" >> "$GITHUB_ENV"
       - name: Qualify frozen staging source before production selection
-        run: bash scripts/macos-ci-lane.sh release-headless-qualification
+        run: |
+          if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            # No --wait: busy resources fall back instead of delaying production.
+            agent-workspace run --project dunecity --owner "github:$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:qualify" --tests -- \
+              dunecity-queue reservation run --cwd "$GITHUB_WORKSPACE" --rev "$DUNECITY_CANDIDATE_SOURCE" \
+                --owner "github:$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:qualify" --repository "$GITHUB_REPOSITORY" \
+                --run-id "$GITHUB_RUN_ID" --lane macos-qualification --purpose verification -- \
+                bash "$GITHUB_WORKSPACE/scripts/macos-ci-lane.sh" release-headless-qualification
+          else
+            bash scripts/macos-ci-lane.sh release-headless-qualification
+          fi
+      - name: Report whether Mini qualification actually started
+        id: admission
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/qualification-admitted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" ]; then
+            echo 'admitted=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'admitted=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Freeze successful source/toolchain/test qualification
         run: |
           python3 scripts/release-automation.py record-build --platform macos-arm64-headless-qualification \
@@ -93,7 +126,7 @@ jobs:
             build/macos-headless-results.xml
           if-no-files-found: error
           retention-days: 90
-      - name: Preserve failed hosted qualification diagnostics
+      - name: Preserve qualification diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -104,3 +137,43 @@ jobs:
             build/macos-headless-results.xml
           if-no-files-found: warn
           retention-days: 90
+
+  mini-deadline:
+    needs: [select-candidate]
+    if: needs.select-candidate.outputs.run == 'true' && needs.select-candidate.outputs.backend == 'mini'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Fall back if the Mini runner cannot start within two minutes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.select-candidate.outputs.sha }}
+        run: python3 scripts/qualification-routing.py wait-for-mini
+
+  mini-fallback:
+    needs: [select-candidate, qualify]
+    if: >-
+      always() && !cancelled() && needs.select-candidate.outputs.run == 'true' &&
+      needs.select-candidate.outputs.backend == 'mini' && needs.qualify.result == 'failure' &&
+      needs.qualify.outputs.admitted != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Use hosted Mac after Mini admission was refused
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.select-candidate.outputs.sha }}
+          MINI_ADMITTED: ${{ needs.qualify.outputs.admitted }}
+        run: python3 scripts/qualification-routing.py refused-mini

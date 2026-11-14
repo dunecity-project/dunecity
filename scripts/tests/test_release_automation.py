@@ -1222,7 +1222,9 @@ class HostedHeadlessQualificationTests(unittest.TestCase):
         args = argparse.Namespace(platform='macos-arm64-headless-qualification', build_root=self.root,
                                   output=self.root / automation.HEADLESS_RECEIPT)
         with patch.dict(os.environ, DUNECITY_RELEASE_BUILD='OFF', PACKAGE_BUILD='false',
-                        GITHUB_RUN_ID='41', GITHUB_RUN_ATTEMPT='1'), \
+                        GITHUB_RUN_ID='41', GITHUB_RUN_ATTEMPT='1', RUNNER_NAME='hosted-test',
+                        RUNNER_ENVIRONMENT='github-hosted', RUNNER_ARCH='ARM64',
+                        ImageOS='macos15', ImageVersion='fixture-image'), \
              patch.object(automation, 'exception_policy', return_value={}), \
              patch.object(automation, 'run', side_effect=lambda *command: SHA if command[0] == 'git' else 'cmake fixture'):
             automation.record_build(args)
@@ -1372,7 +1374,7 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
     def api_for(self, producer):
         def response(path):
             if '/attempts/1/jobs' in path:
-                return {'jobs': [dict(name=name, conclusion='success') for name in ('select-candidate', 'qualify')]}
+                return {'jobs': [dict(name=name, conclusion='success', labels=['macos-15'], runner_name='hosted-test') for name in ('select-candidate', 'qualify')]}
             if '/attempts/1' in path:
                 return producer
             if '/contents/' in path:
@@ -1420,6 +1422,29 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
             if extra:
                 archive.writestr(extra, 'unexpected')
         return buffer.getvalue()
+
+    def test_receipt_binds_hosted_or_mini_runner_to_the_authenticated_job(self):
+        receipt = self.reusable()
+        base = self.api_for(self.producer())
+        def api(path):
+            data = base(path)
+            if '/attempts/1/jobs' in path:
+                data['jobs'][1].update(labels=['self-hosted', 'macOS', 'ARM64', 'dunecity-builder'],
+                                       runner_name='mini')
+            return data
+        with patch.object(automation, 'qualification_api', side_effect=api):
+            with self.assertRaisesRegex(ValueError, 'runner identity'):
+                automation.qualification_producer(receipt, SHA)
+            receipt.update(runnerEnvironment='self-hosted', runnerName='mini')
+            automation.qualification_producer(receipt, SHA)
+            receipt['runnerName'] = 'different-host'
+            with self.assertRaisesRegex(ValueError, 'runner identity'):
+                automation.qualification_producer(receipt, SHA)
+
+    def test_mini_image_identity_includes_macos_and_xcode(self):
+        with patch.dict(os.environ, RUNNER_ENVIRONMENT='self-hosted'), \
+             patch.object(automation, 'run', side_effect=['24G90', 'Xcode 26.0\nBuild version 17A324']):
+            self.assertEqual(automation.qualification_image_version(), 'self-hosted:24G90:Xcode 26.0\nBuild version 17A324')
 
     def test_artifact_transport_rejects_expiry_digest_substitution_and_extra_files(self):
         raw = self.zip_evidence()

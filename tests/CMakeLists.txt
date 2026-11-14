@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 
+# Independent single-game balance probes use PROCESSORS 2 instead of RUN_SERIAL.
+# Their profiles/output paths are private and their shared probe cache is locked.
+# The qualifier gives the Mini four slots (two games), hosted Macs two (one game).
+# GUI and internally parallel multi-game fixtures retain exclusive scheduling.
+
 # Capability is an admission requirement, independent of tier membership. Nightly
 # is the complete configured suite; the other tiers are deliberately small subsets.
 function(dunecity_add_test capability tiers)
@@ -573,9 +578,9 @@ if((APPLE OR WIN32) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --capture-mib 256 --path-workers 1
             --scenario-sides harkonnen:1:qBotEasy,atreides:2:qBotEasy
             --skirmish size=96,base=small,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
-        set_tests_properties(tile_non_infantry_lookup PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(tile_non_infantry_lookup PROPERTIES TIMEOUT 300 PROCESSORS 2)
         set_tests_properties(cross_platform_city_medium PROPERTIES
-            TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "BALANCE_DUNECITY_AUDIT=1")
+            TIMEOUT 300 PROCESSORS 2 ENVIRONMENT "BALANCE_DUNECITY_AUDIT=1")
     endif()
 endif()
 
@@ -618,13 +623,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-eight-slot-startup
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 384x384 - new beginning.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
-        set_tests_properties(bundled_city_eight_slot_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        set_tests_properties(bundled_city_eight_slot_startup PROPERTIES TIMEOUT 240 PROCESSORS 2)
         dunecity_add_test(headless nightly LABELS "macos" NAME bundled_three_way_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bundled-three-way-startup
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/3P - 192x192 - 3waysplit.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
-        set_tests_properties(bundled_three_way_startup PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        set_tests_properties(bundled_three_way_startup PROPERTIES TIMEOUT 240 PROCESSORS 2)
         # Every catalogue map in data/maps/community-maps.json is the recorded revision, has the
         # slots and size its name advertises, a start for every slot, and loads and plays for a
         # game minute in its mod with every lobby house still holding its start.
@@ -646,7 +651,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/observed-startup-unplaceable-unit
             --repeatable --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 51x31 - 2v2 - Sihaya-Phonics.ini"
             --mod dunecity --local-spectator --minutes 1 --enemy-difficulty hard --partner-difficulty hard)
-        set_tests_properties(observed_startup_unplaceable_unit PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
+        set_tests_properties(observed_startup_unplaceable_unit PROPERTIES TIMEOUT 240 PROCESSORS 2)
         dunecity_add_test(gui nightly LABELS "macos" NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skins/run-skin-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skin-probe)
@@ -879,7 +884,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --mod ${repair_mod} --level 9 --partner-difficulty hard --minutes 1
                 --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/repair-capacity-${repair_mod}-probe)
-            set_tests_properties(repair_capacity_${repair_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            set_tests_properties(repair_capacity_${repair_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
         # A ground unit walled in on a real map really does stop moving, so the thirty-second
         # long-stall rescue can be measured against the engine instead of being simulated:
@@ -1020,7 +1025,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --${ai_probe}-probe --repeatable
                     --level 9 --mod ${ai_mod} --build-dir ${CMAKE_BINARY_DIR}
                     --output-dir ${CMAKE_BINARY_DIR}/${ai_probe}-${ai_mod}-probe)
-                set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+                if(ai_capability STREQUAL "headless")
+                    set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 PROCESSORS 2)
+                else()
+                    set_tests_properties(quantbot_${ai_probe}_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+                endif()
             endforeach()
         endforeach()
         # Genuine tech-1 city/classic economies, the registered difficulty and
@@ -1035,7 +1044,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     --wall-timeout 550 --build-dir ${CMAKE_BINARY_DIR}
                     --output-dir ${CMAKE_BINARY_DIR}/research-lab-ai-${lab_mod}-${lab_difficulty}-probe)
                 set_tests_properties(quantbot_research_lab_${lab_mod}_${lab_difficulty}
-                    PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+                    PROPERTIES TIMEOUT 600 PROCESSORS 2)
             endforeach()
         endforeach()
         # Synthetic physical city isolates the old crime-only lab funding veto;
@@ -1046,7 +1055,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --no-ai-telemetry --path-workers 1 --wall-timeout 240
             --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/research-lab-crime-policy)
-        set_tests_properties(quantbot_research_lab_crime_policy PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+        set_tests_properties(quantbot_research_lab_crime_policy PROPERTIES TIMEOUT 600 PROCESSORS 2
             ENVIRONMENT "BALANCE_RESEARCH_LAB_CRIME_ONLY=1")
         # A deferred CityResearchOrder study must not veto the Research Lab building.
         dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_research_order_lab_capital COMMAND ${Python3_EXECUTABLE}
@@ -1055,7 +1064,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --no-ai-telemetry --path-workers 1 --wall-timeout 240
             --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/research-order-lab-capital)
-        set_tests_properties(quantbot_research_order_lab_capital PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+        set_tests_properties(quantbot_research_order_lab_capital PROPERTIES TIMEOUT 600 PROCESSORS 2
             ENVIRONMENT "BALANCE_RESEARCH_ORDER_LAB_ONLY=1")
         dunecity_add_test(headless integration LABELS "macos" NAME quantbot_dunecity_audit_parser COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/test_dunecity_audit.py)
@@ -1092,7 +1101,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --pacing-probe --repeatable
             --house harkonnen --level 4 --mod vanilla --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/campaign-pacing-probe)
-        set_tests_properties(quantbot_campaign_pacing PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_campaign_pacing PROPERTIES TIMEOUT 600 PROCESSORS 2)
         # Read-only Stats window, observer house browsing and the sidebar squeeze,
         # on a real renderer at the smallest supported interface height and at
         # native 1080. Both sizes capture screenshots into their output directory.
@@ -1116,21 +1125,21 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
                 --mod ${ai_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/opening-economy-${ai_mod}-probe)
-            set_tests_properties(quantbot_opening-economy_${ai_mod} PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+            set_tests_properties(quantbot_opening-economy_${ai_mod} PROPERTIES TIMEOUT 180 PROCESSORS 2)
         endforeach()
         dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_police_placement COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --police-placement-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/police-placement-probe)
-        set_tests_properties(quantbot_police_placement PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_police_placement PROPERTIES TIMEOUT 180 PROCESSORS 2)
         dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_police_budget COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --police-budget-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/police-budget-probe)
         # The fixture states its tax and service bills in classic years (annual == per minute).
-        set_tests_properties(quantbot_police_budget PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE
+        set_tests_properties(quantbot_police_budget PROPERTIES TIMEOUT 180 PROCESSORS 2
             ENVIRONMENT "BALANCE_GAME_OPTIONS=${CMAKE_SOURCE_DIR}/tests/ai/game-options/classic-city-year.ini")
         # Police reinforcement admission: the unit limit the lobby selected is the only
         # authority for the sidebar status and for deployment, and the station's own
@@ -1140,7 +1149,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/police-reinforcement-probe)
-        set_tests_properties(police_reinforcement_limit PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(police_reinforcement_limit PROPERTIES TIMEOUT 180 PROCESSORS 2)
         # MCVs must turn into yards on the rock the base already stands on,
         # even while the advanced core and its turret cover are unfinished.
         # The reported match ran this map and mod; the fixture asserts that
@@ -1151,7 +1160,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/mcv-deployment-probe)
-        set_tests_properties(quantbot_mcv_deployment PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_mcv_deployment PROPERTIES TIMEOUT 300 PROCESSORS 2)
         option(DUNECITY_ENABLE_AI_MATCH_TESTS "Enable long, victory-required QuantBot matches" OFF)
         if(DUNECITY_ENABLE_AI_MATCH_TESTS)
             foreach(seed 1841712204 41562270 1430976924)
@@ -1184,7 +1193,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/city-growth-probe)
-        set_tests_properties(quantbot_city_growth PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_city_growth PROPERTIES TIMEOUT 180 PROCESSORS 2)
         dunecity_add_test(gui nightly LABELS "macos" NAME city_zone_power COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --zone-power-probe --repeatable
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/6P - 256x256 - Alkozeltser 4.ini"
@@ -1199,7 +1208,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
             --mod dunecity --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/no-spice-city-probe)
-        set_tests_properties(quantbot_no_spice_city PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_no_spice_city PROPERTIES TIMEOUT 180 PROCESSORS 2)
         # A growth-cap project (demanded Stadium/Airport, planned reactor) must enter
         # production without its price banked and be charged in installments out of
         # arriving tax: the reported 1.0.817 city never ordered a 3000-credit stadium
@@ -1210,14 +1219,14 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
             --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/growth-installment-probe)
-        set_tests_properties(quantbot_growth_installments PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_growth_installments PROPERTIES TIMEOUT 300 PROCESSORS 2)
         dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_civic_priority COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --civic-priority-probe
             --repeatable --level 9 --mod dunecity --concrete-required
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
             --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/civic-priority-probe)
-        set_tests_properties(quantbot_civic_priority PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_civic_priority PROPERTIES TIMEOUT 300 PROCESSORS 2)
         foreach(no_spice_map IN ITEMS dunecity low-cash)
             dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_no_spice_income_${no_spice_map} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-no-spice-city-progress.py
@@ -1231,7 +1240,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --starport-probe --level 9 --repeatable
                 --mod ${starport_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/starport-${starport_mod}-probe)
-            set_tests_properties(quantbot_starport_${starport_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            set_tests_properties(quantbot_starport_${starport_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
         # Dynasty-aligned degradation: power damage on the raw produced/required
         # figures, foundation decay from real placement, walls excluded, the
@@ -1242,12 +1251,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --degradation-probe --repeatable
                 --level 9 --mod ${degradation_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/degradation-${degradation_mod}-probe)
-            set_tests_properties(structure_degradation_${degradation_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            set_tests_properties(structure_degradation_${degradation_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
         dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_custom_attack COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --custom-attack-probe --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/custom-attack-probe)
-        set_tests_properties(quantbot_custom_attack PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_custom_attack PROPERTIES TIMEOUT 180 PROCESSORS 2)
         # Custom Hard/Brutal army recovery: reinforcements assemble at home, a
         # badly traded main-force collapse withdraws while an ordinary raid does
         # not, the withdrawal really moves units home and still defends on
@@ -1269,7 +1278,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
                 --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retreat-preserve-${preserve_mod}-probe)
             set_tests_properties(quantbot_retreat_preserve_${preserve_mod} PROPERTIES
-                TIMEOUT 300 RUN_SERIAL TRUE ENVIRONMENT "BALANCE_RETREAT_PRESERVE_ONLY=1")
+                TIMEOUT 300 PROCESSORS 2 ENVIRONMENT "BALANCE_RETREAT_PRESERVE_ONLY=1")
         endforeach()
         # Custom Hard/Brutal whole-army dispatch: one attack sends every
         # available combat troop to engine Hunt - idle, targeting, moving,
@@ -1283,7 +1292,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/whole-army-dispatch-probe)
-        set_tests_properties(quantbot_whole_army_dispatch PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_whole_army_dispatch PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # QuantBot attack waves in formation (docs/formations.md, QuantBot waves): a mixed
         # Hard wave launches as one hunting formation in the configured shape (Combined arms,
         # Box, Line) towards its own objective, harvester and MCV left out, no slot in a sonic
@@ -1294,7 +1303,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/wave-formation-probe)
-        set_tests_properties(quantbot_wave_formation PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_wave_formation PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # QuantBot hunt parties (docs/formations.md, Blob waves): a mixed Hard wave with
         # WaveFormation Blob gathers every available fighter at a rally point, marches leg by
         # leg with its fast members kept near the slow ones, releases into engine Hunt on
@@ -1306,7 +1315,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/blob-wave-probe)
-        set_tests_properties(quantbot_blob_waves PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_blob_waves PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # QuantBot force concentration defaults (docs/formations.md, "Concentrating force"):
         # Custom Hard/Brutal hunters focus the damaged enemy fighter in reach, a wave member not
         # fighting walks to its army's fight nearby, and a wave launches at 60% readiness; the
@@ -1319,7 +1328,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/force-concentration-probe)
-        set_tests_properties(quantbot_force_concentration PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_force_concentration PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # SpiceBloomHarvest (docs/ai-scenario-matrix.md, "Spice bloom harvest"; default OFF), in both
         # skirmish mods: the Atreides QuantBot's cheapest idle ranged unit bursts an open-sand bloom
         # into 81 spice tiles without standing on it, at levels 1 and 2; a bloom inside a field is
@@ -1332,7 +1341,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --level 9 --mod ${bloom_mod}
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
                 --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spice-bloom-${bloom_mod}-probe)
-            set_tests_properties(quantbot_spice_bloom_${bloom_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            set_tests_properties(quantbot_spice_bloom_${bloom_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
         # QuantBot strategies (docs/ai-play-styles.md, "Strategies"), tests/ai/strategy-probe.inc:
         # two peers of the same four-house vanilla game pick the same seeded strategies and stay
@@ -1363,20 +1372,20 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/launcher-kiting-probe)
-        set_tests_properties(quantbot_launcher_kiting PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_launcher_kiting PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # EliteLauncher is Tornie-only: exercise its real stats and projectile there.
         dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_launcher_kiting_tornie COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --launcher-kiting-probe --repeatable
             --level 9 --mod Tornie
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/launcher-kiting-tornie-probe)
-        set_tests_properties(quantbot_launcher_kiting_tornie PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_launcher_kiting_tornie PROPERTIES TIMEOUT 300 PROCESSORS 2)
         dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_battery_clearance COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --battery-clearance-probe --repeatable
             --level 9 --mod dunecity
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/battery-clearance-probe)
-        set_tests_properties(quantbot_battery_clearance PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(quantbot_battery_clearance PROPERTIES TIMEOUT 180 PROCESSORS 2)
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): Stefan's
         # "All against Atreides" setup played to the end - vanilla, Atreides QuantBot Brutal
         # (local spectator) against four AI Player (hard) houses, his Game Options (unit and
@@ -1461,7 +1470,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --level 4 --house atreides
                 --mod ${popwin_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/no-population-victory-${popwin_mod}-probe)
-            set_tests_properties(campaign_no_population_victory_${popwin_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            set_tests_properties(campaign_no_population_victory_${popwin_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
         # Credit storage: refined spice and city taxes share the refinery/silo
         # capacity, starting cash is exempt, and the overflow is destroyed at once.
@@ -1471,7 +1480,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --credit-storage-probe --repeatable
                 --mod ${credit_mod} --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-${credit_mod}-probe)
-            set_tests_properties(house_credit_storage_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            set_tests_properties(house_credit_storage_${credit_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
         # The same probe in a custom game (a bundled multiplayer map), so the spice quota met by
         # refined spice and city tax credits alike is checked outside campaigns too, for every house.
@@ -1482,7 +1491,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/2P - 128x128 - 1v1 - Habbanya-Penny.ini"
                 --build-dir ${CMAKE_BINARY_DIR}
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-custom-${credit_mod}-probe)
-            set_tests_properties(house_credit_storage_custom_${credit_mod} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            set_tests_properties(house_credit_storage_custom_${credit_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
         # Construction Yard pre-placement queue: sidebar planning, reservation commands
         # (chained and refused), save/load, placement on plan after moving a unit, the blocked

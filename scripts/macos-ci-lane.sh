@@ -2,6 +2,11 @@
 # Stable callers hold agent-workspace's shared heavy-work gate for this entire command.
 set -euo pipefail
 cd "$GITHUB_WORKSPACE"
+# Only reached after the approved workflow's atomic workspace/queue admission.
+# A later compile/test failure must never masquerade as an unavailable runner.
+if [ "${1:-}" = release-headless-qualification ] && [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+    touch "$RUNNER_TEMP/qualification-admitted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+fi
 if [ "${1:-build}" = ios-staging ]; then
     : "${IOS_BUILD_NUMBER:?The workflow must provide its unique internal build number}"
     npm ci --ignore-scripts --prefix platform/web
@@ -38,11 +43,13 @@ MODE="${1:-build}"
 if [ "$MODE" = release-headless-qualification ] && {
     [ "$STABLE" != OFF ] || [ "${PACKAGE_BUILD:-false}" != false ];
 }; then
-    echo '::error::Hosted headless qualification requires dev identity and PACKAGE_BUILD=false'
+    echo '::error::Headless qualification requires dev identity and PACKAGE_BUILD=false'
     exit 2
 fi
 export CMAKE_BUILD_PARALLEL_LEVEL=2
-if [ "$STABLE" = ON ]; then export CMAKE_BUILD_PARALLEL_LEVEL=4; fi
+if [ "$STABLE" = ON ] || [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+    export CMAKE_BUILD_PARALLEL_LEVEL=4
+fi
 POINTER_OUT="$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 SIGNED_OUT="$RUNNER_TEMP/dunecity-mac-signed-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 mkdir -p "$POINTER_OUT"
@@ -74,10 +81,17 @@ fi
 cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
-    ctest --test-dir build --show-only=json-v1 -L headless -L nightly > build/macos-headless-plan.json
+    # Single-game probes reserve two CTest slots. The Mini can overlap two;
+    # the smaller hosted Mac keeps one, alongside eligible lightweight tests.
+    TEST_SLOTS=2
+    if [ "${RUNNER_ENVIRONMENT:-github-hosted}" = self-hosted ]; then TEST_SLOTS=4; fi
+    echo "Headless qualification: ${RUNNER_ENVIRONMENT:-github-hosted}, $TEST_SLOTS CTest slots"
+    # PHP-backed network coverage remains mandatory in the stable Mini lane.
+    # Both backends use the same qualification inventory and receipt recipe.
+    ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
     ctest_status=0
-    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 \
-        -L headless -L nightly --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml" || ctest_status=$?
+    ctest --test-dir build --output-on-failure --no-tests=error --parallel "$TEST_SLOTS" \
+        -L headless -L nightly -LE network --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml" || ctest_status=$?
     # CTest 8 means test failures; only exact committed decisions can accept them.
     # Launch/configuration failures and incomplete/skipped XML still fail closed.
     if [ "$ctest_status" -ne 0 ] && [ "$ctest_status" -ne 8 ]; then exit "$ctest_status"; fi
@@ -86,6 +100,15 @@ if [ "$MODE" = release-headless-qualification ]; then
     exit 0
 fi
 ctest --test-dir build --output-on-failure --no-tests=error -L integration -LE gui
+if [ "$STABLE" = ON ]; then
+    command -v php >/dev/null || [ -x /opt/homebrew/bin/php ] || {
+        echo '::error::Stable Mini lane requires PHP for the headless network tests'; exit 1; }
+    ctest --test-dir build --output-on-failure --no-tests=error -L headless -L network \
+        --output-junit "$POINTER_OUT/macos-network-results.xml"
+    if grep -q '<skipped' "$POINTER_OUT/macos-network-results.xml"; then
+        echo '::error::A headless network test was skipped on the Mini'; exit 1
+    fi
+fi
 if [ "${TEST_TIER:-integration}" = nightly ]; then
     # Headless nightly is owned by qualify-release.yml; this lane owns GUI nightly.
     ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly -L gui

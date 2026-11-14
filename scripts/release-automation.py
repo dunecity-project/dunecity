@@ -596,13 +596,19 @@ def reservation_token(args):
     print(release_token(state, args.sha, run('git', 'rev-parse', 'HEAD')))
 
 
+def qualification_image_version():
+    if os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted':
+        return 'self-hosted:' + run('sw_vers', '-buildVersion').strip() + ':' + run('xcodebuild', '-version').strip()
+    return os.environ.get('ImageVersion')
+
+
 def exception_policy(sha, runner_image_version=None):
     """Only committed, explicitly scoped decisions can accept a known failure."""
     policy = json.loads(run('git', 'show', full_sha(sha) + ':' + EXCEPTIONS))
     if policy.get('schema') != 1 or not isinstance(policy.get('exceptions'), list):
         raise ValueError('Invalid qualification exception policy')
     decisions = {}
-    runner_image_version = runner_image_version or os.environ.get('ImageVersion')
+    runner_image_version = runner_image_version or qualification_image_version()
     for item in policy['exceptions']:
         name = item['test']
         if (not name or name in decisions or not item.get('owner') or not item.get('reason')
@@ -708,6 +714,15 @@ def qualification_producer(receipt, sha):
     jobs = qualification_api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}/jobs?per_page=100')['jobs']
     if not {'select-candidate', 'qualify'}.issubset({j['name'] for j in jobs if j['conclusion'] == 'success'}):
         raise ValueError('Qualification producer lacks successful required jobs')
+    matches = [j for j in jobs if j['name'] == 'qualify']
+    if len(matches) != 1:
+        raise ValueError('Ambiguous qualification runner')
+    job = matches[0]
+    environment = receipt.get('runnerEnvironment', 'github-hosted')
+    expected = {'self-hosted', 'macOS', 'ARM64', 'dunecity-builder'} if environment == 'self-hosted' else {'macos-15'}
+    if (environment not in ('github-hosted', 'self-hosted') or set(job.get('labels', [])) != expected
+            or receipt.get('runnerName') and receipt['runnerName'] != job.get('runner_name')):
+        raise ValueError('Qualification runner identity differs from producing job')
     return producer
 
 
@@ -854,7 +869,8 @@ def record_build(args):
                 metadata[key] = value
     result = dict(sourceCommit=full_sha(run('git', 'rev-parse', 'HEAD')),
         platform=args.platform, releaseBuild=os.environ.get('DUNECITY_RELEASE_BUILD', 'OFF'),
-        runnerImage=os.environ.get('ImageOS'), runnerImageVersion=os.environ.get('ImageVersion'),
+        runnerImage=os.environ.get('ImageOS'), runnerImageVersion=qualification_image_version(),
+        runnerEnvironment=os.environ.get('RUNNER_ENVIRONMENT', 'github-hosted'), runnerName=os.environ.get('RUNNER_NAME'),
         runnerArchitecture=os.environ.get('RUNNER_ARCH'), cmake=run('cmake', '--version'),
         configuration=metadata,
         toolchainFileSha256={key: digest(value) for key, value in metadata.items()
