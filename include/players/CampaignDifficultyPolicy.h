@@ -14,8 +14,10 @@ struct Profile {
 };
 // Per-house budgets: more enemy bases still add pressure, but less than
 // multiplying the single-house wave unchanged. Custom base values scale equally.
-inline int hardWaveValue(int configured, int bases, int experiment) {
+inline int hardWaveValue(int configured, int bases, int experiment,
+                         int one = 3500, int two = 3500, int three = 3500) {
     if(experiment == 0) return configured;
+    if(experiment == 3) return bases <= 1 ? one : bases == 2 ? two : three;
     const int value = bases <= 1 ? 4000
         : bases == 2 ? (experiment == 1 ? 3000 : 3250)
         : (experiment == 1 ? 2500 : 3000);

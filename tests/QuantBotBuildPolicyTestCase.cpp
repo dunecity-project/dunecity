@@ -2283,6 +2283,13 @@ TEST_CASE("Campaign house budgets soften added bases while total pressure increa
     CHECK(hardWaveValue(3500,3,1)==2500);
     CHECK(hardWaveValue(3500,2,2)==3250);
     CHECK(hardWaveValue(3500,3,2)==3000);
+    // Explicit budgets permit independent response measurements; switching OFF
+    // must ignore every candidate value, including custom mod wave values.
+    for(int bases:{0,1,2,3,4,8}) {
+        CHECK(hardWaveValue(4500,bases,0,6500,2500,1500)==4500);
+        CHECK(hardWaveValue(4500,bases,3,6500,2500,1500)==
+            (bases<=1 ? 6500 : bases==2 ? 2500 : 1500));
+    }
 }
 
 TEST_CASE("Custom attacks commit a strict share of the owned ground army", "[quantbot][army][regression]") {

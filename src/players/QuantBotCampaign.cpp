@@ -254,7 +254,8 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
                    && house->getTeamID()==getHouse()->getTeamID()
                    && house->getNumStructures()>house->getNumItems(Structure_Wall)) ++bases;
             }
-            profile.value=CampaignDifficultyPolicy::hardWaveValue(profile.value,bases,force.campaignHouseWaveExperiment);
+            profile.value=CampaignDifficultyPolicy::hardWaveValue(profile.value,bases,force.campaignHouseWaveExperiment,
+                force.campaignHouseWaveOneValue,force.campaignHouseWaveTwoValue,force.campaignHouseWaveThreeValue);
         }
     }
     return profile;

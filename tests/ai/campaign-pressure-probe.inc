@@ -160,16 +160,22 @@ void runCampaignPressureProbe(Game& game) {
                 baseHouses.emplace_back(house,house->numStructures);
         require(baseHouses.size()>=3,"House-wave fixture needs three enemy house slots");
         const int savedExperiment=getQuantBotConfig().force.campaignHouseWaveExperiment;
+        const int savedOne=getQuantBotConfig().force.campaignHouseWaveOneValue;
+        const int savedTwo=getQuantBotConfig().force.campaignHouseWaveTwoValue;
+        const int savedThree=getQuantBotConfig().force.campaignHouseWaveThreeValue;
+        getQuantBotConfig().force.campaignHouseWaveOneValue=5000;
+        getQuantBotConfig().force.campaignHouseWaveTwoValue=2500;
+        getQuantBotConfig().force.campaignHouseWaveThreeValue=2000;
         const auto partnerDifficulty=partner->difficulty;
         partner->difficulty=QuantBot::Difficulty::Hard;
-        for(int arm:{0,1,2}) for(int bases:{1,2,3}) {
+        for(int arm:{0,1,2,3}) for(int bases:{1,2,3}) {
             getQuantBotConfig().force.campaignHouseWaveExperiment=arm;
             for(size_t i=0;i<baseHouses.size();++i)
                 baseHouses[i].first->numStructures=baseHouses[i].first->getNumItems(Structure_Wall)+(int(i)<bases);
             reset(QuantBot::Difficulty::Hard);
             auto* bot=enemies[0];bot->militaryValueLimit=12000;bot->launchGroundHunt();
             const int expected=game.isCitySimEnabled() ? 3500
-                : CampaignDifficultyPolicy::hardWaveValue(3500,bases,arm);
+                : CampaignDifficultyPolicy::hardWaveValue(3500,bases,arm,5000,2500,2000);
             const int price=game.objectData.data[Unit_Tank][bot->getHouse()->getHouseID()].price;
             require(bot->campaignProfile().value==expected,"Wrong enemy base count or scope");
             require(bot->campaignWave.members.size()==size_t(expected/price),"House budget did not bound actual dispatch");
@@ -183,6 +189,9 @@ void runCampaignPressureProbe(Game& game) {
         for(auto [house,count]:baseHouses) house->numStructures=count;
         partner->difficulty=partnerDifficulty;
         getQuantBotConfig().force.campaignHouseWaveExperiment=savedExperiment;
+        getQuantBotConfig().force.campaignHouseWaveOneValue=savedOne;
+        getQuantBotConfig().force.campaignHouseWaveTwoValue=savedTwo;
+        getQuantBotConfig().force.campaignHouseWaveThreeValue=savedThree;
         for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
             reset(tier);
             auto* bot=enemies[0];

@@ -388,6 +388,9 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignRepairRoleFix = true;
     force.campaignPowerExperiment = 0;
     force.campaignHouseWaveExperiment = 0;
+    force.campaignHouseWaveOneValue = 3500;
+    force.campaignHouseWaveTwoValue = 3500;
+    force.campaignHouseWaveThreeValue = 3500;
     force.campaignEasyHarvesters = 1;
     force.campaignMediumHarvesters = 2;
     force.campaignHardHarvesters = 4;
@@ -842,6 +845,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
         iniFile.setIntValue("Force Concentration", "CampaignPowerExperiment", force.campaignPowerExperiment);
         iniFile.setIntValue("Force Concentration", "CampaignHouseWaveExperiment", force.campaignHouseWaveExperiment);
+        iniFile.setIntValue("Force Concentration", "CampaignHouseWaveOneValue", force.campaignHouseWaveOneValue);
+        iniFile.setIntValue("Force Concentration", "CampaignHouseWaveTwoValue", force.campaignHouseWaveTwoValue);
+        iniFile.setIntValue("Force Concentration", "CampaignHouseWaveThreeValue", force.campaignHouseWaveThreeValue);
         iniFile.setIntValue("Force Concentration", "CampaignEasyHarvesters", force.campaignEasyHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignMediumHarvesters", force.campaignMediumHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignHardHarvesters", force.campaignHardHarvesters);
@@ -1133,7 +1139,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignDeferredYardUpgrade = iniFile.getBoolValue("Force Concentration", "CampaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
     force.campaignRepairRoleFix = iniFile.getBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
     force.campaignPowerExperiment = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignPowerExperiment", force.campaignPowerExperiment), 0, 2);
-    force.campaignHouseWaveExperiment = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHouseWaveExperiment", force.campaignHouseWaveExperiment), 0, 2);
+    force.campaignHouseWaveExperiment = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHouseWaveExperiment", force.campaignHouseWaveExperiment), 0, 3);
+    force.campaignHouseWaveOneValue = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHouseWaveOneValue", force.campaignHouseWaveOneValue), 300, 100000);
+    force.campaignHouseWaveTwoValue = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHouseWaveTwoValue", force.campaignHouseWaveTwoValue), 300, 100000);
+    force.campaignHouseWaveThreeValue = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHouseWaveThreeValue", force.campaignHouseWaveThreeValue), 300, 100000);
     // Literal keys, one per line: the genome inventory reads these statements.
     force.campaignEasyHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyHarvesters", force.campaignEasyHarvesters), 0, 40);
     force.campaignMediumHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignMediumHarvesters", force.campaignMediumHarvesters), 0, 40);
@@ -1782,6 +1791,9 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignRepairRoleFix", force.campaignRepairRoleFix);
     addNamed("campaignPowerExperiment", force.campaignPowerExperiment);
     addNamed("campaignHouseWaveExperiment", force.campaignHouseWaveExperiment);
+    addNamed("campaignHouseWaveOneValue", force.campaignHouseWaveOneValue);
+    addNamed("campaignHouseWaveTwoValue", force.campaignHouseWaveTwoValue);
+    addNamed("campaignHouseWaveThreeValue", force.campaignHouseWaveThreeValue);
     addNamed("campaignEasyHarvesters", force.campaignEasyHarvesters);
     addNamed("campaignMediumHarvesters", force.campaignMediumHarvesters);
     addNamed("campaignHardHarvesters", force.campaignHardHarvesters);
