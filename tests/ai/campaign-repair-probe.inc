@@ -90,7 +90,18 @@ void runCampaignRepairProbe(Game& game) {
             for (bool deferred : {true, false}) {
                 force.campaignDeferredYardUpgrade = deferred;
                 house->startingCredits = 60000;
-                bot->build(4000);
+                QuantBot::BuildPass pass(4000);
+                bot->resetBuildPass(); bot->planBuildInventory(pass);
+                pass.money = 60000; pass.citySimEnabled = true;
+                pass.actualHarvesters = house->getNumItems(Unit_Harvester);
+                const int oldLimit = bot->harvesterLimit;
+                bot->harvesterLimit = 0; // Explicitly enter the legacy upgrade-vs-power branch.
+                QuantBot::BuilderTurn turn(pass.money);
+                turn.pBuilder = yard; turn.pStructure = yard;
+                QuantBot::YardTurn yardTurn;
+                bot->planningBuilder = yard->getObjectID(); bot->clearPlacementCache();
+                bot->buildCampaignYard(pass, turn, yardTurn);
+                bot->harvesterLimit = oldLimit;
                 if (deferred)
                     require(!yard->isUpgrading() && (yard->getCurrentProducedItem() == Structure_WindTrap
                         || yard->getCurrentProducedItem() == Structure_NuclearPlant),
