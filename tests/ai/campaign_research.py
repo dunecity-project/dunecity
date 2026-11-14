@@ -199,7 +199,10 @@ def game_evidence(directory):
             source_fingerprint=row.get('source_fingerprint'), digest=row.get('digest'), outcome=row.get('outcome'),
             minutes=number(row.get('minutes')), helper_house=house, helper_style=row.get('helper_style'), style_seats=row.get('style_seats'),
             configs=json.loads(row.get('ai_configs') or '{}'), setup=json.loads(row.get('setup_identity') or '{}'),
-            metrics=metrics, event_counts=dict(counts), timeline=parsed, samples=own,
+            metrics=metrics, event_counts=dict(counts), timeline=parsed,
+            sample_checkpoints=[{k: v for k, v in sample.items() if k in ('minute', 'cycle', 'credits', 'army_value', 'army_units', 'harvesters', 'repair_yards', 'refineries', 'yard_level', 'heavy', 'ix', 'power', 'need', 'spent_total', 'spice_gross', 'kill_value', 'loss_value')}
+                for index, sample in enumerate(own) if index in (0, len(own)-1) or number(sample.get('minute')) in (5, 10, 15, 20, 30, 40, 60, 80)],
+            evidence=dict(directory=str(Path(directory).resolve()), game_id=gid, sample_rows=len(own), event_rows=len(events[gid]), full_samples='samples.csv[.gz]', full_events='campaign-ai.csv[.gz]'),
             issues=issues, interpretation='Observed events only; causal explanation requires paired evidence and review.')
     return result
 
@@ -279,7 +282,7 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
         ref = evidence.get('controls', {}).get(name)
         controls[name] = False
         if ref:
-            c = compact_json(resolve(path.parent, ref))
+            c = compact_json(resolve(path.parent, ref), maximum=64 * 1024 * 1024)
             plan = provenance['control_plans'][name]
             regenerated = None
             if c.get('inputs') and c.get('control_config') == ('historical-native' if name == 'historical' else m['configs']['off']):

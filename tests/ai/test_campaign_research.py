@@ -158,6 +158,17 @@ class CampaignResearchTests(unittest.TestCase):
         (self.root/'tests/ai/play-styles/candidate.ini').write_text('[Play Style]\nMinWaveUnits=3\n')
         with self.assertRaisesRegex(ValueError,'hashed'):subject.validate_manifest(self.m,self.root)
 
+    def test_self_consistent_fabricated_control_certificate_is_rejected(self):
+        a=self.game();b=self.game('on');provenance=subject.validate_manifest(self.m,self.root)
+        certificate=dict(schema='campaign-research-control/1',kind='campaign-all-maps',source_revision='a'*40,
+            candidate_config='candidate',schedule_sha256=provenance['control_plans']['campaign-all-maps']['sha256'],
+            complete=True,pending_reviews=[],games=[{'id':'invented'}])
+        certificate['games_sha256']=subject.digest(certificate['games'])
+        file=self.root/'forged.json';file.write_text(json.dumps(certificate))
+        result=subject.experiment_report(self.path,'pilot',a,b,{'controls':{'campaign-all-maps':str(file)}})
+        self.assertFalse(result['controls']['campaign-all-maps'])
+        self.assertFalse(result['facts']['promotion_ready'])
+
     def test_duplicate_case_rejected(self):
         p=self.root/'pilot.json';d=json.loads(p.read_text());d['cases']*=2;p.write_text(json.dumps(d))
         with self.assertRaisesRegex(ValueError,'Duplicate'):subject.cases(p)
