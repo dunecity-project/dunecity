@@ -444,6 +444,7 @@ CampaignAllyStrengthFloor=1
 # City campaigns are unchanged.
 CampaignHelperQuotaSaving=1
 CampaignRepairRoleFix=0
+CampaignPowerExperiment=0
 CampaignDeferredYardUpgrade=0
 # The three difficulty levers of Easy / Medium / Hard campaign opponents (Brutal has none). Hashed.
 # Harvesters: the most an opponent keeps, however many refineries the mission gives it (0 = no ceiling).

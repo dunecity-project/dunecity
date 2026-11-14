@@ -1,6 +1,8 @@
+#include <players/QuantBotBuildPass.h>
 // Diagnostic-only real construction queue checks for both campaign roles.
 void runCampaignRepairProbe(Game& game) {
     auto require=[](bool ok,const char* reason){if(!ok){SDL_Log("CAMPAIGN_REPAIR_FAIL: %s",reason);throw std::runtime_error(reason);}};
+    game.gameInitSettings.gameOptions.concreteRequired = false; // Queue policy isolated from slab sequencing.
     if(game.isCitySimEnabled())
         for(int y=0;y<currentGameMap->getSizeY();++y)for(int x=0;x<currentGameMap->getSizeX();++x)
             if(!currentGameMap->getTile(x,y)->hasAStructure())currentGameMap->getTile(x,y)->setType(Terrain_Rock);
@@ -14,6 +16,8 @@ void runCampaignRepairProbe(Game& game) {
     for(auto* bot:{partner,enemy}) {
         auto& force = const_cast<QuantBotConfig&>(bot->botConfig()).force;
         const bool savedRoleFix = force.campaignRepairRoleFix;
+        const bool savedDeferred = force.campaignDeferredYardUpgrade;
+        force.campaignDeferredYardUpgrade = false;
         force.campaignRepairRoleFix = false; // Historical OFF control below.
         bot->difficulty=QuantBot::Difficulty::Hard;
         auto* house=const_cast<House*>(bot->getHouse());
@@ -40,12 +44,72 @@ void runCampaignRepairProbe(Game& game) {
             if(building->getOwner()==house && building->getItemID()==Structure_ConstructionYard)
                 {yard=dynamic_cast<BuilderBase*>(building);break;}
         require(yard,"Missing fixture construction yard");
+        yard->curUpgradeLev = yard->getMaxUpgradeLevel();
+        yard->setHealth(yard->getMaxHealth());
         yard->updateBuildList();
         require(yard->isAvailableToBuild(Structure_Radar),"Radar prerequisites missing in fixture");
         // Keep this fixture about repair prerequisites; Medium correctly
         // prioritizes required power before optional construction.
         while(house->getProducedPower()<house->getPowerRequirement()+200)place(Structure_WindTrap);
-        house->addCredits(10000);bot->lastCalculatedSpice=100000;
+        // Starting credits are not clipped to the fixture's refinery storage.
+        house->startingCredits = 60000; bot->lastCalculatedSpice=100000;
+        while (house->getNumItems(Unit_Harvester) < 12) house->createUnit(Unit_Harvester, true);
+        while (house->getNumItems(Unit_Carryall) < 2) house->createUnit(Unit_Carryall, true);
+        // A deferred bulk-concrete upgrade must return the producer's turn.
+        // Otherwise even ordinary construction waits forever for spare cash.
+        {
+            force.campaignDeferredYardUpgrade = true;
+            QuantBot::BuildPass pass(4000);
+            pass.money = 1000;
+            pass.actualHarvesters = house->getNumItems(Unit_Harvester);
+            pass.citySimEnabled = game.isCitySimEnabled();
+            pass.forecastNetIncome = 10000;
+            QuantBot::BuilderTurn turn(pass.money);
+            turn.pBuilder = yard; turn.pStructure = yard;
+            yard->curUpgradeLev = 0; yard->upgrading = false;
+            game.gameInitSettings.gameOptions.concreteRequired = true;
+            require(!bot->upgradeYardForConcrete(pass, turn) && !yard->isUpgrading(),
+                "Deferred concrete upgrade consumed the yard's construction turn");
+            game.gameInitSettings.gameOptions.concreteRequired = false;
+            force.campaignDeferredYardUpgrade = false;
+            yard->curUpgradeLev = yard->getMaxUpgradeLevel();
+        }
+        // The legacy enemy else-if chain used to consume the whole turn on a
+        // refused upgrade. Exercise its actual blackout recovery with ON/OFF.
+        if (bot == enemy && game.isCitySimEnabled()) {
+            std::array<int, Num_ItemID> authored;
+            std::copy(std::begin(bot->initialItemCount), std::end(bot->initialItemCount), authored.begin());
+            for (int i = 0; i < Num_ItemID; ++i) bot->initialItemCount[i] = house->getNumItems(i);
+            const int required = house->powerRequirement;
+            house->powerRequirement = house->getProducedPower() + 1;
+            bot->difficulty = QuantBot::Difficulty::Easy;
+            bot->gameMode = QuantBot::GameMode::Campaign;
+            force.campaignRepairRoleFix = true;
+            yard->curUpgradeLev = 0; yard->updateBuildList();
+            for (bool deferred : {true, false}) {
+                force.campaignDeferredYardUpgrade = deferred;
+                house->startingCredits = 60000;
+                bot->build(4000);
+                if (deferred)
+                    require(!yard->isUpgrading() && (yard->getCurrentProducedItem() == Structure_WindTrap
+                        || yard->getCurrentProducedItem() == Structure_NuclearPlant),
+                        "Deferred enemy upgrade blocked blackout recovery");
+                else require(yard->isUpgrading(), "OFF control failed to attempt its legacy yard upgrade");
+                for (auto* building : structureList) if (building->getOwner() == house)
+                    if (auto* builder = dynamic_cast<BuilderBase*>(building)) {
+                        while (builder->getProductionQueueSize()) builder->doCancelItem(builder->getCurrentProducedItem());
+                        bot->builderPlaceLocations.erase(builder->getObjectID());
+                        bot->reservedStructures.erase(builder->getObjectID());
+                    }
+                yard->upgrading = false; yard->upgradeProgress = 0;
+            }
+            std::copy(authored.begin(), authored.end(), std::begin(bot->initialItemCount));
+            house->powerRequirement = required;
+            bot->difficulty = QuantBot::Difficulty::Hard;
+            force.campaignRepairRoleFix = false;
+            yard->curUpgradeLev = yard->getMaxUpgradeLevel(); yard->updateBuildList();
+            SDL_Log("CAMPAIGN_UPGRADE_PASS: enemy blackout recovery continues with upgrade deferred");
+        }
         if(bot==partner) bot->gameMode=QuantBot::GameMode::Custom;
         bot->build(4000);
         require(yard->getCurrentProducedItem()==Structure_Radar,"Missing repair prerequisite was not prioritized");
@@ -107,7 +171,7 @@ void runCampaignRepairProbe(Game& game) {
                 }
             bot->difficulty = tier;
             bot->initialItemCount[Structure_RepairYard] = 0;
-            house->addCredits(10000);
+            house->startingCredits = 60000;
             const bool denied = bot->isCampaignEnemy() && tier == QuantBot::Difficulty::Easy;
             require(bot->canAddRepairYard(0) != denied, "Repair restriction crossed campaign role boundary");
             bot->build(4000);
@@ -115,6 +179,7 @@ void runCampaignRepairProbe(Game& game) {
                 "Role-scoped repair policy produced the wrong construction order");
         }
         force.campaignRepairRoleFix = savedRoleFix;
+        force.campaignDeferredYardUpgrade = savedDeferred;
         SDL_Log("CAMPAIGN_REPAIR_PASS: tier=%d enemy=%d missing yard queued once",int(bot->difficulty),bot->isCampaignEnemy());
     }
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=repair outcome=passed");

@@ -386,6 +386,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperQuotaSaving = true;
     force.campaignDeferredYardUpgrade = false;
     force.campaignRepairRoleFix = false;
+    force.campaignPowerExperiment = 0;
     force.campaignEasyHarvesters = 1;
     force.campaignMediumHarvesters = 2;
     force.campaignHardHarvesters = 4;
@@ -836,6 +837,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
         iniFile.setBoolValue("Force Concentration", "CampaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
         iniFile.setBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
+        iniFile.setIntValue("Force Concentration", "CampaignPowerExperiment", force.campaignPowerExperiment);
         iniFile.setIntValue("Force Concentration", "CampaignEasyHarvesters", force.campaignEasyHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignMediumHarvesters", force.campaignMediumHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignHardHarvesters", force.campaignHardHarvesters);
@@ -1126,6 +1128,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignHelperQuotaSaving = iniFile.getBoolValue("Force Concentration", "CampaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
     force.campaignDeferredYardUpgrade = iniFile.getBoolValue("Force Concentration", "CampaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
     force.campaignRepairRoleFix = iniFile.getBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
+    force.campaignPowerExperiment = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignPowerExperiment", force.campaignPowerExperiment), 0, 2);
     // Literal keys, one per line: the genome inventory reads these statements.
     force.campaignEasyHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyHarvesters", force.campaignEasyHarvesters), 0, 40);
     force.campaignMediumHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignMediumHarvesters", force.campaignMediumHarvesters), 0, 40);
@@ -1771,6 +1774,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
     addNamed("campaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
     addNamed("campaignRepairRoleFix", force.campaignRepairRoleFix);
+    addNamed("campaignPowerExperiment", force.campaignPowerExperiment);
     addNamed("campaignEasyHarvesters", force.campaignEasyHarvesters);
     addNamed("campaignMediumHarvesters", force.campaignMediumHarvesters);
     addNamed("campaignHardHarvesters", force.campaignHardHarvesters);

@@ -1093,6 +1093,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(quantbot_baseline_807_check PROPERTIES TIMEOUT 60)
         # Exercise campaign wave readiness, first-dispatch funding, surviving attackers
         # and saved partner state through the live Harkonnen level-9 fixture.
+        foreach(repair_role_mod IN ITEMS vanilla dunecity)
+            dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_campaign_repair_roles_${repair_role_mod}
+                COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
+                --repair-probe --repeatable --headless-assets --house harkonnen --level 9 --mod ${repair_role_mod}
+                --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/campaign-repair-roles-${repair_role_mod})
+            set_tests_properties(quantbot_campaign_repair_roles_${repair_role_mod} PROPERTIES TIMEOUT 600 PROCESSORS 2)
+        endforeach()
         foreach(pressure_mod IN ITEMS vanilla dunecity)
             dunecity_add_test(gui nightly LABELS "macos" NAME quantbot_campaign_pressure_${pressure_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --pressure-probe --repeatable

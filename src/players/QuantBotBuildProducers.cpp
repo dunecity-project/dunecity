@@ -223,6 +223,16 @@ bool QuantBot::vanillaBoomUpgradeAdmitted(BuildPass& pass, const BuilderBase* bu
 
 // Record actual queue acceptance for unit and structure production.
 bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32 itemID, int sourceLine, const char* rule) {
+    // The experimental arms affect only the human helper; opponents retain
+    // their normal policy, so this measures the helper's power investment.
+    if (botConfig().force.campaignPowerExperiment > 0 && campaignPolicyApplies()
+        && isAlliedWithHuman() && !getHouse()->isPowerRequired()
+        && itemID == Structure_WindTrap && pass.itemCount[Structure_WindTrap] > 0) {
+        if (botConfig().force.campaignPowerExperiment == 1) return false;
+        if (!QuantBotBuildPolicy::campaignYardUpgradeFunded(true,
+                getAIRefineryBays() > 0 && pass.actualHarvesters > 0, openingWorkersNeeded(pass),
+                pass.money, buildingCapitalCost(pass, itemID), pass.economyReserve)) return false;
+    }
     const Uint32 requestedItem = itemID;
     const bool replacementWorker = botConfig().force.cityHarvesterReplacement
         && (requestedItem == Unit_Harvester
@@ -522,6 +532,7 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
     if (!pass.techSavingActive || pass.techResearch || !capitalPending(pass)
         || pass.capitalChoice != pass.techCandidateIndex
         || turn.pBuilder->getObjectID() != pass.techCandidate.builder) return false;
+    if (pass.techUpgrade && !campaignYardUpgradeReady(pass, turn.pBuilder)) return false;
     // Reserve the funded upgrade's producer while its accepted units finish;
     // otherwise every busy factory appends another unit and never upgrades.
     if (turn.pBuilder->isUpgrading() || (turn.pBuilder->getProductionQueueSize() > 0
@@ -546,15 +557,19 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
     return true;
 }
 
+bool QuantBot::campaignYardUpgradeReady(BuildPass& pass, const BuilderBase* builder) {
+    return !botConfig().force.campaignDeferredYardUpgrade || !campaignPolicyApplies()
+        || builder->getItemID() != Structure_ConstructionYard
+        || QuantBotBuildPolicy::campaignYardUpgradeFunded(getHouse()->hasPower(),
+            pass.citySimEnabled ? pass.forecastNetIncome > 0
+                : getAIRefineryBays() > 0 && pass.actualHarvesters > 0,
+            openingWorkersNeeded(pass), pass.money, builder->getUpgradeCost(), pass.economyReserve);
+}
+
 bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine) {
     if (!vanillaBoomUpgradeAdmitted(pass, turn.pBuilder)) return false;
     const int price=turn.pBuilder->getUpgradeCost();
-    if (botConfig().force.campaignDeferredYardUpgrade && campaignPolicyApplies()
-        && turn.pBuilder->getItemID() == Structure_ConstructionYard
-        && !QuantBotBuildPolicy::campaignYardUpgradeFunded(getHouse()->hasPower(),
-            pass.citySimEnabled ? pass.forecastNetIncome > 0
-                : getAIRefineryBays() > 0 && pass.actualHarvesters > 0,
-            openingWorkersNeeded(pass), pass.money, price, pass.economyReserve)) return false;
+    if (!campaignYardUpgradeReady(pass, turn.pBuilder)) return false;
     const bool simpleProject = pass.techSavings && pass.techSavingActive
         && pass.techUpgrade && pass.techCandidate.builder == turn.pBuilder->getObjectID();
     const bool affordable = (simpleProject ? getHouse()->getCredits() : pass.money) >= price;
@@ -634,12 +649,7 @@ bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {
     auto& data = currentGame->objectData.data;
     // An optional concrete unlock must not own a cash-poor campaign yard's
     // turn. Keep founding with single slabs while income/power recover.
-    if (botConfig().force.campaignDeferredYardUpgrade && campaignPolicyApplies()
-        && !QuantBotBuildPolicy::campaignYardUpgradeFunded(getHouse()->hasPower(),
-            pass.citySimEnabled ? pass.forecastNetIncome > 0
-                : getAIRefineryBays() > 0 && pass.actualHarvesters > 0,
-            openingWorkersNeeded(pass), pass.money, turn.pBuilder->getUpgradeCost(), pass.economyReserve))
-        return false;
+    if (!campaignYardUpgradeReady(pass, turn.pBuilder)) return false;
     // Bulk concrete comes before anything optional this yard could
     // buy, in every mode and at every difficulty, as soon as the
     // technology allows it. Every ordinary building now waits for a
@@ -707,7 +717,17 @@ bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {
 bool QuantBot::queueCampaignWindtrap(BuildPass& pass, BuilderTurn& turn, int nextDemand) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
-    if (!campaignPowerNeeded(pass, nextDemand) || turn.pBuilder->getItemID()!=Structure_ConstructionYard
+    bool needed = campaignPowerNeeded(pass, nextDemand);
+    if (botConfig().force.campaignPowerExperiment > 0 && campaignPolicyApplies()
+        && isAlliedWithHuman() && !getHouse()->isPowerRequired()) {
+        if (botConfig().force.campaignPowerExperiment == 1) return false;
+        needed = getHouse()->getProducedPower() < getHouse()->getPowerRequirement() + nextDemand
+            && !powerGenerationPending(pass)
+            && QuantBotBuildPolicy::campaignYardUpgradeFunded(true,
+                getAIRefineryBays() > 0 && pass.actualHarvesters > 0, openingWorkersNeeded(pass),
+                pass.money, buildingCapitalCost(pass, Structure_WindTrap), pass.economyReserve);
+    }
+    if (!needed || turn.pBuilder->getItemID()!=Structure_ConstructionYard
         || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize()!=0
         || !campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)) return false;
     const Coord site=findPlaceLocation(Structure_WindTrap);
@@ -733,6 +753,8 @@ bool QuantBot::queueCampaignWindtrap(BuildPass& pass, BuilderTurn& turn, int nex
 // untouched and still run ahead of this. Custom and legacy
 // campaign games at every difficulty share the one gate.
 Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
+    if (botConfig().force.campaignPowerExperiment > 0 && campaignPolicyApplies()
+        && isAlliedWithHuman() && !getHouse()->isPowerRequired()) return NONE_ID;
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     if (pass.vanillaBoomArmy) return NONE_ID;

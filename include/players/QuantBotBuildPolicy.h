@@ -684,6 +684,13 @@ inline bool repairMaintainsValue(Uint32 item, bool citySim, int maxHealth, int p
 inline bool canAffordRepairTick(int credits) { return credits >= 5; }
 inline bool repairWhenWealthy(int availableMoney) { return availableMoney > 5000; }
 
+// Campaign upgrades and diagnostic power purchases leave working cash intact.
+inline bool campaignYardUpgradeFunded(bool powered, bool earningIncome, bool workersNeeded,
+                                      int spendable, int upgradeCost, int economyReserve) {
+    return powered && earningIncome && !workersNeeded && upgradeCost > 0
+        && int64_t(spendable) >= int64_t(upgradeCost) + std::max(2000, economyReserve);
+}
+
 // The 2x2 slab is one order and one placement where Slab1 needs four, and
 // every ordinary building now waits for its full foundation. The yard
 // therefore unlocks bulk concrete as soon as the technology allows it, ahead
@@ -694,12 +701,6 @@ inline bool repairWhenWealthy(int availableMoney) { return availableMoney > 5000
 // `anotherYardUpgrading` keeps parallel yards from all stopping at once. It is
 // transient by construction — an upgrade finishes — so every yard reaches the
 // level in turn and none is locked out permanently.
-inline bool campaignYardUpgradeFunded(bool powered, bool earningIncome, bool workersNeeded,
-                                      int spendable, int upgradeCost, int economyReserve) {
-    return powered && earningIncome && !workersNeeded && upgradeCost > 0
-        && int64_t(spendable) >= int64_t(upgradeCost) + std::max(2000, economyReserve);
-}
-
 inline bool upgradeYardForBulkSlab(bool concreteRequired, bool bulkSlabAvailable,
                                    int currentUpgradeLevel, int requiredUpgradeLevel,
                                    int maxUpgradeLevel, int credits, int upgradeCost,

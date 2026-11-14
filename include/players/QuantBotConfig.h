@@ -324,6 +324,8 @@ struct QuantBotConfig {
         bool campaignRepairRoleFix;
         /// Campaign yards upgrade only out of surplus after income and power. Hashed OFF/ON control.
         bool campaignDeferredYardUpgrade;
+        /// Diagnostic helper-only vanilla campaign power arms: 0 unchanged, 1 one windtrap, 2 surplus-funded power.
+        int campaignPowerExperiment;
         /// The three difficulty levers of an Easy / Medium / Hard campaign opponent (Brutal has
         /// none). Hashed. Harvesters: the most it keeps, however many refineries the mission
         /// gives it (0 = no ceiling). WaveValue: the value one ground wave may hold; Easy keeps
