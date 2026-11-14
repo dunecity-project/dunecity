@@ -4609,7 +4609,9 @@ void QuantBot::retreatAllUnits() {
 
             // CampaignHelperRockHold 2 and 3: a support troop whose Area Guard target is a sandworm
             // is called back to the rock instead of following the worm onto the sand.
-            if (pUnit->getOwner() == getHouse() && pUnit->getTarget() && campaignRockHoldApplies(pUnit, true)
+            // The switch is tested first: getTarget() resolves the unit's target pointer and
+            // clears one whose object is gone, which must not happen while the switch is off.
+            if (pUnit->getOwner() == getHouse() && campaignRockHoldApplies(pUnit, true) && pUnit->getTarget()
                 && pUnit->getTarget()->getItemID() == Unit_Sandworm
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur
