@@ -23,6 +23,7 @@ void runCampaignRepairProbe(Game& game) {
         // City campaign enemies retain their authored technology permissions.
         // Give this queue fixture the repair chain; role restrictions are tested below.
         if (bot == enemy && game.isCitySimEnabled()) {
+            bot->noteCampaignOriginalState();
             bot->campaignOriginalStructures.insert(Structure_Radar);
             bot->campaignOriginalStructures.insert(Structure_RepairYard);
         }
@@ -154,6 +155,12 @@ void runCampaignRepairProbe(Game& game) {
         // The legacy enemy else-if chain used to consume the whole turn on a
         // refused upgrade. Exercise its actual blackout recovery with ON/OFF.
         if (bot == enemy && game.isCitySimEnabled()) {
+            for (auto* building : structureList) if (building->getOwner() == house)
+                if (auto* builder = dynamic_cast<BuilderBase*>(building)) {
+                    while (builder->getProductionQueueSize()) builder->doCancelItem(builder->getCurrentProducedItem());
+                    bot->builderPlaceLocations.erase(builder->getObjectID());
+                    bot->reservedStructures.erase(builder->getObjectID());
+                }
             std::array<int, Num_ItemID> authored;
             std::copy(std::begin(bot->initialItemCount), std::end(bot->initialItemCount), authored.begin());
             for (int i = 0; i < Num_ItemID; ++i) bot->initialItemCount[i] = house->getNumItems(i);
