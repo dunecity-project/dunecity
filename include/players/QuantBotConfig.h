@@ -315,6 +315,10 @@ struct QuantBotConfig {
         /// threshold cannot send the starting army into three bases. Hashed; default on.
         /// OFF retains the difficulty threshold alone; cities are unchanged.
         bool campaignAllyStrengthFloor;
+        /// On a quota mission a campaign helper sharing the player's house stops placing
+        /// orders once that house has banked half its quota, so the mission can be won on
+        /// credits. Hashed; default on. OFF retains unrestricted spending.
+        bool campaignHelperQuotaSaving;
         /// The three difficulty levers of an Easy / Medium / Hard campaign opponent (Brutal has
         /// none). Hashed. Harvesters: the most it keeps, however many refineries the mission
         /// gives it (0 = no ceiling). WaveValue: the value one ground wave may hold; Easy keeps

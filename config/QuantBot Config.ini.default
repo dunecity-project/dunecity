@@ -438,6 +438,10 @@ CampaignAdaptiveReadiness=1
 # opposing alliance (capped at 75% of its own limit). Hashed; OFF preserves the difficulty
 # threshold alone. City campaigns are unchanged.
 CampaignAllyStrengthFloor=1
+# On a quota mission a campaign helper sharing the player's house stops placing orders once the
+# house has banked half its quota, so the mission can be won on credits. Hashed; OFF retains
+# unrestricted spending. City campaigns are unchanged.
+CampaignHelperQuotaSaving=1
 # The three difficulty levers of Easy / Medium / Hard campaign opponents (Brutal has none). Hashed.
 # Harvesters: the most an opponent keeps, however many refineries the mission gives it (0 = no ceiling).
 CampaignEasyHarvesters=1
