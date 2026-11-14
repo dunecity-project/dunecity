@@ -48,7 +48,7 @@ jobs:
     needs: [select-candidate]
     if: needs.select-candidate.outputs.run == 'true'
     runs-on: ${{ needs.select-candidate.outputs.backend == 'mini' && fromJSON('["self-hosted", "macOS", "ARM64", "dunecity-builder"]') || fromJSON('["macos-15"]') }}
-    timeout-minutes: 120
+    timeout-minutes: ${{ needs.select-candidate.outputs.backend == 'mini' && 60 || 120 }}
     outputs:
       admitted: ${{ steps.admission.outputs.admitted }}
     env:
@@ -59,7 +59,13 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - name: Keep compiler cache outside candidate source
-        run: printf 'CCACHE_DIR=%s/dunecity-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+        run: |
+          printf 'CCACHE_DIR=%s/dunecity-qualification-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            echo "QUALIFICATION_VCPKG_CACHE=$HOME/.cache/dunecity-qualification/vcpkg/archives" >> "$GITHUB_ENV"
+          else
+            echo "QUALIFICATION_VCPKG_CACHE=$HOME/.cache/vcpkg/archives" >> "$GITHUB_ENV"
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.select-candidate.outputs.sha }}
@@ -72,7 +78,7 @@ jobs:
       - name: Restore compiled Mac objects
         uses: hendrikmuhs/ccache-action@v1
         with:
-          key: macos-arm64-${{ hashFiles('vcpkg.json') }}
+          key: ${{ runner.environment == 'self-hosted' && 'qualification-mini' || 'macos' }}-arm64-${{ hashFiles('vcpkg.json') }}
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -80,12 +86,12 @@ jobs:
       - name: Restore dependency binaries
         uses: actions/cache@v6
         with:
-          path: ~/.cache/vcpkg/archives
-          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json') }}
+          path: ${{ env.QUALIFICATION_VCPKG_CACHE }}
+          key: ${{ runner.environment == 'self-hosted' && 'vcpkg-qualification-mini' || 'vcpkg-macos' }}-arm64-${{ hashFiles('vcpkg.json') }}
       - name: Enable portable dependency cache
         run: |
-          mkdir -p "$HOME/.cache/vcpkg/archives"
-          echo "VCPKG_BINARY_SOURCES=clear;files,$HOME/.cache/vcpkg/archives,readwrite" >> "$GITHUB_ENV"
+          mkdir -p "$QUALIFICATION_VCPKG_CACHE"
+          echo "VCPKG_BINARY_SOURCES=clear;files,$QUALIFICATION_VCPKG_CACHE,readwrite" >> "$GITHUB_ENV"
       - name: Qualify frozen staging source before production selection
         run: |
           if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then

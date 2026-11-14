@@ -247,6 +247,16 @@ routing helpers get `actions: write`; compilation/tests retain read permissions.
 Runner identity is checked against the producing job and recorded with macOS/Xcode
 identity. Existing release signing roles remain separately approved.
 
+Mini qualification has separate compiler/dependency cache keys and a separate
+vcpkg archive directory from signing; routine staging qualification does not feed
+the signing lane's caches. Its job limit is 60 minutes, versus 120 on hosted Mac.
+Any production reservation refuses new Mini verification admissions, including
+the same source SHA. Admission is not preemption: a production request arriving
+after qualification starts waits for that admitted job to finish or time out.
+Do not terminate accepted jobs or bypass the shared gate to claim immediate
+production priority. A timeout/cancellation terminates the owned queue child and
+preserves failed evidence; it is not permission to relabel the result as a pass.
+
 Independent single-game probes use CTest `PROCESSORS 2`: the Mini qualifier has
 four slots (up to two games), the smaller hosted Mac has two. GUI, network and
 internally parallel multi-game tests retain serial scheduling. Profiles and output
