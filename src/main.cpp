@@ -1261,6 +1261,18 @@ int main(int argc, char *argv[]) {
             settings.general.language = myINIFile.getStringValue("General","Language","en");
             settings.general.scrollSpeed = myINIFile.getIntValue("General","Scroll Speed",50);
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);
+            {
+                // Personal shortcuts: missing keys keep defaults, bad values recover (misc/Hotkeys.h).
+                std::map<std::string, std::string> hotkeyEntries;
+                for(const Hotkeys::ActionInfo& action : Hotkeys::actions()) {
+                    if(myINIFile.hasKey("Hotkeys", action.iniKey))
+                        hotkeyEntries[action.iniKey] = myINIFile.getStringValue("Hotkeys", action.iniKey);
+                }
+                Hotkeys::LoadResult hotkeys = Hotkeys::load(hotkeyEntries);
+                for(const std::string& warning : hotkeys.warnings)
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", warning.c_str());
+                settings.hotkeys = hotkeys.bindings;
+            }
 #ifdef DUNECITY_MOBILE
             // Without a right mouse button, a tap on an enemy attacks and a tap on the ground moves.
             constexpr bool defaultLeftClickOrders = true;

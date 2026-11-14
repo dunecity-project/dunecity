@@ -21,6 +21,7 @@
 #include <Definitions.h>
 #include <TechResearch.h>
 #include <misc/SDL2pp.h>
+#include <misc/Hotkeys.h>
 
 // Libraries
 #include <string>
@@ -206,6 +207,9 @@ public:
         bool            customGameOnline = false;  ///< Custom game setup: last Offline/Online choice (remembered across games)
         std::string     customGameMod;             ///< Custom game setup: last mod the player picked (empty: follow the active mod)
     } general;
+
+    /// Personal command shortcuts ([Hotkeys] in the player's config file; misc/Hotkeys.h).
+    Hotkeys::Bindings hotkeys = Hotkeys::Bindings::defaults();
 
     class VideoClass {
     public:

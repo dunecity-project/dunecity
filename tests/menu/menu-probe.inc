@@ -2343,7 +2343,7 @@ int runMenuProbe() {
     }
     {
         OptionsMenu menu;
-        for(int page=0;page<5;++page) { menu.showPage(page); menuCapture(menu,"settings-"+std::to_string(page)); }
+        for(int page=0;page<6;++page) { menu.showPage(page); menuCapture(menu,"settings-"+std::to_string(page)); }
         menuRequire(menu.interfaceSizeDropDownBox.getParent()==&menu.interfaceHBox,"Interface size missing from Settings");
         menuRequire(menu.pages[1].getMinimumSize().y <= menu.pages[1].getSize().y,"Graphics controls overflow");
         menuRequire(menu.pages[4].getMinimumSize().y <= menu.pages[4].getSize().y,"Advanced controls overflow");
@@ -2375,6 +2375,87 @@ int runMenuProbe() {
             && savedOptions.getBoolValue("General","Left Click Orders",false)
             && !savedOptions.getBoolValue("General","Movement Paths",true),"Input options not persisted");
         menuRequire(menu.isQuiting(),"Unchanged legacy network field blocked audio apply");
+    }
+    {
+        // Hotkeys tab at this size: every tab and control on screen, real key capture through the
+        // menu's input path (Escape cancels the capture, not Settings), Back discards, Apply persists.
+        using Hotkeys::Action;
+        const auto original = settings.hotkeys;
+        auto keyDown = [](OptionsMenu& menu, SDL_Keycode sym, Uint16 mod) {
+            SDL_Event event{}; event.type=SDL_KEYDOWN; event.key.keysym.sym=sym; event.key.keysym.mod=mod;
+            menu.doInput(event);
+        };
+        auto rowOf = [](Action action) { return static_cast<int>(action); };
+        {
+            OptionsMenu menu;
+            menu.showPage(OptionsMenu::hotkeysPage);
+            auto& page = menu.pages[OptionsMenu::hotkeysPage];
+            menuRequire(page.getMinimumSize().y <= page.getSize().y, "Hotkeys controls overflow Settings");
+            const Point pagePos = menu.windowWidget.getWidgetPosition(&page);
+            menuRequire(pagePos.y + page.getSize().y <= menu.windowWidget.getWidgetPosition(&menu.backButton).y,
+                        "Hotkeys page overlaps Back/Apply");
+            int lastRight = 0;
+            for(int i=0;i<6;++i) {
+                const Point tab = menu.windowWidget.getWidgetPosition(&menu.pageButtons[i]);
+                const Point size = menu.pageButtons[i].getSize();
+                menuRequire(tab.x >= lastRight && tab.x + size.x <= menu.getSize().x && size.x >= menu.pageButtons[i].getMinimumSize().x,
+                            "Settings tabs overlap, leave the screen or clip their names");
+                lastRight = tab.x + size.x;
+            }
+            menuRequire(menu.hotkeyListBox.getSize().y >= 80, "Hotkeys list too short to use");
+            menuRequire(page.getWidgetPosition(&menu.hotkeyFixedLabel).y + menu.hotkeyFixedLabel.getSize().y <= page.getSize().y,
+                        "Fixed shortcut summary is cut off");
+            menuRequire(menu.hotkeyListBox.getNumEntries()==Hotkeys::actionCount, "Hotkeys list misses commands");
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AreaGuard)).find("Shift+G")!=std::string::npos,
+                        "Area Guard row does not show Shift+G");
+
+            menu.hotkeyListBox.setSelectedItem(rowOf(Action::Guard));
+            menu.onHotkeyChange();
+            keyDown(menu, SDLK_ESCAPE, KMOD_NONE);
+            menuRequire(!menu.isQuiting() && menu.capturingHotkey<0 && menu.pendingHotkeys==settings.hotkeys,
+                        "Escape during hotkey capture left Settings or changed a key");
+            menu.onHotkeyChange();
+            keyDown(menu, SDLK_1, KMOD_NONE);
+            keyDown(menu, SDLK_LSHIFT, KMOD_LSHIFT);
+            menuRequire(menu.capturingHotkey==rowOf(Action::Guard) && menu.pendingHotkeys==settings.hotkeys,
+                        "A control-group digit or lone Shift was taken as a hotkey");
+            keyDown(menu, SDLK_y, KMOD_NONE);
+            menuRequire(menu.capturingHotkey<0 && menu.pendingHotkeys.get(Action::Guard)==Hotkeys::Binding{SDLK_y,0}
+                        && !menu.pendingHotkeys.get(Action::NextConstructionYard).bound(),
+                        "Capturing Y did not move it from Next Construction Yard to Guard");
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).find(": ")!=std::string::npos
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).substr(menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).size()-1)=="Y",
+                        "Hotkeys list not refreshed after a capture");
+            menuRequire(menu.acceptButton.isEnabled() && settings.hotkeys==original, "Hotkey edit not pending until Apply");
+            menuCapture(menu,"settings-hotkeys-edited");
+            menu.onOptionsCancel();
+            menuRequire(settings.hotkeys==original, "Back kept an edited hotkey");
+        }
+        {
+            OptionsMenu menu;
+            menu.hotkeyListBox.setSelectedItem(rowOf(Action::Stop));
+            menu.onHotkeyClear();
+            menu.hotkeyListBox.setSelectedItem(rowOf(Action::Guard));
+            menu.onHotkeyChange();
+            keyDown(menu, SDLK_y, KMOD_NONE);
+            menu.onOptionsOK();
+            INIFile saved(getConfigFilepath());
+            menuRequire(menu.isQuiting() && settings.hotkeys.get(Action::Guard)==Hotkeys::Binding{SDLK_y,0}
+                        && !settings.hotkeys.get(Action::Stop).bound()
+                        && saved.getStringValue("Hotkeys","Guard")=="Y" && saved.getStringValue("Hotkeys","Stop")=="None"
+                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="None",
+                        "Edited hotkeys not applied or persisted");
+        }
+        {
+            OptionsMenu menu;
+            menu.onHotkeyDefaults();
+            menu.onOptionsOK();
+            INIFile saved(getConfigFilepath());
+            menuRequire(settings.hotkeys==Hotkeys::Bindings::defaults() && saved.getStringValue("Hotkeys","Guard")=="G"
+                        && saved.getStringValue("Hotkeys","Area Guard")=="Shift+G" && saved.getStringValue("Hotkeys","Stop")=="S"
+                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="Y",
+                        "Default hotkeys not restored or persisted");
+        }
     }
     {
         menuRequire(ModManager::instance().setActiveMod("dunecity"),"Skin options fixture mod unavailable");

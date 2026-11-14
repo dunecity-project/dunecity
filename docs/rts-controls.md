@@ -6,8 +6,9 @@ Dune Legacy input model (left selects, right orders; optional left-click orders;
 Already present (verify, keep, do not re-implement): Stop (S / Shift+S with WASD), select same type on
 screen (T) / on map (Ctrl+T), control groups Ctrl+0–9 / 0–9, factory rally points
 (CMD_STRUCTURE_SETDEPLOYPOSITION), Guard/Area Guard/Hunt/Retreat modes, hover intent cursors,
-auto-repair, Space = match pause. Existing key meanings: G next yard, F next factory, P place structure,
-H harvester return, R repair / Shift+R road tool, M move, C capture, Shift+1..8 city overlays.
+auto-repair, Space = match pause. Key meanings at the time: G next yard (now Y, see "Configurable
+hotkeys"), F next factory, P place structure, H harvester return, R repair / Shift+R road tool,
+M move, C capture, Shift+1..8 city overlays.
 
 ## 1. Attack-move
 - Trigger: `A` then left-click (right-click when left-click orders are off follows existing cursor-mode
@@ -153,9 +154,8 @@ behaviour probe and the rendered smoke frame pass.
   button entering the same mode would be a duplicate.
 - Double-tap group centring: already present (pressing a group number while that group is
   selected centres the camera, with no time window) — kept as is.
-- Mode buttons Guard/Area Guard/Ambush/Hunt/Retreat and Deploy/Destruct/Heal/Paths have no
-  hotkey to show; their tooltips are unchanged. Structure Repair (R) / Upgrade (U) / Place (P)
-  already show hotkeys.
+- Mode buttons Ambush/Hunt/Retreat and Deploy/Destruct/Heal/Paths have no hotkey to show; their
+  tooltips are unchanged. Guard and Area Guard gained keys later (see "Configurable hotkeys").
 - HOLD "no scatter from worms / crushing": the engine has no scatter behaviour for player units,
   so nothing needed changing; Saboteurs in HOLD do not force-chase targets.
 - A queued MoveToObject on a friendly *unit* follows it indefinitely and blocks later orders
@@ -202,3 +202,89 @@ Rendered by the probe through the production `Game::drawScreen` (SDL software re
 - `/tmp/dunecity-rts-controls-smoke/rts-controls-tooltip.png` — the same frame with the hovered
   Patrol button tooltip "Patrol (Q): attack-move back and forth from here; Shift+click adds patrol points".
 Each probe run regenerates both files (also copied into `build/rts-controls-probe/`).
+
+# Configurable hotkeys (GitHub #87, 2026-11-15)
+
+Stefan: Guard, Area Guard and Stop get keys, the Construction Yard shortcut may move, and players
+set their own keys in an Options tab.
+
+## Registry and dispatch
+- `include/misc/Hotkeys.h` is the single registry: each action's stable `[Hotkeys]` config key,
+  English label, default chord and whether Shift on top is intent. `settings.hotkeys` holds the
+  player's bindings (`SettingsClass`, defaults when the section or a key is missing).
+- `Game::handleKeyInput` asks `Hotkeys::Bindings::match` for a named action before the fixed
+  keys and runs it in `Game::runHotkeyAction`; nothing translates a key into another key, so a
+  rebound action no longer answers to its old key and an unbound one answers to nothing. The
+  observer allow-list still runs first, so no configurable action reaches a spectator.
+- Matching: the exact chord wins. Otherwise Shift held on top of an unshifted binding reaches an
+  action marked `shiftIntent` (order cursors, Stop, Hold, Repair, selection keys) and is reported
+  as `extraShift`: Hold uses it to queue a harvester return, the order cursors read Shift at the
+  click as before. Guard, Area Guard, the T selections, formation keys and city keys need their
+  exact chord. Cmd/Windows-key chords never run a command (Cmd+Q, Cmd+M stay the system's).
+  City tools are unavailable without the city simulation, so Shift+C and Shift+R then fall
+  through to Capture and Repair as before.
+- WASD camera: an unmodified binding on W, A, S, D or Q needs Shift (the established Shift+A/S/D/Q
+  rule, now applied to whatever the player binds there). Tooltips and the Options list show the
+  effective chord.
+- Stop, Guard and Area Guard send `CMD_UNIT_SETMODE` for each selected unit the player may command
+  (`Game::setSelectedUnitsAttackMode`), exactly what the panel buttons send; queues, HOLD and
+  multiplayer routing are unchanged. Stop, Guard, Area Guard and Hold remain separate modes.
+
+## Actions and default keys
+| Action | Default | | Action | Default |
+|---|---|---|---|---|
+| Move | M | | Select next Construction Yard | Y (was G) |
+| Attack Move | A (WASD: Shift+A) | | Select next factory | F |
+| Patrol | Q (WASD: Shift+Q) | | Select all ornithopters | O |
+| Stop | S (WASD: Shift+S) | | Select same type on screen | T |
+| Guard | G | | Select same type on map | Ctrl+T |
+| Area Guard | Shift+G | | Select all combat units | Ctrl+A |
+| Hold / return harvesters | H (Shift+H queues returns) | | Formation moves on/off | Ctrl+F |
+| Capture | C | | Next formation shape | Ctrl+Shift+F |
+| Request Carryall drop | D (WASD: Shift+D) | | City zone tool | Z |
+| Repair | R | | City road tool | Shift+R |
+| Upgrade structure | U | | City budget | Shift+B |
+| Place structure | P | | City statistics overlay | Shift+C |
+| | | | Show game time | Shift+T |
+
+Fixed, not configurable, listed on the tab: 0-9 groups (Ctrl+0-9 set, Alt+0-9 add), Shift+1-8 city
+overlays, F1-F12, Space pause, +/- speed, Enter chat (Alt+Enter fullscreen), Esc menu, Tab,
+arrows, Print Screen and Ctrl+P screenshots. Only letters, the bracket, semicolon, quote, comma,
+period, slash, backslash and backquote keys, Insert, Delete, Home, End, Page Up and Page Down can
+be bound, with any of Ctrl, Alt and Shift.
+
+Modifier changes against the old hard-coded switch: Ctrl/Alt chords of M, D, R, U, C, F, P and the
+old G no longer run those commands (they now need their exact chord); Shift+M/A/Q/S/C/D/R/U/P/F/O/H
+still do.
+
+## Options > Hotkeys
+- Sixth Settings tab. A list of every action with its effective key (for the WASD choice ticked on
+  Controls), Change... (or double-click), Clear and Defaults, a status line and the fixed keys.
+- Change waits for the next key: Escape cancels (it does not close Settings), a lone modifier keeps
+  waiting, fixed/system keys are refused with the reason and capture continues. A key already
+  used by another action moves to the new one and the status line names the action left unbound;
+  a chord that would collide only through the WASD rule is refused.
+- Edits stay in the menu until Apply, which writes every action to `[Hotkeys]` in the player's
+  `Dune City.ini` (personal settings: not saves, mods, game options or multiplayer hashes);
+  Back discards them.
+- Loading recovers: missing keys use defaults, unreadable or reserved values fall back to the
+  default with a log warning, and a collision unbinds the defaulted action (or the later one in
+  the registry when both were configured).
+
+## Tooltips
+Unit and group panels (Move, Attack Move, Patrol, Guard, Area Guard, Stop, Hold, Capture, Carryall
+drop, Return harvester, Repair, formation buttons), the structure Repair/Upgrade buttons, the
+sidebar Place hint, the ornithopter button and the formation option text all read the effective
+binding through `UnitCommandTooltips::hotkeyText`/`hotkeySuffix`; an unbound action shows
+"(unbound)" or no hint.
+
+## Tests
+- `hotkeys_tests` (`tests/HotkeysTestCase.cpp`, `[hotkeys]`): defaults, dispatch and Shift intent,
+  the WASD rule, unavailable-action fallthrough, rebinding, reserved and WASD-only collisions,
+  capture, config round trip and recovery.
+- `rts_controls_probe` section 9: G, Shift+G, S (and Shift+S with WASD) through
+  `Game::handleKeyInput` and real game cycles; a rebound Guard ignores G, an unbound Stop ignores
+  S; both panels' tooltips.
+- `menu_navigation_probe`: the Hotkeys tab at 640x480, 854x480 and 1280x720 (tabs and controls on
+  screen, capture via the menu input path, Escape, refused digit, Back, Apply and Defaults with the
+  saved `[Hotkeys]` values).

@@ -6474,6 +6474,15 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             default: return;
         }
     }
+    // Configurable command shortcuts (misc/Hotkeys.h): a named action, never a translated key,
+    // so a rebound action does not also answer to its old key. Unbound or unavailable presses
+    // continue to the fixed shortcuts below.
+    if(const auto hotkey = settings.hotkeys.match(keyboardEvent.keysym.sym, keyboardEvent.keysym.mod,
+                                                  settings.general.wasdCamera,
+                                                  [this](Hotkeys::Action action) { return isHotkeyAvailable(action); })) {
+        runHotkeyAction(hotkey->action, hotkey->extraShift);
+        return;
+    }
     switch(keyboardEvent.keysym.sym) {
 
         case SDLK_0: {
@@ -6597,73 +6606,6 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             requestGameSpeed(std::max(getGameSpeed()-1, GAMESPEED_MIN));
         } break;
 
-        case SDLK_b: {
-            if (citySimEnabled_ && (SDL_GetModState() & KMOD_SHIFT)) {
-                onCityBudget();
-            }
-        } break;
-
-        case SDLK_c: {
-            if (citySimEnabled_ && (SDL_GetModState() & KMOD_SHIFT)) {
-                pInterface->toggleCityStatsOverlay();
-            } else {
-                setCursorMode(CursorMode_Capture);
-            }
-        } break;
-
-        case SDLK_z: {
-            if (!citySimEnabled_) {
-                break;
-            }
-            if (currentCursorMode == CursorMode_CityZone) {
-                setCursorMode(CursorMode_Normal);
-            } else {
-                setCursorMode(CursorMode_CityZone);
-                selectedZoneType_ = DuneCity::ZoneType::Residential;
-            }
-        } break;
-
-        case SDLK_a: {
-            if(keyboardEvent.keysym.mod & (KMOD_ALT|KMOD_GUI)) break;
-            if(keyboardEvent.keysym.mod & KMOD_CTRL) {
-                // Ctrl+A (also Ctrl+Shift+A): every own combat unit on the map.
-                selectAllCombatUnits();
-                break;
-            }
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT))break;
-            // Attack cursor: an enemy is attacked, ground is attack-moved to, Ctrl+ground fires at it
-            setCursorMode(CursorMode_Attack);
-        } break;
-
-        case SDLK_q: {
-            // Cmd+Q stays the platform quit shortcut.
-            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT)) break;
-            setCursorMode(CursorMode_Patrol);
-        } break;
-
-        case SDLK_s: {
-            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT)) break;
-            UnitBase* responder=nullptr;
-            for(Uint32 id:selectedList) {
-                auto* unit=dynamic_cast<UnitBase*>(objectManager.getObject(id));
-                if(unit && canControlHouse(unit->getOwner()) && unit->isRespondable()) {
-                    unit->handleSetAttackModeClick(STOP); responder=unit;
-                }
-            }
-            if(responder) responder->playConfirmSound();
-        } break;
-
-        case SDLK_t: {
-            if(keyboardEvent.keysym.mod & (KMOD_ALT|KMOD_GUI)) break;
-            if(keyboardEvent.keysym.mod & KMOD_SHIFT) {
-                bShowTime = !bShowTime;
-                break;
-            }
-            selectSameUnitTypes((keyboardEvent.keysym.mod & KMOD_CTRL)!=0);
-        } break;
-
         case SDLK_ESCAPE: {
             if (currentCursorMode == CursorMode_CityZone || currentCursorMode == CursorMode_CityRoad || isPlanningPlacement()) {
                 setCursorMode(CursorMode_Normal);
@@ -6734,62 +6676,9 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             bShowFPS = !bShowFPS;
         } break;
 
-        case SDLK_o: {
-            if((SDL_GetModState() & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) == 0) {
-                selectAllOrnithopters();
-            }
-        } break;
-
-        case SDLK_m: {
-            //set object to move
-            setCursorMode(CursorMode_Move);
-        } break;
-
-        case SDLK_g: {
-            // select next construction yard
-            std::set<Uint32> itemIDs;
-            itemIDs.insert(Structure_ConstructionYard);
-            selectNextStructureOfType(itemIDs);
-        } break;
-
-        case SDLK_f: {
-            // Ctrl+F switches formation moves, Ctrl+Shift+F picks the next shape; plain F keeps
-            // selecting the next factory.
-            if(SDL_GetModState() & KMOD_CTRL) {
-                if(SDL_GetModState() & KMOD_SHIFT) cycleFormationShape();
-                else toggleFormationMoves();
-                break;
-            }
-            // select next factory
-            std::set<Uint32> itemIDs;
-            itemIDs.insert(Structure_Barracks);
-            itemIDs.insert(Structure_WOR);
-            itemIDs.insert(Structure_LightFactory);
-            itemIDs.insert(Structure_HeavyFactory);
-            itemIDs.insert(Structure_HighTechFactory);
-            itemIDs.insert(Structure_StarPort);
-            selectNextStructureOfType(itemIDs);
-        } break;
-
         case SDLK_p: {
-            if(SDL_GetModState() & KMOD_CTRL) {
-                // fall through to SDLK_PRINT
-            } else {
-                // Place structure
-                if(selectedList.size() == 1) {
-                    ConstructionYard* pConstructionYard = dynamic_cast<ConstructionYard*>(objectManager.getObject(*selectedList.begin()));
-                    if(pConstructionYard != nullptr) {
-                        if(currentCursorMode == CursorMode_Placing) {
-                            setCursorMode(CursorMode_Normal);
-                        } else if(pConstructionYard->mayPlaceByHand()) {
-                            setCursorMode(CursorMode_Placing);
-                        }
-                    }
-                }
-
-                break;  // do not fall through
-            }
-
+            // Ctrl+P is the fixed screenshot shortcut; plain P is the configurable Place structure.
+            if(!(keyboardEvent.keysym.mod & KMOD_CTRL)) break;
         } // fall through
 
         case SDLK_PRINTSCREEN:
@@ -6798,68 +6687,6 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
                 takePeriodicalScreenshots = !takePeriodicalScreenshots;
             } else {
                 takeScreenshot();
-            }
-        } break;
-
-        case SDLK_h: {
-            // Harvesters return (Shift queues the return); every other selected unit holds.
-            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
-            const bool queued = (keyboardEvent.keysym.mod & KMOD_SHIFT) != 0;
-            UnitBase* holder = nullptr;
-            for(Uint32 objectID : selectedList) {
-                ObjectBase* pObject = objectManager.getObject(objectID);
-                if(isHarvesterLikeObject(pObject)) {
-                    if(queued && canControlHouse(pObject->getOwner()) && pObject->isRespondable()) {
-                        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
-                            static_cast<Uint32>(UnitOrderType::HarvesterReturn), 0, 0));
-                    } else {
-                        harvesterHandleReturnClick(pObject);
-                    }
-                } else if(auto* pUnit = dynamic_cast<UnitBase*>(pObject);
-                          pUnit != nullptr && canControlHouse(pUnit->getOwner()) && pUnit->isRespondable()) {
-                    pUnit->handleSetAttackModeClick(HOLD);
-                    holder = pUnit;
-                }
-            }
-            if(holder != nullptr) holder->playConfirmSound();
-        } break;
-
-
-        case SDLK_r: {
-            if (citySimEnabled_ && (SDL_GetModState() & KMOD_SHIFT)) {
-                if (currentCursorMode == CursorMode_CityRoad) {
-                    setCursorMode(CursorMode_Normal);
-                } else {
-                    setCursorMode(CursorMode_CityRoad);
-                    addToNewsTicker(_("Road tool selected: click rock or slab tiles to place roads."));
-                }
-            } else {
-                for(Uint32 objectID : selectedList) {
-                    ObjectBase* pObject = objectManager.getObject(objectID);
-                    if(pObject->isAStructure()) {
-                        static_cast<StructureBase*>(pObject)->handleRepairClick();
-                    } else if(pObject->isAGroundUnit() && pObject->getHealth() < pObject->getMaxHealth()) {
-                        static_cast<GroundUnit*>(pObject)->handleSendToRepairClick();
-                    }
-                }
-            }
-        } break;
-
-
-        case SDLK_d: {
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT))break;
-            setCursorMode(CursorMode_CarryallDrop);
-        } break;
-
-        case SDLK_u: {
-            for(Uint32 objectID : selectedList) {
-                ObjectBase* pObject = objectManager.getObject(objectID);
-                if(pObject->isABuilder()) {
-                    BuilderBase* pBuilder = static_cast<BuilderBase*>(pObject);
-                    if(pBuilder->getHealth() >= pBuilder->getMaxHealth() && pBuilder->isAllowedToUpgrade()) {
-                        pBuilder->handleUpgradeClick();
-                    }
-                }
             }
         } break;
 
@@ -6884,6 +6711,140 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
 
         default: {
         } break;
+    }
+}
+
+bool Game::isHotkeyAvailable(Hotkeys::Action action) const {
+    switch(action) {
+        case Hotkeys::Action::CityZoneTool: case Hotkeys::Action::CityRoadTool:
+        case Hotkeys::Action::CityBudget: case Hotkeys::Action::CityStatsOverlay:
+            return citySimEnabled_;
+        default:
+            return true;
+    }
+}
+
+void Game::setSelectedUnitsAttackMode(ATTACKMODE mode) {
+    // The same CMD_UNIT_SETMODE the unit panel buttons send, for every selected unit this
+    // player may command.
+    UnitBase* responder = nullptr;
+    for(Uint32 id : selectedList) {
+        auto* unit = dynamic_cast<UnitBase*>(objectManager.getObject(id));
+        if(unit && canControlHouse(unit->getOwner()) && unit->isRespondable()) {
+            unit->handleSetAttackModeClick(mode);
+            responder = unit;
+        }
+    }
+    if(responder) responder->playConfirmSound();
+}
+
+void Game::runHotkeyAction(Hotkeys::Action action, bool extraShift) {
+    using Hotkeys::Action;
+    switch(action) {
+        // Order cursors: Shift at the click queues (docs/rts-controls.md); Ctrl+ground fires.
+        case Action::Move: setCursorMode(CursorMode_Move); break;
+        case Action::AttackMove: setCursorMode(CursorMode_Attack); break;
+        case Action::Patrol: setCursorMode(CursorMode_Patrol); break;
+        case Action::Capture: setCursorMode(CursorMode_Capture); break;
+        case Action::CarryallDrop: setCursorMode(CursorMode_CarryallDrop); break;
+
+        case Action::Stop: setSelectedUnitsAttackMode(STOP); break;
+        case Action::Guard: setSelectedUnitsAttackMode(GUARD); break;
+        case Action::AreaGuard: setSelectedUnitsAttackMode(AREAGUARD); break;
+
+        case Action::Hold: {
+            // Harvesters return (Shift on top of the key queues the return); every other
+            // selected unit holds.
+            UnitBase* holder = nullptr;
+            for(Uint32 objectID : selectedList) {
+                ObjectBase* pObject = objectManager.getObject(objectID);
+                if(isHarvesterLikeObject(pObject)) {
+                    if(extraShift && canControlHouse(pObject->getOwner()) && pObject->isRespondable()) {
+                        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
+                            static_cast<Uint32>(UnitOrderType::HarvesterReturn), 0, 0));
+                    } else {
+                        harvesterHandleReturnClick(pObject);
+                    }
+                } else if(auto* pUnit = dynamic_cast<UnitBase*>(pObject);
+                          pUnit != nullptr && canControlHouse(pUnit->getOwner()) && pUnit->isRespondable()) {
+                    pUnit->handleSetAttackModeClick(HOLD);
+                    holder = pUnit;
+                }
+            }
+            if(holder != nullptr) holder->playConfirmSound();
+        } break;
+
+        case Action::Repair: {
+            for(Uint32 objectID : selectedList) {
+                ObjectBase* pObject = objectManager.getObject(objectID);
+                if(pObject == nullptr) continue;
+                if(pObject->isAStructure()) {
+                    static_cast<StructureBase*>(pObject)->handleRepairClick();
+                } else if(pObject->isAGroundUnit() && pObject->getHealth() < pObject->getMaxHealth()) {
+                    static_cast<GroundUnit*>(pObject)->handleSendToRepairClick();
+                }
+            }
+        } break;
+
+        case Action::Upgrade: {
+            for(Uint32 objectID : selectedList) {
+                ObjectBase* pObject = objectManager.getObject(objectID);
+                if(pObject != nullptr && pObject->isABuilder()) {
+                    BuilderBase* pBuilder = static_cast<BuilderBase*>(pObject);
+                    if(pBuilder->getHealth() >= pBuilder->getMaxHealth() && pBuilder->isAllowedToUpgrade()) {
+                        pBuilder->handleUpgradeClick();
+                    }
+                }
+            }
+        } break;
+
+        case Action::PlaceStructure: {
+            if(selectedList.size() == 1) {
+                auto* pConstructionYard = dynamic_cast<ConstructionYard*>(objectManager.getObject(*selectedList.begin()));
+                if(pConstructionYard != nullptr) {
+                    if(currentCursorMode == CursorMode_Placing) {
+                        setCursorMode(CursorMode_Normal);
+                    } else if(pConstructionYard->mayPlaceByHand()) {
+                        setCursorMode(CursorMode_Placing);
+                    }
+                }
+            }
+        } break;
+
+        case Action::NextConstructionYard:
+            selectNextStructureOfType({Structure_ConstructionYard});
+            break;
+        case Action::NextFactory:
+            selectNextStructureOfType({Structure_Barracks, Structure_WOR, Structure_LightFactory,
+                                       Structure_HeavyFactory, Structure_HighTechFactory, Structure_StarPort});
+            break;
+        case Action::SelectOrnithopters: selectAllOrnithopters(); break;
+        case Action::SelectSameTypeOnScreen: selectSameUnitTypes(false); break;
+        case Action::SelectSameTypeOnMap: selectSameUnitTypes(true); break;
+        case Action::SelectAllCombatUnits: selectAllCombatUnits(); break;
+        case Action::ToggleFormationMoves: toggleFormationMoves(); break;
+        case Action::NextFormationShape: cycleFormationShape(); break;
+
+        case Action::CityZoneTool: {
+            if(currentCursorMode == CursorMode_CityZone) {
+                setCursorMode(CursorMode_Normal);
+            } else {
+                setCursorMode(CursorMode_CityZone);
+                selectedZoneType_ = DuneCity::ZoneType::Residential;
+            }
+        } break;
+        case Action::CityRoadTool: {
+            if(currentCursorMode == CursorMode_CityRoad) {
+                setCursorMode(CursorMode_Normal);
+            } else {
+                setCursorMode(CursorMode_CityRoad);
+                addToNewsTicker(_("Road tool selected: click rock or slab tiles to place roads."));
+            }
+        } break;
+        case Action::CityBudget: onCityBudget(); break;
+        case Action::CityStatsOverlay: pInterface->toggleCityStatsOverlay(); break;
+        case Action::ToggleGameTime: bShowTime = !bShowTime; break;
+        case Action::Count: break;
     }
 }
 
@@ -7970,7 +7931,9 @@ void Game::drawCityPlacementHint() {
         return;
     }
 
-    const std::string hint = std::string(DuneCity::getRoadPlacementModeLabel()) + "\nShift+R toggle · Click to place · Esc cancels";
+    const std::string roadKey = Hotkeys::displayName(settings.hotkeys.effective(Hotkeys::Action::CityRoadTool, settings.general.wasdCamera));
+    const std::string hint = std::string(DuneCity::getRoadPlacementModeLabel())
+        + (roadKey.empty() ? std::string("\n") : "\n" + roadKey + " toggle · ") + "Click to place · Esc cancels";
     sdl2::texture_ptr hintTexture = pFontManager->createTextureWithMultilineText(hint, COLOR_WHITE, 12, true);
     if (!hintTexture) {
         return;

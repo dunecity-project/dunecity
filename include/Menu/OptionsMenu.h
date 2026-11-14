@@ -27,6 +27,7 @@
 #include <GUI/TextBox.h>
 #include <GUI/Checkbox.h>
 #include <GUI/DropDownBox.h>
+#include <GUI/ListBox.h>
 #include <GUI/PictureLabel.h>
 #include <DataTypes.h>
 #include <misc/SDL2pp.h>
@@ -58,6 +59,18 @@ private:
 
     void onChildWindowClose(Window* pChildWindow) override;
 
+    // Hotkeys tab (misc/Hotkeys.h). It edits pendingHotkeys; Apply saves them with the other
+    // settings, Back discards them.
+    static constexpr int hotkeysPage = 5;
+    bool    doInput(SDL_Event& event) override;
+    void    refreshHotkeyList();
+    void    onHotkeyChange();
+    void    onHotkeyClear();
+    void    onHotkeyDefaults();
+    void    handleHotkeyCapture(const SDL_KeyboardEvent& key);
+    bool    assignHotkey(Hotkeys::Action action, const Hotkeys::Binding& binding);
+    std::string hotkeyEntryText(Hotkeys::Action action) const;
+
     /**
         This method determines all available suitable screen resolutions.
         If the system returns that any resolution is possible a reasonable
@@ -74,8 +87,8 @@ private:
     StaticContainer windowWidget;
 
     Label       title;
-    VBox        pages[5];
-    TextButton  pageButtons[5];
+    VBox        pages[6];
+    TextButton  pageButtons[6];
     static int lastPage;
     HBox        interfaceHBox;
     DropDownBox interfaceSizeDropDownBox;
@@ -140,6 +153,17 @@ private:
     TextButton  restoreDefaultsButton;
     HBox        clearDuneCityAssetsHBox;
     TextButton  clearDuneCityAssetsButton;
+
+    Hotkeys::Bindings pendingHotkeys;
+    int         capturingHotkey = -1;     ///< Action index waiting for a key, or -1
+    bool        displayedHotkeyWasd = false;
+    ListBox     hotkeyListBox;
+    HBox        hotkeyButtonsHBox;
+    TextButton  hotkeyChangeButton;
+    TextButton  hotkeyClearButton;
+    TextButton  hotkeyDefaultsButton;
+    Label       hotkeyStatusLabel;
+    Label       hotkeyFixedLabel;
 
     TextButton  acceptButton;
     TextButton  backButton;

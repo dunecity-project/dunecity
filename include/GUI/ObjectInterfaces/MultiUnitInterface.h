@@ -141,7 +141,7 @@ protected:
 
         guardButton.setText(_("Guard"));
         guardButton.setTextColor(color);
-        guardButton.setTooltipText(_("Unit will not move from location"));
+        guardButton.setTooltipText(UnitCommandTooltips::guard());
         guardButton.setToggleButton(true);
         guardButton.setOnClick(std::bind(&MultiUnitInterface::onGuard, this));
         buttonVBox.addWidget(&guardButton, 26);
@@ -150,7 +150,7 @@ protected:
 
         areaGuardButton.setText(_("Area Guard"));
         areaGuardButton.setTextColor(color);
-        areaGuardButton.setTooltipText(_("Unit will engage any unit within guard range"));
+        areaGuardButton.setTooltipText(UnitCommandTooltips::areaGuard());
         areaGuardButton.setToggleButton(true);
         areaGuardButton.setOnClick(std::bind(&MultiUnitInterface::onAreaGuard, this));
         buttonVBox.addWidget(&areaGuardButton, 26);

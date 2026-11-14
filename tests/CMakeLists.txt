@@ -112,6 +112,7 @@ target_sources(dunelegacy_tests
         CitySpritePolicyTestCase.cpp
         CityAircraftPolicyTestCase.cpp
         RendererSizeTestCase.cpp
+        HotkeysTestCase.cpp
         CursorAppearanceTestCase.cpp
         GasDeviationPolicyTestCase.cpp
         OrdinaryDamagePolicyTestCase.cpp
@@ -314,6 +315,8 @@ dunecity_add_test(headless integration NAME dune2r_presentation_tests COMMAND du
 dunecity_add_test(headless integration NAME classic_desert_ui_tests COMMAND dunelegacy_tests "[menu][ui-skin]")
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 dunecity_add_test(headless integration NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
+# Configurable command hotkeys: dispatch, WASD rule, conflicts, capture and [Hotkeys] config (misc/Hotkeys.h).
+dunecity_add_test(headless integration NAME hotkeys_tests COMMAND dunelegacy_tests "[hotkeys]")
 # The fair-start-rock seed sweep is one Catch test case per mode and map size; as one test the
 # sanitized Debug build exceeded the CTest timeout. Catch's sharding divides whatever sweep
 # cases exist in declaration order: a changed size list moves work between shards but never

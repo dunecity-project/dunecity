@@ -788,6 +788,13 @@ private:
     */
     void handleKeyInput(SDL_KeyboardEvent& keyboardEvent);
 
+    /// Whether a configurable shortcut applies here (city tools need the city simulation).
+    bool isHotkeyAvailable(Hotkeys::Action action) const;
+    /// Runs one configurable shortcut; 'extraShift' is Shift held on top of a Shift-less binding.
+    void runHotkeyAction(Hotkeys::Action action, bool extraShift);
+    /// Stop, Guard and Area Guard keys: CMD_UNIT_SETMODE for every selected unit this player commands.
+    void setSelectedUnitsAttackMode(ATTACKMODE mode);
+
     /**
         Performs a building placement
         \param  xPos    x-coordinate in map coordinates

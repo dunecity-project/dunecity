@@ -14,6 +14,8 @@
 //   7. a rendered frame shows the queued waypoint lines and a hotkey tooltip (smoke screenshot);
 //   8. the Attack button and the A key on a spice bloom fire at it from weapon range, for every
 //      firing unit type alone and as one group (formation moves off and on): nobody drives onto it.
+//   9. Guard (G), Area Guard (Shift+G) and Stop (S, Shift+S with WASD) key presses reach the
+//      units; a rebound or unbound key stops answering; both unit panels' tooltips agree.
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -498,6 +500,98 @@ int runRtsControlsProbe() {
         game->gameInitSettings.setGameOptions(rules);
         SDL_Log("RTS_CONTROLS_REPEAT_PASS: item %u built %d times unattended in %d cycles, paused at the unit limit, resumed after %d cycles",
                 repeated, atLimit - before, cycles, resume);
+    }
+
+    // ---- 9. Guard, Area Guard and Stop keys, rebinding and the panel tooltips ----------------
+    // Real key events through Game::handleKeyInput, the command stream and game cycles.
+    {
+        const Uint32 tank = spawn(owner, Unit_Tank, Coord(4, 18));
+        const Uint32 quad = spawn(owner, Unit_Quad, Coord(6, 18));
+        const auto savedHotkeys = settings.hotkeys;
+        const bool savedWasd = settings.general.wasdCamera;
+        settings.hotkeys = Hotkeys::Bindings::defaults();
+        settings.general.wasdCamera = false;
+        auto select = [&](const std::vector<Uint32>& ids) {
+            game->unselectAll(game->selectedList);
+            game->selectedList.clear();
+            for(Uint32 id : ids) { game->selectedList.insert(id); unitOf(id)->setSelected(true); }
+            game->selectionChanged();
+            game->pInterface->updateObjectInterface();
+        };
+        auto press = [&](SDL_Keycode sym, Uint16 mod) {
+            SDL_KeyboardEvent key{};
+            key.type = SDL_KEYDOWN;
+            key.keysym.sym = sym;
+            key.keysym.mod = mod;
+            game->handleKeyInput(key);
+            step(4);
+        };
+        auto inMode = [&](ATTACKMODE mode) {
+            return unitOf(tank)->getAttackMode() == mode && unitOf(quad)->getAttackMode() == mode;
+        };
+        auto startsWith = [](const std::string& text, const std::string& prefix) { return text.rfind(prefix, 0) == 0; };
+
+        select({tank, quad});
+        press(SDLK_g, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "G did not put the selection in Guard");
+        press(SDLK_g, KMOD_LSHIFT);
+        rtsRequire(inMode(AREAGUARD), "Shift+G did not put the selection in Area Guard");
+        press(SDLK_s, KMOD_NONE);
+        rtsRequire(inMode(STOP), "S did not stop the selection");
+        press(SDLK_g, KMOD_LCTRL);
+        rtsRequire(inMode(STOP), "Ctrl+G ran Guard");
+        press(SDLK_g, KMOD_NONE);
+        settings.general.wasdCamera = true;
+        press(SDLK_s, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "With the WASD camera, plain S still stopped the selection");
+        press(SDLK_s, KMOD_LSHIFT);
+        rtsRequire(inMode(STOP), "With the WASD camera, Shift+S did not stop the selection");
+        select({tank});         // a single unit first, so the group panel below is built anew
+        select({tank, quad});
+        auto* many = dynamic_cast<MultiUnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(many && startsWith(many->stopButton.getTooltipText(), "Stop (Shift+S)"),
+                   "The group Stop tooltip does not show the WASD key");
+        settings.general.wasdCamera = false;
+
+        // Both panels name the keys the handler uses.
+        select({tank});
+        auto* one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(one && startsWith(one->guardButton.getTooltipText(), "Guard (G)")
+                   && startsWith(one->areaGuardButton.getTooltipText(), "Area Guard (Shift+G)")
+                   && startsWith(one->stopButton.getTooltipText(), "Stop (S)"),
+                   "The unit panel tooltips do not name Guard G, Area Guard Shift+G and Stop S");
+        select({tank, quad});
+        many = dynamic_cast<MultiUnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(many && startsWith(many->guardButton.getTooltipText(), "Guard (G)")
+                   && startsWith(many->areaGuardButton.getTooltipText(), "Area Guard (Shift+G)")
+                   && startsWith(many->stopButton.getTooltipText(), "Stop (S)"),
+                   "The group panel tooltips do not name Guard G, Area Guard Shift+G and Stop S");
+
+        // Rebound Guard answers only to its new key; an unbound Stop answers to nothing.
+        rtsRequire(Hotkeys::assign(settings.hotkeys, Hotkeys::Action::Guard, Hotkeys::Binding{SDLK_k, 0}).outcome
+                   == Hotkeys::AssignOutcome::Assigned, "Guard could not move to K");
+        press(SDLK_g, KMOD_NONE);
+        rtsRequire(inMode(STOP) && game->selectedList.size() == 2, "G still acted after Guard moved to K");
+        press(SDLK_k, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "K did not run the rebound Guard");
+        Hotkeys::assign(settings.hotkeys, Hotkeys::Action::Stop, Hotkeys::Binding{});
+        press(SDLK_s, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "S still stopped units after Stop was unbound");
+        select({tank});
+        one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(one && startsWith(one->guardButton.getTooltipText(), "Guard (K)")
+                   && startsWith(one->stopButton.getTooltipText(), "Stop (unbound)"),
+                   "Tooltips do not follow the rebound and unbound keys");
+
+        settings.hotkeys = savedHotkeys;
+        settings.general.wasdCamera = savedWasd;
+        game->unselectAll(game->selectedList);
+        game->selectedList.clear();
+        game->selectionChanged();
+        retire(tank);
+        retire(quad);
+        SDL_Log("RTS_CONTROLS_HOTKEYS_PASS: G Guard, Shift+G Area Guard, S Stop (Shift+S with WASD) through the key handler;"
+                " rebound Guard ignores G; unbound Stop ignores S; unit and group tooltips agree");
     }
 
     // ---- 5. Save round trip: queue, patrol, HOLD and repeat flags --------------------------
