@@ -91,7 +91,15 @@ void runCampaignRepairProbe(Game& game) {
                 force.campaignDeferredYardUpgrade = deferred;
                 house->startingCredits = 60000;
                 QuantBot::BuildPass pass(4000);
-                bot->resetBuildPass(); bot->planBuildInventory(pass);
+                bot->resetBuildPass(); bot->planBuildInventory(pass); bot->planBuildBudget(pass);
+                bot->planCityState(pass); bot->planStrategicReserve(pass); bot->planSpiceEconomy(pass);
+                bot->planPowerAndYards(pass); bot->planCityPopulation(pass); bot->planCivicNeedAndTrips(pass);
+                bot->planUnitMix(pass); bot->planCapitalForecast(pass); bot->planCityBootstrap(pass);
+                bot->planOpeningProduction(pass); bot->planDefenceCoverage(pass); bot->planVanillaCoreDefence(pass);
+                bot->planCityResearchOrder(pass); bot->planTechSavings(pass); bot->planCapitalCandidates(pass);
+                bot->planVanillaBoldCapital(pass); bot->chooseCapitalPlan(pass);
+                // Isolate this producer branch from competing capital projects.
+                pass.capitalChoice = -1; pass.sharedSpending = false; pass.cityGrowthProtected = false;
                 pass.money = 60000; pass.citySimEnabled = true;
                 pass.actualHarvesters = house->getNumItems(Unit_Harvester);
                 const int oldLimit = bot->harvesterLimit;
