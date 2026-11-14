@@ -532,6 +532,23 @@ SourceForge backfills never advance current download defaults or source branches
 Documentation-only pushes may use `[skip ci]`; game changes may not skip their
 required CI.
 
+`resume build` reruns a failed Mac lane from the same source, which signs and
+notarizes again. Before it, centre the Mini's pointer and do not move it during
+the lane: the packaged pointer gate reads the real pointer where it rests (see
+the consumer notes below). A rerun after Apple has accepted the app can also
+fail at stapling under the runner's App Management restriction. Observed once,
+in the third attempt of `v1.0.868`: packaging launched the signed app before
+stapling, that launch was of already notarized code, and `stapler staple`
+exited 73 (kernel `System Policy: stapler deny file-write-create
+…/Contents/CodeResources`; TCC `kTCCServiceSystemPolicyAppBundles`, responsible
+binary the runner's `node`, no prompt). The same two steps passed from a
+terminal session, whose host app holds that permission. From 1.0.869 the launch
+follows the staple; runner validation of that order is the 1.0.869 release.
+Never change the Mini's privacy grants to work around this; that decision is
+Stefan's. The `release` job accepts only the `DuneCity-macOS-DMG` artifact of a
+successful Mac lane; `DuneCity-macOS-failed-packages-N` is evidence and has no
+consumer.
+
 ## SourceForge presentation and web hosting
 
 See [sourceforge-releases.md](sourceforge-releases.md) for credential **names**,

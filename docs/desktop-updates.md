@@ -82,7 +82,14 @@ their dynamically loaded SDL3 library and license. Static linker dependency
 inspection alone does not find this dependency. Mac package verification launches
 the app's isolated `--check-desktop-runtime` mode, checks hidden-window rendering,
 and confirms that every loaded SDL library comes from the app bundle. The same
-check runs after Developer ID signing and before submission to Apple.
+check runs on the signed app after Apple's ticket is stapled and validated, and
+before the final ZIP and DMG are made; if it fails, neither is made. It used to
+run before submission. Launching code that Apple has already notarized (a rerun
+of the same source) can put the bundle under macOS App Management: in the third
+1.0.868 attempt the runner's `stapler` was then refused the write of
+`Contents/CodeResources` (exit 73). Nothing writes into the bundle after the
+launch now. The new order is confirmed by test for sequence only; its first
+runner validation is the 1.0.869 release.
 
 `scripts/package-signed-macos.py` copies an installed bundle, signs all nested
 Mach-O files and bundles with hardened runtime/timestamps, notarizes and staples
