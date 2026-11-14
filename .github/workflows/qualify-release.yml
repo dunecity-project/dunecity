@@ -82,6 +82,7 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1
         with:
           key: ${{ runner.environment == 'self-hosted' && 'qualification-mini' || 'macos' }}-arm64-deps-v1-${{ steps.macos-dependencies.outputs.key }}
+          restore-keys: ${{ runner.environment == 'self-hosted' && 'qualification-mini' || 'macos' }}-arm64
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -91,6 +92,7 @@ jobs:
         with:
           path: ${{ env.QUALIFICATION_VCPKG_CACHE }}
           key: ${{ runner.environment == 'self-hosted' && 'vcpkg-qualification-mini' || 'vcpkg-macos' }}-arm64-deps-v1-${{ steps.macos-dependencies.outputs.key }}
+          restore-keys: ${{ runner.environment == 'self-hosted' && 'vcpkg-qualification-mini' || 'vcpkg-macos' }}-arm64-
       - name: Enable portable dependency cache
         run: |
           mkdir -p "$QUALIFICATION_VCPKG_CACHE"

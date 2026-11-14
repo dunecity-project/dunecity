@@ -260,8 +260,11 @@ Mini qualification has separate compiler/dependency cache keys and a separate
 vcpkg archive directory from signing; routine staging qualification does not feed
 the signing lane's caches. Mac cache keys use `vcpkg-dependency-key.py`, as Windows
 does: a game version bump preserves dependency caches, while dependency, registry
-baseline and feature changes invalidate them. Compiler caches still validate each
-compiler invocation and its source inputs. A new key initially needs warming in
+baseline and feature changes change the primary key. A fallback within the same
+backend/architecture namespace can seed a new key from older caches; vcpkg checks
+package ABI compatibility, and compiler caches validate each compiler invocation
+and its source inputs. Mini qualification never falls back to signing caches.
+A new key initially needs warming in
 the default-branch scope; a cache written only by integration/PR CI is not a
 default-branch cache for a later tag. Its job limit is 60 minutes, versus 120 on hosted Mac.
 Any production reservation refuses new Mini verification admissions, including
