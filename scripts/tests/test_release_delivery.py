@@ -20,7 +20,7 @@ spec.loader.exec_module(website)
 class WebsiteReleaseTests(unittest.TestCase):
     def test_current_desktop_labels_and_links_change_mobile_and_history_do_not(self):
         before = '''<p class="version-info">Windows/Linux: 1.0.865 · macOS: 1.0.865 · Android: 0.2.33</p>
-<p>New in 1.0.865 (Windows and Linux): old features</p>
+<p>New in 1.0.865 (Windows and Linux): old features <a href="tornie.html">About Tornie</a> · <a href="coop.html">Play co-op</a></p>
 <p>Windows and Linux 1.0.865 · macOS 1.0.865 · Android 0.2.33 (engine 1.0.858) · TestFlight (engine 1.0.857).</p>
 <a href="https://github.com/dunecity-project/dunecity/releases/download/v1.0.865/DuneCity-1.0.865-macOS.dmg">Download 1.0.865 DMG</a>
 <a href="/v1.0.865/DuneCity-1.0.865-Windows-x64.zip">Download ZIP</a>
@@ -32,7 +32,8 @@ class WebsiteReleaseTests(unittest.TestCase):
         self.assertNotIn('old features', after)
         for value in ['Android 0.2.33 (engine 1.0.858)', 'TestFlight (engine 1.0.857)',
                       'before 1.0.732', 'Download 1.0.867 DMG', 'Download Installer',
-                      '/v1.0.867/dunecity_1.0.867_amd64.deb', 'New in 1.0.867']:
+                      '/v1.0.867/dunecity_1.0.867_amd64.deb', 'New in 1.0.867',
+                      '<a href="tornie.html">About Tornie</a>', '<a href="coop.html">Play co-op</a>']:
             self.assertIn(value, after)
         self.assertEqual(website.update(after, '1.0.867'), after)
 

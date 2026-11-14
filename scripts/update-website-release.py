@@ -51,9 +51,11 @@ def update(html, version):
     def news(match):
         if match[1] == version:
             return match[0]
+        navigation = re.findall(r'<a\b[^>]*href="(?:tornie|coop)\.html"[^>]*>.*?</a>', match[0], re.S)
+        trailing = ''.join(' · ' + link for link in navigation)
         return (f'<p>New in {version}: <a href="https://github.com/dunecity-project/'
                 f'dunecity/releases/tag/v{version}">Release notes and known issues</a>'
-                ' · <a href="changelog.html">What\'s new in every release</a></p>')
+                ' · <a href="changelog.html">What\'s new in every release</a>' + trailing + '</p>')
     html = re.sub(r"<p>New in (" + VERSION + r")[\s\S]*?</p>", news, html)
     verify_current_copy(html, version)
     return html
