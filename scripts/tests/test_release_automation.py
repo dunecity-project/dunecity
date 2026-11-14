@@ -1304,6 +1304,58 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertEqual(calls, 1)
 
 
+class QualificationAdmissionTests(unittest.TestCase):
+    def invoke(self, event, name='workflow_run', ref='refs/heads/main', latest=SHA,
+               reusable=False, recipe_matches=True):
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / 'event.json'
+            automation.write_json(event_path, event)
+            def api(path):
+                if '/git/ref/heads/' in path:
+                    return {'object': {'sha': latest}}
+                if '/contents/' in path:
+                    return {'sha': 'recipe' if recipe_matches or path.endswith(SHA) else 'changed'}
+                raise AssertionError(path)
+            with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event_path), GITHUB_EVENT_NAME=name,
+                            GITHUB_REF=ref, GITHUB_SHA=OTHER), \
+                 patch.object(automation, 'api', side_effect=api), \
+                 patch.object(automation, 'qualification_for', return_value={'id': 41}) as green, \
+                 patch.object(automation, 'reuse_qualification', side_effect=None if reusable else ValueError('none')), \
+                 patch.object(automation, 'emit') as emit:
+                automation.select_qualification(argparse.Namespace())
+                return emit.call_args.args[0], green.call_count
+
+    def event(self, **overrides):
+        source = dict(head_branch=automation.STAGING, event='push', conclusion='success', head_sha=SHA,
+                      head_repository={'full_name': automation.repository()})
+        source.update(overrides)
+        return {'workflow_run': source}
+
+    def test_failed_fork_wrong_branch_and_nonpush_never_admit(self):
+        for override in [dict(conclusion='failure'), dict(head_branch='release-idea'), dict(event='pull_request'),
+                         dict(head_repository={'full_name': 'fork/dunecity'})]:
+            with self.subTest(override=override):
+                values, checked = self.invoke(self.event(**override))
+                self.assertFalse(values['run'])
+                self.assertEqual(checked, 0)
+
+    def test_superseded_auto_candidate_coalesces_but_explicit_pin_survives(self):
+        values, checked = self.invoke(self.event(), latest=OTHER)
+        self.assertFalse(values['run']); self.assertEqual(checked, 0)
+        values, checked = self.invoke({'inputs': {'sha': SHA}}, name='workflow_dispatch', latest=OTHER)
+        self.assertTrue(values['run']); self.assertEqual(checked, 1)
+
+    def test_already_qualified_candidate_does_not_rerun(self):
+        values, checked = self.invoke(self.event(), reusable=True)
+        self.assertFalse(values['run']); self.assertEqual(checked, 1)
+
+    def test_control_recipe_drift_and_untrusted_dispatch_ref_fail_closed(self):
+        with self.assertRaisesRegex(ValueError, 'recipes differ'):
+            self.invoke(self.event(), recipe_matches=False)
+        with self.assertRaisesRegex(ValueError, 'trusted main/integration'):
+            self.invoke({'inputs': {'sha': SHA}}, name='workflow_dispatch', ref='refs/heads/release-untrusted')
+
+
 class ReusableQualificationTests(HostedHeadlessQualificationTests):
     def reusable(self):
         receipt = json.loads(self.paths[automation.HEADLESS_RECEIPT].read_text())
