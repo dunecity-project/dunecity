@@ -123,6 +123,10 @@ public:
         \return the maximum number of upgrades available (0 if none)
     */
     int getMaxUpgradeLevel() const;
+    /// Original campaign factories start fully upgraded. Checks the owning
+    /// controller itself; this is not a general free-upgrade player command.
+    void grantOriginalCampaignUpgrades();
+    bool hasOriginalCampaignController() const;
 
     /**
         This method checks what is available for purchase in this builder. It shall

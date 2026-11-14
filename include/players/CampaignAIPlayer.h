@@ -22,6 +22,7 @@
 #include <DataTypes.h>
 #include <misc/InputStream.h>
 #include <misc/OutputStream.h>
+#include <players/OriginalTeamScript.h>
 
 #include <vector>
 
@@ -33,7 +34,7 @@ class StructureBase;
 class UnitBase;
 
 /**
- * Campaign AI Player - Original Dune II AI behavior (from Dune Dynasty)
+ * Campaign AI Player - original Dune II rules with legacy save compatibility.
  * 
  * Key features:
  * - Ground-only contact activation (mutual activation of both houses)
@@ -41,7 +42,9 @@ class UnitBase;
  * - Original AI build filters (no harvester auto-build, carryall max 1, ornithopter 10min delay)
  * - 25% randomization + priority-based build selection
  * - Palace auto-fire when AI active
- * - One-time full-scale attack on base damage
+ * - Original TEAM.EMC execution for authored scenario teams
+ * - Independently hunting produced combat units
+ * - Original ineffective full-scale attack flag, without added base scrambles
  */
 class CampaignAIPlayer : public Player {
 public:
@@ -57,6 +60,7 @@ public:
     virtual void onObjectWasBuilt(const ObjectBase* pObject);
     virtual void onDecrementStructures(int itemID, const Coord& location);
     virtual void onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID);
+    bool usesOriginalRules() const { return originalRules; }
 
 private:
     /**
@@ -108,9 +112,32 @@ private:
      */
     void scrambleUnitsAndDefend(const ObjectBase* pIntruder);
 
+    // Captured when a game is created and saved. Old saves keep the old controller.
+    bool originalRules = false;
+    struct ScenarioTeam {
+        AITeamBehavior behavior = AITeamBehavior_Normal;
+        AITeamType type = AITeamType_Foot;
+        int minimum = 0;
+        int maximum = 0;
+        bool staging = false;
+        Coord position{0, 0};
+        Uint32 targetID = NONE_ID;
+        OriginalTeamScript::State script;
+        std::vector<Uint32> members;
+    };
+    bool scenarioTeamsInitialized = false;
+    std::vector<ScenarioTeam> scenarioTeams;
+    OriginalTeamScript::Program teamProgram;
+    Uint32 nextTeamTick = 0; // Original 60 Hz clock, independent of the 50-cycle build pass.
+    void updateOriginalUnits();
+    void updateScenarioTeams();
+    const ObjectBase* originalTarget(const UnitBase* unit, bool structuresFirst) const;
+    bool originalCombatUnit(const UnitBase* unit) const;
+    static AITeamType movementClass(const UnitBase* unit);
+
     std::vector<RebuildQueueEntry> rebuildQueue;  // Max 5 entries (Original AI limit)
 
-    // Simple team/wave staging (lightweight stand-in for Dynasty team scripts)
+    // Pre-9886 approximation retained only for old saves or OriginalCampaignAI=0.
     struct AttackTeam {
         Uint32 minSize = 8;                 // Launch threshold
         Uint32 cooldownCycles = MILLI2CYCLES(12000); // 12s between launches

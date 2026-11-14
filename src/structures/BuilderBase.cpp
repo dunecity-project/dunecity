@@ -36,6 +36,7 @@
 #include <structures/Worfinery.h>
 
 #include <players/HumanPlayer.h>
+#include <players/CampaignAIPlayer.h>
 
 #include <GUI/ObjectInterfaces/BuilderInterface.h>
 
@@ -571,9 +572,31 @@ int BuilderBase::getMaxUpgradeLevel() const {
     return upgradeLevel;
 }
 
+bool BuilderBase::hasOriginalCampaignController() const
+{
+    for(const auto& player : owner->getPlayerList()) {
+        const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get());
+        if(campaign && campaign->usesOriginalRules()) return true;
+    }
+    return false;
+}
+
+void BuilderBase::grantOriginalCampaignUpgrades()
+{
+    if(!hasOriginalCampaignController()) return;
+    const int maximum = getMaxUpgradeLevel();
+    if(curUpgradeLev >= maximum) return;
+    curUpgradeLev = maximum;
+    upgrading = false;
+    upgradeProgress = 0;
+    upgradeProgressFromStartingCredits = 0;
+    updateBuildList();
+}
+
 void BuilderBase::updateBuildList()
 {
     std::list<BuildItem>::iterator iter = buildList.begin();
+    const bool originalCampaignYard = itemID == Structure_ConstructionYard && hasOriginalCampaignController();
     const bool tornieFamily = ModManager::instance().isTornieFamilyContentActive();
     const int technology = tornieFamily ? getTechnologyHouseID() : originalHouseID;
     const auto contentBase = tornieFamily
@@ -706,9 +729,9 @@ void BuilderBase::updateBuildList()
 
             // check if prerequisites are met. Worfinery direct products bypass
             // all prerequisite structures by design.
-            bool bPrerequisitesMet = directWorfineryProduct;
+            bool bPrerequisitesMet = directWorfineryProduct || originalCampaignYard;
             int missingPrerequisite = ItemID_Invalid;
-            if(!directWorfineryProduct) {
+            if(!directWorfineryProduct && !originalCampaignYard) {
                 bPrerequisitesMet = true;
                 const int prerequisiteLimit = std::min<int>(Num_ItemID, static_cast<int>(objData.prerequisiteStructuresSet.size()));
                 for(int itemID2Test = ItemID_FirstID; itemID2Test < prerequisiteLimit; itemID2Test++) {

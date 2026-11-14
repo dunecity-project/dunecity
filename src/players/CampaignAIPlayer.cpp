@@ -16,6 +16,8 @@
  */
 
 #include <players/CampaignAIPlayer.h>
+#include <players/OriginalCampaignPolicy.h>
+#include <FileClasses/FileManager.h>
 #include <players/QuantBotConfig.h>
 #include <House.h>
 #include <sand.h>
@@ -32,6 +34,9 @@
 #include <mod/ModManager.h>
 #include <algorithm>
 #include <array>
+#include <set>
+#include <stdexcept>
+#include <climits>
 
 #define AIUPDATEINTERVAL 50
 
@@ -208,6 +213,7 @@ void CampaignAIPlayer::RebuildQueueEntry::save(OutputStream& stream) const {
 CampaignAIPlayer::CampaignAIPlayer(House* associatedHouse, const std::string& playername)
  : Player(associatedHouse, playername) {
     init();
+    originalRules = getQuantBotConfig().originalCampaignAI;
 }
 
 CampaignAIPlayer::CampaignAIPlayer(InputStream& stream, House* associatedHouse) 
@@ -222,6 +228,38 @@ CampaignAIPlayer::CampaignAIPlayer(InputStream& stream, House* associatedHouse)
     // attackTriggered was added in version 9804
     if(currentGame->getLoadedSavegameVersion() >= 9804) {
         attackTriggered = stream.readBool();
+    }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_ORIGINAL_CAMPAIGN_AI) {
+        originalRules = stream.readBool();
+        scenarioTeamsInitialized = stream.readBool();
+        nextTeamTick = stream.readUint32();
+        const Uint32 count = stream.readUint32();
+        if(count > 1024) throw std::runtime_error("Invalid campaign AI team count");
+        for(Uint32 i = 0; i < count; ++i) {
+            ScenarioTeam team;
+            team.behavior = static_cast<AITeamBehavior>(stream.readSint32());
+            team.type = static_cast<AITeamType>(stream.readSint32());
+            team.minimum = stream.readSint32();
+            team.maximum = stream.readSint32();
+            team.staging = stream.readBool();
+            team.position.x = stream.readSint32();
+            team.position.y = stream.readSint32();
+            team.targetID = stream.readUint32();
+            team.script.pc = stream.readUint32();
+            team.script.delay = stream.readUint16();
+            team.script.result = stream.readUint16();
+            team.script.sp = stream.readUint8();
+            team.script.halted = stream.readBool();
+            for(auto& word : team.script.stack) word = stream.readUint16();
+            const Uint32 members = stream.readUint32();
+            if(team.minimum < 0 || team.maximum < team.minimum || team.maximum > 65535
+                || members > static_cast<Uint32>(team.maximum) || team.script.sp > 15
+                || team.behavior < AITeamBehavior_Normal || team.behavior > AITeamBehavior_Flee
+                || team.type < AITeamType_Foot || team.type > AITeamType_Harvester)
+                throw std::runtime_error("Invalid campaign AI team state");
+            for(Uint32 j = 0; j < members; ++j) team.members.push_back(stream.readUint32());
+            scenarioTeams.push_back(std::move(team));
+        }
     }
 }
 
@@ -239,6 +277,28 @@ void CampaignAIPlayer::save(OutputStream& stream) const {
     }
     
     stream.writeBool(attackTriggered);
+    stream.writeBool(originalRules);
+    stream.writeBool(scenarioTeamsInitialized);
+    stream.writeUint32(nextTeamTick);
+    stream.writeUint32(scenarioTeams.size());
+    for(const auto& team : scenarioTeams) {
+        stream.writeSint32(team.behavior);
+        stream.writeSint32(team.type);
+        stream.writeSint32(team.minimum);
+        stream.writeSint32(team.maximum);
+        stream.writeBool(team.staging);
+        stream.writeSint32(team.position.x);
+        stream.writeSint32(team.position.y);
+        stream.writeUint32(team.targetID);
+        stream.writeUint32(team.script.pc);
+        stream.writeUint16(team.script.delay);
+        stream.writeUint16(team.script.result);
+        stream.writeUint8(team.script.sp);
+        stream.writeBool(team.script.halted);
+        for(const auto word : team.script.stack) stream.writeUint16(word);
+        stream.writeUint32(team.members.size());
+        for(const Uint32 id : team.members) stream.writeUint32(id);
+    }
 }
 
 // =============================================================================
@@ -246,8 +306,14 @@ void CampaignAIPlayer::save(OutputStream& stream) const {
 // =============================================================================
 
 void CampaignAIPlayer::update() {
+    if(originalRules && getHouse()->isAIActivated()) updateScenarioTeams();
     if((getGameCycleCount() + getHouse()->getHouseID()) % AIUPDATEINTERVAL != 0) {
         return;  // Not our turn this cycle
+    }
+    if(originalRules) {
+        for(const auto* structure : getStructureList())
+            if(structure->getOwner() == getHouse() && structure->isABuilder())
+                const_cast<BuilderBase*>(static_cast<const BuilderBase*>(structure))->grantOriginalCampaignUpgrades();
     }
     
     // ORIGINAL AI: Only act when AI is activated (ground unit contact)
@@ -260,12 +326,21 @@ void CampaignAIPlayer::update() {
 }
 
 void CampaignAIPlayer::onObjectWasBuilt(const ObjectBase* pObject) {
-    // Nothing special needed here for Original AI
+    if(originalRules && pObject && pObject->isAUnit()) {
+        const auto* unit = static_cast<const UnitBase*>(pObject);
+        if(originalCombatUnit(unit) && !unit->isByScenario()) doSetAttackMode(unit, HUNT);
+    }
 }
 
 void CampaignAIPlayer::onDecrementStructures(int itemID, const Coord& location) {
     if (itemID == Structure_Slowpost && ModManager::instance().isTornieFamilyContentActive()) itemID = Structure_Scoutpost;
+    if(originalRules && (itemID == Structure_Wall || itemID == Structure_Slab1 || itemID == Structure_Slab4)) return;
     // ORIGINAL AI: Add to 5-slot rebuild queue (structure.c:340-354)
+    if(originalRules) {
+        const auto empty = std::find_if(rebuildQueue.begin(), rebuildQueue.end(),
+            [](const auto& entry) { return entry.itemID == ItemID_Invalid; });
+        if(empty != rebuildQueue.end()) { *empty = RebuildQueueEntry(itemID, location); return; }
+    }
     if(rebuildQueue.size() < 5) {
         rebuildQueue.emplace_back(itemID, location);
     }
@@ -280,7 +355,7 @@ void CampaignAIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 da
             // Defenders answer any intruder, but crime troopers are no opposing house: they
             // must not start this house's campaign-wide offensive.
             if(!pDamager->getOwner()->isNatives()) triggerFullScaleAttack();
-            scrambleUnitsAndDefend(pDamager);
+            if(!originalRules) scrambleUnitsAndDefend(pDamager);
         }
         return;
     }
@@ -301,14 +376,17 @@ void CampaignAIPlayer::onDamage(const ObjectBase* pObject, int damage, Uint32 da
     if(pDamager->getOwner()->getTeamID() == pUnit->getOwner()->getTeamID()) {
         return;
     }
+    // Original damage reaction belongs to the unit's own action script. Do not
+    // force guards/team members to chase an attacker and abandon their orders.
+    if(originalRules) return;
     
     // Unit has been engaged by an enemy – allow attack waves to launch. A worm or a crime
     // trooper (the Natives) is no enemy house and does not open the offensive.
-    if(!pDamager->getOwner()->isNatives()) attackTriggered = true;
+    if(!originalRules && !pDamager->getOwner()->isNatives()) attackTriggered = true;
 
     // Guard harvesters aggressively (Original AI behaviour tweak)
-    if(pObject->getItemID() == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
-        && isHarvesterLikeUnit(pObject->getItemID()))) {
+    if(!originalRules && (pObject->getItemID() == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
+        && isHarvesterLikeUnit(pObject->getItemID())))) {
         scrambleUnitsAndDefend(pDamager);
     }
     
@@ -375,6 +453,19 @@ void CampaignAIPlayer::updateStructures() {
                 if(!pPalace->usesTargetedSpecialWeapon()) {
                     doSpecialWeapon(pPalace);
                 } else {
+                    if(originalRules) {
+                        // The original palace chooses the first enemy structure, not
+                        // the richest house or DuneCity's nuclear reactor heuristic.
+                        for(const auto* target : getStructureList()) {
+                            if(target->getOwner()->isNatives()
+                                || target->getOwner()->getTeamID() == getHouse()->getTeamID()
+                                || target->getItemID() == Structure_Wall
+                                || target->getItemID() == Structure_Slab1
+                                || target->getItemID() == Structure_Slab4) continue;
+                            doLaunchDeathhand(pPalace, target->getLocation().x, target->getLocation().y);
+                            break;
+                        }
+                    } else {
                     // Death Hand - target house with most structures
                     const House* pBestHouse = nullptr;
                     for(int i = 0; i < NUM_HOUSES; i++) {
@@ -399,9 +490,11 @@ void CampaignAIPlayer::updateStructures() {
                         if (reactorTarget.isValid()) target = reactorTarget;
                         doLaunchDeathhand(pPalace, target.x, target.y);
                     }
+                    }
                 }
             }
         }
+        if(originalRules && getHouse()->getCredits() <= 0) continue;
         
         // Repair damaged structures (< 50% health)
         if(pStructure->getHealth() < pStructure->getMaxHealth() / 2) {
@@ -417,7 +510,7 @@ void CampaignAIPlayer::updateStructures() {
             const BuilderBase* pBuilder = static_cast<const BuilderBase*>(pStructure);
             
             // Upgrade if not at max level
-            if(pBuilder->getCurrentUpgradeLevel() < pBuilder->getMaxUpgradeLevel()) {
+            if(!originalRules && pBuilder->getCurrentUpgradeLevel() < pBuilder->getMaxUpgradeLevel()) {
                 if(!pStructure->isRepairing() && !pBuilder->isUpgrading()) {
                     doUpgrade(pBuilder);
                 }
@@ -440,6 +533,10 @@ void CampaignAIPlayer::updateStructures() {
                                                             itemsize.x, itemsize.y, false, 
                                                             pConstYard->getOwner())) {
                                 doPlaceStructure(pConstYard, location.x, location.y);
+                            } else if(originalRules) {
+                                // A unit temporarily standing on a rebuild site must
+                                // not erase that structure from the five-slot plan.
+                                continue;
                             } else if(itemID == Structure_Slab1 || itemID == Structure_Slab4) {
                                 // Forget about concrete slabs that can't be placed
                                 doCancelItem(pConstYard, itemID);
@@ -448,18 +545,24 @@ void CampaignAIPlayer::updateStructures() {
                                 doCancelItem(pConstYard, itemID);
                             }
                             
-                            rebuildQueue.erase(iter);
+                            if(originalRules) *iter = RebuildQueueEntry();
+                            else rebuildQueue.erase(iter);
                             break;
                         }
                     }
                 } else if(!rebuildQueue.empty() && pBuilder->getProductionQueueSize() <= 0) {
                     // Start building from rebuild queue
-                    const RebuildQueueEntry& entry = rebuildQueue.front();
+                    const auto selected = originalRules
+                        ? std::find_if(rebuildQueue.begin(), rebuildQueue.end(), [&](const auto& candidate) {
+                            return pBuilder->isAvailableToBuild(candidate.itemID);
+                        }) : rebuildQueue.begin();
+                    if(selected == rebuildQueue.end()) continue;
+                    const RebuildQueueEntry& entry = *selected;
                     if(pBuilder->isAvailableToBuild(entry.itemID)) {
                         doSetBuildSpeedLimit(pBuilder, 
                             std::min(1.0_fix, ((getTechLevel()-1) * 20 + 95)/255.0_fix));
                         doProduceItem(pBuilder, entry.itemID);
-                    } else {
+                    } else if(!originalRules) {
                         // Unavailable - dequeue
                         rebuildQueue.erase(rebuildQueue.begin());
                     }
@@ -487,6 +590,11 @@ void CampaignAIPlayer::updateStructures() {
 
 Uint32 CampaignAIPlayer::pickNextToBuild(const BuilderBase* pBuilder) {
     if(!pBuilder) return ItemID_Invalid;
+    if(originalRules) {
+        return OriginalCampaignPolicy::pickUnit([&](int item) {
+            return pBuilder->isAvailableToBuild(item) && shouldBuildItem(pBuilder->getItemID(), item);
+        }, [&] { return getRandomGen().rand(0, 255); });
+    }
     
     // Get buildable items from builder's build list
     const std::list<BuildItem>& buildList = pBuilder->getBuildList();
@@ -558,8 +666,10 @@ bool CampaignAIPlayer::shouldBuildItem(int builderType, Uint32 itemID) const {
                 if(settings.getGameType() == GameType::Skirmish || 
                    settings.getGameType() == GameType::CustomMultiplayer) {
                     // 10 minutes = 600 seconds = 30000 cycles at 50Hz
-                    Uint32 gameMinutes = currentGame->getGameCycleCount() / (60 * 50);
-                    if(gameMinutes < 10) {
+                    const bool tooEarly = originalRules
+                        ? getGameCycleCount() < MILLI2CYCLES(10 * 60 * 1000)
+                        : currentGame->getGameCycleCount() / (60 * 50) < 10;
+                    if(tooEarly) {
                         return false;
                     }
                 }
@@ -577,7 +687,231 @@ bool CampaignAIPlayer::shouldBuildItem(int builderType, Uint32 itemID) const {
 // Unit management (Original AI)
 // =============================================================================
 
+bool CampaignAIPlayer::originalCombatUnit(const UnitBase* unit) const {
+    return unit && unit->getOwner() == getHouse() && unit->isRespondable()
+        && OriginalCampaignPolicy::combatUnit(unit->getItemID())
+        && !isHarvesterLikeUnit(unit->getItemID()) && unit->getAttackMode() != SABOTAGE;
+}
+
+AITeamType CampaignAIPlayer::movementClass(const UnitBase* unit) {
+    if(isHarvesterLikeUnit(unit->getItemID())) return AITeamType_Harvester;
+    if(unit->getItemID() == Unit_Sandworm) return AITeamType_Slither;
+    if(unit->isAFlyingUnit()) return AITeamType_Winged;
+    if(unit->isInfantry()) return AITeamType_Foot;
+    return unit->isTracked() ? AITeamType_Tracked : AITeamType_Wheeled;
+}
+
+const ObjectBase* CampaignAIPlayer::originalTarget(const UnitBase* unit, bool structuresFirst) const {
+    const ObjectBase* bestStructure = nullptr;
+    const ObjectBase* bestUnit = nullptr;
+    int structurePriority = 0, unitPriority = 0;
+    const auto eligible = [&](const ObjectBase* target) {
+        return target && !target->getOwner()->isNatives()
+            && target->getOwner()->getTeamID() != getHouse()->getTeamID()
+            && target->isVisible(getHouse()->getTeamID()) && unit->canAttack(target)
+            && target->getLocation().isValid();
+    };
+    for(const auto* target : getStructureList()) {
+        if(!eligible(target) || target->getItemID() == Structure_Wall
+            || target->getItemID() == Structure_Slab1 || target->getItemID() == Structure_Slab4) continue;
+        const int priority = OriginalCampaignPolicy::targetPriority(getTargetPriority(target->getItemID()),
+            blockDistanceApprox(unit->getLocation(), target->getLocation()), true);
+        if(priority >= structurePriority && priority > 0) { structurePriority = priority; bestStructure = target; }
+    }
+    if(structuresFirst && bestStructure) return bestStructure;
+    for(const auto* target : getUnitList()) {
+        if(!eligible(target)) continue;
+        const int combined = getTargetPriority(target->getItemID());
+        const int priority = OriginalCampaignPolicy::targetPriority(combined,
+            blockDistanceApprox(unit->getLocation(), target->getLocation()), false);
+        if(priority > unitPriority) { unitPriority = priority; bestUnit = target; }
+    }
+    return bestStructure && structurePriority >= unitPriority ? bestStructure : bestUnit;
+}
+
+void CampaignAIPlayer::updateOriginalUnits() {
+    for(const auto* unit : getUnitList()) {
+        if(!originalCombatUnit(unit) || unit->isByScenario() || unit->wasForced()
+            || unit->isInFormation() || unit->getLocation().isInvalid()) continue;
+        // Produced units hunt independently. Scenario actions and mission-team
+        // membership are handled separately, never folded into a generic wave.
+        if(unit->getAttackMode() != HUNT) doSetAttackMode(unit, HUNT);
+        if(!unit->getTarget()) {
+            if(const auto* target = originalTarget(unit, false)) doAttackObject(unit, target, false);
+        }
+    }
+}
+
+void CampaignAIPlayer::updateScenarioTeams() {
+    const Uint32 tick = static_cast<Uint32>(static_cast<Uint64>(getGameCycleCount()) * GAMESPEED_DEFAULT * 60 / 1000);
+    if(tick < nextTeamTick) return;
+    nextTeamTick = tick + (getRandomGen().rand(0, 255) & 7) + 5;
+    if(teamProgram.words.empty()) {
+        auto file = pFileManager->openFileFromNamedPak("TEAM.EMC", "DUNE.PAK");
+        const auto size = SDL_RWsize(file.get());
+        if(size < 12 || size > 1024 * 1024) throw std::runtime_error("Invalid original TEAM.EMC size");
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+        if(SDL_RWread(file.get(), bytes.data(), 1, bytes.size()) != bytes.size())
+            throw std::runtime_error("Cannot read original TEAM.EMC");
+        teamProgram = OriginalTeamScript::Program::parse(bytes);
+    }
+    const auto action = [](AITeamBehavior behavior) -> unsigned {
+        switch(behavior) {
+            case AITeamBehavior_Staging: return 1;
+            case AITeamBehavior_Flee: return 2;
+            case AITeamBehavior_Kamikaze: return 3;
+            case AITeamBehavior_Guard: return 4;
+            default: return 0;
+        }
+    };
+    if(!scenarioTeamsInitialized) {
+        for(const auto& definition : getHouse()->getAITeams()) {
+            ScenarioTeam team;
+            team.behavior = definition.aiTeamBehavior;
+            team.type = definition.aiTeamType;
+            team.minimum = std::clamp(definition.minUnits, 0, 65535);
+            team.maximum = std::clamp(definition.maxUnits, team.minimum, 65535);
+            team.staging = definition.aiTeamBehavior == AITeamBehavior_Staging;
+            teamProgram.load(team.script, action(team.behavior));
+            scenarioTeams.push_back(std::move(team));
+        }
+        scenarioTeamsInitialized = true;
+    }
+    std::set<Uint32> assigned;
+    for(auto& team : scenarioTeams) {
+        team.members.erase(std::remove_if(team.members.begin(), team.members.end(), [&](Uint32 id) {
+            const auto* object = getObject(id);
+            return !object || !object->isAUnit() || object->getOwner() != getHouse()
+                || !object->isByScenario() || !assigned.insert(id).second;
+        }), team.members.end());
+        const auto* target = getObject(team.targetID);
+        if(!target || target->getOwner()->isNatives()
+            || target->getOwner()->getTeamID() == getHouse()->getTeamID()) team.targetID = NONE_ID;
+    }
+    for(auto& team : scenarioTeams) {
+        // Run exactly one instruction, or decrement one delay count, per
+        // original 5..12-tick scheduler turn. TEAM.EMC owns the cadence.
+        const bool running = teamProgram.step(team.script, [&](unsigned function, OriginalTeamScript::State& vm) -> Uint16 {
+            switch(function) {
+                case 0: vm.delay = vm.peek() / 5; return vm.delay;
+                case 1: case 11: case 14: return 0; // Text/no-op have no simulation effect.
+                case 2: return static_cast<Uint16>(team.members.size());
+                case 3: {
+                    if(static_cast<int>(team.members.size()) >= team.maximum) return 0;
+                    const UnitBase* nearest = nullptr;
+                    ScenarioTeam* donor = nullptr;
+                    int bestDistance = INT_MAX;
+                    const auto eligible = [&](const UnitBase* unit) {
+                        return unit && unit->getOwner() == getHouse() && unit->isByScenario()
+                            && unit->isRespondable() && unit->getItemID() != Unit_Saboteur
+                            && !unit->wasForced() && unit->getLocation().isValid() && movementClass(unit) == team.type;
+                    };
+                    for(const auto* unit : getUnitList()) {
+                        if(!eligible(unit) || assigned.count(unit->getObjectID())) continue;
+                        const int distance = blockDistanceApprox(team.position, unit->getLocation());
+                        if(distance < bestDistance) { nearest = unit; bestDistance = distance; }
+                    }
+                    if(!nearest) for(auto& other : scenarioTeams) {
+                        if(&other == &team || static_cast<int>(other.members.size()) > other.minimum) continue;
+                        for(Uint32 id : other.members) {
+                            const auto* unit = static_cast<const UnitBase*>(getObject(id));
+                            if(!eligible(unit)) continue;
+                            const int distance = blockDistanceApprox(team.position, unit->getLocation());
+                            if(distance < bestDistance) { nearest = unit; bestDistance = distance; donor = &other; }
+                        }
+                    }
+                    if(!nearest) return 0;
+                    const auto id = nearest->getObjectID();
+                    if(donor) donor->members.erase(std::remove(donor->members.begin(), donor->members.end(), id), donor->members.end());
+                    team.members.push_back(id); assigned.insert(id);
+                    return static_cast<Uint16>(team.maximum - team.members.size());
+                }
+                case 4: {
+                    Sint64 x = 0, y = 0; int count = 0;
+                    for(Uint32 id : team.members) {
+                        const auto* unit = getObject(id);
+                        if(!unit || unit->getLocation().isInvalid()) continue;
+                        x += unit->getLocation().x; y += unit->getLocation().y; ++count;
+                    }
+                    if(!count) return 0;
+                    team.position = Coord(static_cast<int>(x / count), static_cast<int>(y / count));
+                    int distance = 0;
+                    for(Uint32 id : team.members) {
+                        const auto* unit = getObject(id);
+                        if(unit && unit->getLocation().isValid()) distance += blockDistanceApprox(team.position, unit->getLocation());
+                    }
+                    return static_cast<Uint16>(distance / count);
+                }
+                case 5: {
+                    const int distance = vm.peek(); Uint16 moving = 0;
+                    for(Uint32 id : team.members) {
+                        const auto* unit = static_cast<const UnitBase*>(getObject(id));
+                        if(!unit || !unit->isRespondable() || unit->wasForced()) continue;
+                        const auto destination = unit->getDestination();
+                        const int toUnit = blockDistanceApprox(unit->getLocation(), team.position);
+                        const int toDestination = destination.isValid() ? blockDistanceApprox(unit->getLocation(), destination) : 64;
+                        const int teamToDestination = destination.isValid() ? blockDistanceApprox(team.position, destination) : 64;
+                        if((toDestination < teamToDestination && distance + 2 < toUnit)
+                            || (toDestination >= teamToDestination && toUnit > distance)) {
+                            // DuneCity uses tile-centre path destinations. Spread nearby
+                            // rally positions deterministically rather than one blocked tile.
+                            const int x = std::clamp(team.position.x + getRandomGen().rand(-distance, distance), 0, getMap().getSizeX()-1);
+                            const int y = std::clamp(team.position.y + getRandomGen().rand(-distance, distance), 0, getMap().getSizeY()-1);
+                            doMove2Pos(unit, x, y, false); ++moving;
+                        } else doSetAttackMode(unit, GUARD);
+                    }
+                    return moving;
+                }
+                case 6:
+                    for(Uint32 id : team.members) {
+                        const auto* unit = static_cast<const UnitBase*>(getObject(id));
+                        if(!unit || !unit->isRespondable() || unit->getLocation().isInvalid()) continue;
+                        if(const auto* target = originalTarget(unit, !team.staging && team.behavior == AITeamBehavior_Kamikaze)) {
+                            team.targetID = target->getObjectID(); return 1;
+                        }
+                    }
+                    return 0;
+                case 7: {
+                    const auto* target = getObject(team.targetID);
+                    if(!target) return 0;
+                    for(Uint32 id : team.members) {
+                        const auto* unit = static_cast<const UnitBase*>(getObject(id));
+                        if(!unit || !unit->isRespondable() || unit->wasForced() || !unit->canAttack(target)) continue;
+                        if(unit->getTarget() == target && (unit->isMoving()
+                            || blockDistanceApprox(unit->getLocation(), target->getLocation()) >= unit->getWeaponRange())) continue;
+                        doAttackObject(unit, target, false);
+                    }
+                    return 0;
+                }
+                case 8: {
+                    const unsigned next = vm.peek();
+                    const unsigned current = team.staging ? 1 : action(team.behavior);
+                    if(next != current) {
+                        if(next != 1 && next != action(team.behavior)) throw std::runtime_error("Unsupported campaign team action transition");
+                        team.staging = next == 1; teamProgram.load(vm, next);
+                    }
+                    return 0;
+                }
+                case 9:
+                    if(team.staging && team.behavior != AITeamBehavior_Staging) {
+                        team.staging = false; teamProgram.load(vm, action(team.behavior));
+                    }
+                    return 0;
+                case 10: vm.delay = getRandomGen().rand(0, 255) * vm.peek() / 256 / 5; return vm.delay;
+                case 12: return static_cast<Uint16>(team.minimum);
+                case 13: return team.targetID == NONE_ID ? 0 : 1;
+                default: throw std::runtime_error("Unsupported campaign team callback");
+            }
+        });
+        if(!running) break; // Original script error aborts this scheduler turn.
+    }
+}
+
 void CampaignAIPlayer::updateUnits() {
+    if(originalRules) {
+        updateOriginalUnits();
+        return;
+    }
     // Simple staging: gather idle combat units and launch waves only when we have enough
     std::vector<const UnitBase*> stagingUnits;
     stagingUnits.reserve(getUnitList().size());
@@ -716,6 +1050,9 @@ void CampaignAIPlayer::triggerFullScaleAttack() {
     
     // Mark house as having done full-scale attack (need non-const access)
     const_cast<House*>(pHouse)->triggerFullScaleAttack();
+    // Dune II's original Carryall-only search makes the mass-attack body a
+    // no-op. Dynasty changes that only in its enhanced mode.
+    if(originalRules) return;
     
     // Set all combat units to HUNT mode
     for(const UnitBase* pUnit : getUnitList()) {
