@@ -56,8 +56,9 @@ older campaign saves. The switch is included in the network configuration hash.
 Save format 9886 persists the selected mode and team VM state; older saves select
 the legacy mode. Protocol 125 separates these decisions from older network peers.
 
-Validation on source `41d34ddcb2ccaf1a85daad4915db8d144c9a60ba` (2026-11-14):
-AWS CTest `20261114T185742-original-campaign-final-25bc98`, **5/5 passed**.
+Final combined-source validation on `54903ac010ba78d4600a74c5393bf8be6c93848c`
+(2026-11-14): AWS CTest `20261114T190827-original-campaign-reviewed-9f8da4`,
+**5/5 passed**. `6de739e46` adds only handover documentation.
 The runtime fixture covers produced Hunt, authored guards/team pursuit, rebuild
 slots, scoped free upgrades, old controller stream boundaries and real saved-world
 continuation (live/checkpoint and repeated ordinary loads, 1500 cycles each).
@@ -67,5 +68,16 @@ identical final simulation digests. Policy/VM and config registry checks pass.
 These checks do not assert identical combat to the original executable or a
 particular win rate against QuantBot.
 
-The separately frozen 1.0.868 release is not changed by this feature. Combined
-broad/native regression and staging integration remain pending at this snapshot.
+Full matrix on `6de739e46`: 1665 scenarios, zero engine errors. A fresh matched
+350-case baseline on `8ecc2d433` gives identical outcomes and final simulation
+digests in every shared case. The full tier reports actual wins, losses and
+timeouts; it does not assert that every matchup wins. Evidence is retained in
+`outputs/campaign-original-ai/baseline-comparison.json` and `full-report.md`.
+
+Release automation-only fix `6470b576c` is merged without changing those game
+inputs. Native build/focused checks, both All-against-Atreides gates, FFA, smoke
+matrix, GUI performance and staging integration remain pending. The four AI
+CTest registrations are macOS-only; a cloud attempt matched no tests. The
+separately frozen 1.0.868 release is not changed by this feature; its coordinator
+retains the native lane until its Mini release jobs finish. No feature deployment
+has been performed.

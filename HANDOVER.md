@@ -20,12 +20,22 @@ Source-only checkout: `/Users/stefan/Documents/projects/dunecity-original-campai
 native `build-int` remain with the release coordinator until its handoff.
 Two bounded independent OMP reviews informed fixes; Codex owns integration.
 
-Focused checks at `41d34ddcb`: 5/5 AWS CTest gates, including 25 mission/mod/control
-cases, identical three-house QuantBot OFF/ON digests, original repeatability,
-legacy stream boundaries and real live/checkpoint/ordinary-save continuation.
-The combined-source rerun and required broad/native gates are tracked in
-`/Users/stefan/Documents/projects/outputs/campaign-original-ai/validation.md`.
-Do not infer deployment, merge or complete regression from the focused pass.
+Combined-source checks at `54903ac01` (docs-only `6de739e46`): 5/5 AWS CTest
+gates, including 25 mission/mod/control cases, identical three-house QuantBot
+OFF/ON digests, original repeatability, legacy stream boundaries and real
+live/checkpoint/ordinary-save continuation. Full matrix: 1665 scenarios complete,
+zero engine errors. Fresh 350-case baseline on `8ecc2d433`: every shared outcome
+and final digest identical. This is not a claim every matchup won.
+
+Release infrastructure fix `6470b576c` merged into this source-only branch;
+only release automation and its unit tests differ from the validated game inputs.
+Native build, focused tests, both All-against-Atreides gates, FFA, smoke matrix
+and GUI performance remain pending. Their four AI CTests are macOS-only
+registrations; the cloud attempt matched no tests. The release coordinator
+declined a temporary native window at 19:41 AEDT to protect its new qualifier.
+Staging source/native integration waits for its explicit handoff after release
+Mini jobs. No feature publication requested or performed. Detailed evidence and
+continuation: `/Users/stefan/Documents/projects/outputs/campaign-original-ai/validation.md`.
 
 ## 2026-11-14 - 1.0.867 published; 1.0.866 was tagged but never published
 
