@@ -4095,6 +4095,40 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
  * @param pUnit The unit to potentially move
  * @param squadRadius The acceptable radius around either position (unit won't move if within this radius)
  */
+bool QuantBot::campaignRockHoldApplies(const UnitBase* unit, int level) const {
+    return botConfig().force.campaignHelperRockHold >= level && campaignEconomySupport()
+        && unit && unit->isAGroundUnit() && unit->getAttackMode()!=RETREAT && unit->getAttackMode()!=HUNT;
+}
+
+bool QuantBot::holdOnCampaignRock(const UnitBase* unit, Coord anchor, int radius, int* orderBudget, bool forced) {
+    const int reach = std::max(radius, kRockHoldReach);
+    const auto holds = [&](Coord p) {
+        return getMap().tileExists(p) && getMap().getTile(p)->isRock() && !getMap().getTile(p)->isMountain()
+            && std::max(std::abs(p.x-anchor.x), std::abs(p.y-anchor.y)) <= reach;
+    };
+    if (!forced) {
+        if (holds(unit->getLocation())) return false;
+        // A queued path can exist before isMoving becomes true: leave a rock destination alone.
+        const Coord destination = unit->getDestination();
+        if (destination.isValid() && destination!=unit->getLocation() && holds(destination)) return false;
+    }
+    if ((orderBudget && *orderBudget<=0) || currentGame->getPathRequestQueueSize()>150) return false;
+    Coord best = Coord::Invalid();
+    int bestScore = std::numeric_limits<int>::max();
+    for (int dy=-reach; dy<=reach; ++dy) for (int dx=-reach; dx<=reach; ++dx) {
+        const Coord p = anchor+Coord(dx,dy);
+        if (!holds(p) || p==unit->getLocation() || !unit->canPass(p.x,p.y) || dangerAt(p)!=0 || onPlannedSite(p)) continue;
+        // Nearest free rock first; the object ID spreads troops ordered in the same pass.
+        const int score = blockDistance(unit->getLocation(),p).lround()*4 + std::max(std::abs(dx),std::abs(dy))
+            + static_cast<int>((static_cast<Uint32>(p.x*31+p.y*17)+unit->getObjectID())%4);
+        if (score<bestScore) { bestScore=score; best=p; }
+    }
+    if (best.isInvalid()) return false;
+    doMove2Pos(unit,best.x,best.y,forced);
+    if (orderBudget) --*orderBudget;
+    return true;
+}
+
 void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius, int* orderBudget) {
     if (!unit || unit->getItemID()==Unit_Saboteur || !unit->isRespondable() || unit->hasATarget()
         || unitRole(unit, {UnitRole::Human, UnitRole::Defence}) != UnitRole::Free
@@ -4132,6 +4166,18 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
         ? home : findSquadCenter(getHouse()->getHouseID());
     if (regroup.isInvalid()) regroup = homeAnchored
         ? findSquadCenter(getHouse()->getHouseID(),false) : home;
+    // CampaignHelperRockHold (default 0, docs/campaign-support-research.md): idle campaign
+    // support troops hold the rock around their own base. Their centroid can lie on open
+    // sand, and Area Guard follows a sandworm out there; a unit on rock cannot be eaten.
+    if (campaignRockHoldApplies(unit, 1)) {
+        const Coord anchor = findBaseCentre(getHouse()->getHouseID());
+        if (anchor.isValid()) {
+            const_cast<UnitBase*>(unit)->setGuardPoint(anchor);
+            if (unit->getAttackMode()!=AREAGUARD) doSetAttackMode(unit,AREAGUARD);
+            holdOnCampaignRock(unit, anchor, radius.lround(), orderBudget, false);
+            return;
+        }
+    }
     if (regroup.isInvalid()) return;
     const_cast<UnitBase*>(unit)->setGuardPoint(regroup);
     if (unit->getAttackMode()!=RETREAT && unit->getAttackMode()!=AREAGUARD) doSetAttackMode(unit,AREAGUARD);
@@ -4560,6 +4606,19 @@ void QuantBot::retreatAllUnits() {
                 }
             }
 
+            // CampaignHelperRockHold 2: a support troop whose Area Guard target is a sandworm
+            // is called back to the rock instead of following the worm onto the sand.
+            if (pUnit->getOwner() == getHouse() && pUnit->getTarget() && campaignRockHoldApplies(pUnit, 2)
+                && pUnit->getTarget()->getItemID() == Unit_Sandworm
+                && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
+                && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur
+                && unitRole(pUnit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free) {
+                const Coord anchor = findBaseCentre(getHouse()->getHouseID());
+                if (anchor.isValid()) {
+                    holdOnCampaignRock(pUnit, anchor, rallyRadius, nullptr, true);
+                    continue;
+                }
+            }
             if (bundling && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur

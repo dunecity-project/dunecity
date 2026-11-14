@@ -2370,6 +2370,41 @@ TEST_CASE("Campaign home fields require initial spice and a legally low-tech ope
     REQUIRE_FALSE(homeFieldOpeningScope(0, false, 3, 8));
 }
 
+TEST_CASE("Campaign helper rock hold persists OFF and both levels with distinct hashes",
+          "[ai][campaign][defence][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperRockHold == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-rock-hold-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int level : {0, 1, 2}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperRockHold=" << level << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperRockHold == level);
+        REQUIRE(loaded.force.campaignSizedWorkerRescue == defaults.force.campaignSizedWorkerRescue);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperRockHold = level;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), level).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperRockHold == level);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCampaignHelperRockHold=9\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.campaignHelperRockHold == 2);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign sized worker rescue persists OFF and both force coverage levels",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;

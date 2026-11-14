@@ -758,6 +758,13 @@ private:
     static constexpr Uint32 kOpeningDispersalLimit = 4096;
     Coord findSquadRetreatLocation();
     void moveToOptimalSquadPosition(const UnitBase* pUnit, FixPoint squadRadius, int* orderBudget = nullptr);
+    /// CampaignHelperRockHold: the least reach, in tiles around the base centre, searched for rock.
+    static constexpr int kRockHoldReach = 6;
+    /// True while CampaignHelperRockHold (at least \a level) governs this idle support troop.
+    bool campaignRockHoldApplies(const UnitBase* unit, int level) const;
+    /// Orders \a unit to a free rock tile around \a anchor unless it already holds one or is
+    /// walking to one. \a forced also drops its current target. Returns whether it ordered a move.
+    bool holdOnCampaignRock(const UnitBase* unit, Coord anchor, int radius, int* orderBudget, bool forced);
     void kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThreat, int desiredRange);
 
     // `emergencyOnBase` reports whether the reported attacker was hitting one of
