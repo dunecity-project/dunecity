@@ -1829,7 +1829,8 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         const int upgradeStep=turn.pBuilder->getCurrentUpgradeLevel()<rocketUpgrade
             && turn.pBuilder->getMaxUpgradeLevel()>=rocketUpgrade ? turn.pBuilder->getUpgradeCost() : 0;
         const int wanted=upgradeStep>0 ? upgradeStep : data[Structure_RocketTurret][houseID].price;
-        if (pass.money<wanted && pass.cashFlow.projectedCash>=wanted
+        if ((upgradeStep == 0 || campaignYardUpgradeReady(pass, turn.pBuilder))
+            && pass.money<wanted && pass.cashFlow.projectedCash>=wanted
             && proactiveSavingHold(pass, wanted)
             && data[Structure_RocketTurret][houseID].enabled
             && data[Structure_RocketTurret][houseID].techLevel<=getHouse()->getTechLevel())

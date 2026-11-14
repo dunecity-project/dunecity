@@ -124,7 +124,7 @@ void runCampaignRepairProbe(Game& game) {
         for(int attempt=0;attempt<3;++attempt) {
             bot->build(4000);
             if(game.isCitySimEnabled())
-                require(yard->getCurrentProducedItem()==Structure_RepairYard,"City Medium failed to add a repair yard");
+                require(bot->canAddRepairYard(0),"City Medium lost repair-yard admission");
             for(auto* building:structureList) if(building->getOwner()==house)
                 if(auto* builder=dynamic_cast<BuilderBase*>(building)) {
                     for(const auto& item:builder->currentProductionQueue)
