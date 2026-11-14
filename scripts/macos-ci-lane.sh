@@ -15,15 +15,20 @@ if [ "${1:-build}" = ios-staging ]; then
 fi
 if [ "${1:-build}" = feeds ]; then
     [ "${DUNECITY_RELEASE_BUILD:-OFF}" = ON ] || { echo 'Official feeds require explicit release identity' >&2; exit 1; }
+    : "${RUNNER_TEMP:?Missing runner temporary directory}"
+    : "${GITHUB_RUN_ID:?Missing run identity}"
+    : "${GITHUB_RUN_ATTEMPT:?Missing attempt identity}"
+    INPUT="$RUNNER_TEMP/dunecity-update-input-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+    OUTPUT="$RUNNER_TEMP/dunecity-update-feeds-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
     VERSION="${UPDATE_TAG#v}"
     KEY_DIR="$HOME/Library/Application Support/DuneCity Signing/updates"
     BASE="https://github.com/${UPDATE_REPO}/releases/download/${UPDATE_TAG}"
-    for SPEC in "macos-arm64:macos:DuneCity-${VERSION}-macOS.zip" "windows-x64:windows:DuneCity-${VERSION}-Windows-x64.exe" "linux-x86_64:linux:DuneCity-${VERSION}-Linux-x86_64.AppImage"; do
+    for SPEC in "macos-arm64:DuneCity-macOS-DMG:DuneCity-${VERSION}-macOS.zip" "windows-x64:DuneCity-Windows-Installer:DuneCity-${VERSION}-Windows-x64.exe" "linux-x86_64:DuneCity-Linux-Packages:DuneCity-${VERSION}-Linux-x86_64.AppImage"; do
         IFS=: read -r PLATFORM FOLDER FILE <<< "$SPEC"
         "$RUNNER_TEMP/dunecity-update-signing-python/bin/python" scripts/prepare-desktop-updates.py --version "$VERSION" --platform "$PLATFORM" \
-            --archive "update-input/$FOLDER/$FILE" --base-url "$BASE" \
+            --archive "$INPUT/$FOLDER/$FILE" --base-url "$BASE" \
             --key-file "$KEY_DIR/update-ed25519.pem" --password-file "$KEY_DIR/update-key-password" \
-            --output update-feeds
+            --output "$OUTPUT"
     done
     exit 0
 fi

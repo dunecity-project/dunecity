@@ -172,6 +172,45 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
   running operations and the single critical-path blocker. Preparation is not
   execution; CI success is not publication. No ETA without measured throughput.
 
+### Deployment latency lessons (2026-11-14)
+
+The objective is shorter approval-to-live time, not fewer correctness checks.
+Record both the original request/approval and candidate-ready time, so preparation
+is visible rather than moved outside the reported duration. Separate queue,
+dependencies/configure/compile, tests, signing/notarization, downloads/uploads,
+publication and live-channel verification. Measure the critical path; do not sum
+concurrent jobs or extrapolate a subset test speedup to the whole release.
+
+| Observed delay | Durable mechanism | Verification / limit |
+| --- | --- | --- |
+| Broad Mac tests on the tag path; serial isolated probes | Prequalify exact frozen SHA; consume receipt; 71 isolated probes use processor weights | Native 62-probe passes and nine-probe 4:15 pass; full-suite new-path timing still requires first use |
+| Version bumps discarded usable caches | Dependency fingerprint and same-backend fallback; default-branch cache warm | PR125 hosted Mac 38/38 in 3:52; this is integration, not the broad suite |
+| Feed downloads looked like dirty source | Run/attempt-scoped `RUNNER_TEMP` inputs/outputs | Real fixture signing plus clean Git status; tracked-source gate unchanged |
+| Serial feed artifact transfers | One filtered multi-artifact download into separate named directories | All three required archives remain mandatory; missing inputs fail signing |
+| Website links changed but visible labels stayed old | `update-website-release.py` updates current desktop copy and URLs together | Mobile/history preserved; old feature prose replaced by current notes link, not relabelled |
+| Merged fixes assumed to be deployed | Explicit host-gate/hash activation and first-use evidence | Coordinator records installed/enabled/proven separately; no synthetic stable release |
+| Repeated optimistic ETAs | Per-phase measurements and named remaining operations | Report channel state and uncertainty; never call an upload live verification |
+
+Feed signing downloads exactly the Windows installer, Linux packages and Mac
+package artifacts concurrently under
+`$RUNNER_TEMP/dunecity-update-input-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT` and writes
+feeds under the corresponding `dunecity-update-feeds-...` directory. The 867
+`.git/info/exclude` entries were a recovery workaround only; new workflows must
+work on a fresh runner clone without them. Preserve artifact digest validation,
+exact source admission and required-input failures. Existing successful 867
+packages are immutable and do not need rebuilding for this repair.
+
+Prepare release notes with the candidate. The website helper preserves a current
+handwritten feature paragraph; if it belongs to an older version, it replaces it
+with a current release-notes link instead of claiming old features are new.
+Detailed release history continues through the existing changelog generator.
+
+For every process rollout retain one matrix of lesson, implementation, installed
+state and acceptance evidence. Hindsight holds dated findings, the runbook holds
+implementation commands, policy holds cross-agent rules and the shared release
+skill holds portable procedure. A pending real qualification/production consumer
+must remain explicit; do not invent a new tag merely to prove automation.
+
 ### Test tiers and frequent staging
 
 - `integration` is the bounded ordinary change gate; `nightly` retains broad

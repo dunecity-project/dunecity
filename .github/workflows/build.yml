@@ -195,6 +195,7 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_desktop_updates.py
           python3 -m unittest discover -s scripts/tests -p test_checkout_content.py
           python3 -m unittest discover -s scripts/tests -p test_release_automation.py
+          python3 -m unittest discover -s scripts/tests -p test_release_delivery.py
           python3 -m unittest discover -s scripts/tests -p test_qualification_routing.py
           python3 -m unittest discover -s scripts/tests -p test_headless_parallel.py
           python3 -m unittest discover -s scripts/tests -p test_ios_staging.py
@@ -1207,18 +1208,13 @@ jobs:
           TOKEN=$(python3 scripts/release-automation.py reservation-token --sha "$RELEASE_SHA")
           echo "::add-mask::$TOKEN"
           echo "DUNECITY_RESERVATION=$TOKEN" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v8
+      - name: Download update inputs concurrently outside the source checkout
+        uses: actions/download-artifact@v8
         with:
-          name: DuneCity-Windows-Installer
-          path: update-input/windows
-      - uses: actions/download-artifact@v8
-        with:
-          name: DuneCity-Linux-Packages
-          path: update-input/linux
-      - uses: actions/download-artifact@v8
-        with:
-          name: DuneCity-macOS-DMG
-          path: update-input/macos
+          pattern: '{DuneCity-Windows-Installer,DuneCity-Linux-Packages,DuneCity-macOS-DMG}'
+          path: ${{ runner.temp }}/dunecity-update-input-${{ github.run_id }}-${{ github.run_attempt }}
+          merge-multiple: false
+          digest-mismatch: error
       - name: Prepare update-signing Python
         run: |
           python3 -m venv "$RUNNER_TEMP/dunecity-update-signing-python"
@@ -1240,7 +1236,7 @@ jobs:
         with:
           name: DuneCity-Update-Feeds
           overwrite: true
-          path: update-feeds/*
+          path: ${{ runner.temp }}/dunecity-update-feeds-${{ github.run_id }}-${{ github.run_attempt }}/*
           if-no-files-found: error
 
   # Publish all binaries and their signed feeds together after every build passes.
@@ -1352,39 +1348,8 @@ jobs:
             exit 0
           fi
 
-          # Replace version numbers and download URLs in both HTML files
-          for FILE in website/index.html website/dune-city.html; do
-            # Download URLs: v1.0.4/DuneCity-1.0.4-... -> vVERSION/DuneCity-VERSION-...
-            sed -i "s|/v[0-9]\+\.[0-9]\+\.[0-9]\+/DuneCity-[0-9]\+\.[0-9]\+\.[0-9]\+-|/v${VERSION}/DuneCity-${VERSION}-|g" "$FILE"
-            # The EXE installs the Windows updater; the portable ZIP remains available on Releases.
-            sed -i "s|Windows-x64\.zip|Windows-x64.exe|g" "$FILE"
-            sed -i '/DuneCity-.*-Windows-x64[.]exe/s|>Download ZIP<|>Download Installer<|g' "$FILE"
-            # Debian package names use lowercase and underscores.
-            sed -i "s|/v[0-9]\+\.[0-9]\+\.[0-9]\+/dunecity_[0-9]\+\.[0-9]\+\.[0-9]\+_amd64\.deb|/v${VERSION}/dunecity_${VERSION}_amd64.deb|g" "$FILE"
-            # Release tag links
-            sed -i "s|releases/tag/v[0-9]\+\.[0-9]\+\.[0-9]\+|releases/tag/v${VERSION}|g" "$FILE"
-            # Desktop release copy. Android is versioned independently, so its
-            # labels must not be caught by these patterns.
-            #
-            # Since 1.0.599 all three desktop platforms ship from the same tag —
-            # the Mac mini runner builds a DMG for every release — so the copy
-            # says "Desktop: X.Y.Z" and "Windows, macOS and Linux X.Y.Z" rather
-            # than carrying macOS as a separate, older version. The old
-            # "no X macOS build exists" and "This is not version X" rewrites are
-            # deliberately gone: left in place they would have restated a claim
-            # that is now false, on the same page as a working DMG link.
-            sed -i "s|>Dune City [0-9]\+\.[0-9]\+\.[0-9]\+<|>Dune City ${VERSION}<|g" "$FILE"
-            sed -i "s|Desktop: [0-9]\+\.[0-9]\+\.[0-9]\+|Desktop: ${VERSION}|g" "$FILE"
-            sed -i "s|Windows, macOS and Linux [0-9]\+\.[0-9]\+\.[0-9]\+|Windows, macOS and Linux ${VERSION}|g" "$FILE"
-            # Desktop hero button text.
-            sed -i "s|>Download [0-9]\+\.[0-9]\+\.[0-9]\+</a>|>Download ${VERSION}</a>|g" "$FILE"
-            # Latest label: "Latest: X.X.X"
-            sed -i "s|Latest: [0-9]\+\.[0-9]\+\.[0-9]\+|Latest: ${VERSION}|g" "$FILE"
-            # Schema softwareVersion
-            sed -i "s|softwareVersion\": \"[0-9]\+\.[0-9]\+\.[0-9]\+\"|softwareVersion\": \"${VERSION}\"|g" "$FILE"
-            # "X.X.X is current"
-            sed -i "s|[0-9]\+\.[0-9]\+\.[0-9]\+ is current|${VERSION} is current|g" "$FILE"
-          done
+          # Update visible desktop labels as well as URLs. Mobile/history stay separate.
+          python3 "$GITHUB_WORKSPACE/scripts/update-website-release.py" --version "$VERSION" --website website
 
           # Release history page (website/changelog.html): every published release with its
           # releases/desktop notes, or its commit summaries when it has none.
