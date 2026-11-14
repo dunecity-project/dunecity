@@ -61,7 +61,8 @@ void runCampaignRepairProbe(Game& game) {
         // Starting credits are not clipped to the fixture's refinery storage.
         house->startingCredits = 60000; bot->lastCalculatedSpice=100000;
         while (house->getNumItems(Unit_Harvester) < 12) house->createUnit(Unit_Harvester, true);
-        while (house->getNumItems(Unit_Carryall) < 2) house->createUnit(Unit_Carryall, true);
+        // Satisfy the city transport baseline before asserting repair priority.
+        while (house->getNumItems(Unit_Carryall) < 4) house->createUnit(Unit_Carryall, true);
         // A deferred bulk-concrete upgrade must return the producer's turn.
         // Otherwise even ordinary construction waits forever for spare cash.
         {
