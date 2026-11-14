@@ -33,7 +33,8 @@ void runCampaignRepairProbe(Game& game) {
         };
         for(auto item:{Structure_WindTrap,Structure_Refinery,Structure_HeavyFactory,Structure_LightFactory})
             if(!house->getNumItems(item))place(item);
-        if((bot==partner || game.isCitySimEnabled()) && !house->getNumItems(Structure_StarPort))place(Structure_StarPort);
+        // Brutal also establishes its Starport before optional repair capacity.
+        if(!house->getNumItems(Structure_StarPort))place(Structure_StarPort);
         if(!house->getNumItems(Unit_Harvester))house->createUnit(Unit_Harvester,true);
         auto originalStructures=structureList;
         for(auto* building:originalStructures)
@@ -175,6 +176,7 @@ void runCampaignRepairProbe(Game& game) {
             const bool denied = bot->isCampaignEnemy() && tier == QuantBot::Difficulty::Easy;
             require(bot->canAddRepairYard(0) != denied, "Repair restriction crossed campaign role boundary");
             bot->build(4000);
+            SDL_Log("CAMPAIGN_REPAIR_CASE: tier=%d enemy=%d queued=%u denied=%d", int(tier), bot->isCampaignEnemy(), yard->getCurrentProducedItem(), denied);
             require((yard->getCurrentProducedItem() == Structure_RepairYard) != denied,
                 "Role-scoped repair policy produced the wrong construction order");
         }
