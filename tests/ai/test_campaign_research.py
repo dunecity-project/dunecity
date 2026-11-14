@@ -131,6 +131,27 @@ class CampaignResearchTests(unittest.TestCase):
         report=subject.control_report(candidate,candidate,self.control_schedule(),'campaign-all-maps','candidate',control_config='control')
         self.assertFalse(report['complete'])
 
+    def test_observer_controls_resolve_first_seat_team_and_expose_lost_win(self):
+        a=self.game();b=self.game('on')
+        for directory,winner in ((a,'3'),(b,'2')):
+            rows=subject.table(directory,'games.csv')
+            rows[0].update(category='team',sides='harkonnen:3:QB ordos:3:QH atreides:2:QE',outcome='decided',winner_team=winner)
+            csv_file(directory/'games.csv',rows)
+        pair=subject.pair_records(subject.game_evidence(a),subject.game_evidence(b))[0]
+        self.assertFalse(pair['issues'])
+        self.assertEqual(pair['outcome_change'],'won->lost')
+        self.assertIn('lost-baseline-win',pair['flags'])
+        self.assertEqual(pair['after']['observer_result'],dict(outcome='decided',winner_team='2'))
+
+    def test_observer_unknown_winner_fails_and_timeout_stays_timeout(self):
+        directory=self.game();rows=subject.table(directory,'games.csv')
+        rows[0].update(category='cy',sides='harkonnen:1:QB atreides:2:QE',outcome='decided',winner_team='9')
+        csv_file(directory/'games.csv',rows)
+        self.assertIn('engine-error-or-unfinished',subject.game_evidence(directory)[self.gid]['issues'])
+        rows[0].update(outcome='time_limit',winner_team='0');csv_file(directory/'games.csv',rows)
+        game=subject.game_evidence(directory)[self.gid]
+        self.assertEqual(game['outcome'],'time_limit');self.assertFalse(game['issues'])
+
     def test_control_receipt_binds_real_input_bytes_and_requires_reviews(self):
         a=self.game();b=self.game('on')
         first=subject.control_report(a,b,self.control_schedule(),'campaign-all-maps','candidate',control_config='control')

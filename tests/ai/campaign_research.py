@@ -185,7 +185,18 @@ def game_evidence(directory):
                 malformed += 1
         counts = collections.Counter(e['event'] for e in parsed if e['house'] == house)
         issues = []
-        if row.get('error') or row.get('outcome') not in ('won', 'lost', 'time_limit'):
+        outcome = row.get('outcome')
+        # Observer games have no player-relative outcome. Resolve the winner
+        # against the treated first seat, including allied and multi-team games.
+        if row.get('category') != 'campaign' and outcome in ('decided', 'won', 'lost'):
+            sides = [side.split(':') for side in row.get('sides', '').split()]
+            winner = row.get('winner_team')
+            if (not sides or any(len(side) != 3 for side in sides)
+                    or winner in (None, '', '0', '-1') or winner not in {side[1] for side in sides}):
+                outcome = 'unknown'
+            else:
+                outcome = 'won' if winner == sides[0][1] else 'lost'
+        if row.get('error') or outcome not in ('won', 'lost', 'time_limit'):
             issues.append('engine-error-or-unfinished')
         if not own: issues.append('missing-player-samples')
         elif number(row.get('minutes')) is None or (number(own[-1].get('minute')) or 0) + 2 < float(row['minutes']):
@@ -196,7 +207,7 @@ def game_evidence(directory):
         if any(v is None for v in minutes) or len(set(minutes)) != len(minutes): issues.append('invalid-or-duplicate-samples')
         if len(minutes) > 1 and all(v is not None for v in minutes) and any(b - a > 2 for a, b in zip(minutes, minutes[1:])): issues.append('sample-gaps')
         result[gid] = dict(id=gid, identity={k: row.get(k, '') for k in IDENTITY}, source=row.get('source_commit'),
-            source_fingerprint=row.get('source_fingerprint'), digest=row.get('digest'), outcome=row.get('outcome'),
+            source_fingerprint=row.get('source_fingerprint'), digest=row.get('digest'), outcome=outcome,
             minutes=number(row.get('minutes')), helper_house=house, helper_style=row.get('helper_style'), style_seats=row.get('style_seats'),
             configs=json.loads(row.get('ai_configs') or '{}'), setup=json.loads(row.get('setup_identity') or '{}'),
             metrics=metrics, event_counts=dict(counts), timeline=parsed,
@@ -204,6 +215,8 @@ def game_evidence(directory):
                 for index, sample in enumerate(own) if index in (0, len(own)-1) or number(sample.get('minute')) in (5, 10, 15, 20, 30, 40, 60, 80)],
             evidence=dict(directory=str(Path(directory).resolve()), game_id=gid, sample_rows=len(own), event_rows=len(events[gid]), full_samples='samples.csv[.gz]', full_events='campaign-ai.csv[.gz]'),
             issues=issues, interpretation='Observed events only; causal explanation requires paired evidence and review.')
+        if row.get('category') != 'campaign':
+            result[gid]['observer_result'] = dict(outcome=row.get('outcome'), winner_team=row.get('winner_team'))
     return result
 
 
