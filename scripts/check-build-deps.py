@@ -9,7 +9,9 @@ import sys
 def main():
     build = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "build").resolve()
     result = subprocess.run(
-        ["ninja", "-C", str(build), "-t", "deps"],
+        # Without -n Ninja may open/compact shared logs even for a query tool.
+        # Parallel probes must inspect the build without mutating those logs.
+        ["ninja", "-n", "-C", str(build), "-t", "deps"],
         check=True, capture_output=True, text=True,
     )
     broken = []

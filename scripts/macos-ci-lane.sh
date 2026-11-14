@@ -2,6 +2,11 @@
 # Stable callers hold agent-workspace's shared heavy-work gate for this entire command.
 set -euo pipefail
 cd "$GITHUB_WORKSPACE"
+# Only reached after the approved workflow's atomic workspace/queue admission.
+# A later compile/test failure must never masquerade as an unavailable runner.
+if [ "${1:-}" = release-headless-qualification ] && [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+    touch "$RUNNER_TEMP/qualification-admitted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+fi
 if [ "${1:-build}" = ios-staging ]; then
     : "${IOS_BUILD_NUMBER:?The workflow must provide its unique internal build number}"
     npm ci --ignore-scripts --prefix platform/web
@@ -38,11 +43,38 @@ MODE="${1:-build}"
 if [ "$MODE" = release-headless-qualification ] && {
     [ "$STABLE" != OFF ] || [ "${PACKAGE_BUILD:-false}" != false ];
 }; then
-    echo '::error::Hosted headless qualification requires dev identity and PACKAGE_BUILD=false'
+    echo '::error::Headless qualification requires dev identity and PACKAGE_BUILD=false'
     exit 2
 fi
 export CMAKE_BUILD_PARALLEL_LEVEL=2
-if [ "$STABLE" = ON ]; then export CMAKE_BUILD_PARALLEL_LEVEL=4; fi
+if [ "$STABLE" = ON ] || [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+    export CMAKE_BUILD_PARALLEL_LEVEL=4
+fi
+# Keep phase durations visible even when a command fails. The qualification
+# diagnostics already retain Testing/Temporary; do not call the entire lane
+# "tests" when it also installs dependencies and compiles the game.
+TIMING_FILE="$GITHUB_WORKSPACE/build/Testing/Temporary/macos-lane-timings.tsv"
+mkdir -p "$(dirname "$TIMING_FILE")"
+printf 'phase\tseconds\texit_code\n' > "$TIMING_FILE"
+run_phase() {
+    local phase="$1" started elapsed status=0
+    shift
+    started=$(date +%s)
+    echo "::group::Mac lane: $phase"
+    "$@" || status=$?
+    elapsed=$(( $(date +%s) - started ))
+    echo "::endgroup::"
+    printf '%s\t%s\t%s\n' "$phase" "$elapsed" "$status" >> "$TIMING_FILE"
+    echo "Mac lane phase $phase: ${elapsed}s, exit $status"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        printf '| %s | %ss | %s |\n' "$phase" "$elapsed" "$status" >> "$GITHUB_STEP_SUMMARY"
+    fi
+    return "$status"
+}
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '\n### Mac lane timings\n\nBuild workers: %s; runner: %s.\n\n| Phase | Elapsed | Exit code |\n| --- | ---: | ---: |\n' \
+        "$CMAKE_BUILD_PARALLEL_LEVEL" "${RUNNER_ENVIRONMENT:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+fi
 POINTER_OUT="$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 SIGNED_OUT="$RUNNER_TEMP/dunecity-mac-signed-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 mkdir -p "$POINTER_OUT"
@@ -56,11 +88,11 @@ MISSING=()
 for formula in "${WANT[@]}"; do
     grep -qx "$formula" <<<"$INSTALLED" || MISSING+=("$formula")
 done
-if [ ${#MISSING[@]} -gt 0 ]; then brew install "${MISSING[@]}"; fi
-npm ci --ignore-scripts --prefix platform/web
+if [ ${#MISSING[@]} -gt 0 ]; then run_phase build-tools brew install "${MISSING[@]}"; fi
+run_phase web-dependencies npm ci --ignore-scripts --prefix platform/web
 # The checkout, toolchain and dependency cache are the same as the workflow's
 # run-vcpkg step. Do not reuse a CMake tree from another checkout/platform.
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+run_phase configure-and-dependencies cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DDUNECITY_RELEASE_BUILD="$STABLE" \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
@@ -71,20 +103,29 @@ if [ "${PACKAGE_BUILD:-false}" = true ] && [ "$MODE" != release-headless-qualifi
     python3 tests/menu/pointer_artifact.py snapshot --build-dir build --output build/pointer-producer-inputs.json \
         --status-output "$POINTER_OUT/gate-status.json"
 fi
-cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-python3 scripts/check-build-deps.py build
+run_phase compile cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+run_phase dependency-audit python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
-    # Hosted Macs have no PHP, so a `network` test can only skip here and the
-    # receipt rejects skips. The stable Mini lane below runs those tests for real.
+    # Single-game probes reserve two CTest slots. The Mini can overlap two;
+    # the smaller hosted Mac keeps one, alongside eligible lightweight tests.
+    TEST_SLOTS=2
+    if [ "${RUNNER_ENVIRONMENT:-github-hosted}" = self-hosted ]; then TEST_SLOTS=4; fi
+    echo "Headless qualification: ${RUNNER_ENVIRONMENT:-github-hosted}, $TEST_SLOTS CTest slots"
+    # PHP-backed network coverage remains mandatory in the stable Mini lane.
+    # Both backends use the same qualification inventory and receipt recipe.
     ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
-    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 \
-        -L headless -L nightly -LE network --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml"
+    ctest_status=0
+    run_phase headless-nightly ctest --test-dir build --output-on-failure --no-tests=error --parallel "$TEST_SLOTS" \
+        -L headless -L nightly -LE network --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml" || ctest_status=$?
+    # CTest 8 means test failures; only exact committed decisions can accept them.
+    # Launch/configuration failures and incomplete/skipped XML still fail closed.
+    if [ "$ctest_status" -ne 0 ] && [ "$ctest_status" -ne 8 ]; then exit "$ctest_status"; fi
+    python3 scripts/release-automation.py check-headless --directory build --ctest-status "$ctest_status"
     build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
     exit 0
 fi
 ctest --test-dir build --output-on-failure --no-tests=error -L integration -LE gui
 if [ "$STABLE" = ON ]; then
-    # A missing PHP would turn these into a silent skip (exit 77); refuse instead.
     command -v php >/dev/null || [ -x /opt/homebrew/bin/php ] || {
         echo '::error::Stable Mini lane requires PHP for the headless network tests'; exit 1; }
     ctest --test-dir build --output-on-failure --no-tests=error -L headless -L network \
@@ -94,7 +135,8 @@ if [ "$STABLE" = ON ]; then
     fi
 fi
 if [ "${TEST_TIER:-integration}" = nightly ]; then
-    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly
+    # Headless nightly is owned by qualify-release.yml; this lane owns GUI nightly.
+    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly -L gui
 fi
 build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
 if [ "$STABLE" = ON ] || [ "${MACOS_SKIN_PROBE:-false}" = true ]; then

@@ -1,6 +1,6 @@
 # Release and hosting operations
 
-Operating contract updated 2026-11-13. This is the entry point for Codex, Claude,
+Operating contract updated 2026-11-14. This is the entry point for Codex, Claude,
 Hermes and human maintainers. Check current branches, workflows and release state
 before acting; historical version numbers/run IDs below are examples, not defaults.
 
@@ -193,8 +193,12 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
   the website repository; verified immutable archives download into temporary
   storage. Never commit WASM/data snapshots into its Git history. `/play-staging`
   isolates dev/SHA identity, caches, saves and signaling from stable `/play`.
-- Stable headless-nightly qualification runs on hosted Mac at the exact source
-  SHA before the Mini lane. Long QuantBot/Atreides/scenario/FFA checks stay there;
+- Headless-nightly qualification runs **before production selection**, after green
+  integration CI, in `qualify-release.yml`, preferring the Mini with hosted fallback. It runs once per frozen
+  source, independently of packaging. Automatic requests coalesce to the newest
+  pending integration commit; an explicit candidate is never cancelled by pushes.
+  Daily Mac nightly owns GUI-only coverage; Linux nightly remains separate platform
+  coverage. Production consumes qualification evidence and does not rerun that suite.
   Mini retains bounded native integration, calibrated GUI/performance/skin and
   packaged-pointer verification. Qualification metadata, plan and JUnit digests
   must agree before Latest.
@@ -206,6 +210,145 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
   A channel is complete only after verifying its live destination/source/digest;
   resume from those facts rather than restarting the entire release. Missing
   Android signer/phone approval holds Android alone, not every other channel.
+
+### Select a qualified candidate, then release it
+
+Freeze the numeric version, combined defaults and full commit **before** qualification.
+The version-bump commit must pass integration CI; a `[skip ci]` commit cannot
+qualify. Changes unrelated to a blocked release join the next batch. Source changes create a
+new candidate; never move a published tag or relabel old test evidence. This first
+implementation reuses exact source SHAs only. Documentation can ship separately
+without changing the frozen game candidate; cross-SHA equivalence is not automated.
+
+Green integration CI starts **Qualify release candidate** automatically after this
+workflow is deployed on the default `main` branch. For an explicit older green integration
+candidate, first check whether its qualification is already running, then:
+
+```sh
+gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref main -f sha="$FULL_SHA"
+# After completion, this is the concrete readiness check, before creating a tag:
+python3 scripts/release-automation.py reuse-qualification --sha "$FULL_SHA" --directory "$EVIDENCE_DIR/qualification"
+```
+
+The Mini is optional capacity. The host gate admits only the separately hash-approved
+qualification workflow on `main`, with a successful candidate
+selection and no production reservation. The workspace and queue atomically admit
+one verification lane without waiting; a refusal triggers a hosted run. An offline
+or occupied runner gets a two-minute queue window, then a hosted dispatch and
+cancellation of the queued attempt. A runner assignment racing cancellation may
+briefly start the old lane; its queue wrapper terminates only that owned child.
+API/dispatch/cancellation errors remain visible. This is not a guaranteed total ETA:
+GitHub scheduling and execution time are outside that queue window.
+
+Diagnose elapsed time by phase, not the job name. The Mac lane writes durations
+and original exit codes for dependencies, configuration, compilation and headless
+tests to the Actions summary and `build/Testing/Temporary/macos-lane-timings.tsv`
+(included in qualification diagnostics). In the completed 1.0.866 run, preparation
+and compilation took about two minutes and the broad headless suite took 49.5
+minutes. Increasing compiler workers alone would not remove that test bottleneck.
+The Mini uses four build workers; the smaller hosted Mac retains two to bound
+compiler memory. Test scheduling has its own separate resource budget below.
+
+Once the Mini enters the lane, compilation or test failure is retained and **does
+not** trigger fallback. `backend=hosted` is an explicit operator override and the
+terminal fallback route; it cannot recursively dispatch more runs. Only the hosted
+routing helpers get `actions: write`; compilation/tests retain read permissions.
+Runner identity is checked against the producing job and recorded with macOS/Xcode
+identity. Existing release signing roles remain separately approved.
+
+Mini qualification has separate compiler/dependency cache keys and a separate
+vcpkg archive directory from signing; routine staging qualification does not feed
+the signing lane's caches. Mac cache keys use `vcpkg-dependency-key.py`, as Windows
+does: a game version bump preserves dependency caches, while dependency, registry
+baseline and feature changes change the primary key. A fallback within the same
+backend/architecture namespace can seed a new key from older caches; vcpkg checks
+package ABI compatibility, and compiler caches validate each compiler invocation
+and its source inputs. Mini qualification never falls back to signing caches.
+A new key initially needs warming in
+the default-branch scope; a cache written only by integration/PR CI is not a
+default-branch cache for a later tag. Its job limit is 60 minutes, versus 120 on hosted Mac.
+Any production reservation refuses new Mini verification admissions, including
+the same source SHA. Admission is not preemption: a production request arriving
+after qualification starts waits for that admitted job to finish or time out.
+Do not terminate accepted jobs or bypass the shared gate to claim immediate
+production priority. A timeout/cancellation terminates the owned queue child and
+preserves failed evidence; it is not permission to relabel the result as a pass.
+
+Independent single-game probes use CTest `PROCESSORS 2`: the Mini qualifier has
+four slots (up to two games), the smaller hosted Mac has two. GUI, network and
+internally parallel multi-game tests retain serial scheduling. Profiles and output
+paths stay separate; no timeouts or assertions are relaxed. The PHP-backed network
+test runs in the stable Mini lane, with missing PHP or a skipped case fatal; both
+qualification backends exclude that separately required network scope.
+
+This verifies the exact source, trusted repository/workflow/attempt, successful
+required jobs, identical control recipe, immutable Actions artifact digest, CMake
+identity and complete non-skipped CTest results. Read-only GitHub 500/502/503/504 failures receive at most three attempts with
+one- and two-second delays; authentication, missing inputs and other failures
+remain errors. A missing, expired, changed or failed receipt stops production
+immediately, before any platform job. It never
+silently launches another broad suite. Preserve the frozen evidence; an expired
+Actions artifact currently needs a new qualification before a new release.
+For archived history, pass `--run-id` from the frozen record; discovery paginates
+and refuses to treat truncated history as missing qualification.
+A successful staging-to-main promotion at the **same SHA** skips duplicate platform
+CI. Unknown/failed evidence falls back to running CI, never to a guessed pass.
+
+Production still builds official-identity packages, signs/notarizes them, checks the
+actual package, publishes and verifies live channels. Dev qualification is not
+proof of signed package behaviour. Gate scripts and exception policy are owned by
+the reviewed candidate, as in the previous tag workflow; their digests are visible
+in the receipt. This is source provenance, not an independent sandbox for hostile
+repository maintainers. Check signing identity/keychain and Apple
+notary account readiness at candidate selection, so account failures surface before
+waiting for game tests. Keep private signing operations in the existing Mini lane.
+
+| Scope | Owner/run | Reuse rule |
+| --- | --- | --- |
+| Ordinary source/platform integration | staging push | exact SHA; main promotion reuses |
+| Mac headless nightly | pre-production qualifier | exact source + recipe + complete result artifact |
+| Mac GUI nightly | daily nightly | separate GUI scope; no headless replay |
+| Linux nightly | daily nightly | separate platform coverage |
+| Official package, signing and packaged smoke | production | exact official package; never inferred from dev tests |
+| Delivery recovery | existing publication workflows | immutable successful artifacts; no rebuild |
+
+### Carry an explicit known-failure decision forward
+
+`releases/qualification-exceptions.json` starts empty. A reviewed entry requires
+`test`, `failureSha256`, `owner`, `reason`, `trackingUrl`, `runnerImageVersion`
+and `inputTree`.
+The owner and linked durable decision must establish explicit acceptance; agents
+must not add an exception merely to make CI green. `failureSha256` is produced by
+`failure_digest` from the failure/error metadata and all structured `*_FAIL:`,
+`FAIL:`, `*_ERROR:` and `ERROR:` lines. Random scratch paths and timings outside
+those markers do not change the signature; changed or additional markers block.
+A test without stable markers cannot use an exception. Raw output is always retained.
+For every path in `EXCEPTION_INPUTS`, `inputTree[path]` is the exact output of
+`git ls-tree BASELINE_SHA -- PATH` (empty only when that input was absent). Additional
+input paths may tighten the scope. Freeze these values when the decision is made.
+
+The qualifier compares those Git objects at the new candidate before accepting
+anything. Changed game, test, asset, dependency, harness or workflow inputs invalidate
+the decision. The hosted toolchain image must also match `runnerImageVersion`
+from the original receipt. Changed failure output also blocks. Skips and missing/duplicate tests
+are never accepted. The original JUnit remains FAIL; the receipt reports
+`accepted-known-failures` and includes the decision, rather than rewriting it as PASS.
+A passing test needs no exception. A stale entry must be reviewed/removed before the
+next qualifier; it is never silently expanded. Decisions can carry forward unchanged
+without another approval while their recorded scope and failure remain identical.
+
+Safety checks exercise wrong source/repository/workflow/attempt, failed jobs,
+modified/expired artifacts, incomplete coverage, changed exceptions and duplicate
+main admission. These are bounded contract tests, not proof that every game or
+publication service is correct. Verify the first real qualifier and production
+consumer after rollout; retain the old active-release workflow binding until its
+coordinator hands off, then review/rebind the new `build.yml` hash on Mini.
+During a main-only rollout with staging still frozen on the previous release,
+that old staging source has no matching qualification recipe. Its existing release
+keeps its original gate; bring staging forward as the first step after the release
+handoff to activate the new automatic headless scope. Hosted GUI nightly still
+contains the existing hardware-sensitive performance gate; that pre-existing
+limitation is separate from headless qualification and must remain visible.
 
 Staging and recovery use the existing automation, with `FULL_SHA` set to the
 committed, qualified source and the workflows first deployed on default `main`:

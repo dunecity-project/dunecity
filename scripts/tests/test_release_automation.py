@@ -1222,9 +1222,16 @@ class HostedHeadlessQualificationTests(unittest.TestCase):
         args = argparse.Namespace(platform='macos-arm64-headless-qualification', build_root=self.root,
                                   output=self.root / automation.HEADLESS_RECEIPT)
         with patch.dict(os.environ, DUNECITY_RELEASE_BUILD='OFF', PACKAGE_BUILD='false',
-                        GITHUB_RUN_ID='41', GITHUB_RUN_ATTEMPT='1'), \
+                        GITHUB_RUN_ID='41', GITHUB_RUN_ATTEMPT='1', RUNNER_NAME='hosted-test',
+                        RUNNER_ENVIRONMENT='github-hosted', RUNNER_ARCH='ARM64',
+                        ImageOS='macos15', ImageVersion='fixture-image'), \
+             patch.object(automation, 'exception_policy', return_value={}), \
              patch.object(automation, 'run', side_effect=lambda *command: SHA if command[0] == 'git' else 'cmake fixture'):
             automation.record_build(args)
+        # Keep the historical same-run contract covered for immutable older releases.
+        receipt = json.loads(args.output.read_text())
+        receipt.pop('qualificationWorkflow')
+        automation.write_json(args.output, receipt)
         self.paths = {name: self.root / name for name in
                       (automation.HEADLESS_PLAN, automation.HEADLESS_RESULTS, automation.HEADLESS_RECEIPT)}
 
@@ -1270,6 +1277,293 @@ class HostedHeadlessQualificationTests(unittest.TestCase):
         for tests in ([], [dict(name='gui', properties=[dict(name='LABELS', value=['gui', 'nightly'])])]):
             automation.write_json(self.paths[automation.HEADLESS_PLAN], {'tests': tests})
             with self.assertRaisesRegex(ValueError, 'nonempty headless nightly'):
+                automation.headless_qualification(self.root)
+
+
+class ReleaseReadinessTests(unittest.TestCase):
+    def invoke_plan(self, ref, qualified=None, error=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            automation.write_json(root / 'event.json', {'before': OTHER})
+            with patch.dict(os.environ, GITHUB_EVENT_PATH=str(root / 'event.json'), GITHUB_EVENT_NAME='push',
+                            GITHUB_REF=ref, GITHUB_SHA=SHA, GITHUB_OUTPUT='', GITHUB_STEP_SUMMARY=''), \
+                 patch.object(automation, 'qualification_for', return_value=qualified, side_effect=error), \
+                 patch.object(automation, 'api', return_value={'files': [{'filename': 'src/Game.cpp'}]}), \
+                 patch.object(automation, 'reuse_qualification') as reuse:
+                automation.plan(argparse.Namespace(output=root / 'selection.json'))
+                return json.loads((root / 'selection.json').read_text()), reuse.call_count
+
+    def test_main_reuses_exact_green_integration_and_unknown_evidence_runs_ci(self):
+        result, calls = self.invoke_plan('refs/heads/main', qualified={'id': 41})
+        self.assertFalse(result['run'])
+        self.assertEqual(calls, 0)
+        result, _ = self.invoke_plan('refs/heads/main', error=ValueError('no green source'))
+        self.assertTrue(result['run'])
+
+    def test_tag_checks_readiness_before_emitting_platform_admission(self):
+        result, calls = self.invoke_plan('refs/tags/v' + VERSION)
+        self.assertTrue(result['stable'])
+        self.assertEqual(calls, 1)
+
+
+class QualificationAdmissionTests(unittest.TestCase):
+    def invoke(self, event, name='workflow_run', ref='refs/heads/main', latest=SHA,
+               reusable=False, recipe_matches=True):
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / 'event.json'
+            automation.write_json(event_path, event)
+            def api(path):
+                if '/git/ref/heads/' in path:
+                    return {'object': {'sha': latest}}
+                if '/contents/' in path:
+                    return {'sha': 'recipe' if recipe_matches or path.endswith(SHA) else 'changed'}
+                raise AssertionError(path)
+            with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event_path), GITHUB_EVENT_NAME=name,
+                            GITHUB_REF=ref, GITHUB_SHA=OTHER), \
+                 patch.object(automation, 'qualification_api', side_effect=api), \
+                 patch.object(automation, 'qualification_for', return_value={'id': 41}) as green, \
+                 patch.object(automation, 'reuse_qualification', side_effect=None if reusable else ValueError('none')), \
+                 patch.object(automation, 'emit') as emit:
+                automation.select_qualification(argparse.Namespace())
+                return emit.call_args.args[0], green.call_count
+
+    def event(self, **overrides):
+        source = dict(head_branch=automation.STAGING, event='push', conclusion='success', head_sha=SHA,
+                      head_repository={'full_name': automation.repository()})
+        source.update(overrides)
+        return {'workflow_run': source}
+
+    def test_failed_fork_wrong_branch_and_nonpush_never_admit(self):
+        for override in [dict(conclusion='failure'), dict(head_branch='release-idea'), dict(event='pull_request'),
+                         dict(head_repository={'full_name': 'fork/dunecity'})]:
+            with self.subTest(override=override):
+                values, checked = self.invoke(self.event(**override))
+                self.assertFalse(values['run'])
+                self.assertEqual(checked, 0)
+
+    def test_superseded_auto_candidate_coalesces_but_explicit_pin_survives(self):
+        values, checked = self.invoke(self.event(), latest=OTHER)
+        self.assertFalse(values['run']); self.assertEqual(checked, 0)
+        values, checked = self.invoke({'inputs': {'sha': SHA}}, name='workflow_dispatch', latest=OTHER)
+        self.assertTrue(values['run']); self.assertEqual(checked, 1)
+
+    def test_already_qualified_candidate_does_not_rerun(self):
+        values, checked = self.invoke(self.event(), reusable=True)
+        self.assertFalse(values['run']); self.assertEqual(checked, 1)
+
+    def test_control_recipe_drift_and_untrusted_dispatch_ref_fail_closed(self):
+        with self.assertRaisesRegex(ValueError, 'recipes differ'):
+            self.invoke(self.event(), recipe_matches=False)
+        with self.assertRaisesRegex(ValueError, 'trusted main/integration'):
+            self.invoke({'inputs': {'sha': SHA}}, name='workflow_dispatch', ref='refs/heads/release-untrusted')
+
+
+class ReusableQualificationTests(HostedHeadlessQualificationTests):
+    def reusable(self):
+        receipt = json.loads(self.paths[automation.HEADLESS_RECEIPT].read_text())
+        receipt['qualificationWorkflow'] = automation.QUALIFY_WORKFLOW
+        automation.write_json(self.paths[automation.HEADLESS_RECEIPT], receipt)
+        return receipt
+
+    def producer(self):
+        return dict(id=41, run_attempt=1, workflow_id=7, path=automation.QUALIFY_WORKFLOW,
+                    status='completed', conclusion='success', event='workflow_run',
+                    head_branch='main', head_sha=OTHER,
+                    head_repository={'full_name': automation.repository()}, display_title='Qualify ' + SHA)
+
+    def api_for(self, producer):
+        def response(path):
+            if '/attempts/1/jobs' in path:
+                return {'jobs': [dict(name=name, conclusion='success', labels=['macos-15'], runner_name='hosted-test') for name in ('select-candidate', 'qualify')]}
+            if '/attempts/1' in path:
+                return producer
+            if '/contents/' in path:
+                return {'sha': 'same-workflow-blob'}
+            if path.endswith('/qualify-release.yml'):
+                return {'id': 7}
+            raise AssertionError(path)
+        return response
+
+    def test_cross_run_reuse_authenticates_original_attempt_and_bytes(self):
+        receipt = self.reusable()
+        producer = self.producer()
+        contents = {name: path.read_bytes() for name, path in self.paths.items()}
+        with patch.dict(os.environ, GITHUB_RUN_ID='999'), \
+             patch.object(automation, 'exception_policy', return_value={}), \
+             patch.object(automation, 'qualification_api', side_effect=self.api_for(producer)), \
+             patch.object(automation, 'qualification_artifact', return_value=contents):
+            automation.verify_headless_qualification(self.paths, SHA)
+            receipt['runnerImageVersion'] = 'tampered'
+            automation.write_json(self.paths[automation.HEADLESS_RECEIPT], receipt)
+            with self.assertRaisesRegex(ValueError, 'immutable producer artifact'):
+                automation.verify_headless_qualification(self.paths, SHA)
+
+    def test_wrong_producer_branch_repository_event_attempt_recipe_or_job_is_rejected(self):
+        receipt = self.reusable()
+        for field, value in [('head_branch', 'release-attacker'), ('event', 'pull_request'),
+                             ('head_repository', {'full_name': 'fork/dunecity'}), ('conclusion', 'failure'),
+                             ('workflow_id', 99), ('run_attempt', 2), ('id', 42), ('path', automation.BUILD_WORKFLOW)]:
+            producer = self.producer(); producer[field] = value
+            with self.subTest(field=field), patch.object(automation, 'qualification_api', side_effect=self.api_for(producer)), \
+                 self.assertRaisesRegex(ValueError, 'Untrusted'):
+                automation.qualification_producer(receipt, SHA)
+        base = self.api_for(self.producer())
+        for suffix, result in [('/attempts/1/jobs?per_page=100', {'jobs': []}),
+                               ('?ref=' + OTHER, {'sha': 'changed-recipe'})]:
+            with patch.object(automation, 'qualification_api', side_effect=lambda path: result if path.endswith(suffix) else base(path)), \
+                 self.assertRaises(ValueError):
+                automation.qualification_producer(receipt, SHA)
+
+    def zip_evidence(self, extra=None):
+        buffer = automation.io.BytesIO()
+        with automation.zipfile.ZipFile(buffer, 'w') as archive:
+            for name, path in self.paths.items():
+                archive.writestr(name, path.read_bytes())
+            if extra:
+                archive.writestr(extra, 'unexpected')
+        return buffer.getvalue()
+
+    def test_receipt_binds_hosted_or_mini_runner_to_the_authenticated_job(self):
+        receipt = self.reusable()
+        base = self.api_for(self.producer())
+        def api(path):
+            data = base(path)
+            if '/attempts/1/jobs' in path:
+                data['jobs'][1].update(labels=['self-hosted', 'macOS', 'ARM64', 'dunecity-builder'],
+                                       runner_name='mini')
+            return data
+        with patch.object(automation, 'qualification_api', side_effect=api):
+            with self.assertRaisesRegex(ValueError, 'runner identity'):
+                automation.qualification_producer(receipt, SHA)
+            receipt.update(runnerEnvironment='self-hosted', runnerName='mini')
+            automation.qualification_producer(receipt, SHA)
+            receipt['runnerName'] = 'different-host'
+            with self.assertRaisesRegex(ValueError, 'runner identity'):
+                automation.qualification_producer(receipt, SHA)
+
+    def test_mini_image_identity_includes_macos_and_xcode(self):
+        with patch.dict(os.environ, RUNNER_ENVIRONMENT='self-hosted'), \
+             patch.object(automation, 'run', side_effect=['24G90', 'Xcode 26.0\nBuild version 17A324']):
+            self.assertEqual(automation.qualification_image_version(), 'self-hosted:24G90:Xcode 26.0\nBuild version 17A324')
+
+    def test_artifact_transport_rejects_expiry_digest_substitution_and_extra_files(self):
+        raw = self.zip_evidence()
+        artifact = dict(id=50, name=automation.QUALIFY_ARTIFACT + '-1', expired=False,
+                        size_in_bytes=len(raw), digest='sha256:' + automation.hashlib.sha256(raw).hexdigest())
+        listing = {'total_count': 1, 'artifacts': [artifact]}
+        with patch.object(automation, 'qualification_api', return_value=listing), \
+             patch.object(automation, 'qualification_read', return_value=raw):
+            self.assertEqual(set(automation.qualification_artifact(self.producer())), set(automation.QUALIFY_FILES))
+            artifact['expired'] = True
+            with self.assertRaisesRegex(ValueError, 'expired'):
+                automation.qualification_artifact(self.producer())
+            artifact['expired'] = False; artifact['digest'] = 'sha256:' + '0' * 64
+            with self.assertRaisesRegex(ValueError, 'digest'):
+                automation.qualification_artifact(self.producer())
+        raw = self.zip_evidence('../escape')
+        artifact['digest'] = 'sha256:' + automation.hashlib.sha256(raw).hexdigest()
+        with patch.object(automation, 'qualification_api', return_value=listing), \
+             patch.object(automation, 'qualification_read', return_value=raw), \
+             self.assertRaisesRegex(ValueError, 'contents'):
+            automation.qualification_artifact(self.producer())
+
+    def test_missing_qualification_never_starts_a_build(self):
+        args = argparse.Namespace(sha=SHA, directory=self.root / 'reuse')
+        with patch.object(automation, 'qualification_api', return_value={'workflow_runs': []}), \
+             patch.object(automation.subprocess, 'run') as command, \
+             self.assertRaisesRegex(ValueError, 'before creating a production tag'):
+            automation.reuse_qualification(args)
+        command.assert_not_called()
+        self.assertFalse(args.directory.exists())
+
+    def test_known_failure_requires_exact_output_and_retains_fail(self):
+        tree = automation.ET.fromstring(self.xml)
+        automation.ET.SubElement(tree[0], 'failure', {'message': 'fixture failure'})
+        automation.ET.SubElement(tree[0], 'system-out').text = 'path=/tmp/run-abc time=123\nPROBE_FAIL: expected=18 actual=21'
+        signature = automation.failure_digest(tree[0])
+        self.paths[automation.HEADLESS_RESULTS].write_text(automation.ET.tostring(tree, encoding='unicode'))
+        decision = dict(test=self.names[0], failureSha256=signature, owner='Stefan',
+                        reason='fixture decision', trackingUrl='https://example.test/decision')
+        result = automation.headless_qualification(self.root, {self.names[0]: decision})
+        self.assertEqual(result['status'], 'accepted-known-failures')
+        self.assertEqual(result['acceptedFailures'], [decision])
+        self.assertIn('<failure', self.paths[automation.HEADLESS_RESULTS].read_text())
+        tree[0].find('system-out').text = 'path=/tmp/run-xyz time=999\nPROBE_FAIL: expected=18 actual=21'
+        self.assertEqual(automation.failure_digest(tree[0]), signature)
+        tree[0].find('system-out').text = 'PROBE_FAIL: new regression'
+        self.paths[automation.HEADLESS_RESULTS].write_text(automation.ET.tostring(tree, encoding='unicode'))
+        with self.assertRaisesRegex(ValueError, 'unaccepted failure'):
+            automation.headless_qualification(self.root, {self.names[0]: decision})
+
+    def test_exception_scope_drift_or_missing_owner_is_rejected(self):
+        item = dict(test='case', failureSha256='a' * 64, owner='Stefan', reason='fixture',
+                    trackingUrl='https://example.test/decision', runnerImageVersion='fixture-image',
+                    inputTree={p: p + '-tree' for p in automation.EXCEPTION_INPUTS})
+        policy = dict(schema=1, exceptions=[item])
+        def git(*args):
+            return json.dumps(policy) if args[1] == 'show' else args[-1] + '-tree'
+        with patch.object(automation, 'run', side_effect=git), patch.dict(os.environ, ImageVersion='fixture-image'):
+            self.assertEqual(automation.exception_policy(SHA), {'case': item})
+            with self.assertRaisesRegex(ValueError, 'toolchain image changed'):
+                automation.exception_policy(SHA, 'new-image')
+            item['inputTree']['src'] = 'old-tree'
+            with self.assertRaisesRegex(ValueError, 'scope changed'):
+                automation.exception_policy(SHA)
+            item['owner'] = ''
+            with self.assertRaisesRegex(ValueError, 'Incomplete'):
+                automation.exception_policy(SHA)
+
+    def test_github_read_retries_only_transient_server_failures_and_is_bounded(self):
+        transient = subprocess.CalledProcessError(1, ['gh', 'api'], stderr=b'HTTP 502 Bad Gateway')
+        with patch.object(automation.subprocess, 'check_output', side_effect=[transient, b'{"ok":true}']) as request, \
+             patch.object(automation.time, 'sleep') as sleep:
+            self.assertEqual(automation.qualification_api('fixture'), {'ok': True})
+            self.assertEqual(request.call_count, 2); sleep.assert_called_once_with(1)
+        with patch.object(automation.subprocess, 'check_output', side_effect=transient) as request, \
+             patch.object(automation.time, 'sleep'), self.assertRaises(subprocess.CalledProcessError):
+            automation.qualification_api('fixture')
+        self.assertEqual(request.call_count, 3)
+        for status in (401, 403, 404):
+            failure = subprocess.CalledProcessError(1, ['gh', 'api'], stderr=f'HTTP {status}'.encode())
+            with patch.object(automation.subprocess, 'check_output', side_effect=failure) as request, \
+                 patch.object(automation.time, 'sleep') as sleep, self.assertRaises(subprocess.CalledProcessError):
+                automation.qualification_api('fixture')
+            self.assertEqual(request.call_count, 1); sleep.assert_not_called()
+
+    def test_unexplained_ctest_failure_cannot_be_hidden_by_green_xml(self):
+        with patch.object(automation, 'exception_policy', return_value={}), \
+             patch.object(automation, 'run', return_value=SHA):
+            for code in (8, 1, 2):
+                with self.subTest(code=code), self.assertRaisesRegex(ValueError, 'exit status'):
+                    automation.check_headless(argparse.Namespace(directory=self.root, ctest_status=code))
+
+    def test_full_reuse_writes_only_authenticated_exact_source_evidence(self):
+        self.reusable()
+        producer = self.producer()
+        base = self.api_for(producer)
+        def response(path):
+            if '/runs?status=success' in path:
+                return {'workflow_runs': [producer]}
+            return base(path)
+        contents = {name: path.read_bytes() for name, path in self.paths.items()}
+        destination = self.root / 'consumed'
+        with patch.object(automation, 'qualification_api', side_effect=response), \
+             patch.object(automation, 'qualification_artifact', return_value=contents), \
+             patch.object(automation, 'exception_policy', return_value={}):
+            automation.reuse_qualification(argparse.Namespace(sha=SHA, directory=destination))
+            self.assertEqual({p.name: p.read_bytes() for p in destination.iterdir()}, contents)
+            receipt = json.loads(contents[automation.HEADLESS_RECEIPT])
+            receipt['sourceCommit'] = OTHER
+            contents[automation.HEADLESS_RECEIPT] = json.dumps(receipt).encode()
+            with self.assertRaisesRegex(ValueError, 'No reusable'):
+                automation.reuse_qualification(argparse.Namespace(sha=SHA, directory=self.root / 'wrong-source'))
+            self.assertFalse((self.root / 'wrong-source').exists())
+
+    def test_headless_labels_must_exclude_gui_and_every_test_must_be_nightly(self):
+        for labels in (['headless', 'nightly', 'gui'], ['headless']):
+            self.plan['tests'][0]['properties'][0]['value'] = labels
+            automation.write_json(self.paths[automation.HEADLESS_PLAN], self.plan)
+            with self.assertRaisesRegex(ValueError, 'headless nightly'):
                 automation.headless_qualification(self.root)
 
 

@@ -195,6 +195,8 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_desktop_updates.py
           python3 -m unittest discover -s scripts/tests -p test_checkout_content.py
           python3 -m unittest discover -s scripts/tests -p test_release_automation.py
+          python3 -m unittest discover -s scripts/tests -p test_qualification_routing.py
+          python3 -m unittest discover -s scripts/tests -p test_headless_parallel.py
           python3 -m unittest discover -s scripts/tests -p test_ios_staging.py
           python3 -m unittest discover -s tests/performance -p test_fixture_reconstruction.py
           python3 -m unittest discover -s scripts/tests -p test_macos_runtime.py
@@ -590,73 +592,29 @@ jobs:
           if-no-files-found: error
 
   release-headless-qualification:
-    # Deliberate once-per-release verification, not an idea/build tree on Mini.
+    # Production consumes frozen pre-production evidence; it never reruns the broad suite.
     needs: [select-inputs, verify-version]
-    if: success() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.select-inputs.outputs.stable == 'true'
-    runs-on: macos-15
-    timeout-minutes: 120
+    if: success() && needs.select-inputs.outputs.stable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
-    env:
-      DUNECITY_RELEASE_BUILD: 'OFF'
-      PACKAGE_BUILD: 'false'
-      DUNECITY_CANDIDATE_SOURCE: ${{ needs.select-inputs.outputs.sha }}
-      TEST_TIER: nightly
-      HOMEBREW_NO_AUTO_UPDATE: '1'
+      actions: read
     steps:
-      - name: Keep compiler cache outside candidate source
-        run: printf 'CCACHE_DIR=%s/dunecity-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.select-inputs.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Require the declared hosted Mac architecture
-        run: test "$(uname -m)" = arm64
-      - name: Restore compiled Mac objects
-        uses: hendrikmuhs/ccache-action@v1
-        with:
-          key: macos-arm64-${{ hashFiles('vcpkg.json') }}
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgJsonGlob: 'vcpkg.json'
-      - name: Restore dependency binaries
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/vcpkg/archives
-          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json') }}
-      - name: Enable portable dependency cache
-        run: |
-          mkdir -p "$HOME/.cache/vcpkg/archives"
-          echo "VCPKG_BINARY_SOURCES=clear;files,$HOME/.cache/vcpkg/archives,readwrite" >> "$GITHUB_ENV"
-      - name: Qualify headless nightly at the exact release source without signing
-        run: bash scripts/macos-ci-lane.sh release-headless-qualification
-      - name: Freeze successful source/toolchain/test qualification
-        run: |
-          python3 scripts/release-automation.py record-build --platform macos-arm64-headless-qualification \
-            --build-root build --output build/macos-headless-qualification.json
+      - name: Require verified qualification for the exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.select-inputs.outputs.sha }}
+        run: python3 scripts/release-automation.py reuse-qualification --sha "$CANDIDATE_SHA" --directory qualification
       - uses: actions/upload-artifact@v7
         with:
           name: DuneCity-macOS-headless-qualification
-          path: |
-            build/macos-headless-qualification.json
-            build/macos-headless-plan.json
-            build/macos-headless-results.xml
+          path: qualification/
           if-no-files-found: error
-          retention-days: 90
-      - name: Preserve failed hosted qualification diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: DuneCity-macOS-headless-diagnostics-${{ github.run_attempt }}
-          path: |
-            build/Testing/Temporary/
-            build/macos-headless-plan.json
-            build/macos-headless-results.xml
-          if-no-files-found: warn
           retention-days: 90
 
   build-macos:
@@ -705,10 +663,14 @@ jobs:
           node-version: '22'
       - name: Require the declared Mac architecture
         run: test "$(uname -m)" = arm64
+      - name: Fingerprint Mac dependencies without the application version
+        id: macos-dependencies
+        run: echo "key=$(python3 scripts/vcpkg-dependency-key.py)" >> "$GITHUB_OUTPUT"
       - name: Restore compiled Mac objects
         uses: hendrikmuhs/ccache-action@v1
         with:
-          key: macos-arm64-${{ hashFiles('vcpkg.json') }}
+          key: macos-arm64-deps-v1-${{ steps.macos-dependencies.outputs.key }}
+          restore-keys: macos-arm64
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -717,7 +679,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/vcpkg/archives
-          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-macos-arm64-deps-v1-${{ steps.macos-dependencies.outputs.key }}
+          restore-keys: vcpkg-macos-arm64-
       - name: Enable portable dependency cache
         run: |
           mkdir -p "$HOME/.cache/vcpkg/archives"
