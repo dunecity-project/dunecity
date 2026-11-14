@@ -47,7 +47,9 @@ if [ "$MODE" = release-headless-qualification ] && {
     exit 2
 fi
 export CMAKE_BUILD_PARALLEL_LEVEL=2
-if [ "$STABLE" = ON ]; then export CMAKE_BUILD_PARALLEL_LEVEL=4; fi
+if [ "$STABLE" = ON ] || [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+    export CMAKE_BUILD_PARALLEL_LEVEL=4
+fi
 POINTER_OUT="$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 SIGNED_OUT="$RUNNER_TEMP/dunecity-mac-signed-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 mkdir -p "$POINTER_OUT"
@@ -83,6 +85,7 @@ if [ "$MODE" = release-headless-qualification ]; then
     # the smaller hosted Mac keeps one, alongside eligible lightweight tests.
     TEST_SLOTS=2
     if [ "${RUNNER_ENVIRONMENT:-github-hosted}" = self-hosted ]; then TEST_SLOTS=4; fi
+    echo "Headless qualification: ${RUNNER_ENVIRONMENT:-github-hosted}, $TEST_SLOTS CTest slots"
     # PHP-backed network coverage remains mandatory in the stable Mini lane.
     # Both backends use the same qualification inventory and receipt recipe.
     ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
