@@ -65,6 +65,17 @@ class CampaignCoverageTests(unittest.TestCase):
             args.shard=(2, 2)
             self.assertEqual(matrix['schedule'](args), [games[1]])
 
+    def test_noncampaign_seat_style_uses_only_first_quantbot(self):
+        import tempfile
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            args=SimpleNamespace(tier='full',seat_style='campaign-power-surplus',style=None)
+            game=dict(kind='skirmish',sides=[('harkonnen',1,'QH'),('atreides',2,'QB')],id='test')
+            path=matrix['control_style_inputs'](args,game,Path(directory)/'game')
+            self.assertTrue((path/'0-opening.ini').is_file())
+            self.assertFalse((path/'1-opening.ini').exists())
+            self.assertEqual(matrix['expected_style_seats'](args,game),'0=candidate-campaign-power-surplus')
+
     def test_balance_cli_accepts_quantbot_tiers_and_ai_only_in_both_modes(self):
         for mode in ('full', 'single'):
             for tier in ('easy', 'medium', 'hard', 'brutal'):

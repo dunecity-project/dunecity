@@ -87,7 +87,9 @@ def validate_manifest(m, base):
     require(set(m.get('configs', {})) == {'off', 'on'}, 'Explicit helper OFF/ON required')
     for value in m['configs'].values():
         require(re.fullmatch('[a-z0-9][a-z0-9-]+', value), 'Invalid helper style')
-        require((Path(m['snapshot']['cwd']) / 'tests/ai/play-styles' / (value + '.ini')).is_file(), 'Missing helper style')
+        style_path = Path(m['snapshot']['cwd']) / 'tests/ai/play-styles' / (value + '.ini')
+        require(style_path.is_file(), 'Missing helper style')
+        require(not re.search(r'^\s*\[\s*Play Style\s*\]', style_path.read_text(), re.I | re.M), 'Research treatments require hashed config switches, not untracked Play Style fields')
     require(m['configs']['off'] != m['configs']['on'], 'Identical treatment names')
     require(m.get('primary') == {'metric': 'won', 'direction': 'higher', 'minimum_effect': m.get('primary', {}).get('minimum_effect')}, 'Campaign primary must be player-team wins')
     require(0 < m['primary']['minimum_effect'] <= 1, 'Invalid worthwhile effect')
@@ -95,6 +97,9 @@ def validate_manifest(m, base):
     require(design.get('cluster_fields') == ['seed'] and design.get('stopping') == 'fixed-budget', 'Campaign uses seed blocks and fixed budgets')
     require(0 < design.get('alpha', 0) < .5 and .5 < design.get('power', 0) < 1 and type(design.get('finalists')) is int and design['finalists'] > 0, 'Invalid error/power budget')
     preregistered_cluster_sd(design)
+    options_path = resolve(base, m.get('game_options', ''))
+    require(options_path.is_file(), 'Explicit frozen game-options INI required')
+    options = dict(path=str(options_path.resolve()), sha256=hashlib.sha256(options_path.read_bytes()).hexdigest())
     stages = m.get('stages', {})
     diagnostic = m.get('purpose') == 'diagnostic'
     require(set(stages) == {'pilot'} if diagnostic else set(stages) >= {'pilot', 'confirmation'}, 'Independent confirmation required; diagnostic is pilot only')
@@ -123,12 +128,12 @@ def validate_manifest(m, base):
         control = compact_json(path)
         require(isinstance(control, list) and control and len({r['id'] for r in control}) == len(control), 'Invalid control schedule')
         if name == 'campaign-all-maps':
-            require({(r.get('house'), r.get('mission')) for r in control} >= {(h, n) for h in HOUSES for n in range(1, 23)}, 'Campaign control must include all 66 authored maps')
+            require({(match[1], int(match[2])) for r in control for match in [re.fullmatch(r'(atreides|harkonnen|ordos) level [1-9] mission ([0-9]+)', r.get('map', ''))] if match and f'/{match[1]}-m{match[2]}/' in r['id']} >= {(h, n) for h in HOUSES for n in range(1, 23)}, 'Campaign control must include all 66 authored maps')
         elif name == 'scenario-controls':
-            require({r.get('category') for r in control} >= {'controls', 'skirmish', 'team', 'ladder', 'aaa'}, 'Other-map controls must cover authored maps, skirmish, team, ladder and AAA')
+            require({r['id'].split('/')[0] for r in control if r.get('category') == r['id'].split('/')[0]} >= {'controls', 'skirmish', 'team', 'ladder', 'aaa'}, 'Other-map controls must cover authored maps, skirmish, team, ladder and AAA')
         control_plans[name] = dict(path=str(path.resolve()), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
     return dict(schema='dunecity-experiment-provenance/1', population='campaign', manifest_sha256=digest(m), source_revision=revision,
-                configs=m['configs'], decks=decks, control_plans=control_plans, games_per_case=2, config_values_are_run_inputs=True)
+                configs=m['configs'], decks=decks, game_options=options, control_plans=control_plans, games_per_case=2, config_values_are_run_inputs=True)
 
 
 def table(directory, name):
@@ -164,7 +169,7 @@ def game_evidence(directory):
         match = re.search(r'/(atreides|harkonnen|ordos)-m(\d+)/', gid)
         house = HOUSES[match[1]] if match else ALL_HOUSES.get(row.get('sides', '').split(':')[0], '')
         require(house != '', 'Missing tracked house identity')
-        own = sorted([s for s in samples[gid] if s.get('house') == house], key=lambda s: number(s.get('minute')) or 0)
+        own = sorted([s for s in samples[gid] if s.get('house') == house], key=lambda s: number(s.get('cycle')) or 0)
         metrics = {}
         for field in ('credits', 'army_value', 'harvesters', 'repair_yards', 'spice_gross', 'loss_value', 'kill_value', 'refineries', 'yard_level', 'heavy', 'ix', 'power', 'need', 'spent_total', 'harvesters_lost', 'carryalls'):
             values = [number(s.get(field)) for s in own]
@@ -187,12 +192,12 @@ def game_evidence(directory):
             issues.append('truncated-player-samples')
         if row.get('category') == 'campaign' and not parsed: issues.append('missing-campaign-events')
         if malformed: issues.append('malformed-events')
-        minutes = [number(s.get('minute')) for s in own]
+        minutes = [number(s.get('cycle')) / 3750 if number(s.get('cycle')) is not None else None for s in own]
         if any(v is None for v in minutes) or len(set(minutes)) != len(minutes): issues.append('invalid-or-duplicate-samples')
         if len(minutes) > 1 and all(v is not None for v in minutes) and any(b - a > 2 for a, b in zip(minutes, minutes[1:])): issues.append('sample-gaps')
         result[gid] = dict(id=gid, identity={k: row.get(k, '') for k in IDENTITY}, source=row.get('source_commit'),
             source_fingerprint=row.get('source_fingerprint'), digest=row.get('digest'), outcome=row.get('outcome'),
-            minutes=number(row.get('minutes')), helper_house=house, helper_style=row.get('helper_style'),
+            minutes=number(row.get('minutes')), helper_house=house, helper_style=row.get('helper_style'), style_seats=row.get('style_seats'),
             configs=json.loads(row.get('ai_configs') or '{}'), setup=json.loads(row.get('setup_identity') or '{}'),
             metrics=metrics, event_counts=dict(counts), timeline=parsed, samples=own,
             issues=issues, interpretation='Observed events only; causal explanation requires paired evidence and review.')
@@ -207,18 +212,20 @@ def pair_records(left, right, historical=False):
         if old is None or new is None:
             issues.append('unmatched-game')
         else:
-            issues.extend('off:' + s for s in old['issues'])
-            issues.extend('on:' + s for s in new['issues'])
+            issues.extend('off:' + s for s in old['issues'] if not (historical and s == 'missing-campaign-events'))
+            issues.extend('on:' + s for s in new['issues'] if not (historical and s == 'missing-campaign-events'))
             if old['identity'] != new['identity']: issues.append('scenario-identity-mismatch')
-            if any(not old['setup'].get(k) or old['setup'].get(k) != new['setup'].get(k) for k in SETUP): issues.append('missing-or-changed-world-identity')
+            if any(not old['setup'].get(k) or old['setup'].get(k) != new['setup'].get(k) for k in (('map_hash', 'options_hash', 'observing') if historical else SETUP)): issues.append('missing-or-changed-world-identity')
             if not historical and (not old['source'] or old['source'] != new['source'] or not old['source_fingerprint'] or old['source_fingerprint'] != new['source_fingerprint']): issues.append('source-mismatch')
             if not historical:
                 h = old['helper_house']
                 enemies = {k: v for k, v in old['configs'].items() if k != h}
-                if not enemies or enemies != {k: v for k, v in new['configs'].items() if k != h}: issues.append('enemy-policy-unverified-or-changed')
+                if (old['identity'].get('enemy_ai') == 'quantbot' and not enemies) or enemies != {k: v for k, v in new['configs'].items() if k != h}: issues.append('enemy-policy-unverified-or-changed')
         change = None if old is None or new is None else old['outcome'] + '->' + new['outcome']
         # Every game needs review; changed outcomes and economic/army regressions are prominent.
         record = dict(id=gid, before=old, after=new, outcome_change=change, issues=issues)
+        if historical and old and new:
+            record['version_differences'] = {k: [old['setup'].get(k), new['setup'].get(k)] for k in ('content_hash', 'object_data_hash') if old['setup'].get(k) != new['setup'].get(k)}
         record['flags'] = []
         if old and new:
             if old['outcome'] == 'won' and new['outcome'] != 'won': record['flags'].append('lost-baseline-win')
@@ -274,7 +281,14 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
         if ref:
             c = compact_json(resolve(path.parent, ref))
             plan = provenance['control_plans'][name]
-            controls[name] = bool(c.get('schema') == 'campaign-research-control/1' and c.get('kind') == name
+            regenerated = None
+            if c.get('inputs') and c.get('control_config') == ('historical-native' if name == 'historical' else m['configs']['off']):
+                try:
+                    regenerated = control_report(c['inputs']['before'], c['inputs']['after'], plan['path'], name, m['configs']['on'],
+                        {r['id']: r['review'] for r in c.get('games', []) if r.get('review')}, control_config='historical-native' if name == 'historical' else m['configs']['off'])
+                except (OSError, ValueError, KeyError):
+                    pass
+            controls[name] = bool(regenerated == c and c.get('schema') == 'campaign-research-control/1' and c.get('kind') == name
                 and c.get('source_revision') == provenance['source_revision'] and c.get('candidate_config') == m['configs']['on']
                 and c.get('schedule_sha256') == plan['sha256'] and c.get('complete') is True
                 and c.get('pending_reviews') == [] and c.get('games')
@@ -290,8 +304,11 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
         if row['before'] and row['after']:
             key = tuple(row['before']['identity'][k] for k in ('map', 'campaign_mode', 'mod', 'partner', 'enemy_difficulty'))
             strata[key][row['outcome_change']] += 1
+    harmful = bool(complete and actuation and effect.get('interval') and effect['interval'][1] < 0)
+    broken = any(any('engine-error' in issue for issue in r['issues']) for r in rows)
+    status = 'implementation-failed' if broken else 'harmful' if harmful else 'confirmed' if confirmed else 'inconclusive'
     return dict(schema='dunecity-experiment-report/1', id=m['id'], stage=stage, population='campaign', provenance=provenance,
-                status='confirmed' if confirmed else 'inconclusive',
+                status=status,
                 facts=dict(complete=complete, actuation_verified=actuation, quality_reviewed=not pending and complete,
                            promotion_controls_passed=all(controls.values()), promotion_ready=confirmed and all(controls.values())),
                 metrics=dict(primary=effect), games=rows, pending_reviews=pending, controls=controls,
@@ -299,7 +316,7 @@ def experiment_report(path, stage, control_directory, candidate_directory, evide
                 interpretation='Player-support OFF/ON against fixed enemies. Every game is retained; no automatic causal or default-promotion claim.')
 
 
-def control_report(before, after, schedule_path, kind, candidate_config, reviews=None):
+def control_report(before, after, schedule_path, kind, candidate_config, reviews=None, control_config=None):
     from research_report import compact_json
     schedule_path = Path(schedule_path)
     expected = compact_json(schedule_path)
@@ -308,6 +325,10 @@ def control_report(before, after, schedule_path, kind, candidate_config, reviews
     left, right = game_evidence(before), game_evidence(after)
     rows = pair_records(left, right, historical=kind == 'historical')
     ids = {r['id'] for r in expected}
+    for gid in sorted(ids - (set(left) | set(right))):
+        row = dict(id=gid, before=None, after=None, outcome_change=None, issues=['missing-both-arms'])
+        row['review_key'] = digest(row)
+        rows.append(row)
     complete = len(ids) == len(expected) and set(left) == set(right) == ids and bool(rows) and all(not r['issues'] for r in rows)
     for expected_row in expected:
         for data in (left, right):
@@ -321,8 +342,17 @@ def control_report(before, after, schedule_path, kind, candidate_config, reviews
                 wanted = sides if isinstance(sides, str) else ' '.join(':'.join(map(str, side)) for side in sides)
                 if wanted != actual['identity']['sides']: complete = False
             else: complete = False
+    def has_style(r, style):
+        return bool(style) and (r['helper_style'] == style or r.get('style_seats') == f"{r['helper_house']}=candidate-{style}")
     sources = {r['source'] for r in right.values()}
-    complete &= len(sources) == 1 and all(r['helper_style'] == candidate_config or r['setup'].get('style') == candidate_config for r in right.values())
+    complete &= len(sources) == 1 and all(has_style(r, candidate_config) for r in right.values())
+    if kind != 'historical':
+        complete &= bool(control_config and control_config != candidate_config) and all(has_style(r, control_config) for r in left.values())
+        complete &= all(r['before'] and r['after'] and r['before']['configs'].get(r['before']['helper_house'])
+                        and r['after']['configs'].get(r['after']['helper_house'])
+                        and r['before']['configs'].get(r['before']['helper_house']) != r['after']['configs'].get(r['after']['helper_house']) for r in rows)
+    else:
+        complete &= control_config == 'historical-native' or all(has_style(r, control_config) for r in left.values())
     if kind == 'historical':
         complete &= len({r['source'] for r in left.values()}) == 1 and {r['source'] for r in left.values()} != sources
     pending = []
@@ -334,7 +364,8 @@ def control_report(before, after, schedule_path, kind, candidate_config, reviews
         row['review'] = review if valid else None
         if not valid: pending.append(row['id'])
     return dict(schema='campaign-research-control/1', kind=kind, source_revision=next(iter(sources)) if len(sources) == 1 else None,
-                candidate_config=candidate_config, schedule_sha256=hashlib.sha256(schedule_path.read_bytes()).hexdigest(),
+                candidate_config=candidate_config, control_config=control_config, inputs=dict(before=str(Path(before).resolve()), after=str(Path(after).resolve())),
+                input_hashes={arm: {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for name in ('games.csv', 'samples.csv', 'campaign-ai.csv') for p in [Path(directory)/name, Path(directory)/(name+'.gz')] if p.is_file()} for arm, directory in [('before',before),('after',after)]}, schedule_sha256=hashlib.sha256(schedule_path.read_bytes()).hexdigest(),
                 complete=bool(complete), games=rows, games_sha256=digest(rows), pending_reviews=pending,
                 interpretation='Historical whole-version same-scenario comparison, not head-to-head strength.' if kind == 'historical' else 'Matched controls; each regression requires explicit review.')
 
@@ -347,12 +378,13 @@ def main():
     parser.add_argument('--control-schedule', type=Path)
     parser.add_argument('--kind', choices=('campaign-all-maps', 'scenario-controls', 'historical'))
     parser.add_argument('--candidate-config')
+    parser.add_argument('--control-config', required=False)
     parser.add_argument('--reviews', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if args.control_schedule:
         require(args.kind and args.candidate_config, 'Control kind and config required')
-        report = control_report(args.before, args.after, args.control_schedule, args.kind, args.candidate_config, json.loads(args.reviews.read_text()) if args.reviews else None)
+        report = control_report(args.before, args.after, args.control_schedule, args.kind, args.candidate_config, json.loads(args.reviews.read_text()) if args.reviews else None, args.control_config)
         args.output.write_text(json.dumps(report, indent=2) + '\n')
         return
     rows = pair_records(game_evidence(args.before), game_evidence(args.after), args.historical)

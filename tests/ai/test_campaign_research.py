@@ -16,9 +16,10 @@ def manifest_fixture(root):
     case = dict(house='harkonnen', mission=21, seed=9901, helper='brutal', enemy='hard', mode='full', mod='vanilla', minutes=80)
     for stage, seed in (('pilot', 9901), ('confirmation', 10001)):
         (root / (stage + '.json')).write_text(json.dumps(dict(schema='campaign-research-cases/1', cases=[dict(case, seed=seed)])))
+    (root / 'options.ini').write_text('[Game Options]\nFog of War = false\n')
     plans = {
-        'campaign-all-maps': [dict(id=f'{h}-{n}', house=h, mission=n) for h in subject.HOUSES for n in range(1,23)],
-        'scenario-controls': [dict(id=k, category=k) for k in ('controls','skirmish','team','ladder','aaa')],
+        'campaign-all-maps': [dict(id=f'campaign/test/vanilla/{h}-m{n}/1', house=h, mission=n, map=f'{h} level {subject.level(n)} mission {n}') for h in subject.HOUSES for n in range(1,23)],
+        'scenario-controls': [dict(id=k+'/test', category=k) for k in ('controls','skirmish','team','ladder','aaa')],
         'historical': [dict(id='historical-deck')]}
     for name, rows in plans.items(): (root / (name + '.json')).write_text(json.dumps(rows))
     return dict(schema='dunecity-experiment/1', population='campaign', id='campaign-support',
@@ -26,7 +27,7 @@ def manifest_fixture(root):
         off_contract='Current policy', stopping_rule='Fixed budget', snapshot=dict(revision='a'*40,cwd=str(root)),
         baseline=dict(release='869',source_commit='a'*40,config_identity='native',population='campaign',independent=True),
         observed_failure=['loss'],successful_counterexamples=['win'],negative_learning=[], configs=dict(off='control',on='candidate'),
-        primary=dict(metric='won',direction='higher',minimum_effect=.1),
+        game_options='options.ini', primary=dict(metric='won',direction='higher',minimum_effect=.1),
         design=dict(cluster_fields=['seed'],stopping='fixed-budget',alpha=.05,power=.8,finalists=1),
         budget=dict(max_games=4,max_wall_s=1000), promotion_controls=list(plans),
         control_plans={k:k+'.json' for k in plans},
@@ -53,7 +54,7 @@ class CampaignResearchTests(unittest.TestCase):
             helper_style=self.m['configs'][arm],ai_configs=json.dumps({'0':arm,'1':'enemy'}),setup_identity=json.dumps(setup))
         csv_file(p/'games.csv',[row])
         if samples:
-            csv_file(p/'samples.csv',[dict(id=self.gid,house='0',minute='80',credits='30',army_value='0',harvesters='0',repair_yards='1',spice_gross='100',loss_value='500',kill_value='100')])
+            csv_file(p/'samples.csv',[dict(id=self.gid,house='0',minute='80',cycle='300000',credits='30',army_value='0',harvesters='0',repair_yards='1',spice_gross='100',loss_value='500',kill_value='100')])
         if events:
             csv_file(p/'campaign-ai.csv',[dict(id=self.gid,line='minute=0 house=0 role=partner difficulty=3 event=campaign_opening {}')])
         return p
@@ -105,6 +106,57 @@ class CampaignResearchTests(unittest.TestCase):
         b[self.gid]['setup']['map_hash']='different';b[self.gid]['source']='b'*40
         issues=subject.pair_records(a,b)[0]['issues']
         self.assertIn('missing-or-changed-world-identity',issues);self.assertIn('source-mismatch',issues)
+
+    def test_final_sample_in_same_minute_is_not_duplicate(self):
+        p=self.game(); rows=subject.table(p,'samples.csv')
+        rows.append(dict(rows[0],cycle='300050',credits='0'))
+        csv_file(p/'samples.csv',rows)
+        self.assertNotIn('invalid-or-duplicate-samples',subject.game_evidence(p)[self.gid]['issues'])
+        rows.append(rows[0]);csv_file(p/'samples.csv',rows)
+        self.assertIn('invalid-or-duplicate-samples',subject.game_evidence(p)[self.gid]['issues'])
+
+    def test_options_bytes_are_part_of_frozen_provenance(self):
+        first=subject.validate_manifest(self.m,self.root)
+        (self.root/'options.ini').write_text('[Game Options]\nFog of War = true\n')
+        second=subject.validate_manifest(self.m,self.root)
+        self.assertNotEqual(first['game_options']['sha256'],second['game_options']['sha256'])
+
+    def control_schedule(self):
+        path=self.root/'small-control.json'
+        path.write_text(json.dumps([dict(id=self.gid, seed=9901, mod='vanilla', map='harkonnen level 8 mission 21', minutes=80, sides='harkonnen:1:QB enemies:2:QH')]))
+        return path
+
+    def test_controls_cannot_compare_candidate_against_itself(self):
+        candidate=self.game('on')
+        report=subject.control_report(candidate,candidate,self.control_schedule(),'campaign-all-maps','candidate',control_config='control')
+        self.assertFalse(report['complete'])
+
+    def test_control_receipt_binds_real_input_bytes_and_requires_reviews(self):
+        a=self.game();b=self.game('on')
+        first=subject.control_report(a,b,self.control_schedule(),'campaign-all-maps','candidate',control_config='control')
+        self.assertTrue(first['complete']);self.assertEqual(first['pending_reviews'],[self.gid])
+        rows=subject.table(b,'games.csv');rows[0]['outcome']='won';csv_file(b/'games.csv',rows)
+        second=subject.control_report(a,b,self.control_schedule(),'campaign-all-maps','candidate',control_config='control')
+        self.assertNotEqual(first['input_hashes'],second['input_hashes'])
+        self.assertNotEqual(first['games'][0]['review_key'],second['games'][0]['review_key'])
+
+    def test_historical_allows_engine_content_change_but_not_map_or_options(self):
+        a=subject.game_evidence(self.game());b=subject.game_evidence(self.game('on'))
+        a[self.gid]['source']='b'*40;a[self.gid]['setup']['content_hash']='older'
+        pair=subject.pair_records(a,b,historical=True)[0]
+        self.assertFalse(pair['issues']);self.assertIn('content_hash',pair['version_differences'])
+        a[self.gid]['setup']['options_hash']='wrong'
+        self.assertIn('missing-or-changed-world-identity',subject.pair_records(a,b,historical=True)[0]['issues'])
+
+    def test_forged_map_labels_do_not_supply_66_map_coverage(self):
+        p=self.root/'campaign-all-maps.json';rows=json.loads(p.read_text())
+        for r in rows:r['map']='harkonnen level 8 mission 21'
+        p.write_text(json.dumps(rows))
+        with self.assertRaisesRegex(ValueError,'66'):subject.validate_manifest(self.m,self.root)
+
+    def test_unhashed_play_style_not_accepted_as_research_switch(self):
+        (self.root/'tests/ai/play-styles/candidate.ini').write_text('[Play Style]\nMinWaveUnits=3\n')
+        with self.assertRaisesRegex(ValueError,'hashed'):subject.validate_manifest(self.m,self.root)
 
     def test_duplicate_case_rejected(self):
         p=self.root/'pilot.json';d=json.loads(p.read_text());d['cases']*=2;p.write_text(json.dumps(d))

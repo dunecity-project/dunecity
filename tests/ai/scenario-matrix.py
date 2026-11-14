@@ -324,9 +324,11 @@ def aaa_seeds(count):
 
 
 def schedule(args):
+    if getattr(args, 'seat_style', None) and (getattr(args, 'style', None) or getattr(args, 'helper_style', None) or getattr(args, 'genome', None)):
+        raise ValueError('Seat-only treatment cannot combine with another style or genome')
     if getattr(args, 'case_manifest', None):
         import campaign_research
-        if getattr(args, 'style', None) or getattr(args, 'genome', None) or getattr(args, 'campaign_ai_only', False):
+        if getattr(args, 'style', None) or getattr(args, 'seat_style', None) or getattr(args, 'genome', None) or getattr(args, 'campaign_ai_only', False):
             raise ValueError('Campaign research deck cannot change all controllers or remove the human')
         games = campaign_research.schedule(args.case_manifest, campaign_game)
         if getattr(args, 'shard', None):
@@ -540,9 +542,11 @@ def control_style_inputs(args, game, out):
     """Controls: --style overlays only the candidate seat (slot 0, the Brutal QuantBot) through the
     per-house genome-phase transport of dunecity-audit.py --candidate-style. Every other seat,
     including a QuantBot ally, keeps the native config."""
-    if args.tier != 'controls' or not getattr(args, 'style', None):
+    style = getattr(args, 'seat_style', None) or (getattr(args, 'style', None) if args.tier == 'controls' else None)
+    if not style:
         return None
-    style = args.style
+    if getattr(args, 'seat_style', None) and (getattr(args, 'style', None) or getattr(args, 'genome', None) or game['kind'] == 'campaign'):
+        raise ValueError('Seat-only controls require a non-campaign game without another treatment')
     source = root / 'tests/ai/play-styles' / f'{style}.ini'
     if Path(style).name != style or not source.is_file():
         raise SystemExit(f'Unknown play style: {style}')
@@ -550,8 +554,8 @@ def control_style_inputs(args, game, out):
     if re.search(rb'^\s*\[\s*Play Style\s*\]', payload, re.IGNORECASE | re.MULTILINE):
         raise SystemExit('Candidate-only control styles must be config overlays (no [Play Style] section)')
     house, _, code = game['sides'][0]
-    if code != 'QB':
-        raise SystemExit(f'Control candidate seat is {code}, not QB: {game["id"]}')
+    if code not in DIFFICULTY:
+        raise SystemExit(f'Control candidate seat is not QuantBot: {game["id"]}')
     directory = out.with_suffix('.candidate')
     remove_tree(directory)
     directory.mkdir(parents=True)
@@ -582,9 +586,10 @@ def style_seats(lines):
 
 
 def expected_style_seats(args, game):
-    if not getattr(args, 'style', None):
+    style = getattr(args, 'seat_style', None) or getattr(args, 'style', None)
+    if not style:
         return 'none'
-    return f'{HOUSE_NUMBERS[game["sides"][0][0]]}=candidate-{args.style}'
+    return f'{HOUSE_NUMBERS[game["sides"][0][0]]}=candidate-{style}'
 
 
 def campaign_roster_error(game, houses):
@@ -619,9 +624,9 @@ def play(args, scratch, binary, game):
     env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
     env.pop('BALANCE_DUNECITY_AUDIT', None)
     env.pop('DUNECITY_TECH_SAVINGS_AUDIT', None)
-    if args.tier == 'controls':
+    if args.tier == 'controls' or getattr(args, 'seat_style', None) or getattr(args, 'helper_style', None):
         # Native means no inherited experiment; a --style reaches the candidate seat only.
-        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
+        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_HELPER_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
             env.pop(key, None)
     candidate_dir = out.with_suffix('.candidate')
     if getattr(args, 'genome', None):
@@ -680,7 +685,7 @@ def play(args, scratch, binary, game):
         if (row['helper_style'] != args.helper_style or not native or helper not in configs or len(configs) < 2
                 or any(value != native for house, value in configs.items() if house != helper)):
             row['error'] = 'Helper treatment missing or enemy configuration changed'
-    if args.tier == 'controls':
+    if args.tier == 'controls' or getattr(args, 'seat_style', None):
         remove_tree(candidate_dir)
         if not row['error'] and row['style_seats'] != expected_style_seats(args, game):
             row['error'] = f'style seats {row["style_seats"] or "unrecorded"} != {expected_style_seats(args, game)}'
@@ -1254,6 +1259,7 @@ parser.add_argument('--cells', help='Only cells whose category/name/mod matches 
 parser.add_argument('--cases', help='Only scheduled game IDs matching this regular expression (diagnostic subset)')
 parser.add_argument('--case-manifest', type=Path, help='Frozen authored campaign research cases (no schedule expansion)')
 parser.add_argument('--helper-style', help='Apply a treatment only to the human house QuantBot helper')
+parser.add_argument('--seat-style', help='Non-campaign control experiment: config overlay on the first QuantBot seat only')
 parser.add_argument('--control-diagnostics', action='store_true',
                     help='Observed handmade-map study, never a controls gate; every comparison arm must use it')
 parser.add_argument('--control-seeds', type=int, nargs='+',
