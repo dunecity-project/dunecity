@@ -194,7 +194,7 @@ Queue wrapper exit 0 and a job ID mean **accepted**, not completed or passed.
   storage. Never commit WASM/data snapshots into its Git history. `/play-staging`
   isolates dev/SHA identity, caches, saves and signaling from stable `/play`.
 - Headless-nightly qualification runs **before production selection**, after green
-  integration CI, in `qualify-release.yml` on hosted Mac. It runs once per frozen
+  integration CI, in `qualify-release.yml`, preferring the Mini with hosted fallback. It runs once per frozen
   source, independently of packaging. Automatic requests coalesce to the newest
   pending integration commit; an explicit candidate is never cancelled by pushes.
   Daily Mac nightly owns GUI-only coverage; Linux nightly remains separate platform
@@ -221,14 +221,38 @@ implementation reuses exact source SHAs only. Documentation can ship separately
 without changing the frozen game candidate; cross-SHA equivalence is not automated.
 
 Green integration CI starts **Qualify release candidate** automatically after this
-workflow is deployed on default `main`. For an explicit older green integration
+workflow is deployed on the default `integrate/feature-batch` branch. For an explicit older green integration
 candidate, first check whether its qualification is already running, then:
 
 ```sh
-gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref main -f sha="$FULL_SHA"
+gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref integrate/feature-batch -f sha="$FULL_SHA"
 # After completion, this is the concrete readiness check, before creating a tag:
 python3 scripts/release-automation.py reuse-qualification --sha "$FULL_SHA" --directory "$EVIDENCE_DIR/qualification"
 ```
+
+The Mini is optional capacity. The host gate admits only the separately hash-approved
+qualification workflow on `integrate/feature-batch`, with a successful candidate
+selection and no production reservation. The workspace and queue atomically admit
+one verification lane without waiting; a refusal triggers a hosted run. An offline
+or occupied runner gets a two-minute queue window, then a hosted dispatch and
+cancellation of the queued attempt. A runner assignment racing cancellation may
+briefly start the old lane; its queue wrapper terminates only that owned child.
+API/dispatch/cancellation errors remain visible. This is not a guaranteed total ETA:
+GitHub scheduling and execution time are outside that queue window.
+
+Once the Mini enters the lane, compilation or test failure is retained and **does
+not** trigger fallback. `backend=hosted` is an explicit operator override and the
+terminal fallback route; it cannot recursively dispatch more runs. Only the hosted
+routing helpers get `actions: write`; compilation/tests retain read permissions.
+Runner identity is checked against the producing job and recorded with macOS/Xcode
+identity. Existing release signing roles remain separately approved.
+
+Independent single-game probes use CTest `PROCESSORS 2`: the Mini qualifier has
+four slots (up to two games), the smaller hosted Mac has two. GUI, network and
+internally parallel multi-game tests retain serial scheduling. Profiles and output
+paths stay separate; no timeouts or assertions are relaxed. The PHP-backed network
+test runs in the stable Mini lane, with missing PHP or a skipped case fatal; both
+qualification backends exclude that separately required network scope.
 
 This verifies the exact source, trusted repository/workflow/attempt, successful
 required jobs, identical control recipe, immutable Actions artifact digest, CMake

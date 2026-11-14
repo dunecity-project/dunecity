@@ -195,6 +195,8 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_desktop_updates.py
           python3 -m unittest discover -s scripts/tests -p test_checkout_content.py
           python3 -m unittest discover -s scripts/tests -p test_release_automation.py
+          python3 -m unittest discover -s scripts/tests -p test_qualification_routing.py
+          python3 -m unittest discover -s scripts/tests -p test_headless_parallel.py
           python3 -m unittest discover -s scripts/tests -p test_ios_staging.py
           python3 -m unittest discover -s tests/performance -p test_fixture_reconstruction.py
           python3 -m unittest discover -s scripts/tests -p test_macos_runtime.py
