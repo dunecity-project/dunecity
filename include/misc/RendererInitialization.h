@@ -20,8 +20,16 @@ constexpr bool startupSoftwareFallback = true;
 constexpr bool startupSoftwareFallback = false;
 #endif
 
+// SDL2's dummy video driver has no accelerated renderer on any platform. Only
+// tests and headless tools select it, so they get the software renderer rather
+// than each launcher having to pin SDL_RENDER_DRIVER. Players never use it.
+inline bool defaultStartupSoftwareFallback() {
+    const char* driver = SDL_GetCurrentVideoDriver();
+    return startupSoftwareFallback || (driver && std::string(driver) == "dummy");
+}
+
 inline SDL_Renderer* createStartupRenderer(SDL_Window* window,
-                                          bool allowSoftwareFallback = startupSoftwareFallback) {
+                                          bool allowSoftwareFallback = defaultStartupSoftwareFallback()) {
     if(!window) {
         SDL_SetError("Cannot create a renderer without a window");
         return nullptr;
