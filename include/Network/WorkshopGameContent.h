@@ -61,7 +61,10 @@ inline void resolveMod(GameInitSettings& init, bool allowDownload = true) {
     } else {
         if(mods.getActiveModName() != init.getModName() && !mods.setActiveMod(init.getModName()))
             throw std::runtime_error("This game's mod is not installed.");
-        if(!init.getModChecksum().empty() && mods.getEffectiveChecksums().combined != init.getModChecksum())
+        const bool migratedWave = init.getSavedGameVersion() == "1.0.867"
+            && mods.matchesPre868CampaignWaveChecksum(init.getModChecksum());
+        if(!init.getModChecksum().empty() && mods.getEffectiveChecksums().combined != init.getModChecksum()
+           && !migratedWave)
             throw std::runtime_error("This game needs an older mod version. Its installed files have changed.");
     }
     init.setModIdentity(mods.getActiveModName(), mods.getEffectiveChecksums().combined);

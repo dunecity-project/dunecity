@@ -20,7 +20,7 @@ inline Profile profile(int difficulty, int tech) {
         // half-ready-army budget still retains defenders.
         case 0: return {1, 3+stage, stage==2 ? 1700 : (3+stage)*300, 180000-stage*30000, 120000, 150000, 25, 50, true};
         case 1: return {1, std::numeric_limits<int>::max(), 2500, 120000-stage*15000, 120000, 180000, 15, 100, true};
-        case 2: return {2, std::numeric_limits<int>::max(), 3500, 75000-stage*15000, 120000, 240000, 10, 100, true};
+        case 2: return {2, std::numeric_limits<int>::max(), 4000, 75000-stage*15000, 120000, 240000, 10, 100, true};
         default:return {8, 16+stage*4, (16+stage*4)*700, 40000-stage*10000, 0, 300000, 5, 100, false};
     }
 }

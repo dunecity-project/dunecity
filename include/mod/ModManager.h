@@ -169,6 +169,10 @@ public:
      * \return ModChecksums with hashes for multiplayer verification
      */
     ModChecksums getEffectiveChecksums() const;
+
+    // Accept the 1.0.867 checksum only when the sole rules change is the
+    // shipped Hard campaign wave increase from 3500 to 4000.
+    bool matchesPre868CampaignWaveChecksum(const std::string& checksum) const;
     
     /**
      * Recalculate and cache checksums for current state.
@@ -338,7 +342,7 @@ private:
      * blank lines so cosmetic edits don't change the hash). Returns
      * "FILE_NOT_FOUND" if the file is missing.
      */
-    static std::string hashFileCanonical(const std::string& path);
+    static std::string hashFileCanonical(const std::string& path, bool pre868CampaignWave = false);
 
     /**
      * Combine the per-file hashes into the checksum that is exchanged in multiplayer.

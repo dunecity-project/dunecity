@@ -392,7 +392,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHardHarvesters = 4;
     force.campaignEasyWaveValue = 1700;
     force.campaignMediumWaveValue = 2500;
-    force.campaignHardWaveValue = 3500;
+    force.campaignHardWaveValue = 4000;
     force.campaignEasyOpeningDelaySec = 0;
     force.campaignMediumOpeningDelaySec = 0;
     force.campaignHardOpeningDelaySec = 60;

@@ -83,7 +83,7 @@ outstanding-force or recovery blocking: an enemy wave is limited by its own cap.
 | Enemy lever | Easy | Medium | Hard |
 |---|---|---|---|
 | `Campaign<Tier>Harvesters` (most it keeps; 0 = no ceiling) | 1 | 2 | 4 |
-| `Campaign<Tier>WaveValue` (one ground wave) | 1700 | 2500 | 3500 |
+| `Campaign<Tier>WaveValue` (one ground wave) | 1700 | 2500 | 4000 |
 | `Campaign<Tier>OpeningDelaySec` (after the map trigger) | 0 | 0 | 60 |
 
 | Helper lever | Easy | Medium | Hard | Brutal |
@@ -190,6 +190,24 @@ game's own `CAMPAIGN_AI:` log lines) and
 one line per game or a full game story from it.
 
 Still open:
+
+- The historical level-8 Brutal-helper/Hard-enemy aggregate was 22 wins,
+  31 losses and one time limit in 54 Full campaign games (40.7% wins), on
+  `264f44e0a1d3bfc0b39466d805cf7fd4badc94bf`. Harkonnen mission 20 was
+  4/9 wins; mission 21 was **0/9**. These are measured results, not the
+  separate 55% final-mission target, and do not establish Single mission
+  performance. The `losing` save from 1.0.867 is Single mission Harkonnen
+  mission 21, Brutal helper against Hard enemies. Its captured first 24
+  minutes show no helper ground dispatch and ten enemy dispatches; the
+  helper's army falls below the opposing-alliance readiness floor while
+  suffering losses at home. This identifies a failure mode, not proof
+  that removing the floor improves results.
+- The Hard enemy wave default increases from 3500 to 4000 for 1.0.868.
+  Historical results above used 3500 and must not be presented as measured
+  performance of the new default. Unpinned 1.0.867 Vanilla/Dune City saves
+  accept this exact config migration only after reconstructing and matching
+  the entire old checksum; unrelated content mismatches still fail. Saves
+  with immutable Workshop revisions retain their exact pinned content.
 
 - Brutal enemies win every game on levels 8-9 and most from level 4. A Brutal
   enemy sends its whole army on the trigger (5,000-7,000 on missions 8-12,

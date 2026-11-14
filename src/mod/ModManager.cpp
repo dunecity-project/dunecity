@@ -1085,7 +1085,16 @@ ModChecksums ModManager::getEffectiveChecksums() const {
     return cachedChecksums;
 }
 
-std::string ModManager::hashFileCanonical(const std::string& path) {
+bool ModManager::matchesPre868CampaignWaveChecksum(const std::string& checksum) const {
+    if(activeMod != "vanilla" && activeMod != "dunecity") return false;
+    const auto previous = hashFileCanonical(getActiveQuantBotConfigPath(), true);
+    if(previous.empty() || previous == "FILE_NOT_FOUND") return false;
+    const auto current = getEffectiveChecksums();
+    return checksum == combineChecksumParts(current.objectData, previous,
+        current.gameOptions, current.customHouse, "");
+}
+
+std::string ModManager::hashFileCanonical(const std::string& path, bool pre868CampaignWave) {
     // Compute canonical FNV-1a hash of an INI-style file.
     // "Canonical" means: skip comments, skip empty lines, trim whitespace,
     // so cosmetic edits don't change the hash.
@@ -1096,6 +1105,8 @@ std::string ModManager::hashFileCanonical(const std::string& path) {
 
     std::string contents;
     std::string line;
+    std::string section;
+    int migratedWaveKeys = 0;
     while (std::getline(file, line)) {
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
@@ -1123,10 +1134,17 @@ std::string ModManager::hashFileCanonical(const std::string& path) {
         }
 
         if (!line.empty()) {
+            if(line.front() == '[') section = line;
+            if(pre868CampaignWave && section == "[Force Concentration]"
+               && line == "CampaignHardWaveValue=4000") {
+                line = "CampaignHardWaveValue=3500";
+                ++migratedWaveKeys;
+            }
             contents += line + '\n';
         }
     }
     file.close();
+    if(pre868CampaignWave && migratedWaveKeys != 1) return "";
 
     uint64_t hash = 14695981039346656037ULL;
     const uint64_t prime = 1099511628211ULL;
