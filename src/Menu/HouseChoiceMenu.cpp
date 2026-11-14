@@ -181,7 +181,8 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     supportDescription.setTextFontSize(10);
     supportDescription.setTextColor(COLOR_WHITE);
     supportDescription.setAlignment(Alignment_Left);
-    windowWidget.addWidget(&supportDescription, Point(336, 361), Point(256, 26));
+    // Two size-10 lines need 28 rows: 26 cut the descenders of the second line.
+    windowWidget.addWidget(&supportDescription, Point(336, 361), Point(256, 28));
     onPartnerChanged(false);
 
     // Enemy AI: AI and Difficulty on one row; opponents always build and fight.
@@ -195,7 +196,8 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     enemyDescription.setTextFontSize(10);
     enemyDescription.setTextColor(COLOR_WHITE);
     enemyDescription.setAlignment(Alignment_Left);
-    windowWidget.addWidget(&enemyDescription, Point(336, 429), Point(256, 26));
+    // Two rows higher so the taller label still ends above the button row at 455.
+    windowWidget.addWidget(&enemyDescription, Point(336, 427), Point(256, 28));
     onEnemyChanged(false);
 
     gameOptionsButton.setText(_("Game Rules"));
@@ -256,7 +258,7 @@ void HouseChoiceMenu::onEnemyChanged(bool /*interactive*/) {
         {"qBotEasy",         "Small waves and a limited economy.\nEnemy houses can attack at the same time."},
         {"qBotMedium",       "Larger waves than Easy.\nEnemy houses can attack at the same time."},
         {"qBotHard",         "Stronger economy and capped waves.\nEnemy houses can attack at the same time."},
-        {"qBotBrutal",       "No limit on ground wave size.\nEnemy houses can attack at the same time."},
+        {"qBotBrutal",       "Ground waves have no credit cap.\nEnemy houses can attack at the same time."},
         {"qBotDefend",       "Builds and defends without main assaults."},
         {"CampaignAIPlayer", "Uses the original campaign AI behaviour."}
     };
