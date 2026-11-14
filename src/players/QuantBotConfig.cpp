@@ -420,6 +420,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHomeFields = 2;
     force.campaignSizedWorkerRescue = 0;
     force.campaignHelperRockHold = 0;
+    force.campaignHelperFactoryFirst = false;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
@@ -878,6 +879,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CampaignHomeFields", force.campaignHomeFields);
         iniFile.setIntValue("Force Concentration", "CampaignSizedWorkerRescue", force.campaignSizedWorkerRescue);
         iniFile.setIntValue("Force Concentration", "CampaignHelperRockHold", force.campaignHelperRockHold);
+        iniFile.setBoolValue("Force Concentration", "CampaignHelperFactoryFirst", force.campaignHelperFactoryFirst);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1179,6 +1181,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         iniFile.getIntValue("Force Concentration", "CampaignSizedWorkerRescue", force.campaignSizedWorkerRescue), 0, 2);
     force.campaignHelperRockHold = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperRockHold", force.campaignHelperRockHold), 0, 3);
+    force.campaignHelperFactoryFirst = iniFile.getBoolValue("Force Concentration", "CampaignHelperFactoryFirst", force.campaignHelperFactoryFirst);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1827,6 +1830,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHomeFields", force.campaignHomeFields);
     addNamed("campaignSizedWorkerRescue", force.campaignSizedWorkerRescue);
     addNamed("campaignHelperRockHold", force.campaignHelperRockHold);
+    addNamed("campaignHelperFactoryFirst", force.campaignHelperFactoryFirst);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);

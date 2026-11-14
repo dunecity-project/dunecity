@@ -918,6 +918,8 @@ bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
         && turn.pBuilder->getItemID()==Structure_ConstructionYard
         && !turn.pBuilder->isUpgrading() && turn.pBuilder->getProductionQueueSize()==0
         && pass.itemCount[Structure_RepairYard]==0
+        // CampaignHelperFactoryFirst: the first Heavy Factory is ordered before this walk.
+        && !pass.campaignHelperFactoryFirst
         && getAIRefineryBays()>0
         && getAIHarvesterCount()>0
         && ((gameMode == GameMode::Campaign && !pass.citySimEnabled && difficulty != Difficulty::Brutal)
@@ -1849,6 +1851,10 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         // transport or combat order. Spend the remainder on useful
         // workers without applying a second arbitrary half-cash cap.
         auto buyEconomicImport = [&](Uint32 item, const char* rule) {
+            // CampaignHelperFactoryFirst: no worker or transport import beyond six
+            // workers before the first Heavy Factory is ordered.
+            if (pass.campaignHelperFactoryFirst && (item == Unit_Harvester || item == Unit_Carryall)
+                && pass.itemCount[Unit_Harvester] >= 6) return false;
             if (!vanillaBoomAdmits(pass, item)) return false;
             const int price = purchasePrice(turn.pBuilder,item);
             const bool plannedMcv = economyPriority > 1 && item == Unit_MCV && capitalPending(pass)

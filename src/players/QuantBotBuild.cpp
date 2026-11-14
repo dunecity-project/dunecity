@@ -3351,6 +3351,12 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     pass.campaignThreatProduction = ((helperForce.campaignThreatProduction && pass.defendingEconomy) || belowArmyFloor)
         && !pass.citySimEnabled && !builderOnly()
         && campaignPolicyApplies() && isAlliedWithHuman();
+    // CampaignHelperFactoryFirst (default off): that support house walks to its first Heavy
+    // Factory before more economy. Inert once one is built or queued, or without its tech.
+    pass.campaignHelperFactoryFirst = helperForce.campaignHelperFactoryFirst && belowArmyFloor
+        && campaignEconomySupport() && pass.itemCount[Structure_HeavyFactory] == 0
+        && data[Structure_HeavyFactory][houseID].enabled
+        && data[Structure_HeavyFactory][houseID].techLevel <= getHouse()->getTechLevel();
     pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth
         && groundEconomyThreat && ownGroundArmyValue()
             < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());

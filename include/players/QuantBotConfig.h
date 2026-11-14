@@ -386,6 +386,11 @@ struct QuantBotConfig {
         /// Area Guard target is a sandworm, 3=only that call-back, with the centroid regroup
         /// kept. Hunting, retreating, defending, repairing and human-ordered units are unchanged.
         int campaignHelperRockHold;
+        /// Classic campaign support below its campaignHelper*ArmyFloor, with two refineries and
+        /// no Heavy Factory built or queued, walks to its first Heavy Factory before the Starport
+        /// ladder, a third refinery, the first Repair Yard and imports beyond six harvesters.
+        /// Independent hashed candidate, default off; inert without Heavy Factory tech.
+        bool campaignHelperFactoryFirst;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

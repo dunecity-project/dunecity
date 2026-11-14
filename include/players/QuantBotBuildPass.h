@@ -264,6 +264,8 @@ struct QuantBot::BuildPass {
     bool roadMaintenanceAttempted{};
     bool defendingEconomy{};
     bool campaignThreatProduction{};
+    // CampaignHelperFactoryFirst: support house below its army floor still lacks a Heavy Factory.
+    bool campaignHelperFactoryFirst{};
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
     bool vanillaFfaLargeScope{};

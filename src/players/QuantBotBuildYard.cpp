@@ -415,6 +415,38 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         vetYardChoice(pass, turn, yardTurn);
         return placeYardChoice(pass, turn, yardTurn);
     }
+    // CampaignHelperFactoryFirst (default off, docs/campaign-support-research.md): a support
+    // house below its army floor, with two refineries, walks to its first Heavy Factory before
+    // field outposts, the Starport ladder (third/fourth refinery, port, repair) and the
+    // campaign repair walk can take the yard. Saving holds the yard; a pending step waits.
+    if (pass.campaignHelperFactoryFirst
+        && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
+        const int house = getHouse()->getHouseID();
+        const auto& data = currentGame->objectData.data;
+        Uint32 step = Structure_HeavyFactory;
+        for (int depth = 0; step != NONE_ID && depth < Structure_LastID; ++depth) {
+            if (pass.itemCount[step] > 0) {
+                yardTurn.skipRemainingStructureLogic = true;
+                yardTurn.structureRule = "helper_factory_first_pending";
+                break;
+            }
+            if (campaignAvailableToBuild(turn.pBuilder, step)) {
+                if (findPlaceLocation(step).isValid()) {
+                    yardTurn.skipRemainingStructureLogic = true;
+                    yardTurn.itemID = pass.money >= buildingCapitalCost(pass, step) ? step : NONE_ID;
+                    yardTurn.serviceSavingHold = yardTurn.itemID == NONE_ID;
+                    yardTurn.structureRule = yardTurn.itemID == NONE_ID
+                        ? "save_helper_factory_first" : "helper_factory_first";
+                }
+                break;
+            }
+            Uint32 prerequisite = NONE_ID;
+            for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
+                if (data[step][house].prerequisiteStructuresSet[item]
+                    && getHouse()->getNumItems(item) == 0) { prerequisite = item; break; }
+            step = prerequisite;
+        }
+    }
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && getHouse()->hasPower()) {
         const Uint32 item = fieldExpansion.guard.isValid() ? Uint32(Structure_GunTurret)
             : fieldExpansion.refinery.isValid() ? Uint32(Structure_Refinery) : Uint32(NONE_ID);
