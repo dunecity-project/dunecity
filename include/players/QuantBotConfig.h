@@ -383,8 +383,8 @@ struct QuantBotConfig {
         /// Classic campaign support keeps its idle ground troops on the rock around its own
         /// base, where a sandworm cannot take them: 0=OFF (regroup on the troops' own
         /// centroid, sand included), 1=hold on base rock, 2=also call back a troop whose
-        /// Area Guard target is a sandworm. Hunting, retreating, defending, repairing and
-        /// human-ordered units are unchanged.
+        /// Area Guard target is a sandworm, 3=only that call-back, with the centroid regroup
+        /// kept. Hunting, retreating, defending, repairing and human-ordered units are unchanged.
         int campaignHelperRockHold;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.

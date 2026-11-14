@@ -4095,8 +4095,9 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
  * @param pUnit The unit to potentially move
  * @param squadRadius The acceptable radius around either position (unit won't move if within this radius)
  */
-bool QuantBot::campaignRockHoldApplies(const UnitBase* unit, int level) const {
-    return botConfig().force.campaignHelperRockHold >= level && campaignEconomySupport()
+bool QuantBot::campaignRockHoldApplies(const UnitBase* unit, bool recall) const {
+    const int level = botConfig().force.campaignHelperRockHold;
+    return (recall ? level >= 2 : level == 1 || level == 2) && campaignEconomySupport()
         && unit && unit->isAGroundUnit() && unit->getAttackMode()!=RETREAT && unit->getAttackMode()!=HUNT;
 }
 
@@ -4169,7 +4170,7 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     // CampaignHelperRockHold (default 0, docs/campaign-support-research.md): idle campaign
     // support troops hold the rock around their own base. Their centroid can lie on open
     // sand, and Area Guard follows a sandworm out there; a unit on rock cannot be eaten.
-    if (campaignRockHoldApplies(unit, 1)) {
+    if (campaignRockHoldApplies(unit, false)) {
         const Coord anchor = findBaseCentre(getHouse()->getHouseID());
         if (anchor.isValid()) {
             const_cast<UnitBase*>(unit)->setGuardPoint(anchor);
@@ -4606,9 +4607,9 @@ void QuantBot::retreatAllUnits() {
                 }
             }
 
-            // CampaignHelperRockHold 2: a support troop whose Area Guard target is a sandworm
+            // CampaignHelperRockHold 2 and 3: a support troop whose Area Guard target is a sandworm
             // is called back to the rock instead of following the worm onto the sand.
-            if (pUnit->getOwner() == getHouse() && pUnit->getTarget() && campaignRockHoldApplies(pUnit, 2)
+            if (pUnit->getOwner() == getHouse() && pUnit->getTarget() && campaignRockHoldApplies(pUnit, true)
                 && pUnit->getTarget()->getItemID() == Unit_Sandworm
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur

@@ -2370,13 +2370,13 @@ TEST_CASE("Campaign home fields require initial spice and a legally low-tech ope
     REQUIRE_FALSE(homeFieldOpeningScope(0, false, 3, 8));
 }
 
-TEST_CASE("Campaign helper rock hold persists OFF and both levels with distinct hashes",
+TEST_CASE("Campaign helper rock hold persists OFF and every level with distinct hashes",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;
     REQUIRE(defaults.force.campaignHelperRockHold == 0);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-rock-hold-test.ini";
     std::map<std::string, int> hashes;
-    for (const int level : {0, 1, 2}) {
+    for (const int level : {0, 1, 2, 3}) {
         {
             std::ofstream ini(path);
             ini << "[Force Concentration]\nCampaignHelperRockHold=" << level << '\n';
@@ -2401,7 +2401,7 @@ TEST_CASE("Campaign helper rock hold persists OFF and both levels with distinct 
     }
     QuantBotConfig clamped;
     REQUIRE(clamped.applyOverrides(path.string()));
-    REQUIRE(clamped.force.campaignHelperRockHold == 2);
+    REQUIRE(clamped.force.campaignHelperRockHold == 3);
     std::filesystem::remove(path);
 }
 
