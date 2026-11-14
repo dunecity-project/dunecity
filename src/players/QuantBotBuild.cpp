@@ -1064,14 +1064,19 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     pass.clearanceCommitmentShortfall = std::max(0, reservedCommitments - pass.money);
     pass.money = std::max(0, pass.money - reservedCommitments);
     // A quota mission is won by the credits its house has banked, and on some maps by nothing
-    // else. From half the quota a campaign helper on that house stops placing orders so the
-    // remaining income reaches the quota instead of becoming more army.
+    // else. A campaign helper on that house stops placing orders once half the quota is banked,
+    // or once the map holds less than three times the spice still needed, so the remaining
+    // income reaches the quota instead of becoming more army.
     if (botConfig().force.campaignHelperQuotaSaving && !pass.citySimEnabled
         && campaignPolicyApplies() && isAlliedWithHuman()
         && (currentGame->winFlags & WINLOSEFLAGS_QUOTA) != 0 && getHouse()->getQuota() > 0
         && getHouse() == currentGame->getOutcomeHouse()
-        && getHouse()->getCapacity() >= getHouse()->getQuota()
-        && getHouse()->getStoredCredits() * 2 >= getHouse()->getQuota()) pass.money = 0;
+        && getHouse()->getCapacity() >= getHouse()->getQuota()) {
+        const int quota = getHouse()->getQuota();
+        const int banked = getHouse()->getStoredCredits().floor();
+        if (banked * 2 >= quota || (getGameCycleCount() > MILLI2CYCLES(60000)
+                && int64_t(lastCalculatedSpice) <= int64_t(3) * (quota - banked))) pass.money = 0;
+    }
     // Keep the experimental policy's current working-capital convention;
     // ordinary production retains its existing economic cash buffer.
     pass.economyReserve = pass.vanillaEconomy && !pass.techSavings ? std::max(2000,
