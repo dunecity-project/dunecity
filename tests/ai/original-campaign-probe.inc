@@ -119,6 +119,42 @@ void runOriginalCampaignProbe(Game& game) {
     require(std::find(team.members.begin(), team.members.end(), NONE_ID) == team.members.end(), "dead ID survived team cleanup");
     require(team.members.size() <= 2, "team exceeded mission maximum");
 
+    // Execute the real script's attack callback against an enemy outside the
+    // guard radius, then run normal engine targeting. Neither the leash nor
+    // autonomous target refresh may undo the mission team's ATTACK order.
+    UnitBase* distantEnemy = nullptr;
+    for(int y = 1; y < currentGameMap->getSizeY() - 1 && !distantEnemy; ++y)
+        for(int x = 1; x < currentGameMap->getSizeX() - 1 && !distantEnemy; ++x) {
+            auto* tile = currentGameMap->getTile(x, y);
+            const int distance = blockDistanceApprox(authored->getLocation(), Coord(x, y));
+            if(tile->hasAGroundObject() || tile->isMountain() || distance < 15 || distance > 25) continue;
+            auto* candidate = other->createUnit(Unit_Tank, false);
+            require(candidate, "enemy allocation failed");
+            candidate->deploy(Coord(x, y));
+            if(currentGameMap->terrainAttackReachable(*authored, *candidate)) distantEnemy = candidate;
+            else candidate->destroy();
+        }
+    require(distantEnemy, "fixture needs a reachable distant enemy");
+    team.members = {authored->getObjectID()}; team.targetID = distantEnemy->getObjectID();
+    team.staging = false; team.script = {};
+    const auto attackInstruction = std::find(bot->teamProgram.words.begin(), bot->teamProgram.words.end(), 0x4e07);
+    require(attackInstruction != bot->teamProgram.words.end(), "original TEAM.EMC has no ATTACK callback");
+    team.script.pc = static_cast<Uint32>(attackInstruction - bot->teamProgram.words.begin());
+    bot->nextTeamTick = 0; bot->updateScenarioTeams();
+    require(authored->getAttackMode() == HUNT && authored->getTarget() == distantEnemy && !authored->wasForced(),
+        "script attack did not replace the guard leash with autonomous pursuit");
+    require(bot->keepsScenarioTeamTarget(authored), "team target ownership was not recognized");
+    for(int n = 0; n < 3; ++n) {
+        authored->findTargetTimer = 0; authored->targeting();
+        require(authored->getTarget() == distantEnemy, "engine dropped or replaced the mission team target");
+    }
+    bot->originalRules = false;
+    require(!bot->keepsScenarioTeamTarget(authored), "OFF changed target refresh");
+    bot->originalRules = true;
+    authored->doAttackObject(distantEnemy, true);
+    require(!bot->keepsScenarioTeamTarget(authored), "team hook claimed an explicit player order");
+    authored->doAttackObject(distantEnemy, false);
+
     // Exact controller-state persistence, including next action time and IDs.
     const auto previousVersion = game.loadedSavegameVersion;
     game.loadedSavegameVersion = 9886;

@@ -38,6 +38,7 @@
 #include <audio/sounds.h>
 
 #include <players/HumanPlayer.h>
+#include <players/CampaignAIPlayer.h>
 
 #include <misc/draw_util.h>
 
@@ -2529,7 +2530,14 @@ void UnitBase::targeting() {
             // Refresh target if current one is out of weapon range
             if(target && !attackPos && !forced && 
                (attackMode == GUARD || attackMode == AREAGUARD || attackMode == AMBUSH || attackMode == HUNT)) {
-                if(!isInWeaponRange(target.getObjPointer())) {
+                bool scriptedTeamTarget = false;
+                if(isByScenario() && attackMode == HUNT) {
+                    for(const auto& player : owner->getPlayerList())
+                        if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
+                            scriptedTeamTarget |= campaign->keepsScenarioTeamTarget(this);
+                }
+                if(scriptedTeamTarget) findTargetTimer = MILLI2CYCLES(1*1000);
+                else if(!isInWeaponRange(target.getObjPointer())) {
                     const ObjectBase* pNewTarget = findTarget();
 
                     if(pNewTarget != nullptr) {

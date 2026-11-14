@@ -743,11 +743,17 @@ void CampaignAIPlayer::updateOriginalUnits() {
 }
 
 void CampaignAIPlayer::updateScenarioTeams() {
+    if(!scenarioTeamsInitialized && getHouse()->getAITeams().empty()) {
+        scenarioTeamsInitialized = true;
+        return;
+    }
+    if(scenarioTeamsInitialized && scenarioTeams.empty()) return;
     const Uint32 tick = static_cast<Uint32>(static_cast<Uint64>(getGameCycleCount()) * GAMESPEED_DEFAULT * 60 / 1000);
     if(tick < nextTeamTick) return;
     nextTeamTick = tick + (getRandomGen().rand(0, 255) & 7) + 5;
     if(teamProgram.words.empty()) {
         auto file = pFileManager->openFileFromNamedPak("TEAM.EMC", "DUNE.PAK");
+        if(!file) throw std::runtime_error("Original Campaign AI requires TEAM.EMC in DUNE.PAK");
         const auto size = SDL_RWsize(file.get());
         if(size < 12 || size > 1024 * 1024) throw std::runtime_error("Invalid original TEAM.EMC size");
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
@@ -879,6 +885,10 @@ void CampaignAIPlayer::updateScenarioTeams() {
                         if(!unit || !unit->isRespondable() || unit->wasForced() || !unit->canAttack(target)) continue;
                         if(unit->getTarget() == target && (unit->isMoving()
                             || blockDistanceApprox(unit->getLocation(), target->getLocation()) >= unit->getWeaponRange())) continue;
+                        // Dune II ACTION_ATTACK pursues beyond a guard point.
+                        // HUNT supplies that movement here; the team target is
+                        // retained by targeting() without marking a player order.
+                        doSetAttackMode(unit, HUNT);
                         doAttackObject(unit, target, false);
                     }
                     return 0;
@@ -905,6 +915,15 @@ void CampaignAIPlayer::updateScenarioTeams() {
         });
         if(!running) break; // Original script error aborts this scheduler turn.
     }
+}
+
+bool CampaignAIPlayer::keepsScenarioTeamTarget(const UnitBase* unit) const {
+    if(!originalRules || !unit || unit->getOwner() != getHouse() || !unit->isByScenario()
+        || unit->wasForced() || unit->getAttackMode() != HUNT || !unit->getTarget()) return false;
+    for(const auto& team : scenarioTeams)
+        if(team.targetID == unit->getTarget()->getObjectID()
+            && std::find(team.members.begin(), team.members.end(), unit->getObjectID()) != team.members.end()) return true;
+    return false;
 }
 
 void CampaignAIPlayer::updateUnits() {

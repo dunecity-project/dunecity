@@ -38,6 +38,12 @@ The saved state includes instruction pointer, return register, stack, delay,
 team IDs and the next scheduler tick. It does not replace that timing with a
 fixed wave interval. DuneCity's tile-centre movement/weapon/pathfinding rules
 remain engine adaptations; this does not emulate original sub-tile combat.
+Scripted team attacks use Hunt movement and retain the team's selected target
+through autonomous target refresh, without marking the order as player-forced.
+Explicit orders, legacy Campaign AI and other controllers do not use this hook.
+Blocked rebuild locations remain blocked rather than reproducing original
+collision-ignoring placement. Ornithopters use DuneCity's Hunt flight/combat;
+the original STOP action's separate aircraft script is not emulated.
 
 Implementation and validation are in progress. The separately frozen 1.0.868
 release is not changed by this work. New state requires explicit save-version

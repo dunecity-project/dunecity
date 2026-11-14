@@ -1,7 +1,7 @@
 #ifndef ORIGINAL_CAMPAIGN_POLICY_H
 #define ORIGINAL_CAMPAIGN_POLICY_H
 
-#include <DataTypes.h>
+#include <data.h>
 #include <array>
 
 // Dune Dynasty 755876a710c0b188075ebe89cb40c068490e08e2, original (non-Brutal)

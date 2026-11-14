@@ -61,6 +61,7 @@ public:
     virtual void onDecrementStructures(int itemID, const Coord& location);
     virtual void onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID);
     bool usesOriginalRules() const { return originalRules; }
+    bool keepsScenarioTeamTarget(const UnitBase* unit) const;
 
 private:
     /**
