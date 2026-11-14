@@ -441,10 +441,10 @@ CampaignAllyStrengthFloor=1
 # The three difficulty levers of Easy / Medium / Hard campaign opponents (Brutal has none). Hashed.
 # Harvesters: the most an opponent keeps, however many refineries the mission gives it (0 = no ceiling).
 CampaignEasyHarvesters=1
-CampaignMediumHarvesters=1
-CampaignHardHarvesters=2
-# WaveValue: the value one ground wave may hold from tech level 8. Earlier Medium/Hard missions use
-# (tech level + 4) / 12 of it: 58% at tech 3, 75% at tech 5. Easy keeps its staged 900 / 1,200 of 1,700.
+CampaignMediumHarvesters=2
+CampaignHardHarvesters=4
+# WaveValue: the value one ground wave may hold. Easy keeps its smaller early-mission waves in
+# proportion (900 / 1,200 of 1,700).
 CampaignEasyWaveValue=1700
 CampaignMediumWaveValue=2500
 CampaignHardWaveValue=3500
@@ -455,16 +455,16 @@ CampaignMediumOpeningDelaySec=0
 CampaignHardOpeningDelaySec=60
 # The levers of a campaign helper (a QuantBot on the player's side in a campaign), by its difficulty. Hashed.
 # Harvesters: the most it keeps (0 = the spice budget alone).
-CampaignHelperEasyHarvesters=0
-CampaignHelperMediumHarvesters=0
-CampaignHelperHardHarvesters=0
+CampaignHelperEasyHarvesters=4
+CampaignHelperMediumHarvesters=6
+CampaignHelperHardHarvesters=8
 CampaignHelperBrutalHarvesters=0
 # ArmyFloor: until its ground army holds this value, and once it has two refineries, it funds
 # ground production before its economy (0 = economy first).
 CampaignHelperEasyArmyFloor=0
 CampaignHelperMediumArmyFloor=0
-CampaignHelperHardArmyFloor=0
-CampaignHelperBrutalArmyFloor=0
+CampaignHelperHardArmyFloor=3000
+CampaignHelperBrutalArmyFloor=6000
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1

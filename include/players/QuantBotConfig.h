@@ -317,9 +317,8 @@ struct QuantBotConfig {
         bool campaignAllyStrengthFloor;
         /// The three difficulty levers of an Easy / Medium / Hard campaign opponent (Brutal has
         /// none). Hashed. Harvesters: the most it keeps, however many refineries the mission
-        /// gives it (0 = no ceiling). WaveValue: the value one ground wave may hold from tech
-        /// level 8; earlier Medium/Hard missions use (tech level + 4) / 12 of it and Easy its
-        /// staged 900 / 1,200 of 1,700 in proportion.
+        /// gives it (0 = no ceiling). WaveValue: the value one ground wave may hold; Easy keeps
+        /// its staged early waves (900 / 1,200 of 1,700) in proportion.
         /// OpeningDelaySec: seconds it waits after the map's first enemy combat reinforcement,
         /// on top of its 0-2 minute stagger, before its first wave.
         int campaignEasyHarvesters, campaignMediumHarvesters, campaignHardHarvesters;
