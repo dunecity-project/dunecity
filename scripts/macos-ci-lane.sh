@@ -74,13 +74,25 @@ fi
 cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
-    ctest --test-dir build --show-only=json-v1 -L headless -L nightly > build/macos-headless-plan.json
+    # Hosted Macs have no PHP, so a `network` test can only skip here and the
+    # receipt rejects skips. The stable Mini lane below runs those tests for real.
+    ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
     ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 \
-        -L headless -L nightly --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml"
+        -L headless -L nightly -LE network --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml"
     build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
     exit 0
 fi
 ctest --test-dir build --output-on-failure --no-tests=error -L integration -LE gui
+if [ "$STABLE" = ON ]; then
+    # A missing PHP would turn these into a silent skip (exit 77); refuse instead.
+    command -v php >/dev/null || [ -x /opt/homebrew/bin/php ] || {
+        echo '::error::Stable Mini lane requires PHP for the headless network tests'; exit 1; }
+    ctest --test-dir build --output-on-failure --no-tests=error -L headless -L network \
+        --output-junit "$POINTER_OUT/macos-network-results.xml"
+    if grep -q '<skipped' "$POINTER_OUT/macos-network-results.xml"; then
+        echo '::error::A headless network test was skipped on the Mini'; exit 1
+    fi
+fi
 if [ "${TEST_TIER:-integration}" = nightly ]; then
     ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly
 fi
