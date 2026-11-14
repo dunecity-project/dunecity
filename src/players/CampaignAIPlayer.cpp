@@ -532,7 +532,8 @@ void CampaignAIPlayer::updateStructures() {
                             if(getMap().okayToPlaceStructure(location.x, location.y, 
                                                             itemsize.x, itemsize.y, false, 
                                                             pConstYard->getOwner())) {
-                                doPlaceStructure(pConstYard, location.x, location.y);
+                                const bool placed = doPlaceStructure(pConstYard, location.x, location.y);
+                                if(originalRules && !placed) continue;
                             } else if(originalRules) {
                                 // A unit temporarily standing on a rebuild site must
                                 // not erase that structure from the five-slot plan.
