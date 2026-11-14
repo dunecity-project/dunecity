@@ -384,8 +384,8 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignAdaptiveReadiness = true;
     force.campaignAllyStrengthFloor = true;
     force.campaignHelperQuotaSaving = true;
-    force.campaignDeferredYardUpgrade = false;
-    force.campaignRepairRoleFix = false;
+    force.campaignDeferredYardUpgrade = true;
+    force.campaignRepairRoleFix = true;
     force.campaignPowerExperiment = 0;
     force.campaignEasyHarvesters = 1;
     force.campaignMediumHarvesters = 2;
