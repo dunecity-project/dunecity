@@ -65,83 +65,108 @@ partner strength floor capped at 95% of its limit or uncapped, a partner wave
 that needs the home troops alone to meet the required army, and a partner Light
 Factory opening with a threat production floor (worse).
 
-### Three opponent levers (2026-11-14)
+### Helper v enemy difficulty gradient (2026-11-14)
 
-Stefan's rule: an Easy/Medium/Hard campaign opponent's difficulty is set by
-three levers only, all hashed `[Force Concentration]` integers; Brutal has none.
-There is no outstanding-force or recovery blocking: a wave is limited by its own
-cap only. Added target: Brutal v Hard at least 50% on level 9.
+Naming: the helper is the QuantBot on the player's side, the enemy is a campaign
+opponent. Stefan's objective: easy for first-time players on Easy, a challenge
+for veterans, and a gradient in both directions (an Easy helper loses to a Hard
+enemy). Approved targets on the final mission with an idle human, win %, helper
+rows by enemy columns Easy / Medium / Hard / Brutal: Easy 70 / 35 / 10 / 0,
+Medium 85 / 50 / 20 / 5, Hard 95 / 75 / 30 / 10, Brutal 98 / 90 / 55 / 15.
+Matching difficulties by level: levels 1-3 100 / 95 / 85 / 60, levels 4-6
+95 / 80 / 60 / 40, levels 7-8 85 / 65 / 45 / 25. The Brutal enemy stays at
+full strength.
 
-| Lever | Easy | Medium | Hard |
+All levers are hashed `[Force Concentration]` integers. There is no
+outstanding-force or recovery blocking: an enemy wave is limited by its own cap.
+
+| Enemy lever | Easy | Medium | Hard |
 |---|---|---|---|
-| `Campaign<Tier>Harvesters` (most it keeps; 0 = no ceiling) | 1 | 1 | 2 |
-| `Campaign<Tier>WaveValue` (one ground wave, from tech 8) | 1700 | 2500 | 3500 |
+| `Campaign<Tier>Harvesters` (most it keeps; 0 = no ceiling) | 1 | 2 | 4 |
+| `Campaign<Tier>WaveValue` (one ground wave) | 1700 | 2500 | 3500 |
 | `Campaign<Tier>OpeningDelaySec` (after the map trigger) | 0 | 0 | 60 |
 
-- Wave value by mission: Medium and Hard use (tech level + 4) / 12 of the value
-  (58% at tech 3, 75% at tech 5, full from tech 8). Easy keeps its staged 900 /
-  1,200 / 1,700 and its 3/4/5 unit cap.
-- Opening: the anchor is the map's first enemy combat reinforcement (minute 12 on
-  mission 22), plus a 0-2 minute per-house stagger, plus the delay. Dune Dynasty
-  likewise wakes its AI when the first scheduled reinforcement lands and has no
-  further delay. Missions 1-4 have no trigger and always open in minutes 4-6; a
-  later map without a trigger never attacks.
-- A Medium opponent may build one Repair Yard (tech above 4) and adds a Spice
-  Silo when its storage is 90% full. In 144 Medium bases on missions 11-22 the
-  storage was full twice, so the silo rule rarely acts; the Repair Yard was
-  built by 14 of 15 houses on mission 22 and 3 of 15 on mission 21.
-- No campaign opponent uses coordinated attacks at any difficulty: every
+| Helper lever | Easy | Medium | Hard | Brutal |
+|---|---|---|---|---|
+| `CampaignHelper<Tier>Harvesters` (most it keeps; 0 = spice budget alone) | 4 | 6 | 8 | 0 |
+| `CampaignHelper<Tier>ArmyFloor` (ground army it funds before its economy, from two refineries) | 0 | 0 | 3000 | 6000 |
+
+- Before the helper levers every helper difficulty played the same game: army,
+  harvesters, refineries and income were identical to the unit through minute
+  12 on missions 14, 20 and 22, and Hard and Brutal through minute 18. The
+  helper builds 8-11 refineries and 9-14 harvesters first; its first combat
+  factory arrives near minute 9 and it adds no army before minute 11-12.
+- With the harvester ceilings a mission 22 helper holds about 7,000 / 8,000 /
+  14,000 / 15,000 army at minute 24 (Easy / Medium / Hard / Brutal).
+- Easy keeps its staged 900 / 1,200 / 1,700 wave values and its 3/4/5 unit cap.
+  Scaling Medium and Hard waves down on early missions was tried and removed:
+  it erased the Hard column's gradient on levels 4-7.
+- Opening: the anchor is the map's first enemy combat reinforcement (minute 12
+  on mission 22), plus a 0-2 minute per-house stagger, plus the delay. Dune
+  Dynasty likewise wakes its AI when the first scheduled reinforcement lands.
+  Missions 1-4 have no trigger and always open in minutes 4-6; a later map
+  without a trigger never attacks.
+- A Medium enemy may build one Repair Yard (tech above 4) and adds a Spice Silo
+  when its storage is 90% full; its storage is rarely full.
+- No campaign enemy uses coordinated attacks at any difficulty: every
   coordination path requires a Custom game outside campaign policy.
+- Tried and removed: a helper army value limit (a low limit lowers the attack
+  requirement, so the helper sends its starting army at minute 0), a helper
+  first-factory lever (the factory arrives by minute 6 but the yard keeps
+  buying refineries and the factory stays idle), and `CampaignCombatBudget`
+  for Hard/Brutal helpers (no effect against Brutal enemies).
 
-Win % by level (level 1 = mission 1, 2 = missions 2-4, ... 8 = missions 20-21,
-9 = mission 22), 3 houses x seeds 9301-9303 for every mission, with seeds
-9304-9309 added on levels 8-9 for the six target pairs:
+Measured win % (games), 3 houses x seeds 9601-9603 on every mission and seeds
+9604-9609 added on missions 20-22. Helper rows, enemy columns:
 
-| Player v enemy | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
-|---|---|---|---|---|---|---|---|---|---|
-| Easy v Easy | 100 | 100 | 96 | 100 | 100 | 100 | 96 | 72 (39/54) | 92 (25/27) |
-| Medium v Easy | 100 | 100 | 96 | 100 | 100 | 100 | 100 | 74 (40/54) | 85 (23/27) |
-| Hard v Easy | 100 | 92 | 100 | 100 | 100 | 100 | 100 | 94 | 88 |
-| Brutal v Easy | 100 | 92 | 100 | 100 | 100 | 100 | 100 | 88 | 88 |
-| Easy v Medium | 100 | 100 | 100 | 100 | 100 | 100 | 92 | 72 | 77 |
-| Medium v Medium | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 74 (40/54) | 70 (19/27) |
-| Hard v Medium | 100 | 92 | 100 | 100 | 100 | 100 | 100 | 94 (51/54) | 70 (19/27) |
-| Brutal v Medium | 100 | 96 | 100 | 100 | 100 | 100 | 100 | 94 | 66 |
-| Easy v Hard | 100 | 100 | 85 | 100 | 96 | 96 | 81 | 44 | 44 |
-| Medium v Hard | 100 | 100 | 96 | 100 | 100 | 100 | 85 | 38 | 44 |
-| Hard v Hard | 100 | 96 | 92 | 100 | 100 | 100 | 96 | 77 (42/54) | 66 (18/27) |
-| Brutal v Hard | 100 | 100 | 88 | 100 | 100 | 100 | 96 | 79 (43/54) | 70 (19/27) |
+| Levels | Helper | Easy | Medium | Hard | Brutal |
+|---|---|---|---|---|---|
+| 1-3 (63) | Easy | 98 | 100 | 93 | 80 |
+| | Medium | 100 | 98 | 96 | 80 |
+| | Hard | 92 | 100 | 90 | 84 |
+| | Brutal | 93 | 98 | 95 | 84 |
+| 4-6 (81) | Easy | 100 | 95 | 59 | 9 |
+| | Medium | 100 | 97 | 71 | 19 |
+| | Hard | 100 | 100 | 95 | 20 |
+| | Brutal | 100 | 100 | 95 | 18 |
+| 7 (27) | Easy | 96 | 77 | 48 | 0 |
+| | Medium | 96 | 85 | 51 | 11 |
+| | Hard | 100 | 100 | 88 | 44 |
+| | Brutal | 100 | 100 | 88 | 29 |
+| 8 (54) | Easy | 81 | 33 | 1 | 0 |
+| | Medium | 81 | 40 | 3 | 0 |
+| | Hard | 100 | 90 | 31 | 0 |
+| | Brutal | 96 | 81 | 40 | 0 |
+| 9 (27) | Easy | 81 | 22 | 0 | 0 |
+| | Medium | 96 | 62 | 0 | 0 |
+| | Hard | 96 | 77 | 40 | 0 |
+| | Brutal | 92 | 77 | 51 | 0 |
 
-What each lever did, on missions 20-22 with 36 games per pair and arm:
-
-- Harvesters are the strong lever against Medium and Hard. Hard 4 -> 2 lifted
-  Hard v Hard on level 8 from 7/18 to 16/24; Medium 2 -> 1 lifted Medium v
-  Medium on level 9 from 6/9 to 12/12.
-- Opening delay acts on level 9 only, where three opponents open together
-  against a partner that still holds its scripted starting army. Hard at 0 s
-  gave Brutal v Hard 13/27, 60 s 19/27, 120 s 22/27, 180 s 23/27; level 8 did
-  not move (39-43 of 54).
-- Wave value at 60% changed little on levels 8-9. Scaling it by tech level
-  removed full-size Medium/Hard waves from levels 3 and 5.
-
-`tests/ai/scenario-matrix.py --attack-events` now returns `campaign-ai.csv`
-(the game's own `CAMPAIGN_AI:` log lines) and
+`tests/ai/scenario-matrix.py --attack-events` returns `campaign-ai.csv` (the
+game's own `CAMPAIGN_AI:` log lines) and
 `tests/ai/campaign-game-report.py RESULTS... [--game REGEX] [--lost]` prints
 one line per game or a full game story from it.
 
-Still open, and not reachable with the three opponent levers:
+Still open:
 
-- Easy and Medium opponents are easier on level 9 than on level 8. The level 8
-  losses are the partner's: Atreides mission 20 wins 0-1 of 9 for every pair
-  but Hard v Medium. The partner attacks two bases with 16 rocket turrets at
-  minute 13-16, loses its army, and its map has only about 45,000 credits of
-  spice, so it cannot rebuild while each opponent regrows on one harvester.
-- Hard and Brutal partners play alike (same wins against Hard opponents), and
-  Easy and Medium partners are close against Easy opponents.
-- Harkonnen mission 22 is the weakest level 9 map: the partner still holds
-  2,500-4,200 army at minute 12 when three opponents open.
-- Atreides mission 4 can run to the 80-minute limit after the opponent has no
-  structures or units left; the mission does not end.
+- Brutal enemies win every game on levels 8-9 and most from level 4. A Brutal
+  enemy sends its whole army on the trigger (5,000-7,000 on missions 8-12,
+  about 25,000 from three houses on mission 22) while the helper has earned
+  7,000-14,000 credits in total. The army floor raises the helper's army at
+  minute 12 from about 1,650 to 3,300 on mission 8, which does not close it.
+- Hard and Brutal helpers are still close (8 against 10-14 harvesters), and the
+  Brutal helper is not better than Hard against Easy and Medium enemies.
+- Easy and Medium helpers win no level 9 game against Hard enemies (targets
+  10 and 20).
+- Harkonnen mission 22 is the weakest final map: five of the six Brutal helper
+  losses to Medium enemies are there, with 3,400-4,700 army at minute 12.
+- Atreides mission 20: the helper attacks two bases with 16 rocket turrets at
+  minute 13-16 and its map has about 45,000 credits of spice.
+- Missions 3-4 carry a 2,700 credit quota. On Atreides mission 4 the game runs
+  on after the enemy has no structures or units left; Hard and Brutal helpers
+  hold almost no credits and reach the 80-minute limit in most games, while
+  Easy and Medium helpers win by minute 16. The helper has no quota rule; the
+  quota link is inferred from these logs, not yet traced in code.
 
 
 
