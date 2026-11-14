@@ -378,7 +378,11 @@
 //      would desync. Private development identity and save format remain unchanged.
 // 123: QuantBot repair-capacity demand treatment and its saved/runtime pressure
 //      clock; observer runtime 9 carries the same continuation state (save 9885).
-#define NETWORK_PROTOCOL_VERSION            123
+// 124: Campaign QuantBots build Repair Yards for every helper and for Medium and
+//      harder opponents (only Easy opponents are denied), and defer Construction Yard
+//      upgrades until power, income and a cash reserve exist. Older peers queue
+//      different AI construction and would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            124
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Project name and version
-project(DuneCity VERSION 1.0.867 LANGUAGES C CXX)
+project(DuneCity VERSION 1.0.868 LANGUAGES C CXX)
 
 # Release optimizations do not make a build an official release. Keep the
 # numeric project version for packages, updates, saves and multiplayer matching.
