@@ -28,7 +28,7 @@ static const char* kHowToPlayBody =
     "\n"
     "2) START A CITY-SIZED SKIRMISH\n"
     "Single Player -> Custom Game -> pick a large map. The bundled map\n"
-    "'2P - 192x192 - SimCity' is designed for city-sim play. City tools\n"
+    "'2P - 192x192 - City' is designed for city-sim play. City tools\n"
     "only work on rock tiles; sand is for spice and combat as usual.\n"
     "\n"
     "3) LAY DOWN THE BACKBONE\n"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Re-pack the two cities on "2P - 192x192 - SimCity.ini" with a COMPACT,
+Re-pack the two cities on "2P - 192x192 - City.ini" with a COMPACT,
 mixed-use layout.
 
 Why this was rewritten
@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 REPO = Path(__file__).resolve().parent.parent
-DEFAULT_PATH = REPO / "data" / "maps" / "singleplayer" / "2P - 192x192 - SimCity.ini"
+DEFAULT_PATH = REPO / "data" / "maps" / "singleplayer" / "2P - 192x192 - City.ini"
 
 ROCK = '%'
 

@@ -152,7 +152,7 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     skinLabel.setText(_("DuneCity skin"));
     skinLabel.setTextFontSize(12);
     windowWidget.addWidget(&skinLabel, Point(coopX, coopY+126), Point(180, 18));
-    skinDropDown.addEntry(_("SimCity"), 0);
+    skinDropDown.addEntry(_("Classic"), 0);
     skinDropDown.addEntry(_("Dune2"), 1);
     skinDropDown.setSelectedItem(settings.general.duneCityCampaignSkin == 1 ? 1 : 0);
     skinDropDown.setEnabled(ModManager::instance().isCityModeActive());

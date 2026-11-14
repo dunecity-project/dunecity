@@ -72,6 +72,9 @@ AboutMenu::AboutMenu() : MenuBase()
         "Dune Legacy collects gameplay statistics when matches start and end, including "
         "player display names, houses, results, and unit statistics. These statistics help "
         "improve game balance and the player experience.\n\n"
+        "DuneCity is an unofficial fan project, not affiliated with or endorsed by Electronic Arts, "
+        "Westwood Studios, the Herbert estate or any Dune licensee. Dune and SimCity are trademarks "
+        "of their respective owners.\n\n"
         "Dune Legacy is free software released under the GNU General Public License.");
     windowWidget.addWidget(&credits, Point(panelX, panelY + 40), Point(panelWidth, panelHeight - 88));
 

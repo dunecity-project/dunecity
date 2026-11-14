@@ -689,7 +689,7 @@ void createDefaultConfigFile(const std::string& configfilepath, const std::strin
                                 "Language = %s               # en = English, fr = French, de = German\n"
                                 "Scroll Speed = 50           # Amount to scroll the map when the cursor is near the screen border\n"
                                 "Show Tutorial Hints = true  # Show tutorial hints during the game\n"
-                                "DuneCity Campaign Skin = 0 # 0 = SimCity, 1 = Dune2 (presentation only)\n"
+                                "DuneCity Campaign Skin = 0 # 0 = Classic, 1 = Dune2 (presentation only)\n"
                                 "Multiple Players Per House = false  # Custom game: allow two players per house\n"
                                 "\n"
                                 "[Video]\n"

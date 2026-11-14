@@ -715,7 +715,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
             curHouseInfo.graphicsSkinLabel.setText(_("Skin"));
             curHouseInfo.graphicsSkinLabel.setTextFontSize(12);
             curHouseInfo.graphicsSkinDropDown.addEntry(
-                _("SimCity"), static_cast<int>(GameInitSettings::GraphicsSkin::SimCity));
+                _("Classic"), static_cast<int>(GameInitSettings::GraphicsSkin::SimCity));
             curHouseInfo.graphicsSkinDropDown.addEntry(
                 _("Dune2"), static_cast<int>(GameInitSettings::GraphicsSkin::Dune2));
             curHouseInfo.graphicsSkinDropDown.setSelectedItem(

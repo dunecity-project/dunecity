@@ -629,11 +629,11 @@ SCENARIO_TARGETS = ['2P - 128x128 - Sihaya Basin.ini',
  '2P - 128x128 - Habbanya Crescent.ini',
  '3P - 128x128 - Habbanya Narrows.ini']
 EXPECTATIONS = {name: {"scenario": True} for name in SCENARIO_TARGETS}
-EXPECTATIONS["2P - 192x192 - SimCity.ini"] = {
+EXPECTATIONS["2P - 192x192 - City.ini"] = {
     "max_road_components": {"player1": 1, "player2": 1},
     "allow_polluted_res": 40,
 }
-DEFAULT_TARGETS = SCENARIO_TARGETS + ["2P - 192x192 - SimCity.ini"]
+DEFAULT_TARGETS = SCENARIO_TARGETS + ["2P - 192x192 - City.ini"]
 
 
 def main(argv: List[str]) -> int:

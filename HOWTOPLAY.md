@@ -24,11 +24,11 @@ available in-game.
 
 ## 2. Start a skirmish on a city-sized map
 
-City-sim play wants room. The bundled map **`2P - 192x192 - SimCity`**
+City-sim play wants room. The bundled map **`2P - 192x192 - City`**
 is designed for it.
 
 1. Main Menu → **Single Player** → **Custom Game**
-2. Pick **`2P - 192x192 - SimCity`** from the map list
+2. Pick **`2P - 192x192 - City`** from the map list
 3. Set up players and start the game
 
 City tools only work on **rock** tiles. Sand is for spice harvesting and

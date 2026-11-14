@@ -300,7 +300,7 @@ RandomSkirmishMenu::RandomSkirmishMenu(bool multiplayer, const std::string& host
         spectateAI.aiBox.setTooltipText(spectateAITip);
         spectateAI.difficultyBox.setTooltipText(spectateAITip);
         // The DuneCity skin, one choice for every house as in the campaign; shared with it.
-        skinBox.addEntry(_("SimCity"), 0);
+        skinBox.addEntry(_("Classic"), 0);
         skinBox.addEntry(_("Dune2"), 1);
         skinBox.setSelectedItem(settings.general.duneCityCampaignSkin == 1 ? 1 : 0);
 

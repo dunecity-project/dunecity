@@ -143,7 +143,7 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     startLevelDropDown.setOnSelectionChange([this](bool) { s_startLevel = startLevelDropDown.getSelectedEntryIntData(); });
     windowWidget.addWidget(&startLevelDropDown, Point(48, 315), Point(256, 22));
     label("DuneCity skin", 48, 339);
-    campaignSkinDropDown.addEntry(_("SimCity"), 0);
+    campaignSkinDropDown.addEntry(_("Classic"), 0);
     campaignSkinDropDown.addEntry(_("Dune2"), 1);
     campaignSkinDropDown.setSelectedItem(s_campaignSkin);
     campaignSkinDropDown.setOnSelectionChange([this](bool interactive) {
