@@ -591,9 +591,26 @@ void CampaignAIPlayer::updateStructures() {
 Uint32 CampaignAIPlayer::pickNextToBuild(const BuilderBase* pBuilder) {
     if(!pBuilder) return ItemID_Invalid;
     if(originalRules) {
-        return OriginalCampaignPolicy::pickUnit([&](int item) {
+        const int selected = OriginalCampaignPolicy::pickUnit([&](int item) {
             return pBuilder->isAvailableToBuild(item) && shouldBuildItem(pBuilder->getItemID(), item);
         }, [&] { return getRandomGen().rand(0, 255); });
+        if(selected != ItemID_Invalid) return selected;
+        // A mod can replace every original unit in a factory. Keep that factory
+        // productive using its legal combat roster; this extension is inert for
+        // the original 18-unit roster and never substitutes harvesters or MCVs.
+        int fallback = ItemID_Invalid, priority = 0;
+        for(const auto& item : pBuilder->getBuildList()) {
+            if(std::find(OriginalCampaignPolicy::unitOrder.begin(), OriginalCampaignPolicy::unitOrder.end(), item.itemID)
+                    != OriginalCampaignPolicy::unitOrder.end()
+                || !OriginalCampaignPolicy::combatUnit(item.itemID) || isHarvesterLikeUnit(item.itemID)
+                || isCarryallUnit(item.itemID) || !pBuilder->isAvailableToBuild(item.itemID)
+                || !shouldBuildItem(pBuilder->getItemID(), item.itemID)) continue;
+            const int value = getBuildPriority(item.itemID);
+            if(getRandomGen().rand(0, 255) % 4 == 0 || fallback == ItemID_Invalid || value > priority) {
+                fallback = item.itemID; priority = value;
+            }
+        }
+        return fallback;
     }
     
     // Get buildable items from builder's build list

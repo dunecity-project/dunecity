@@ -487,6 +487,8 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_ORIGINAL_CAMPAIGN_PROBE")) {
         runOriginalCampaignProbe(*game);
+        runOriginalCampaignContinuation(game);
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=original-campaign outcome=passed");
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }

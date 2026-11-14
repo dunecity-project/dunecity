@@ -44,6 +44,9 @@ Explicit orders, legacy Campaign AI and other controllers do not use this hook.
 Blocked rebuild locations remain blocked rather than reproducing original
 collision-ignoring placement. Ornithopters use DuneCity's Hunt flight/combat;
 the original STOP action's separate aircraft script is not emulated.
+Mods whose factory has no legal original unit may build a legal replacement
+combat unit using the same random/priority selection rule. That extension never
+changes the original roster's candidate order or random draws.
 
 Implementation and validation are in progress. The separately frozen 1.0.868
 release is not changed by this work. New state requires explicit save-version

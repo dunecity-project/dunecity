@@ -4,6 +4,7 @@
 #include <players/OriginalCampaignPolicy.h>
 #include <misc/OMemoryStream.h>
 #include <misc/IMemoryStream.h>
+#include <Network/GameStateDigest.h>
 
 void runOriginalCampaignProbe(Game& game) {
     const auto require = [](bool ok, const char* message) {
@@ -178,4 +179,56 @@ void runOriginalCampaignProbe(Game& game) {
     require(oldInput.readUint32() == 0x12345678, "9885 load consumed the following save section");
     game.loadedSavegameVersion = previousVersion;
     SDL_Log("ORIGINAL_CAMPAIGN_PASS: produced Hunt, authored guards/teams, five-slot rebuild, scoped free upgrades, new and legacy serialization");
+}
+
+void runOriginalCampaignContinuation(std::unique_ptr<Game>& game) {
+    const auto require = [](bool ok, const char* message) {
+        if(!ok) throw std::runtime_error(std::string("ORIGINAL_CAMPAIGN_CONTINUATION_FAIL: ") + message);
+    };
+    const GameInitSettings initial = game->getGameInitSettings();
+    auto reset = [&] {
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+        game = std::make_unique<Game>(); currentGame = game.get();
+    };
+    reset(); game->bReplay = true; game->initGame(initial); game->bReplay = false;
+    game->initializeGameLoop(); game->bPause = false;
+    auto tick = [&] {
+        game->negotiatedBudget = 5000; game->carryOverTokens = 0; game->updateGameState();
+    };
+    // Exercise real production, movement and the shipped TEAM.EMC, not only a
+    // synthetic controller stream. Wake the original teams for this fixture.
+    for(int h = 0; h < NUM_HOUSES; ++h) if(auto* house = game->getHouse(h))
+        for(const auto& player : house->getPlayerList())
+            if(dynamic_cast<CampaignAIPlayer*>(player.get())) house->activateAI();
+    for(int n = 0; n < 2500; ++n) tick();
+    const std::string path = "original-campaign-checkpoint.sav";
+    require(game->saveGame(path), "could not save real campaign world");
+    const auto runtime = game->saveObserverRuntime();
+    auto tail = [&] {
+        std::vector<std::string> states;
+        for(int n = 0; n < 1500; ++n) {
+            tick();
+            if(n % 50) continue;
+            OMemoryStream players; players.open();
+            for(int h = 0; h < NUM_HOUSES; ++h) if(auto* house = game->getHouse(h))
+                for(const auto& player : house->getPlayerList())
+                    if(const auto* bot = dynamic_cast<const CampaignAIPlayer*>(player.get())) {
+                        require(bot->usesOriginalRules(), "loaded world changed controller mode");
+                        bot->save(players);
+                    }
+            states.push_back(GameStateDigest::describe(game->computeStateDigest())
+                + std::string(players.getData(), players.getDataLength()));
+        }
+        return states;
+    };
+    const auto live = tail();
+    auto load = [&] {
+        reset(); game->bReplay = true; game->initGame(GameInitSettings(path)); game->bReplay = false;
+        game->initializeGameLoop(); game->bPause = false;
+    };
+    load(); game->loadObserverRuntime(runtime);
+    require(tail() == live, "checkpoint continuation diverged from running campaign");
+    load(); const auto ordinary = tail();
+    load(); require(tail() == ordinary, "ordinary save resumed nondeterministically");
+    SDL_Log("ORIGINAL_CAMPAIGN_CONTINUATION_PASS: live/checkpoint and repeated ordinary loads, 1500 cycles each");
 }
