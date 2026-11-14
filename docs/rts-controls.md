@@ -1,5 +1,8 @@
 # Spec: Modern RTS controls
 
+The original specification and verification below record the old keys. **Current defaults are
+WASD-friendly single keys**, documented under [Configurable hotkeys](#configurable-hotkeys-github-87-2026-11-15).
+
 Goal: the command set players expect from StarCraft II / Age of Empires / C&C Remastered, layered on the
 Dune Legacy input model (left selects, right orders; optional left-click orders; optional WASD camera).
 
@@ -206,7 +209,8 @@ Each probe run regenerates both files (also copied into `build/rts-controls-prob
 # Configurable hotkeys (GitHub #87, 2026-11-15)
 
 Stefan: Guard, Area Guard and Stop get keys, the Construction Yard shortcut may move, and players
-set their own keys in an Options tab.
+set their own keys in an Options tab. The defaults assume WASD camera movement: frequent orders
+cluster around it, and none of the 25 command defaults requires Shift, Ctrl or Alt.
 
 ## Registry and dispatch
 - `include/misc/Hotkeys.h` is the single registry: each action's stable `[Hotkeys]` config key,
@@ -219,43 +223,47 @@ set their own keys in an Options tab.
 - Matching: the exact chord wins. Otherwise Shift held on top of an unshifted binding reaches an
   action marked `shiftIntent` (order cursors, Stop, Hold, Repair, selection keys) and is reported
   as `extraShift`: Hold uses it to queue a harvester return, the order cursors read Shift at the
-  click as before. Guard, Area Guard, the T selections, formation keys and city keys need their
+  click as before. Guard, Area Guard, the type selections, formation keys and city keys need their
   exact chord. Cmd/Windows-key chords never run a command (Cmd+Q, Cmd+M stay the system's).
-  City tools are unavailable without the city simulation, so Shift+C and Shift+R then fall
-  through to Capture and Repair as before.
-- WASD camera: an unmodified binding on W, A, S, D or Q needs Shift (the established Shift+A/S/D/Q
-  rule, now applied to whatever the player binds there). Tooltips and the Options list show the
-  effective chord.
+  City tools are unavailable without the city simulation. Custom bindings still allow exact
+  modifier chords, and Shift on top of an order key still queues orders.
+- WASD camera: all defaults avoid W/A/S/D and stay identical with the camera on or off. Q is
+  available beside W for Attack Move without Shift. Only an explicitly customised unmodified
+  W/A/S/D binding retains the legacy Shift fallback; tooltips show that effective chord.
 - Stop, Guard and Area Guard send `CMD_UNIT_SETMODE` for each selected unit the player may command
   (`Game::setSelectedUnitsAttackMode`), exactly what the panel buttons send; queues, HOLD and
   multiplayer routing are unchanged. Stop, Guard, Area Guard and Hold remain separate modes.
 
 ## Actions and default keys
-| Action | Default | | Action | Default |
-|---|---|---|---|---|
-| Move | M | | Select next Construction Yard | Y (was G) |
-| Attack Move | A (WASD: Shift+A) | | Select next factory | F |
-| Patrol | Q (WASD: Shift+Q) | | Select all ornithopters | O |
-| Stop | S (WASD: Shift+S) | | Select same type on screen | T |
-| Guard | G | | Select same type on map | Ctrl+T |
-| Area Guard | Shift+G | | Select all combat units | Ctrl+A |
-| Hold / return harvesters | H (Shift+H queues returns) | | Formation moves on/off | Ctrl+F |
-| Capture | C | | Next formation shape | Ctrl+Shift+F |
-| Request Carryall drop | D (WASD: Shift+D) | | City zone tool | Z |
-| Repair | R | | City road tool | Shift+R |
-| Upgrade structure | U | | City budget | Shift+B |
-| Place structure | P | | City statistics overlay | Shift+C |
-| | | | Show game time | Shift+T |
+
+The main cluster is Q/E/R (Attack/Stop/Repair), F/G (Guard/Area Guard), and
+Z/X/C/V (Patrol/Hold/Capture/Move). T requests a Carryall drop and B places a structure.
+
+| Action | Key | Action | Key |
+|---|---|---|---|
+| Move | V | Next Construction Yard | Y |
+| Attack Move | Q | Next factory | H |
+| Patrol | Z | All ornithopters | O |
+| Stop | E | Same type on screen | N |
+| Guard | F | Same type on map | J |
+| Area Guard | G | All combat units | K |
+| Hold / return harvesters | X | Formation moves on/off | M |
+| Capture | C | Next formation shape | I |
+| Carryall drop | T | City zone tool | L |
+| Repair | R | City road tool | P |
+| Upgrade structure | U | City budget | [ |
+| Place structure | B | City statistics | ] |
+| | | Show game time | Backslash |
+
+Shift+X queues a harvester return; Shift at the order click still queues orders.
+Saved custom bindings are preserved; **Defaults**, then **Apply** selects this layout in an
+existing profile that already saved another set of bindings.
 
 Fixed, not configurable, listed on the tab: 0-9 groups (Ctrl+0-9 set, Alt+0-9 add), Shift+1-8 city
 overlays, F1-F12, Space pause, +/- speed, Enter chat (Alt+Enter fullscreen), Esc menu, Tab,
 arrows, Print Screen and Ctrl+P screenshots. Only letters, the bracket, semicolon, quote, comma,
 period, slash, backslash and backquote keys, Insert, Delete, Home, End, Page Up and Page Down can
 be bound, with any of Ctrl, Alt and Shift.
-
-Modifier changes against the old hard-coded switch: Ctrl/Alt chords of M, D, R, U, C, F, P and the
-old G no longer run those commands (they now need their exact chord); Shift+M/A/Q/S/C/D/R/U/P/F/O/H
-still do.
 
 ## Options > Hotkeys
 - Sixth Settings tab. A list of every action with its effective key (for the WASD choice ticked on
@@ -282,9 +290,9 @@ binding through `UnitCommandTooltips::hotkeyText`/`hotkeySuffix`; an unbound act
 - `hotkeys_tests` (`tests/HotkeysTestCase.cpp`, `[hotkeys]`): defaults, dispatch and Shift intent,
   the WASD rule, unavailable-action fallthrough, rebinding, reserved and WASD-only collisions,
   capture, config round trip and recovery.
-- `rts_controls_probe` section 9: G, Shift+G, S (and Shift+S with WASD) through
-  `Game::handleKeyInput` and real game cycles; a rebound Guard ignores G, an unbound Stop ignores
-  S; both panels' tooltips.
+- `rts_controls_probe` section 9: F, G and E with WASD on and off through
+  `Game::handleKeyInput` and real game cycles; a rebound Guard ignores F, an unbound Stop ignores
+  E; both panels' tooltips. Q Attack Move is also exercised on spice blooms.
 - `menu_navigation_probe`: the Hotkeys tab at 640x480, 854x480 and 1280x720 (tabs and controls on
   screen, capture via the menu input path, Escape, refused digit, Back, Apply and Defaults with the
   saved `[Hotkeys]` values).

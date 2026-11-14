@@ -1573,7 +1573,7 @@ Stefan: "when selecting men and then setting a formation, the troops should move
 formation".
 
 - **What triggers it:** with 2+ of the local house's ground units selected, a shape button of
-  the unit panel (Box, Combined arms, Line, Column), `Ctrl+Shift+F`, or `Ctrl+F` switching
+  the unit panel (Box, Combined arms, Line, Column), `I`, or `M` switching
   formations on (`Game::chooseFormation`, on). **Off moves nobody and sends nothing.** The
   shape is remembered for later move, attack-move and patrol orders as before.
 - **Who:** the selected, respondable, eligible units (`Game::issueSelectedFormUp`); harvesters
@@ -1626,7 +1626,7 @@ formation".
   trooper, an MCV and a harvester. The facing rules on real units (bodies east → east; half
   west, half east → north; an enemy tank in sight to the south → south; a right-click east →
   east). Off issues nothing. The four buttons through `FormationBar`'s real click handler and
-  `Ctrl+Shift+F` through `Game::handleKeyInput`: one FormUp command per member to its planned
+  `I` through `Game::handleKeyInput`: one FormUp command per member to its planned
   slot facing east with one token, none for the harvester, the MCV on the centroid, every member
   on its slot (Box 29.8 s from the scattered start, Combined arms 19.4 s, Line 12.1 s, Column
   11.4 s, Box again by hotkey 30.5 s), no member in a sonic lane in any formed shape, the line one
@@ -1793,7 +1793,7 @@ per round, size, seed and shape); reproduce with
   three give the pre-formation orders with None. QuantBot's own waves use the per-player
   `waveFormationShape()` (the test-only override, else the config value). Defence scrambles are
   unchanged.
-- **Kept five player shapes:** Box, Pincer, Column, Staggered, Echelon (panel and Ctrl+Shift+F
+- **Kept five player shapes:** Box, Pincer, Column, Staggered, Echelon (panel and I
   order), plus Off. Removed: Combined arms (and all its scout code), Line, Wedge, Vee, Diamond.
   The removed shapes' names are unknown `WaveFormation` values (logged, the default is kept).
 - **Stable shape ids** (`FormationPlanner::Shape`): Box 0, Column 3, Echelon 6, Staggered 7,
@@ -2009,7 +2009,7 @@ today's behaviour: only a member in contact leaves.
   `Game::chooseFormation` and applies to the next move, attack-move or patrol order. A shape
   also forms the selected units up in it where they stand ("Form up where they stand" above);
   Off leaves them where they are.
-- **`Ctrl+F`** switches formations on or off; **`Ctrl+Shift+F`** picks the next shape (and
+- **`M`** switches formations on or off; **`I`** picks the next shape (and
   switches formations on). Switching on or picking a shape forms the selection up like the
   buttons. Plain `F` still selects the next factory. Both show a ticker line.
 - Persisted in the ini as `General/Formation Moves` and `General/Formation Shape` (0-3).
@@ -2144,7 +2144,7 @@ hunting group with the facing; ineligible units get the plain order.
   cursor. At least 2 such units are needed.
 - **Everything else in the selection** keeps its old per-unit action: attack or follow,
   aircraft, and structures.
-- **`Ctrl+F`, `Ctrl+Shift+F` and the panel buttons:** see Controls above; choosing a shape forms
+- **`M`, `I` and the panel buttons:** see Controls above; choosing a shape forms
   the selection up where it stands through `Game::issueSelectedFormUp`.
 - **Options → Controls** has a "Move groups in formation" checkbox. It is on by default and is
   stored as `General/Formation Moves`; the shape is `General/Formation Shape`.
@@ -2304,7 +2304,7 @@ cases: 1064 passed, 3 skipped).
     and every member had a target within 9.9 s (the siege tank last).
   - Frames: `formation-march.png` (Box) and `formation-combined.png`: the Combined-arms
     group with its scouts out in front, the panel's five formation buttons with Combined
-    arms held down and its tooltip naming Ctrl+Shift+F.
+    arms held down and its tooltip naming I.
 - **`game_command_regressions`** adds `FORMATION_HUNT_COMMAND_PROBE_PASS`: enemy issuer, zero
   token, kind Move, unknown kind, unknown facing and off-map slot refused; attack-move joins
   one hunting group with the slowest pace, the sent facing and unforced attack-move walks;
@@ -2445,8 +2445,8 @@ There are two intermediate results:
   clear in the formed shape, group pace cap) but as the group's form-up phase, in which
   members walk at their own speed and the lane wait does not apply - as in the form-up before
   every march. Marching on the spot gridlocked (see "Form up where they stand").
-- **`Ctrl+F` forms up too:** switching formations on chooses the current shape, so it forms the
-  selection up like that shape's button; the brief named the buttons and `Ctrl+Shift+F`.
+- **`M` forms up too:** switching formations on chooses the current shape, so it forms the
+  selection up like that shape's button; the brief named the buttons and `I`.
 - **Short formation moves (not changed):** a formation move whose march is under
   `kFormUpMinMarch` skips the form-up and marches straight to the slots under the march rules.
   When the slots overlap the group (a short move into the area it stands in), that is the

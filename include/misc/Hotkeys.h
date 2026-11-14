@@ -66,31 +66,31 @@ struct ActionInfo {
 
 inline const std::array<ActionInfo, actionCount>& actions() {
     static const std::array<ActionInfo, actionCount> table = {{
-        {Action::Move,                   "Move",                    "Move",                          {SDLK_m, 0},                      true},
-        {Action::AttackMove,             "Attack Move",             "Attack Move",                   {SDLK_a, 0},                      true},
-        {Action::Patrol,                 "Patrol",                  "Patrol",                        {SDLK_q, 0},                      true},
-        {Action::Stop,                   "Stop",                    "Stop",                          {SDLK_s, 0},                      true},
-        {Action::Guard,                  "Guard",                   "Guard",                         {SDLK_g, 0},                      false},
-        {Action::AreaGuard,              "Area Guard",              "Area Guard",                    {SDLK_g, Mod::Shift},             false},
-        {Action::Hold,                   "Hold",                    "Hold / return harvesters",      {SDLK_h, 0},                      true},
-        {Action::Capture,                "Capture",                 "Capture",                       {SDLK_c, 0},                      true},
-        {Action::CarryallDrop,           "Carryall Drop",           "Request Carryall drop",         {SDLK_d, 0},                      true},
-        {Action::Repair,                 "Repair",                  "Repair",                        {SDLK_r, 0},                      true},
-        {Action::Upgrade,                "Upgrade",                 "Upgrade structure",             {SDLK_u, 0},                      true},
-        {Action::PlaceStructure,         "Place Structure",         "Place structure",               {SDLK_p, 0},                      true},
-        {Action::NextConstructionYard,   "Next Construction Yard",  "Select next Construction Yard", {SDLK_y, 0},                      true},
-        {Action::NextFactory,            "Next Factory",            "Select next factory",           {SDLK_f, 0},                      true},
-        {Action::SelectOrnithopters,     "Select Ornithopters",     "Select all ornithopters",       {SDLK_o, 0},                      true},
-        {Action::SelectSameTypeOnScreen, "Select Same Type",        "Select same type on screen",    {SDLK_t, 0},                      false},
-        {Action::SelectSameTypeOnMap,    "Select Same Type On Map", "Select same type on map",       {SDLK_t, Mod::Ctrl},              false},
-        {Action::SelectAllCombatUnits,   "Select Combat Units",     "Select all combat units",       {SDLK_a, Mod::Ctrl},              true},
-        {Action::ToggleFormationMoves,   "Formation Moves",         "Formation moves on/off",        {SDLK_f, Mod::Ctrl},              false},
-        {Action::NextFormationShape,     "Next Formation Shape",    "Next formation shape",          {SDLK_f, Mod::Ctrl | Mod::Shift}, false},
-        {Action::CityZoneTool,           "City Zone Tool",          "City zone tool",                {SDLK_z, 0},                      true},
-        {Action::CityRoadTool,           "City Road Tool",          "City road tool",                {SDLK_r, Mod::Shift},             false},
-        {Action::CityBudget,             "City Budget",             "City budget",                   {SDLK_b, Mod::Shift},             false},
-        {Action::CityStatsOverlay,       "City Statistics",         "City statistics overlay",       {SDLK_c, Mod::Shift},             false},
-        {Action::ToggleGameTime,         "Show Game Time",          "Show game time",                {SDLK_t, Mod::Shift},             false},
+        {Action::Move,                   "Move",                    "Move",                          {SDLK_v, 0},                           true},
+        {Action::AttackMove,             "Attack Move",             "Attack Move",                   {SDLK_q, 0},                           true},
+        {Action::Patrol,                 "Patrol",                  "Patrol",                        {SDLK_z, 0},                           true},
+        {Action::Stop,                   "Stop",                    "Stop",                          {SDLK_e, 0},                           true},
+        {Action::Guard,                  "Guard",                   "Guard",                         {SDLK_f, 0},                           false},
+        {Action::AreaGuard,              "Area Guard",              "Area Guard",                    {SDLK_g, 0},                           false},
+        {Action::Hold,                   "Hold",                    "Hold / return harvesters",      {SDLK_x, 0},                           true},
+        {Action::Capture,                "Capture",                 "Capture",                       {SDLK_c, 0},                           true},
+        {Action::CarryallDrop,           "Carryall Drop",           "Request Carryall drop",         {SDLK_t, 0},                           true},
+        {Action::Repair,                 "Repair",                  "Repair",                        {SDLK_r, 0},                           true},
+        {Action::Upgrade,                "Upgrade",                 "Upgrade structure",             {SDLK_u, 0},                           true},
+        {Action::PlaceStructure,         "Place Structure",         "Place structure",               {SDLK_b, 0},                           true},
+        {Action::NextConstructionYard,   "Next Construction Yard",  "Select next Construction Yard", {SDLK_y, 0},                           true},
+        {Action::NextFactory,            "Next Factory",            "Select next factory",           {SDLK_h, 0},                           true},
+        {Action::SelectOrnithopters,     "Select Ornithopters",     "Select all ornithopters",       {SDLK_o, 0},                           true},
+        {Action::SelectSameTypeOnScreen, "Select Same Type",        "Select same type on screen",    {SDLK_n, 0},                           false},
+        {Action::SelectSameTypeOnMap,    "Select Same Type On Map", "Select same type on map",       {SDLK_j, 0},                           false},
+        {Action::SelectAllCombatUnits,   "Select Combat Units",     "Select all combat units",       {SDLK_k, 0},                           true},
+        {Action::ToggleFormationMoves,   "Formation Moves",         "Formation moves on/off",        {SDLK_m, 0},                           false},
+        {Action::NextFormationShape,     "Next Formation Shape",    "Next formation shape",          {SDLK_i, 0},                           false},
+        {Action::CityZoneTool,           "City Zone Tool",          "City zone tool",                {SDLK_l, 0},                           true},
+        {Action::CityRoadTool,           "City Road Tool",          "City road tool",                {SDLK_p, 0},                           false},
+        {Action::CityBudget,             "City Budget",             "City budget",                   {SDLK_LEFTBRACKET, 0},                 false},
+        {Action::CityStatsOverlay,       "City Statistics",         "City statistics overlay",       {SDLK_RIGHTBRACKET, 0},                false},
+        {Action::ToggleGameTime,         "Show Game Time",          "Show game time",                {SDLK_BACKSLASH, 0},                   false},
     }};
     return table;
 }
@@ -217,13 +217,13 @@ inline const char* fixedShortcutsSummary() {
     return "Fixed: 0-9 select groups, Ctrl+0-9 set, Alt+0-9 add; Shift+1-8 city overlays;\n"
            "F1-F3 zoom, F4-F6 skip time, F10/F11 sound/music, F12 FPS; Space pause;\n"
            "+/- game speed; Enter chat; Esc menu; arrows scroll; Ctrl+P screenshot.\n"
-           "With the WASD camera, W/A/S/D scroll and hotkeys on W/A/S/D/Q need Shift.";
+           "W/A/S/D scroll with WASD camera; default commands use nearby single keys.";
 }
 
-/// With the WASD camera, W/A/S/D scroll and Q keeps its established Shift+Q, so an unmodified
-/// binding on one of these keys needs Shift.
+/// Only custom bindings on the four camera keys need Shift with WASD enabled.
+/// Defaults avoid those keys entirely; Q remains a single-key command beside W.
 inline bool needsShiftWithWasd(SDL_Keycode key) {
-    return key == SDLK_w || key == SDLK_a || key == SDLK_s || key == SDLK_d || key == SDLK_q;
+    return key == SDLK_w || key == SDLK_a || key == SDLK_s || key == SDLK_d;
 }
 
 inline Binding effective(Binding binding, bool wasdCamera) {

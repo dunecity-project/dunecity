@@ -17,7 +17,7 @@ std::optional<Action> pressed(const Hotkeys::Bindings& bindings, SDL_Keycode key
 }
 }
 
-TEST_CASE("Default hotkeys are distinct, bindable and give Guard G, Area Guard Shift+G, Stop S", "[hotkeys]") {
+TEST_CASE("Defaults use distinct single keys around WASD without camera conflicts", "[hotkeys]") {
     const auto defaults = Hotkeys::Bindings::defaults();
     REQUIRE(defaults.conflicts().empty());
     std::set<std::string> keys;
@@ -26,73 +26,73 @@ TEST_CASE("Default hotkeys are distinct, bindable and give Guard G, Area Guard S
         REQUIRE(static_cast<int>(info.action) == i);
         REQUIRE(keys.insert(info.iniKey).second);
         REQUIRE(info.defaultBinding.bound());
+        REQUIRE(info.defaultBinding.mods == 0);
+        REQUIRE_FALSE(Hotkeys::needsShiftWithWasd(info.defaultBinding.key));
         REQUIRE(Hotkeys::reservedReason(info.defaultBinding) == nullptr);
+        for(bool wasd : {false, true}) {
+            REQUIRE(defaults.effective(info.action, wasd) == info.defaultBinding);
+            REQUIRE(pressed(defaults, info.defaultBinding.key, KMOD_NONE, wasd) == info.action);
+        }
     }
-    REQUIRE(Hotkeys::displayName(defaults.get(Action::Guard)) == "G");
-    REQUIRE(Hotkeys::displayName(defaults.get(Action::AreaGuard)) == "Shift+G");
-    REQUIRE(Hotkeys::displayName(defaults.get(Action::Stop)) == "S");
-    REQUIRE(Hotkeys::displayName(defaults.effective(Action::Stop, true)) == "Shift+S");
-    REQUIRE(Hotkeys::displayName(defaults.get(Action::NextConstructionYard)) == "Y");
+    REQUIRE(pressed(defaults, SDLK_q, KMOD_NONE, true) == Action::AttackMove);
+    REQUIRE(pressed(defaults, SDLK_e, KMOD_NONE, true) == Action::Stop);
+    REQUIRE(pressed(defaults, SDLK_r, KMOD_NONE, true) == Action::Repair);
+    REQUIRE(pressed(defaults, SDLK_f, KMOD_NONE, true) == Action::Guard);
+    REQUIRE(pressed(defaults, SDLK_g, KMOD_NONE, true) == Action::AreaGuard);
+    REQUIRE(pressed(defaults, SDLK_z, KMOD_NONE, true) == Action::Patrol);
+    REQUIRE(pressed(defaults, SDLK_x, KMOD_NONE, true) == Action::Hold);
+    REQUIRE(pressed(defaults, SDLK_c, KMOD_NONE, true) == Action::Capture);
+    REQUIRE(pressed(defaults, SDLK_v, KMOD_NONE, true) == Action::Move);
+    REQUIRE(pressed(defaults, SDLK_y, KMOD_NONE, true) == Action::NextConstructionYard);
+    for(auto key : {SDLK_w, SDLK_a, SDLK_s, SDLK_d}) {
+        REQUIRE_FALSE(pressed(defaults, key, KMOD_NONE, true));
+        REQUIRE_FALSE(pressed(defaults, key, KMOD_LSHIFT, true));
+    }
 }
 
-TEST_CASE("Key presses dispatch to named actions with explicit modifier intent", "[hotkeys]") {
-    const auto bindings = Hotkeys::Bindings::defaults();
-    REQUIRE(pressed(bindings, SDLK_g) == Action::Guard);
-    REQUIRE(pressed(bindings, SDLK_g, KMOD_LSHIFT) == Action::AreaGuard);
-    REQUIRE(pressed(bindings, SDLK_s) == Action::Stop);
-    REQUIRE(pressed(bindings, SDLK_y) == Action::NextConstructionYard);
-    REQUIRE(pressed(bindings, SDLK_t, KMOD_RCTRL) == Action::SelectSameTypeOnMap);
-    REQUIRE(pressed(bindings, SDLK_f, KMOD_LCTRL | KMOD_LSHIFT) == Action::NextFormationShape);
-    // Shift on top of an order key keeps its queue meaning: it reaches the action, flagged.
-    const auto queuedHold = bindings.match(SDLK_h, KMOD_LSHIFT, false, always);
+TEST_CASE("Optional Shift still queues orders and custom modifiers still work", "[hotkeys]") {
+    auto bindings = Hotkeys::Bindings::defaults();
+    const auto queuedHold = bindings.match(SDLK_x, KMOD_LSHIFT, true, always);
     REQUIRE(queuedHold);
     REQUIRE(queuedHold->action == Action::Hold);
     REQUIRE(queuedHold->extraShift);
-    REQUIRE_FALSE(bindings.match(SDLK_h, KMOD_NONE, false, always)->extraShift);
-    REQUIRE(pressed(bindings, SDLK_a, KMOD_LCTRL | KMOD_LSHIFT) == Action::SelectAllCombatUnits);
-    // Guard never accepts an extra modifier, and system or unknown chords run nothing.
-    REQUIRE_FALSE(pressed(bindings, SDLK_g, KMOD_LCTRL));
-    REQUIRE_FALSE(pressed(bindings, SDLK_g, KMOD_LGUI));
+    REQUIRE_FALSE(bindings.match(SDLK_x, KMOD_NONE, true, always)->extraShift);
+    REQUIRE_FALSE(pressed(bindings, SDLK_f, KMOD_LCTRL));
+    REQUIRE_FALSE(pressed(bindings, SDLK_f, KMOD_LGUI));
     REQUIRE_FALSE(pressed(bindings, SDLK_q, KMOD_LGUI));
     REQUIRE_FALSE(pressed(bindings, SDLK_5));
     REQUIRE_FALSE(pressed(bindings, SDLK_SPACE));
-    // Caps Lock and Num Lock are not modifiers of a chord.
-    REQUIRE(pressed(bindings, SDLK_g, KMOD_CAPS | KMOD_NUM) == Action::Guard);
+    REQUIRE(pressed(bindings, SDLK_f, KMOD_CAPS | KMOD_NUM) == Action::Guard);
+    Hotkeys::assign(bindings, Action::Guard, {SDLK_f, Mod::Ctrl});
+    REQUIRE(pressed(bindings, SDLK_f, KMOD_RCTRL, true) == Action::Guard);
+    REQUIRE_FALSE(pressed(bindings, SDLK_f, KMOD_NONE, true));
 }
 
-TEST_CASE("The WASD camera moves unmodified W/A/S/D/Q hotkeys to Shift", "[hotkeys]") {
-    const auto bindings = Hotkeys::Bindings::defaults();
+TEST_CASE("Custom camera-key bindings retain their explicit WASD handling", "[hotkeys]") {
+    auto bindings = Hotkeys::Bindings::defaults();
+    Hotkeys::assign(bindings, Action::Stop, {SDLK_s, 0});
+    REQUIRE(pressed(bindings, SDLK_s) == Action::Stop);
     REQUIRE_FALSE(pressed(bindings, SDLK_s, KMOD_NONE, true));
-    REQUIRE_FALSE(pressed(bindings, SDLK_a, KMOD_NONE, true));
     REQUIRE(pressed(bindings, SDLK_s, KMOD_LSHIFT, true) == Action::Stop);
-    REQUIRE_FALSE(bindings.match(SDLK_s, KMOD_LSHIFT, true, always)->extraShift);
-    REQUIRE(pressed(bindings, SDLK_a, KMOD_LSHIFT, true) == Action::AttackMove);
-    REQUIRE(pressed(bindings, SDLK_q, KMOD_LSHIFT, true) == Action::Patrol);
-    REQUIRE(pressed(bindings, SDLK_g, KMOD_NONE, true) == Action::Guard);
-    REQUIRE(pressed(bindings, SDLK_a, KMOD_LCTRL, true) == Action::SelectAllCombatUnits);
+    REQUIRE(pressed(bindings, SDLK_q, KMOD_NONE, true) == Action::AttackMove);
 }
 
-TEST_CASE("Unavailable actions fall through to the action that accepts Shift", "[hotkeys]") {
-    const auto bindings = Hotkeys::Bindings::defaults();
-    const auto noCity = [](Action action) {
-        return action != Action::CityStatsOverlay && action != Action::CityRoadTool
-            && action != Action::CityBudget && action != Action::CityZoneTool;
-    };
+TEST_CASE("Unavailable city actions do not intercept a custom Shift order", "[hotkeys]") {
+    auto bindings = Hotkeys::Bindings::defaults();
+    Hotkeys::assign(bindings, Action::CityStatsOverlay, {SDLK_c, Mod::Shift});
+    const auto noCity = [](Action action) { return action != Action::CityStatsOverlay; };
     REQUIRE(pressed(bindings, SDLK_c, KMOD_LSHIFT) == Action::CityStatsOverlay);
     REQUIRE(pressed(bindings, SDLK_c, KMOD_LSHIFT, false, noCity) == Action::Capture);
-    REQUIRE(pressed(bindings, SDLK_r, KMOD_LSHIFT, false, noCity) == Action::Repair);
-    REQUIRE_FALSE(pressed(bindings, SDLK_b, KMOD_LSHIFT, false, noCity));
-    REQUIRE_FALSE(pressed(bindings, SDLK_z, KMOD_NONE, false, noCity));
 }
 
 TEST_CASE("A rebound action answers only to its new key", "[hotkeys]") {
     auto bindings = Hotkeys::Bindings::defaults();
-    auto result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_k, 0});
+    auto result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_DELETE, 0});
     REQUIRE(result.outcome == Hotkeys::AssignOutcome::Assigned);
     REQUIRE_FALSE(result.displaced);
-    REQUIRE_FALSE(pressed(bindings, SDLK_g));
-    REQUIRE(pressed(bindings, SDLK_k) == Action::Guard);
-    REQUIRE(pressed(bindings, SDLK_g, KMOD_LSHIFT) == Action::AreaGuard);
+    REQUIRE_FALSE(pressed(bindings, SDLK_f));
+    REQUIRE(pressed(bindings, SDLK_DELETE) == Action::Guard);
+    REQUIRE(pressed(bindings, SDLK_g, KMOD_NONE) == Action::AreaGuard);
 
     // Taking a key from another action leaves that action unbound rather than sharing it.
     result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_y, 0});
@@ -100,7 +100,7 @@ TEST_CASE("A rebound action answers only to its new key", "[hotkeys]") {
     REQUIRE(result.displaced == Action::NextConstructionYard);
     REQUIRE_FALSE(bindings.get(Action::NextConstructionYard).bound());
     REQUIRE(pressed(bindings, SDLK_y) == Action::Guard);
-    REQUIRE_FALSE(pressed(bindings, SDLK_k));
+    REQUIRE_FALSE(pressed(bindings, SDLK_DELETE));
     REQUIRE(bindings.conflicts().empty());
 
     REQUIRE(Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_y, 0}).outcome == Hotkeys::AssignOutcome::Unchanged);
@@ -110,8 +110,9 @@ TEST_CASE("A rebound action answers only to its new key", "[hotkeys]") {
 
 TEST_CASE("Reserved chords and WASD-only collisions are refused", "[hotkeys]") {
     auto bindings = Hotkeys::Bindings::defaults();
+    bindings.set(Action::Stop, {SDLK_s, 0});
     const auto before = bindings;
-    // Stop is S, which becomes Shift+S with the WASD camera.
+    // Custom Stop is S, which becomes Shift+S with the WASD camera.
     auto result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_s, Mod::Shift});
     REQUIRE(result.outcome == Hotkeys::AssignOutcome::Rejected);
     REQUIRE(result.reason.find("WASD camera is on") != std::string::npos);
@@ -181,8 +182,8 @@ TEST_CASE("Colliding config entries leave one action on the key", "[hotkeys]") {
     REQUIRE(bothConfigured.bindings.conflicts().empty());
 
     // A collision that only exists with the WASD camera is still resolved.
-    const auto wasdOnly = Hotkeys::load({{"Guard", "Shift+S"}});
+    const auto wasdOnly = Hotkeys::load({{"Guard", "Shift+S"}, {"Stop", "S"}});
     REQUIRE(wasdOnly.bindings.conflicts().empty());
-    REQUIRE(wasdOnly.bindings.get(Action::Guard) == Binding{SDLK_s, Mod::Shift});
-    REQUIRE_FALSE(wasdOnly.bindings.get(Action::Stop).bound());
+    REQUIRE_FALSE(wasdOnly.bindings.get(Action::Guard).bound());
+    REQUIRE(wasdOnly.bindings.get(Action::Stop) == Binding{SDLK_s, 0});
 }

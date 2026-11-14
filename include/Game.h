@@ -518,9 +518,9 @@ public:
     void confirmSkipMission();
     void drawMovementPaths();
     void toggleMovementPaths();
-    /// Ctrl+F: switches "Move groups in formation" and persists it (docs/formations.md).
+    /// M: switches "Move groups in formation" and persists it (docs/formations.md).
     void toggleFormationMoves();
-    /// Ctrl+Shift+F: the next formation shape (Box, Combined arms, Line, Column), switching
+    /// I: the next formation shape (Box, Combined arms, Line, Column), switching
     /// formations on; persisted (docs/formations.md).
     void cycleFormationShape();
     /**

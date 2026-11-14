@@ -62,29 +62,29 @@ void runSourceforgeRegressionsProbe(Game& game) {
     game.selectedList.insert(0xfffffffe);key(SDLK_0);require(game.selectedList.empty(),"Plain 0 stale selection failed");
     auto modeCount=[&](){int count=0;for(const auto& [cycle,slot]:game.cmdManager.timeslot)for(const auto& command:slot)if(command.getCommandID()==CMD_UNIT_SETMODE)++count;return count;};
     select({tank});settings.general.wasdCamera=false;
-    int count=modeCount();key(SDLK_s);require(modeCount()==count+1,"S did not queue Stop");
+    int count=modeCount();key(SDLK_e);require(modeCount()==count+1,"E did not queue Stop");
     settings.general.wasdCamera=true;count=modeCount();key(SDLK_s);require(modeCount()==count,"WASD S stopped instead of scrolling");
-    key(SDLK_s,KMOD_SHIFT);require(modeCount()==count+1,"Shift+S did not stop with WASD");
+    key(SDLK_e);require(modeCount()==count+1,"E did not stop with WASD");
     for(auto& [cycle,slot]:game.cmdManager.timeslot) {
         for(const auto& command:slot)if(command.getCommandID()==CMD_UNIT_SETMODE)command.executeCommand();
     }
     require(tank->getAttackMode()==STOP,"Queued Stop did not execute");
     settings.general.wasdCamera=false;
     screenborder->setNewScreenCenter((plot+Coord(8,8))*TILESIZE);
-    select({tank});key(SDLK_t);
-    require(game.selectedList.count(tank->getObjectID()) && game.selectedList.count(second->getObjectID()) && !game.selectedList.count(other->getObjectID()),"T failed matching-type selection");
+    select({tank});key(SDLK_n);
+    require(game.selectedList.count(tank->getObjectID()) && game.selectedList.count(second->getObjectID()) && !game.selectedList.count(other->getObjectID()),"N failed matching-type selection");
     Coord distant=Coord::Invalid();
     for(int y=1;y<currentGameMap->getSizeY()-1 && distant.isInvalid();++y)
         for(int x=1;x<currentGameMap->getSizeX()-1 && distant.isInvalid();++x)
             if(!screenborder->isTileInsideScreen(Coord(x,y)) && !currentGameMap->getTile(x,y)->hasAGroundObject())distant=Coord(x,y);
     require(distant.isValid(),"No off-screen selection fixture");
     auto* far=owner->createUnit(Unit_Tank);far->deploy(distant);
-    select({tank});key(SDLK_t);require(!game.selectedList.count(far->getObjectID()),"T selected off-screen tank");
-    key(SDLK_t,KMOD_CTRL);require(game.selectedList.count(far->getObjectID()),"Ctrl+T omitted off-screen tank");
-    select({tank,other});key(SDLK_t,KMOD_CTRL);
+    select({tank});key(SDLK_n);require(!game.selectedList.count(far->getObjectID()),"T selected off-screen tank");
+    key(SDLK_j);require(game.selectedList.count(far->getObjectID()),"J omitted off-screen tank");
+    select({tank,other});key(SDLK_j);
     require(game.selectedList.count(second->getObjectID()) && game.selectedList.count(other->getObjectID()),"Mixed-type selection was not preserved");
-    const bool timer=game.bShowTime;const auto selection=game.selectedList;key(SDLK_t,KMOD_SHIFT);
-    require(game.bShowTime!=timer && game.selectedList==selection,"Shift+T lost timer shortcut");
+    const bool timer=game.bShowTime;const auto selection=game.selectedList;key(SDLK_BACKSLASH);
+    require(game.bShowTime!=timer && game.selectedList==selection,"Backslash lost timer shortcut");
 
     House* enemy=nullptr;
     for(int h=0;h<NUM_HOUSES;++h)if(auto* house=game.getHouse(h);house && house->getTeamID()!=owner->getTeamID()){enemy=house;break;}
@@ -95,8 +95,8 @@ void runSourceforgeRegressionsProbe(Game& game) {
     auto hover=[&](Coord pos){drawnMouseX=screenborder->world2screenX(pos.x*TILESIZE+TILESIZE/2);drawnMouseY=screenborder->world2screenY(pos.y*TILESIZE+TILESIZE/2);};
     hover(plot+Coord(11,11));
     require(game.getHoverCursorAction()==CursorAppearance::Action::Pointer,"Ordinary movement shows forced-move cursor");
-    key(SDLK_m);
-    require(game.currentCursorMode==Game::CursorMode_Move,"M failed to enable explicit move cursor");
+    key(SDLK_v);
+    require(game.currentCursorMode==Game::CursorMode_Move,"V failed to enable explicit move cursor");
     game.setCursorMode(Game::CursorMode_Normal);
     game.pInterface->updateObjectInterface();
     auto* sidebar=dynamic_cast<UnitInterface*>(game.pInterface->pObjectContainer);

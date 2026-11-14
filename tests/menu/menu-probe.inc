@@ -2406,8 +2406,8 @@ int runMenuProbe() {
             menuRequire(page.getWidgetPosition(&menu.hotkeyFixedLabel).y + menu.hotkeyFixedLabel.getSize().y <= page.getSize().y,
                         "Fixed shortcut summary is cut off");
             menuRequire(menu.hotkeyListBox.getNumEntries()==Hotkeys::actionCount, "Hotkeys list misses commands");
-            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AreaGuard)).find("Shift+G")!=std::string::npos,
-                        "Area Guard row does not show Shift+G");
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AreaGuard))=="Area Guard:  G",
+                        "Area Guard row does not show G");
 
             menu.hotkeyListBox.setSelectedItem(rowOf(Action::Guard));
             menu.onHotkeyChange();
@@ -2451,8 +2451,8 @@ int runMenuProbe() {
             menu.onHotkeyDefaults();
             menu.onOptionsOK();
             INIFile saved(getConfigFilepath());
-            menuRequire(settings.hotkeys==Hotkeys::Bindings::defaults() && saved.getStringValue("Hotkeys","Guard")=="G"
-                        && saved.getStringValue("Hotkeys","Area Guard")=="Shift+G" && saved.getStringValue("Hotkeys","Stop")=="S"
+            menuRequire(settings.hotkeys==Hotkeys::Bindings::defaults() && saved.getStringValue("Hotkeys","Guard")=="F"
+                        && saved.getStringValue("Hotkeys","Area Guard")=="G" && saved.getStringValue("Hotkeys","Stop")=="E"
                         && saved.getStringValue("Hotkeys","Next Construction Yard")=="Y",
                         "Default hotkeys not restored or persisted");
         }

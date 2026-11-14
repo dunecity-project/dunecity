@@ -14,7 +14,7 @@
 //   7. a rendered frame shows the queued waypoint lines and a hotkey tooltip (smoke screenshot);
 //   8. the Attack button and the A key on a spice bloom fire at it from weapon range, for every
 //      firing unit type alone and as one group (formation moves off and on): nobody drives onto it.
-//   9. Guard (G), Area Guard (Shift+G) and Stop (S, Shift+S with WASD) key presses reach the
+//   9. Guard (F), Area Guard (G) and Stop (E), with WASD on or off key presses reach the
 //      units; a rebound or unbound key stops answering; both unit panels' tooltips agree.
 #include <Game.h>
 #include <House.h>
@@ -312,7 +312,7 @@ int runRtsControlsProbe() {
             } else {
                 SDL_KeyboardEvent key{};
                 key.type = SDL_KEYDOWN;
-                key.keysym.sym = SDLK_a;
+                key.keysym.sym = SDLK_q;
                 game->handleKeyInput(key);
             }
             rtsRequire(game->currentCursorMode == Game::CursorMode_Attack, "The Attack cursor did not open");
@@ -433,7 +433,7 @@ int runRtsControlsProbe() {
             }
         }
         settings.general.formationMoves = formations;
-        SDL_Log("RTS_CONTROLS_BLOOM_PASS: %d Attack-cursor clicks on a spice bloom (button and A key, %zu unit types alone, "
+        SDL_Log("RTS_CONTROLS_BLOOM_PASS: %d Attack-cursor clicks on a spice bloom (button and Q key, %zu unit types alone, "
                 "one ground group with formation moves off and on) fired from weapon range; nobody drove onto the bloom", cases, kinds.size());
     }
 
@@ -532,51 +532,55 @@ int runRtsControlsProbe() {
         auto startsWith = [](const std::string& text, const std::string& prefix) { return text.rfind(prefix, 0) == 0; };
 
         select({tank, quad});
+        press(SDLK_f, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "F did not put the selection in Guard");
         press(SDLK_g, KMOD_NONE);
-        rtsRequire(inMode(GUARD), "G did not put the selection in Guard");
-        press(SDLK_g, KMOD_LSHIFT);
-        rtsRequire(inMode(AREAGUARD), "Shift+G did not put the selection in Area Guard");
-        press(SDLK_s, KMOD_NONE);
-        rtsRequire(inMode(STOP), "S did not stop the selection");
-        press(SDLK_g, KMOD_LCTRL);
-        rtsRequire(inMode(STOP), "Ctrl+G ran Guard");
-        press(SDLK_g, KMOD_NONE);
+        rtsRequire(inMode(AREAGUARD), "G did not put the selection in Area Guard");
+        press(SDLK_e, KMOD_NONE);
+        rtsRequire(inMode(STOP), "E did not stop the selection");
+        press(SDLK_f, KMOD_LCTRL);
+        rtsRequire(inMode(STOP), "Ctrl+F ran Guard");
+        press(SDLK_f, KMOD_NONE);
         settings.general.wasdCamera = true;
+        press(SDLK_g, KMOD_NONE);
+        rtsRequire(inMode(AREAGUARD), "With WASD, G did not run Area Guard");
+        press(SDLK_f, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "With WASD, F did not run Guard");
         press(SDLK_s, KMOD_NONE);
         rtsRequire(inMode(GUARD), "With the WASD camera, plain S still stopped the selection");
-        press(SDLK_s, KMOD_LSHIFT);
-        rtsRequire(inMode(STOP), "With the WASD camera, Shift+S did not stop the selection");
+        press(SDLK_e, KMOD_NONE);
+        rtsRequire(inMode(STOP), "With the WASD camera, E did not stop the selection");
         select({tank});         // a single unit first, so the group panel below is built anew
         select({tank, quad});
         auto* many = dynamic_cast<MultiUnitInterface*>(game->pInterface->pObjectContainer);
-        rtsRequire(many && startsWith(many->stopButton.getTooltipText(), "Stop (Shift+S)"),
+        rtsRequire(many && startsWith(many->stopButton.getTooltipText(), "Stop (E)"),
                    "The group Stop tooltip does not show the WASD key");
         settings.general.wasdCamera = false;
 
         // Both panels name the keys the handler uses.
         select({tank});
         auto* one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
-        rtsRequire(one && startsWith(one->guardButton.getTooltipText(), "Guard (G)")
-                   && startsWith(one->areaGuardButton.getTooltipText(), "Area Guard (Shift+G)")
-                   && startsWith(one->stopButton.getTooltipText(), "Stop (S)"),
-                   "The unit panel tooltips do not name Guard G, Area Guard Shift+G and Stop S");
+        rtsRequire(one && startsWith(one->guardButton.getTooltipText(), "Guard (F)")
+                   && startsWith(one->areaGuardButton.getTooltipText(), "Area Guard (G)")
+                   && startsWith(one->stopButton.getTooltipText(), "Stop (E)"),
+                   "The unit panel tooltips do not name Guard F, Area Guard G and Stop E");
         select({tank, quad});
         many = dynamic_cast<MultiUnitInterface*>(game->pInterface->pObjectContainer);
-        rtsRequire(many && startsWith(many->guardButton.getTooltipText(), "Guard (G)")
-                   && startsWith(many->areaGuardButton.getTooltipText(), "Area Guard (Shift+G)")
-                   && startsWith(many->stopButton.getTooltipText(), "Stop (S)"),
-                   "The group panel tooltips do not name Guard G, Area Guard Shift+G and Stop S");
+        rtsRequire(many && startsWith(many->guardButton.getTooltipText(), "Guard (F)")
+                   && startsWith(many->areaGuardButton.getTooltipText(), "Area Guard (G)")
+                   && startsWith(many->stopButton.getTooltipText(), "Stop (E)"),
+                   "The group panel tooltips do not name Guard F, Area Guard G and Stop E");
 
         // Rebound Guard answers only to its new key; an unbound Stop answers to nothing.
         rtsRequire(Hotkeys::assign(settings.hotkeys, Hotkeys::Action::Guard, Hotkeys::Binding{SDLK_k, 0}).outcome
                    == Hotkeys::AssignOutcome::Assigned, "Guard could not move to K");
-        press(SDLK_g, KMOD_NONE);
-        rtsRequire(inMode(STOP) && game->selectedList.size() == 2, "G still acted after Guard moved to K");
+        press(SDLK_f, KMOD_NONE);
+        rtsRequire(inMode(STOP) && game->selectedList.size() == 2, "F still acted after Guard moved to K");
         press(SDLK_k, KMOD_NONE);
         rtsRequire(inMode(GUARD), "K did not run the rebound Guard");
         Hotkeys::assign(settings.hotkeys, Hotkeys::Action::Stop, Hotkeys::Binding{});
-        press(SDLK_s, KMOD_NONE);
-        rtsRequire(inMode(GUARD), "S still stopped units after Stop was unbound");
+        press(SDLK_e, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "E still stopped units after Stop was unbound");
         select({tank});
         one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
         rtsRequire(one && startsWith(one->guardButton.getTooltipText(), "Guard (K)")
@@ -590,8 +594,8 @@ int runRtsControlsProbe() {
         game->selectionChanged();
         retire(tank);
         retire(quad);
-        SDL_Log("RTS_CONTROLS_HOTKEYS_PASS: G Guard, Shift+G Area Guard, S Stop (Shift+S with WASD) through the key handler;"
-                " rebound Guard ignores G; unbound Stop ignores S; unit and group tooltips agree");
+        SDL_Log("RTS_CONTROLS_HOTKEYS_PASS: F Guard, G Area Guard, E Stop with WASD on/off through the key handler;"
+                " rebound Guard ignores F; unbound Stop ignores E; unit and group tooltips agree");
     }
 
     // ---- 5. Save round trip: queue, patrol, HOLD and repeat flags --------------------------
@@ -630,9 +634,9 @@ int runRtsControlsProbe() {
         game->pInterface->updateObjectInterface();
         auto* panel = dynamic_cast<MultiUnitInterface*>(game->pInterface->pObjectContainer);
         rtsRequire(panel != nullptr, "No group panel for the smoke frame");
-        rtsRequire(panel->attackButton.getTooltipText().rfind("Attack Move (A)", 0) == 0
-                   && panel->patrolButton.getTooltipText().rfind("Patrol (Q)", 0) == 0
-                   && panel->holdButton.getTooltipText().rfind("Hold (H)", 0) == 0,
+        rtsRequire(panel->attackButton.getTooltipText().rfind("Attack Move (Q)", 0) == 0
+                   && panel->patrolButton.getTooltipText().rfind("Patrol (Z)", 0) == 0
+                   && panel->holdButton.getTooltipText().rfind("Hold (X)", 0) == 0,
                    "Unit command tooltips do not name their hotkeys");
         auto capture = [&](const std::string& name, bool tooltip) {
             panel->patrolButton.bHover = tooltip;
@@ -659,7 +663,7 @@ int runRtsControlsProbe() {
         rtsRequire(rtsHasColor(frame.first, frame.second, field, 235, 70, 60), "No red attack-move waypoint line on screen");
         rtsRequire(rtsHasColor(frame.first, frame.second, field, 90, 150, 255), "No blue patrol waypoint line on screen");
         capture("rts-controls-tooltip.png", true);
-        SDL_Log("RTS_CONTROLS_SMOKE_PASS: waypoint lines (move, attack-move, patrol) and Patrol (Q) tooltip captured in %s", smoke.c_str());
+        SDL_Log("RTS_CONTROLS_SMOKE_PASS: waypoint lines (move, attack-move, patrol) and Patrol (Z) tooltip captured in %s", smoke.c_str());
     }
     game.reset(); currentGame = nullptr;
     SDL_Log("RTS_CONTROLS_PROBE_PASS: attack-move, HOLD, Shift queue, repeat production, save round trip, 9854 load, smoke frame");
