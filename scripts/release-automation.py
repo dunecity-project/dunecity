@@ -598,7 +598,10 @@ def reservation_token(args):
 
 def qualification_image_version():
     if os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted':
-        return 'self-hosted:' + run('sw_vers', '-buildVersion').strip() + ':' + run('xcodebuild', '-version').strip()
+        # Name the toolchain that actually compiles: the active developer directory and
+        # its compiler. The Mini uses the Command Line Tools, which have no xcodebuild.
+        return ':'.join(('self-hosted', run('sw_vers', '-buildVersion'), run('xcode-select', '-p'),
+                         run('clang', '--version').splitlines()[0]))
     return os.environ.get('ImageVersion')
 
 

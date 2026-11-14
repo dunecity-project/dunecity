@@ -1441,10 +1441,15 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
             with self.assertRaisesRegex(ValueError, 'runner identity'):
                 automation.qualification_producer(receipt, SHA)
 
-    def test_mini_image_identity_includes_macos_and_xcode(self):
+    def test_mini_image_identity_names_macos_and_active_toolchain(self):
+        # Command Line Tools have no xcodebuild; asking for it must fail the test too.
+        answers = {('sw_vers', '-buildVersion'): '25G83',
+                   ('xcode-select', '-p'): '/Library/Developer/CommandLineTools',
+                   ('clang', '--version'): 'Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.6.0'}
         with patch.dict(os.environ, RUNNER_ENVIRONMENT='self-hosted'), \
-             patch.object(automation, 'run', side_effect=['24G90', 'Xcode 26.0\nBuild version 17A324']):
-            self.assertEqual(automation.qualification_image_version(), 'self-hosted:24G90:Xcode 26.0\nBuild version 17A324')
+             patch.object(automation, 'run', side_effect=lambda *command: answers[command]):
+            self.assertEqual(automation.qualification_image_version(),
+                'self-hosted:25G83:/Library/Developer/CommandLineTools:Apple clang version 21.0.0 (clang-2100.1.1.101)')
 
     def test_artifact_transport_rejects_expiry_digest_substitution_and_extra_files(self):
         raw = self.zip_evidence()
