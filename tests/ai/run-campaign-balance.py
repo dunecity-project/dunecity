@@ -473,6 +473,8 @@ parser.add_argument('--pressure-probe', action='store_true', help='Verify campai
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
 parser.add_argument('--original-campaign-probe', action='store_true', help='Verify original Campaign AI rules and saved state')
+parser.add_argument('--original-campaign-rules', choices=('on', 'off'),
+                    help='Capture original or legacy rules for newly created Campaign AI controllers')
 parser.add_argument('--repair-capacity-probe', action='store_true',
                     help='Verify demand-driven repair capacity, shared pending orders and saved pressure')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
@@ -890,7 +892,7 @@ else:
 headless_assets = args.headless_assets and not (
     args.real_video or args.ffa_screenshot
     or any(value is True for name, value in vars(args).items()
-           if name.endswith('_probe') and name != 'repair_capacity_probe'))
+           if name.endswith('_probe') and name not in ('repair_capacity_probe', 'original_campaign_probe')))
 if args.build_only and not headless_assets:
     print(binary)
     sys.exit(0)
@@ -1054,6 +1056,8 @@ if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
 if args.original_campaign_probe: env['BALANCE_ORIGINAL_CAMPAIGN_PROBE'] = '1'
+env.pop('BALANCE_ORIGINAL_CAMPAIGN_RULES', None)
+if args.original_campaign_rules is not None: env['BALANCE_ORIGINAL_CAMPAIGN_RULES'] = args.original_campaign_rules
 if args.repair_capacity_probe: env['BALANCE_REPAIR_CAPACITY_PROBE'] = '1'
 if args.scenario:
     env['BALANCE_SCENARIO'] = '1'

@@ -282,6 +282,8 @@ int runCampaignBalanceProbe() {
         ++rosterRow;
         init.addHouseInfo(info);
     }
+    if(const char* original = std::getenv("BALANCE_ORIGINAL_CAMPAIGN_RULES"))
+        getQuantBotConfig().originalCampaignAI = std::string(original) == "on";
     auto game = std::make_unique<Game>();
     currentGame = game.get();
     // Suppress the interactive briefing and public match analytics at setup.
@@ -293,6 +295,10 @@ int runCampaignBalanceProbe() {
         GamePerf::MeasuredQuantBots measuredQuantBots(!civWars && std::getenv("BALANCE_PERF") != nullptr);
         game->initGame(init);
     }
+    for(int h = 0; h < NUM_HOUSES; ++h) if(const auto* house = game->getHouse(h))
+        for(const auto& player : house->getPlayerList())
+            if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
+                SDL_Log("ORIGINAL_CAMPAIGN_ROSTER: house=%d original=%d", h, int(campaign->usesOriginalRules()));
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
         throw std::runtime_error("Custom diagnostic did not create the real local observer");
     if(scenario && scenarioSides.empty())

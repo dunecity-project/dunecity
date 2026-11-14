@@ -56,6 +56,10 @@ if(NOT EMSCRIPTEN AND NOT ANDROID AND Python3_Interpreter_FOUND AND CMAKE_GENERA
         --house harkonnen --level 9 --mod vanilla --minutes 1
         --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/original-campaign-ai-probe)
     set_tests_properties(original_campaign_ai PROPERTIES TIMEOUT 300 PROCESSORS 2)
+    dunecity_add_test(headless nightly NAME original_campaign_matches
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-original-campaign-matches.py
+        --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/original-campaign-matches)
+    set_tests_properties(original_campaign_matches PROPERTIES TIMEOUT 1200 PROCESSORS 3)
 endif()
 
 # Isolate video initialization and hint state from the larger simulation suite.
