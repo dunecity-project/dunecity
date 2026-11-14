@@ -3319,7 +3319,16 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
                 groundEconomyThreat = true;
         }
     }
-    pass.campaignThreatProduction = botConfig().force.campaignThreatProduction && pass.defendingEconomy
+    // A helper lever: until its ground army holds this value, a helper with two refineries
+    // funds ground production before its economy, as it does under a live attack.
+    const auto& helperForce = botConfig().force;
+    const int armyFloor = difficulty == Difficulty::Easy ? helperForce.campaignHelperEasyArmyFloor
+        : difficulty == Difficulty::Medium ? helperForce.campaignHelperMediumArmyFloor
+        : difficulty == Difficulty::Hard ? helperForce.campaignHelperHardArmyFloor
+        : difficulty == Difficulty::Brutal ? helperForce.campaignHelperBrutalArmyFloor : 0;
+    const bool belowArmyFloor = armyFloor > 0 && pass.itemCount[Structure_Refinery] >= 2
+        && ownGroundArmyValue() < armyFloor;
+    pass.campaignThreatProduction = ((helperForce.campaignThreatProduction && pass.defendingEconomy) || belowArmyFloor)
         && !pass.citySimEnabled && !builderOnly()
         && campaignPolicyApplies() && isAlliedWithHuman();
     pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth

@@ -455,18 +455,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         && pass.itemCount[Structure_Barracks] == 0 && pass.itemCount[Structure_WOR] == 0) {
         const int house = getHouse()->getHouseID();
         const auto& data = currentGame->objectData.data;
-        // A helper lever: from this many refineries the first combat factory is due at once.
-        const auto& helperForce = botConfig().force;
-        const int factoryRefineries = difficulty == Difficulty::Easy ? helperForce.campaignHelperEasyFactoryRefineries
-            : difficulty == Difficulty::Medium ? helperForce.campaignHelperMediumFactoryRefineries
-            : difficulty == Difficulty::Hard ? helperForce.campaignHelperHardFactoryRefineries
-            : difficulty == Difficulty::Brutal ? helperForce.campaignHelperBrutalFactoryRefineries : 0;
-        const bool factoryDue = factoryRefineries > 0 && pass.itemCount[Structure_Refinery] >= factoryRefineries;
         for (Uint32 producer : {Structure_LightFactory, Structure_Barracks, Structure_WOR}) {
             const auto& spec = data[producer][house];
             if (!spec.enabled || spec.builder != int(turn.pBuilder->getItemID())
                 || spec.techLevel > getHouse()->getTechLevel()) continue;
-            if (producer == Structure_LightFactory && botConfig().force.campaignFundedLightOpening && !factoryDue) {
+            if (producer == Structure_LightFactory && botConfig().force.campaignFundedLightOpening) {
                 // A paid-for empty factory is not a replacement army. Leave the
                 // yard to its normal economy until a legal first vehicle fits
                 // beside the cash that its producer would have to protect.

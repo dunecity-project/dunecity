@@ -459,12 +459,12 @@ CampaignHelperEasyHarvesters=0
 CampaignHelperMediumHarvesters=0
 CampaignHelperHardHarvesters=0
 CampaignHelperBrutalHarvesters=0
-# FactoryRefineries: it builds its first combat factory once it has this many refineries
-# (0 = when the factory and a first unit are funded beside its economy reserves).
-CampaignHelperEasyFactoryRefineries=0
-CampaignHelperMediumFactoryRefineries=0
-CampaignHelperHardFactoryRefineries=0
-CampaignHelperBrutalFactoryRefineries=0
+# ArmyFloor: until its ground army holds this value, and once it has two refineries, it funds
+# ground production before its economy (0 = economy first).
+CampaignHelperEasyArmyFloor=0
+CampaignHelperMediumArmyFloor=0
+CampaignHelperHardArmyFloor=0
+CampaignHelperBrutalArmyFloor=0
 # Fund campaign player-side ground production before economic savings during live base attacks.
 # Hashed; real prices, military budgets and unit limits stay unchanged.
 CampaignThreatProduction=1

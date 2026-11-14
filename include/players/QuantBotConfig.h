@@ -327,12 +327,12 @@ struct QuantBotConfig {
         int campaignEasyOpeningDelaySec, campaignMediumOpeningDelaySec, campaignHardOpeningDelaySec;
         /// The levers of a campaign helper (a QuantBot on the human's side under campaign
         /// policy), by its difficulty. Hashed. Harvesters: the most it keeps (0 = the spice
-        /// budget alone). FactoryRefineries: it builds its first combat factory once it has
-        /// this many refineries (0 = when the factory and a first unit are funded).
+        /// budget alone). ArmyFloor: until its ground army holds this value, and once it has
+        /// two refineries, it funds ground production before its economy (0 = economy first).
         int campaignHelperEasyHarvesters, campaignHelperMediumHarvesters,
             campaignHelperHardHarvesters, campaignHelperBrutalHarvesters;
-        int campaignHelperEasyFactoryRefineries, campaignHelperMediumFactoryRefineries,
-            campaignHelperHardFactoryRefineries, campaignHelperBrutalFactoryRefineries;
+        int campaignHelperEasyArmyFloor, campaignHelperMediumArmyFloor,
+            campaignHelperHardArmyFloor, campaignHelperBrutalArmyFloor;
         /// A campaign player's ground producers can spend economic savings while
         /// visible attackers are firing on its income/base. Hashed; default on.
         bool campaignThreatProduction;
