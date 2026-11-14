@@ -53,7 +53,7 @@ def integer(row, key):
 
 class Game:
     def __init__(self, row):
-        self.row, self.id = row, row['id'].split('#')[0]
+        self.row, self.id = row, row['id']
         self.events, self.samples = [], collections.defaultdict(dict)   # samples[minute][house]
         self.outcome, self.minutes = row['outcome'], float(row['minutes'] or 0)
 
@@ -104,18 +104,20 @@ class Game:
     def reading(self, facts):
         if self.outcome == 'won':
             return 'won'
+        if not self.samples or not self.events:
+            return 'insufficient telemetry; cause unknown'
         if self.outcome != 'lost':
             return self.outcome
         first = facts['first_wave']
         if first is None:
-            return 'lost without any opponent wave'
+            return 'no opponent wave recorded; cause unknown'
         if self.minutes <= first + 6:
-            return 'overrun by the opening waves'
+            return 'hypothesis: overrun by the opening waves'
         if facts['thrown'] is not None:
-            return f"partner lost its army attacking at {facts['thrown']:.0f} min"
+            return f"hypothesis: partner lost its army attacking at {facts['thrown']:.0f} min"
         if facts['income_stall'] is not None and facts['income_stall'] < self.minutes - 5:
-            return f"partner income stopped at {facts['income_stall']} min"
-        return 'worn down by repeated waves'
+            return f"hypothesis: partner income stopped at {facts['income_stall']} min"
+        return 'cause unresolved; inspect paired game events'
 
     def story(self, out):
         facts = self.read()
@@ -178,7 +180,7 @@ def load(directories):
         for row in table(directory, 'samples.csv'):
             if row['id'] in local and (integer(row, 'structures') or integer(row, 'army_units')):
                 local[row['id']].samples[integer(row, 'minute')][row['house']] = row
-    return [game for game in games.values() if game.samples]
+    return list(games.values())
 
 
 def main():

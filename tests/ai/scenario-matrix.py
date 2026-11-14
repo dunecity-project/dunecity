@@ -83,7 +83,7 @@ GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect'
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint',
                'style_seats', 'control_diagnostics', 'campaign_mode', 'partner', 'enemy_ai',
-               'enemy_difficulty') + genome_qualification.FIELDS
+               'enemy_difficulty', 'helper_style', 'ai_configs', 'setup_identity') + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
@@ -324,6 +324,15 @@ def aaa_seeds(count):
 
 
 def schedule(args):
+    if getattr(args, 'case_manifest', None):
+        import campaign_research
+        if getattr(args, 'style', None) or getattr(args, 'genome', None) or getattr(args, 'campaign_ai_only', False):
+            raise ValueError('Campaign research deck cannot change all controllers or remove the human')
+        games = campaign_research.schedule(args.case_manifest, campaign_game)
+        if getattr(args, 'shard', None):
+            k, n = args.shard
+            games = games[k - 1::n]
+        return games
     diagnostic = getattr(args, 'control_diagnostics', False)
     if diagnostic and (args.tier != 'controls' or getattr(args, 'check', False)):
         raise SystemExit('--control-diagnostics requires --tier controls and cannot be a --check gate')
@@ -490,6 +499,10 @@ def command(args, binary, game, out):
         cmd += ['--no-ai-telemetry']
     if getattr(args, 'style', None) and args.tier != 'controls':
         cmd += ['--scenario-style', args.style]
+    if getattr(args, 'helper_style', None):
+        if game['kind'] != 'campaign' or game.get('ai_only') or getattr(args, 'style', None):
+            raise ValueError('Helper treatment requires an authored human/support campaign')
+        cmd += ['--helper-style', args.helper_style]
     options_path = game.get('options')
     if getattr(args, 'genome', None):
         options_path = out.with_suffix('.candidate') / 'game-options.ini'
@@ -653,10 +666,20 @@ def play(args, scratch, binary, game):
            'source_commit': summary.get('sourceCommit', ''),
            'source_fingerprint': summary.get('sourceFingerprint', ''),
            'style_seats': style_seats(lines),
+           'helper_style': next((parse(l, 'SCENARIO_HELPER_STYLE:').get('style', '') for l in lines if 'SCENARIO_HELPER_STYLE:' in l), ''),
+           'ai_configs': json.dumps({r['house']: r.get('config_hash', '') for l in lines if 'SCENARIO_AI_CONFIG:' in l for r in [parse(l, 'SCENARIO_AI_CONFIG:')]}, sort_keys=True),
+           'setup_identity': json.dumps(next((parse(l, 'SCENARIO_SETUP:') for l in lines if 'SCENARIO_SETUP:' in l), {}), sort_keys=True),
            'control_diagnostics': int(getattr(args, 'control_diagnostics', False)),
            **{key: game.get(key, '') for key in ('campaign_mode', 'partner', 'enemy_ai', 'enemy_difficulty')}}
     if campaign and not row['error']:
         row['error'] = campaign_roster_error(game, houses)
+    if getattr(args, 'helper_style', None) and not row['error']:
+        configs = json.loads(row['ai_configs'])
+        native = json.loads(row['setup_identity']).get('config_hash')
+        helper = str(HOUSE_NUMBERS[game['house']])
+        if (row['helper_style'] != args.helper_style or not native or helper not in configs or len(configs) < 2
+                or any(value != native for house, value in configs.items() if house != helper)):
+            row['error'] = 'Helper treatment missing or enemy configuration changed'
     if args.tier == 'controls':
         remove_tree(candidate_dir)
         if not row['error'] and row['style_seats'] != expected_style_seats(args, game):
@@ -1229,6 +1252,8 @@ parser.add_argument('--minutes', type=int, choices=range(1, 121),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--cases', help='Only scheduled game IDs matching this regular expression (diagnostic subset)')
+parser.add_argument('--case-manifest', type=Path, help='Frozen authored campaign research cases (no schedule expansion)')
+parser.add_argument('--helper-style', help='Apply a treatment only to the human house QuantBot helper')
 parser.add_argument('--control-diagnostics', action='store_true',
                     help='Observed handmade-map study, never a controls gate; every comparison arm must use it')
 parser.add_argument('--control-seeds', type=int, nargs='+',

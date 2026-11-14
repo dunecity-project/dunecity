@@ -497,12 +497,16 @@ parser.add_argument('--scenario-style',
                     help='Scenario game, strategic-site probe, --load-save or --custom-map run: a play style '
                          '(tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
                          'e.g. a candidate config switch (test-only: not saved or hashed)')
+parser.add_argument('--helper-style', help='Authored campaign only: apply this style to player-side QuantBot support only')
 parser.add_argument('--mission', type=int, choices=range(1, 23),
                     help='Campaign mission number instead of the --level\'s first (all real IDs 1–22)')
 parser.add_argument('--seed', type=int, default=486409243)
 parser.add_argument('--minutes', type=int, default=20)
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
 args = parser.parse_args()
+if args.helper_style and (not args.scenario or args.scenario_sides or args.skirmish or args.custom_map
+                         or args.load_save or args.campaign_ai_only or args.scenario_style):
+    parser.error('--helper-style requires authored campaign human/support, without global style or alternate setup')
 if args.repair_capacity_probe and args.no_ai_telemetry:
     parser.error('--repair-capacity-probe requires structured production/placement receipts.')
 if args.army_deploys_regression_observer and args.scenario:
@@ -1068,6 +1072,7 @@ if args.scenario:
     if args.mission: env['BALANCE_MISSION'] = str(args.mission)
     if args.campaign_ai_only: env['BALANCE_CAMPAIGN_AI_ONLY'] = '1'
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
+if args.helper_style: env['BALANCE_HELPER_STYLE'] = args.helper_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
 cache_reader = None

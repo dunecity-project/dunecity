@@ -538,6 +538,18 @@ int runCampaignBalanceProbe() {
                 if (House* house = game->getHouse(h))
                     for (const auto& player : house->getPlayerList())
                         if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
+    if (const char* style = std::getenv("BALANCE_HELPER_STYLE"); style && *style) {
+        if (!scenario || !scenarioSides.empty() || loadSave || customMap || std::getenv("BALANCE_SCENARIO_STYLE"))
+            throw std::runtime_error("Helper style requires an authored campaign without a global treatment");
+        House* house = game->getHouse(humanHouse);
+        int helpers = 0;
+        if (house) for (const auto& player : house->getPlayerList())
+            if (auto* bot = dynamic_cast<QuantBot*>(player.get())) {
+                FormationDuel::applyStyle(*bot, style);
+                ++helpers;
+            }
+        if (helpers != 1) throw std::runtime_error("Helper treatment requires exactly one player-side QuantBot");
+    }
     if (std::getenv("BALANCE_POWER_CONTINUATION")) {
         runPowerContinuation(*game, minutes);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;

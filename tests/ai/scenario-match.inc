@@ -213,6 +213,8 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     for (const unsigned char byte : init.getFiledata()) mapHash.mixUint8(byte);
     const auto checksums = ModManager::instance().getEffectiveChecksums();
     const char* style = std::getenv("BALANCE_SCENARIO_STYLE");
+    if (const char* helperStyle = std::getenv("BALANCE_HELPER_STYLE"))
+        SDL_Log("SCENARIO_HELPER_STYLE: house=%d style=%s", trackedHouse, helperStyle);
     SDL_Log("SCENARIO_SETUP: seed=%u cycle=%u config_hash=%s options_hash=%s map_hash=%016llx "
             "map_hash_algorithm=fnv1a64 content_hash=%s object_data_hash=%s city_sim=%d observing=%d research_enabled=%d style=%s "
             "initial_spice_tile_permille=%d",
