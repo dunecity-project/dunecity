@@ -75,61 +75,6 @@ void runCampaignRepairProbe(Game& game) {
             force.campaignDeferredYardUpgrade = false;
             yard->curUpgradeLev = yard->getMaxUpgradeLevel();
         }
-        // The legacy enemy else-if chain used to consume the whole turn on a
-        // refused upgrade. Exercise its actual blackout recovery with ON/OFF.
-        if (bot == enemy && game.isCitySimEnabled()) {
-            std::array<int, Num_ItemID> authored;
-            std::copy(std::begin(bot->initialItemCount), std::end(bot->initialItemCount), authored.begin());
-            for (int i = 0; i < Num_ItemID; ++i) bot->initialItemCount[i] = house->getNumItems(i);
-            const int required = house->powerRequirement;
-            house->powerRequirement = house->getProducedPower() + 1;
-            bot->difficulty = QuantBot::Difficulty::Easy;
-            bot->gameMode = QuantBot::GameMode::Campaign;
-            force.campaignRepairRoleFix = true;
-            yard->curUpgradeLev = 0; yard->updateBuildList();
-            for (bool deferred : {true, false}) {
-                force.campaignDeferredYardUpgrade = deferred;
-                house->startingCredits = 60000;
-                QuantBot::BuildPass pass(4000);
-                bot->resetBuildPass(); bot->planBuildInventory(pass); bot->planBuildBudget(pass);
-                bot->planCityState(pass); bot->planStrategicReserve(pass); bot->planSpiceEconomy(pass);
-                bot->planPowerAndYards(pass); bot->planCityPopulation(pass); bot->planCivicNeedAndTrips(pass);
-                bot->planUnitMix(pass); bot->planCapitalForecast(pass); bot->planCityBootstrap(pass);
-                bot->planOpeningProduction(pass); bot->planDefenceCoverage(pass); bot->planVanillaCoreDefence(pass);
-                bot->planCityResearchOrder(pass); bot->planTechSavings(pass); bot->planCapitalCandidates(pass);
-                bot->planVanillaBoldCapital(pass); bot->chooseCapitalPlan(pass);
-                // Isolate this producer branch from competing capital projects.
-                pass.capitalChoice = -1; pass.sharedSpending = false; pass.cityGrowthProtected = false;
-                pass.money = 60000; pass.citySimEnabled = true;
-                pass.actualHarvesters = house->getNumItems(Unit_Harvester);
-                const int oldLimit = bot->harvesterLimit;
-                bot->harvesterLimit = 0; // Explicitly enter the legacy upgrade-vs-power branch.
-                QuantBot::BuilderTurn turn(pass.money);
-                turn.pBuilder = yard; turn.pStructure = yard;
-                QuantBot::YardTurn yardTurn;
-                bot->planningBuilder = yard->getObjectID(); bot->clearPlacementCache();
-                bot->buildCampaignYard(pass, turn, yardTurn);
-                bot->harvesterLimit = oldLimit;
-                if (deferred)
-                    require(!yard->isUpgrading() && (yard->getCurrentProducedItem() == Structure_WindTrap
-                        || yard->getCurrentProducedItem() == Structure_NuclearPlant),
-                        "Deferred enemy upgrade blocked blackout recovery");
-                else require(yard->isUpgrading(), "OFF control failed to attempt its legacy yard upgrade");
-                for (auto* building : structureList) if (building->getOwner() == house)
-                    if (auto* builder = dynamic_cast<BuilderBase*>(building)) {
-                        while (builder->getProductionQueueSize()) builder->doCancelItem(builder->getCurrentProducedItem());
-                        bot->builderPlaceLocations.erase(builder->getObjectID());
-                        bot->reservedStructures.erase(builder->getObjectID());
-                    }
-                yard->upgrading = false; yard->upgradeProgress = 0;
-            }
-            std::copy(authored.begin(), authored.end(), std::begin(bot->initialItemCount));
-            house->powerRequirement = required;
-            bot->difficulty = QuantBot::Difficulty::Hard;
-            force.campaignRepairRoleFix = false;
-            yard->curUpgradeLev = yard->getMaxUpgradeLevel(); yard->updateBuildList();
-            SDL_Log("CAMPAIGN_UPGRADE_PASS: enemy blackout recovery continues with upgrade deferred");
-        }
         if(bot==partner) bot->gameMode=QuantBot::GameMode::Custom;
         bot->build(4000);
         require(yard->getCurrentProducedItem()==Structure_Radar,"Missing repair prerequisite was not prioritized");
@@ -198,6 +143,61 @@ void runCampaignRepairProbe(Game& game) {
             SDL_Log("CAMPAIGN_REPAIR_CASE: tier=%d enemy=%d queued=%u denied=%d", int(tier), bot->isCampaignEnemy(), yard->getCurrentProducedItem(), denied);
             require((yard->getCurrentProducedItem() == Structure_RepairYard) != denied,
                 "Role-scoped repair policy produced the wrong construction order");
+        }
+        // The legacy enemy else-if chain used to consume the whole turn on a
+        // refused upgrade. Exercise its actual blackout recovery with ON/OFF.
+        if (bot == enemy && game.isCitySimEnabled()) {
+            std::array<int, Num_ItemID> authored;
+            std::copy(std::begin(bot->initialItemCount), std::end(bot->initialItemCount), authored.begin());
+            for (int i = 0; i < Num_ItemID; ++i) bot->initialItemCount[i] = house->getNumItems(i);
+            const int required = house->powerRequirement;
+            house->powerRequirement = house->getProducedPower() + 1;
+            bot->difficulty = QuantBot::Difficulty::Easy;
+            bot->gameMode = QuantBot::GameMode::Campaign;
+            force.campaignRepairRoleFix = true;
+            yard->curUpgradeLev = 0; yard->updateBuildList();
+            for (bool deferred : {true, false}) {
+                force.campaignDeferredYardUpgrade = deferred;
+                house->startingCredits = 60000;
+                QuantBot::BuildPass pass(4000);
+                bot->resetBuildPass(); bot->planBuildInventory(pass); bot->planBuildBudget(pass);
+                bot->planCityState(pass); bot->planStrategicReserve(pass); bot->planSpiceEconomy(pass);
+                bot->planPowerAndYards(pass); bot->planCityPopulation(pass); bot->planCivicNeedAndTrips(pass);
+                bot->planUnitMix(pass); bot->planCapitalForecast(pass); bot->planCityBootstrap(pass);
+                bot->planOpeningProduction(pass); bot->planDefenceCoverage(pass); bot->planVanillaCoreDefence(pass);
+                bot->planCityResearchOrder(pass); bot->planTechSavings(pass); bot->planCapitalCandidates(pass);
+                bot->planVanillaBoldCapital(pass); bot->chooseCapitalPlan(pass);
+                // Isolate this producer branch from competing capital projects.
+                pass.capitalChoice = -1; pass.sharedSpending = false; pass.cityGrowthProtected = false;
+                pass.money = 60000; pass.citySimEnabled = true;
+                pass.actualHarvesters = house->getNumItems(Unit_Harvester);
+                const int oldLimit = bot->harvesterLimit;
+                bot->harvesterLimit = 0; // Explicitly enter the legacy upgrade-vs-power branch.
+                QuantBot::BuilderTurn turn(pass.money);
+                turn.pBuilder = yard; turn.pStructure = yard;
+                QuantBot::YardTurn yardTurn;
+                bot->planningBuilder = yard->getObjectID(); bot->clearPlacementCache();
+                bot->buildCampaignYard(pass, turn, yardTurn);
+                bot->harvesterLimit = oldLimit;
+                if (deferred)
+                    require(!yard->isUpgrading() && (yard->getCurrentProducedItem() == Structure_WindTrap
+                        || yard->getCurrentProducedItem() == Structure_NuclearPlant),
+                        "Deferred enemy upgrade blocked blackout recovery");
+                else require(yard->isUpgrading(), "OFF control failed to attempt its legacy yard upgrade");
+                for (auto* building : structureList) if (building->getOwner() == house)
+                    if (auto* builder = dynamic_cast<BuilderBase*>(building)) {
+                        while (builder->getProductionQueueSize()) builder->doCancelItem(builder->getCurrentProducedItem());
+                        bot->builderPlaceLocations.erase(builder->getObjectID());
+                        bot->reservedStructures.erase(builder->getObjectID());
+                    }
+                yard->upgrading = false; yard->upgradeProgress = 0;
+            }
+            std::copy(authored.begin(), authored.end(), std::begin(bot->initialItemCount));
+            house->powerRequirement = required;
+            bot->difficulty = QuantBot::Difficulty::Hard;
+            force.campaignRepairRoleFix = false;
+            yard->curUpgradeLev = yard->getMaxUpgradeLevel(); yard->updateBuildList();
+            SDL_Log("CAMPAIGN_UPGRADE_PASS: enemy blackout recovery continues with upgrade deferred");
         }
         force.campaignRepairRoleFix = savedRoleFix;
         force.campaignDeferredYardUpgrade = savedDeferred;
