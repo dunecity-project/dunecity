@@ -29,6 +29,63 @@ The dated implementation/audit sections below remain historical evidence for
 their named source revisions, not proof that the current engine or either menu
 mode passes every proposed target.
 
+## Full campaign cap confirmation (2026-11-14, 1.0.868 game code)
+
+The repair-role and deferred-upgrade fixes are enabled. House-count wave scaling
+remains disabled: none of the tested candidates established a better difficulty
+curve. This does **not** establish that the retained 3,500 cap is calibrated on
+every map.
+
+Exploration covered 2,880 games and eleven caps. Three candidates were then
+frozen and compared with 3,500 on eight independent seeds per map (9901–9908),
+all four helper tiers, all three player houses, missions 5/8/14/20/21/22, actual
+QuantBot opponents, Vanilla, Full campaign, idle human, Both-role support and
+an 80-minute game-time limit. Medium and Brutal enemy brackets ran alongside
+them. Source `db72ba6f73b1b603134216a6332876599910c8b3` contains the styles;
+game behavior is unchanged from `bd8af1f71dc1cd7895b81f7629c8ddfd342a021f`.
+The 3,456-game confirmation had no engine errors and eleven time limits, kept
+in the denominators. These are measured samples, not universal win odds.
+
+| Helper and mission group | 3,500 | 6,500/2,000/4,000 | 6,500/4,000/4,000 | Flat 4,000 |
+|---|---:|---:|---:|---:|
+| Hard, level 4 | 24/24 | 24/24 | 24/24 | 24/24 |
+| Hard, level 6 | 24/24 | 24/24 | 24/24 | 24/24 |
+| Easy, level 6 | 18/24 | 3/24 | 3/24 | 13/24 |
+| Hard, level 8 | 16/48 | 12/48 | 20/48 | 20/48 |
+| Brutal, level 8 | 21/48 | 15/48 | 19/48 | 20/48 |
+| Medium, level 9 | 3/24 | 1/24 | 1/24 | 1/24 |
+| Hard, level 9 | 14/24 | 9/24 | 9/24 | 9/24 |
+| Brutal, level 9 | 13/24 | 9/24 | 9/24 | 9/24 |
+
+Tuples mean per-house credit caps with one/two/three surviving enemy bases.
+Stefan explicitly requested live recalculation as bases are destroyed. The
+combined-policy tests exercise that behavior; actual cap changes occurred in
+26 and 17 games for the two variable tuples. Every logged dispatch obeyed its
+effective cap. The apparent exploratory Hard-helper level-4 benefit from 6,500
+did not repeat, and every candidate reduced Brutal final-mission wins. The
+exploratory target-fit score alone would favor them, but all paired seed-block
+intervals cross zero and the map-specific regressions preclude promotion.
+
+The baseline loses Harkonnen mission 21 in all 32 helper/seed games. Candidates
+win once in 96, with Medium support under 6,500/2,000/4,000; Brutal is 0/8 in
+every arm. The reported seed 1408815401 loses with every helper under all four
+policies. Disabling only `CampaignAllyStrengthFloor` in a separate 36-game
+Full campaign Harkonnen-21 comparison also loses every game; it enables more
+Easy/Medium attacks but no Brutal attacks. Removing that floor alone is not a
+solution. The ordinary readiness threshold and the wider late-map imbalance
+remain unresolved.
+
+Diagnostic arm 3 uses `CampaignHouseWaveOneValue`, `CampaignHouseWaveTwoValue`
+and `CampaignHouseWaveThreeValue`. These keys are hashed, absent from the
+canonical INI, and default to 3,500 with the experiment off. Arm 0 preserves
+`CampaignHardWaveValue`. Helpers, Custom games, other tiers and city games do
+not inherit the experimental live-base scaling.
+
+The campaign menu now accurately says enemy houses can attack at the same
+time: each has an independent launch timer. The old one-house/two-house and
+relative-recovery descriptions were obsolete; correcting them changes no
+combat rule.
+
 ## Vanilla level 9 partner calibration (2026-11-13)
 
 Stefan's targets for idle human plus QuantBot support against QuantBot enemies on
