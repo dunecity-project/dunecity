@@ -240,6 +240,15 @@ briefly start the old lane; its queue wrapper terminates only that owned child.
 API/dispatch/cancellation errors remain visible. This is not a guaranteed total ETA:
 GitHub scheduling and execution time are outside that queue window.
 
+Diagnose elapsed time by phase, not the job name. The Mac lane writes durations
+and original exit codes for dependencies, configuration, compilation and headless
+tests to the Actions summary and `build/Testing/Temporary/macos-lane-timings.tsv`
+(included in qualification diagnostics). In the completed 1.0.866 run, preparation
+and compilation took about two minutes and the broad headless suite took 49.5
+minutes. Increasing compiler workers alone would not remove that test bottleneck.
+The Mini uses four build workers; the smaller hosted Mac retains two to bound
+compiler memory. Test scheduling has its own separate resource budget below.
+
 Once the Mini enters the lane, compilation or test failure is retained and **does
 not** trigger fallback. `backend=hosted` is an explicit operator override and the
 terminal fallback route; it cannot recursively dispatch more runs. Only the hosted
@@ -249,7 +258,12 @@ identity. Existing release signing roles remain separately approved.
 
 Mini qualification has separate compiler/dependency cache keys and a separate
 vcpkg archive directory from signing; routine staging qualification does not feed
-the signing lane's caches. Its job limit is 60 minutes, versus 120 on hosted Mac.
+the signing lane's caches. Mac cache keys use `vcpkg-dependency-key.py`, as Windows
+does: a game version bump preserves dependency caches, while dependency, registry
+baseline and feature changes invalidate them. Compiler caches still validate each
+compiler invocation and its source inputs. A new key initially needs warming in
+the default-branch scope; a cache written only by integration/PR CI is not a
+default-branch cache for a later tag. Its job limit is 60 minutes, versus 120 on hosted Mac.
 Any production reservation refuses new Mini verification admissions, including
 the same source SHA. Admission is not preemption: a production request arriving
 after qualification starts waits for that admitted job to finish or time out.

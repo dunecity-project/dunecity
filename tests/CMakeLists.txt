@@ -636,13 +636,13 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         dunecity_add_test(headless nightly LABELS "macos" NAME community_maps_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/maps/check-community-maps.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-maps-startup)
-        set_tests_properties(community_maps_startup PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        set_tests_properties(community_maps_startup PROPERTIES TIMEOUT 900 PROCESSORS 2)
         # Exact reviewed payloads, real five-minute AI production from two bare yards,
         # and matching final digests across two runs of every community mod.
         dunecity_add_test(headless nightly LABELS "macos" NAME community_mods_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/mods/check-community-mods.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-mods-startup)
-        set_tests_properties(community_mods_startup PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
+        set_tests_properties(community_mods_startup PROPERTIES TIMEOUT 1800 PROCESSORS 2)
         # Sihaya-Phonics stacks two scenario sandworms on tile 790. The second
         # cannot be placed and is destroyed while an observed game's map loads,
         # before any local player exists; that crashed 1.0.830 at startup.
@@ -683,7 +683,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         dunecity_add_test(headless nightly LABELS "macos" NAME trooper_anti_air_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-aa-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-aa-probe)
-        set_tests_properties(trooper_anti_air_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
+        set_tests_properties(trooper_anti_air_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
         # UI skins on the real menus and a real DuneCity game (Modern and the default Classic
         # Desert at 640x480 and Stefan's 1440x900 Medium): every screen rendered and linted, the
         # spectated end plate fits the map in every house colour, chat clears the city readouts,
@@ -932,7 +932,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         dunecity_add_test(headless nightly LABELS "macos" NAME brutal_unit_override_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-brutal-unit-override-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/brutal-unit-override-probe)
-        set_tests_properties(brutal_unit_override_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(brutal_unit_override_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         dunecity_add_test(headless nightly LABELS "macos" NAME active_tile_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
@@ -941,15 +941,15 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-tile-track-bounds-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --phases current
             --output-dir ${CMAKE_BINARY_DIR}/tile-track-bounds-probe)
-        set_tests_properties(tile_track_bounds_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(tile_track_bounds_probe PROPERTIES TIMEOUT 180 PROCESSORS 2)
         dunecity_add_test(headless nightly LABELS "macos" NAME body_angle_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
-        set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+        set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 PROCESSORS 2)
         dunecity_add_test(headless nightly LABELS "macos" NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
-        set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # Formation movement (docs/formations.md): twelve mixed units through the real
         # right-click path with formations on and off, a hunting mid-march save/reload, 9854
         # and 9857 unit records, Combined arms with sonic tanks and scouts (sonic lanes never
@@ -968,7 +968,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --weapon-reloads
             --output-dir ${CMAKE_BINARY_DIR}/weapon-reload-probe)
-        set_tests_properties(weapon_reload_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        set_tests_properties(weapon_reload_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # Modern RTS controls on real units over real cycles: attack-move column, HOLD launcher
         # under fire, three-waypoint Shift queue, repeat production through the unit limit,
         # save round trip, the committed 9854 save, and a rendered waypoint/tooltip smoke frame.
@@ -1013,7 +1013,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
                 --build-dir ${CMAKE_BINARY_DIR} ${projectile_flag}
                 --output-dir ${CMAKE_BINARY_DIR}/projectile-${projectile_probe}-probe)
-            set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            if(projectile_probe STREQUAL "combat")
+                set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+            else()
+                set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            endif()
         endforeach()
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(ai_probe IN ITEMS air-defense shared-spending stats harvester-safety)

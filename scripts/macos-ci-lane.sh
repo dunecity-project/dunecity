@@ -50,6 +50,31 @@ export CMAKE_BUILD_PARALLEL_LEVEL=2
 if [ "$STABLE" = ON ] || [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
     export CMAKE_BUILD_PARALLEL_LEVEL=4
 fi
+# Keep phase durations visible even when a command fails. The qualification
+# diagnostics already retain Testing/Temporary; do not call the entire lane
+# "tests" when it also installs dependencies and compiles the game.
+TIMING_FILE="$GITHUB_WORKSPACE/build/Testing/Temporary/macos-lane-timings.tsv"
+mkdir -p "$(dirname "$TIMING_FILE")"
+printf 'phase\tseconds\texit_code\n' > "$TIMING_FILE"
+run_phase() {
+    local phase="$1" started elapsed status=0
+    shift
+    started=$(date +%s)
+    echo "::group::Mac lane: $phase"
+    "$@" || status=$?
+    elapsed=$(( $(date +%s) - started ))
+    echo "::endgroup::"
+    printf '%s\t%s\t%s\n' "$phase" "$elapsed" "$status" >> "$TIMING_FILE"
+    echo "Mac lane phase $phase: ${elapsed}s, exit $status"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        printf '| %s | %ss | %s |\n' "$phase" "$elapsed" "$status" >> "$GITHUB_STEP_SUMMARY"
+    fi
+    return "$status"
+}
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '\n### Mac lane timings\n\nBuild workers: %s; runner: %s.\n\n| Phase | Elapsed | Exit code |\n| --- | ---: | ---: |\n' \
+        "$CMAKE_BUILD_PARALLEL_LEVEL" "${RUNNER_ENVIRONMENT:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+fi
 POINTER_OUT="$RUNNER_TEMP/dunecity-pointer-mapping-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 SIGNED_OUT="$RUNNER_TEMP/dunecity-mac-signed-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 mkdir -p "$POINTER_OUT"
@@ -63,11 +88,11 @@ MISSING=()
 for formula in "${WANT[@]}"; do
     grep -qx "$formula" <<<"$INSTALLED" || MISSING+=("$formula")
 done
-if [ ${#MISSING[@]} -gt 0 ]; then brew install "${MISSING[@]}"; fi
-npm ci --ignore-scripts --prefix platform/web
+if [ ${#MISSING[@]} -gt 0 ]; then run_phase build-tools brew install "${MISSING[@]}"; fi
+run_phase web-dependencies npm ci --ignore-scripts --prefix platform/web
 # The checkout, toolchain and dependency cache are the same as the workflow's
 # run-vcpkg step. Do not reuse a CMake tree from another checkout/platform.
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+run_phase configure-and-dependencies cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DDUNECITY_RELEASE_BUILD="$STABLE" \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
@@ -78,8 +103,8 @@ if [ "${PACKAGE_BUILD:-false}" = true ] && [ "$MODE" != release-headless-qualifi
     python3 tests/menu/pointer_artifact.py snapshot --build-dir build --output build/pointer-producer-inputs.json \
         --status-output "$POINTER_OUT/gate-status.json"
 fi
-cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
-python3 scripts/check-build-deps.py build
+run_phase compile cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
+run_phase dependency-audit python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
     # Single-game probes reserve two CTest slots. The Mini can overlap two;
     # the smaller hosted Mac keeps one, alongside eligible lightweight tests.
@@ -90,7 +115,7 @@ if [ "$MODE" = release-headless-qualification ]; then
     # Both backends use the same qualification inventory and receipt recipe.
     ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
     ctest_status=0
-    ctest --test-dir build --output-on-failure --no-tests=error --parallel "$TEST_SLOTS" \
+    run_phase headless-nightly ctest --test-dir build --output-on-failure --no-tests=error --parallel "$TEST_SLOTS" \
         -L headless -L nightly -LE network --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml" || ctest_status=$?
     # CTest 8 means test failures; only exact committed decisions can accept them.
     # Launch/configuration failures and incomplete/skipped XML still fail closed.
