@@ -167,6 +167,21 @@ the mean simulation CPU per cycle or a house's AI update exceeds its budget (mul
 calibration loop, so it works on any Mac). Run it on a quiet machine; see `docs/game-performance.md`
 (also `tests/performance/game-perf.py --rendered` for real-window frame rates at 2 ms game speed).
 
+Where they run: the four AI gates above are `headless` tests registered for macOS and Linux, so run
+them on the AWS workers, not the Mini, from a committed SHA:
+
+```bash
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- dunecity-queue ctest \
+  --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev FULL_SHA --machines aws aws-mel2 \
+  -R '^(quantbot_all_against_atreides|quantbot_all_against_atreides_dune2r|quantbot_scenario_matrix|quantbot_ffa_army_deploys)$'
+dunecity-queue report JOB --follow   # outside the wrapper; accepted is not passed
+```
+
+`perf_regression` stays on the Mini: it is `gui` (it launches a game through the real main menu) and
+its budgets are calibrated on that machine, so run it alone on a quiet Mac. The other Mini-only
+tests are every `gui` test and a few headless probes whose harness still builds against
+`bin/dunecity.app`; `docs/ai-scenario-matrix.md`, "Where the gates run", lists them.
+
 ## AI test games: scoring and the default rule
 
 AI test games (`tests/ai/formation-duel.py`, `vanilla-match.py`, `play-style-matrix.py` reports) are

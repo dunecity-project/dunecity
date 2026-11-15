@@ -948,6 +948,46 @@ Air commands; it never submits the dirty checkout. For explicit independent shar
 add `--shard K/N`, give each shard a distinct results directory, and combine them
 with `--report`. Do not launch simultaneous local batches or create another build tree.
 
+## Where the gates run
+
+Registration follows capability, not the OS (`tests/CMakeLists.txt`). Every `headless` probe whose
+harness finds its balance-probe binary on Linux (`tests/performance/probe_profile.py`
+`probe_binary`, used by `run-campaign-balance.py` and the batch harnesses) registers in macOS and
+Linux Ninja trees, so `dunecity-queue ctest` runs it on the AWS workers. That includes the four
+mandatory AI gates, every `run-campaign-balance.py` probe, the community map/mod startups, the
+Python parser/schedule tests and `dunelegacy_tests` (headless since its `[gpu]` cases moved out):
+
+```sh
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- dunecity-queue ctest \
+  --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev FULL_SHA --machines aws aws-mel2 \
+  -R '^(quantbot_all_against_atreides|quantbot_all_against_atreides_dune2r|quantbot_scenario_matrix|quantbot_ffa_army_deploys)$'
+dunecity-queue report JOB --follow     # outside the wrapper
+```
+
+`run-ffa-army-deploys.py` is also a batch harness (`--results`), so `dunecity-queue submit` can play
+its three seeds as separate units and check them once collected.
+
+Mini-only (registered only on macOS, labelled `macos`):
+
+- `perf_regression`: `gui` (it starts a game through the real main menu) and its budgets are
+  multiples of a calibration loop on a quiet machine. Run it alone on the Mini.
+- Every `gui` test: menu, skirmish, spectator, UI gallery, stats, sidebar-grid, controls, save and
+  unit-motion probes, `quantbot_stats_*`, `quantbot_army_recovery`, `quantbot_strategy`,
+  `quantbot_campaign_pressure_*`, `quantbot_strategic_site_stall` and `dunelegacy_gpu_tests`
+  (the renderer cases on the native backend). There is no Linux display host.
+- Headless probes whose harness still compiles against `bin/dunecity.app` and its `Resources`:
+  `quantbot_carryall_repair`, `carryall_flight_probe`, `stalled_carryall_probe`,
+  `trooper_anti_air_probe`, `tile_track_bounds_probe`, `body_angle_probe`, `unit_speed_probe`,
+  `weapon_reload_probe`, `projectile_mechanics_probe`, `projectile_combat_probe`
+  (`tests/units/run-*.py`), `brutal_unit_override_probe`, `active_tile_probe`,
+  `native_multiplayer_join_modes` (`tests/network/run-late-join-probe.py`) and the menu/skirmish
+  probe fixtures. Porting one means finding the binary as `run-campaign-balance.py` does (the
+  Linux link output beside `bin/` game data) and proving it on AWS. Until then, a candidate that
+  must pass every `^quantbot_` headless test still needs a Mac for `quantbot_carryall_repair`.
+
+Hosted Linux CI uses Makefiles, not Ninja, so it registers none of these probes; its nightly tier
+does now run `dunelegacy_tests`.
+
 
 ## Machines and time
 

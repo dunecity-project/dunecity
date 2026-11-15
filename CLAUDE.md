@@ -166,6 +166,12 @@ The same changes, and game-loop or rendering changes, must also pass
 6 game minutes headless, budgets on mean simulation CPU per cycle and per-house AI update time as
 multiples of a calibration loop. Run it on a quiet machine (`docs/game-performance.md`).
 
+The four AI gates are `headless` and registered for Linux too: run them on the AWS workers with
+`dunecity-queue ctest --rev FULL_SHA --machines aws aws-mel2 -R '<gate regex>'` inside
+`agent-workspace run --tests --wait`, not on the Mini (AGENTS.md has the exact command).
+`perf_regression` stays on the Mini: it is `gui` (real main-menu launch) and calibrated on that
+machine. Every other Mini-only test is listed in `docs/ai-scenario-matrix.md`, "Where the gates run".
+
 ## AI test games: scoring and the default rule
 
 AI test reports (`tests/ai/formation-duel.py`, `vanilla-match.py`, `play-style-matrix.py`) score games
