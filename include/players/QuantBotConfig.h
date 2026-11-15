@@ -433,7 +433,8 @@ struct QuantBotConfig {
         /// deferred spare-cash rule: 0=OFF (existing rules only), 1=as soon as a level is
         /// available and affordable, 2=after the first Light Factory, 3=after the first Heavy
         /// Factory, 4=after the first Heavy Factory and the full opening harvester fleet.
-        /// Hashed; default 0.
+        /// Hashed; default 2 (528 paired campaign games: wins unchanged, the yard upgraded in
+        /// 360 games at minute 7 instead of 229 at minute 19).
         int campaignHelperYardUpgradeTiming;
         /// Classic campaign support upgrades its yard to the Rocket Turret level as soon as an
         /// enemy fields aircraft (or can build Ornithopters from a standing High Tech Factory),
@@ -442,7 +443,8 @@ struct QuantBotConfig {
         bool campaignHelperAirUpgrade;
         /// Classic campaign support at the ground unit limit launches with the army it has when
         /// that army is below its readiness (the CampaignAllyStrengthFloor can otherwise ask
-        /// for more than the unit cap can ever hold). Hashed; default off.
+        /// for more than the unit cap can ever hold). Hashed; default on (528 paired campaign
+        /// games: 381 -> 410 wins, time-outs 77 -> 38).
         bool campaignHelperUnitCapLaunch;
         /// Classic campaign support buys windtraps that close its power shortage when the
         /// shortage's running cost (repairs plus lost refinery pay) repays them within this many

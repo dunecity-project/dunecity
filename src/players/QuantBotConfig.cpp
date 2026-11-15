@@ -429,9 +429,9 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperNoConcrete = true;
     force.campaignHelperFactoryConcrete = true;
     force.campaignHelperRepairFactoriesOnly = false;
-    force.campaignHelperYardUpgradeTiming = 0;
+    force.campaignHelperYardUpgradeTiming = 2;
     force.campaignHelperAirUpgrade = false;
-    force.campaignHelperUnitCapLaunch = false;
+    force.campaignHelperUnitCapLaunch = true;
     force.campaignHelperPowerPayback = 0;
     force.campaignHelperLateConcrete = 0;
     force.campaignHelperTurretConcrete = false;
