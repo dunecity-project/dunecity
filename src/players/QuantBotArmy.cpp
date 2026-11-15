@@ -399,9 +399,11 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
     }
     // CampaignHelperDefenceLeash (default 14): a support house's home troops do not answer a
     // ground contact standing beyond the leash; its wave (Hunt) troops still may.
-    const bool leashedContact = botConfig().force.campaignHelperDefenceLeash > 0 && campaignEconomySupport()
-        && !intruder->isAFlyingUnit()
-        && campaignHelperStructureDistance(contact) > botConfig().force.campaignHelperDefenceLeash;
+    // A house with no building left has nothing to measure the leash from (INT_MAX): no leash.
+    const int contactTiles = botConfig().force.campaignHelperDefenceLeash > 0 && campaignEconomySupport()
+        && !intruder->isAFlyingUnit() ? campaignHelperStructureDistance(contact) : 0;
+    const bool leashedContact = contactTiles > botConfig().force.campaignHelperDefenceLeash
+        && contactTiles != std::numeric_limits<int>::max();
     std::vector<SimpleArmyPolicy::Responder> candidates;
     for (const auto* unit : getUnitList()) {
         if (!unit->isActive() || !unit->canAttack()) continue;
@@ -4203,6 +4205,8 @@ bool QuantBot::campaignHelperLeash(const UnitBase* unit, int radius, int& orderB
         || unitRole(unit, {UnitRole::Human, UnitRole::Repair}) != UnitRole::Free) return false;
     const int leash = botConfig().force.campaignHelperDefenceLeash;
     const int unitDistance = campaignHelperStructureDistance(unit->getLocation());
+    // No building left to hold: the leash has nothing to measure from and must not pin the troops.
+    if (unitDistance == std::numeric_limits<int>::max()) return false;
     const bool unitOut = unitDistance > leash;
     const auto* target = unit->getTarget();
     const bool hostile = target && target->getHealth()>0 && target->getOwner()
@@ -4446,9 +4450,13 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     // CampaignHelperDefenceLeash (default 14): a centroid beyond the leash (troops out with a
     // wave pull it into the field) is no regroup point; the leash would only send them back.
     else if (botConfig().force.campaignHelperDefenceLeash > 0 && campaignEconomySupport()
-        && unit->getAttackMode()!=RETREAT && regroup.isValid()
-        && campaignHelperStructureDistance(regroup) > botConfig().force.campaignHelperDefenceLeash)
-        regroup = campaignHelperLeashAnchor();
+        && unit->getAttackMode()!=RETREAT && regroup.isValid()) {
+        // With no building left (INT_MAX), or no anchor to offer, the centroid stays.
+        const int regroupTiles = campaignHelperStructureDistance(regroup);
+        if (regroupTiles > botConfig().force.campaignHelperDefenceLeash
+            && regroupTiles != std::numeric_limits<int>::max())
+            if (const Coord anchor = campaignHelperLeashAnchor(); anchor.isValid()) regroup = anchor;
+    }
     // CampaignHelperRockHold (default 0, docs/campaign-support-research.md): idle campaign
     // support troops hold the rock around their own base. Their centroid can lie on open
     // sand, and Area Guard follows a sandworm out there; a unit on rock cannot be eaten.
