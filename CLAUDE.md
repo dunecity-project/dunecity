@@ -169,8 +169,9 @@ multiples of a calibration loop. Run it on a quiet machine (`docs/game-performan
 The four AI gates are `headless` and registered for Linux too: run them on the AWS workers with
 `dunecity-queue ctest --rev FULL_SHA --machines aws aws-mel2 -R '<gate regex>'` inside
 `agent-workspace run --tests --wait`, not on the Mini (AGENTS.md has the exact command).
-`perf_regression` stays on the Mini: it is `gui` (real main-menu launch) and calibrated on that
-machine. Every other Mini-only test is listed in `docs/ai-scenario-matrix.md`, "Where the gates run".
+`perf_regression` stays on the Mini: its budgets are calibrated on that machine. Every dummy-driver
+probe is `headless` and runs on AWS too; the five other Mini-only tests and their reasons are in
+`docs/ai-scenario-matrix.md`, "Where the gates run".
 
 ## AI test games: scoring and the default rule
 

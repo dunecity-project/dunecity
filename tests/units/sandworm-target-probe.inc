@@ -1,6 +1,6 @@
 // A real sleeping sandworm remains in the object manager and can still be an
 // AI unit's target. Threat evaluation must not read its off-map location.
-#include <units/Sandworm.h>
+#include <units/SandWorm.h>
 void runSandwormTargetProbe(House& owner) {
     auto require=[](bool value,const char* why) { if(!value) throw std::runtime_error(why); };
     Coord sand=Coord::Invalid();

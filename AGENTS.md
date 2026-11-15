@@ -177,10 +177,10 @@ agent-workspace run --project dunecity --owner OWNER --tests --wait -- dunecity-
 dunecity-queue report JOB --follow   # outside the wrapper; accepted is not passed
 ```
 
-`perf_regression` stays on the Mini: it is `gui` (it launches a game through the real main menu) and
-its budgets are calibrated on that machine, so run it alone on a quiet Mac. The other Mini-only
-tests are every `gui` test and a few headless probes whose harness still builds against
-`bin/dunecity.app`; `docs/ai-scenario-matrix.md`, "Where the gates run", lists them.
+`perf_regression` stays on the Mini: its budgets are calibrated on that machine (and it launches a
+game through the real main menu), so run it alone on a quiet Mac. Every other test that runs on the
+dummy video driver is `headless` and runs on AWS (`-L nightly -LE gui`); only five more stay on the
+Mini, each with its reason in `docs/ai-scenario-matrix.md`, "Where the gates run".
 
 ## AI test games: scoring and the default rule
 
