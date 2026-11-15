@@ -457,6 +457,22 @@ struct QuantBotConfig {
         /// turret, wall, concrete, optional structure, extra windtrap or unrelated upgrade; a
         /// harvester only while fewer than two exist. Repairs and the army are unaffected. Default off.
         bool campaignHelperBeeline;
+        /// Classic campaign support's Starport opening ladder orders this many refineries before
+        /// the Starport instead of four, back to back as cash allows: 0=OFF, 1..8. Still bounded
+        /// by the map's spice (mapSpiceHarvesterTarget), fleet ratios and placement.
+        int campaignHelperOpeningRefineries;
+        /// Classic campaign support with its Repair Yard built (or none it can build) adds
+        /// refineries up to this total ahead of optional structures and its first Heavy Factory,
+        /// and plans at least 1.75 harvesters per refinery: 0=OFF, 1..10. Same spice bound.
+        int campaignHelperRefineryGoal;
+        /// Classic campaign support keeps at least one harvesting carryall per this many
+        /// harvesters (rounded up), from its Starport, else a High-Tech Factory; one on order
+        /// at a time until a Repair Yard stands: 0=OFF, 1..6. Army transport is unchanged.
+        int campaignHelperCarryallRatio;
+        /// Classic campaign support with one Construction Yard, its Repair Yard and refinery goal
+        /// met, buys one MCV through the Starport (never if it ever received one) when a yard
+        /// site adjoins its base; the existing MCV handling deploys it. Default off.
+        bool campaignHelperSecondYard;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

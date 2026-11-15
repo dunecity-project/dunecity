@@ -487,7 +487,10 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         && !builderOnly() && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
         && pass.itemCount[Structure_Refinery] > 0
         && pass.itemCount[Structure_LightFactory] == 0 && pass.itemCount[Structure_HeavyFactory] == 0
-        && pass.itemCount[Structure_Barracks] == 0 && pass.itemCount[Structure_WOR] == 0) {
+        && pass.itemCount[Structure_Barracks] == 0 && pass.itemCount[Structure_WOR] == 0
+        // CampaignHelperOpeningRefineries (default off): the opening refineries come first.
+        && !(pass.campaignHelperOpeningRefineries > 0 && getHouse()->getNumItems(Structure_StarPort) == 0
+            && pass.itemCount[Structure_Refinery] < pass.campaignHelperOpeningRefineries)) {
         const int house = getHouse()->getHouseID();
         const auto& data = currentGame->objectData.data;
         for (Uint32 producer : {Structure_LightFactory, Structure_Barracks, Structure_WOR}) {
@@ -1389,9 +1392,11 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         && getHouse()->getTechLevel() >= data[Structure_StarPort][houseID].techLevel) {
         Uint32 step = NONE_ID;
         if (getHouse()->getNumItems(Structure_StarPort) == 0) {
-            const int refineryGoal = QuantBotBuildPolicy::supplierRefineryGoal(
-                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
-                pass.fleetRatios, pass.fleetRefineryTarget);
+            // CampaignHelperOpeningRefineries (default off): its bounded goal replaces the four.
+            const int refineryGoal = pass.campaignHelperOpeningRefineries > 0 ? pass.campaignHelperOpeningRefineries
+                : QuantBotBuildPolicy::supplierRefineryGoal(
+                    std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                    pass.fleetRatios, pass.fleetRefineryTarget);
             const bool campaignFactory = botConfig().force.campaignFactoryBeforeStarport
                 && campaignEconomySupport() && lastCalculatedSpice > 0
                 && pass.itemCount[Structure_LightFactory] == 0
@@ -1408,9 +1413,10 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             if (step == NONE_ID && pass.vanillaFfaWaveCapitalReserve > 0)
                 step = Structure_RepairYard;
         } else if (pass.campaignHelperEarlyStarport > 0
-            && pass.itemCount[Structure_Refinery] < QuantBotBuildPolicy::supplierRefineryGoal(
-                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
-                pass.fleetRatios, pass.fleetRefineryTarget)) {
+            && pass.itemCount[Structure_Refinery] < (pass.campaignHelperOpeningRefineries > 0
+                ? pass.campaignHelperOpeningRefineries : QuantBotBuildPolicy::supplierRefineryGoal(
+                    std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                    pass.fleetRatios, pass.fleetRefineryTarget))) {
             // CampaignHelperEarlyStarport: the port came early; finish the opening
             // refineries before its Repair Yard.
             step = Structure_Refinery;
@@ -1463,6 +1469,20 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             }
             step = prerequisite;
         }
+    }
+    // CampaignHelperRefineryGoal (default off): with its Repair Yard standing (or none it can
+    // build) the support house adds refineries up to the goal, back to back as cash allows, ahead
+    // of optional structures and its first Heavy Factory. Without a site the yard runs on.
+    if (pass.campaignHelperRefineryGoal > 0
+        && yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && pass.itemCount[Structure_Refinery] < pass.campaignHelperRefineryGoal
+        && campaignAvailableToBuild(turn.pBuilder, Structure_Refinery)
+        && findPlaceLocation(Structure_Refinery).isValid()
+        && (!pass.techSavings || spendingAdmits(pass, Structure_Refinery,
+            buildingCapitalCost(pass, Structure_Refinery)))) {
+        yardTurn.skipRemainingStructureLogic = true;
+        yardTurn.structureRule = "campaign_helper_refinery_goal";
+        if (pass.money >= buildingCapitalCost(pass, Structure_Refinery)) yardTurn.itemID = Structure_Refinery;
     }
 }
 

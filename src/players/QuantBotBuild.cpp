@@ -1701,6 +1701,15 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
         pass.fleetRefineryTarget = targets.refineries;
         pass.repairBaseline = pass.repairTarget = targets.repairYards;
     }
+    // CampaignHelperRefineryGoal (default off): once its Repair Yard stands (or it cannot have one)
+    // the support house plans 1.75 harvesters per built refinery bay (rounded up) where the
+    // throughput rule plans 1.5, still within harvesterLimit (map spice / 2,000, the allied Brutal
+    // 20, any lobby ceiling). Fleet ratios keep their own targets.
+    if (botConfig().force.campaignHelperRefineryGoal > 0 && campaignEconomySupport() && !pass.fleetRatios
+        && (getHouse()->getNumItems(Structure_RepairYard) > 0 || !data[Structure_RepairYard][houseID].enabled
+            || data[Structure_RepairYard][houseID].techLevel > getHouse()->getTechLevel()))
+        pass.spiceHarvesterTarget = std::max(pass.spiceHarvesterTarget,
+            std::min(harvesterLimit, (getAIRefineryBays() * 7 + 3) / 4));
     pass.citySpiceCapacityRunway = botConfig().force.citySpiceCapacityRunway && pass.citySimEnabled
         && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0
@@ -3444,6 +3453,60 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     // refineries (chooseYardCoreEconomy); the switch is tested before anything is called.
     pass.campaignHelperEarlyStarport = helperForce.campaignHelperEarlyStarport > 0 && campaignEconomySupport()
         ? helperForce.campaignHelperEarlyStarport : 0;
+    // CampaignHelperOpeningRefineries (default off): the support house's opening refinery goal
+    // before its Starport (chooseYardCoreEconomy), bounded as the default four are, by the map's
+    // spice and fleet ratios; zero where the Starport ladder cannot run. Switch first.
+    if (helperForce.campaignHelperOpeningRefineries > 0 && campaignEconomySupport()
+        && pass.starportMarketAvailable
+        && data[Structure_StarPort][houseID].enabled
+        && data[Structure_StarPort][houseID].techLevel <= getHouse()->getTechLevel())
+        pass.campaignHelperOpeningRefineries = QuantBotBuildPolicy::supplierRefineryGoal(
+            std::min(helperForce.campaignHelperOpeningRefineries, pass.mapSpiceHarvesterTarget),
+            pass.fleetRatios, pass.fleetRefineryTarget);
+    // CampaignHelperRefineryGoal (default off): the support house's refinery total once its Repair
+    // Yard stands or it cannot build one, with the same bounds. Switch first.
+    if (helperForce.campaignHelperRefineryGoal > 0 && campaignEconomySupport()
+        && getHouse()->getNumItems(Structure_ConstructionYard) > 0
+        && (getHouse()->getNumItems(Structure_RepairYard) > 0 || !repairYardAdmitted(pass)
+            || !data[Structure_RepairYard][houseID].enabled
+            || data[Structure_RepairYard][houseID].techLevel > getHouse()->getTechLevel()))
+        pass.campaignHelperRefineryGoal = QuantBotBuildPolicy::supplierRefineryGoal(
+            std::min(helperForce.campaignHelperRefineryGoal, pass.mapSpiceHarvesterTarget),
+            pass.fleetRatios, pass.fleetRefineryTarget);
+    // CampaignHelperCarryallRatio (default off): one harvesting carryall per that many harvesters,
+    // owned or queued, rounded up (buildStarPort, buildHighTechFactory). Switch first.
+    if (helperForce.campaignHelperCarryallRatio > 0 && campaignEconomySupport()) {
+        const int ratio = helperForce.campaignHelperCarryallRatio;
+        pass.campaignHelperCarryallTarget = (std::max(0, pass.itemCount[Unit_Harvester]) + ratio - 1) / ratio;
+    }
+    // CampaignHelperSecondYard (default off): one Starport MCV for a support house with exactly one
+    // Construction Yard, none ever received, its Repair Yard standing (or none it can build) and its
+    // refinery goal built, when a yard footprint lies within 10 tiles of one of its buildings.
+    // manageMcv deploys it (where it lands, else findMcvPlaceLocation). Switch first.
+    if (helperForce.campaignHelperSecondYard && campaignEconomySupport()
+        && getHouse()->getNumItems(Structure_ConstructionYard) == 1
+        && pass.itemCount[Structure_ConstructionYard] == 1 && pass.itemCount[Unit_MCV] == 0
+        && getHouse()->getNumBuiltItems(Unit_MCV) == 0
+        && getHouse()->getNumItems(Structure_StarPort) > 0
+        && data[Unit_MCV][houseID].enabled
+        && (pass.yardLimit <= 0 || pass.yardLimit > 1)
+        && (getHouse()->getNumItems(Structure_RepairYard) > 0 || !repairYardAdmitted(pass)
+            || !data[Structure_RepairYard][houseID].enabled
+            || data[Structure_RepairYard][houseID].techLevel > getHouse()->getTechLevel())
+        && getHouse()->getNumItems(Structure_Refinery) >= (pass.campaignHelperRefineryGoal > 0
+            ? pass.campaignHelperRefineryGoal : pass.campaignHelperOpeningRefineries > 0
+            ? pass.campaignHelperOpeningRefineries : QuantBotBuildPolicy::supplierRefineryGoal(
+                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                pass.fleetRatios, pass.fleetRefineryTarget))) {
+        const Coord site = findPlaceLocation(Structure_ConstructionYard);
+        if (site.isValid())
+            for (const auto* structure : getStructureList())
+                if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+                    && blockDistance(site, structure->getClosestPoint(site)) <= 10) {
+                    pass.campaignHelperSecondYard = true;
+                    break;
+                }
+    }
     // CampaignHelperBeeline (default off): until the support house's opening ladder is done it
     // buys only the ladder's next step (chooseYardCoreEconomy): the opening refineries, then the
     // Starport, then the Repair Yard, each with its missing prerequisites. Only houses whose yard
@@ -3458,9 +3521,11 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         && pass.starportMarketAvailable
         && data[Structure_StarPort][houseID].enabled
         && data[Structure_StarPort][houseID].techLevel <= getHouse()->getTechLevel()) {
-        const int refineryGoal = QuantBotBuildPolicy::supplierRefineryGoal(
-            std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
-            pass.fleetRatios, pass.fleetRefineryTarget);
+        // CampaignHelperOpeningRefineries (default off): the same goal the ladder walks.
+        const int refineryGoal = pass.campaignHelperOpeningRefineries > 0 ? pass.campaignHelperOpeningRefineries
+            : QuantBotBuildPolicy::supplierRefineryGoal(
+                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                pass.fleetRatios, pass.fleetRefineryTarget);
         const int portRefineries = pass.campaignHelperEarlyStarport > 0
             ? std::min(pass.campaignHelperEarlyStarport, refineryGoal) : refineryGoal;
         Uint32 goal = NONE_ID;

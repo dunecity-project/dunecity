@@ -282,6 +282,17 @@ struct QuantBot::BuildPass {
     // switch's exceptions are bought; NONE_ID whenever the flag is false.
     bool campaignHelperBeeline{};
     Uint32 campaignHelperBeelineGoal = NONE_ID;
+    // CampaignHelperOpeningRefineries: support house's bounded opening refinery goal before the
+    // Starport (0 = off or out of scope; the default goal then applies).
+    int campaignHelperOpeningRefineries{};
+    // CampaignHelperRefineryGoal: support house's bounded refinery total once its Repair Yard
+    // stands or cannot be built (0 = off, out of scope or not yet due).
+    int campaignHelperRefineryGoal{};
+    // CampaignHelperCarryallRatio: harvesting carryalls the support house keeps, owned or
+    // queued (0 = off or out of scope).
+    int campaignHelperCarryallTarget{};
+    // CampaignHelperSecondYard: the support house's one Starport MCV is due now.
+    bool campaignHelperSecondYard{};
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
     bool vanillaFfaLargeScope{};

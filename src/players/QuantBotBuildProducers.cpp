@@ -941,9 +941,10 @@ bool QuantBot::buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn) {
         && !pass.campaignHelperFactoryFirst
         // CampaignHelperEarlyStarport: the remaining opening refineries come before this walk.
         && !(pass.campaignHelperEarlyStarport > 0
-            && pass.itemCount[Structure_Refinery] < QuantBotBuildPolicy::supplierRefineryGoal(
-                std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
-                pass.fleetRatios, pass.fleetRefineryTarget))
+            && pass.itemCount[Structure_Refinery] < (pass.campaignHelperOpeningRefineries > 0
+                ? pass.campaignHelperOpeningRefineries : QuantBotBuildPolicy::supplierRefineryGoal(
+                    std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+                    pass.fleetRatios, pass.fleetRefineryTarget)))
         && getAIRefineryBays()>0
         && getAIHarvesterCount()>0
         && ((gameMode == GameMode::Campaign && !pass.citySimEnabled && difficulty != Difficulty::Brutal)
@@ -1491,6 +1492,15 @@ void QuantBot::buildHighTechFactory(BuildPass& pass, BuilderTurn& turn) {
     air.carryallPrice = carryallPrice;
     air.carryalls = pass.itemCount[Unit_Carryall];
     air.carryallTarget = pass.vanillaBoomArmy ? std::min(1, pass.transportTarget) : pass.transportTarget;
+    // CampaignHelperCarryallRatio (default off): the support house's harvesting carryalls come from
+    // here only while it has no Starport or its Starport has none in stock; one on order at a time
+    // until a Repair Yard stands.
+    if (pass.campaignHelperCarryallTarget > 0
+        && (getHouse()->getNumItems(Structure_RepairYard) > 0
+            || pass.itemCount[Unit_Carryall] <= getHouse()->getNumItems(Unit_Carryall))
+        && (getHouse()->getNumItems(Structure_StarPort) == 0
+            || getHouse()->getChoam().getNumAvailable(Unit_Carryall) <= 0))
+        air.carryallTarget = std::max(air.carryallTarget, pass.campaignHelperCarryallTarget);
     air.armyValue = pass.militaryValue;
     air.armyLimit = pass.lightBudget;
     air.vehiclePlanValue = pass.vehiclePlanValue;
@@ -1934,6 +1944,10 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             && (!pass.techSavings || ((pass.yardLimit <= 0
                     || pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] < pass.yardLimit)
                 && spendingAdmits(pass, Unit_MCV, purchasePrice(turn.pBuilder, Unit_MCV))))) return;
+        // CampaignHelperSecondYard (default off): the support house's one MCV, while in stock and
+        // affordable; manageMcv deploys it where it lands or at findMcvPlaceLocation.
+        if (pass.campaignHelperSecondYard && pass.itemCount[Unit_MCV] == 0)
+            buyEconomicImport(Unit_MCV, "campaign_helper_second_yard");
         // A market transport is still only worth its price when
         // there is something to carry. The capital/factory lane
         // already refuses one without a working harvesting
@@ -1945,6 +1959,13 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             getHouse()->getNumItems(Structure_RepairYard));
         if (pass.itemCount[Unit_Carryall] == 0 && transportUseful)
             buyEconomicImport(Unit_Carryall, "first_economic_transport");
+        // CampaignHelperCarryallRatio (default off): harvesting carryalls up to the support house's
+        // ratio, before further worker imports; one on order at a time until a Repair Yard stands.
+        while (pass.campaignHelperCarryallTarget > 0
+            && pass.itemCount[Unit_Carryall] < pass.campaignHelperCarryallTarget
+            && (getHouse()->getNumItems(Structure_RepairYard) > 0
+                || pass.itemCount[Unit_Carryall] <= getHouse()->getNumItems(Unit_Carryall)))
+            if (!buyEconomicImport(Unit_Carryall, "campaign_helper_carryall_ratio")) break;
         // CampaignHelperStarportArmy (default off): below its army target the support house's
         // own heavy imports come after its first six harvesters and two carryalls, and before
         // any further worker or transport import.
