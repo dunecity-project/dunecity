@@ -75,7 +75,8 @@ HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardau
 # Houses for N players, in this order (the 7th and 8th custom-game houses last).
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary', 'rebels', 'neutral')
 CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBrutal',
-           'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard'}
+           'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard',
+           'CA': 'CampaignAIPlayer'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
 DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
 CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'controls')
@@ -250,6 +251,15 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                           kind='campaign', mod='vanilla', partner=partner, enemy_ai='quantbot',
                           enemy_difficulty=enemy_difficulty, minutes=80, full=1, smoke=0,
                           opt_in=True, measured=True))
+        # Diagnostic (docs/original-campaign-ai.md), only with --cells: the campaign menu's
+        # "Campaign AI" enemy (CampaignAIPlayer) against the same idle human with QuantBot support.
+        # -original and -legacy force OriginalCampaignAI on and off; -release plays whatever the
+        # build defaults to, the only form a release older than the switch can play.
+        for rules, flag in (('original', 'on'), ('legacy', 'off'), ('release', None)):
+            cells.append(dict(category='campaign', name=f'partner-{partner}-v-campaign-ai-{rules}',
+                              kind='campaign', mod='vanilla', partner=partner, enemy_ai='campaign',
+                              enemy_difficulty=enemy_difficulty, original_rules=flag, minutes=80,
+                              full=1, smoke=0, opt_in=True, measured=True))
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
     # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
     # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
@@ -445,9 +455,10 @@ def match_game(cell, index, seed, suffix=''):
 
 
 def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
-    enemy = 'Q' + cell['enemy_difficulty'][0].upper()
+    enemy = 'CA' if cell['enemy_ai'] == 'campaign' else 'Q' + cell['enemy_difficulty'][0].upper()
     mode = '#single-mission' if campaign_mode == 'single' else '#full-campaign'
-    return dict(id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category='campaign',
+    rules = {'original_rules': cell['original_rules']} if cell.get('original_rules') else {}
+    return dict(**rules, id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category='campaign',
                 cell=f'{cell["name"]}{mode}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
                 map=f'{house} level {level} mission {mission}', house=house, level=level, mission=mission,
                 partner=cell['partner'], enemy_ai=cell['enemy_ai'], enemy_difficulty=cell['enemy_difficulty'],
@@ -527,6 +538,8 @@ def command(args, binary, game, out):
                 '--enemy-difficulty', game['enemy_difficulty'], '--campaign-mode', game['campaign_mode']]
         if game.get('ai_only'):
             cmd += ['--campaign-ai-only']
+        if game.get('original_rules'):
+            cmd += ['--original-campaign-rules', game['original_rules']]
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
@@ -600,7 +613,7 @@ def campaign_roster_error(game, houses):
         expected_player.add('HumanPlayer')
     if player is None or set(player['players'].split('+')) != expected_player:
         return 'campaign player roster does not match the requested human/support setup'
-    expected_enemy = CLASSES['Q' + game['enemy_difficulty'][0].upper()]
+    expected_enemy = CLASSES['CA' if game['enemy_ai'] == 'campaign' else 'Q' + game['enemy_difficulty'][0].upper()]
     enemies = [row for row in houses if row['team'] != player['team']]
     if not enemies or any(row['players'] != expected_enemy for row in enemies):
         return f'campaign enemies are not all {expected_enemy}'
@@ -1190,7 +1203,9 @@ def campaign_report(rows, houses, problems):
         partner = CLASSES.get(sides[0], sides[0])
         enemy = CLASSES.get(sides[-1], sides[-1])
         if enemy == 'CampaignAIPlayer':
-            enemy += ' (legacy; not QuantBot)'
+            enemy += {'on': ' (original rules', 'off': ' (legacy controller'}.get(
+                'on' if '-campaign-ai-original' in cell else 'off' if '-campaign-ai-legacy' in cell else '',
+                ' (build default') + '; not QuantBot)'
         mode = gs[0].get('campaign_mode') or 'full (historical)'
         ok = [g for g in gs if not g['error']]
         won = [g for g in ok if g['outcome'] == 'won']
