@@ -1,3 +1,42 @@
+## 2026-11-15 - 1.0.870 candidate: campaign helper holds its ground and follows a bigger build order
+
+Classic-campaign support QuantBots (campaignEconomySupport(): campaign policy, allied with the
+human, not builder-only, city sim off) get four default changes. Evidence root:
+`~/Documents/projects/outputs/brutal-support-claude-20261115/` (`results.md`, `round10`..`round19`).
+All games vanilla, Full campaign, idle human, saved options, AWS.
+
+- `afc42bfc0` `CampaignHelperFactoryLast` on: with a Starport the first Heavy Factory waits for the
+  Repair Yard and for the Starport to run out of heavy units at or below list price (or cash above
+  2,500). Brutal helper v Hard, missions 20-22, 216 games: 74 -> 105; second seed block 88 -> 115.
+- `0518ffedd` defaults: `CampaignHelperDefenceLeash=14` (home troops do not chase or answer a
+  ground contact more than 14 tiles from the nearest own building), `CampaignHelperNoConcrete` with
+  `CampaignHelperFactoryConcrete` (concrete only under production buildings),
+  `CampaignHelperOpeningRefineries=6`, `CampaignHelperRefineryGoal=8`, `CampaignHelperCarryallRatio=2`.
+- Leash alone: 105 -> 128, second seed block 115 -> 133, all 66 maps x 4 seeds 229 -> 243
+  (missions 1-19 211 -> 221 of 228). Leash 6 is ruinous (15 of 216); 10 did not hold on fresh seeds.
+- Build order alone: 105 -> 127 on the first seed block, 115 -> 116 on the second, 229 -> 231 on all
+  maps: not confirmed as a strength gain. It is on by the owner's choice, modelled on his recorded
+  build order. With the leash: 129, 129 and 240.
+- New defaults by helper level against Hard, missions 20-22, 216 games each, against the
+  `campaign-helper-release-870-off` style in the same build: Brutal 105 -> 129, Hard 101 -> 121,
+  Medium 55 -> 81, Easy 5 -> 15. The default arm matches the tested style on 216 of 216 final
+  digests, and the off style matches the previous default on 216 of 216.
+- Against the Campaign AI opponent, all 66 maps x 2 seeds, 132 games per helper level: Easy
+  119 -> 124, Medium 123 -> 125, Hard 122 -> 124, Brutal 124 -> 125; no engine errors in 1,056 games.
+- Rejected or unproven, left default off: rock hold, factory first, readiness cap, Starport army,
+  import cap, early unload, early Starport, protected Repair Yard site, front post, focus fire
+  (69 of 216 against 105), counter-attack, single target, beeline (77), second Construction Yard
+  (103), six-then-eight refineries with concrete kept (93).
+- Gates at `0518ffedd`: AWS scenario-matrix smoke 11 of 11, All against Atreides vanilla 6 of 6
+  (31.4-36.4 min) and Dune2R 7 of 7 (31.0-34.8 min); Mini `dunelegacy_tests`,
+  `quantbot_ffa_army_deploys` and `perf_regression` pass (house_max 5.7 against 10).
+- Still weak: Atreides mission 20 (4 of 24), Harkonnen mission 21 (6 of 24), and every late mission
+  against Brutal opponents (0 of 216).
+- The mandatory AI tests are registered `macos` in CTest; on AWS they run as
+  `dunecity-queue submit --purpose verification --machines aws` jobs with the scenario-matrix harness.
+- Also in this candidate: the Campaign AI corrections below and the configurable Hotkeys tab
+  (`a7b382da6`, `98ed3adbe`). Version 1.0.870, protocol 126, save format 9886. Nothing tagged.
+
 ## 2026-11-15 - Campaign AI in 1.0.869 was unwinnable from level 6: woke at the first tick (fixed locally, unreleased)
 
 Player report: with Enemy AI "Campaign AI" the campaign became much harder than 1.0.867 and
