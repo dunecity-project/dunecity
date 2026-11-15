@@ -47,6 +47,16 @@ inline bool combatUnit(int item) {
         && item != Unit_MCV && item != Unit_Sandworm && item != Unit_Saboteur;
 }
 
+// Dune II wakes a computer house (production, repairs, teams, palace) only when the
+// player's own sight uncovers one of its ground units: unit.c Unit_UpdateMap calls
+// Unit_HouseUnitCount_Add(unit, g_playerHouseID) for a unit on a tile unveiled to the
+// player, and Unit_Server_HouseUnitCount_Add then sets isAIActive on both houses
+// unless they are allied or the unit is winged. A computer house seeing the player's
+// units wakes nobody. `observerIsOriginalAI` is that computer side.
+inline bool sightActivates(bool observerIsOriginalAI, bool allied, bool flying, bool tileSeenByObserver) {
+    return !observerIsOriginalAI && !allied && !flying && tileSeenByObserver;
+}
+
 inline int targetPriority(int combinedPriority, int distance, bool structure) {
     if (distance == 0) return combinedPriority;
     return combinedPriority / distance + (structure ? 0 : 1);

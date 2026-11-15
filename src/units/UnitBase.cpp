@@ -39,6 +39,7 @@
 
 #include <players/HumanPlayer.h>
 #include <players/CampaignAIPlayer.h>
+#include <players/OriginalCampaignPolicy.h>
 
 #include <misc/draw_util.h>
 
@@ -3183,6 +3184,29 @@ bool UnitBase::update() {
     return true;
 }
 
+namespace {
+
+bool hasOriginalCampaignAI(const House* house) {
+    for(const auto& player : house->getPlayerList())
+        if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
+            if(campaign->usesOriginalRules()) return true;
+    return false;
+}
+
+// Dune II "unveiled to the player": a house of this team has had the tile in sight. "Start
+// with Explored Map" marks every tile explored for everyone, so there only recorded sight counts.
+bool tileSeenByTeam(const Tile& tile, int teamID) {
+    const bool preExplored = currentGame->getGameInitSettings().getGameOptions().startWithExploredMap;
+    for(int h = 0; h < NUM_HOUSES; ++h) {
+        const auto* house = currentGame->getHouse(h);
+        if(house != nullptr && house->getTeamID() == teamID && tile.isExploredByHouse(h)
+           && (!preExplored || tile.getLastAccess(h) != 0)) return true;
+    }
+    return false;
+}
+
+} // namespace
+
 void UnitBase::updateVisibleUnits() {
     if(isAFlyingUnit()) {
         return;
@@ -3221,9 +3245,20 @@ void UnitBase::updateVisibleUnits() {
             
             // ORIGINAL AI: Ground-only contact triggers mutual activation (unit.c:3111-3116)
             // Only ground units (not wingers/carryalls/ornithopters) activate AI
-            if(isAGroundUnit() && !isAFlyingUnit()) {
-                pHouse->activateAI();        // Observing house activates
-                getOwner()->activateAI();    // Unit's house also activates (mutual)
+            if(isAGroundUnit() && !isAFlyingUnit() && (!pHouse->isAIActivated() || !getOwner()->isAIActivated())) {
+                const bool ownerOriginal = hasOriginalCampaignAI(getOwner());
+                const bool observerOriginal = hasOriginalCampaignAI(pHouse);
+                // The object visibility flag tested above is set for every deployed unit, so
+                // the pre-9886 controller (and every other one) is activated at the first
+                // update. An original-rules Campaign AI house wakes as in Dune II: only once
+                // the other side's own sight has uncovered this ground unit. Two such houses
+                // at war with nobody else present wake each other by sight (no Dune II case).
+                if((!ownerOriginal && !observerOriginal)
+                   || OriginalCampaignPolicy::sightActivates(observerOriginal && !ownerOriginal, false, false,
+                                                             tileSeenByTeam(*pTile, pHouse->getTeamID()))) {
+                    pHouse->activateAI();        // Observing house activates
+                    getOwner()->activateAI();    // Unit's house also activates (mutual)
+                }
             }
         }
 

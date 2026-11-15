@@ -24,6 +24,15 @@ TEST_CASE("Original campaign production uses original order and random replaceme
     REQUIRE(produced == std::set<int>{Unit_Devastator, Unit_Quad});
 }
 
+TEST_CASE("Original campaign AI wakes only on the other side's sight of a ground unit", "[campaign-ai]") {
+    using OriginalCampaignPolicy::sightActivates;
+    REQUIRE(sightActivates(false, false, false, true));
+    REQUIRE_FALSE(sightActivates(false, false, false, false)); // not uncovered yet
+    REQUIRE_FALSE(sightActivates(true, false, false, true));   // the computer house seeing the player
+    REQUIRE_FALSE(sightActivates(false, false, true, true));   // aircraft never wake a house
+    REQUIRE_FALSE(sightActivates(false, true, false, true));   // allies
+}
+
 TEST_CASE("Original campaign structure and unit targeting differ at distance", "[campaign-ai]") {
     REQUIRE(OriginalCampaignPolicy::targetPriority(300, 3, true) == 100);
     REQUIRE(OriginalCampaignPolicy::targetPriority(300, 3, false) == 101);

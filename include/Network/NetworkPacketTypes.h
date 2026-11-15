@@ -384,7 +384,10 @@
 //      different AI construction and would desync. Save format unchanged.
 // 125: Original Campaign AI production and authored TEAM.EMC execution, including
 //      saved team state (9886), free upgrades and script-owned attack targets.
-#define NETWORK_PROTOCOL_VERSION            125
+// 126: Original Campaign AI wakes only once the other side's sight uncovers one of its
+//      ground units (Dune II isAIActive), not at the first update. Older peers start its
+//      production and team scripts at once and would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            126
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

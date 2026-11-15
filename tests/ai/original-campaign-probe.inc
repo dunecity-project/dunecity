@@ -19,6 +19,41 @@ void runOriginalCampaignProbe(Game& game) {
     auto* house = const_cast<House*>(bot->getHouse());
     auto* other = game.getHouse(HOUSE_HARKONNEN);
     require(other && other != house, "fixture needs an opposing human house");
+    // Dune II activation: the house sleeps until the other side's own sight uncovers one
+    // of its ground units. Its own sight of the player wakes nobody; the pre-9886
+    // controller keeps waking at the first update.
+    {
+        UnitBase* own = nullptr; UnitBase* foreign = nullptr;
+        for(auto* unit : unitList) {
+            if(!unit->isAGroundUnit() || unit->isAFlyingUnit() || !currentGameMap->tileExists(unit->getLocation())) continue;
+            if(!own && unit->getOwner() == house) own = unit;
+            if(!foreign && unit->getOwner() == other) foreign = unit;
+        }
+        require(own && foreign, "activation fixture needs a ground unit on each side");
+        const auto sight = [&](UnitBase* unit, const House* observer, bool seen) {
+            auto* tile = currentGameMap->getTile(unit->getLocation());
+            for(int h = 0; h < NUM_HOUSES; ++h) if(const auto* member = game.getHouse(h))
+                if(member->getTeamID() == observer->getTeamID()) { tile->explored[h] = false; tile->lastAccess[h] = 0; }
+            if(seen) tile->setExplored(observer->getHouseID(), std::max<Uint32>(1, game.getGameCycleCount()));
+        };
+        house->isAIActive = false;
+        sight(own, other, false);
+        own->updateVisibleUnits();
+        require(!house->isAIActivated(), "original house woke before the player saw it");
+        sight(foreign, house, true);
+        foreign->updateVisibleUnits();
+        require(!house->isAIActivated(), "original house woke on its own sight of the player");
+        sight(own, other, true);
+        own->updateVisibleUnits();
+        require(house->isAIActivated() && other->isAIActivated(), "player sight of a ground unit did not wake both houses");
+        bot->originalRules = false;
+        house->isAIActive = false;
+        sight(own, other, false);
+        own->updateVisibleUnits();
+        require(house->isAIActivated(), "pre-9886 controller no longer wakes at the first update");
+        bot->originalRules = true;
+    }
+
     auto spawn = [&](int item, bool scenario) {
         for(int y = 1; y < currentGameMap->getSizeY() - 1; ++y)
             for(int x = 1; x < currentGameMap->getSizeX() - 1; ++x) {

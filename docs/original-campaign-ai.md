@@ -48,6 +48,27 @@ Mods whose factory has no legal original unit may build a legal replacement
 combat unit using the same random/priority selection rule. That extension never
 changes the original roster's candidate order or random draws.
 
+## Activation (corrected 2026-11-15)
+
+Dune II keeps a computer house asleep - no production, repairs, team scripts or palace
+weapon - until the player's own sight uncovers one of its ground units (upstream
+`src/unit.c`, `Unit_UpdateMap` calling `Unit_HouseUnitCount_Add(unit, g_playerHouseID)` for a
+unit on a tile unveiled to the player; `Unit_Server_HouseUnitCount_Add` then sets
+`isAIActive` on both houses unless they are allied or the unit is winged). A computer house
+seeing the player's units wakes nobody, and seeing a structure does not count.
+
+1.0.868/1.0.869 woke every house at the first update instead: `UnitBase::updateVisibleUnits`
+tested the object visibility flag, which is set for every deployed unit. The pre-9886
+controller tolerated that because its waves waited for damage; the original team scripts do
+not, so they recruited the whole authored army at once and sent it at the player's starting
+base within two game minutes (levels 6-9 lost in 3-7 minutes in the 2026-11-15 comparison,
+`outputs/campaign-ai-fidelity-20261115`). An original-rules Campaign AI house now wakes only
+when a house on the other side has had the tile of one of its ground units in sight
+(`OriginalCampaignPolicy::sightActivates`). With "Start with Explored Map" only recorded
+sight counts, not the pre-explored map. The pre-9886 controller and every other controller
+keep waking at the first update. Protocol 126; save format unchanged (`isAIActive` was
+already saved).
+
 New games default to `OriginalCampaignAI=true` in `[General Behavior]` of the
 runtime QuantBot configuration; `false` selects the previous controller for
 controlled comparisons. QuantBot remains a separate controller. Do not add the
