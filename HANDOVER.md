@@ -1,3 +1,52 @@
+## 2026-11-16 - 1.0.871 candidate: classic command keys restored, keys for every panel command
+
+The owner played 1.0.870 and asked for the classic shortcuts back with the newer commands as
+extras, and for W/A/S/D scrolling only when switched on. Commits `79fe6f432` and `b471f0485` on
+`integrate/feature-batch`. Full description and key table:
+`docs/rts-controls.md`, "Configurable hotkeys".
+
+- Defaults are the pre-1.0.870 keys again, modifier chords included: A Attack Move, S Stop,
+  M Move, Q Patrol, H Hold, C Capture, D Carryall drop, R Repair, U Upgrade, P Place, G next
+  Construction Yard, F next factory, O ornithopters, T / Ctrl+T same type, Ctrl+A combat units,
+  Ctrl+F / Ctrl+Shift+F formations, Z zone tool, Shift+R / Shift+B / Shift+C / Shift+T.
+- Commands without a classic key: E Guard, X Area Guard, B Ambush, N Hunt, K Retreat, Y Deploy
+  MCV, V movement paths, Delete self-destruct, J Sabotage and L Heal (Tornie mods). 33 commands.
+- The WASD camera was already off by default and stays so. On, W/A/S/D scroll and a command on
+  one of them needs Shift (Shift+A, Shift+S, Shift+D by default); the Hotkeys tab, the checkbox
+  and the tooltips show the key in effect.
+- A profile holding an untouched copy of the 1.0.870 defaults (Apply writes all of them) loads as
+  the new defaults. Any other saved `[Hotkeys]` section is kept key for key; in such a 1.0.870
+  profile seven of the newer commands start unbound because their letters are in use.
+- Tested at `b471f0485`: Mini `dunelegacy_tests`, `rts_controls_tests`, `hotkeys_tests`,
+  `menu_navigation_probe`, `terrain_mix_menu_probe`, `ui_gallery_probe`, `formation_movement_probe`,
+  `rts_controls_probe`, `mouse_controls_probe`, `preplace_queue_probe`, both `sidebar_grid_probe`
+  sizes and the unregistered SourceForge regressions probe passed; `native_pointer_mapping_probe`
+  skipped itself. Linux (AWS): `rts_controls_tests` and `hotkeys_tests` passed; `dunelegacy_tests`
+  in queue job `20261115T190454-classic-hotkeys-5f41a3` was never given a machine in 8 hours and
+  was cancelled, so Linux unit tests rest on the branch CI.
+- AI is unchanged by these commits and by `f24981a0f` (default-off research switch
+  `CampaignHelperRepairFactoriesOnly`, rejected: 110 and 120 of 216 against 129, income down 11%).
+  At `b471f0485` on AWS: Brutal helper v Hard missions 20-22, 216 games, 129 won, all 216 final
+  digests identical to the 1.0.870 defaults; smoke tier 11 of 11; Dune2R 7 of 7; All against
+  Atreides 6 of 6 in 31.4 to 36.4 minutes. Evidence:
+  `~/Documents/projects/outputs/brutal-support-claude-20261115/round22/`.
+- Release 1.0.871 carries only this: protocol 126 and save format 9886 are unchanged.
+- Not verified: no person has played the build; the keys were not tried on a German or French
+  keyboard; Sabotage and Heal were only checked to be inert without Tornie content.
+
+Release notes as proposed by the hotkey session (final text: `releases/desktop/1.0.871.md`):
+
+> - The classic command keys are back: A Attack, S Stop, M Move, Q Patrol, H Hold, C Capture,
+>   D Carryall, R Repair, U Upgrade, P Place, G next Construction Yard and F next factory, with
+>   Ctrl+A, T and Ctrl+T for selections as before.
+> - Every unit command now has a key: E Guard, X Area Guard, B Ambush, N Hunt, K Retreat,
+>   Y Deploy MCV, V movement paths and Delete for a Devastator's self-destruct. The buttons'
+>   tooltips name them, and all 33 commands can be changed under Options > Hotkeys.
+> - W, A, S and D scroll the map only if you switch on "WASD camera" under Options > Controls.
+>   While it is on, the commands on those keys need Shift, for example Shift+A to attack.
+> - If you never changed a key in 1.0.870 you get these keys automatically. Keys you chose
+>   yourself are kept; Defaults then Apply switches such a profile to the keys above.
+
 ## 2026-11-15 - 1.0.870 published
 
 `v1.0.870` is an annotated tag on `e0eaee02f1ea11a31c1469573d8994d02319624b` (branch
