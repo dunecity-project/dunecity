@@ -3744,3 +3744,30 @@ TEST_CASE("Campaign helper factory concrete persists OFF and ON with distinct ha
     REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
     std::filesystem::remove(path);
 }
+
+TEST_CASE("Campaign helper repair factories only persists OFF and ON with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperRepairFactoriesOnly);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-repair-factories-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperRepairFactoriesOnly=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperRepairFactoriesOnly == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperRepairFactoriesOnly = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperRepairFactoriesOnly == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}

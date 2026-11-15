@@ -47,7 +47,11 @@ void QuantBot::buildRepair(BuildPass& pass, const StructureBase* pStructure) {
         && pStructure->getHealth() < pStructure->getMaxHealth()
         && QuantBotBuildPolicy::canAffordRepairTick(getHouse()->getCredits())) {
         const Uint32 repairItem = pStructure->getItemID();
-        const bool maintained = repairPolicyMaintains(pass, pStructure);
+        // CampaignHelperRepairFactoriesOnly (default off): a support house repairs at once only
+        // what produces; refineries and windtraps wait for the wealth, survival or engaged rules.
+        const bool maintained = botConfig().force.campaignHelperRepairFactoriesOnly && campaignEconomySupport()
+            ? QuantBotBuildPolicy::healthScaledProduction(repairItem)
+            : repairPolicyMaintains(pass, pStructure);
         const bool survival = pStructure->getHealth() < pStructure->getMaxHealth() * 0.40_fix
             && pass.money > 1000;
         const bool engaged = QuantBotBuildPolicy::defensiveEmplacement(repairItem)

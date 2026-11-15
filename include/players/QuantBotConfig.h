@@ -423,6 +423,12 @@ struct QuantBotConfig {
         /// WOR and Barracks still get their foundation: a building on bare rock starts at half
         /// health and a producer builds at its health fraction. Hashed; default on.
         bool campaignHelperFactoryConcrete;
+        /// Classic campaign support repairs a damaged building at once only when it produces
+        /// (Construction Yard and factories); refineries, windtraps and the rest wait for a
+        /// comfortable treasury (over 5,000) or the survival and engaged-defence rules. A refinery
+        /// at half health unloads at two fifths speed, so OFF keeps repairing those too.
+        /// Hashed; default off.
+        bool campaignHelperRepairFactoriesOnly;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
         /// Repair Yard: 0=OFF (all opening refineries first). 1..4.
