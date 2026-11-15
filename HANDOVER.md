@@ -1,3 +1,35 @@
+## 2026-11-15 - Campaign AI in 1.0.869 was unwinnable from level 6: woke at the first tick (fixed locally, unreleased)
+
+Player report: with Enemy AI "Campaign AI" the campaign became much harder than 1.0.867 and
+unsolvable from level 6. Confirmed on AWS (264 games per arm, all 22 missions, three houses,
+seeds 7101/7102, idle human plus QuantBot helper): levels 6-9 with a Hard helper were won 0 of 54
+times in 1.0.869 against 49 of 54 in 1.0.867, the base falling after a median 3.9 game minutes.
+
+- Cause: `UnitBase::updateVisibleUnits` activated every house on the object visibility flag,
+  which is set for every deployed unit, so the AI was awake from the first update. Dune II wakes
+  a computer house only when the player's sight uncovers one of its ground units. The pre-9886
+  controller hid this because its waves waited for damage; the original TEAM.EMC scripts
+  recruited the whole authored army at once and had about 16 units at the player's base by minute 2.
+- `172242e1d`: an original-rules Campaign AI house wakes only when the other side has had one of
+  its ground units in sight. Other controllers unchanged. **Protocol 126**, save format unchanged.
+  Levels 6-9: 0 of 54 to 36 of 54 won.
+- `6bcf2473c`: in authored missions such a house keeps its mission's `MaxUnit` (15-25, default 39)
+  unless the unit override is a number above 0; the shipped override 0 had made it unlimited.
+  Faithful to the original, no measurable effect in these games (31 of 54). Kept as its own commit
+  so it can be dropped; this is the owner's decision.
+- `8f229669b`: opt-in `partner-<tier>-v-campaign-ai-{original,legacy,release}` cells in
+  `tests/ai/scenario-matrix.py`. `refs/research/campaign-ai-fidelity-867` (`41ccd0a97`) is the
+  1.0.867 tag plus those cells, for the comparison only.
+- Unchanged elsewhere: 264 of 264 QuantBot Easy and 264 of 264 old-controller games keep their
+  final digest across both fixes; AWS smoke tier 11 of 11, All against Atreides 6 of 6 and Dune2R 7 of 7;
+  `original_campaign_*` 3 of 3.
+- Open: native Mac build, `quantbot_ffa_army_deploys` and `perf_regression` on the Mini; a human
+  play test; levels 8-9 remain hard for a Medium helper. Still different from the original and
+  left alone: shared 102-unit pool, 75% speed of built units, credits capped at storage, mission
+  Guard units switching to Hunt when hit.
+- Evidence and audit table: `outputs/campaign-ai-fidelity-20261115/results.md`; rules in
+  `docs/original-campaign-ai.md`.
+
 ## 2026-11-15 - 1.0.869 published; 1.0.868 was tagged but never published
 
 - Tag `v1.0.869` → `a6e26c57e99bf67d507c515ce7ea252b52e1306c`; tag run 43597776305; integration CI 43594620864; Mini qualifier 43595737089 (receipt reused by the tag job, no test rerun). Tag `v1.0.868` stays on `e990124666feb61ac82073324c6e6d6fb1a93d48`, unpublished: its tag run 43590160430 failed the Mac lane three times. 1.0.869 is that game code with the version changed and the Mac packaging order fixed.
