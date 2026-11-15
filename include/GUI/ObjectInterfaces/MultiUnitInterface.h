@@ -103,18 +103,18 @@ protected:
         returnButton.setOnClick(std::bind(&MultiUnitInterface::onReturn, this));
 
         deployButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Deploy)});
-        deployButton.setTooltipText(_("Build a new construction yard"));
+        deployButton.setTooltipText(UnitCommandTooltips::deploy());
         deployButton.setOnClick(std::bind(&MultiUnitInterface::onDeploy, this));
 
         destructButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Destruct)});
-        destructButton.setTooltipText(_("Self-destruct this unit"));
+        destructButton.setTooltipText(UnitCommandTooltips::destruct());
         destructButton.setOnClick(std::bind(&MultiUnitInterface::onDestruct, this));
 
         healButton.setVisible(false);
         if(ModManager::instance().isTornieFamilyContentActive()) {
 
             healButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Heal)});
-            healButton.setTooltipText(_("Heal an allied unit"));
+            healButton.setTooltipText(UnitCommandTooltips::heal());
             healButton.setToggleButton(true);
             healButton.setOnClick(std::bind(&MultiUnitInterface::onHeal, this));
 
@@ -126,7 +126,7 @@ protected:
 
         movementPathsButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Paths)});
         movementPathsButton.setToggleButton(true);
-        movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
+        movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
         actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
             &carryallDropButton, &captureButton, &returnButton, &deployButton,
@@ -177,7 +177,7 @@ protected:
 
         ambushButton.setText(_("Ambush"));
         ambushButton.setTextColor(color);
-        ambushButton.setTooltipText(_("Unit will not move until enemy unit spotted"));
+        ambushButton.setTooltipText(UnitCommandTooltips::ambush());
         ambushButton.setToggleButton(true);
         ambushButton.setOnClick(std::bind(&MultiUnitInterface::onAmbush, this));
         buttonVBox.addWidget(&ambushButton, 26);
@@ -186,7 +186,7 @@ protected:
 
         huntButton.setText(_("Hunt"));
         huntButton.setTextColor(color);
-        huntButton.setTooltipText(_("Unit will immediately start to engage an enemy unit"));
+        huntButton.setTooltipText(UnitCommandTooltips::hunt());
         huntButton.setToggleButton(true);
         huntButton.setOnClick(std::bind(&MultiUnitInterface::onHunt, this));
         buttonVBox.addWidget(&huntButton, 26);
@@ -195,7 +195,7 @@ protected:
 
         retreatButton.setText(_("Retreat"));
         retreatButton.setTextColor(color);
-        retreatButton.setTooltipText(_("Unit will retreat back to base"));
+        retreatButton.setTooltipText(UnitCommandTooltips::retreat());
         retreatButton.setToggleButton(true);
         retreatButton.setOnClick(std::bind(&MultiUnitInterface::onRetreat, this));
         buttonVBox.addWidget(&retreatButton,26);
@@ -204,7 +204,7 @@ protected:
             buttonVBox.addWidget(VSpacer::create(buttonGap));
             sabotageButton.setText(_("Sabotage"));
             sabotageButton.setTextColor(color);
-            sabotageButton.setTooltipText(_("Infantry will hunt enemy buildings to capture them"));
+            sabotageButton.setTooltipText(UnitCommandTooltips::sabotage(_("Infantry will hunt enemy buildings to capture them")));
             sabotageButton.setToggleButton(true);
             sabotageButton.setOnClick(std::bind(&MultiUnitInterface::onSabotage, this));
             buttonVBox.addWidget(&sabotageButton, 26);

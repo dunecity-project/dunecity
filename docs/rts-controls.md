@@ -157,8 +157,8 @@ behaviour probe and the rendered smoke frame pass.
   button entering the same mode would be a duplicate.
 - Double-tap group centring: already present (pressing a group number while that group is
   selected centres the camera, with no time window) — kept as is.
-- Mode buttons Ambush/Hunt/Retreat and Deploy/Destruct/Heal/Paths have no hotkey to show; their
-  tooltips are unchanged. Guard and Area Guard gained keys later (see "Configurable hotkeys").
+- Mode buttons Ambush/Hunt/Retreat and Deploy/Destruct/Heal/Paths had no hotkey to show at this
+  point. Guard and Area Guard, then these, gained keys later (see "Configurable hotkeys").
 - HOLD "no scatter from worms / crushing": the engine has no scatter behaviour for player units,
   so nothing needed changing; Saboteurs in HOLD do not force-chase targets.
 - A queued MoveToObject on a friendly *unit* follows it indefinitely and blocks later orders
@@ -210,7 +210,10 @@ Each probe run regenerates both files (also copied into `build/rts-controls-prob
 
 Stefan: Guard, Area Guard and Stop get keys, the Construction Yard shortcut may move, and players
 set their own keys in an Options tab. The defaults assume WASD camera movement: frequent orders
-cluster around it, and none of the 25 command defaults requires Shift, Ctrl or Alt.
+cluster around it, and none of the 33 command defaults requires Shift, Ctrl or Alt.
+Stefan, 2026-11-15, asked for keys for the other commands too; the panel commands that still had
+none (Ambush, Hunt, Retreat, Sabotage, Deploy, Self-destruct, Heal, movement paths) now have one. All letters are taken by the earlier commands and
+the camera, so these default to punctuation, Insert and Delete.
 
 ## Registry and dispatch
 - `include/misc/Hotkeys.h` is the single registry: each action's stable `[Hotkeys]` config key,
@@ -224,15 +227,22 @@ cluster around it, and none of the 25 command defaults requires Shift, Ctrl or A
   action marked `shiftIntent` (order cursors, Stop, Hold, Repair, selection keys) and is reported
   as `extraShift`: Hold uses it to queue a harvester return, the order cursors read Shift at the
   click as before. Guard, Area Guard, the type selections, formation keys and city keys need their
-  exact chord. Cmd/Windows-key chords never run a command (Cmd+Q, Cmd+M stay the system's).
-  City tools are unavailable without the city simulation. Custom bindings still allow exact
+  exact chord, and so do Ambush, Hunt, Retreat, Sabotage, Deploy, Self-destruct, Heal and movement
+  paths. Cmd/Windows-key chords never run a command (Cmd+Q, Cmd+M stay the system's).
+  City tools are unavailable without the city simulation; Sabotage and Heal are unavailable
+  without Tornie-family content, like their buttons (`Game::isHotkeyAvailable`). Custom bindings still allow exact
   modifier chords, and Shift on top of an order key still queues orders.
 - WASD camera: all defaults avoid W/A/S/D and stay identical with the camera on or off. Q is
   available beside W for Attack Move without Shift. Only an explicitly customised unmodified
   W/A/S/D binding retains the legacy Shift fallback; tooltips show that effective chord.
-- Stop, Guard and Area Guard send `CMD_UNIT_SETMODE` for each selected unit the player may command
-  (`Game::setSelectedUnitsAttackMode`), exactly what the panel buttons send; queues, HOLD and
-  multiplayer routing are unchanged. Stop, Guard, Area Guard and Hold remain separate modes.
+- Stop, Guard, Area Guard, Ambush, Hunt, Retreat and Sabotage send `CMD_UNIT_SETMODE` for each
+  selected unit the player may command (`Game::setSelectedUnitsAttackMode`; Sabotage only for
+  units that can capture), exactly what the panel buttons send; queues, HOLD and multiplayer
+  routing are unchanged. Stop, Guard, Area Guard and Hold remain separate modes.
+- Deploy and Self-destruct send the buttons' `CMD_MCV_DEPLOY` and `CMD_DEVASTATOR_STARTDEVASTATE`
+  for each selected MCV or Devastator the player may command. Heal opens the heal cursor, which
+  `CursorManager` refuses unless a selected unit can heal. Movement paths is the panel's toggle
+  (`Game::toggleMovementPaths`, saved in the profile).
 
 ## Actions and default keys
 
@@ -253,7 +263,14 @@ Z/X/C/V (Patrol/Hold/Capture/Move). T requests a Carryall drop and B places a st
 | Repair | R | City road tool | P |
 | Upgrade structure | U | City budget | [ |
 | Place structure | B | City statistics | ] |
-| | | Show game time | Backslash |
+| Ambush | ; | Show game time | Backslash |
+| Hunt | ' | Deploy MCV | . |
+| Retreat | , | Self-destruct Devastator | Delete |
+| Sabotage (Tornie mods) | Insert | Heal (Tornie mods) | ` |
+| Show movement paths | / | | |
+
+A profile that already uses one of the newer keys for something else keeps its own binding: the
+newer command is left unbound there (a log warning names it) and can be set on the tab.
 
 Shift+X queues a harvester return; Shift at the order click still queues orders.
 Saved custom bindings are preserved; **Defaults**, then **Apply** selects this layout in an
@@ -280,8 +297,9 @@ be bound, with any of Ctrl, Alt and Shift.
   the registry when both were configured).
 
 ## Tooltips
-Unit and group panels (Move, Attack Move, Patrol, Guard, Area Guard, Stop, Hold, Capture, Carryall
-drop, Return harvester, Repair, formation buttons), the structure Repair/Upgrade buttons, the
+Unit and group panels (Move, Attack Move, Patrol, Guard, Area Guard, Stop, Hold, Ambush, Hunt,
+Retreat, Sabotage, Capture, Carryall drop, Return harvester, Deploy, Self-destruct, Heal, Repair,
+movement paths, formation buttons), the structure Repair/Upgrade buttons, the
 sidebar Place hint, the ornithopter button and the formation option text all read the effective
 binding through `UnitCommandTooltips::hotkeyText`/`hotkeySuffix`; an unbound action shows
 "(unbound)" or no hint.
@@ -289,10 +307,14 @@ binding through `UnitCommandTooltips::hotkeyText`/`hotkeySuffix`; an unbound act
 ## Tests
 - `hotkeys_tests` (`tests/HotkeysTestCase.cpp`, `[hotkeys]`): defaults, dispatch and Shift intent,
   the WASD rule, unavailable-action fallthrough, rebinding, reserved and WASD-only collisions,
-  capture, config round trip and recovery.
+  capture, config round trip and recovery, the punctuation defaults, mod-only fallthrough and a
+  profile whose saved key collides with a newer command's default.
 - `rts_controls_probe` section 9: F, G and E with WASD on and off through
   `Game::handleKeyInput` and real game cycles; a rebound Guard ignores F, an unbound Stop ignores
-  E; both panels' tooltips. Q Attack Move is also exercised on spice blooms.
+  E; both panels' tooltips. Q Attack Move is also exercised on spice blooms. The same section
+  presses ; ' , for Ambush, Hunt and Retreat, / for movement paths, Delete on a Devastator
+  (Shift+Delete does nothing), and checks that Insert, backquote, period and Delete leave a tank
+  and a quad alone.
 - `menu_navigation_probe`: the Hotkeys tab at 640x480, 854x480 and 1280x720 (tabs and controls on
   screen, capture via the menu input path, Escape, refused digit, Back, Apply and Defaults with the
   saved `[Hotkeys]` values).

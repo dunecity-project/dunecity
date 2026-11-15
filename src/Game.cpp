@@ -120,6 +120,8 @@ std::mutex Game::performanceLogMutex;
 #include <units/InfantryBase.h>
 #include <units/GroundUnit.h>
 #include <units/Carryall.h>
+#include <units/Devastator.h>
+#include <units/MCV.h>
 #include <units/AmbientAirplane.h>
 #include <units/AmbientHelicopter.h>
 #include <structures/Airport.h>
@@ -6719,6 +6721,10 @@ bool Game::isHotkeyAvailable(Hotkeys::Action action) const {
         case Hotkeys::Action::CityZoneTool: case Hotkeys::Action::CityRoadTool:
         case Hotkeys::Action::CityBudget: case Hotkeys::Action::CityStatsOverlay:
             return citySimEnabled_;
+        // The Sabotage mode and the Heal order exist only with Tornie-family content, like
+        // their panel buttons.
+        case Hotkeys::Action::Sabotage: case Hotkeys::Action::Heal:
+            return ModManager::instance().isTornieFamilyContentActive();
         default:
             return true;
     }
@@ -6730,7 +6736,8 @@ void Game::setSelectedUnitsAttackMode(ATTACKMODE mode) {
     UnitBase* responder = nullptr;
     for(Uint32 id : selectedList) {
         auto* unit = dynamic_cast<UnitBase*>(objectManager.getObject(id));
-        if(unit && canControlHouse(unit->getOwner()) && unit->isRespondable()) {
+        if(unit && canControlHouse(unit->getOwner()) && unit->isRespondable()
+           && (mode != SABOTAGE || unit->canCaptureStructures())) {
             unit->handleSetAttackModeClick(mode);
             responder = unit;
         }
@@ -6751,6 +6758,26 @@ void Game::runHotkeyAction(Hotkeys::Action action, bool extraShift) {
         case Action::Stop: setSelectedUnitsAttackMode(STOP); break;
         case Action::Guard: setSelectedUnitsAttackMode(GUARD); break;
         case Action::AreaGuard: setSelectedUnitsAttackMode(AREAGUARD); break;
+        case Action::Ambush: setSelectedUnitsAttackMode(AMBUSH); break;
+        case Action::Hunt: setSelectedUnitsAttackMode(HUNT); break;
+        case Action::Retreat: setSelectedUnitsAttackMode(RETREAT); break;
+        case Action::Sabotage: setSelectedUnitsAttackMode(SABOTAGE); break;
+
+        // The same commands the Deploy and Self-destruct panel buttons send.
+        case Action::DeployMCV:
+        case Action::SelfDestruct: {
+            for(Uint32 objectID : selectedList) {
+                auto* pUnit = dynamic_cast<UnitBase*>(objectManager.getObject(objectID));
+                if(pUnit == nullptr || !canControlHouse(pUnit->getOwner()) || !pUnit->isRespondable()) continue;
+                if(action == Action::DeployMCV) {
+                    if(auto* pMCV = dynamic_cast<MCV*>(pUnit)) pMCV->handleDeployClick();
+                } else if(auto* pDevastator = dynamic_cast<Devastator*>(pUnit)) {
+                    pDevastator->handleStartDevastateClick();
+                }
+            }
+        } break;
+        // CursorManager refuses the cursor unless a selected unit can heal.
+        case Action::Heal: setCursorMode(CursorMode_Heal); break;
 
         case Action::Hold: {
             // Harvesters return (Shift on top of the key queues the return); every other
@@ -6824,6 +6851,7 @@ void Game::runHotkeyAction(Hotkeys::Action action, bool extraShift) {
         case Action::SelectAllCombatUnits: selectAllCombatUnits(); break;
         case Action::ToggleFormationMoves: toggleFormationMoves(); break;
         case Action::NextFormationShape: cycleFormationShape(); break;
+        case Action::ToggleMovementPaths: toggleMovementPaths(); break;
 
         case Action::CityZoneTool: {
             if(currentCursorMode == CursorMode_CityZone) {

@@ -27,11 +27,12 @@
 namespace Hotkeys {
 
 enum class Action : int {
-    Move, AttackMove, Patrol, Stop, Guard, AreaGuard, Hold, Capture, CarryallDrop,
+    Move, AttackMove, Patrol, Stop, Guard, AreaGuard, Hold, Ambush, Hunt, Retreat, Sabotage,
+    Capture, CarryallDrop, DeployMCV, SelfDestruct, Heal,
     Repair, Upgrade, PlaceStructure,
     NextConstructionYard, NextFactory, SelectOrnithopters, SelectSameTypeOnScreen, SelectSameTypeOnMap,
     SelectAllCombatUnits,
-    ToggleFormationMoves, NextFormationShape,
+    ToggleFormationMoves, NextFormationShape, ToggleMovementPaths,
     CityZoneTool, CityRoadTool, CityBudget, CityStatsOverlay,
     ToggleGameTime,
     Count
@@ -73,8 +74,15 @@ inline const std::array<ActionInfo, actionCount>& actions() {
         {Action::Guard,                  "Guard",                   "Guard",                         {SDLK_f, 0},                           false},
         {Action::AreaGuard,              "Area Guard",              "Area Guard",                    {SDLK_g, 0},                           false},
         {Action::Hold,                   "Hold",                    "Hold / return harvesters",      {SDLK_x, 0},                           true},
+        {Action::Ambush,                 "Ambush",                  "Ambush",                        {SDLK_SEMICOLON, 0},                   false},
+        {Action::Hunt,                   "Hunt",                    "Hunt",                          {SDLK_QUOTE, 0},                       false},
+        {Action::Retreat,                "Retreat",                 "Retreat",                       {SDLK_COMMA, 0},                       false},
+        {Action::Sabotage,               "Sabotage",                "Sabotage (Tornie mods)",        {SDLK_INSERT, 0},                      false},
         {Action::Capture,                "Capture",                 "Capture",                       {SDLK_c, 0},                           true},
         {Action::CarryallDrop,           "Carryall Drop",           "Request Carryall drop",         {SDLK_t, 0},                           true},
+        {Action::DeployMCV,              "Deploy MCV",              "Deploy MCV",                    {SDLK_PERIOD, 0},                      false},
+        {Action::SelfDestruct,           "Self-Destruct",           "Self-destruct Devastator",      {SDLK_DELETE, 0},                      false},
+        {Action::Heal,                   "Heal",                    "Heal (Tornie mods)",            {SDLK_BACKQUOTE, 0},                   false},
         {Action::Repair,                 "Repair",                  "Repair",                        {SDLK_r, 0},                           true},
         {Action::Upgrade,                "Upgrade",                 "Upgrade structure",             {SDLK_u, 0},                           true},
         {Action::PlaceStructure,         "Place Structure",         "Place structure",               {SDLK_b, 0},                           true},
@@ -86,6 +94,7 @@ inline const std::array<ActionInfo, actionCount>& actions() {
         {Action::SelectAllCombatUnits,   "Select Combat Units",     "Select all combat units",       {SDLK_k, 0},                           true},
         {Action::ToggleFormationMoves,   "Formation Moves",         "Formation moves on/off",        {SDLK_m, 0},                           false},
         {Action::NextFormationShape,     "Next Formation Shape",    "Next formation shape",          {SDLK_i, 0},                           false},
+        {Action::ToggleMovementPaths,    "Movement Paths",          "Show movement paths",           {SDLK_SLASH, 0},                       false},
         {Action::CityZoneTool,           "City Zone Tool",          "City zone tool",                {SDLK_l, 0},                           true},
         {Action::CityRoadTool,           "City Road Tool",          "City road tool",                {SDLK_p, 0},                           false},
         {Action::CityBudget,             "City Budget",             "City budget",                   {SDLK_LEFTBRACKET, 0},                 false},

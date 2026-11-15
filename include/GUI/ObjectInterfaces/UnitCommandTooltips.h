@@ -50,6 +50,31 @@ inline std::string areaGuard() {
 inline std::string hold() {
     return withHotkey(_("Hold"), Hotkeys::Action::Hold, _("never move, fire only at enemies within weapon range"));
 }
+inline std::string ambush() {
+    return withHotkey(_("Ambush"), Hotkeys::Action::Ambush, _("Unit will not move until enemy unit spotted"));
+}
+inline std::string hunt() {
+    return withHotkey(_("Hunt"), Hotkeys::Action::Hunt, _("Unit will immediately start to engage an enemy unit"));
+}
+inline std::string retreat() {
+    return withHotkey(_("Retreat"), Hotkeys::Action::Retreat, _("Unit will retreat back to base"));
+}
+/// 'help' differs between the single-unit and the group panel.
+inline std::string sabotage(const std::string& help) {
+    return withHotkey(_("Sabotage"), Hotkeys::Action::Sabotage, help);
+}
+inline std::string deploy() {
+    return withHotkey(_("Build a new construction yard"), Hotkeys::Action::DeployMCV, std::string());
+}
+inline std::string destruct() {
+    return withHotkey(_("Self-destruct this unit"), Hotkeys::Action::SelfDestruct, std::string());
+}
+inline std::string heal() {
+    return withHotkey(_("Heal an allied unit"), Hotkeys::Action::Heal, std::string());
+}
+inline std::string movementPaths() {
+    return withHotkey(_("Show or hide movement paths for selected units"), Hotkeys::Action::ToggleMovementPaths, std::string());
+}
 inline std::string stop() {
     return withHotkey(_("Stop"), Hotkeys::Action::Stop, _("unit will not move or attack"));
 }

@@ -44,6 +44,18 @@ TEST_CASE("Defaults use distinct single keys around WASD without camera conflict
     REQUIRE(pressed(defaults, SDLK_c, KMOD_NONE, true) == Action::Capture);
     REQUIRE(pressed(defaults, SDLK_v, KMOD_NONE, true) == Action::Move);
     REQUIRE(pressed(defaults, SDLK_y, KMOD_NONE, true) == Action::NextConstructionYard);
+    // The remaining panel commands sit on punctuation and navigation keys: no letter is free.
+    REQUIRE(pressed(defaults, SDLK_SEMICOLON, KMOD_NONE, true) == Action::Ambush);
+    REQUIRE(pressed(defaults, SDLK_QUOTE, KMOD_NONE, true) == Action::Hunt);
+    REQUIRE(pressed(defaults, SDLK_COMMA, KMOD_NONE, true) == Action::Retreat);
+    REQUIRE(pressed(defaults, SDLK_INSERT, KMOD_NONE, true) == Action::Sabotage);
+    REQUIRE(pressed(defaults, SDLK_PERIOD, KMOD_NONE, true) == Action::DeployMCV);
+    REQUIRE(pressed(defaults, SDLK_DELETE, KMOD_NONE, true) == Action::SelfDestruct);
+    REQUIRE(pressed(defaults, SDLK_BACKQUOTE, KMOD_NONE, true) == Action::Heal);
+    REQUIRE(pressed(defaults, SDLK_SLASH, KMOD_NONE, true) == Action::ToggleMovementPaths);
+    // Shift is not part of these commands: a mode or a self-destruct needs its exact key.
+    for(auto key : {SDLK_SEMICOLON, SDLK_QUOTE, SDLK_COMMA, SDLK_PERIOD, SDLK_DELETE})
+        REQUIRE_FALSE(pressed(defaults, key, KMOD_LSHIFT));
     for(auto key : {SDLK_w, SDLK_a, SDLK_s, SDLK_d}) {
         REQUIRE_FALSE(pressed(defaults, key, KMOD_NONE, true));
         REQUIRE_FALSE(pressed(defaults, key, KMOD_LSHIFT, true));
@@ -87,11 +99,11 @@ TEST_CASE("Unavailable city actions do not intercept a custom Shift order", "[ho
 
 TEST_CASE("A rebound action answers only to its new key", "[hotkeys]") {
     auto bindings = Hotkeys::Bindings::defaults();
-    auto result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_DELETE, 0});
+    auto result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_END, 0});
     REQUIRE(result.outcome == Hotkeys::AssignOutcome::Assigned);
     REQUIRE_FALSE(result.displaced);
     REQUIRE_FALSE(pressed(bindings, SDLK_f));
-    REQUIRE(pressed(bindings, SDLK_DELETE) == Action::Guard);
+    REQUIRE(pressed(bindings, SDLK_END) == Action::Guard);
     REQUIRE(pressed(bindings, SDLK_g, KMOD_NONE) == Action::AreaGuard);
 
     // Taking a key from another action leaves that action unbound rather than sharing it.
@@ -100,7 +112,7 @@ TEST_CASE("A rebound action answers only to its new key", "[hotkeys]") {
     REQUIRE(result.displaced == Action::NextConstructionYard);
     REQUIRE_FALSE(bindings.get(Action::NextConstructionYard).bound());
     REQUIRE(pressed(bindings, SDLK_y) == Action::Guard);
-    REQUIRE_FALSE(pressed(bindings, SDLK_DELETE));
+    REQUIRE_FALSE(pressed(bindings, SDLK_END));
     REQUIRE(bindings.conflicts().empty());
 
     REQUIRE(Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_y, 0}).outcome == Hotkeys::AssignOutcome::Unchanged);
@@ -165,6 +177,26 @@ TEST_CASE("Hotkey config round-trips and recovers from missing or bad values", "
                                Action::PlaceStructure, Action::Patrol})
         REQUIRE(bad.bindings.get(action) == Hotkeys::info(action).defaultBinding);
     REQUIRE(bad.bindings.get(Action::Capture) == Binding{SDLK_k, Mod::Shift});
+}
+
+TEST_CASE("Mod-only commands fall through without their content", "[hotkeys]") {
+    auto bindings = Hotkeys::Bindings::defaults();
+    const auto baseGame = [](Action action) { return action != Action::Sabotage && action != Action::Heal; };
+    REQUIRE_FALSE(pressed(bindings, SDLK_INSERT, KMOD_NONE, false, baseGame));
+    REQUIRE_FALSE(pressed(bindings, SDLK_BACKQUOTE, KMOD_NONE, false, baseGame));
+    REQUIRE(pressed(bindings, SDLK_SEMICOLON, KMOD_NONE, false, baseGame) == Action::Ambush);
+}
+
+TEST_CASE("A profile saved before a command existed keeps its own key", "[hotkeys]") {
+    // Guard was moved to ';' before Ambush took that default: the saved key wins, Ambush is
+    // left unbound and says so, and every other new command keeps its default.
+    const auto older = Hotkeys::load({{"Guard", "Semicolon"}});
+    REQUIRE(older.bindings.get(Action::Guard) == Binding{SDLK_SEMICOLON, 0});
+    REQUIRE_FALSE(older.bindings.get(Action::Ambush).bound());
+    REQUIRE(older.warnings.size() == 1);
+    REQUIRE(older.bindings.conflicts().empty());
+    REQUIRE(older.bindings.get(Action::Hunt) == Binding{SDLK_QUOTE, 0});
+    REQUIRE(pressed(older.bindings, SDLK_SEMICOLON) == Action::Guard);
 }
 
 TEST_CASE("Colliding config entries leave one action on the key", "[hotkeys]") {

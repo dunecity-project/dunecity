@@ -351,7 +351,7 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     }
 
     movementPathsButton.setText(_("Movement paths"));
-    movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
+    movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
     movementPathsButton.setToggleButton(true);
     movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
     windowWidget.addWidget(&movementPathsButton,

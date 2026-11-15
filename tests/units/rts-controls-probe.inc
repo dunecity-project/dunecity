@@ -27,6 +27,7 @@
 #include <GUI/ObjectInterfaces/UnitInterface.h>
 #include <mod/ModManager.h>
 #include <structures/BuilderBase.h>
+#include <units/Devastator.h>
 #include <units/UnitBase.h>
 #include <units/UnitOrderQueue.h>
 #include <FormationOrders.h>
@@ -571,6 +572,62 @@ int runRtsControlsProbe() {
                    && startsWith(many->stopButton.getTooltipText(), "Stop (E)"),
                    "The group panel tooltips do not name Guard F, Area Guard G and Stop E");
 
+        // The other mode buttons and the panel commands have keys too (no letter is free, so
+        // they sit on punctuation, Insert and Delete), and their tooltips name them.
+        press(SDLK_SEMICOLON, KMOD_NONE);
+        rtsRequire(inMode(AMBUSH), "; did not put the selection in Ambush");
+        press(SDLK_QUOTE, KMOD_NONE);
+        rtsRequire(inMode(HUNT), "' did not put the selection in Hunt");
+        press(SDLK_COMMA, KMOD_NONE);
+        rtsRequire(inMode(RETREAT), ", did not put the selection in Retreat");
+        if(!ModManager::instance().isTornieFamilyContentActive()) {
+            press(SDLK_INSERT, KMOD_NONE);
+            rtsRequire(inMode(RETREAT), "Insert ran the Tornie-only Sabotage mode in the base game");
+        }
+        press(SDLK_BACKQUOTE, KMOD_NONE);
+        rtsRequire(game->currentCursorMode != Game::CursorMode_Heal, "` opened the Heal cursor for units that cannot heal");
+        press(SDLK_PERIOD, KMOD_NONE);
+        press(SDLK_DELETE, KMOD_NONE);
+        rtsRequire(unitOf(tank) && unitOf(quad) && inMode(RETREAT), "Deploy or Self-destruct keys acted on a tank and a quad");
+        const bool savedPaths = settings.general.showMovementPaths;
+        press(SDLK_SLASH, KMOD_NONE);
+        rtsRequire(settings.general.showMovementPaths != savedPaths, "/ did not toggle the movement paths");
+        press(SDLK_SLASH, KMOD_NONE);
+        rtsRequire(settings.general.showMovementPaths == savedPaths, "A second / did not restore the movement paths");
+        rtsRequire(startsWith(many->ambushButton.getTooltipText(), "Ambush (;)")
+                   && startsWith(many->huntButton.getTooltipText(), "Hunt (')")
+                   && startsWith(many->retreatButton.getTooltipText(), "Retreat (,)")
+                   && many->deployButton.getTooltipText().find("(.)") != std::string::npos
+                   && many->destructButton.getTooltipText().find("(Delete)") != std::string::npos
+                   && many->movementPathsButton.getTooltipText().find("(/)") != std::string::npos,
+                   "The group panel tooltips do not name the Ambush, Hunt, Retreat, Deploy, Self-destruct and Paths keys");
+        select({tank});
+        one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(one && startsWith(one->ambushButton.getTooltipText(), "Ambush (;)")
+                   && startsWith(one->huntButton.getTooltipText(), "Hunt (')")
+                   && startsWith(one->retreatButton.getTooltipText(), "Retreat (,)"),
+                   "The unit panel tooltips do not name the Ambush, Hunt and Retreat keys");
+        select({tank, quad});
+        press(SDLK_e, KMOD_NONE);
+        rtsRequire(inMode(STOP), "E did not stop the selection after the mode keys");
+
+        // Self-destruct: Delete starts the fuse of a selected Devastator, exactly once.
+        {
+            const Uint32 devastator = spawn(owner, Unit_Devastator, Coord(11, 18));
+            select({devastator});
+            auto* fused = dynamic_cast<Devastator*>(unitOf(devastator));
+            rtsRequire(fused && fused->devastateTimer == 0, "The fixture Devastator already has a fuse");
+            press(SDLK_DELETE, KMOD_LSHIFT);
+            rtsRequire(fused->devastateTimer == 0, "Shift+Delete started the self-destruct");
+            press(SDLK_DELETE, KMOD_NONE);
+            rtsRequire(fused->devastateTimer > 0, "Delete did not start the Devastator's self-destruct");
+            // Out of the way of the units above before it goes off.
+            select({tank, quad});
+            fused->devastateTimer = 0;
+            retire(devastator);
+            rtsRequire(unitOf(tank) && unitOf(quad), "The fixture Devastator took the tank or the quad with it");
+        }
+
         // Rebound Guard answers only to its new key; an unbound Stop answers to nothing.
         rtsRequire(Hotkeys::assign(settings.hotkeys, Hotkeys::Action::Guard, Hotkeys::Binding{SDLK_k, 0}).outcome
                    == Hotkeys::AssignOutcome::Assigned, "Guard could not move to K");
@@ -595,6 +652,7 @@ int runRtsControlsProbe() {
         retire(tank);
         retire(quad);
         SDL_Log("RTS_CONTROLS_HOTKEYS_PASS: F Guard, G Area Guard, E Stop with WASD on/off through the key handler;"
+                " ; Ambush, ' Hunt, , Retreat, / paths, Delete self-destruct; Sabotage and Heal inert without their content;"
                 " rebound Guard ignores F; unbound Stop ignores E; unit and group tooltips agree");
     }
 
