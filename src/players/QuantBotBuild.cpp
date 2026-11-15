@@ -77,6 +77,15 @@ bool QuantBot::campaignHelperNoConcrete(Uint32 item) const {
     // CampaignHelperPowerPayback (default off): its windtraps keep their foundation, so they
     // start at full output and never need the bare-rock repair.
     if (item == Structure_WindTrap && campaignHelperPowerPaybackActive()) return false;
+    // CampaignHelperLateConcrete (default off): past the opening a foundation costs less than
+    // repairing the half-health start of any building the house maintains.
+    if (const int late = botConfig().force.campaignHelperLateConcrete; late > 0 && campaignEconomySupport()) {
+        if (late == 1 && getHouse()->getNumItems(Structure_HeavyFactory) > 0) return false;
+        if (late == 2)
+            for (const auto* structure : getStructureList())
+                if (structure->getOwner() == getHouse() && structure->getItemID() == Structure_ConstructionYard
+                    && static_cast<const BuilderBase*>(structure)->getCurrentUpgradeLevel() >= 1) return false;
+    }
     // CampaignHelperFactoryConcrete (default on): production buildings keep their foundation.
     // On bare rock a building starts at half health and BuilderBase builds at its health
     // fraction, so a factory without concrete produces at half speed until it is repaired.

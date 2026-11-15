@@ -449,6 +449,11 @@ struct QuantBotConfig {
         /// game minutes; it lays their full concrete foundation and orders them only when its
         /// yard has nothing else to build. 0=OFF. Hashed; default 0.
         int campaignHelperPowerPayback;
+        /// Classic campaign support with CampaignHelperNoConcrete lays full foundations again once
+        /// its opening is past: 0=OFF, 1=after its first Heavy Factory stands, 2=after a yard
+        /// reaches upgrade level 1 (bulk Slab4). Buildings already standing are not affected.
+        /// Hashed; default 0.
+        int campaignHelperLateConcrete;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
         /// Repair Yard: 0=OFF (all opening refineries first). 1..4.
