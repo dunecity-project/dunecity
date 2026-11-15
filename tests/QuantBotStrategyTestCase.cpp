@@ -2521,7 +2521,7 @@ TEST_CASE("Campaign helper early unload persists OFF and percent values with dis
 TEST_CASE("Campaign helper no concrete persists OFF and ON with distinct hashes",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignHelperNoConcrete);
+    REQUIRE(defaults.force.campaignHelperNoConcrete);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-no-concrete-test.ini";
     std::map<std::string, bool> hashes;
     for (const bool enabled : {false, true}) {
@@ -2609,10 +2609,10 @@ TEST_CASE("Campaign helper protected repair persists OFF and ON with distinct ha
 TEST_CASE("Campaign helper defence leash persists OFF and tile values with distinct hashes",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.campaignHelperDefenceLeash == 0);
+    REQUIRE(defaults.force.campaignHelperDefenceLeash == 14);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-defence-leash-test.ini";
     std::map<std::string, int> hashes;
-    for (const int tiles : {0, 6, 10, 30}) {
+    for (const int tiles : {0, 6, 10, 14, 30}) {
         {
             std::ofstream ini(path);
             ini << "[Force Concentration]\nCampaignHelperDefenceLeash=" << tiles << '\n';
@@ -2792,7 +2792,7 @@ TEST_CASE("Campaign helper beeline persists OFF and ON with distinct hashes",
 TEST_CASE("Campaign helper opening refineries persists OFF and every level with distinct hashes",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.campaignHelperOpeningRefineries == 0);
+    REQUIRE(defaults.force.campaignHelperOpeningRefineries == 6);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-opening-refineries-test.ini";
     std::map<std::string, int> hashes;
     for (const int refineries : {0, 1, 2, 3, 4, 5, 6, 7, 8}) {
@@ -2826,7 +2826,7 @@ TEST_CASE("Campaign helper opening refineries persists OFF and every level with 
 TEST_CASE("Campaign helper refinery goal persists OFF and every level with distinct hashes",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.campaignHelperRefineryGoal == 0);
+    REQUIRE(defaults.force.campaignHelperRefineryGoal == 8);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-refinery-goal-test.ini";
     std::map<std::string, int> hashes;
     for (const int refineries : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
@@ -2860,7 +2860,7 @@ TEST_CASE("Campaign helper refinery goal persists OFF and every level with disti
 TEST_CASE("Campaign helper carryall ratio persists OFF and every level with distinct hashes",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.campaignHelperCarryallRatio == 0);
+    REQUIRE(defaults.force.campaignHelperCarryallRatio == 2);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-carryall-ratio-test.ini";
     std::map<std::string, int> hashes;
     for (const int ratio : {0, 1, 2, 3, 4, 5, 6}) {
@@ -3721,7 +3721,7 @@ TEST_CASE("Combat priority levels and strict focus use stable HP and id order", 
 TEST_CASE("Campaign helper factory concrete persists OFF and ON with distinct hashes",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignHelperFactoryConcrete);
+    REQUIRE(defaults.force.campaignHelperFactoryConcrete);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-factory-concrete-test.ini";
     std::map<std::string, bool> hashes;
     for (const bool enabled : {false, true}) {

@@ -500,6 +500,22 @@ CampaignSizedWorkerRescue=0
 # price (or cash is above 2,500): the Starport supplies the early army. Hashed; OFF builds the
 # Heavy Factory as soon as it is chosen. City campaigns are unchanged.
 CampaignHelperFactoryLast=1
+# Campaign support troops that are not out with an attack wave do not chase a target, or answer a
+# ground contact, more than this many tiles from the nearest building the house owns; they return
+# to their assembly point. 0=OFF. Hashed.
+CampaignHelperDefenceLeash=14
+# Campaign support lays no concrete, except under Light and Heavy Factories, the High-Tech Factory,
+# WOR and Barracks (CampaignHelperFactoryConcrete): a producer on bare rock starts at half health
+# and builds at half speed. Hashed; OFF lays concrete under every building.
+CampaignHelperNoConcrete=1
+CampaignHelperFactoryConcrete=1
+# Campaign support with a Starport available builds this many refineries before the Starport, and
+# grows to the refinery goal once its Repair Yard stands, both bounded by the map's spice; it
+# plans 1.75 harvesters per refinery and keeps one carryall per CarryallRatio harvesters.
+# 0=OFF for each. Hashed.
+CampaignHelperOpeningRefineries=6
+CampaignHelperRefineryGoal=8
+CampaignHelperCarryallRatio=2
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

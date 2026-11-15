@@ -488,7 +488,7 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         && pass.itemCount[Structure_Refinery] > 0
         && pass.itemCount[Structure_LightFactory] == 0 && pass.itemCount[Structure_HeavyFactory] == 0
         && pass.itemCount[Structure_Barracks] == 0 && pass.itemCount[Structure_WOR] == 0
-        // CampaignHelperOpeningRefineries (default off): the opening refineries come first.
+        // CampaignHelperOpeningRefineries (default 6): the opening refineries come first.
         && !(pass.campaignHelperOpeningRefineries > 0 && getHouse()->getNumItems(Structure_StarPort) == 0
             && pass.itemCount[Structure_Refinery] < pass.campaignHelperOpeningRefineries)) {
         const int house = getHouse()->getHouseID();
@@ -1392,7 +1392,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
         && getHouse()->getTechLevel() >= data[Structure_StarPort][houseID].techLevel) {
         Uint32 step = NONE_ID;
         if (getHouse()->getNumItems(Structure_StarPort) == 0) {
-            // CampaignHelperOpeningRefineries (default off): its bounded goal replaces the four.
+            // CampaignHelperOpeningRefineries (default 6): its bounded goal replaces the four.
             const int refineryGoal = pass.campaignHelperOpeningRefineries > 0 ? pass.campaignHelperOpeningRefineries
                 : QuantBotBuildPolicy::supplierRefineryGoal(
                     std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
@@ -1470,7 +1470,7 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
             step = prerequisite;
         }
     }
-    // CampaignHelperRefineryGoal (default off): with its Repair Yard standing (or none it can
+    // CampaignHelperRefineryGoal (default 8): with its Repair Yard standing (or none it can
     // build) the support house adds refineries up to the goal, back to back as cash allows, ahead
     // of optional structures and its first Heavy Factory. Without a site the yard runs on.
     if (pass.campaignHelperRefineryGoal > 0
@@ -3038,7 +3038,7 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         bool needsConcreteExpansion = getGameInitSettings().getGameOptions().concreteRequired
             && QuantBotBuildPolicy::foundationRequiredForItem(yardTurn.itemID);
 
-        // CampaignHelperNoConcrete (default off): that support house never lays a slab.
+        // CampaignHelperNoConcrete (default on): that support house never lays a slab.
         if (needsConcreteExpansion && !campaignHelperNoConcrete()
             && campaignAvailableToBuild(turn.pBuilder,Structure_Slab1)) {
             Coord slabLocation = findSlabPlaceLocation(Structure_Slab1);

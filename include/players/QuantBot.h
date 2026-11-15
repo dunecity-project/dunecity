@@ -2034,7 +2034,7 @@ private:
     bool openingWorkersNeeded(BuildPass& pass);
     int harvesterInvestmentReserve(BuildPass& pass);
     bool campaignEconomySupport() const;
-    /// CampaignHelperNoConcrete (default off) applies: the switch is read first, so with it off
+    /// CampaignHelperNoConcrete (default on) applies: the switch is read first, so with it off
     /// nothing else is evaluated. This house then orders no slab and plans no foundation.
     bool campaignHelperNoConcrete() const;
     /// The same for one building: false for a production building while

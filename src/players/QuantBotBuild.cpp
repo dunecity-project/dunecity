@@ -70,7 +70,7 @@ bool QuantBot::campaignHelperNoConcrete() const {
 }
 
 bool QuantBot::campaignHelperNoConcrete(Uint32 item) const {
-    // CampaignHelperFactoryConcrete (default off): production buildings keep their foundation.
+    // CampaignHelperFactoryConcrete (default on): production buildings keep their foundation.
     // On bare rock a building starts at half health and BuilderBase builds at its health
     // fraction, so a factory without concrete produces at half speed until it is repaired.
     return campaignHelperNoConcrete() && !(botConfig().force.campaignHelperFactoryConcrete
@@ -1710,7 +1710,7 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
         pass.fleetRefineryTarget = targets.refineries;
         pass.repairBaseline = pass.repairTarget = targets.repairYards;
     }
-    // CampaignHelperRefineryGoal (default off): once its Repair Yard stands (or it cannot have one)
+    // CampaignHelperRefineryGoal (default 8): once its Repair Yard stands (or it cannot have one)
     // the support house plans 1.75 harvesters per built refinery bay (rounded up) where the
     // throughput rule plans 1.5, still within harvesterLimit (map spice / 2,000, the allied Brutal
     // 20, any lobby ceiling). Fleet ratios keep their own targets.
@@ -3462,7 +3462,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     // refineries (chooseYardCoreEconomy); the switch is tested before anything is called.
     pass.campaignHelperEarlyStarport = helperForce.campaignHelperEarlyStarport > 0 && campaignEconomySupport()
         ? helperForce.campaignHelperEarlyStarport : 0;
-    // CampaignHelperOpeningRefineries (default off): the support house's opening refinery goal
+    // CampaignHelperOpeningRefineries (default 6): the support house's opening refinery goal
     // before its Starport (chooseYardCoreEconomy), bounded as the default four are, by the map's
     // spice and fleet ratios; zero where the Starport ladder cannot run. Switch first.
     if (helperForce.campaignHelperOpeningRefineries > 0 && campaignEconomySupport()
@@ -3472,7 +3472,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         pass.campaignHelperOpeningRefineries = QuantBotBuildPolicy::supplierRefineryGoal(
             std::min(helperForce.campaignHelperOpeningRefineries, pass.mapSpiceHarvesterTarget),
             pass.fleetRatios, pass.fleetRefineryTarget);
-    // CampaignHelperRefineryGoal (default off): the support house's refinery total once its Repair
+    // CampaignHelperRefineryGoal (default 8): the support house's refinery total once its Repair
     // Yard stands or it cannot build one, with the same bounds. Switch first.
     if (helperForce.campaignHelperRefineryGoal > 0 && campaignEconomySupport()
         && getHouse()->getNumItems(Structure_ConstructionYard) > 0
@@ -3482,7 +3482,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         pass.campaignHelperRefineryGoal = QuantBotBuildPolicy::supplierRefineryGoal(
             std::min(helperForce.campaignHelperRefineryGoal, pass.mapSpiceHarvesterTarget),
             pass.fleetRatios, pass.fleetRefineryTarget);
-    // CampaignHelperCarryallRatio (default off): one harvesting carryall per that many harvesters,
+    // CampaignHelperCarryallRatio (default 2): one harvesting carryall per that many harvesters,
     // owned or queued, rounded up (buildStarPort, buildHighTechFactory). Switch first.
     if (helperForce.campaignHelperCarryallRatio > 0 && campaignEconomySupport()) {
         const int ratio = helperForce.campaignHelperCarryallRatio;
@@ -3530,7 +3530,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         && pass.starportMarketAvailable
         && data[Structure_StarPort][houseID].enabled
         && data[Structure_StarPort][houseID].techLevel <= getHouse()->getTechLevel()) {
-        // CampaignHelperOpeningRefineries (default off): the same goal the ladder walks.
+        // CampaignHelperOpeningRefineries (default 6): the same goal the ladder walks.
         const int refineryGoal = pass.campaignHelperOpeningRefineries > 0 ? pass.campaignHelperOpeningRefineries
             : QuantBotBuildPolicy::supplierRefineryGoal(
                 std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
@@ -3769,7 +3769,7 @@ int QuantBot::purchasePrice(const BuilderBase* builder, Uint32 item) {
 // An incomplete plan defers the building; it never places it bare.
 QuantBotFoundationPolicy::Plan QuantBot::foundationPlan(const BuilderBase* builder, Uint32 item, Coord site, const std::vector<Uint32>& clearedZones) {
     QuantBotFoundationPolicy::Plan plan;
-    // CampaignHelperNoConcrete (default off): that support house plans no foundation at all,
+    // CampaignHelperNoConcrete (default on): that support house plans no foundation at all,
     // so every building is ordered and placed directly on bare rock.
     if (!getGameInitSettings().getGameOptions().concreteRequired || campaignHelperNoConcrete(item)
         || !QuantBotBuildPolicy::foundationRequiredForItem(item) || !site.isValid()) {
@@ -3952,7 +3952,7 @@ int QuantBot::buildingCapitalCost(BuildPass& pass, Uint32 item) {
     const Coord size=getStructureSize(item);
     const int power=pass.citySimEnabled || pass.powerRules ? std::max(0,data[item][houseID].power) : 0;
     // Without concrete there is no foundation to budget for.
-    // CampaignHelperNoConcrete (default off): nor for a support house that never lays any.
+    // CampaignHelperNoConcrete (default on): nor for a support house that never lays any.
     const int foundation=getGameInitSettings().getGameOptions().concreteRequired && !campaignHelperNoConcrete(item)
         ? size.x*size.y*data[Structure_Slab1][houseID].price : 0;
     return data[item][houseID].price + foundation

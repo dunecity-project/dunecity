@@ -397,7 +397,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && (trueFieldThreat || structure->isVisible(getHouse()->getTeamID()))
             && blockDistance(contact,structure->getLocation())<=8) threatValue+=value(structure);
     }
-    // CampaignHelperDefenceLeash (default 0): a support house's home troops do not answer a
+    // CampaignHelperDefenceLeash (default 14): a support house's home troops do not answer a
     // ground contact standing beyond the leash; its wave (Hunt) troops still may.
     const bool leashedContact = botConfig().force.campaignHelperDefenceLeash > 0 && campaignEconomySupport()
         && !intruder->isAFlyingUnit()
@@ -4443,7 +4443,7 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
     const Coord frontPost = botConfig().force.campaignHelperFrontPost > 0 && unit->getAttackMode()!=RETREAT
         ? campaignHelperFrontPost() : Coord::Invalid();
     if (frontPost.isValid()) regroup = frontPost;
-    // CampaignHelperDefenceLeash (default 0): a centroid beyond the leash (troops out with a
+    // CampaignHelperDefenceLeash (default 14): a centroid beyond the leash (troops out with a
     // wave pull it into the field) is no regroup point; the leash would only send them back.
     else if (botConfig().force.campaignHelperDefenceLeash > 0 && campaignEconomySupport()
         && unit->getAttackMode()!=RETREAT && regroup.isValid()

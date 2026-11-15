@@ -417,10 +417,11 @@ struct QuantBotConfig {
         int campaignHelperEarlyUnload;
         /// Classic campaign support never orders concrete (no Slab1/Slab4, no bulk-slab yard
         /// upgrade) and places its buildings on bare rock. Enemies are unchanged.
+        /// Default on.
         bool campaignHelperNoConcrete;
         /// With CampaignHelperNoConcrete on, Light and Heavy Factories, the High-Tech Factory,
         /// WOR and Barracks still get their foundation: a building on bare rock starts at half
-        /// health and a producer builds at its health fraction. Hashed; default off.
+        /// health and a producer builds at its health fraction. Hashed; default on.
         bool campaignHelperFactoryConcrete;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
@@ -435,6 +436,7 @@ struct QuantBotConfig {
         /// this many tiles from the nearest live building the house owns: the target is dropped,
         /// any defence assignment ends and the troop walks back to its regroup anchor. Shots at
         /// anything inside weapon range stay allowed; sandworms are never pursued. 0=OFF, 0..30.
+        /// Default 14.
         int campaignHelperDefenceLeash;
         /// Classic campaign support with a Repair Yard regroups its idle ground troops on rock or
         /// concrete this many tiles from the Repair Yard towards where the enemy comes from (at
@@ -464,14 +466,17 @@ struct QuantBotConfig {
         /// Classic campaign support's Starport opening ladder orders this many refineries before
         /// the Starport instead of four, back to back as cash allows: 0=OFF, 1..8. Still bounded
         /// by the map's spice (mapSpiceHarvesterTarget), fleet ratios and placement.
+        /// Default 6.
         int campaignHelperOpeningRefineries;
         /// Classic campaign support with its Repair Yard built (or none it can build) adds
         /// refineries up to this total ahead of optional structures and its first Heavy Factory,
         /// and plans at least 1.75 harvesters per refinery: 0=OFF, 1..10. Same spice bound.
+        /// Default 8.
         int campaignHelperRefineryGoal;
         /// Classic campaign support keeps at least one harvesting carryall per this many
         /// harvesters (rounded up), from its Starport, else a High-Tech Factory; one on order
         /// at a time until a Repair Yard stands: 0=OFF, 1..6. Army transport is unchanged.
+        /// Default 2.
         int campaignHelperCarryallRatio;
         /// Classic campaign support with one Construction Yard, its Repair Yard and refinery goal
         /// met, buys one MCV through the Starport (never if it ever received one) when a yard

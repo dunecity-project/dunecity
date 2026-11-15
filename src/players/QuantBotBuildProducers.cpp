@@ -666,7 +666,7 @@ bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {
     // An optional concrete unlock must not own a cash-poor campaign yard's
     // turn. Keep founding with single slabs while income/power recover.
     if (!campaignYardUpgradeReady(pass, turn.pBuilder)) return false;
-    // CampaignHelperNoConcrete (default off): a support house that lays no slab needs no
+    // CampaignHelperNoConcrete (default on): a support house that lays no slab needs no
     // bulk-slab upgrade, so the upgrade never owns its yard's turn.
     if (campaignHelperNoConcrete()) return false;
     // Bulk concrete comes before anything optional this yard could
@@ -1492,7 +1492,7 @@ void QuantBot::buildHighTechFactory(BuildPass& pass, BuilderTurn& turn) {
     air.carryallPrice = carryallPrice;
     air.carryalls = pass.itemCount[Unit_Carryall];
     air.carryallTarget = pass.vanillaBoomArmy ? std::min(1, pass.transportTarget) : pass.transportTarget;
-    // CampaignHelperCarryallRatio (default off): the support house's harvesting carryalls come from
+    // CampaignHelperCarryallRatio (default 2): the support house's harvesting carryalls come from
     // here only while it has no Starport or its Starport has none in stock; one on order at a time
     // until a Repair Yard stands.
     if (pass.campaignHelperCarryallTarget > 0
@@ -1959,7 +1959,7 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             getHouse()->getNumItems(Structure_RepairYard));
         if (pass.itemCount[Unit_Carryall] == 0 && transportUseful)
             buyEconomicImport(Unit_Carryall, "first_economic_transport");
-        // CampaignHelperCarryallRatio (default off): harvesting carryalls up to the support house's
+        // CampaignHelperCarryallRatio (default 2): harvesting carryalls up to the support house's
         // ratio, before further worker imports; one on order at a time until a Repair Yard stands.
         while (pass.campaignHelperCarryallTarget > 0
             && pass.itemCount[Unit_Carryall] < pass.campaignHelperCarryallTarget
