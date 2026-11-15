@@ -228,6 +228,13 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if (pass.campaignHelperImportCap
         && ((itemID == Unit_Harvester && pass.itemCount[Unit_Harvester] >= 6)
             || (itemID == Unit_Carryall && pass.itemCount[Unit_Carryall] >= 2))) return false;
+    // CampaignHelperBeeline (default off): while the opening ladder is unfinished every order
+    // from any producer is refused unless the ladder admits it. Slabs are admitted only as the
+    // foundation of an admitted building (its selector or queueFoundedStructure vetted it).
+    if (pass.campaignHelperBeeline
+        && !((itemID == Structure_Slab1 || itemID == Structure_Slab4)
+            && rule && std::string_view(rule) == "building_foundation")
+        && !campaignHelperBeelineAdmits(pass, itemID)) return false;
     // The experimental arms affect only the human helper; opponents retain
     // their normal policy, so this measures the helper's power investment.
     if (botConfig().force.campaignPowerExperiment > 0 && campaignPolicyApplies()
@@ -572,6 +579,8 @@ bool QuantBot::campaignYardUpgradeReady(BuildPass& pass, const BuilderBase* buil
 }
 
 bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine) {
+    // CampaignHelperBeeline (default off): no upgrade the opening ladder does not need.
+    if (pass.campaignHelperBeeline && !campaignHelperBeelineAdmitsUpgrade(pass, turn.pBuilder)) return false;
     if (!vanillaBoomUpgradeAdmitted(pass, turn.pBuilder)) return false;
     const int price=turn.pBuilder->getUpgradeCost();
     if (!campaignYardUpgradeReady(pass, turn.pBuilder)) return false;
@@ -597,6 +606,8 @@ bool QuantBot::upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int source
 // the standard construction selection below. Give them the same
 // founded queue and per-yard site reservation.
 bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 item, int sourceLine, const char* rule) {
+    // CampaignHelperBeeline (default off): refuse before any foundation slab is ordered.
+    if (pass.campaignHelperBeeline && !campaignHelperBeelineAdmits(pass, item)) return false;
     if (turn.pBuilder->getItemID()!=Structure_ConstructionYard
         || turn.pBuilder->isUpgrading() || turn.pBuilder->getProductionQueueSize()!=0
         || !vanillaBoomAdmits(pass, item)

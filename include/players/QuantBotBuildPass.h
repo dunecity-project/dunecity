@@ -277,6 +277,11 @@ struct QuantBot::BuildPass {
     // CampaignHelperEarlyStarport: support house's refineries before its Starport (0 = off or
     // out of scope); the remaining opening refineries follow the port, before the Repair Yard.
     int campaignHelperEarlyStarport{};
+    // CampaignHelperBeeline: support house whose opening ladder is unfinished. Only this goal
+    // (next refinery, the Starport or the Repair Yard), its missing prerequisites and the
+    // switch's exceptions are bought; NONE_ID whenever the flag is false.
+    bool campaignHelperBeeline{};
+    Uint32 campaignHelperBeelineGoal = NONE_ID;
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
     bool vanillaFfaLargeScope{};

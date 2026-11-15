@@ -434,6 +434,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperFocusFire = false;
     force.campaignHelperCounterAttack = 0;
     force.campaignHelperSingleTarget = false;
+    force.campaignHelperBeeline = false;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
@@ -906,6 +907,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignHelperFocusFire", force.campaignHelperFocusFire);
         iniFile.setIntValue("Force Concentration", "CampaignHelperCounterAttack", force.campaignHelperCounterAttack);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperSingleTarget", force.campaignHelperSingleTarget);
+        iniFile.setBoolValue("Force Concentration", "CampaignHelperBeeline", force.campaignHelperBeeline);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1228,6 +1230,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignHelperCounterAttack = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperCounterAttack", force.campaignHelperCounterAttack), 0, 100);
     force.campaignHelperSingleTarget = iniFile.getBoolValue("Force Concentration", "CampaignHelperSingleTarget", force.campaignHelperSingleTarget);
+    force.campaignHelperBeeline = iniFile.getBoolValue("Force Concentration", "CampaignHelperBeeline", force.campaignHelperBeeline);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1890,6 +1893,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHelperFocusFire", force.campaignHelperFocusFire);
     addNamed("campaignHelperCounterAttack", force.campaignHelperCounterAttack);
     addNamed("campaignHelperSingleTarget", force.campaignHelperSingleTarget);
+    addNamed("campaignHelperBeeline", force.campaignHelperBeeline);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);

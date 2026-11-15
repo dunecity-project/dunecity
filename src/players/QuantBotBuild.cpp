@@ -28,6 +28,32 @@
 
 using QuantBotInternal::rocketCoverageTier;
 
+namespace {
+// CampaignHelperBeeline: visit the goal and every structure it still lacks, at any depth,
+// each once; true at the first visit that returns true.
+template <typename Visit>
+bool anyBeelineStep(const House* house, Uint32 goal, Visit visit) {
+    if (goal == NONE_ID || goal > Uint32(Structure_LastID)) return false;
+    const auto& data = currentGame->objectData.data;
+    const int houseID = house->getHouseID();
+    std::array<bool, Structure_LastID + 1> seen{};
+    std::array<Uint32, Structure_LastID + 1> open{};
+    size_t count = 0;
+    seen[goal] = true;
+    open[count++] = goal;
+    while (count > 0) {
+        const Uint32 step = open[--count];
+        if (visit(step)) return true;
+        for (int i = Structure_FirstID; i <= Structure_LastID; ++i)
+            if (!seen[i] && data[step][houseID].prerequisiteStructuresSet[i] && house->getNumItems(i) == 0) {
+                seen[i] = true;
+                open[count++] = Uint32(i);
+            }
+    }
+    return false;
+}
+}
+
 int QuantBot::recentFactoryLossCount() const {
     return std::count_if(recentStructureLosses.begin(), recentStructureLosses.end(), [&](const auto& loss) {
         return loss.item == Structure_HeavyFactory && getGameCycleCount()-loss.cycle < MILLI2CYCLES(120000);
@@ -41,6 +67,23 @@ bool QuantBot::campaignEconomySupport() const {
 
 bool QuantBot::campaignHelperNoConcrete() const {
     return botConfig().force.campaignHelperNoConcrete && campaignEconomySupport();
+}
+
+bool QuantBot::campaignHelperBeelineAdmits(const BuildPass& pass, Uint32 item) const {
+    // The switch's exceptions: a harvester while fewer than two exist, alive or committed,
+    // and the one windtrap needed to place anything.
+    if (item == Unit_Harvester) return pass.actualHarvesters < 2 && pass.itemCount[Unit_Harvester] < 2;
+    if (item == Structure_WindTrap && pass.itemCount[Structure_WindTrap] == 0) return true;
+    return anyBeelineStep(getHouse(), pass.campaignHelperBeelineGoal, [&](Uint32 step) { return step == item; });
+}
+
+bool QuantBot::campaignHelperBeelineAdmitsUpgrade(const BuildPass& pass, const BuilderBase* builder) const {
+    const int houseID = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    return anyBeelineStep(getHouse(), pass.campaignHelperBeelineGoal, [&](Uint32 step) {
+        return data[step][houseID].builder == int(builder->getItemID())
+            && data[step][houseID].upgradeLevel > builder->getCurrentUpgradeLevel();
+    });
 }
 
 int QuantBot::campaignRefineryReplacementCost(BuildPass& pass) {
@@ -3401,6 +3444,52 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
     // refineries (chooseYardCoreEconomy); the switch is tested before anything is called.
     pass.campaignHelperEarlyStarport = helperForce.campaignHelperEarlyStarport > 0 && campaignEconomySupport()
         ? helperForce.campaignHelperEarlyStarport : 0;
+    // CampaignHelperBeeline (default off): until the support house's opening ladder is done it
+    // buys only the ladder's next step (chooseYardCoreEconomy): the opening refineries, then the
+    // Starport, then the Repair Yard, each with its missing prerequisites. Only houses whose yard
+    // runs that ladder (buildCustomYard) are in scope. A Repair Yard built, lost, or finished and
+    // waiting to be placed ends it, as does one the house cannot build. The switch is the first
+    // operand; with it off nothing below is called.
+    if (helperForce.campaignHelperBeeline && campaignEconomySupport()
+        && (gameMode != GameMode::Campaign || difficulty == Difficulty::Brutal)
+        && getHouse()->getNumItems(Structure_ConstructionYard) > 0
+        && getHouse()->getNumItems(Structure_RepairYard) == 0
+        && getHouse()->getNumLostItems(Structure_RepairYard) == 0
+        && pass.starportMarketAvailable
+        && data[Structure_StarPort][houseID].enabled
+        && data[Structure_StarPort][houseID].techLevel <= getHouse()->getTechLevel()) {
+        const int refineryGoal = QuantBotBuildPolicy::supplierRefineryGoal(
+            std::min(QuantBotBuildPolicy::kOpeningSupplierRefineries, pass.mapSpiceHarvesterTarget),
+            pass.fleetRatios, pass.fleetRefineryTarget);
+        const int portRefineries = pass.campaignHelperEarlyStarport > 0
+            ? std::min(pass.campaignHelperEarlyStarport, refineryGoal) : refineryGoal;
+        Uint32 goal = NONE_ID;
+        if (getHouse()->getNumItems(Structure_StarPort) == 0) {
+            const bool campaignFactory = helperForce.campaignFactoryBeforeStarport && lastCalculatedSpice > 0
+                && pass.itemCount[Structure_LightFactory] == 0 && pass.itemCount[Structure_HeavyFactory] == 0
+                && data[Structure_LightFactory][houseID].enabled
+                && data[Structure_LightFactory][houseID].techLevel <= getHouse()->getTechLevel();
+            goal = pass.itemCount[Structure_Refinery] < portRefineries ? Structure_Refinery
+                : campaignFactory ? Structure_LightFactory : Structure_StarPort;
+        } else if (pass.campaignHelperEarlyStarport > 0 && pass.itemCount[Structure_Refinery] < refineryGoal) {
+            goal = Structure_Refinery;
+        } else if ((pass.itemCount[Structure_RepairYard] > 0 || repairYardAdmitted(pass))
+            && data[Structure_RepairYard][houseID].enabled
+            && data[Structure_RepairYard][houseID].techLevel <= getHouse()->getTechLevel()) {
+            // A queued Repair Yard (counted by repairYardAdmitted) stays the goal until it is paid.
+            bool repairPaid = false;
+            for (const auto* structure : getStructureList())
+                if (structure->getOwner() == getHouse() && structure->getItemID() == Structure_ConstructionYard
+                    && static_cast<const ConstructionYard*>(structure)->isWaitingToPlace()
+                    && static_cast<const ConstructionYard*>(structure)->getCurrentProducedItem() == Structure_RepairYard) {
+                    repairPaid = true;
+                    break;
+                }
+            if (!repairPaid) goal = Structure_RepairYard;
+        }
+        pass.campaignHelperBeelineGoal = goal;
+        pass.campaignHelperBeeline = goal != NONE_ID;
+    }
     pass.vanillaFfaThreatProduction = vanillaFfaThreatPolicy && vanillaFfaGrowth
         && groundEconomyThreat && ownGroundArmyValue()
             < ForceConcentrationPolicy::scaledReadiness(houseAttackThreshold(), openingReadinessPercent());
@@ -5648,6 +5737,13 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
             pass.capitalChoice = choice;
             pass.cityGrowthProtected = DuneCity::isCityZoneStructure(pass.capitalCandidates[choice].item);
         }
+    }
+    // CampaignHelperBeeline (default off): a capital choice off the opening ladder neither owns
+    // a producer nor withholds the yard's cash while the ladder is unfinished.
+    if (pass.campaignHelperBeeline && pass.capitalChoice >= 0
+        && !campaignHelperBeelineAdmits(pass, pass.capitalCandidates[pass.capitalChoice].item)) {
+        pass.capitalChoice = -1;
+        pass.protectionCapital = pass.cityGrowthProtected = false;
     }
     pass.capitalConsumed = false;
     pass.capitalOrderedCost = 0;

@@ -2037,6 +2037,13 @@ private:
     /// CampaignHelperNoConcrete (default off) applies: the switch is read first, so with it off
     /// nothing else is evaluated. This house then orders no slab and plans no foundation.
     bool campaignHelperNoConcrete() const;
+    /// CampaignHelperBeeline: whether the unfinished opening ladder admits this purchase (its goal,
+    /// a missing prerequisite at any depth, the first windtrap, or a harvester while fewer than two
+    /// exist). Callers test pass.campaignHelperBeeline first.
+    bool campaignHelperBeelineAdmits(const BuildPass& pass, Uint32 item) const;
+    /// CampaignHelperBeeline: a builder upgrade is admitted only when the goal or one of its missing
+    /// prerequisites needs that builder's next level. Callers test pass.campaignHelperBeeline first.
+    bool campaignHelperBeelineAdmitsUpgrade(const BuildPass& pass, const BuilderBase* builder) const;
     int campaignRefineryReplacementCost(BuildPass& pass);
     bool needsFirstTransport(BuildPass& pass);
     static int initialCityPopulation(Uint32 item);
@@ -2143,6 +2150,8 @@ private:
     void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Core protection, power reserve, reactor and production recovery.
     void chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// CampaignHelperBeeline: the opening ladder's next step owns the yard, saving for it if short.
+    void chooseYardHelperBeeline(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// City opening refineries, zones, vehicle factory and first transport.
     void chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Crime services, refineries and repair support.

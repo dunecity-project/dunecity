@@ -2762,6 +2762,33 @@ TEST_CASE("Campaign helper single target persists OFF and ON with distinct hashe
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign helper beeline persists OFF and ON with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperBeeline);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-beeline-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperBeeline=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperBeeline == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperBeeline = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperBeeline == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign helper rock hold persists OFF and every level with distinct hashes",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;

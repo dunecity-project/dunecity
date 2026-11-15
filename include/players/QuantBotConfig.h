@@ -450,6 +450,13 @@ struct QuantBotConfig {
         /// ID on ties. Wave objectives prefer it and hunters on another house's building are sent
         /// to its nearest building, at most once per 5 game seconds per unit. Default off.
         bool campaignHelperSingleTarget;
+        /// Classic campaign support with a Construction Yard follows its Starport opening ladder
+        /// and buys nothing else until the ladder is done: the remaining opening refineries, the
+        /// Starport and then the Repair Yard, each with its missing prerequisites. Until a Repair
+        /// Yard is built or finished waiting to place (or cannot be built) it orders no unit, no
+        /// turret, wall, concrete, optional structure, extra windtrap or unrelated upgrade; a
+        /// harvester only while fewer than two exist. Repairs and the army are unaffected. Default off.
+        bool campaignHelperBeeline;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

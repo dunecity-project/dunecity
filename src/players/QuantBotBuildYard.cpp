@@ -296,6 +296,9 @@ bool QuantBot::buildCampaignYard(BuildPass& pass, BuilderTurn& turn, YardTurn& y
 
 bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     startYardSelection(pass, turn, yardTurn);
+    // CampaignHelperBeeline (default off): the opening ladder's next step owns this yard; every
+    // later selector is skipped and vetYardChoice drops anything else.
+    if (pass.campaignHelperBeeline) chooseYardHelperBeeline(pass, turn, yardTurn);
     Uint32 admittedItem = NONE_ID;
     auto releaseUnfundedChoice = [&]() {
         const Uint32 item = yardTurn.itemID;
@@ -1463,6 +1466,59 @@ void QuantBot::chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTur
     }
 }
 
+void QuantBot::chooseYardHelperBeeline(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    const int house = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data;
+    // Replaces whatever startYardSelection chose (silo, capital); nothing else may use the yard.
+    yardTurn.itemID = NONE_ID;
+    yardTurn.crimeServiceSite = Coord::Invalid();
+    yardTurn.serviceSavingHold = false;
+    yardTurn.skipRemainingStructureLogic = true;
+    yardTurn.structureRule = "helper_beeline_blocked";
+    if (turn.pBuilder->getProductionQueueSize() > 0 || turn.pBuilder->isUpgrading()) {
+        yardTurn.structureRule = "helper_beeline_busy";
+        return;
+    }
+    // The one windtrap needed to place anything comes first; then the ladder's goal, walking
+    // its missing prerequisites as chooseYardCoreEconomy does and stopping at a pending one.
+    Uint32 step = pass.itemCount[Structure_WindTrap] == 0
+        && campaignAvailableToBuild(turn.pBuilder, Structure_WindTrap)
+        ? Uint32(Structure_WindTrap) : pass.campaignHelperBeelineGoal;
+    for (int depth = 0; step != NONE_ID && depth < Structure_LastID; ++depth) {
+        if (pass.itemCount[step] > 0 && step != Structure_Refinery) {
+            yardTurn.structureRule = "helper_beeline_pending";
+            break;
+        }
+        if (campaignAvailableToBuild(turn.pBuilder, step)) {
+            if (findPlaceLocation(step).isValid()) {
+                const bool funded = pass.money >= buildingCapitalCost(pass, step);
+                yardTurn.itemID = funded ? step : NONE_ID;
+                yardTurn.serviceSavingHold = !funded;
+                yardTurn.structureRule = funded ? "helper_beeline" : "save_helper_beeline";
+            } else {
+                yardTurn.structureRule = "helper_beeline_no_site";
+            }
+            break;
+        }
+        Uint32 prerequisite = NONE_ID;
+        for (int item = Structure_FirstID; item <= Structure_LastID; ++item)
+            if (data[step][house].prerequisiteStructuresSet[item]
+                && getHouse()->getNumItems(item) == 0) { prerequisite = item; break; }
+        // Every prerequisite stands, so the step waits for this yard's next upgrade level.
+        if (prerequisite == NONE_ID && data[step][house].builder == int(turn.pBuilder->getItemID())
+            && data[step][house].upgradeLevel > turn.pBuilder->getCurrentUpgradeLevel()) {
+            yardTurn.structureRule = upgradeWithLogging(pass, turn, __LINE__)
+                ? "helper_beeline_upgrade" : "save_helper_beeline_upgrade";
+            break;
+        }
+        step = prerequisite;
+    }
+    if (pass.emitStatsLog && AITelemetry::log().enabled())
+        traceDecision("helper_beeline", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+            .set("goal", pass.campaignHelperBeelineGoal).set("step", step).set("item", yardTurn.itemID)
+            .set("rule", yardTurn.structureRule).set("spendable", pass.money));
+}
+
 void QuantBot::chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     int houseID = getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
@@ -2541,7 +2597,7 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     // Native measurements show long raw shortages in Vanilla (building decay),
     // and shorter city blackouts. Size anticipation from the actual next chosen
     // consumer, plus demand already committed by every yard; never invent growth.
-    if (botConfig().force.powerLeadBuildings>0 && lastCalculatedSpice>0
+    if (!pass.campaignHelperBeeline && botConfig().force.powerLeadBuildings>0 && lastCalculatedSpice>0
         && yardTurn.itemID!=NONE_ID && data[yardTurn.itemID][houseID].power>0
         && !powerGenerationPending(pass)
         && getHouse()->getProducedPower()<getHouse()->getPowerRequirement()
@@ -2554,7 +2610,7 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         yardTurn.structureRule="power_lead_buildings";
         yardTurn.crimeServiceSite=Coord::Invalid();
     }
-    if (yardTurn.itemID!=NONE_ID && yardTurn.itemID!=Structure_WindTrap
+    if (!pass.campaignHelperBeeline && yardTurn.itemID!=NONE_ID && yardTurn.itemID!=Structure_WindTrap
         && campaignPowerNeeded(pass, std::max(0,data[yardTurn.itemID][houseID].power))
         && campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)) {
         yardTurn.itemID=Structure_WindTrap; yardTurn.structureRule="campaign_planned_power";
@@ -2663,6 +2719,16 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && std::string_view(yardTurn.structureRule)!="early_rocket_cover") {
         yardTurn.itemID=NONE_ID;yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="funded_standing_battery_required";
+    }
+    // CampaignHelperBeeline (default off): while the opening ladder is unfinished no choice
+    // outside it is placed (the substitutions above are skipped, so its step is not replaced).
+    if (pass.campaignHelperBeeline && yardTurn.itemID != NONE_ID
+        && !campaignHelperBeelineAdmits(pass, yardTurn.itemID)) {
+        traceDecision("construction_rejected", AITelemetry::Record()
+            .set("builder", turn.pBuilder->getObjectID()).set("item", yardTurn.itemID)
+            .set("rule", yardTurn.structureRule).set("reason", "campaign_helper_beeline"));
+        yardTurn.itemID = NONE_ID;
+        yardTurn.crimeServiceSite = Coord::Invalid();
     }
     if (pass.emitStatsLog) logDebug("BUILD-CHOICE: CY=%u item=%u credits=%d skip=%d",
         turn.pBuilder->getObjectID(), yardTurn.itemID, pass.money, yardTurn.skipRemainingStructureLogic);
