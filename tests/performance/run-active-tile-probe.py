@@ -14,6 +14,8 @@ import sys
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
 from probe_profile import discard_profile_assets, scratch_dir  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -25,8 +27,8 @@ build = args.build_dir.resolve()
 
 def run(out):
     subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
-    target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-    lines = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+    target = NATIVE_TARGET
+    lines = native_build_commands(build)
     main = (root / 'src/main.cpp').read_text()
     needle = 'int menuResult = MainMenu().showMenu();'
     if main.count(needle) != 1:
@@ -34,7 +36,7 @@ def run(out):
     main = main.replace(needle, 'int menuResult = runActiveTileProbe();')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
     position = main.index('int main(')
-    main = main[:position] + '#include "' + str(root / 'tests/performance/active-tile-probe.inc') + '"\n' + main[position:]
+    main = main[:position] + NATIVE_INCLUDES + '#include "' + str(root / 'tests/performance/active-tile-probe.inc') + '"\n' + main[position:]
     source = out / 'active-tile-probe-main.cpp'
     source.write_text(main)
     cc = shlex.split(next(line for line in lines if ' -c ' in line and '/src/main.cpp' in line))
@@ -51,12 +53,7 @@ def run(out):
     cc[cc.index('-c') + 1] = str(source)
     cc.append('-DPROBE_MAP_PATH="' + str(root / 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini') + '"')
     cc.append('-fno-access-control')  # Reach the A* scratch pool to force a generation wrap.
-    app = out / 'active-tile-probe.app/Contents'
-    (app / 'MacOS').mkdir(parents=True, exist_ok=True)
-    resources = app / 'Resources'
-    if not resources.exists():
-        resources.symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    binary = app / 'MacOS/active-tile-probe'
+    binary = native_probe_binary(build, out, 'active-tile-probe')
     link = shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
     link = link[link.index('&&')+1:]
     link = link[:link.index('&&')]

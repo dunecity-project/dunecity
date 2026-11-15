@@ -1066,13 +1066,78 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --output-dir ${CMAKE_BINARY_DIR}/credit-storage-custom-${credit_mod}-probe)
             set_tests_properties(house_credit_storage_custom_${credit_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
+        dunecity_add_test(headless nightly NAME trooper_anti_air_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-aa-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-aa-probe)
+        set_tests_properties(trooper_anti_air_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        dunecity_add_test(headless nightly NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
+        set_tests_properties(carryall_flight_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+        # Real human/QuantBot repair decisions must book a free carryall, pick up, deliver to the
+        # bay and release fully repaired. No carryall (or a busy one) keeps the driving fallback.
+        # The QuantBot prefix deliberately includes this test in the AI/unit round gates.
+        dunecity_add_test(headless nightly NAME quantbot_carryall_repair COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-repair-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-repair-probe)
+        set_tests_properties(quantbot_carryall_repair PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        dunecity_add_test(headless nightly NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
+        set_tests_properties(stalled_carryall_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+        # Brutal only plans past its configured military value cap when the lobby
+        # selected an explicit unit-count override; the engine count limit stays
+        # the authority, and other difficulties keep the configured cap.
+        dunecity_add_test(headless nightly NAME brutal_unit_override_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-brutal-unit-override-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/brutal-unit-override-probe)
+        set_tests_properties(brutal_unit_override_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+        dunecity_add_test(headless nightly NAME active_tile_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
+        set_tests_properties(active_tile_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+        dunecity_add_test(headless nightly NAME tile_track_bounds_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-tile-track-bounds-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --phases current
+            --output-dir ${CMAKE_BINARY_DIR}/tile-track-bounds-probe)
+        set_tests_properties(tile_track_bounds_probe PROPERTIES TIMEOUT 180 PROCESSORS 2)
+        dunecity_add_test(headless nightly NAME body_angle_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
+        set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 PROCESSORS 2)
+        dunecity_add_test(headless nightly NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
+        set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+        dunecity_add_test(headless nightly NAME weapon_reload_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --weapon-reloads
+            --output-dir ${CMAKE_BINARY_DIR}/weapon-reload-probe)
+        set_tests_properties(weapon_reload_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+        # Projectile mechanics and combat traces (headless); the save continuation is GUI, below.
+        foreach(projectile_probe IN ITEMS mechanics combat)
+            if(projectile_probe STREQUAL "mechanics")
+                set(projectile_flag --projectiles)
+            else()
+                set(projectile_flag --projectile-${projectile_probe})
+            endif()
+            dunecity_add_test(headless nightly NAME projectile_${projectile_probe}_probe COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
+                --build-dir ${CMAKE_BINARY_DIR} ${projectile_flag}
+                --output-dir ${CMAKE_BINARY_DIR}/projectile-${projectile_probe}-probe)
+            if(projectile_probe STREQUAL "combat")
+                set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+            else()
+                set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+            endif()
+        endforeach()
     endif()
 endif()
 
-# macOS only: GUI probes (a real window and renderer; there is no Linux display host) and
-# headless probes whose harness still compiles and runs against bin/dunecity.app
-# (tests/units/run-*-probe.py, run-brutal-unit-override-probe.py, run-active-tile-probe.py,
-# the menu/skirmish probe fixtures and run-late-join-probe.py). The diagnostic mains link
+# macOS only: GUI probes (a real window and renderer; there is no Linux display host), the
+# menu/skirmish probe fixtures (they only prepare those GUI probes' binaries) and
+# native_multiplayer_join_modes (run-late-join-probe.py still links the macOS bundle and needs
+# a local PHP signalling service the Linux workers do not have). The diagnostic mains link
 # production menu objects; no test access ships in the app. docs/ai-scenario-matrix.md,
 # "Where the gates run".
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
@@ -1126,10 +1191,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-research-lab-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/research-lab-probe)
         set_tests_properties(research_lab_probe PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
-        dunecity_add_test(headless nightly LABELS "macos" NAME trooper_anti_air_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-aa-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-aa-probe)
-        set_tests_properties(trooper_anti_air_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
         # UI skins on the real menus and a real DuneCity game (Modern and the default Classic
         # Desert at 640x480 and Stefan's 1440x900 Medium): every screen rendered and linted, the
         # spectated end plate fits the map in every house colour, chat clears the city readouts,
@@ -1311,17 +1372,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/saves/run-save-roundtrip-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/save-roundtrip-probe)
         set_tests_properties(save_roundtrip_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        dunecity_add_test(headless nightly LABELS "macos" NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
-        set_tests_properties(carryall_flight_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        # Real human/QuantBot repair decisions must book a free carryall, pick up, deliver to the
-        # bay and release fully repaired. No carryall (or a busy one) keeps the driving fallback.
-        # The QuantBot prefix deliberately includes this test in the AI/unit round gates.
-        dunecity_add_test(headless nightly LABELS "macos" NAME quantbot_carryall_repair COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-repair-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-repair-probe)
-        set_tests_properties(quantbot_carryall_repair PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # A ground unit walled in on a real map really does stop moving, so the thirty-second
         # long-stall rescue can be measured against the engine instead of being simulated:
         # the clock survives a queued path request and a route cleared every cycle, and the
@@ -1335,10 +1385,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-city-aircraft-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-aircraft-probe)
         set_tests_properties(city_aircraft_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
-        dunecity_add_test(headless nightly LABELS "macos" NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
-        set_tests_properties(stalled_carryall_probe PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Real production objects and full saves: two independent refinery bays,
         # captured production blueprints, slow status and movement continuation.
         dunecity_add_test(gui nightly LABELS "macos" NAME tornie_object_state_roundtrip COMMAND ${Python3_EXECUTABLE}
@@ -1362,30 +1408,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-transport-containment-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/transport-containment-probe)
         set_tests_properties(transport_containment_probe PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
-        # Brutal only plans past its configured military value cap when the lobby
-        # selected an explicit unit-count override; the engine count limit stays
-        # the authority, and other difficulties keep the configured cap.
-        dunecity_add_test(headless nightly LABELS "macos" NAME brutal_unit_override_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/ai/run-brutal-unit-override-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/brutal-unit-override-probe)
-        set_tests_properties(brutal_unit_override_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
-        dunecity_add_test(headless nightly LABELS "macos" NAME active_tile_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
-        set_tests_properties(active_tile_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        dunecity_add_test(headless nightly LABELS "macos" NAME tile_track_bounds_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-tile-track-bounds-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --phases current
-            --output-dir ${CMAKE_BINARY_DIR}/tile-track-bounds-probe)
-        set_tests_properties(tile_track_bounds_probe PROPERTIES TIMEOUT 180 PROCESSORS 2)
-        dunecity_add_test(headless nightly LABELS "macos" NAME body_angle_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
-        set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 PROCESSORS 2)
-        dunecity_add_test(headless nightly LABELS "macos" NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
-        set_tests_properties(unit_speed_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # Formation movement (docs/formations.md): twelve mixed units through the real
         # right-click path with formations on and off, a hunting mid-march save/reload, 9854
         # and 9857 unit records, Combined arms with sonic tanks and scouts (sonic lanes never
@@ -1400,11 +1422,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --continuation
             --output-dir ${CMAKE_BINARY_DIR}/unit-route-continuation-probe)
         set_tests_properties(unit_route_continuation_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-        dunecity_add_test(headless nightly LABELS "macos" NAME weapon_reload_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --weapon-reloads
-            --output-dir ${CMAKE_BINARY_DIR}/weapon-reload-probe)
-        set_tests_properties(weapon_reload_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # Modern RTS controls on real units over real cycles: attack-move column, HOLD launcher
         # under fire, three-waypoint Shift queue, repeat production through the unit limit,
         # save round trip, the committed 9854 save, and a rendered waypoint/tooltip smoke frame.
@@ -1435,26 +1452,11 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --deviation-reward
             --output-dir ${CMAKE_BINARY_DIR}/deviation-reward-probe)
         set_tests_properties(deviation_reward_probe PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
-        foreach(projectile_probe IN ITEMS mechanics combat continuation)
-            set(projectile_capability headless)
-            if(projectile_probe STREQUAL "continuation")
-                set(projectile_capability gui)
-            endif()
-            if(projectile_probe STREQUAL "mechanics")
-                set(projectile_flag --projectiles)
-            else()
-                set(projectile_flag --projectile-${projectile_probe})
-            endif()
-            dunecity_add_test(${projectile_capability} nightly LABELS "macos" NAME projectile_${projectile_probe}_probe COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
-                --build-dir ${CMAKE_BINARY_DIR} ${projectile_flag}
-                --output-dir ${CMAKE_BINARY_DIR}/projectile-${projectile_probe}-probe)
-            if(projectile_probe STREQUAL "combat")
-                set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
-            else()
-                set_tests_properties(projectile_${projectile_probe}_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-            endif()
-        endforeach()
+        dunecity_add_test(gui nightly LABELS "macos" NAME projectile_continuation_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-unit-route-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --projectile-continuation
+            --output-dir ${CMAKE_BINARY_DIR}/projectile-continuation-probe)
+        set_tests_properties(projectile_continuation_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
             dunecity_add_test(gui nightly LABELS "macos" NAME quantbot_stats_${ai_mod} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --stats-probe --repeatable

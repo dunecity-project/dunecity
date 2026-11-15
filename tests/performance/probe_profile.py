@@ -243,6 +243,54 @@ def probe_binary(out):
     return out / 'balance-probe.app/Contents/MacOS/balance-probe'
 
 
+# The standalone diagnostic probes (tests/units/run-*-probe.py and friends) compile src/main.cpp
+# with a probe include and link it like the game target. These helpers keep that macOS/Linux
+# difference in one place: the target, its build commands, the extra libstdc++ include, and
+# where the linked binary must sit to find the game data.
+NATIVE_TARGET = 'bin/dunecity.app/Contents/MacOS/dunecity' if sys.platform == 'darwin' else 'bin/dunecity'
+
+
+def native_build_commands(build):
+    """The command lines that compile and link NATIVE_TARGET, as `ninja -t commands` prints them.
+    Linux links through a response file the build deletes, so there the compilation database's
+    expanded (-x) commands are used instead, as run-campaign-balance.py does."""
+    build = str(build)
+    if sys.platform == 'darwin':
+        return subprocess.check_output(['ninja', '-C', build, '-t', 'commands', NATIVE_TARGET],
+                                       text=True).splitlines()
+    return [entry['command'] for entry in json.loads(subprocess.check_output(
+        ['ninja', '-C', build, '-t', 'compdb', '-x'], text=True))]
+
+
+def native_probe_includes(root):
+    """Includes a probe main needs before its own .inc: libstdc++ (Linux) needs RobustList's
+    iterator traits declared first."""
+    return [] if sys.platform == 'darwin' else [Path(root) / 'tests/ai/robustlist-iterator-traits.inc']
+
+
+def native_probe_binary(build, out, name):
+    """Path to link a probe NAME to, private to OUT, from which the game finds the build's data.
+
+    macOS: an app bundle whose Resources is the build app's. Linux: OUT/NAME/bin/NAME, with
+    OUT/NAME/share/DuneCity the build's bin/ (the game's executable-relative data directory,
+    src/misc/FileSystem.cpp), so concurrent probes never write into the shared build tree."""
+    build, out = Path(build), Path(out)
+    if sys.platform == 'darwin':
+        app = out / f'{name}.app/Contents'
+        (app / 'MacOS').mkdir(parents=True, exist_ok=True)
+        resources = app / 'Resources'
+        if not resources.exists():
+            resources.symlink_to(build / 'bin/dunecity.app/Contents/Resources')
+        return app / 'MacOS' / name
+    prefix = out / name
+    (prefix / 'bin').mkdir(parents=True, exist_ok=True)
+    (prefix / 'share').mkdir(exist_ok=True)
+    data = prefix / 'share/DuneCity'
+    if not data.exists():
+        data.symlink_to(build.resolve() / 'bin', target_is_directory=True)
+    return prefix / 'bin' / name
+
+
 def _installed(name):
     """An installed agent-workspace module on managed hosts; None on CI and other machines."""
     helper = Path.home() / '.local/share/agent-workspace' / (name + '.py')
