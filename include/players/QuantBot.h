@@ -766,6 +766,37 @@ private:
     /// Orders \a unit to a free rock tile around \a anchor unless it already holds one or is
     /// walking to one. \a forced also drops its current target. Returns whether it ordered a move.
     bool holdOnCampaignRock(const UnitBase* unit, Coord anchor, int radius, int* orderBudget, bool forced);
+    /// Campaign helper tactics switches (CampaignHelperDefenceLeash, FrontPost, FocusFire,
+    /// CounterAttack, SingleTarget; QuantBotConfig.h). Every caller tests its switch and
+    /// campaignEconomySupport() first, so none of these runs while the switch is off.
+    /// Tiles from \a at to the nearest live building this house owns (INT_MAX with none).
+    int campaignHelperStructureDistance(Coord at) const;
+    /// DefenceLeash: where a leashed troop walks back to - the front post when set, else the
+    /// assembly anchor when that is inside the leash, else the base centre.
+    Coord campaignHelperLeashAnchor() const;
+    /// DefenceLeash: drops a chase beyond the leash and sends \a unit home. Returns whether it
+    /// gave an order (one from \a orderBudget).
+    bool campaignHelperLeash(const UnitBase* unit, int radius, int& orderBudget);
+    /// FrontPost: rock or concrete beside the Repair Yard facing the enemy, or invalid.
+    /// Computed once per game cycle; the cache is not game state and is never saved.
+    Coord campaignHelperFrontPost() const;
+    mutable Uint32 helperFrontPostCycle = std::numeric_limits<Uint32>::max();
+    mutable Coord helperFrontPost = Coord::Invalid();
+    /// FocusFire: 3 Deviator, 2 Sonic Tank, 1 Launcher, 0 anything else.
+    static int campaignHelperPriorityRank(Uint32 itemID);
+    /// FocusFire: the visible hostile priority unit ranked above \a aboveRank that \a unit can
+    /// attack within its weapon range + 4 tiles: highest rank, lowest health, lowest object ID.
+    const UnitBase* campaignHelperPriorityTarget(const UnitBase* unit, int aboveRank) const;
+    /// True on the one AI pass per \a periodMs (rounded up to whole passes) on which \a unit
+    /// may be re-ordered; derived from the game cycle and the object ID only.
+    bool campaignHelperOrderSlot(const UnitBase* unit, int periodMs) const;
+    /// CounterAttack: whether a beaten wave lets the helper launch below readiness now.
+    bool campaignHelperCounterAttackReady(int militaryValue, int requiredMilitary) const;
+    /// SingleTarget: the hostile house whose visible buildings (one at least reachable by
+    /// \a unit when given) have the lowest health-weighted price total; -1 when none.
+    int campaignHelperTargetHouse(const UnitBase* unit) const;
+    /// SingleTarget: the nearest visible live building of \a house that \a unit can reach.
+    const StructureBase* campaignHelperTargetStructure(const UnitBase* unit, int house) const;
     void kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThreat, int desiredRange);
 
     // `emergencyOnBase` reports whether the reported attacker was hitting one of

@@ -429,6 +429,11 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperNoConcrete = false;
     force.campaignHelperEarlyStarport = 0;
     force.campaignHelperProtectedRepair = false;
+    force.campaignHelperDefenceLeash = 0;
+    force.campaignHelperFrontPost = 0;
+    force.campaignHelperFocusFire = false;
+    force.campaignHelperCounterAttack = 0;
+    force.campaignHelperSingleTarget = false;
     force.capacityMcvRunway = false;
     force.respectServiceOwnership = false;
     force.clearMcvFootprint = true;
@@ -896,6 +901,11 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignHelperNoConcrete", force.campaignHelperNoConcrete);
         iniFile.setIntValue("Force Concentration", "CampaignHelperEarlyStarport", force.campaignHelperEarlyStarport);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
+        iniFile.setIntValue("Force Concentration", "CampaignHelperDefenceLeash", force.campaignHelperDefenceLeash);
+        iniFile.setIntValue("Force Concentration", "CampaignHelperFrontPost", force.campaignHelperFrontPost);
+        iniFile.setBoolValue("Force Concentration", "CampaignHelperFocusFire", force.campaignHelperFocusFire);
+        iniFile.setIntValue("Force Concentration", "CampaignHelperCounterAttack", force.campaignHelperCounterAttack);
+        iniFile.setBoolValue("Force Concentration", "CampaignHelperSingleTarget", force.campaignHelperSingleTarget);
         iniFile.setBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
         iniFile.setBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
         iniFile.setBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1210,6 +1220,14 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignHelperEarlyStarport = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperEarlyStarport", force.campaignHelperEarlyStarport), 0, 4);
     force.campaignHelperProtectedRepair = iniFile.getBoolValue("Force Concentration", "CampaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
+    force.campaignHelperDefenceLeash = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignHelperDefenceLeash", force.campaignHelperDefenceLeash), 0, 30);
+    force.campaignHelperFrontPost = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignHelperFrontPost", force.campaignHelperFrontPost), 0, 12);
+    force.campaignHelperFocusFire = iniFile.getBoolValue("Force Concentration", "CampaignHelperFocusFire", force.campaignHelperFocusFire);
+    force.campaignHelperCounterAttack = std::clamp(
+        iniFile.getIntValue("Force Concentration", "CampaignHelperCounterAttack", force.campaignHelperCounterAttack), 0, 100);
+    force.campaignHelperSingleTarget = iniFile.getBoolValue("Force Concentration", "CampaignHelperSingleTarget", force.campaignHelperSingleTarget);
     force.capacityMcvRunway = iniFile.getBoolValue("Force Concentration", "CapacityMcvRunway", force.capacityMcvRunway);
     force.respectServiceOwnership = iniFile.getBoolValue("Force Concentration", "RespectServiceOwnership", force.respectServiceOwnership);
     force.clearMcvFootprint = iniFile.getBoolValue("Force Concentration", "ClearMcvFootprint", force.clearMcvFootprint);
@@ -1867,6 +1885,11 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHelperNoConcrete", force.campaignHelperNoConcrete);
     addNamed("campaignHelperEarlyStarport", force.campaignHelperEarlyStarport);
     addNamed("campaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
+    addNamed("campaignHelperDefenceLeash", force.campaignHelperDefenceLeash);
+    addNamed("campaignHelperFrontPost", force.campaignHelperFrontPost);
+    addNamed("campaignHelperFocusFire", force.campaignHelperFocusFire);
+    addNamed("campaignHelperCounterAttack", force.campaignHelperCounterAttack);
+    addNamed("campaignHelperSingleTarget", force.campaignHelperSingleTarget);
     addNamed("capacityMcvRunway", force.capacityMcvRunway);
     addNamed("respectServiceOwnership", force.respectServiceOwnership);
     addNamed("clearMcvFootprint", force.clearMcvFootprint);

@@ -512,7 +512,13 @@ bool QuantBot::campaignControlsUnit(const UnitBase* unit) {
             && unit->isActive() && unit->isRespondable()
             && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free && unit->getAttackMode()==HUNT
             && !unit->isMoving() && !unit->hasATarget()) {
-            if (const auto* objective=campaignObjective(unit,0)) {
+            // CampaignHelperSingleTarget (default off): the house the wave is finishing first.
+            const ObjectBase* objective = nullptr;
+            if (botConfig().force.campaignHelperSingleTarget && campaignEconomySupport())
+                if (const int house = campaignHelperTargetHouse(unit); house >= 0)
+                    objective = campaignHelperTargetStructure(unit, house);
+            if (!objective) objective = campaignObjective(unit,0);
+            if (objective) {
                 doAttackObject(unit,objective,true);
                 return true;
             }

@@ -426,6 +426,30 @@ struct QuantBotConfig {
         /// from the base edge facing the nearest visible enemy (map centre when none), never on
         /// the shallowest legal site when a deeper one exists. Other placement is unchanged.
         bool campaignHelperProtectedRepair;
+        /// Classic campaign support ground troops that are not out with a wave (not Hunt) and not
+        /// under a human order or a repair run never chase a hostile target standing more than
+        /// this many tiles from the nearest live building the house owns: the target is dropped,
+        /// any defence assignment ends and the troop walks back to its regroup anchor. Shots at
+        /// anything inside weapon range stay allowed; sandworms are never pursued. 0=OFF, 0..30.
+        int campaignHelperDefenceLeash;
+        /// Classic campaign support with a Repair Yard regroups its idle ground troops on rock or
+        /// concrete this many tiles from the Repair Yard towards where the enemy comes from (at
+        /// most this + 3 tiles from it), not on their own centroid. 0=OFF, 0..12.
+        int campaignHelperFrontPost;
+        /// Classic campaign support ground troops in a fight retarget a visible hostile Deviator,
+        /// then Sonic Tank, then Launcher within weapon range + 4 tiles (lowest health, then
+        /// lowest object ID), at most once per 2 game seconds per unit. Default off.
+        bool campaignHelperFocusFire;
+        /// Classic campaign support launches a ground wave below its readiness once a defence of
+        /// its base has ended (a response in the last 90 s, no hostile ground fighter within 14
+        /// tiles of its buildings, no Hunt troops out) with at least this percent of the required
+        /// army, at most once per 3 game minutes. 0=OFF, 0..100.
+        int campaignHelperCounterAttack;
+        /// Classic campaign support's wave finishes one enemy house first: the hostile house whose
+        /// visible, reachable buildings have the lowest health-weighted price total, lowest house
+        /// ID on ties. Wave objectives prefer it and hunters on another house's building are sent
+        /// to its nearest building, at most once per 5 game seconds per unit. Default off.
+        bool campaignHelperSingleTarget;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.

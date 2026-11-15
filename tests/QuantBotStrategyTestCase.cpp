@@ -2606,6 +2606,162 @@ TEST_CASE("Campaign helper protected repair persists OFF and ON with distinct ha
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign helper defence leash persists OFF and tile values with distinct hashes",
+          "[ai][campaign][defence][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperDefenceLeash == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-defence-leash-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int tiles : {0, 6, 10, 30}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperDefenceLeash=" << tiles << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperDefenceLeash == tiles);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperDefenceLeash = tiles;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), tiles).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperDefenceLeash == tiles);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCampaignHelperDefenceLeash=99\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.campaignHelperDefenceLeash == 30);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper front post persists OFF and tile values with distinct hashes",
+          "[ai][campaign][defence][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperFrontPost == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-front-post-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int tiles : {0, 4, 6, 12}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperFrontPost=" << tiles << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperFrontPost == tiles);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperFrontPost = tiles;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), tiles).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperFrontPost == tiles);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCampaignHelperFrontPost=40\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.campaignHelperFrontPost == 12);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper focus fire persists OFF and ON with distinct hashes",
+          "[ai][campaign][defence][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperFocusFire);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-focus-fire-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperFocusFire=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperFocusFire == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperFocusFire = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperFocusFire == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper counter-attack persists OFF and percent values with distinct hashes",
+          "[ai][campaign][attack][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignHelperCounterAttack == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-counter-attack-test.ini";
+    std::map<std::string, int> hashes;
+    for (const int percent : {0, 60, 80, 100}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperCounterAttack=" << percent << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperCounterAttack == percent);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperCounterAttack = percent;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), percent).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperCounterAttack == percent);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nCampaignHelperCounterAttack=250\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.campaignHelperCounterAttack == 100);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("Campaign helper single target persists OFF and ON with distinct hashes",
+          "[ai][campaign][attack][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperSingleTarget);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-single-target-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperSingleTarget=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperSingleTarget == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperSingleTarget = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperSingleTarget == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Campaign helper rock hold persists OFF and every level with distinct hashes",
           "[ai][campaign][defence][config]") {
     const QuantBotConfig defaults;
