@@ -379,8 +379,8 @@ void runControlsProbe(Game& game) {
     settings.general.wasdCamera=true;select();
     SDL_KeyboardEvent key{};key.type=SDL_KEYDOWN;key.keysym.sym=SDLK_a;
     game.handleKeyInput(key);require(game.currentCursorMode==Game::CursorMode_Normal,"WASD A activated attack");
-    key.keysym.sym=SDLK_q;key.keysym.mod=KMOD_NONE;game.handleKeyInput(key);
-    require(game.currentCursorMode==Game::CursorMode_Attack,"Q cannot attack with WASD enabled");
+    key.keysym.mod=KMOD_SHIFT;game.handleKeyInput(key);
+    require(game.currentCursorMode==Game::CursorMode_Attack,"Shift+A cannot attack with WASD enabled");
     game.setCursorMode(Game::CursorMode_Normal);
     require(game.canSkipMission(),"Fixture cannot skip campaign");
     game.onOptions();

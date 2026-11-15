@@ -2406,8 +2406,30 @@ int runMenuProbe() {
             menuRequire(page.getWidgetPosition(&menu.hotkeyFixedLabel).y + menu.hotkeyFixedLabel.getSize().y <= page.getSize().y,
                         "Fixed shortcut summary is cut off");
             menuRequire(menu.hotkeyListBox.getNumEntries()==Hotkeys::actionCount, "Hotkeys list misses commands");
-            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AreaGuard))=="Area Guard:  G",
-                        "Area Guard row does not show G");
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AreaGuard))=="Area Guard:  X"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Guard))=="Guard:  E"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::NextConstructionYard))=="Select next Construction Yard:  G"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Move))=="Move:  M",
+                        "Hotkey rows do not show Guard E, Area Guard X, Construction Yard G and Move M");
+            // The rows show the keys in effect for the WASD choice ticked on Controls: off, A, S
+            // and D are plain command keys; on, they scroll and their commands need Shift.
+            const bool tickedWasd = menu.wasdCameraCheckbox.isChecked();
+            menu.wasdCameraCheckbox.setChecked(false);
+            menu.onChangeOption(true);
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AttackMove))=="Attack Move:  A"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Stop))=="Stop:  S"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::CarryallDrop))=="Request Carryall drop:  D",
+                        "Without the WASD camera the rows do not show Attack Move A, Stop S and Carryall drop D");
+            menu.wasdCameraCheckbox.setChecked(true);
+            menu.onChangeOption(true);
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AttackMove))=="Attack Move:  Shift+A"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Stop))=="Stop:  Shift+S"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::CarryallDrop))=="Request Carryall drop:  Shift+D"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Patrol))=="Patrol:  Q"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Guard))=="Guard:  E",
+                        "With the WASD camera the rows do not show Shift+A, Shift+S and Shift+D, or changed another key");
+            menu.wasdCameraCheckbox.setChecked(tickedWasd);
+            menu.onChangeOption(true);
 
             menu.hotkeyListBox.setSelectedItem(rowOf(Action::Guard));
             menu.onHotkeyChange();
@@ -2421,8 +2443,8 @@ int runMenuProbe() {
                         "A control-group digit or lone Shift was taken as a hotkey");
             keyDown(menu, SDLK_y, KMOD_NONE);
             menuRequire(menu.capturingHotkey<0 && menu.pendingHotkeys.get(Action::Guard)==Hotkeys::Binding{SDLK_y,0}
-                        && !menu.pendingHotkeys.get(Action::NextConstructionYard).bound(),
-                        "Capturing Y did not move it from Next Construction Yard to Guard");
+                        && !menu.pendingHotkeys.get(Action::DeployMCV).bound(),
+                        "Capturing Y did not move it from Deploy MCV to Guard");
             menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).find(": ")!=std::string::npos
                         && menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).substr(menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).size()-1)=="Y",
                         "Hotkeys list not refreshed after a capture");
@@ -2443,7 +2465,8 @@ int runMenuProbe() {
             menuRequire(menu.isQuiting() && settings.hotkeys.get(Action::Guard)==Hotkeys::Binding{SDLK_y,0}
                         && !settings.hotkeys.get(Action::Stop).bound()
                         && saved.getStringValue("Hotkeys","Guard")=="Y" && saved.getStringValue("Hotkeys","Stop")=="None"
-                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="None",
+                        && saved.getStringValue("Hotkeys","Deploy MCV")=="None"
+                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="G",
                         "Edited hotkeys not applied or persisted");
         }
         {
@@ -2451,9 +2474,11 @@ int runMenuProbe() {
             menu.onHotkeyDefaults();
             menu.onOptionsOK();
             INIFile saved(getConfigFilepath());
-            menuRequire(settings.hotkeys==Hotkeys::Bindings::defaults() && saved.getStringValue("Hotkeys","Guard")=="F"
-                        && saved.getStringValue("Hotkeys","Area Guard")=="G" && saved.getStringValue("Hotkeys","Stop")=="E"
-                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="Y",
+            menuRequire(settings.hotkeys==Hotkeys::Bindings::defaults() && saved.getStringValue("Hotkeys","Guard")=="E"
+                        && saved.getStringValue("Hotkeys","Area Guard")=="X" && saved.getStringValue("Hotkeys","Stop")=="S"
+                        && saved.getStringValue("Hotkeys","Attack Move")=="A" && saved.getStringValue("Hotkeys","Move")=="M"
+                        && saved.getStringValue("Hotkeys","Deploy MCV")=="Y"
+                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="G",
                         "Default hotkeys not restored or persisted");
         }
     }

@@ -16,7 +16,9 @@
     The configurable in-game command shortcuts (GitHub #87, docs/rts-controls.md "Hotkeys").
 
     One registry names every action, its stable [Hotkeys] key in the player's config file, its
-    English label and its default key. Game::handleKeyInput dispatches through match(), the
+    English label and its default key. The defaults are the classic shortcuts (A Attack Move,
+    S Stop, M Move, ...); commands that had none take the remaining letters.
+    Game::handleKeyInput dispatches through match(), the
     unit/structure tooltips and the Options "Hotkeys" tab read the same bindings, so a rebound
     action never answers to its old key and every tooltip shows the effective key.
 
@@ -67,39 +69,41 @@ struct ActionInfo {
 
 inline const std::array<ActionInfo, actionCount>& actions() {
     static const std::array<ActionInfo, actionCount> table = {{
-        {Action::Move,                   "Move",                    "Move",                          {SDLK_v, 0},                           true},
-        {Action::AttackMove,             "Attack Move",             "Attack Move",                   {SDLK_q, 0},                           true},
-        {Action::Patrol,                 "Patrol",                  "Patrol",                        {SDLK_z, 0},                           true},
-        {Action::Stop,                   "Stop",                    "Stop",                          {SDLK_e, 0},                           true},
-        {Action::Guard,                  "Guard",                   "Guard",                         {SDLK_f, 0},                           false},
-        {Action::AreaGuard,              "Area Guard",              "Area Guard",                    {SDLK_g, 0},                           false},
-        {Action::Hold,                   "Hold",                    "Hold / return harvesters",      {SDLK_x, 0},                           true},
-        {Action::Ambush,                 "Ambush",                  "Ambush",                        {SDLK_SEMICOLON, 0},                   false},
-        {Action::Hunt,                   "Hunt",                    "Hunt",                          {SDLK_QUOTE, 0},                       false},
-        {Action::Retreat,                "Retreat",                 "Retreat",                       {SDLK_COMMA, 0},                       false},
-        {Action::Sabotage,               "Sabotage",                "Sabotage (Tornie mods)",        {SDLK_INSERT, 0},                      false},
-        {Action::Capture,                "Capture",                 "Capture",                       {SDLK_c, 0},                           true},
-        {Action::CarryallDrop,           "Carryall Drop",           "Request Carryall drop",         {SDLK_t, 0},                           true},
-        {Action::DeployMCV,              "Deploy MCV",              "Deploy MCV",                    {SDLK_PERIOD, 0},                      false},
-        {Action::SelfDestruct,           "Self-Destruct",           "Self-destruct Devastator",      {SDLK_DELETE, 0},                      false},
-        {Action::Heal,                   "Heal",                    "Heal (Tornie mods)",            {SDLK_BACKQUOTE, 0},                   false},
-        {Action::Repair,                 "Repair",                  "Repair",                        {SDLK_r, 0},                           true},
-        {Action::Upgrade,                "Upgrade",                 "Upgrade structure",             {SDLK_u, 0},                           true},
-        {Action::PlaceStructure,         "Place Structure",         "Place structure",               {SDLK_b, 0},                           true},
-        {Action::NextConstructionYard,   "Next Construction Yard",  "Select next Construction Yard", {SDLK_y, 0},                           true},
-        {Action::NextFactory,            "Next Factory",            "Select next factory",           {SDLK_h, 0},                           true},
-        {Action::SelectOrnithopters,     "Select Ornithopters",     "Select all ornithopters",       {SDLK_o, 0},                           true},
-        {Action::SelectSameTypeOnScreen, "Select Same Type",        "Select same type on screen",    {SDLK_n, 0},                           false},
-        {Action::SelectSameTypeOnMap,    "Select Same Type On Map", "Select same type on map",       {SDLK_j, 0},                           false},
-        {Action::SelectAllCombatUnits,   "Select Combat Units",     "Select all combat units",       {SDLK_k, 0},                           true},
-        {Action::ToggleFormationMoves,   "Formation Moves",         "Formation moves on/off",        {SDLK_m, 0},                           false},
-        {Action::NextFormationShape,     "Next Formation Shape",    "Next formation shape",          {SDLK_i, 0},                           false},
-        {Action::ToggleMovementPaths,    "Movement Paths",          "Show movement paths",           {SDLK_SLASH, 0},                       false},
-        {Action::CityZoneTool,           "City Zone Tool",          "City zone tool",                {SDLK_l, 0},                           true},
-        {Action::CityRoadTool,           "City Road Tool",          "City road tool",                {SDLK_p, 0},                           false},
-        {Action::CityBudget,             "City Budget",             "City budget",                   {SDLK_LEFTBRACKET, 0},                 false},
-        {Action::CityStatsOverlay,       "City Statistics",         "City statistics overlay",       {SDLK_RIGHTBRACKET, 0},                false},
-        {Action::ToggleGameTime,         "Show Game Time",          "Show game time",                {SDLK_BACKSLASH, 0},                   false},
+        // The classic shortcuts (Game::handleKeyInput before the registry) keep their keys;
+        // the commands that had none (marked +) take the letters those left free.
+        {Action::Move,                   "Move",                    "Move",                          {SDLK_m, 0},                      true},
+        {Action::AttackMove,             "Attack Move",             "Attack Move",                   {SDLK_a, 0},                      true},
+        {Action::Patrol,                 "Patrol",                  "Patrol",                        {SDLK_q, 0},                      true},
+        {Action::Stop,                   "Stop",                    "Stop",                          {SDLK_s, 0},                      true},
+        {Action::Guard,                  "Guard",                   "Guard",                         {SDLK_e, 0},                      false},  // +
+        {Action::AreaGuard,              "Area Guard",              "Area Guard",                    {SDLK_x, 0},                      false},  // +
+        {Action::Hold,                   "Hold",                    "Hold / return harvesters",      {SDLK_h, 0},                      true},
+        {Action::Ambush,                 "Ambush",                  "Ambush",                        {SDLK_b, 0},                      false},  // +
+        {Action::Hunt,                   "Hunt",                    "Hunt",                          {SDLK_n, 0},                      false},  // +
+        {Action::Retreat,                "Retreat",                 "Retreat",                       {SDLK_k, 0},                      false},  // +
+        {Action::Sabotage,               "Sabotage",                "Sabotage (Tornie mods)",        {SDLK_j, 0},                      false},  // +
+        {Action::Capture,                "Capture",                 "Capture",                       {SDLK_c, 0},                      true},
+        {Action::CarryallDrop,           "Carryall Drop",           "Request Carryall drop",         {SDLK_d, 0},                      true},
+        {Action::DeployMCV,              "Deploy MCV",              "Deploy MCV",                    {SDLK_y, 0},                      false},  // +
+        {Action::SelfDestruct,           "Self-Destruct",           "Self-destruct Devastator",      {SDLK_DELETE, 0},                 false},  // +
+        {Action::Heal,                   "Heal",                    "Heal (Tornie mods)",            {SDLK_l, 0},                      false},  // +
+        {Action::Repair,                 "Repair",                  "Repair",                        {SDLK_r, 0},                      true},
+        {Action::Upgrade,                "Upgrade",                 "Upgrade structure",             {SDLK_u, 0},                      true},
+        {Action::PlaceStructure,         "Place Structure",         "Place structure",               {SDLK_p, 0},                      true},
+        {Action::NextConstructionYard,   "Next Construction Yard",  "Select next Construction Yard", {SDLK_g, 0},                      true},
+        {Action::NextFactory,            "Next Factory",            "Select next factory",           {SDLK_f, 0},                      true},
+        {Action::SelectOrnithopters,     "Select Ornithopters",     "Select all ornithopters",       {SDLK_o, 0},                      true},
+        {Action::SelectSameTypeOnScreen, "Select Same Type",        "Select same type on screen",    {SDLK_t, 0},                      false},
+        {Action::SelectSameTypeOnMap,    "Select Same Type On Map", "Select same type on map",       {SDLK_t, Mod::Ctrl},              false},
+        {Action::SelectAllCombatUnits,   "Select Combat Units",     "Select all combat units",       {SDLK_a, Mod::Ctrl},              true},
+        {Action::ToggleFormationMoves,   "Formation Moves",         "Formation moves on/off",        {SDLK_f, Mod::Ctrl},              false},
+        {Action::NextFormationShape,     "Next Formation Shape",    "Next formation shape",          {SDLK_f, Mod::Ctrl | Mod::Shift}, false},
+        {Action::ToggleMovementPaths,    "Movement Paths",          "Show movement paths",           {SDLK_v, 0},                      false},  // +
+        {Action::CityZoneTool,           "City Zone Tool",          "City zone tool",                {SDLK_z, 0},                      true},
+        {Action::CityRoadTool,           "City Road Tool",          "City road tool",                {SDLK_r, Mod::Shift},             false},
+        {Action::CityBudget,             "City Budget",             "City budget",                   {SDLK_b, Mod::Shift},             false},
+        {Action::CityStatsOverlay,       "City Statistics",         "City statistics overlay",       {SDLK_c, Mod::Shift},             false},
+        {Action::ToggleGameTime,         "Show Game Time",          "Show game time",                {SDLK_t, Mod::Shift},             false},
     }};
     return table;
 }
@@ -226,13 +230,20 @@ inline const char* fixedShortcutsSummary() {
     return "Fixed: 0-9 select groups, Ctrl+0-9 set, Alt+0-9 add; Shift+1-8 city overlays;\n"
            "F1-F3 zoom, F4-F6 skip time, F10/F11 sound/music, F12 FPS; Space pause;\n"
            "+/- game speed; Enter chat; Esc menu; arrows scroll; Ctrl+P screenshot.\n"
-           "W/A/S/D scroll with WASD camera; default commands use nearby single keys.";
+           "With the WASD camera on, W/A/S/D scroll and hotkeys on them need Shift.";
 }
 
-/// Only custom bindings on the four camera keys need Shift with WASD enabled.
-/// Defaults avoid those keys entirely; Q remains a single-key command beside W.
+/// The WASD camera is off unless the player switches it on (Options > Controls). While it is
+/// on, W/A/S/D scroll the map, so an unmodified binding on one of them (by default Attack
+/// Move A, Stop S and Carryall drop D) needs Shift; every other key is unchanged.
 inline bool needsShiftWithWasd(SDL_Keycode key) {
     return key == SDLK_w || key == SDLK_a || key == SDLK_s || key == SDLK_d;
+}
+
+/// Whether held W/A/S/D scroll the map now: only with the WASD camera on and no modifier held,
+/// so Shift+A (Attack Move while the camera is on) and Ctrl+A never scroll.
+inline bool wasdScrolls(bool wasdCamera, Uint16 sdlMods) {
+    return wasdCamera && !(sdlMods & (KMOD_SHIFT | KMOD_CTRL | KMOD_ALT | KMOD_GUI));
 }
 
 inline Binding effective(Binding binding, bool wasdCamera) {
@@ -322,13 +333,63 @@ private:
 struct LoadResult {
     Bindings bindings;
     std::vector<std::string> warnings;
+    /// The saved section was an earlier build's untouched default set; the current defaults apply.
+    bool replacedRetiredDefaults = false;
 };
+
+/// Options > Apply writes every action, so a profile can hold a full copy of the defaults of
+/// the build that saved it without the player ever choosing a key. These are those earlier
+/// default sets, in registry order of their day: the single-key layout around WASD published
+/// in 1.0.870, and the first registry layout (classic keys, G Guard, Y Construction Yard).
+struct RetiredDefault { const char* iniKey; const char* value; };
+inline const std::array<std::array<RetiredDefault, 25>, 2>& retiredDefaultSets() {
+    static const std::array<std::array<RetiredDefault, 25>, 2> sets = {{
+        {{{"Move", "V"}, {"Attack Move", "Q"}, {"Patrol", "Z"}, {"Stop", "E"}, {"Guard", "F"}, {"Area Guard", "G"},
+          {"Hold", "X"}, {"Capture", "C"}, {"Carryall Drop", "T"}, {"Repair", "R"}, {"Upgrade", "U"},
+          {"Place Structure", "B"}, {"Next Construction Yard", "Y"}, {"Next Factory", "H"},
+          {"Select Ornithopters", "O"}, {"Select Same Type", "N"}, {"Select Same Type On Map", "J"},
+          {"Select Combat Units", "K"}, {"Formation Moves", "M"}, {"Next Formation Shape", "I"},
+          {"City Zone Tool", "L"}, {"City Road Tool", "P"}, {"City Budget", "LeftBracket"},
+          {"City Statistics", "RightBracket"}, {"Show Game Time", "Backslash"}}},
+        {{{"Move", "M"}, {"Attack Move", "A"}, {"Patrol", "Q"}, {"Stop", "S"}, {"Guard", "G"}, {"Area Guard", "Shift+G"},
+          {"Hold", "H"}, {"Capture", "C"}, {"Carryall Drop", "D"}, {"Repair", "R"}, {"Upgrade", "U"},
+          {"Place Structure", "P"}, {"Next Construction Yard", "Y"}, {"Next Factory", "F"},
+          {"Select Ornithopters", "O"}, {"Select Same Type", "T"}, {"Select Same Type On Map", "Ctrl+T"},
+          {"Select Combat Units", "Ctrl+A"}, {"Formation Moves", "Ctrl+F"}, {"Next Formation Shape", "Ctrl+Shift+F"},
+          {"City Zone Tool", "Z"}, {"City Road Tool", "Shift+R"}, {"City Budget", "Shift+B"},
+          {"City Statistics", "Shift+C"}, {"Show Game Time", "Shift+T"}}},
+    }};
+    return sets;
+}
+
+/// True when the saved entries are exactly one retired default set: the same actions, each on
+/// that set's key, and nothing else. One changed, cleared or added entry makes it the player's.
+inline bool isRetiredDefaultSet(const std::map<std::string, std::string>& entries) {
+    for(const auto& set : retiredDefaultSets()) {
+        if(entries.size() != set.size()) continue;
+        bool same = true;
+        for(const RetiredDefault& saved : set) {
+            const auto entry = entries.find(saved.iniKey);
+            const auto was = parse(saved.value);
+            const auto is = entry == entries.end() ? std::nullopt : parse(entry->second);
+            if(!was || !is || *was != *is) { same = false; break; }
+        }
+        if(same) return true;
+    }
+    return false;
+}
 
 /// Reads the [Hotkeys] entries. Missing actions keep their default, unreadable or reserved
 /// values fall back to the default, and a collision unbinds the defaulted action (or the later
-/// one when both were configured), so the result never has two actions on one chord.
+/// one when both were configured), so the result never has two actions on one chord. A section
+/// that is an untouched copy of an earlier build's defaults gets the current defaults instead;
+/// any other saved section is the player's own and is kept as it is.
 inline LoadResult load(const std::map<std::string, std::string>& entries) {
     LoadResult result{Bindings::defaults(), {}};
+    if(isRetiredDefaultSet(entries)) {
+        result.replacedRetiredDefaults = true;
+        return result;
+    }
     std::array<bool, actionCount> configured{};
     for(const ActionInfo& action : actions()) {
         const auto entry = entries.find(action.iniKey);

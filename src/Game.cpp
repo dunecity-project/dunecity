@@ -3558,7 +3558,7 @@ case CursorMode_Heal: {
 
         const Uint8 *keystate = SDL_GetKeyboardState(nullptr);
         const bool cameraKeys=!chatMode && !pInterface->hasChildWindow();
-        const bool wasd=cameraKeys && settings.general.wasdCamera && !(SDL_GetModState() & (KMOD_SHIFT|KMOD_CTRL|KMOD_ALT|KMOD_GUI));
+        const bool wasd=cameraKeys && Hotkeys::wasdScrolls(settings.general.wasdCamera, SDL_GetModState());
         const SDL_Point touchEdge = TouchInput::edgeScroll();
         scrollDownMode = (touchPointer ? touchEdge.y > 0 : drawnMouseY >= getRendererHeight()-1-SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_DOWN]) || (wasd && keystate[SDL_SCANCODE_S]);
         scrollLeftMode = (touchPointer ? touchEdge.x < 0 : drawnMouseX <= SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_LEFT]) || (wasd && keystate[SDL_SCANCODE_A]);

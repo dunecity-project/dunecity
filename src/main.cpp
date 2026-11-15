@@ -1269,6 +1269,8 @@ int main(int argc, char *argv[]) {
                         hotkeyEntries[action.iniKey] = myINIFile.getStringValue("Hotkeys", action.iniKey);
                 }
                 Hotkeys::LoadResult hotkeys = Hotkeys::load(hotkeyEntries);
+                if(hotkeys.replacedRetiredDefaults)
+                    SDL_Log("Saved hotkeys were an earlier version's defaults; using the current defaults");
                 for(const std::string& warning : hotkeys.warnings)
                     SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", warning.c_str());
                 settings.hotkeys = hotkeys.bindings;

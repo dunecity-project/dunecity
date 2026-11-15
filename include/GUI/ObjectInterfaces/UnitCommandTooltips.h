@@ -10,7 +10,7 @@
 /**
     Tooltips for the unit command and mode buttons, each naming the effective hotkey from the
     player's bindings (GitHub #87, misc/Hotkeys.h, docs/rts-controls.md). With the WASD camera
-    on, an unmodified W/A/S/D/Q binding needs Shift, and the tooltip says so; an unbound action
+    on, an unmodified W/A/S/D binding needs Shift, and the tooltip says so; an unbound action
     says "unbound". Built when the panel is built, like every other tooltip.
 */
 namespace UnitCommandTooltips {

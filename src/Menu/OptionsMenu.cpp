@@ -396,8 +396,8 @@ OptionsMenu::OptionsMenu() : MenuBase()
         row.addWidget(&box,480); row.addWidget(Spacer::create(),0.5);
         pages[3].addWidget(VSpacer::create(6)); pages[3].addWidget(&row,32);
     };
-    addControl(cameraKeysHBox,wasdCameraCheckbox,"WASD camera (W/A/S/D scroll)",settings.general.wasdCamera);
-    wasdCameraCheckbox.setTooltipText(_("W, A, S and D scroll the map. Default commands use nearby single keys. Customise them on the Hotkeys tab."));
+    addControl(cameraKeysHBox,wasdCameraCheckbox,"WASD camera (W/A/S/D hotkeys then need Shift)",settings.general.wasdCamera);
+    wasdCameraCheckbox.setTooltipText(_("Off: W, A, S and D are command keys (A Attack Move, S Stop, D Carryall drop). On: they scroll the map and a command on one of them needs Shift; the Hotkeys tab and the tooltips show the keys in effect."));
     addControl(mouseOrdersHBox,leftClickOrdersCheckbox,"Left-click orders (drag to select, right-click cancels)",settings.general.leftClickOrders);
     addControl(movementPathsHBox,movementPathsCheckbox,"Show movement paths for selected units",settings.general.showMovementPaths);
     addControl(formationMovesHBox,formationMovesCheckbox,"Move groups in formation",settings.general.formationMoves);
