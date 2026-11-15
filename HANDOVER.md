@@ -1,3 +1,24 @@
+## 2026-11-16 - 1.0.871 published
+
+`v1.0.871` is an annotated tag on `76ca46d7eb2f22c07d0521a7ef525d07bd64fb41` (branch
+`integrate/feature-batch`), pushed 03:48 AEDT after the owner's "ok once done deploy buold to
+production". Evidence: `~/Documents/projects/outputs/release-1.0.871/` (`gates.md`, `channels.md`).
+
+- Content: the classic command keys as defaults, a key for every unit panel command, W/A/S/D
+  scrolling only with the WASD camera on (entry below). No AI behaviour change.
+- Qualified: run 43735354446. Tag build: run 43737586500, 23 minutes, all jobs passed.
+- Verified live: GitHub release (Latest, 25 assets, hashes and signatures), SourceForge downloads and
+  defaults, browser build (build.json at 1.0.871/76ca46d7e, hashes match, main menu reached in
+  headless Chrome on the Mini), website links and What's New.
+- Not done: TestFlight (latest is 1.0.870), Android (held on 0.2.33). No package was installed and
+  played on Windows or Linux. Pull request 127 into `main` is still open.
+- The first live verification ran before the website deploy finished and failed on the browser
+  build; wait for the `dunelegacy.com` "Deploy to Droplet" run before `verify --live`.
+- A fresh browser profile logged "INIFile: Syntax-Error in line 5:Version =" once while the menu
+  loaded normally. Not investigated and not compared with 1.0.870.
+- The hotkey session waited 8 hours on a Linux `dunelegacy_tests` queue job that never got a
+  machine. A session waiting on a queue job needs a time limit and a report, not an open wait.
+
 ## 2026-11-16 - 1.0.871 candidate: classic command keys restored, keys for every panel command
 
 The owner played 1.0.870 and asked for the classic shortcuts back with the newer commands as
