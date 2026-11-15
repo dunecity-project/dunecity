@@ -778,7 +778,11 @@ void CampaignAIPlayer::updateOriginalUnits() {
 }
 
 void CampaignAIPlayer::updateScenarioTeams() {
-    if(!scenarioTeamsInitialized && getHouse()->getAITeams().empty()) {
+    // The original loader rejects every campaign [TEAMS] line, so no team exists and
+    // TEAM.EMC never runs (OriginalCampaignPolicy::referenceCreatesTeam). Teams saved by
+    // 1.0.868/1.0.869 keep running until their mission ends.
+    if(!scenarioTeamsInitialized && (getHouse()->getAITeams().empty() || (!forceAuthoredTeams
+        && !OriginalCampaignPolicy::referenceCreatesTeam(OriginalCampaignPolicy::authoredTeamLineCommas)))) {
         scenarioTeamsInitialized = true;
         return;
     }

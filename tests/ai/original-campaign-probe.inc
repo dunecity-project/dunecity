@@ -159,6 +159,12 @@ void runOriginalCampaignProbe(Game& game) {
 
     // Authored definitions, movement filters, minimum/maximum and stale IDs.
     house->aiteams.clear(); house->addAITeam(AITeamBehavior_Normal, AITeamType_Tracked, 1, 2);
+    // The original loader rejects every campaign team line, so none may be created or run.
+    bot->scenarioTeams.clear(); bot->scenarioTeamsInitialized = false; bot->nextTeamTick = 0;
+    bot->updateScenarioTeams();
+    require(bot->scenarioTeams.empty() && bot->scenarioTeamsInitialized, "original rules created a campaign team the original never has");
+    // The script machine stays covered through the test-only switch.
+    bot->forceAuthoredTeams = true;
     bot->scenarioTeams.clear(); bot->scenarioTeamsInitialized = false; bot->nextTeamTick = 0;
     bot->updateScenarioTeams();
     require(bot->scenarioTeams.size() == 1, "authored team was ignored");

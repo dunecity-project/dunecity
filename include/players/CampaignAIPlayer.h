@@ -127,6 +127,8 @@ private:
         std::vector<Uint32> members;
     };
     bool scenarioTeamsInitialized = false;
+    /// Tests only: run authored teams although the original loader rejects them. Not saved.
+    bool forceAuthoredTeams = false;
     std::vector<ScenarioTeam> scenarioTeams;
     OriginalTeamScript::Program teamProgram;
     Uint32 nextTeamTick = 0; // Original 60 Hz clock, independent of the 50-cycle build pass.

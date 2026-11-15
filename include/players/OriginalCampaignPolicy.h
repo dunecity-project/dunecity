@@ -57,6 +57,15 @@ inline bool sightActivates(bool observerIsOriginalAI, bool allied, bool flying, 
     return !observerIsOriginalAI && !allied && !flying && tileSeenByObserver;
 }
 
+// Dune II never creates a campaign team. Scenario_Load_Team (scenario.c, the same in Dune
+// Dynasty and OpenDUNE) returns unless a comma follows the fifth value, and every [TEAMS]
+// line of the campaign ("1=Ordos,Normal,Foot,2,4") ends at the fifth value with four commas.
+// So TEAM.EMC never runs there: mission-placed units keep their authored Guard, Area Guard,
+// Ambush or Hunt action, and only built units and reinforcements come hunting. The fan
+// "v1.07 fix" patch repairs this and is a different, harder game.
+inline constexpr int authoredTeamLineCommas = 4;
+inline bool referenceCreatesTeam(int commasInLine) { return commasInLine >= 5; }
+
 // scenario.c Scenario_Load_House: a house whose mission gives no MaxUnit gets 39.
 inline constexpr int defaultUnitCap = 39;
 

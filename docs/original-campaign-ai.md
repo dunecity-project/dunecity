@@ -15,7 +15,7 @@ Verified differences in the previous controller:
 | Factory selection | fixed `(house + item) % 4`, menu order | random byte per available candidate, original unit order, 25% replacement then priority |
 | Soldier/trooper production priority | 20/50 | 10/20 |
 | Produced combat units | wait for damage, gather eight, 12-second wave | each unit starts its AI action (normally Hunt) |
-| Mission teams | parsed then unused | authored movement class, min/max membership and team script |
+| Mission teams | parsed then unused | never created: the original loader rejects every campaign team line (see Mission teams) |
 | Base damage | scramble every available defender and launch full army | original full-scale-attack flag has no effective army order (original Carryall filter bug) |
 | Harvesters attacked | whole-base scramble | no added controller-wide scramble |
 | Rebuild queue | erase unavailable or temporarily blocked slots | retain five destroyed-structure slots; select first buildable, clear only successful placement |
@@ -68,6 +68,27 @@ when a house on the other side has had the tile of one of its ground units in si
 sight counts, not the pre-explored map. The pre-9886 controller and every other controller
 keep waking at the first update. Protocol 126; save format unchanged (`isAIActive` was
 already saved).
+
+## Mission teams (corrected 2026-11-15)
+
+Dune II never creates a campaign team. `Scenario_Load_Team` (upstream `src/scenario.c`,
+identical in OpenDUNE) returns unless a comma follows the fifth value, and every `[TEAMS]`
+line of the campaign ends at the fifth value (`1=Ordos,Normal,Foot,2,4`). `TEAM.EMC` therefore
+never runs: mission-placed units keep their authored Guard, Area Guard, Ambush or Hunt action,
+and the only attackers are built units and reinforcements, each on its own.
+
+Measured with a windowless build of Dune Dynasty's game logic (original rules, enemy awake from
+the first tick, idle player, levels 4-9, 90 runs): no team is created in any run, and about five
+enemy units reach the player's base in the first ten minutes, one or two at a time. 1.0.868 and
+1.0.869 parsed the teams with DuneCity's own tolerant loader and ran the script for them, which
+put a median of ten units at the base at once
+(`outputs/campaign-ai-fidelity-20261115/dune_dynasty_compare.py`).
+
+An original-rules house now creates no mission team
+(`OriginalCampaignPolicy::referenceCreatesTeam`). The script machine and its callbacks stay in
+the code, covered by the runtime probe through a test-only switch, in case the fan "v1.07 fix"
+behaviour (teams repaired, a harder game than the original) is ever wanted as an option. Teams
+already saved by 1.0.868/1.0.869 keep running until their mission ends.
 
 ## Unit cap (corrected 2026-11-15)
 

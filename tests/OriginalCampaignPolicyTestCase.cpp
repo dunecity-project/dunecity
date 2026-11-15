@@ -33,6 +33,14 @@ TEST_CASE("Original campaign AI wakes only on the other side's sight of a ground
     REQUIRE_FALSE(sightActivates(false, true, false, true));   // allies
 }
 
+TEST_CASE("Original campaign missions create no teams", "[campaign-ai]") {
+    using namespace OriginalCampaignPolicy;
+    // "1=Ordos,Normal,Foot,2,4": the original loader wants a comma after the fifth value.
+    REQUIRE(authoredTeamLineCommas == 4);
+    REQUIRE_FALSE(referenceCreatesTeam(authoredTeamLineCommas));
+    REQUIRE(referenceCreatesTeam(5));
+}
+
 TEST_CASE("Original campaign houses stop at their authored unit cap", "[campaign-ai]") {
     using namespace OriginalCampaignPolicy;
     REQUIRE(defaultUnitCap == 39);

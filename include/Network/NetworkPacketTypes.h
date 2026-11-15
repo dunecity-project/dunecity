@@ -387,7 +387,8 @@
 // 126: Original Campaign AI wakes only once the other side's sight uncovers one of its
 //      ground units (Dune II isAIActive), not at the first update. Older peers start its
 //      production and team scripts at once and would desync. In authored missions it
-//      also keeps each computer house's own MaxUnit under the default unit override.
+//      also keeps each computer house's own MaxUnit under the default unit override and
+//      creates no mission teams (the original loader rejects every campaign team line).
 //      Save format unchanged.
 #define NETWORK_PROTOCOL_VERSION            126
 
