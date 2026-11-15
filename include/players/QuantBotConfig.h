@@ -418,6 +418,10 @@ struct QuantBotConfig {
         /// Classic campaign support never orders concrete (no Slab1/Slab4, no bulk-slab yard
         /// upgrade) and places its buildings on bare rock. Enemies are unchanged.
         bool campaignHelperNoConcrete;
+        /// With CampaignHelperNoConcrete on, Light and Heavy Factories, the High-Tech Factory,
+        /// WOR and Barracks still get their foundation: a building on bare rock starts at half
+        /// health and a producer builds at its health fraction. Hashed; default off.
+        bool campaignHelperFactoryConcrete;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
         /// Repair Yard: 0=OFF (all opening refineries first). 1..4.

@@ -69,6 +69,15 @@ bool QuantBot::campaignHelperNoConcrete() const {
     return botConfig().force.campaignHelperNoConcrete && campaignEconomySupport();
 }
 
+bool QuantBot::campaignHelperNoConcrete(Uint32 item) const {
+    // CampaignHelperFactoryConcrete (default off): production buildings keep their foundation.
+    // On bare rock a building starts at half health and BuilderBase builds at its health
+    // fraction, so a factory without concrete produces at half speed until it is repaired.
+    return campaignHelperNoConcrete() && !(botConfig().force.campaignHelperFactoryConcrete
+        && (item == Structure_LightFactory || item == Structure_HeavyFactory
+            || item == Structure_HighTechFactory || item == Structure_WOR || item == Structure_Barracks));
+}
+
 bool QuantBot::campaignHelperBeelineAdmits(const BuildPass& pass, Uint32 item) const {
     // The switch's exceptions: a harvester while fewer than two exist, alive or committed,
     // and the one windtrap needed to place anything.
@@ -3762,7 +3771,7 @@ QuantBotFoundationPolicy::Plan QuantBot::foundationPlan(const BuilderBase* build
     QuantBotFoundationPolicy::Plan plan;
     // CampaignHelperNoConcrete (default off): that support house plans no foundation at all,
     // so every building is ordered and placed directly on bare rock.
-    if (!getGameInitSettings().getGameOptions().concreteRequired || campaignHelperNoConcrete()
+    if (!getGameInitSettings().getGameOptions().concreteRequired || campaignHelperNoConcrete(item)
         || !QuantBotBuildPolicy::foundationRequiredForItem(item) || !site.isValid()) {
         plan.complete=true;
         return plan;
@@ -3944,7 +3953,7 @@ int QuantBot::buildingCapitalCost(BuildPass& pass, Uint32 item) {
     const int power=pass.citySimEnabled || pass.powerRules ? std::max(0,data[item][houseID].power) : 0;
     // Without concrete there is no foundation to budget for.
     // CampaignHelperNoConcrete (default off): nor for a support house that never lays any.
-    const int foundation=getGameInitSettings().getGameOptions().concreteRequired && !campaignHelperNoConcrete()
+    const int foundation=getGameInitSettings().getGameOptions().concreteRequired && !campaignHelperNoConcrete(item)
         ? size.x*size.y*data[Structure_Slab1][houseID].price : 0;
     return data[item][houseID].price + foundation
         + (power*pass.generationCostPerThousand+999)/1000;

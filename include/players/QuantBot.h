@@ -2037,6 +2037,9 @@ private:
     /// CampaignHelperNoConcrete (default off) applies: the switch is read first, so with it off
     /// nothing else is evaluated. This house then orders no slab and plans no foundation.
     bool campaignHelperNoConcrete() const;
+    /// The same for one building: false for a production building while
+    /// CampaignHelperFactoryConcrete keeps its foundation.
+    bool campaignHelperNoConcrete(Uint32 item) const;
     /// CampaignHelperBeeline: whether the unfinished opening ladder admits this purchase (its goal,
     /// a missing prerequisite at any depth, the first windtrap, or a harvester while fewer than two
     /// exist). Callers test pass.campaignHelperBeeline first.

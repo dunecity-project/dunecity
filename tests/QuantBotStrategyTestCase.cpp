@@ -3717,3 +3717,30 @@ TEST_CASE("Combat priority levels and strict focus use stable HP and id order", 
     REQUIRE(F::tunedShouldSwitch(true, current, tiedLowerId, 2));
     REQUIRE_FALSE(F::tunedShouldSwitch(true, current, current, 2));
 }
+
+TEST_CASE("Campaign helper factory concrete persists OFF and ON with distinct hashes",
+          "[ai][campaign][economy][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.campaignHelperFactoryConcrete);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-factory-concrete-test.ini";
+    std::map<std::string, bool> hashes;
+    for (const bool enabled : {false, true}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\nCampaignHelperFactoryConcrete=" << (enabled ? "true" : "false") << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.campaignHelperFactoryConcrete == enabled);
+        QuantBotConfig expected = defaults;
+        expected.force.campaignHelperFactoryConcrete = enabled;
+        REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.campaignHelperFactoryConcrete == enabled);
+    }
+    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    std::filesystem::remove(path);
+}
