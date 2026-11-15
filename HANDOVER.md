@@ -23,8 +23,18 @@ times in 1.0.869 against 49 of 54 in 1.0.867, the base falling after a median 3.
 - Unchanged elsewhere: 264 of 264 QuantBot Easy and 264 of 264 old-controller games keep their
   final digest across both fixes; AWS smoke tier 11 of 11, All against Atreides 6 of 6 and Dune2R 7 of 7;
   `original_campaign_*` 3 of 3.
+- `11c54828e` (later the same day, not yet pushed): no mission teams under original rules. A
+  windowless build of Dune Dynasty's game logic (levels 4-9, 180 runs) showed the original never
+  creates a campaign team: `Scenario_Load_Team` (scenario.c, same in OpenDUNE) returns unless a
+  comma follows the fifth value, and every campaign `[TEAMS]` line ends there. So TEAM.EMC never
+  runs; only built units and reinforcements attack, one or two at a time (about 5 at the player's
+  base in the first 10 minutes, where 1.0.869 had a median of 10 at once). The earlier claim that
+  the remaining difficulty was original behaviour was wrong. With all three fixes: levels 6-9
+  51 of 54 with both Hard and Medium helpers (1.0.867: 49 and 38), every mission won at least
+  once, parity and gates unchanged. The script machine stays in the code behind a test-only switch.
+  Driver and logs: `outputs/campaign-ai-fidelity-20261115/dune-dynasty-harness/`, `dune-dynasty/`.
 - Open: native Mac build, `quantbot_ffa_army_deploys` and `perf_regression` on the Mini; a human
-  play test; levels 8-9 remain hard for a Medium helper. Still different from the original and
+  play test; a Dune Dynasty run with an active player. Still different from the original and
   left alone: shared 102-unit pool, 75% speed of built units, credits capped at storage, mission
   Guard units switching to Hunt when hit.
 - Evidence and audit table: `outputs/campaign-ai-fidelity-20261115/results.md`; rules in
