@@ -17,6 +17,8 @@ import sys
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import discard_profile_assets, require_free_space, scratch_dir
+from probe_profile import (NATIVE_TARGET, native_build_commands, native_probe_binary,  # noqa: E402
+                           native_probe_includes, native_probe_relative)
 from probe_process import processes, run, check_output
 from probe_fixture import prepare_fixture
 import pointer_artifact
@@ -104,9 +106,16 @@ commands = []
 production_link = []
 if not args.pointer_artifact:
     run(['python3',str(root/'scripts/check-build-deps.py'),str(build)],check=True,cwd=root)
-    commands = check_output(['ninja','-C',str(build),'-t','commands',pointer_artifact.TARGET],text=True).splitlines()
-    production_link = pointer_artifact.link_command(commands)
-target = pointer_artifact.TARGET
+    # macOS keeps the pointer gate's validated candidate recipe; Linux (dummy-display menus only)
+    # links bin/dunecity through probe_profile's expanded commands.
+    commands = native_build_commands(build)
+    if sys.platform == 'darwin':
+        production_link = pointer_artifact.link_command(commands)
+    else:
+        production_link = shlex.split(next(line for line in commands if ' -o ' + NATIVE_TARGET + ' ' in line))
+        production_link = production_link[production_link.index('&&') + 1:]
+        production_link = production_link[:production_link.index('&&')]
+target = pointer_artifact.TARGET if sys.platform == 'darwin' else NATIVE_TARGET
 
 def compile_fixture(work):
     source, obj = work/'menu-main.cpp', work/'menu-main.o'
@@ -131,7 +140,8 @@ def compile_fixture(work):
             main = main.replace(seed, 'initializePointerProbeVanilla();')
         main = main.replace('if(shouldPlayIntro && (bFirstInit==true))','if(false && shouldPlayIntro && (bFirstInit==true))')
         position = main.index('int main(')
-        main = main[:position] + '#include "'+str(root/'tests/menu/menu-probe.inc')+'"\n' + main[position:]
+        main = (main[:position] + ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
+                + '#include "'+str(root/'tests/menu/menu-probe.inc')+'"\n' + main[position:])
         source.write_text(main)
     compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
     for option in ('-include','-MT','-MF'):
@@ -145,12 +155,15 @@ def compile_fixture(work):
     compile_command.append('-fno-access-control')
     if args.pointer_mapping:
         compile_command.extend(['-DDUNECITY_NATIVE_POINTER_PROBE=1', '-O0'])
-    app = work/'menu-probe.app/Contents'
-    (app/'MacOS').mkdir(parents=True, exist_ok=True)
-    resources = (args.runtime_app.resolve()/'Contents/Resources' if args.pointer_mapping and args.runtime_app
-                 else build/'bin/dunecity.app/Contents/Resources')
-    if not (app/'Resources').exists(): (app/'Resources').symlink_to(resources)
-    binary = app/'MacOS/menu-probe'
+    if sys.platform == 'darwin':
+        app = work/'menu-probe.app/Contents'
+        (app/'MacOS').mkdir(parents=True, exist_ok=True)
+        resources = (args.runtime_app.resolve()/'Contents/Resources' if args.pointer_mapping and args.runtime_app
+                     else build/'bin/dunecity.app/Contents/Resources')
+        if not (app/'Resources').exists(): (app/'Resources').symlink_to(resources)
+        binary = app/'MacOS/menu-probe'
+    else:
+        binary = native_probe_binary(build, work, 'menu-probe')
     link = shlex.split(next(line for line in commands if ' -o '+target+' ' in line))
     link = link[link.index('&&')+1:]
     link = link[:link.index('&&')]
@@ -223,7 +236,7 @@ proof, receipt_sha256 = None, None
 binary = None
 if not args.pointer_artifact:
     fixture_root = args.fixture_dir.resolve() if args.fixture_dir else build / 'menu-probe-fixture'
-    binary = prepare_fixture(root, build, out, fixture_root, 'menu-probe.app/Contents/MacOS/menu-probe',
+    binary = prepare_fixture(root, build, out, fixture_root, native_probe_relative('menu-probe'),
                              commands, production_link, compile_fixture,
                              variant={'pointer': args.pointer_mapping, 'sdl_only': args.pointer_sdl_only,
                                       'retina': args.retina_resolution}, runtime_app=args.runtime_app,

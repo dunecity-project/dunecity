@@ -11,6 +11,8 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'ai'))
 from source_provenance import source_fingerprint
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'performance'))
+from probe_profile import NATIVE_TARGET  # noqa: E402
 
 
 def _snapshot(path):
@@ -86,6 +88,15 @@ def fixture_inputs(build, target, commands, production_link, runtime_app=None):
         for arg in command[:command.index('-c')]:
             if Path(arg).is_absolute() and Path(arg).is_file() and os.access(arg, os.X_OK):
                 inputs.add(Path(arg))
+    if sys.platform != 'darwin':
+        # Linux runs the probe beside the build's bin/ data (probe_profile.native_probe_binary):
+        # seal the same runtime directories the macOS bundle's Resources holds.
+        runtime = (build / target).parent
+        for name in ('config', 'data', 'imported_sprites', 'mods'):
+            directory = runtime / name
+            if directory.exists():
+                inputs.update(_runtime_files(directory))
+        return sorted(inputs)
     runtimes = {(build / target).parents[2].resolve()}
     if runtime_app is not None:
         runtimes.add(Path(runtime_app).resolve())
@@ -102,7 +113,7 @@ def fixture_inputs(build, target, commands, production_link, runtime_app=None):
 
 
 def prepare_fixture(root, build, output, directory, executable, commands, production_link, compile_fixture,
-                    *, target='bin/dunecity.app/Contents/MacOS/dunecity', variant=None,
+                    *, target=NATIVE_TARGET, variant=None,
                     runtime_app=None, require_prepared=False):
     """Publish once, or fail closed on a missing/stale runtime-only fixture.
 

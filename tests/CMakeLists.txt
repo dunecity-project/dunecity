@@ -1410,36 +1410,24 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-motion-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-motion-probe)
         set_tests_properties(unit_motion_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
-    endif()
-endif()
-
-# macOS only: GUI probes (a real window and renderer; there is no Linux display host), the
-# menu/skirmish probe fixtures (they only prepare those GUI probes' binaries) and
-# native_multiplayer_join_modes (run-late-join-probe.py still links the macOS bundle and needs
-# a local PHP signalling service the Linux workers do not have). The diagnostic mains link
-# production menu objects; no test access ships in the app. docs/ai-scenario-matrix.md,
-# "Where the gates run".
-if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-    if(Python3_Interpreter_FOUND)
-        dunecity_add_test(gui nightly LABELS "macos" NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME graphics_skin_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skins/run-skin-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/skin-probe)
         set_tests_properties(graphics_skin_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
         # Navigation and terrain controls use the same injected objects; compile once.
         set(MENU_PROBE_FIXTURE_DIR ${CMAKE_BINARY_DIR}/menu-probe-fixture)
-        dunecity_add_test(headless nightly LABELS "macos" NAME menu_probe_fixture COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME menu_probe_fixture COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --prepare-only
             --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${MENU_PROBE_FIXTURE_DIR})
         set_tests_properties(menu_probe_fixture PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
             FIXTURES_SETUP menu_native_fixture)
-        dunecity_add_test(gui nightly LABELS "macos" NAME menu_navigation_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME menu_navigation_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
             --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
         set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 RUN_SERIAL TRUE)
-        dunecity_add_test(gui nightly LABELS "macos" NAME terrain_mix_menu_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME terrain_mix_menu_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --terrain-mix --size 640x480
             --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/terrain-mix-menu-probe)
@@ -1451,7 +1439,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # spectated end plate fits the map in every house colour, chat clears the city readouts,
         # a skin round trip leaves the in-game sidebar pixel-identical, new and 1.0.850 profiles
         # get Classic. The full 3 skins x 7 sizes gallery: run-ui-gallery-probe.py without --skins/--cases.
-        dunecity_add_test(gui nightly LABELS "macos" NAME ui_gallery_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME ui_gallery_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-ui-gallery-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ui-gallery-probe
             --skins 0 2 --cases 640x480 1440x900-hd)
@@ -1467,7 +1455,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         # existing case/size/payment processes. No case pays for a private rebuild
         # or shares its profile, and each retains the existing 600 s runtime bound.
         set(SKIRMISH_PROBE_FIXTURE_DIR ${CMAKE_BINARY_DIR}/skirmish-probe-fixture)
-        dunecity_add_test(headless nightly LABELS "macos" NAME skirmish_probe_fixture COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME skirmish_probe_fixture COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py --prepare-only
             --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${SKIRMISH_PROBE_FIXTURE_DIR})
@@ -1488,7 +1476,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 if(case STREQUAL "civ-research")
                     foreach(payment IN ITEMS off on)
                         set(name civilization_wars_research_probe_${size}_${payment})
-                        dunecity_add_test(gui nightly LABELS "macos" NAME ${name} COMMAND ${Python3_EXECUTABLE}
+                        dunecity_add_test(headless nightly NAME ${name} COMMAND ${Python3_EXECUTABLE}
                             ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
                             --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR} --cases ${case} --size ${size}
                             --research-payment ${payment}
@@ -1499,7 +1487,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                     endforeach()
                 else()
                     set(name ${prefix}_${case}_${size})
-                    dunecity_add_test(gui nightly LABELS "macos" NAME ${name} COMMAND ${Python3_EXECUTABLE}
+                    dunecity_add_test(headless nightly NAME ${name} COMMAND ${Python3_EXECUTABLE}
                         ${CMAKE_SOURCE_DIR}/tests/skirmish/run-skirmish-probe.py
                         --fixture-dir ${SKIRMISH_PROBE_FIXTURE_DIR} --cases ${case} --size ${size}
                         --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/${name})
@@ -1509,10 +1497,25 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 endif()
             endforeach()
         endforeach()
-        dunecity_add_test(gui nightly LABELS "macos" NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME retina_resolution_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)
         set_tests_properties(retina_resolution_probe PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+        set_tests_properties(graphics_skin_probe menu_probe_fixture menu_navigation_probe
+            terrain_mix_menu_probe ui_gallery_probe skirmish_probe_fixture retina_resolution_probe PROPERTIES
+            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20)
+    endif()
+endif()
+
+# macOS only, each for a concrete reason (docs/ai-scenario-matrix.md, "Where the gates run"):
+# native_pointer_mapping_probe and mouse_controls_probe drive a real window with Cocoa input;
+# perf_regression's budgets are calibrated on a quiet Mac; native_multiplayer_join_modes and
+# spectator_online_end_probe need the local PHP signalling service, which the Linux workers do
+# not have. Every other probe runs on the dummy video driver and is registered above. The
+# diagnostic mains link production menu objects; no test access ships in the app.
+if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
         if(APPLE)
             # Real Cocoa motion/buttons through linked SDL and the production menu
             # hit-test path. Explicit Mini GUI opt-in; never admitted on the Air.
@@ -1528,15 +1531,12 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20
                 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         endif()
-        set_tests_properties(graphics_skin_probe menu_probe_fixture menu_navigation_probe
-            terrain_mix_menu_probe ui_gallery_probe skirmish_probe_fixture retina_resolution_probe PROPERTIES
-            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20)
         # The same end online: host, partner and a mid-game spectator as three processes over the
         # local signaling service (PHP) and WebRTC, each in the real main loop. The spectator ends
         # on the host's last cycle and digest with the winner on its plate and statistics when the
         # host leaves after its end message, quits at the decision, while the spectator hangs 20-25 s
         # or runs at half speed, and in a Dune City game with Natives worms. Skipped without PHP.
-        dunecity_add_test(gui nightly LABELS "macos" NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly LABELS "macos;network" NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/network/run-spectator-end-probe.py
             --cases end,decision,lag-end,lag-decision,slow,natives
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-online-end-probe)

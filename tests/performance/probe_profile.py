@@ -268,27 +268,35 @@ def native_probe_includes(root):
     return [] if sys.platform == 'darwin' else [Path(root) / 'tests/ai/robustlist-iterator-traits.inc']
 
 
+def native_probe_relative(name):
+    """Where a probe NAME's executable sits below its own directory (a fixture or OUT)."""
+    return Path(f'{name}.app/Contents/MacOS/{name}') if sys.platform == 'darwin' else Path(f'{name}/bin/{name}')
+
+
+def native_probe_data_dir(out, name):
+    """The data directory the probe at OUT/native_probe_relative(NAME) reads: the bundle's
+    Resources on macOS, the executable-relative ../share/DuneCity on Linux (src/misc/FileSystem.cpp)."""
+    return Path(out) / (f'{name}.app/Contents/Resources' if sys.platform == 'darwin' else f'{name}/share/DuneCity')
+
+
+def native_build_data_dir(build):
+    """The build tree's own game data directory: the app's Resources, or bin/ beside bin/dunecity."""
+    return Path(build).resolve() / ('bin/dunecity.app/Contents/Resources' if sys.platform == 'darwin' else 'bin')
+
+
 def native_probe_binary(build, out, name):
     """Path to link a probe NAME to, private to OUT, from which the game finds the build's data.
 
     macOS: an app bundle whose Resources is the build app's. Linux: OUT/NAME/bin/NAME, with
     OUT/NAME/share/DuneCity the build's bin/ (the game's executable-relative data directory,
     src/misc/FileSystem.cpp), so concurrent probes never write into the shared build tree."""
-    build, out = Path(build), Path(out)
-    if sys.platform == 'darwin':
-        app = out / f'{name}.app/Contents'
-        (app / 'MacOS').mkdir(parents=True, exist_ok=True)
-        resources = app / 'Resources'
-        if not resources.exists():
-            resources.symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-        return app / 'MacOS' / name
-    prefix = out / name
-    (prefix / 'bin').mkdir(parents=True, exist_ok=True)
-    (prefix / 'share').mkdir(exist_ok=True)
-    data = prefix / 'share/DuneCity'
-    if not data.exists():
-        data.symlink_to(build.resolve() / 'bin', target_is_directory=True)
-    return prefix / 'bin' / name
+    binary = Path(out) / native_probe_relative(name)
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    data = native_probe_data_dir(out, name)
+    data.parent.mkdir(parents=True, exist_ok=True)
+    if not data.exists() and not data.is_symlink():
+        data.symlink_to(native_build_data_dir(build), target_is_directory=True)
+    return binary
 
 
 def _installed(name):

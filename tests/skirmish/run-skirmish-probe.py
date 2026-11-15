@@ -60,6 +60,7 @@ import sys
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import managed_profile, require_free_space, scratch_dir
+from probe_profile import NATIVE_TARGET, native_build_commands, native_build_data_dir, native_probe_binary, native_probe_data_dir, native_probe_includes, native_probe_relative  # noqa: E402
 sys.path.insert(0, str(root / 'tests/menu'))
 from probe_process import processes, run, check_output
 from probe_fixture import prepare_fixture
@@ -98,8 +99,8 @@ if args.size:
 require_free_space(sweep='if-low')
 run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+commands = native_build_commands(build)
 production_link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
 production_link = production_link[production_link.index('&&') + 1:]
 production_link = production_link[:production_link.index('&&')]
@@ -119,7 +120,8 @@ def compile_fixture(work):
     main = main.replace(clamp, '(void)displayIndex;')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
     position = main.index('int main(')
-    main = main[:position] + '#include "' + str(root / 'tests/skirmish/skirmish-probe.inc') + '"\n' + main[position:]
+    main = (main[:position] + ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
+            + '#include "' + str(root / 'tests/skirmish/skirmish-probe.inc') + '"\n' + main[position:])
     source, obj = work / 'skirmish-main.cpp', work / 'skirmish-main.o'
     source.write_text(main)
     menu_source, menu_obj = work / 'civ-wars-menu.cpp', work / 'civ-wars-menu.o'
@@ -144,10 +146,7 @@ def compile_fixture(work):
     menu_compile = compile_command.copy()
     menu_compile[menu_compile.index('-o') + 1] = str(menu_obj)
     menu_compile[menu_compile.index('-c') + 1] = str(menu_source)
-    app = work / 'skirmish-probe.app/Contents'
-    (app / 'MacOS').mkdir(parents=True)
-    (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    binary = app / 'MacOS/skirmish-probe'
+    binary = native_probe_binary(build, work, 'skirmish-probe')
     link = production_link.copy()
     link[link.index('-o') + 1] = str(binary)
     link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
@@ -160,11 +159,12 @@ def compile_fixture(work):
 
 
 fixture_root = args.fixture_dir.resolve() if args.fixture_dir else build / 'skirmish-probe-fixture'
-binary = prepare_fixture(root, build, out, fixture_root, 'skirmish-probe.app/Contents/MacOS/skirmish-probe',
+binary = prepare_fixture(root, build, out, fixture_root, native_probe_relative('skirmish-probe'),
                          commands, production_link, compile_fixture,
                          require_prepared=bool(args.fixture_dir and not args.prepare_only))
 if args.prepare_only:
-    print('SKIRMISH_FIXTURE_READY: ' + str(binary.parents[3]), flush=True)
+    print('SKIRMISH_FIXTURE_READY: ' + str(binary.parents[len(native_probe_relative('skirmish-probe').parts) - 1]),
+          flush=True)
     sys.exit(0)
 
 # Engine diagnostics that mean a generated map or match is broken. Occupied

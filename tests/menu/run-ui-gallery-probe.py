@@ -27,6 +27,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import scratch_dir, require_free_space
+from probe_profile import NATIVE_TARGET, native_build_commands, native_build_data_dir, native_probe_binary, native_probe_data_dir, native_probe_includes, native_probe_relative  # noqa: E402
 from probe_process import processes, run, check_output
 from probe_fixture import prepare_fixture
 processes.install_signal_handlers()
@@ -56,8 +57,8 @@ out.mkdir(parents=True, exist_ok=True)
 require_free_space(sweep='if-low')
 run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+commands = native_build_commands(build)
 production_link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
 production_link = production_link[production_link.index('&&') + 1:]
 production_link = production_link[:production_link.index('&&')]
@@ -74,7 +75,8 @@ def compile_fixture(work):
     main = main.replace(clamp, '(void)displayIndex;')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
     position = main.index('int main(')
-    main = main[:position] + '#include "' + str(root / 'tests/menu/ui-gallery-probe.inc') + '"\n' + main[position:]
+    main = (main[:position] + ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
+            + '#include "' + str(root / 'tests/menu/ui-gallery-probe.inc') + '"\n' + main[position:])
     source, obj = work / 'ui-gallery-main.cpp', work / 'ui-gallery-main.o'
     source.write_text(main)
     compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
@@ -88,10 +90,7 @@ def compile_fixture(work):
     compile_command[compile_command.index('-o') + 1] = str(obj)
     compile_command[compile_command.index('-c') + 1] = str(source)
     compile_command.append('-fno-access-control')
-    app = work / 'ui-gallery.app/Contents'
-    (app / 'MacOS').mkdir(parents=True)
-    (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    binary = app / 'MacOS/ui-gallery'
+    binary = native_probe_binary(build, work, 'ui-gallery')
     link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
     link = link[link.index('&&') + 1:]
     link = link[:link.index('&&')]
@@ -102,7 +101,7 @@ def compile_fixture(work):
         run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
 binary = prepare_fixture(root, build, out, build / 'ui-gallery-probe-fixture',
-                         'ui-gallery.app/Contents/MacOS/ui-gallery', commands, production_link, compile_fixture)
+                         native_probe_relative('ui-gallery'), commands, production_link, compile_fixture)
 print('UI_GALLERY_RUNTIME_PHASE: begin', flush=True)
 
 lobby_map = root / 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini'
