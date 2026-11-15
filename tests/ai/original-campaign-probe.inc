@@ -113,6 +113,26 @@ void runOriginalCampaignProbe(Game& game) {
             require(builder->getCurrentUpgradeLevel() == level, "non-Campaign controller got free upgrade");
         }
 
+    // Authored unit cap (level-nine fixture: every computer house has MaxUnit=20). The
+    // shipped unlimited override leaves the player's house alone and is not applied to it.
+    require(game.getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride > 0
+        || house->maxUnits == 20, "original house lost its authored MaxUnit to the unit override");
+    {
+        const int authoredCap = house->maxUnits;
+        while(factory->getProductionQueueSize()) factory->doCancelItem(factory->getCurrentProducedItem());
+        house->addCredits(10000);
+        house->maxUnits = 0;
+        require(bot->pickNextToBuild(factory) != ItemID_Invalid, "uncapped heavy factory had nothing to build");
+        house->maxUnits = bot->originalAllocatedUnits() + 1;
+        require(bot->pickNextToBuild(factory) != ItemID_Invalid, "house below its cap was refused a unit");
+        house->maxUnits = bot->originalAllocatedUnits();
+        require(bot->pickNextToBuild(factory) == ItemID_Invalid, "house at its cap still started a ground unit");
+        bot->originalRules = false;
+        require(bot->pickNextToBuild(factory) != ItemID_Invalid, "pre-9886 controller inherited the original cap");
+        bot->originalRules = true;
+        house->maxUnits = authoredCap;
+    }
+
     // The five original slots keep temporarily unavailable entries. Selection
     // skips those slots instead of deleting them or blocking a later rebuild.
     bot->rebuildQueue.clear();

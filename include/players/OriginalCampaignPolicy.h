@@ -57,6 +57,24 @@ inline bool sightActivates(bool observerIsOriginalAI, bool allied, bool flying, 
     return !observerIsOriginalAI && !allied && !flying && tileSeenByObserver;
 }
 
+// scenario.c Scenario_Load_House: a house whose mission gives no MaxUnit gets 39.
+inline constexpr int defaultUnitCap = 39;
+
+// pool_unit.c Unit_Allocate: a house at its MaxUnit is refused every new unit except
+// aircraft (and sandworms). Each unit counts as one, and Structure_BuildObject allocates
+// the unit when production starts, so a unit still in a factory counts too. Units the
+// mission places or reinforces are not refused. Zero means no cap.
+inline bool unitCapBlocks(int cap, int allocatedUnits, bool flying) {
+    return cap > 0 && !flying && allocatedUnits >= cap;
+}
+
+// "Maximum Number of Units Override": -1 map default, 0 unlimited (the shipped default),
+// above 0 an explicit number. In an authored mission a computer house under original
+// rules keeps the MaxUnit its mission gave it unless the player set an explicit number.
+inline bool keepsAuthoredUnitCap(bool originalCampaignHouse, bool authoredMission, int unitOverride) {
+    return originalCampaignHouse && authoredMission && unitOverride <= 0;
+}
+
 inline int targetPriority(int combinedPriority, int distance, bool structure) {
     if (distance == 0) return combinedPriority;
     return combinedPriority / distance + (structure ? 0 : 1);

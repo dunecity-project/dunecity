@@ -134,6 +134,8 @@ private:
     void updateScenarioTeams();
     const ObjectBase* originalTarget(const UnitBase* unit, bool structuresFirst) const;
     bool originalCombatUnit(const UnitBase* unit) const;
+    /// Dune II counts every unit of the house, including one still in a factory.
+    int originalAllocatedUnits() const;
     static AITeamType movementClass(const UnitBase* unit);
 
     std::vector<RebuildQueueEntry> rebuildQueue;  // Max 5 entries (Original AI limit)

@@ -592,10 +592,17 @@ void CampaignAIPlayer::updateStructures() {
 Uint32 CampaignAIPlayer::pickNextToBuild(const BuilderBase* pBuilder) {
     if(!pBuilder) return ItemID_Invalid;
     if(originalRules) {
+        // Unit_Allocate refuses a house at its MaxUnit every unit but aircraft. As in Dune II
+        // the choice is made first (same random draws) and a refused unit simply is not started.
+        const int cap = getHouse()->getMaxUnits();
+        const int allocated = cap > 0 ? originalAllocatedUnits() : 0;
+        const auto capped = [&](int item) {
+            return OriginalCampaignPolicy::unitCapBlocks(cap, allocated, isFlyingUnit(item));
+        };
         const int selected = OriginalCampaignPolicy::pickUnit([&](int item) {
             return pBuilder->isAvailableToBuild(item) && shouldBuildItem(pBuilder->getItemID(), item);
         }, [&] { return getRandomGen().rand(0, 255); });
-        if(selected != ItemID_Invalid) return selected;
+        if(selected != ItemID_Invalid) return capped(selected) ? static_cast<Uint32>(ItemID_Invalid) : static_cast<Uint32>(selected);
         // A mod can replace every original unit in a factory. Keep that factory
         // productive using its legal combat roster; this extension is inert for
         // the original 18-unit roster and never substitutes harvesters or MCVs.
@@ -605,7 +612,7 @@ Uint32 CampaignAIPlayer::pickNextToBuild(const BuilderBase* pBuilder) {
                     != OriginalCampaignPolicy::unitOrder.end()
                 || !OriginalCampaignPolicy::combatUnit(item.itemID) || isHarvesterLikeUnit(item.itemID)
                 || isCarryallUnit(item.itemID) || !pBuilder->isAvailableToBuild(item.itemID)
-                || !shouldBuildItem(pBuilder->getItemID(), item.itemID)) continue;
+                || !shouldBuildItem(pBuilder->getItemID(), item.itemID) || capped(item.itemID)) continue;
             const int value = getBuildPriority(item.itemID);
             if(getRandomGen().rand(0, 255) % 4 == 0 || fallback == ItemID_Invalid || value > priority) {
                 fallback = item.itemID; priority = value;
@@ -709,6 +716,16 @@ bool CampaignAIPlayer::originalCombatUnit(const UnitBase* unit) const {
     return unit && unit->getOwner() == getHouse() && unit->isRespondable()
         && OriginalCampaignPolicy::combatUnit(unit->getItemID())
         && !isHarvesterLikeUnit(unit->getItemID()) && unit->getAttackMode() != SABOTAGE;
+}
+
+int CampaignAIPlayer::originalAllocatedUnits() const {
+    int allocated = getHouse()->getNumUnits();
+    for(const StructureBase* structure : getStructureList()) {
+        if(structure->getOwner() != getHouse() || !structure->isABuilder()
+            || structure->getItemID() == Structure_ConstructionYard || structure->getItemID() == Structure_StarPort) continue;
+        if(static_cast<const BuilderBase*>(structure)->getProductionQueueSize() > 0) ++allocated;
+    }
+    return allocated;
 }
 
 AITeamType CampaignAIPlayer::movementClass(const UnitBase* unit) {

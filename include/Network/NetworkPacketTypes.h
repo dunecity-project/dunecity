@@ -386,7 +386,9 @@
 //      saved team state (9886), free upgrades and script-owned attack targets.
 // 126: Original Campaign AI wakes only once the other side's sight uncovers one of its
 //      ground units (Dune II isAIActive), not at the first update. Older peers start its
-//      production and team scripts at once and would desync. Save format unchanged.
+//      production and team scripts at once and would desync. In authored missions it
+//      also keeps each computer house's own MaxUnit under the default unit override.
+//      Save format unchanged.
 #define NETWORK_PROTOCOL_VERSION            126
 
 // Mod transfer limits

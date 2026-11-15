@@ -69,6 +69,24 @@ sight counts, not the pre-explored map. The pre-9886 controller and every other 
 keep waking at the first update. Protocol 126; save format unchanged (`isAIActive` was
 already saved).
 
+## Unit cap (corrected 2026-11-15)
+
+Dune II refuses a house at its `MaxUnit` every new unit except aircraft (upstream
+`src/pool/pool_unit.c`, `Unit_Allocate`; `MaxUnit` is read in `src/scenario.c` and defaults
+to 39). The campaign gives its computer houses 15 to 25, and from level 5 they start with 11
+to 23 units already placed, so the original enemy mostly replaces losses. Each unit counts as
+one and a unit still in a factory counts, because `Structure_BuildObject` allocates it when
+production starts. Mission-placed units and reinforcements are not refused.
+
+DuneCity ships "Maximum Number of Units Override = 0" (unlimited), which replaced every
+house's authored number, so an original-rules house produced from all its factories without
+end. In an authored mission (campaign or single mission) such a house now keeps its own
+`MaxUnit` under both defaults of the option (0 and -1); only an explicit number above 0
+replaces it. `CampaignAIPlayer::pickNextToBuild` applies the original count
+(`OriginalCampaignPolicy::unitCapBlocks`). The player's house, QuantBot, the pre-9886
+controller, custom maps and saves made before this change are unaffected. Not reproduced:
+the engine-wide pool of 102 units shared by all houses.
+
 New games default to `OriginalCampaignAI=true` in `[General Behavior]` of the
 runtime QuantBot configuration; `false` selects the previous controller for
 controlled comparisons. QuantBot remains a separate controller. Do not add the

@@ -10,6 +10,8 @@
 #include <players/Player.h>
 #include <players/AIPlayer.h>
 #include <players/HumanPlayer.h>
+#include <players/OriginalCampaignPolicy.h>
+#include <players/QuantBotConfig.h>
 #include <Map.h>
 #include <ScreenBorder.h>
 #include <MapSeed.h>
@@ -720,8 +722,17 @@ void INIMapLoader::loadHouses()
         }
 
         int maxUnits = 0;
-        if(currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride >= 0) {
-            maxUnits = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride;
+        const int unitOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride;
+        const bool originalCampaignHouse = getQuantBotConfig().originalCampaignAI
+            && std::any_of(resolvedHouseInfo.playerInfoList.begin(), resolvedHouseInfo.playerInfoList.end(),
+                           [](const GameInitSettings::PlayerInfo& info) { return info.playerClass == "CampaignAIPlayer"; });
+        if(OriginalCampaignPolicy::keepsAuthoredUnitCap(originalCampaignHouse, isScenarioGameType(pGame->gameType), unitOverride)) {
+            // Dune II: every computer house keeps the MaxUnit its mission authored. The shipped
+            // "unlimited" override would otherwise let it build without end (docs/original-campaign-ai.md).
+            const int maxUnit = inifile->getIntValue(houseName, "MaxUnit", OriginalCampaignPolicy::defaultUnitCap);
+            maxUnits = inifile->getIntValue(houseName, "MaxUnits", maxUnit);
+        } else if(unitOverride >= 0) {
+            maxUnits = unitOverride;
         } else {
             // Use map size defaults from ObjectData.ini
             const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();

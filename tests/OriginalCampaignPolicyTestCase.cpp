@@ -33,6 +33,22 @@ TEST_CASE("Original campaign AI wakes only on the other side's sight of a ground
     REQUIRE_FALSE(sightActivates(false, true, false, true));   // allies
 }
 
+TEST_CASE("Original campaign houses stop at their authored unit cap", "[campaign-ai]") {
+    using namespace OriginalCampaignPolicy;
+    REQUIRE(defaultUnitCap == 39);
+    REQUIRE_FALSE(unitCapBlocks(25, 24, false));
+    REQUIRE(unitCapBlocks(25, 25, false));
+    REQUIRE(unitCapBlocks(20, 22, false));        // the mission placed more than the cap
+    REQUIRE_FALSE(unitCapBlocks(25, 40, true));   // aircraft are never refused
+    REQUIRE_FALSE(unitCapBlocks(0, 500, false));  // no cap: older saves and explicit overrides
+    // The shipped "unlimited" (0) and "map default" (-1) both keep the mission's number.
+    REQUIRE(keepsAuthoredUnitCap(true, true, 0));
+    REQUIRE(keepsAuthoredUnitCap(true, true, -1));
+    REQUIRE_FALSE(keepsAuthoredUnitCap(true, true, 60));   // an explicit number wins
+    REQUIRE_FALSE(keepsAuthoredUnitCap(true, false, 0));   // custom maps follow the lobby
+    REQUIRE_FALSE(keepsAuthoredUnitCap(false, true, 0));   // QuantBot and pre-9886 houses
+}
+
 TEST_CASE("Original campaign structure and unit targeting differ at distance", "[campaign-ai]") {
     REQUIRE(OriginalCampaignPolicy::targetPriority(300, 3, true) == 100);
     REQUIRE(OriginalCampaignPolicy::targetPriority(300, 3, false) == 101);
