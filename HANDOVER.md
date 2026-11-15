@@ -1,3 +1,26 @@
+## 2026-11-15 - 1.0.870 published
+
+`v1.0.870` is an annotated tag on `e0eaee02f1ea11a31c1469573d8994d02319624b` (branch
+`integrate/feature-batch`), pushed 16:24 AEDT after the owner's "Yes, publish it". Evidence:
+`~/Documents/projects/outputs/release-1.0.870/` (`gates.md`, `channels.md`).
+
+- First candidate `bf9bb5974` failed the headless qualification on `quantbot_custom_attack`
+  (1 of 144): the probe pinned the campaign helper reserve regrouping on the army centroid, which
+  `CampaignHelperDefenceLeash=14` changes on purpose. `e0eaee02f` updates the probe (centroid with
+  the leash off; within the leash of own buildings with the shipped leash) and makes the leash inert
+  for a house with no building left. No game outcome changed in 480 replayed games; the only final
+  digests that differ are games lost in both runs. `bf9bb5974` was never tagged.
+- Qualified: run 43679399472. Tag build: run 43680987264, 25 minutes, all jobs passed.
+- Verified live: GitHub release (Latest, 8 packages, feeds and appcasts, hashes and signatures),
+  SourceForge (7 packages, README, SHA256SUMS, three OS defaults), browser build (build.json at
+  1.0.870/e0eaee02f, hashes match, main menu reached in Chrome on the Mini), website pages and changelog.
+- Not done: TestFlight (still engine 1.0.857). Android held on 0.2.33 (engine 1.0.858); it cannot
+  play online with protocol 126. No package was installed and played on Windows or Linux.
+- Pull request 127 into `main` is still open: the account used has push but not admin rights and
+  `main` requires a review. As with 1.0.869, `main` does not contain the released tag.
+- Lesson: before pushing a candidate that changes an AI default, run the headless nightly AI probes
+  (`^quantbot_`), not only the four mandatory gates; the qualification is where this surfaced.
+
 ## 2026-11-15 - 1.0.870 candidate: campaign helper holds its ground and follows a bigger build order
 
 Classic-campaign support QuantBots (campaignEconomySupport(): campaign policy, allied with the
