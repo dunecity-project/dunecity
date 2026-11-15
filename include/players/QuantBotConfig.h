@@ -458,6 +458,21 @@ struct QuantBotConfig {
         /// foundation under Gun and Rocket Turrets: 5 credits against starting at half health
         /// (repairing that costs 20-39). Hashed; default off.
         bool campaignHelperTurretConcrete;
+        /// Vanilla custom/skirmish QuantBots (no campaign, no city, vanilla power rules) buy the
+        /// windtraps that close a power shortage when its running cost (repairs plus lost refinery
+        /// pay) repays them within this many game minutes, ordering them only when the yard has
+        /// nothing else to build. 0=OFF. Hashed; default 0.
+        int vanillaPowerPayback;
+        /// Vanilla custom/skirmish QuantBots defer the bulk-slab yard upgrade: 0=OFF (at once),
+        /// 2=after the first Light Factory, 3=after the first Heavy Factory. Hashed; default 0.
+        int vanillaYardUpgradeTiming;
+        /// Vanilla custom/skirmish QuantBots place non-production buildings (not factories, not
+        /// turrets) on bare rock until their first Heavy Factory stands, then lay full
+        /// foundations again. Hashed; default off.
+        bool vanillaOpeningBare;
+        /// Vanilla custom/skirmish QuantBots upgrade the yard to the Rocket Turret level as soon
+        /// as an enemy fields aircraft or can build Ornithopters. Hashed; default off.
+        bool vanillaAirUpgrade;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
         /// Repair Yard: 0=OFF (all opening refineries first). 1..4.

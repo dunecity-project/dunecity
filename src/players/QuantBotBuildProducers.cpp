@@ -694,20 +694,23 @@ bool QuantBot::enemyAirCapable() const {
 // deferred spare-cash rule and only need the upgrade's own price.
 bool QuantBot::campaignHelperTimedYardUpgrade(BuildPass& pass, BuilderTurn& turn) {
     const auto& force = botConfig().force;
-    if ((force.campaignHelperYardUpgradeTiming <= 0 && !force.campaignHelperAirUpgrade)
-        || !campaignEconomySupport()) return false;
+    // VanillaAirUpgrade (default off) reuses the air rule for custom play; timings stay helper-only.
+    const bool helper = campaignEconomySupport()
+        && (force.campaignHelperYardUpgradeTiming > 0 || force.campaignHelperAirUpgrade);
+    const bool vanillaAir = force.vanillaAirUpgrade && vanillaCustomEconomy();
+    if (!helper && !vanillaAir) return false;
     const BuilderBase* yard = turn.pBuilder;
     if (yard->getItemID() != Structure_ConstructionYard || yard->isUpgrading()
         || yard->getProductionQueueSize() != 0 || !yard->isAllowedToUpgrade()
         || yard->getHealth() < yard->getMaxHealth()) return false;
     const auto& rocket = currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()];
     const int level = yard->getCurrentUpgradeLevel();
-    const bool air = force.campaignHelperAirUpgrade && rocket.enabled
+    const bool air = (helper ? force.campaignHelperAirUpgrade : vanillaAir) && rocket.enabled
         && rocket.techLevel <= getHouse()->getTechLevel() && level < rocket.upgradeLevel
         && campaignPermitsStructure(Structure_RocketTurret)
         && (pass.airEngaged || enemyAirCapable());
     const char* reason = air ? "air_defence" : nullptr;
-    if (!air) {
+    if (!air && helper) {
         const bool lightFactory = getHouse()->getNumItems(Structure_LightFactory) > 0;
         const bool heavyFactory = getHouse()->getNumItems(Structure_HeavyFactory) > 0;
         switch (force.campaignHelperYardUpgradeTiming) {
@@ -739,6 +742,11 @@ bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {
     // An optional concrete unlock must not own a cash-poor campaign yard's
     // turn. Keep founding with single slabs while income/power recover.
     if (!campaignYardUpgradeReady(pass, turn.pBuilder)) return false;
+    // VanillaYardUpgradeTiming (default off): custom play defers the bulk-slab unlock.
+    if (const int timing = botConfig().force.vanillaYardUpgradeTiming; timing > 0 && vanillaCustomEconomy()) {
+        if (timing == 2 && getHouse()->getNumItems(Structure_LightFactory) == 0) return false;
+        if (timing == 3 && getHouse()->getNumItems(Structure_HeavyFactory) == 0) return false;
+    }
     // CampaignHelperNoConcrete (default on): a support house that lays no slab needs no
     // bulk-slab upgrade, so the upgrade never owns its yard's turn.
     if (campaignHelperNoConcrete()) return false;
@@ -949,7 +957,7 @@ Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
         investment.incomeMinutes=QuantBotSpendingPolicy::horizonMinutes;
         investment.repairMilliPerHitpoint=repairMilli;
         if (campaignHelperPowerPaybackActive()) {
-            investment.paybackMinutes=botConfig().force.campaignHelperPowerPayback;
+            investment.paybackMinutes=powerPaybackMinutes();
             investment.refineryLossPerMinute=QuantBotPowerInvestmentPolicy::refineryPayLossPerMinute(
                 pass.forecastNetIncome/std::max(1,QuantBotSpendingPolicy::horizonMinutes));
         }

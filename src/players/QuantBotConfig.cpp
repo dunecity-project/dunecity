@@ -435,6 +435,10 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperPowerPayback = 0;
     force.campaignHelperLateConcrete = 0;
     force.campaignHelperTurretConcrete = false;
+    force.vanillaPowerPayback = 0;
+    force.vanillaYardUpgradeTiming = 0;
+    force.vanillaOpeningBare = false;
+    force.vanillaAirUpgrade = false;
     force.campaignHelperEarlyStarport = 0;
     force.campaignHelperProtectedRepair = false;
     force.campaignHelperDefenceLeash = 14;
@@ -920,6 +924,10 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CampaignHelperPowerPayback", force.campaignHelperPowerPayback);
         iniFile.setIntValue("Force Concentration", "CampaignHelperLateConcrete", force.campaignHelperLateConcrete);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperTurretConcrete", force.campaignHelperTurretConcrete);
+        iniFile.setIntValue("Force Concentration", "VanillaPowerPayback", force.vanillaPowerPayback);
+        iniFile.setIntValue("Force Concentration", "VanillaYardUpgradeTiming", force.vanillaYardUpgradeTiming);
+        iniFile.setBoolValue("Force Concentration", "VanillaOpeningBare", force.vanillaOpeningBare);
+        iniFile.setBoolValue("Force Concentration", "VanillaAirUpgrade", force.vanillaAirUpgrade);
         iniFile.setIntValue("Force Concentration", "CampaignHelperEarlyStarport", force.campaignHelperEarlyStarport);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
         iniFile.setIntValue("Force Concentration", "CampaignHelperDefenceLeash", force.campaignHelperDefenceLeash);
@@ -1254,6 +1262,12 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignHelperLateConcrete = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperLateConcrete", force.campaignHelperLateConcrete), 0, 2);
     force.campaignHelperTurretConcrete = iniFile.getBoolValue("Force Concentration", "CampaignHelperTurretConcrete", force.campaignHelperTurretConcrete);
+    force.vanillaPowerPayback = std::clamp(
+        iniFile.getIntValue("Force Concentration", "VanillaPowerPayback", force.vanillaPowerPayback), 0, 120);
+    force.vanillaYardUpgradeTiming = std::clamp(
+        iniFile.getIntValue("Force Concentration", "VanillaYardUpgradeTiming", force.vanillaYardUpgradeTiming), 0, 3);
+    force.vanillaOpeningBare = iniFile.getBoolValue("Force Concentration", "VanillaOpeningBare", force.vanillaOpeningBare);
+    force.vanillaAirUpgrade = iniFile.getBoolValue("Force Concentration", "VanillaAirUpgrade", force.vanillaAirUpgrade);
     force.campaignHelperEarlyStarport = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperEarlyStarport", force.campaignHelperEarlyStarport), 0, 4);
     force.campaignHelperProtectedRepair = iniFile.getBoolValue("Force Concentration", "CampaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
@@ -1936,6 +1950,10 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHelperPowerPayback", force.campaignHelperPowerPayback);
     addNamed("campaignHelperLateConcrete", force.campaignHelperLateConcrete);
     addNamed("campaignHelperTurretConcrete", force.campaignHelperTurretConcrete);
+    addNamed("vanillaPowerPayback", force.vanillaPowerPayback);
+    addNamed("vanillaYardUpgradeTiming", force.vanillaYardUpgradeTiming);
+    addNamed("vanillaOpeningBare", force.vanillaOpeningBare);
+    addNamed("vanillaAirUpgrade", force.vanillaAirUpgrade);
     addNamed("campaignHelperEarlyStarport", force.campaignHelperEarlyStarport);
     addNamed("campaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
     addNamed("campaignHelperDefenceLeash", force.campaignHelperDefenceLeash);

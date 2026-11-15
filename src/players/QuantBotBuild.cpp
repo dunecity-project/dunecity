@@ -69,14 +69,33 @@ bool QuantBot::campaignHelperNoConcrete() const {
     return botConfig().force.campaignHelperNoConcrete && campaignEconomySupport();
 }
 
+// Custom/skirmish play with vanilla rules: no campaign, no city, no power requirement.
+bool QuantBot::vanillaCustomEconomy() const {
+    return currentGame && !currentGame->isCitySimEnabled() && !getHouse()->isPowerRequired()
+        && !builderOnly() && !campaignPolicyApplies();
+}
+
+// CampaignHelperPowerPayback for the support house, VanillaPowerPayback for custom play.
+int QuantBot::powerPaybackMinutes() const {
+    if (campaignEconomySupport()) return botConfig().force.campaignHelperPowerPayback;
+    return vanillaCustomEconomy() ? botConfig().force.vanillaPowerPayback : 0;
+}
+
 bool QuantBot::campaignHelperPowerPaybackActive() const {
-    return botConfig().force.campaignHelperPowerPayback > 0 && campaignEconomySupport();
+    return powerPaybackMinutes() > 0;
 }
 
 bool QuantBot::campaignHelperNoConcrete(Uint32 item) const {
     // CampaignHelperPowerPayback (default off): its windtraps keep their foundation, so they
     // start at full output and never need the bare-rock repair.
     if (item == Structure_WindTrap && campaignHelperPowerPaybackActive()) return false;
+    // VanillaOpeningBare (default off): custom play founds only factories and turrets until
+    // its first Heavy Factory stands; past the opening a foundation costs less than the repair.
+    if (botConfig().force.vanillaOpeningBare && vanillaCustomEconomy()
+        && getHouse()->getNumItems(Structure_HeavyFactory) == 0
+        && item != Structure_LightFactory && item != Structure_HeavyFactory && item != Structure_HighTechFactory
+        && item != Structure_WOR && item != Structure_Barracks && item != Structure_ConstructionYard
+        && item != Structure_GunTurret && item != Structure_RocketTurret) return true;
     // CampaignHelperTurretConcrete (default off): a turret's one slab is cheaper than fighting
     // at half health or repairing it.
     if ((item == Structure_GunTurret || item == Structure_RocketTurret)
