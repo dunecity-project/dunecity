@@ -429,6 +429,21 @@ struct QuantBotConfig {
         /// at half health unloads at two fifths speed, so OFF keeps repairing those too.
         /// Hashed; default off.
         bool campaignHelperRepairFactoriesOnly;
+        /// Classic campaign support upgrades its Construction Yard on a fixed timing, outside the
+        /// deferred spare-cash rule: 0=OFF (existing rules only), 1=as soon as a level is
+        /// available and affordable, 2=after the first Light Factory, 3=after the first Heavy
+        /// Factory, 4=after the first Heavy Factory and the full opening harvester fleet.
+        /// Hashed; default 0.
+        int campaignHelperYardUpgradeTiming;
+        /// Classic campaign support upgrades its yard to the Rocket Turret level as soon as an
+        /// enemy fields aircraft (or can build Ornithopters from a standing High Tech Factory),
+        /// whatever the timing above, and the deferred-upgrade rule no longer holds that
+        /// upgrade back. Hashed; default off.
+        bool campaignHelperAirUpgrade;
+        /// Classic campaign support at the ground unit limit launches with the army it has when
+        /// that army is below its readiness (the CampaignAllyStrengthFloor can otherwise ask
+        /// for more than the unit cap can ever hold). Hashed; default off.
+        bool campaignHelperUnitCapLaunch;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
         /// Repair Yard: 0=OFF (all opening refineries first). 1..4.

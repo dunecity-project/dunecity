@@ -2106,6 +2106,8 @@ private:
     bool recoverBuilderConstruction(BuildPass& pass, BuilderTurn& turn);
     /// Bulk-slab yard upgrade; true ends the turn.
     bool upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn);
+    bool campaignHelperTimedYardUpgrade(BuildPass& pass, BuilderTurn& turn);
+    bool enemyAirCapable() const;
     /// Campaign repair capacity; true ends the turn.
     bool buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn);
     /// Withholds the cash this builder must not spend.

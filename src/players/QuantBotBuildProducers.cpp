@@ -80,6 +80,7 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     // A selected ordinary-installment project needs no legacy yard-entry cash.
     if (pass.techSavings && cityHarvesterReplacementFloor(pass) <= pass.itemCount[Unit_Harvester]
         && buildTechSavings(pass, turn)) return;
+    if (campaignHelperTimedYardUpgrade(pass, turn)) return;
     if (upgradeYardForConcrete(pass, turn)) return;
     if (queueCampaignWindtrap(pass, turn, 0)) return;
     if (buildCampaignRepairYard(pass, turn)) return;
@@ -574,7 +575,15 @@ bool QuantBot::buildTechSavings(BuildPass& pass, BuilderTurn& turn) {
 }
 
 bool QuantBot::campaignYardUpgradeReady(BuildPass& pass, const BuilderBase* builder) {
-    return !botConfig().force.campaignDeferredYardUpgrade || !campaignPolicyApplies()
+    // CampaignHelperAirUpgrade (default off): enemy aircraft make the Rocket Turret
+    // level a defence need, not an optional spare-cash purchase.
+    const auto& rocket = currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()];
+    const bool airDefenceUpgrade = botConfig().force.campaignHelperAirUpgrade && campaignEconomySupport()
+        && builder->getItemID() == Structure_ConstructionYard && rocket.enabled
+        && rocket.techLevel <= getHouse()->getTechLevel()
+        && builder->getCurrentUpgradeLevel() < rocket.upgradeLevel
+        && (pass.airEngaged || enemyAirCapable());
+    return airDefenceUpgrade || !botConfig().force.campaignDeferredYardUpgrade || !campaignPolicyApplies()
         || builder->getItemID() != Structure_ConstructionYard
         || QuantBotBuildPolicy::campaignYardUpgradeFunded(getHouse()->hasPower(),
             pass.citySimEnabled ? pass.forecastNetIncome > 0
@@ -662,6 +671,66 @@ bool QuantBot::queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 
     turn.spendingItem = previousSpendingItem;
     clearPlacementCache();
     return true;
+}
+
+// An enemy house that fields aircraft, or that can build Ornithopters from a
+// standing High Tech Factory at its own tech level.
+bool QuantBot::enemyAirCapable() const {
+    if (!currentGame) return false;
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const House* house = getHouse(h);
+        if (!house || house->isNatives() || !house->isAlive()
+            || house->getTeamID() == getHouse()->getTeamID()) continue;
+        if (house->getNumItems(Unit_Ornithopter) > 0) return true;
+        const auto& ornithopter = currentGame->objectData.data[Unit_Ornithopter][h];
+        if (ornithopter.enabled && ornithopter.techLevel <= house->getTechLevel()
+            && house->getNumItems(Structure_HighTechFactory) > 0) return true;
+    }
+    return false;
+}
+
+// CampaignHelperYardUpgradeTiming / CampaignHelperAirUpgrade (both default off):
+// research timings for the support house's yard upgrades. They run before the
+// deferred spare-cash rule and only need the upgrade's own price.
+bool QuantBot::campaignHelperTimedYardUpgrade(BuildPass& pass, BuilderTurn& turn) {
+    const auto& force = botConfig().force;
+    if ((force.campaignHelperYardUpgradeTiming <= 0 && !force.campaignHelperAirUpgrade)
+        || !campaignEconomySupport()) return false;
+    const BuilderBase* yard = turn.pBuilder;
+    if (yard->getItemID() != Structure_ConstructionYard || yard->isUpgrading()
+        || yard->getProductionQueueSize() != 0 || !yard->isAllowedToUpgrade()
+        || yard->getHealth() < yard->getMaxHealth()) return false;
+    const auto& rocket = currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()];
+    const int level = yard->getCurrentUpgradeLevel();
+    const bool air = force.campaignHelperAirUpgrade && rocket.enabled
+        && rocket.techLevel <= getHouse()->getTechLevel() && level < rocket.upgradeLevel
+        && campaignPermitsStructure(Structure_RocketTurret)
+        && (pass.airEngaged || enemyAirCapable());
+    const char* reason = air ? "air_defence" : nullptr;
+    if (!air) {
+        const bool lightFactory = getHouse()->getNumItems(Structure_LightFactory) > 0;
+        const bool heavyFactory = getHouse()->getNumItems(Structure_HeavyFactory) > 0;
+        switch (force.campaignHelperYardUpgradeTiming) {
+        case 1: reason = "asap"; break;
+        case 2: if (lightFactory) reason = "after_light_factory"; break;
+        case 3: if (heavyFactory) reason = "after_heavy_factory"; break;
+        case 4: if (heavyFactory && !openingWorkersNeeded(pass)) reason = "after_heavy_factory_and_workers"; break;
+        default: break;
+        }
+    }
+    if (!reason) return false;
+    const int cost = yard->getUpgradeCost();
+    if (cost <= 0 || pass.money < cost || getHouse()->getCredits() < cost) return false;
+    const bool accepted = doUpgrade(yard);
+    if (accepted) {
+        pass.money -= cost;
+        pass.capitalOrderedCost += cost;
+    }
+    traceDecision("capital_upgrade", AITelemetry::Record().set("capital_plan", pass.capitalDecision)
+        .set("builder", yard->getObjectID()).set("price", cost).set("accepted", accepted)
+        .set("level", level).set("reason", "helper_timed_upgrade").set("timing", reason)
+        .set("source_line", __LINE__));
+    return accepted;
 }
 
 bool QuantBot::upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn) {

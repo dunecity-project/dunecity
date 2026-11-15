@@ -1106,6 +1106,14 @@ void QuantBot::attack(int militaryValue) {
     // raises it to 100% while the house is outnumbered).
     if (const int percent=launchReadinessPercent(); percent!=100)
         requiredMilitary=int(ForceConcentrationPolicy::scaledReadiness(requiredMilitary,percent));
+    // CampaignHelperUnitCapLaunch (default off): a support house at the ground unit limit
+    // cannot grow its army any further, so it goes with what it has.
+    if (botConfig().force.campaignHelperUnitCapLaunch && campaign && campaignEconomySupport()
+        && militaryValue < requiredMilitary && militaryValue > 0 && getHouse()->isGroundUnitLimitReached()) {
+        traceDecision("helper_unit_cap_launch", AITelemetry::Record().set("military", militaryValue)
+            .set("required_military", requiredMilitary).set("max_units", getHouse()->getMaxUnits()));
+        requiredMilitary = militaryValue;
+    }
     // CampaignHelperCounterAttack (default 0): a support house that has just beaten a wave at
     // home follows it out with this percent of its readiness. Only this readiness test is
     // relaxed; the gates below and launchGroundHunt() decide the rest as usual.
