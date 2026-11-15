@@ -435,7 +435,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperPowerPayback = 0;
     force.campaignHelperLateConcrete = 0;
     force.campaignHelperTurretConcrete = false;
-    force.vanillaPowerPayback = 0;
+    force.vanillaPowerPayback = 25;
     force.vanillaYardUpgradeTiming = 0;
     force.vanillaOpeningBare = false;
     force.vanillaAirUpgrade = false;

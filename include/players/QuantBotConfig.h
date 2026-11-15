@@ -463,7 +463,9 @@ struct QuantBotConfig {
         /// Vanilla custom/skirmish QuantBots (no campaign, no city, vanilla power rules) buy the
         /// windtraps that close a power shortage when its running cost (repairs plus lost refinery
         /// pay) repays them within this many game minutes, ordering them only when the yard has
-        /// nothing else to build. 0=OFF. Hashed; default 0.
+        /// nothing else to build. 0=OFF. Hashed; default 25 (13 control maps, 338 paired games:
+        /// +0.057 placement score [+0.026, +0.089], Fortress unchanged; All against Atreides 36/36,
+        /// 1.1 min faster).
         int vanillaPowerPayback;
         /// Vanilla custom/skirmish QuantBots defer the bulk-slab yard upgrade: 0=OFF (at once),
         /// 2=after the first Light Factory, 3=after the first Heavy Factory. Hashed; default 0.

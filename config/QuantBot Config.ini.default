@@ -523,6 +523,11 @@ CampaignHelperYardUpgradeTiming=2
 # Campaign support at the ground unit limit attacks with the army it has when that army is below its
 # readiness: the strength floor can otherwise ask for more than the unit cap can hold. Hashed.
 CampaignHelperUnitCapLaunch=1
+# Custom and skirmish QuantBots playing vanilla power rules buy the windtraps that close a power
+# shortage when its running cost (repairs plus the refinery pay a damaged refinery loses) repays
+# them within this many game minutes, ordering them only when the yard has nothing else to build.
+# 0=OFF. Hashed.
+VanillaPowerPayback=25
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.
