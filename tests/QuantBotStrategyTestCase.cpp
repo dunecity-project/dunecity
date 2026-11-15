@@ -2460,7 +2460,7 @@ TEST_CASE("Campaign helper import cap persists OFF and ON with distinct hashes",
 TEST_CASE("Campaign helper factory last persists OFF and ON with distinct hashes",
           "[ai][campaign][economy][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.campaignHelperFactoryLast);
+    REQUIRE(defaults.force.campaignHelperFactoryLast);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-factory-last-test.ini";
     std::map<std::string, bool> hashes;
     for (const bool enabled : {false, true}) {

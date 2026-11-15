@@ -3361,7 +3361,7 @@ void QuantBot::planCapitalForecast(BuildPass& pass) {
         && campaignEconomySupport() && pass.itemCount[Structure_HeavyFactory] == 0
         && data[Structure_HeavyFactory][houseID].enabled
         && data[Structure_HeavyFactory][houseID].techLevel <= getHouse()->getTechLevel();
-    // CampaignHelperStarportArmy / ImportCap / FactoryLast (default off,
+    // CampaignHelperStarportArmy / ImportCap (default off) and FactoryLast (default on,
     // docs/campaign-support-research.md, "Starport army"): the support house raises its early
     // army through the Starport. Each switch is the first operand; when all three are off
     // nothing below calls anything.

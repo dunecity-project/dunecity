@@ -424,7 +424,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperReadinessCap = 0;
     force.campaignHelperStarportArmy = 0;
     force.campaignHelperImportCap = false;
-    force.campaignHelperFactoryLast = false;
+    force.campaignHelperFactoryLast = true;
     force.campaignHelperEarlyUnload = 0;
     force.campaignHelperNoConcrete = false;
     force.campaignHelperEarlyStarport = 0;

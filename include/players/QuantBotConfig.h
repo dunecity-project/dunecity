@@ -409,6 +409,7 @@ struct QuantBotConfig {
         /// orders its first Heavy Factory only after the first Repair Yard is built or queued
         /// (when it can build one) and the Starport offers no heavy combat unit at or below list
         /// price, or cash exceeds 2,500. Shared prerequisites and the Repair Yard are unaffected.
+        /// Hashed; default on. City campaigns are unchanged.
         bool campaignHelperFactoryLast;
         /// Classic campaign support with fewer than four refineries built sends a harvester that
         /// is harvesting or idle in the field home to unload once its cargo reaches this percent
