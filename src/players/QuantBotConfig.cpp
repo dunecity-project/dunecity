@@ -434,6 +434,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperUnitCapLaunch = false;
     force.campaignHelperPowerPayback = 0;
     force.campaignHelperLateConcrete = 0;
+    force.campaignHelperTurretConcrete = false;
     force.campaignHelperEarlyStarport = 0;
     force.campaignHelperProtectedRepair = false;
     force.campaignHelperDefenceLeash = 14;
@@ -918,6 +919,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignHelperUnitCapLaunch", force.campaignHelperUnitCapLaunch);
         iniFile.setIntValue("Force Concentration", "CampaignHelperPowerPayback", force.campaignHelperPowerPayback);
         iniFile.setIntValue("Force Concentration", "CampaignHelperLateConcrete", force.campaignHelperLateConcrete);
+        iniFile.setBoolValue("Force Concentration", "CampaignHelperTurretConcrete", force.campaignHelperTurretConcrete);
         iniFile.setIntValue("Force Concentration", "CampaignHelperEarlyStarport", force.campaignHelperEarlyStarport);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
         iniFile.setIntValue("Force Concentration", "CampaignHelperDefenceLeash", force.campaignHelperDefenceLeash);
@@ -1251,6 +1253,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         iniFile.getIntValue("Force Concentration", "CampaignHelperPowerPayback", force.campaignHelperPowerPayback), 0, 120);
     force.campaignHelperLateConcrete = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperLateConcrete", force.campaignHelperLateConcrete), 0, 2);
+    force.campaignHelperTurretConcrete = iniFile.getBoolValue("Force Concentration", "CampaignHelperTurretConcrete", force.campaignHelperTurretConcrete);
     force.campaignHelperEarlyStarport = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperEarlyStarport", force.campaignHelperEarlyStarport), 0, 4);
     force.campaignHelperProtectedRepair = iniFile.getBoolValue("Force Concentration", "CampaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
@@ -1932,6 +1935,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHelperUnitCapLaunch", force.campaignHelperUnitCapLaunch);
     addNamed("campaignHelperPowerPayback", force.campaignHelperPowerPayback);
     addNamed("campaignHelperLateConcrete", force.campaignHelperLateConcrete);
+    addNamed("campaignHelperTurretConcrete", force.campaignHelperTurretConcrete);
     addNamed("campaignHelperEarlyStarport", force.campaignHelperEarlyStarport);
     addNamed("campaignHelperProtectedRepair", force.campaignHelperProtectedRepair);
     addNamed("campaignHelperDefenceLeash", force.campaignHelperDefenceLeash);

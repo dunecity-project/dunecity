@@ -454,6 +454,10 @@ struct QuantBotConfig {
         /// reaches upgrade level 1 (bulk Slab4). Buildings already standing are not affected.
         /// Hashed; default 0.
         int campaignHelperLateConcrete;
+        /// Classic campaign support with CampaignHelperNoConcrete still lays the one-tile
+        /// foundation under Gun and Rocket Turrets: 5 credits against starting at half health
+        /// (repairing that costs 20-39). Hashed; default off.
+        bool campaignHelperTurretConcrete;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
         /// Repair Yard: 0=OFF (all opening refineries first). 1..4.

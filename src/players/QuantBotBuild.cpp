@@ -77,6 +77,10 @@ bool QuantBot::campaignHelperNoConcrete(Uint32 item) const {
     // CampaignHelperPowerPayback (default off): its windtraps keep their foundation, so they
     // start at full output and never need the bare-rock repair.
     if (item == Structure_WindTrap && campaignHelperPowerPaybackActive()) return false;
+    // CampaignHelperTurretConcrete (default off): a turret's one slab is cheaper than fighting
+    // at half health or repairing it.
+    if ((item == Structure_GunTurret || item == Structure_RocketTurret)
+        && botConfig().force.campaignHelperTurretConcrete && campaignEconomySupport()) return false;
     // CampaignHelperLateConcrete (default off): past the opening a foundation costs less than
     // repairing the half-health start of any building the house maintains.
     if (const int late = botConfig().force.campaignHelperLateConcrete; late > 0 && campaignEconomySupport()) {
