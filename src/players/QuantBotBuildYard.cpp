@@ -650,6 +650,14 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     releaseUnfundedChoice();
     chooseYardCivicAndDefence(pass, turn, yardTurn);
     releaseUnfundedChoice();
+    // CampaignHelperPowerPayback (default off): a yard with nothing else to build or save for.
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !yardTurn.serviceSavingHold && campaignHelperPowerPaybackActive()) {
+        const Uint32 generator = economicGenerator(pass, turn);
+        if (generator != NONE_ID) {
+            yardTurn.itemID = generator; yardTurn.structureRule = "power_payback";
+        }
+    }
     vetYardChoice(pass, turn, yardTurn);
     if (placeYardChoice(pass, turn, yardTurn)) return true;
     useSpareYardCapacity(pass, turn, yardTurn);
@@ -936,7 +944,10 @@ void QuantBot::chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn
     // every optional purchase below, behind the first windtrap and
     // the functional recovery above, and only when the documented
     // gate accepts the whole package.
-    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic) {
+    // CampaignHelperPowerPayback (default off) moves the support house's purchase to the
+    // end of buildCustomYard: generation is never mission critical for it.
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
+        && !campaignHelperPowerPaybackActive()) {
         const Uint32 generator = economicGenerator(pass, turn);
         if (generator != NONE_ID) {
             yardTurn.itemID = generator; yardTurn.structureRule = "power_investment";

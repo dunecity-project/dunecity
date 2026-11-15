@@ -444,6 +444,11 @@ struct QuantBotConfig {
         /// that army is below its readiness (the CampaignAllyStrengthFloor can otherwise ask
         /// for more than the unit cap can ever hold). Hashed; default off.
         bool campaignHelperUnitCapLaunch;
+        /// Classic campaign support buys windtraps that close its power shortage when the
+        /// shortage's running cost (repairs plus lost refinery pay) repays them within this many
+        /// game minutes; it lays their full concrete foundation and orders them only when its
+        /// yard has nothing else to build. 0=OFF. Hashed; default 0.
+        int campaignHelperPowerPayback;
         /// Classic campaign support's Starport opening ladder orders the Starport once this many
         /// refineries are built or queued, then the remaining opening refineries, then the
         /// Repair Yard: 0=OFF (all opening refineries first). 1..4.

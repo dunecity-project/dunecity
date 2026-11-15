@@ -3459,3 +3459,32 @@ TEST_CASE("Anti-air floor never lowers a share, invents budget or breaks the cap
     CHECK(cappedFloored[2] == UnitMixPolicy::kMobileAntiAirFloorBps);
     CHECK(std::accumulate(cappedFloored.begin(), cappedFloored.end(), 0) == 10000);
 }
+
+TEST_CASE("Support power payback counts repairs and refinery pay over its horizon", "[quantbot][power][economy]") {
+    using namespace QuantBotPowerInvestmentPolicy;
+    // Stefan's doesntupgrade helper: 100 of 210 power, two concreted windtraps close it.
+    Investment state;
+    state.deficit = 110;
+    state.generatorOutput = 100;
+    state.unitCapital = 320;
+    state.spendable = 3244;
+    state.netIncome = 5120;
+    state.incomeMinutes = QuantBotSpendingPolicy::horizonMinutes;
+    state.repairMilliPerHitpoint = 3277;   // 13 credits of repair a game minute
+    REQUIRE(packageCapital(state) == 640);
+    REQUIRE(avoidedRepairPerMinute(state) == 13);
+    REQUIRE(evaluate(state) == Verdict::RepairsTooCheap); // OFF: repairs alone need 49 minutes
+
+    state.refineryLossPerMinute = refineryPayLossPerMinute(1280);
+    REQUIRE(state.refineryLossPerMinute == 15);
+    state.paybackMinutes = 25;            // (13 + 15) * 25 = 700 >= 640
+    REQUIRE(evaluate(state) == Verdict::BuyForPayback);
+    REQUIRE(buys(Verdict::BuyForPayback));
+    state.paybackMinutes = 20;            // 560 < 640: the old gates decide
+    REQUIRE(evaluate(state) == Verdict::RepairsTooCheap);
+    state.paybackMinutes = 25;
+    state.spendable = 639;                // never past the cash it has after the reserve
+    REQUIRE(evaluate(state) == Verdict::Unaffordable);
+    REQUIRE(refineryPayLossPerMinute(0) == 0);
+    REQUIRE(refineryPayLossPerMinute(-100) == 0);
+}

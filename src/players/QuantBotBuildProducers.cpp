@@ -948,6 +948,11 @@ Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
         investment.netIncome=pass.forecastNetIncome;
         investment.incomeMinutes=QuantBotSpendingPolicy::horizonMinutes;
         investment.repairMilliPerHitpoint=repairMilli;
+        if (campaignHelperPowerPaybackActive()) {
+            investment.paybackMinutes=botConfig().force.campaignHelperPowerPayback;
+            investment.refineryLossPerMinute=QuantBotPowerInvestmentPolicy::refineryPayLossPerMinute(
+                pass.forecastNetIncome/std::max(1,QuantBotSpendingPolicy::horizonMinutes));
+        }
         return investment;
     };
     const auto best=cheapestFor(deficit);
@@ -988,6 +993,8 @@ Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
         .set("forecast_minutes",QuantBotSpendingPolicy::horizonMinutes)
         .set("maintained_repair_milli_per_hitpoint",repairMilli)
         .set("avoided_repairs_per_minute",QuantBotPowerInvestmentPolicy::avoidedRepairPerMinute(investment))
+        .set("refinery_loss_per_minute",investment.refineryLossPerMinute)
+        .set("payback_minutes",investment.paybackMinutes)
         .set("accepted",buy)
         .set("reason",QuantBotPowerInvestmentPolicy::describe(verdict)));
     return buy ? chosen.item : Uint32(NONE_ID);
