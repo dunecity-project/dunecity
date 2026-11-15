@@ -19,6 +19,8 @@ import sys
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
 from probe_profile import copy_revisions, default_build_dir, discard_profile_assets, require_free_space, scratch_dir
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -35,8 +37,8 @@ build, out = args.build_dir.resolve(), args.output_dir.resolve()
 require_free_space()
 out.mkdir(parents=True, exist_ok=True)
 subprocess.run([sys.executable, str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+commands = native_build_commands(build)
 main = (root / 'src/main.cpp').read_text(encoding='utf-8')
 needle = 'int menuResult = MainMenu().showMenu();'
 if main.count(needle) != 1:
@@ -44,7 +46,7 @@ if main.count(needle) != 1:
 main = main.replace(needle, 'int menuResult = runResearchLabProbe();')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
 position = main.index('int main(')
-main = main[:position] + '#include "' + (root / 'tests/units/research-lab-probe.inc').as_posix() + '"\n' + main[position:]
+main = main[:position] + NATIVE_INCLUDES + '#include "' + (root / 'tests/units/research-lab-probe.inc').as_posix() + '"\n' + main[position:]
 source, obj = out / 'research-lab-main.cpp', out / 'research-lab-main.o'
 source.write_text(main, encoding='utf-8')
 compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
@@ -58,11 +60,7 @@ for option in ('-MD', '-MMD'):
 compile_command[compile_command.index('-o') + 1] = str(obj)
 compile_command[compile_command.index('-c') + 1] = str(source)
 compile_command.append('-fno-access-control')
-app = out / 'research-lab-probe.app/Contents'
-(app / 'MacOS').mkdir(parents=True, exist_ok=True)
-if not (app / 'Resources').exists():
-    (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-binary = app / 'MacOS/research-lab-probe'
+binary = native_probe_binary(build, out, 'research-lab-probe')
 link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
 link = link[link.index('&&') + 1:]
 link = link[:link.index('&&')]
