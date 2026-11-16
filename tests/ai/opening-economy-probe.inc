@@ -680,15 +680,23 @@ void runOpeningEconomyProbe(Game& game) {
         require(bot->botConfig().force.vanillaPowerPayback>0,"VanillaPowerPayback is not the default");
         house->numItem[Unit_Harvester]=16;
         std::vector<StructureBase*> finished;
+        const auto savedYardLevel=yard->curUpgradeLev;
         int otherProjects=0;bool bought=false;
         for(int pass=0;pass<24 && !bought;++pass) {
             const int demand=house->getPowerRequirement();
             if(powerBuild(100000,demand-windOutput,1300000)>0) {bought=true;break;}
+            if(yard->isUpgrading()) {
+                // The yard's own upgrade is another project ahead of generation: finish it.
+                SDL_Log("POWER_PAYBACK_STEP: pass=%d yard upgrade to level %d",pass,yard->curUpgradeLev+1);
+                ++yard->curUpgradeLev;yard->upgrading=false;yard->upgradeProgress=0;
+                yard->updateBuildList();++otherProjects;continue;
+            }
             Uint32 other=NONE_ID;
             for(const auto& order:yard->currentProductionQueue)
                 if(order.itemID!=Structure_Slab1 && order.itemID!=Structure_Slab4 && order.itemID!=Structure_Road)
                     {other=order.itemID;break;}
             require(other!=NONE_ID,"A funded deficit with an idle yard did not buy generation");
+            SDL_Log("POWER_PAYBACK_STEP: pass=%d other project %u",pass,other);
             clearOrders();
             const auto site=bot->findPlaceLocation(other);
             require(site.isValid(),"No fixture site for the yard's other project");
@@ -701,6 +709,7 @@ void runOpeningEconomyProbe(Game& game) {
         require(bought,"A funded deficit never bought generation once the yard was free");
         clearOrders();
         for(auto* structure:finished)structure->destroy();
+        yard->curUpgradeLev=savedYardLevel;yard->upgrading=false;yard->updateBuildList();
         house->numItem[Unit_Harvester]=savedPowerWorkers;
         bot->difficulty=probeDifficulty;
         SDL_Log("POWER_PAYBACK_PASS: funded deficit bought generation after %d other project(s)",otherProjects);
