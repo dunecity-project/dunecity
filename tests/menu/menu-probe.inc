@@ -3,6 +3,7 @@
 #include <Network/CustomGamePlayerPolicy.h>
 #include <misc/OMemoryStream.h>
 #include <fstream>
+#include <set>
 // Test-only entry point, linked against the real menu objects by run-menu-probe.py.
 #include <Menu/HouseChoiceMenu.h>
 #include <Menu/BriefingMenu.h>
@@ -1142,8 +1143,8 @@ int runMenuProbe() {
     }
     {
         // Reworked campaign (docs/reworked-campaign.md): Maps offers Original and Reworked; Reworked
-        // offers only houses with all 22 reworked missions (Atreides), shows the REMASTERED badge
-        // and reaches the launch; Original restores every house and drops the badge.
+        // offers only houses with all 22 reworked missions (Atreides, Harkonnen and Ordos), shows
+        // the REMASTERED badge and reaches the launch; Original restores every house and drops the badge.
         HouseChoiceMenu::s_reworkedMaps=false;
         HouseChoiceMenu menu(false);
         auto& maps=menu.campaignMapsDropDown;
@@ -1157,9 +1158,13 @@ int runMenuProbe() {
         maps.setSelectedItem(1,true);
         menuRequire(HouseChoiceMenu::isReworkedMaps() && menu.showsRemasteredWatermark(),
                     "Reworked maps choice did not reach the campaign launch");
-        menuRequire(menu.houseChoices.count==1 && menu.houseChoices[0]==HOUSE_ATREIDES
-                    && HouseChoiceMenu::s_house==HOUSE_ATREIDES,
-                    "Reworked maps should offer only Atreides, the complete reworked campaign");
+        {
+            std::set<int> offered;
+            for(int i = 0; i < menu.houseChoices.count; ++i) offered.insert(menu.houseChoices[i]);
+            const std::set<int> complete{HOUSE_ATREIDES, HOUSE_HARKONNEN, HOUSE_ORDOS};
+            menuRequire(menu.houseChoices.count==3 && offered==complete && complete.count(HouseChoiceMenu::s_house)==1,
+                        "Reworked maps should offer only Atreides, Harkonnen and Ordos, the complete reworked campaigns");
+        }
         menuCapture(menu,"campaign-reworked-maps");
         const int reworkedGold=remasteredBadgePixels();
         menuRequire(reworkedGold>=20 && reworkedGold>originalGold*4+10,
