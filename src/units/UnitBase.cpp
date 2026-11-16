@@ -657,7 +657,11 @@ void UnitBase::deploy(const Coord& newLocation) {
             }
         }
 
-        if(isAGroundUnit() && !isSandwormUnit(getItemID())) {
+        // A unit the map starts with did not drive onto its tile, so the bloom under it waits
+        // for a unit that does. Setting it off here killed the unit, and the health from its
+        // [UNITS] line then revived it without its visibility: a unit nobody could see or
+        // target, whose house could never be defeated (reworked Atreides mission 13).
+        if(isAGroundUnit() && !isSandwormUnit(getItemID()) && !deployingAtMapStart) {
             if(currentGameMap->getTile(location)->isSpiceBloom()) {
                 currentGameMap->getTile(location)->triggerSpiceBloom(getOwner());
                 
@@ -688,6 +692,12 @@ void UnitBase::deploy(const Coord& newLocation) {
             pLocalPlayer->onUnitDeployed(this);
         }
     }
+}
+
+void UnitBase::deployAtMapStart(const Coord& newLocation) {
+    deployingAtMapStart = true;
+    deploy(newLocation);
+    deployingAtMapStart = false;
 }
 
 void UnitBase::cancelDeployment() {

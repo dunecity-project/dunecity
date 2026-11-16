@@ -1149,7 +1149,7 @@ void INIMapLoader::loadExtraCoopForces() {
                            || !currentGameMap->tileExists(x, y)) continue;
                         const auto* tile = currentGameMap->getTile(x, y);
                         if(tile->hasAGroundObject() || !unit->canPass(x, y)) continue;
-                        unit->deploy(Coord(x, y));
+                        unit->deployAtMapStart(Coord(x, y));
                         unit->doSetAttackMode(AREAGUARD);
                         placed = true;
                     }
