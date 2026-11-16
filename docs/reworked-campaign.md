@@ -51,13 +51,19 @@ his Ordos set at 1. The missing missions were rebuilt from the originals in his 
   | Ordos | Mercenary | Sardaukar | - |
 
   Missions 20-22 (tech level 8) add Sardaukar and Mercenary where the mission lacks them and
-  there is room: Atreides 20 and Harkonnen 20 and 22 have no room for a Mercenary base. The
-  base follows the level's tech: from Fatkin's level 3 and 4 bases (Barracks, Light and Heavy
+  there is room at least 30 tiles from the player's yard. Each of them has a Sardaukar base, but
+  only Ordos 20 and 22 also have a Mercenary one. Mission 21 starts the player in the middle of
+  the map, and a Mercenary base 25 tiles away boxed it in (lost within 16 minutes in the
+  2026-11-16 playtest), so it has none. The base follows the level's tech: from Fatkin's level
+  3 and 4 bases (Barracks, Light and Heavy
   Factory, WOR, Outpost) up to Repair, Hi-Tech, IX and turrets toward the player. No added
   base gets a Palace: the original Palaces are each mission's superweapons.
 - **Economy and pressure** as in Fatkin's level 3-8 missions: harvesters for every enemy
   refinery, more defenders, about 15 spice fields, three to five AI teams a house, enemy waves
-  (some repeating) and the player's reinforcements; player credits 2,250 / 4,750 / 7,500 /
+  and the player's reinforcements. A repeating wave returns every N minutes, N being its first
+  arrival: every 14 minutes at level 7 and 14-16 at level 8, where the first waves come at
+  minutes 10-11 (eased from 11-12 and minute 7 after Ordos 18 and 20 were worn down in about an
+  hour in that playtest). Player credits are 2,250 / 4,750 / 7,500 /
   10,000 / 12,500 / 17,000 for levels 3-8. Each house gets its own special units: Sonic Tanks
   for Atreides, Devastators for Harkonnen, Deviators for an Ordos enemy (an Ordos player's heavy
   reinforcement is a Siege Tank), Raider Trikes for Ordos and Quads for Harkonnen, which build no

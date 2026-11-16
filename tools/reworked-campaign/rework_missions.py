@@ -108,13 +108,17 @@ WAVES = {
     6: [('A', 'Siege Tank', 10, False), ('B', 'Launcher', 10, False), ('A', 'Troopers', 12, False), ('B', 'Siege Tank', 12, True),
         ('A', 'Launcher', 12, True), ('B', 'Troopers', 14, False), ('A', 'Siege Tank', 17, False), ('B', 'Tank', 18, False),
         ('A', '*special', 20, False), ('B', 'Siege Tank', 20, False)],
-    7: [('A', 'Siege Tank', 9, False), ('B', 'Launcher', 9, False), ('A', '*special', 11, True), ('B', 'Siege Tank', 11, True),
+    # A repeating wave comes back every N minutes, N being its first arrival (ReinforcementTrigger).
+    # Levels 7 and 8 were eased after the 2026-11-16 playtest, where Ordos 18 and 20 were worn down
+    # after about an hour and mission 21 fell within 16 minutes: their repeats were every 11-12 minutes
+    # and the level 8 waves started at minute 7.
+    7: [('A', 'Siege Tank', 9, False), ('B', 'Launcher', 9, False), ('A', '*special', 14, True), ('B', 'Siege Tank', 14, True),
         ('A', 'Troopers', 12, False), ('B', 'Troopers', 12, False), ('A', 'Tank', 16, False), ('B', 'Launcher', 16, False),
         ('A', "'Thopter", 14, False), ('B', "'Thopter", 14, False)],
-    8: [('A', '*special', 8, False), ('A2', 'Siege Tank', 7, False), ('B', 'Launcher', 8, False),
-        ('B2', 'Launcher', 7, False), ('A', '*special', 11, True), ('A2', '*special', 11, True),
-        ('B', 'Siege Tank', 12, True), ('B2', 'Launcher', 12, True), ('A2', "'Thopter", 10, False),
-        ('B', "'Thopter", 10, False), ('B2', "'Thopter", 10, False)],
+    8: [('A', '*special', 11, False), ('A2', 'Siege Tank', 10, False), ('B', 'Launcher', 11, False),
+        ('B2', 'Launcher', 10, False), ('A', '*special', 14, True), ('A2', '*special', 14, True),
+        ('B', 'Siege Tank', 16, True), ('B2', 'Launcher', 16, True), ('A2', "'Thopter", 14, False),
+        ('B', "'Thopter", 15, False), ('B2', "'Thopter", 15, False)],
 }
 PLAYER_WAVES = {
     2: [],
@@ -356,7 +360,9 @@ def rework(letter, n, orig_path, out_path):
     bases = {}
     for house in added:
         best = None
-        for min_player in (30, 27, 24):
+        # At level 8 the mission already has two or three enemy bases; one added closer than 30 tiles
+        # boxed the player in (mission 21, 2026-11-16 playtest), so there it is left out instead.
+        for min_player in (30,) if level == 8 else (30, 27, 24):
             best = choose_anchor(board, pcy, enemy_tiles, rng, min_player=min_player, min_enemy=11 if level < 8 else 9)
             if best and best[2] >= 60: break
         if not best or best[2] < 45:
