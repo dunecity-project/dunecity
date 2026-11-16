@@ -19,6 +19,9 @@
 #include <Menu/RandomSkirmishMenu.h>
 #include <players/PlayerFactory.h>
 #include <units/MCV.h>
+#include <FileClasses/LoadSavePNG.h>
+#include <ScreenBorder.h>
+#include <misc/draw_util.h>
 
 #include <map>
 #include <set>
@@ -206,6 +209,27 @@ inline std::string classesOf(const House* house) {
 /// Plays the game to its end (see the file comment). Returns "won"/"lost" for @a trackedHouse's
 /// team (the campaign's own result in a campaign), "decided" when a local observer watches a
 /// match (it plays no house), or "time_limit".
+/// BALANCE_SCENARIO_SCREENSHOT=<png> (BALANCE_SCENARIO_SCREENSHOT_MINUTE, default 1): the real game
+/// screen, centred on the tracked house's Construction Yard, once at that game minute.
+inline void screenshot(Game& game, int trackedHouse, int minute) {
+    static bool taken = false;
+    const char* path = std::getenv("BALANCE_SCENARIO_SCREENSHOT");
+    const char* at = std::getenv("BALANCE_SCENARIO_SCREENSHOT_MINUTE");
+    if (taken || !path || minute < (at ? std::atoi(at) : 1)) return;
+    taken = true;
+    for (const auto* structure : structureList)
+        if (structure->getOwner()->getHouseID() == trackedHouse && structure->getItemID() == Structure_ConstructionYard) {
+            const Coord yard = structure->getLocation();
+            screenborder->setNewScreenCenter(Coord((yard.x + 1) * TILESIZE, (yard.y + 1) * TILESIZE));
+            break;
+        }
+    SDL_SetRenderTarget(renderer, nullptr);
+    game.drawScreen();
+    auto image = renderReadSurface(renderer);
+    const bool saved = image != nullptr && SavePNG(image.get(), path) == 0;
+    SDL_Log("SCENARIO_SCREENSHOT: minute=%d file=%s saved=%d", minute, path, int(saved));
+}
+
 inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, bool constructionYardOnly) {
     if (constructionYardOnly) deployMcvs(game);
     const auto& init = game.getGameInitSettings();
@@ -272,6 +296,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         if (cycle % minute == 0) {
             EliminationMatch::sample(game);
             measureSorties(houses, tracks);
+            screenshot(game, trackedHouse, static_cast<int>(cycle / minute));
         }
         for (const House* house : houses) {
             HouseTrack& track = tracks[house->getHouseID()];

@@ -312,6 +312,10 @@ parser.add_argument('--ffa-screenshot', type=Path,
                     help='With --elimination-match or --match-sides: save a rendered PNG of --house\'s army (centred '
                          'between its assembly point and its forward bundle) at the first sample, at --viewport')
 parser.add_argument('--ffa-screenshot-minute', type=int, help='--ffa-screenshot: at the first sample from this game minute')
+parser.add_argument('--scenario-screenshot', type=Path,
+                    help='--scenario: save the rendered game screen, centred on --house\'s Construction Yard, '
+                         'at --scenario-screenshot-minute (default 1), at --viewport (default 1440x900)')
+parser.add_argument('--scenario-screenshot-minute', type=int, help='--scenario-screenshot: the game minute')
 parser.add_argument('--load-save', type=Path, help='Continue this savegame instead of starting a new match')
 parser.add_argument('--save-profile', type=Path,
                     help='With --load-save: a player profile whose workshop/ holds the revisions the save pins')
@@ -899,7 +903,7 @@ else:
 # a null-texture test. The repair-capacity fixture checks simulation service,
 # not rendering; its headless CTest explicitly opts in to the existing mode.
 headless_assets = args.headless_assets and not (
-    args.real_video or args.ffa_screenshot
+    args.real_video or args.ffa_screenshot or args.scenario_screenshot
     or any(value is True for name, value in vars(args).items()
            if name.endswith('_probe') and name not in ('repair_capacity_probe', 'original_campaign_probe')))
 if args.build_only and not headless_assets:
@@ -982,10 +986,18 @@ if args.ffa_screenshot:
         env['BALANCE_FFA_SCREENSHOT_MINUTE'] = str(args.ffa_screenshot_minute)
     env['BALANCE_FFA_SCREENSHOT_HOUSE'] = str(house_names.index(args.house))
     args.viewport = args.viewport or '1440x900'
+if args.scenario_screenshot:
+    if not args.scenario:
+        parser.error('--scenario-screenshot needs --scenario.')
+    env['BALANCE_SCENARIO_SCREENSHOT'] = str(args.scenario_screenshot.resolve())
+    if args.scenario_screenshot_minute is not None:
+        env['BALANCE_SCENARIO_SCREENSHOT_MINUTE'] = str(args.scenario_screenshot_minute)
+    args.viewport = args.viewport or '1440x900'
 if args.real_video and not args.viewport:
     args.viewport = '1440x900'
 if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe
-        or args.achievements_probe or args.zone_power_probe or args.real_video or args.ffa_screenshot):
+        or args.achievements_probe or args.zone_power_probe or args.real_video or args.ffa_screenshot
+        or args.scenario_screenshot):
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
