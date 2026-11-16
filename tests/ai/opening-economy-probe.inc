@@ -550,6 +550,12 @@ void runOpeningEconomyProbe(Game& game) {
     // established base invests in a reserve. Other mods keep their functional
     // power rules and are skipped.
     if(!game.isCitySimEnabled() && !house->isPowerRequired()) {
+        // The checks below are the classic generation gate, which still decides
+        // with VanillaPowerPayback off. The payback rule (default on) is checked after them.
+        const auto savedPowerConfig=bot->configOverride;
+        auto classicPower=std::make_shared<QuantBotConfig>(bot->botConfig());
+        classicPower->force.vanillaPowerPayback=0;
+        bot->configOverride=classicPower;
         const int windOutput=-game.objectData.data[Structure_WindTrap][HOUSE_ATREIDES].power;
         require(windOutput>0,"Fixture needs a windtrap that produces power");
         StructureBase* generator=nullptr;
@@ -662,9 +668,42 @@ void runOpeningEconomyProbe(Game& game) {
         house->numItem[Unit_Harvester]=savedPowerWorkers;
         bot->difficulty=probeDifficulty;
         clearOrders();
+        bot->configOverride=savedPowerConfig;
         SDL_Log("POWER_INVESTMENT_PASS: funded deficit and buffer bought, adequate reserve left alone; "
             "no income, no cash, no core, restoring repair and pending generator all decline; "
             "custom and campaign, all difficulties");
+
+        // VanillaPowerPayback (default 25): generation is not mission critical. A funded,
+        // earning base short of power builds its other projects first and buys the
+        // windtraps once its yard has nothing else to build. Each pass, whatever else
+        // the yard ordered is placed as if finished, until the generator is ordered.
+        require(bot->botConfig().force.vanillaPowerPayback>0,"VanillaPowerPayback is not the default");
+        house->numItem[Unit_Harvester]=16;
+        std::vector<StructureBase*> finished;
+        int otherProjects=0;bool bought=false;
+        for(int pass=0;pass<24 && !bought;++pass) {
+            const int demand=house->getPowerRequirement();
+            if(powerBuild(100000,demand-windOutput,1300000)>0) {bought=true;break;}
+            Uint32 other=NONE_ID;
+            for(const auto& order:yard->currentProductionQueue)
+                if(order.itemID!=Structure_Slab1 && order.itemID!=Structure_Slab4 && order.itemID!=Structure_Road)
+                    {other=order.itemID;break;}
+            require(other!=NONE_ID,"A funded deficit with an idle yard did not buy generation");
+            clearOrders();
+            const auto site=bot->findPlaceLocation(other);
+            require(site.isValid(),"No fixture site for the yard's other project");
+            const auto before=structureList.size();
+            require(house->placeStructure(NONE_ID,other,site.x,site.y,true,true),"Fixture placement failed");
+            yard->updateBuildList();
+            if(structureList.size()>before)finished.push_back(structureList.back());
+            ++otherProjects;
+        }
+        require(bought,"A funded deficit never bought generation once the yard was free");
+        clearOrders();
+        for(auto* structure:finished)structure->destroy();
+        house->numItem[Unit_Harvester]=savedPowerWorkers;
+        bot->difficulty=probeDifficulty;
+        SDL_Log("POWER_PAYBACK_PASS: funded deficit bought generation after %d other project(s)",otherProjects);
     }
 
     // Default must ignore the old engine cap in saved houses; explicit options win. In a custom game
