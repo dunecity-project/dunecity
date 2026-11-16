@@ -68,3 +68,27 @@ TEST_CASE("Legacy AI harvesters restart while qBot and human STOP orders persist
     REQUIRE_FALSE(resumeStoppedHarvester(false, false)); // Human stop.
     REQUIRE_FALSE(resumeStoppedHarvester(false, true)); // Human with qBot coplayer.
 }
+
+TEST_CASE("A carryall drop keeps a player's unit in its own mode", "[unit-movement][carryall]") {
+    using UnitMovementPolicy::attackModeAfterCarryallDrop;
+    // A unit flown to its factory's destination guards the spot, like one that drove there,
+    // instead of chasing sandworms in Area Guard (player report on 1.0.873).
+    REQUIRE(attackModeAfterCarryallDrop(GUARD, false, false, /*aiHouse=*/false, false) == GUARD);
+    REQUIRE(attackModeAfterCarryallDrop(CARRYALLREQUESTED, false, false, false, false) == GUARD);
+    // A mode the player chose survives the flight.
+    REQUIRE(attackModeAfterCarryallDrop(HOLD,   false, false, false, false) == HOLD);
+    REQUIRE(attackModeAfterCarryallDrop(AMBUSH, false, false, false, false) == AMBUSH);
+    REQUIRE(attackModeAfterCarryallDrop(AREAGUARD, false, false, false, false) == AREAGUARD);
+    // An attack-move or patrol keeps fighting on its way.
+    REQUIRE(attackModeAfterCarryallDrop(GUARD, false, false, false, /*attackMoving=*/true) == AREAGUARD);
+}
+
+TEST_CASE("A carryall drop keeps the legacy modes for bots, saboteurs and harvesters", "[unit-movement][carryall]") {
+    using UnitMovementPolicy::attackModeAfterCarryallDrop;
+    REQUIRE(attackModeAfterCarryallDrop(GUARD, false, false, /*aiHouse=*/true, false) == AREAGUARD);
+    REQUIRE(attackModeAfterCarryallDrop(HOLD,  false, false, true, false) == AREAGUARD);
+    REQUIRE(attackModeAfterCarryallDrop(GUARD, /*isSaboteur=*/true, false, false, false) == HUNT);
+    REQUIRE(attackModeAfterCarryallDrop(GUARD, true, false, true, false) == HUNT);
+    REQUIRE(attackModeAfterCarryallDrop(GUARD, false, /*isHarvester=*/true, false, false) == HARVEST);
+    REQUIRE(attackModeAfterCarryallDrop(GUARD, false, true, true, false) == HARVEST);
+}

@@ -40,6 +40,13 @@ M move, C capture, Shift+1..8 city overlays.
   Any explicit move order ends HOLD (unit returns to its prior default mode, AREAGUARD).
 - AI never assigns HOLD unless already asked by authored INI (accept "Hold" as a map-editor/INI mode
   string too).
+- Carryall drops (`UnitMovementPolicy::attackModeAfterCarryallDrop`): a player's unit that a
+  carryall flies somewhere (to its factory's destination, a stall rescue or a carryall-drop order)
+  lands in its own mode, Guard after a lift request, like a unit that drove there. Only an
+  attack-move or patrol lands in Area Guard. Bots' units still land in Area Guard, saboteurs in
+  Hunt and harvesters in Harvest, as in Dune Legacy. Until 1.0.873 every unit landed in Area
+  Guard, which chases anything within ten tiles: units dropped at a factory's destination ran
+  off after sandworms.
 
 ## 3. Shift-queued orders
 - Holding `Shift` while issuing move, attack-move, attack-object, patrol, capture, or harvester return
