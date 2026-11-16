@@ -1106,6 +1106,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
         set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 PROCESSORS 2)
+        # A unit the map starts with on a spice or special bloom loads alive and visible with the
+        # bloom intact (no untargetable ghost); a unit arriving on a bloom still sets it off.
+        dunecity_add_test(headless nightly NAME bloom_placement_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-bloom-placement-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/bloom-placement-probe)
+        set_tests_properties(bloom_placement_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME unit_speed_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-unit-speed-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/unit-speed-probe)
