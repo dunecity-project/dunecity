@@ -138,4 +138,22 @@ TEST_CASE("Every Atreides mission has a playable reworked map", "[campaign][rewo
         }
     }
     REQUIRE(atreidesYard);
+
+    // A unit loaded onto a spice bloom stays alive but invisible to every team, so its house can
+    // never be defeated and the mission never ends (RWRK_SCENA013, 2026-11-16 playtest).
+    std::set<int> blooms;
+    for(const char* key : {"Bloom", "Special"}) {
+        std::string list = ini.getStringValue("MAP", key);
+        for(size_t start = 0; start < list.size();) {
+            const size_t end = list.find(',', start);
+            const std::string item = list.substr(start, end == std::string::npos ? std::string::npos : end - start);
+            if(!item.empty()) blooms.insert(std::stoi(item));
+            if(end == std::string::npos) break;
+            start = end + 1;
+        }
+    }
+    for(const auto& key : ini.getSection("UNITS")) {
+        INFO(key.getKeyName() << "=" << key.getStringValue());
+        REQUIRE(blooms.count(std::stoi(split(key.getStringValue(), 3))) == 0);
+    }
 }

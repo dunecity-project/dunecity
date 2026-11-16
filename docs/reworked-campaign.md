@@ -37,11 +37,13 @@ the original missions in his style, the way his `RWRK_SCENA022` reworks its orig
   player's start where the rock allows, never under 24): Mercenary beside Ordos (levels 5 and 7), Sardaukar beside
   Harkonnen (level 6), Sardaukar beside Harkonnen and Ordos at level 8 (mission 20; there is
   no room for a fourth base). Its base follows the level's tech: Construction Yard, Windtraps,
-  Refineries, factories, Outpost, WOR, Repair, Hi-Tech, IX or Palace, turrets toward the player.
+  Refineries, factories, Outpost, WOR, Repair, Hi-Tech and IX, turrets toward the player. Mission
+  20 adds no second Palace: the original Harkonnen one is its superweapon.
 - **Economy and pressure** as in Fatkin's level 5 and 8 missions: two harvesters per enemy
   refinery, more defenders, about 15 spice fields, four or five AI teams a house, enemy waves
   (some repeating) and the player's reinforcements; player credits 7,500 / 10,000 / 12,500 /
-  17,000 for levels 5-8, unit cap 32.
+  17,000 for levels 5-8, unit cap 32. Nothing is placed on a spice bloom or field: a unit loaded
+  onto a bloom stays alive but invisible to everyone, so its house could never be defeated.
 
 Every building lies on rock inside the map with no overlap; `tests/ReworkedCampaignTestCase.cpp`
 checks that for all 22 missions against the real seed generator. The missions are generated

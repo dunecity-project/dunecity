@@ -87,6 +87,9 @@ def validate(sc, ter=None):
                 if typ=='Concrete': continue
                 if (x,y) in occ: errs.append(f'{house} {typ}@{pos} overlaps {occ[(x,y)]}')
                 occ[(x,y)]=f'{house} {typ}@{pos}'
+    blooms=set(sc.positions('Bloom'))|set(sc.positions('Special'))
+    for house,typ,pos,act in sc.units():
+        if pos in blooms: errs.append(f'unit {house} {typ}@{pos} on a spice bloom (loads invisible)')
     upos=collections.Counter()
     for house,typ,pos,act in sc.units():
         x,y=pos%64,pos//64

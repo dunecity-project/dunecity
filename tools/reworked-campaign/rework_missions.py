@@ -17,7 +17,7 @@ from scenario_map import Scen, terrain, validate, SIZES, INFANTRY
 LEVEL = {12: 5, 13: 5, 14: 6, 15: 6, 16: 6, 17: 7, 18: 7, 19: 7, 20: 8}
 PARTNER = {'Ordos': 'Mercenary', 'Harkonnen': 'Sardaukar'}
 PLAYER_CREDITS = {5: 7500, 6: 10000, 7: 12500, 8: 17000}
-ENEMY_CREDITS = {5: 700, 6: 1200, 7: 2000, 8: 3500}
+ENEMY_CREDITS = {5: 700, 6: 1200, 7: 2000, 8: 2500}
 ENEMY_MAXUNIT = {5: 24, 6: 24, 7: 22, 8: 20}
 
 # Second-base build order: essentials first, defences last.  Anything that does not fit is skipped.
@@ -30,8 +30,10 @@ BASE = {
     7: ['Const Yard', 'Windtrap', 'Refinery', 'Windtrap', 'Light Fctry', 'Heavy Fctry', 'Spice Silo', 'Outpost',
         'Refinery', 'Windtrap', 'WOR', 'Repair', 'Hi-Tech', 'IX', 'Heavy Fctry', 'Windtrap',
         'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret'],
+    # No Palace: the original Harkonnen Palace is the mission's one superweapon (a second one made
+    # mission 20 unwinnable in the 2026-11-16 playtest).
     8: ['Const Yard', 'Windtrap', 'Refinery', 'Windtrap', 'Light Fctry', 'Heavy Fctry', 'Outpost', 'Refinery',
-        'Windtrap', 'WOR', 'Repair', 'Hi-Tech', 'Palace', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret'],
+        'Windtrap', 'WOR', 'Repair', 'Hi-Tech', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret'],
 }
 GUARDS = {
     5: {'Ordos': ['Tank', 'Tank', 'Launcher', 'Troopers'], 'Mercenary': ['Tank', 'Tank', 'Tank', 'Launcher', 'Launcher', 'Quad', 'Troopers', 'Tank']},
@@ -85,6 +87,9 @@ class Board:
         self.building = {}   # tile -> label (non-concrete structures)
         self.concrete = set()
         self.unit_tiles = collections.Counter()
+        # A unit loaded onto a spice bloom stays alive but invisible to every team, so its house can
+        # never be defeated (RWRK_SCENA013, 2026-11-16 playtest). Keep blooms and fields clear.
+        self.reserved = {xy(p) for key in ('Bloom', 'Special', 'Field') for p in sc.positions(key)}
         for house, typ, p in sc.structures():
             self.mark(house, typ, p)
         for house, typ, p, act in sc.units():
@@ -105,7 +110,8 @@ class Board:
         for dy in range(sy):
             for dx in range(sx):
                 tx, ty = x + dx, y + dy
-                if not self.inside(tx, ty) or self.ter[ty][tx] != 'r' or (tx, ty) in self.building or self.unit_tiles[(tx, ty)]:
+                if not self.inside(tx, ty) or self.ter[ty][tx] != 'r' or (tx, ty) in self.building or self.unit_tiles[(tx, ty)] \
+                        or (tx, ty) in self.reserved:
                     return False
         for dy in range(-gap, sy + gap):
             for dx in range(-gap, sx + gap):
@@ -115,7 +121,7 @@ class Board:
         return True
 
     def free_unit_tile(self, x, y, typ):
-        if not self.inside(x, y) or (x, y) in self.building: return False
+        if not self.inside(x, y) or (x, y) in self.building or (x, y) in self.reserved: return False
         if typ == 'Harvester' and self.ter[y][x] in 'rm': return False
         if self.ter[y][x] == 'm' and typ not in INFANTRY: return False
         return self.unit_tiles[(x, y)] == 0
