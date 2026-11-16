@@ -99,7 +99,7 @@ with (out / 'build.log').open('w') as log:
     subprocess.run(cc, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 for mod in MODS:
-    profile = out / ('profile-' + mod)
+    profile = out / mod / 'profile'  # managed_profile only adopts a directory named 'profile'
     if profile.exists():
         remove_tree(profile)  # every run starts from a fresh profile
     with managed_profile(profile):
