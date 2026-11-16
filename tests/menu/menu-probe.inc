@@ -1244,8 +1244,40 @@ int runMenuProbe() {
 #if defined(DUNECITY_DESKTOP_UPDATER)
         auto& updater = DesktopUpdater::instance();
         menu.bFirstLaunchPromptChecked = true;
-        MainMenu::updatePromptOfferedThisLaunch = false;
         updater.manifest_.version = "9.0.0";
+#if defined(__linux__)
+        // Linux installs updates in-game only into a user-owned AppImage
+        // ($APPIMAGE), and this build tree is not one. First check it as a
+        // DEB/RPM install sees it, then stand in for an AppImage.
+        struct AppImageStandIn {
+            const char* old = getenv("APPIMAGE");
+            const bool had = old != nullptr;
+            const std::string previous = old ? old : "";
+            const std::filesystem::path image = std::filesystem::absolute(
+                std::filesystem::path(getConfigFilepath()).parent_path() / "menu-probe-update.AppImage");
+            ~AppImageStandIn() {
+                if (had) setenv("APPIMAGE", previous.c_str(), 1); else unsetenv("APPIMAGE");
+                std::error_code ignored; std::filesystem::remove(image, ignored);
+            }
+        } appImage;
+        unsetenv("APPIMAGE");
+        MainMenu::updatePromptOfferedThisLaunch = false;
+        updater.state_ = DesktopUpdater::State::Available;
+        menu.update(); menu.update();
+        menuRequire(!updater.supported() && menu.updateButton.getText()=="Update available",
+            "A non-AppImage Linux install lost its update notice");
+        menuRequire(!menu.pChildWindow && !menu.updatePromptOpen,
+            "A non-AppImage Linux install opened an unsolicited update dialog");
+        menu.onUpdate();
+        menuRequire(dynamic_cast<MsgBox*>(menu.pChildWindow) && !menu.updatePromptOpen,
+            "The update button no longer explains manual updates outside an AppImage");
+        menu.closeChildWindow();
+        menu.processChildWindowOpenCloses();
+        std::ofstream(appImage.image) << "menu probe AppImage stand-in\n";
+        setenv("APPIMAGE", appImage.image.c_str(), 1);
+        menuRequire(updater.supported(), "A user-owned AppImage cannot install updates");
+#endif
+        MainMenu::updatePromptOfferedThisLaunch = false;
         updater.state_ = DesktopUpdater::State::Current;
         menu.update();
         menuRequire(!menu.pChildWindow && !menu.updatePromptOpen, "Up-to-date launch opened an update dialog");
