@@ -28,7 +28,7 @@ bool isAvailableForHouse(HOUSETYPE house) {
 void setWatermarkVisible(bool visible) { watermarkVisible = visible; }
 bool isWatermarkVisible() { return watermarkVisible; }
 
-void drawWatermark(int right, int top) {
+void drawWatermark(int right, int y, bool fromBottom) {
     if(!pFontManager || !renderer) return;
     // A gold label on a dark plate: readable on the map, the planet and the menu art.
     const auto text = pFontManager->createTextureWithText(kWatermark, COLOR_RGB(236, 196, 96), 14);
@@ -36,7 +36,7 @@ void drawWatermark(int right, int top) {
     SDL_SetTextureAlphaMod(text.get(), 230);
     int w = 0, h = 0;
     SDL_QueryTexture(text.get(), nullptr, nullptr, &w, &h);
-    SDL_Rect plate { right - w - 16, top, w + 16, h + 6 };
+    SDL_Rect plate { right - w - 16, fromBottom ? y - h - 6 : y, w + 16, h + 6 };
     renderFillRect(renderer, &plate, COLOR_RGBA(0, 0, 0, 150));
     renderDrawRect(renderer, &plate, COLOR_RGBA(236, 196, 96, 170));
     SDL_Rect dest { plate.x + 8, plate.y + 3, w, h };

@@ -76,8 +76,9 @@ private:
     bool previous;
 };
 
-/// Draws the REMASTERED badge with its right edge at `right` and its top at `top` (screen pixels).
-void drawWatermark(int right, int top);
+/// Draws the REMASTERED badge with its right edge at `right` and its top (or, with `fromBottom`,
+/// its bottom) at `y`, in screen pixels.
+void drawWatermark(int right, int y, bool fromBottom = false);
 
 } // namespace ReworkedCampaign
 
