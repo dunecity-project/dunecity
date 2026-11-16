@@ -316,6 +316,8 @@ parser.add_argument('--scenario-screenshot', type=Path,
                     help='--scenario: save the rendered game screen, centred on --house\'s Construction Yard, '
                          'at --scenario-screenshot-minute (default 1), at --viewport (default 1440x900)')
 parser.add_argument('--scenario-screenshot-minute', type=int, help='--scenario-screenshot: the game minute')
+parser.add_argument('--scenario-watch-object', type=int,
+                    help='--scenario: log each change of this object\'s active/alive/visible state')
 parser.add_argument('--scenario-screenshot-focus', choices=house_names,
                     help='--scenario-screenshot: centre on this house\'s first living unit and log all its units')
 parser.add_argument('--load-save', type=Path, help='Continue this savegame instead of starting a new match')
@@ -988,6 +990,8 @@ if args.ffa_screenshot:
         env['BALANCE_FFA_SCREENSHOT_MINUTE'] = str(args.ffa_screenshot_minute)
     env['BALANCE_FFA_SCREENSHOT_HOUSE'] = str(house_names.index(args.house))
     args.viewport = args.viewport or '1440x900'
+if args.scenario_watch_object is not None:
+    env['BALANCE_SCENARIO_WATCH_OBJECT'] = str(args.scenario_watch_object)
 if args.scenario_screenshot:
     if not args.scenario:
         parser.error('--scenario-screenshot needs --scenario.')

@@ -246,6 +246,25 @@ inline void screenshot(Game& game, int trackedHouse, int minute) {
     SDL_Log("SCENARIO_SCREENSHOT: minute=%d file=%s saved=%d", minute, path, int(saved));
 }
 
+/// BALANCE_SCENARIO_WATCH_OBJECT=<object id>: log each change of that object's active, alive and
+/// visible-to-the-tracked-team state, with its tile (diagnosing a unit nobody can target).
+inline void watchObject(Game& game, int trackedHouse) {
+    static const char* watch = std::getenv("BALANCE_SCENARIO_WATCH_OBJECT");
+    static int last = -2;
+    if (!watch) return;
+    const auto* object = game.getObjectManager().getObject(static_cast<Uint32>(std::atoi(watch)));
+    const int team = game.getHouse(trackedHouse)->getTeamID();
+    const int state = object ? int(object->isActive()) * 4 + int(object->isVisible(team)) * 2 + int(object->getHealth() > 0) : -1;
+    if (state == last) return;
+    last = state;
+    const Coord where = object ? object->getLocation() : Coord::Invalid();
+    const auto* tile = object && currentGameMap->tileExists(where) ? currentGameMap->getTile(where) : nullptr;
+    SDL_Log("SCENARIO_WATCH: cycle=%u object=%s active=%d visible=%d alive=%d health=%d x=%d y=%d sand=%d worm_here=%d",
+            game.getGameCycleCount(), watch, object ? int(object->isActive()) : -1, object ? int(object->isVisible(team)) : -1,
+            object ? int(object->getHealth() > 0) : -1, object ? object->getHealth().lround() : -1, where.x, where.y,
+            tile ? int(tile->isSand()) : -1, tile ? int(tile->hasAnUndergroundUnit()) : -1);
+}
+
 inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, bool constructionYardOnly) {
     if (constructionYardOnly) deployMcvs(game);
     const auto& init = game.getGameInitSettings();
@@ -306,6 +325,7 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         const auto& triggers = game.getTriggerManager().getTriggers();
         for (auto it = triggers.begin(); it != triggers.end() && (*it)->getCycleNumber() == now; ++it) ++fired;
         game.updateGameState();
+        watchObject(game, trackedHouse);
         EliminationMatch::crushCount.observe();
         DuneCityAudit::observe(game);
         const Uint32 cycle = game.getGameCycleCount();
