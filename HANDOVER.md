@@ -1,3 +1,22 @@
+## 2026-11-16 - 1.0.872 candidate: campaign helper unit-cap launch and yard upgrade, vanilla payback windtraps
+
+Stefan's save `doesntupgrade.dls` (Atreides, tech 4, Easy QuantBot on the player's house): the yard
+never upgraded and the helper never attacked. He asked for upgrade timings tested on the two retained
+AWS workers, then for power, concrete and yard rules assessed as general switches, then "release".
+Full results: `docs/campaign-support-research.md` (two 2026-11-16 sections); models and runs in
+`~/Documents/projects/outputs/yard-upgrade-timing-20261116/`.
+
+- New defaults: `CampaignHelperUnitCapLaunch=1`, `CampaignHelperYardUpgradeTiming=2`,
+  `VanillaPowerPayback=25`. Protocol 127, save format 9886 unchanged.
+- Off, kept as switches: `CampaignHelperAirUpgrade`, `CampaignHelperPowerPayback`,
+  `CampaignHelperLateConcrete`, `CampaignHelperTurretConcrete`, `VanillaYardUpgradeTiming`,
+  `VanillaOpeningBare`, `VanillaAirUpgrade`.
+- Gates at a212b0d0c (AI code identical to this candidate): AWS dunelegacy_tests, scenario-matrix
+  smoke, All against Atreides vanilla and Dune2R, FFA army deploys 5/5; Mini perf_regression at
+  eb9c4408b; controls same-source OFF overlay v candidate 9/9 native wins kept (PASS).
+- Not tested: campaign enemies with these switches (difficulty choice), DuneCity city mode (the
+  switches do not apply there).
+
 ## 2026-11-16 - 1.0.871 published
 
 `v1.0.871` is an annotated tag on `76ca46d7eb2f22c07d0521a7ef525d07bd64fb41` (branch

@@ -390,7 +390,11 @@
 //      also keeps each computer house's own MaxUnit under the default unit override and
 //      creates no mission teams (the original loader rejects every campaign team line).
 //      Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            126
+// 127: QuantBot defaults change decisions: a campaign support house attacks at its unit
+//      cap and upgrades its Construction Yard after its first Light Factory; vanilla
+//      custom/skirmish QuantBots buy concreted payback windtraps. Older peers would desync.
+//      Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            127
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
