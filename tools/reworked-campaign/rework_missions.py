@@ -1,27 +1,54 @@
-"""Build the missing reworked Atreides missions (RWRK_SCENA012..020) from the originals.
+"""Build the reworked (Remastered) missions that Dmitri Fatkin's RWRK set lacks, from the originals.
 
 Each mission keeps the original Westwood terrain (same seed), the player's start and the
-original enemy base, then is reworked in the style of Dmitri Fatkin's RWRK missions:
-  * a second enemy house with its own base on free rock away from the player,
+original enemy base, then is reworked in the style of Fatkin's RWRK missions of the same level:
+  * from mission 5 a second enemy house with its own base on free rock away from the player
+    (the original enemy's partner in this campaign, `CAMPAIGNS`),
   * harvesters for every enemy house, more defenders and spice fields,
   * Fatkin-style AI teams and reinforcement waves, more starting credits.
-Placement is validated against the seed terrain (every footprint on rock, no overlaps).
-Deterministic: python3 rework_missions.py ORIGINAL_DIR OUT_DIR, where ORIGINAL_DIR holds
-SCENA012.INI..SCENA020.INI unpacked from SCENARIO.PAK (docs/reworked-campaign.md).
+Missions 2-4 are small 32x32 maps with no room for a second base; as in Fatkin's own level 2
+reworks they get stronger defenders, more credits and spice and two enemy waves instead.
+Placement is validated against the seed terrain (every footprint on rock, no overlaps, no unit
+on a spice bloom). Deterministic:
+    python3 rework_missions.py ORIGINAL_DIR OUT_DIR [CAMPAIGN...]
+where ORIGINAL_DIR holds SCEN?0??.INI unpacked from SCENARIO.PAK and CAMPAIGN is a scenario
+letter in `CAMPAIGNS` (default: all). Fatkin's own missions are never regenerated
+(docs/reworked-campaign.md).
 """
 import math, random, sys, collections
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from scenario_map import Scen, terrain, validate, SIZES, INFANTRY
 
-LEVEL = {12: 5, 13: 5, 14: 6, 15: 6, 16: 6, 17: 7, 18: 7, 19: 7, 20: 8}
-PARTNER = {'Ordos': 'Mercenary', 'Harkonnen': 'Sardaukar'}
-PLAYER_CREDITS = {5: 7500, 6: 10000, 7: 12500, 8: 17000}
-ENEMY_CREDITS = {5: 700, 6: 1200, 7: 2000, 8: 2500}
-ENEMY_MAXUNIT = {5: 24, 6: 24, 7: 22, 8: 20}
+# Per campaign: the player's house, the missions Fatkin did not rework, and the house added beside
+# each original enemy (the Atreides pairing is Fatkin's own from his level 5-8 missions).
+CAMPAIGNS = {
+    'A': dict(player='Atreides', missions=range(12, 21), partner={'Ordos': 'Mercenary', 'Harkonnen': 'Sardaukar'}),
+    'H': dict(player='Harkonnen', missions=range(4, 23), partner={'Atreides': 'Sardaukar', 'Ordos': 'Mercenary'}),
+    'O': dict(player='Ordos', missions=range(2, 23), partner={'Atreides': 'Mercenary', 'Harkonnen': 'Sardaukar'}),
+}
+MAIN_HOUSES = ('Atreides', 'Harkonnen', 'Ordos')
+
+
+def level_of(mission):
+    """The campaign's tech level: 1, 2-4, 5-7, 8-10, 11-13, 14-16, 17-19, 20-22 -> 1..8."""
+    return (mission + 4) // 3
+
+
+# None keeps the original value.
+PLAYER_CREDITS = {2: None, 3: 2250, 4: 4750, 5: 7500, 6: 10000, 7: 12500, 8: 17000}
+PLAYER_MAXUNIT = {2: None, 3: 31, 4: 30, 5: 32, 6: 32, 7: 32, 8: 32}
+ENEMY_CREDITS = {2: 300, 3: 450, 4: 600, 5: 700, 6: 1200, 7: 2000, 8: 2500}
+ENEMY_MAXUNIT = {2: 25, 3: 26, 4: 25, 5: 24, 6: 24, 7: 22, 8: 20}
+# Harvesters for an enemy's first and second refinery.
+HARVESTERS = {2: (1,), 3: (1, 1), 4: (2, 1), 5: (2, 1), 6: (2, 1), 7: (2, 1), 8: (2, 1)}
 
 # Second-base build order: essentials first, defences last.  Anything that does not fit is skipped.
+# Levels 3 and 4 follow Fatkin's added Mercenary and Sardaukar bases (RWRK_SCENA006, RWRK_SCENA009).
 BASE = {
+    3: ['Const Yard', 'Windtrap', 'Refinery', 'Windtrap', 'Light Fctry', 'Barracks', 'Spice Silo', 'Outpost'],
+    4: ['Const Yard', 'Windtrap', 'Refinery', 'Windtrap', 'Light Fctry', 'Heavy Fctry', 'WOR', 'Spice Silo',
+        'Outpost', 'Windtrap'],
     5: ['Const Yard', 'Windtrap', 'Refinery', 'Windtrap', 'Light Fctry', 'Heavy Fctry', 'Spice Silo', 'Outpost',
         'Refinery', 'Windtrap', 'WOR', 'Repair', 'Hi-Tech', 'Turret', 'Turret', 'Turret', 'Turret', 'Turret', 'Turret'],
     6: ['Const Yard', 'Windtrap', 'Refinery', 'Windtrap', 'Light Fctry', 'Heavy Fctry', 'Spice Silo', 'Outpost',
@@ -35,45 +62,77 @@ BASE = {
     8: ['Const Yard', 'Windtrap', 'Refinery', 'Windtrap', 'Light Fctry', 'Heavy Fctry', 'Outpost', 'Refinery',
         'Windtrap', 'WOR', 'Repair', 'Hi-Tech', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret', 'R-Turret'],
 }
+# House roles: 'A' and 'A2' are the original Atreides/Harkonnen/Ordos enemies in file order; 'B' and
+# 'B2' the Sardaukar and Mercenary houses (original ones first, then the added ones).
+# '*special' is the house's own heavy unit and '*trike' its trike (SPECIAL, TRIKE).
 GUARDS = {
-    5: {'Ordos': ['Tank', 'Tank', 'Launcher', 'Troopers'], 'Mercenary': ['Tank', 'Tank', 'Tank', 'Launcher', 'Launcher', 'Quad', 'Troopers', 'Tank']},
-    6: {'Harkonnen': ['Launcher', 'Siege Tank', 'Tank'], 'Sardaukar': ['Siege Tank', 'Siege Tank', 'Tank', 'Tank', 'Launcher', 'Launcher', 'Troopers', 'Troopers', 'Siege Tank']},
-    7: {'Ordos': ['Launcher', 'Siege Tank', 'Deviator'], 'Mercenary': ['Siege Tank', 'Siege Tank', 'Siege Tank', 'Launcher', 'Launcher', 'Launcher', 'Tank', 'Troopers', 'Siege Tank']},
-    8: {'Harkonnen': ['Launcher', 'Devastator'], 'Ordos': ['Launcher', 'Deviator'],
-        'Sardaukar': ['Siege Tank', 'Siege Tank', 'Siege Tank', 'Launcher', 'Launcher', 'Launcher', 'Troopers'],
-        'Mercenary': ['Siege Tank', 'Siege Tank', 'Launcher', 'Launcher', 'Launcher', 'Tank']},
+    2: {'A': ['*trike', '*trike', 'Trooper', 'Quad']},
+    3: {'A': ['Quad', 'Quad', 'Trooper'], 'B': ['Quad', 'Quad', 'Quad', '*trike', 'Troopers', 'Quad', '*trike', 'Troopers', 'Quad', 'Troopers']},
+    4: {'A': ['Tank', 'Tank', 'Troopers'], 'B': ['Tank', 'Tank', 'Tank', 'Tank', 'Quad', 'Troopers', 'Tank', 'Tank', 'Troopers', 'Tank']},
+    5: {'A': ['Tank', 'Tank', 'Launcher', 'Troopers'], 'B': ['Tank', 'Tank', 'Tank', 'Launcher', 'Launcher', 'Quad', 'Troopers', 'Tank']},
+    6: {'A': ['Launcher', 'Siege Tank', 'Tank'], 'B': ['Siege Tank', 'Siege Tank', 'Tank', 'Tank', 'Launcher', 'Launcher', 'Troopers', 'Troopers', 'Siege Tank']},
+    7: {'A': ['Launcher', 'Siege Tank', '*special'], 'B': ['Siege Tank', 'Siege Tank', 'Siege Tank', 'Launcher', 'Launcher', 'Launcher', 'Tank', 'Troopers', 'Siege Tank']},
+    8: {'A': ['Launcher', '*special'], 'A2': ['Launcher', '*special'],
+        'B': ['Siege Tank', 'Siege Tank', 'Siege Tank', 'Launcher', 'Launcher', 'Launcher', 'Troopers'],
+        'B2': ['Siege Tank', 'Siege Tank', 'Launcher', 'Launcher', 'Launcher', 'Tank']},
 }
-# Fatkin's level 5 missions use five teams a house; his level 8+ missions use three.
+SPECIAL = {'Atreides': 'Sonic Tank', 'Harkonnen': 'Devastator', 'Ordos': 'Deviator'}
+# Harkonnen build no trikes and Atreides no Raiders (config/ObjectData.ini.default, Builder(H)/(A)).
+TRIKE = {'Ordos': 'Raider Trike', 'Harkonnen': 'Quad'}
+SQUAD = {'Harkonnen': 'Troopers'}
+# The player's heavy reinforcement: an Ordos player gets Siege Tanks, not Deviators, which do no damage.
+PLAYER_SPECIAL = {'Atreides': 'Sonic Tank', 'Harkonnen': 'Devastator', 'Ordos': 'Siege Tank'}
+# Fatkin's level 3-5 missions use five teams a house; his level 8+ missions use three.  Level 2 keeps the
+# original teams, as his level 2 reworks do.
 TEAMS = {
+    2: None,
+    3: [('Normal', 'Foot', 2, 3), ('Normal', 'Foot', 2, 4), ('Normal', 'Wheeled', 3, 3), ('Normal', 'Wheeled', 4, 5), ('Staging', 'Wheeled', 1, 2)],
+    4: [('Normal', 'Foot', 2, 4), ('Guard', 'Foot', 2, 3), ('Normal', 'Wheeled', 2, 4), ('Normal', 'Tracked', 2, 4), ('Normal', 'Tracked', 4, 6)],
     5: [('Normal', 'Foot', 2, 4), ('Guard', 'Foot', 2, 3), ('Normal', 'Wheeled', 2, 4), ('Normal', 'Tracked', 4, 5), ('Guard', 'Tracked', 2, 3)],
     6: [('Normal', 'Foot', 2, 4), ('Normal', 'Wheeled', 2, 3), ('Normal', 'Tracked', 4, 5), ('Guard', 'Tracked', 2, 3)],
     7: [('Normal', 'Foot', 2, 3), ('Normal', 'Wheeled', 2, 3), ('Normal', 'Tracked', 3, 5), ('Guard', 'Tracked', 2, 3)],
     8: [('Normal', 'Foot', 2, 3), ('Normal', 'Wheeled', 2, 3), ('Normal', 'Tracked', 3, 5)],
 }
-# Enemy waves (house role, unit, minute, repeat).  'A' = original enemy, 'B' = added house.
+# Enemy waves (house role, unit, minute, repeat).  Levels 2-4 follow RWRK_SCENA003, 006 and 009.
 WAVES = {
-    5: [('A', 'Tank', 11, False), ('B', 'Quad', 11, False), ('A', 'Raider Trike', 11, False), ('B', 'Launcher', 12, True),
+    2: [('A', '*trike', 14, False), ('A', 'Trooper', 16, False)],
+    3: [('A', 'Trooper', 7, False), ('A', 'Trooper', 7, False), ('B', 'Trooper', 9, False), ('B', 'Trooper', 9, False),
+        ('A', 'Quad', 12, False), ('A', 'Trooper', 12, False), ('B', 'Quad', 14, False), ('B', 'Trooper', 14, False),
+        ('A', 'Troopers', 18, False), ('B', 'Troopers', 19, False)],
+    4: [('A', 'Tank', 11, True), ('A', 'Quad', 11, True), ('A', 'Troopers', 11, False), ('B', 'Tank', 12, True),
+        ('B', 'Quad', 12, True), ('B', 'Troopers', 12, False), ('A', 'Tank', 16, False), ('A', 'Troopers', 16, False),
+        ('B', 'Tank', 19, False), ('B', 'Troopers', 19, False)],
+    5: [('A', 'Tank', 11, False), ('B', 'Quad', 11, False), ('A', '*trike', 11, False), ('B', 'Launcher', 12, True),
         ('A', 'Tank', 12, True), ('B', 'Troopers', 12, False), ('A', 'Tank', 16, False), ('A', 'Troopers', 16, False),
         ('B', 'Tank', 18, False), ('B', 'Launcher', 18, False)],
     6: [('A', 'Siege Tank', 10, False), ('B', 'Launcher', 10, False), ('A', 'Troopers', 12, False), ('B', 'Siege Tank', 12, True),
         ('A', 'Launcher', 12, True), ('B', 'Troopers', 14, False), ('A', 'Siege Tank', 17, False), ('B', 'Tank', 18, False),
-        ('A', 'Devastator', 20, False), ('B', 'Siege Tank', 20, False)],
-    7: [('A', 'Siege Tank', 9, False), ('B', 'Launcher', 9, False), ('A', 'Deviator', 11, True), ('B', 'Siege Tank', 11, True),
+        ('A', '*special', 20, False), ('B', 'Siege Tank', 20, False)],
+    7: [('A', 'Siege Tank', 9, False), ('B', 'Launcher', 9, False), ('A', '*special', 11, True), ('B', 'Siege Tank', 11, True),
         ('A', 'Troopers', 12, False), ('B', 'Troopers', 12, False), ('A', 'Tank', 16, False), ('B', 'Launcher', 16, False),
         ('A', "'Thopter", 14, False), ('B', "'Thopter", 14, False)],
-    8: [('Harkonnen', 'Devastator', 8, False), ('Ordos', 'Siege Tank', 7, False), ('Sardaukar', 'Launcher', 8, False),
-        ('Mercenary', 'Launcher', 7, False), ('Harkonnen', 'Devastator', 11, True), ('Ordos', 'Deviator', 11, True),
-        ('Sardaukar', 'Siege Tank', 12, True), ('Mercenary', 'Launcher', 12, True), ('Ordos', "'Thopter", 10, False),
-        ('Sardaukar', "'Thopter", 10, False), ('Mercenary', "'Thopter", 10, False)],
+    8: [('A', '*special', 8, False), ('A2', 'Siege Tank', 7, False), ('B', 'Launcher', 8, False),
+        ('B2', 'Launcher', 7, False), ('A', '*special', 11, True), ('A2', '*special', 11, True),
+        ('B', 'Siege Tank', 12, True), ('B2', 'Launcher', 12, True), ('A2', "'Thopter", 10, False),
+        ('B', "'Thopter", 10, False), ('B2', "'Thopter", 10, False)],
 }
 PLAYER_WAVES = {
+    2: [],
+    3: [('*trike', 8), ('*squad', 8), ('Quad', 13), ('*squad', 13)],
+    4: [('Tank', 13), ('Quad', 13), ('Tank', 20), ('Tank', 20)],
     5: [('Tank', 13), ('Tank', 13), ('Tank', 19), ('Launcher', 19)],
     6: [('Siege Tank', 12), ('Launcher', 12), ('Siege Tank', 18), ('Siege Tank', 18)],
-    7: [('Siege Tank', 11), ('Launcher', 11), ('Sonic Tank', 17), ('Siege Tank', 17)],
-    8: [('Launcher', 9), ('Siege Tank', 9), ('Siege Tank', 13), ('Sonic Tank', 13)],
+    7: [('Siege Tank', 11), ('Launcher', 11), ('*special', 17), ('Siege Tank', 17)],
+    8: [('Launcher', 9), ('Siege Tank', 9), ('Siege Tank', 13), ('*special', 13)],
 }
 CHOAM_BONUS = {'Harvester': 3, 'Siege Tank': 2, 'Launcher': 1, 'Tank': 1, 'Quad': 1, 'Carryall': 1}
-HOUSE_ORDER = ['Atreides', 'Harkonnen', 'Ordos', 'Sardaukar', 'Mercenary', 'Fremen']
+
+
+def unit_for(house, unit, special=SPECIAL):
+    if unit == '*special': return special.get(house, 'Siege Tank')
+    if unit == '*trike': return TRIKE.get(house, 'Trike')
+    if unit == '*squad': return SQUAD.get(house, 'Infantry')
+    return unit
 
 
 def xy(pos): return pos % 64, pos // 64
@@ -87,8 +146,9 @@ class Board:
         self.building = {}   # tile -> label (non-concrete structures)
         self.concrete = set()
         self.unit_tiles = collections.Counter()
-        # A unit loaded onto a spice bloom stays alive but invisible to every team, so its house can
-        # never be defeated (RWRK_SCENA013, 2026-11-16 playtest). Keep blooms and fields clear.
+        # A unit loaded onto a spice bloom used to stay alive but invisible to every team, so its house
+        # could never be defeated (RWRK_SCENA013, 2026-11-16 playtest; fixed by
+        # UnitBase::deployAtMapStart). Keep blooms and fields clear anyway.
         self.reserved = {xy(p) for key in ('Bloom', 'Special', 'Field') for p in sc.positions(key)}
         for house, typ, p in sc.structures():
             self.mark(house, typ, p)
@@ -263,24 +323,33 @@ def add_fields(board, existing, centers, rng, want):
     return fields
 
 
-def rework(n, orig_path, out_path):
-    rng = random.Random(1000 + n)
-    level = LEVEL[n]
+def rework(letter, n, orig_path, out_path):
+    campaign = CAMPAIGNS[letter]
+    # The Atreides seeds predate the other campaigns; keep them so those missions stay byte-identical.
+    rng = random.Random(1000 + n + {'A': 0, 'H': 100, 'O': 200}[letter])
+    level = level_of(n)
     sc = Scen(orig_path)
     ter = terrain(sc.seed)
     board = Board(sc, ter)
-    player = 'Atreides'
+    player = campaign['player']
     houses_orig = [h for h in sc.secs if h not in ('BASIC', 'MAP', 'UNITS', 'STRUCTURES', 'TEAMS', 'REINFORCEMENTS', 'CHOAM')]
     enemies = [h for h in houses_orig if h != player]
     pcy = next(xy(p) for h, t, p in sc.structures() if h == player and t == 'Const Yard')
     pcy = (pcy[0] + 0.5, pcy[1] + 0.5)
 
-    # Added houses: the original enemy's partner (levels 5-7), Sardaukar and Mercenary at level 8.
-    if level == 8:
-        added = ['Sardaukar', 'Mercenary']
+    # Added houses: none on the small level 2 maps, the original enemy's partner (levels 3-7),
+    # Sardaukar and Mercenary at level 8 (when the mission has not got them already).
+    main = [h for h in enemies if h in MAIN_HOUSES]
+    if level == 2:
+        added = []
+    elif level == 8:
+        added = [h for h in ('Sardaukar', 'Mercenary') if h not in enemies]
     else:
-        added = [PARTNER[enemies[0]]]
-    roles = {'A': enemies[0], 'B': added[0]}
+        added = [campaign['partner'][main[0]]]
+    others = [h for h in enemies if h not in MAIN_HOUSES] + added
+    roles = dict(zip(('A', 'A2'), main))
+    roles.update(zip(('B', 'B2'), others))
+    role_of = {h: r for r, h in roles.items()}
 
     new_structs, new_units = [], []
     enemy_tiles = [t for t, (h, ty) in board.building.items() if h != player]
@@ -314,25 +383,29 @@ def rework(n, orig_path, out_path):
             tiles = [t for t, (h, ty) in board.building.items() if h == house]
             if not tiles: continue
             center = (sum(t[0] for t in tiles) // len(tiles), sum(t[1] for t in tiles) // len(tiles))
-        guards = GUARDS[level].get(house, [])
+        guards = [unit_for(house, u) for u in GUARDS[level].get(role_of.get(house), [])]
         new_units += place_units(board, house, center, guards, pcy, rng, rmin=2, rmax=9)
-        for i, ref in enumerate(refineries[:2]):
-            new_units += place_harvesters(board, house, ref, 2 if i == 0 else 1, rng)
+        for count, ref in zip(HARVESTERS[level], refineries):
+            new_units += place_harvesters(board, house, ref, count, rng)
 
     # Spice: keep the original fields, add some near every base and the player.
     centers = [(pcy, 6, 11)]
     for house in enemies + list(bases):
         tiles = [t for t, (h, ty) in board.building.items() if h == house]
         if tiles: centers.append(((sum(t[0] for t in tiles) / len(tiles), sum(t[1] for t in tiles) / len(tiles)), 7, 13))
-    fields = add_fields(board, sc.positions('Field'), centers, rng, want=max(15, len(sc.positions('Field')) + 8))
+    original_fields = sc.positions('Field')
+    want = max(4, len(original_fields) + 3) if level == 2 else max(15, len(original_fields) + 8)
+    fields = add_fields(board, original_fields, centers, rng, want=want)
 
     all_enemies = enemies + list(bases)
 
     # ---- write the scenario ----
     b = dict(sc.secs['BASIC'])
-    out = [f'; Scenario {n} control for house Atreides.',
+    style = 'stronger defenders, more spice and enemy waves' if level == 2 else \
+        'a second enemy house, harvesters, more spice and waves'
+    out = [f'; Scenario {n} control for house {player}.',
            '; Reworked for DuneCity from the original Westwood scenario (same terrain and original base),',
-           "; following Dmitri Fatkin's RWRK missions: a second enemy house, harvesters, more spice and waves.",
+           f"; following Dmitri Fatkin's RWRK missions: {style}.",
            '', '[BASIC]']
     for k in ('LosePicture', 'WinPicture', 'BriefPicture', 'TimeOut', 'MapScale', 'CursorPos', 'TacticalPos', 'LoseFlags', 'WinFlags'):
         if k in b: out.append(f'{k}={b[k]}')
@@ -344,7 +417,9 @@ def rework(n, orig_path, out_path):
     def house_block(h, credits, brain, maxunit, quota=0):
         return ['', f'[{h}]', f'Quota={quota}', f'Credits={credits}', f'Brain={brain}', f'MaxUnit={maxunit}']
     pq = int(sc.get(player, 'Quota', '0') or 0)
-    out += house_block(player, PLAYER_CREDITS[level], 'Human', 32, pq)
+    pc = PLAYER_CREDITS[level] or int(sc.get(player, 'Credits', '0') or 0)
+    pm = PLAYER_MAXUNIT[level] or int(sc.get(player, 'MaxUnit', '25') or 25)
+    out += house_block(player, pc, 'Human', pm, pq)
     for h in all_enemies:
         oc = int(sc.get(h, 'Credits', '0') or 0)
         out += house_block(h, max(oc, ENEMY_CREDITS[level]) if h in enemies else ENEMY_CREDITS[level], 'CPU', ENEMY_MAXUNIT[level])
@@ -356,10 +431,13 @@ def rework(n, orig_path, out_path):
         out += ['', '[CHOAM]'] + [f'{k}={v}' for k, v in choam.items()]
 
     out += ['', '[TEAMS]']
-    tid = 1
-    for h in all_enemies:
-        for beh, typ, mn, mx in TEAMS[level]:
-            out.append(f'{tid}={h},{beh},{typ},{mn},{mx}'); tid += 1
+    if TEAMS[level] is None:
+        out += [f'{k}={v}' for k, v in sc.secs.get('TEAMS', [])]
+    else:
+        tid = 1
+        for h in all_enemies:
+            for beh, typ, mn, mx in TEAMS[level]:
+                out.append(f'{tid}={h},{beh},{typ},{mn},{mx}'); tid += 1
 
     out += ['', '[UNITS]']
     uid = 0
@@ -378,20 +456,34 @@ def rework(n, orig_path, out_path):
     for house, typ, p in sc.structures() + new_structs:
         x, y = xy(p)
         if not (x0 <= x < x0 + w and y0 <= y < y0 + hh): continue
-        if typ in ('Concrete', 'Wall'): gens.append(f'GEN{p}={house},{typ}')
+        if typ in ('Concrete', 'Wall'): gens.append((house, typ, p))
         else: ids.append((house, typ, p))
-    out += gens
+    # The game drops a structure that overhangs the map or lands on another one (INIMapLoader), as in
+    # the originals SCENH015/SCENO015 (a Hi-Tech over the east edge) and SCENO005 (buildings listed
+    # twice). Leave those out so every listed structure is one the mission really has.
+    taken = set()
+    def fits(house, typ, p):
+        sx, sy = SIZES.get(typ, (1, 1)); px, py = xy(p)
+        tiles = [(px + dx, py + dy) for dy in range(sy) for dx in range(sx)]
+        if typ != 'Concrete' and any(not (x0 <= tx < x0 + w and y0 <= ty < y0 + hh) or t in taken
+                                     for t in tiles for tx, ty in [t]):
+            print(f'  {n}: dropped {house} {typ}@{p} (outside the map or on another structure, as in the original)')
+            return False
+        if typ != 'Concrete': taken.update(tiles)
+        return True
+    out += [f'GEN{p}={house},{typ}' for house, typ, p in gens if fits(house, typ, p)]
     for house, typ, p in ids:
+        if not fits(house, typ, p): continue
         out.append(f'ID{sid:03d}={house},{typ},256,{p}'); sid += 1
 
     out += ['', '[REINFORCEMENTS]']
     rid = 1
     for role, unit, minute, rep in WAVES[level]:
-        h = roles.get(role, role)
+        h = roles.get(role)
         if h not in all_enemies: continue
-        out.append(f'{rid}={h},{unit},Enemybase,{minute}' + (',+' if rep else '')); rid += 1
+        out.append(f'{rid}={h},{unit_for(h, unit)},Enemybase,{minute}' + (',+' if rep else '')); rid += 1
     for unit, minute in PLAYER_WAVES[level]:
-        out.append(f'{rid}=Atreides,{unit},Homebase,{minute}'); rid += 1
+        out.append(f'{rid}={player},{unit_for(player, unit, PLAYER_SPECIAL)},Homebase,{minute}'); rid += 1
     # The original Sardaukar strike on the palace missions stays.
     for k, v in sc.secs.get('REINFORCEMENTS', []):
         if v.startswith('Sardaukar,') and 'Sardaukar' not in all_enemies:
@@ -404,10 +496,13 @@ def rework(n, orig_path, out_path):
 
 if __name__ == '__main__':
     orig_dir, out_dir = Path(sys.argv[1]), Path(sys.argv[2])
+    letters = sys.argv[3:] or list(CAMPAIGNS)
     out_dir.mkdir(parents=True, exist_ok=True)
     bad = 0
-    for n in range(12, 21):
-        errs = rework(n, orig_dir / f'SCENA{n:03d}.INI', out_dir / f'RWRK_SCENA{n:03d}.INI')
-        print(f'RWRK_SCENA{n:03d}: {"OK" if not errs else errs[:6]}')
-        bad += bool(errs)
+    for letter in letters:
+        for n in CAMPAIGNS[letter]['missions']:
+            name = f'SCEN{letter}{n:03d}.INI'
+            errs = rework(letter, n, orig_dir / name, out_dir / f'RWRK_{name}')
+            print(f'RWRK_{name}: {"OK" if not errs else errs[:6]}')
+            bad += bool(errs)
     sys.exit(1 if bad else 0)

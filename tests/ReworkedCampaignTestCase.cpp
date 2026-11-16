@@ -95,18 +95,30 @@ TEST_CASE("A reworked campaign continues and retries on reworked maps", "[campai
     REQUIRE_THROWS_AS(custom.useReworkedMaps(), std::invalid_argument);
 }
 
-TEST_CASE("Every Atreides mission has a playable reworked map", "[campaign][reworked][data]") {
+TEST_CASE("The bundled reworked campaign is complete for Atreides, Harkonnen and Ordos", "[campaign][reworked][data]") {
+    const auto bundled = [](const std::string& name) {
+        std::string path = mapDirectory() + name;
+        return getCaseInsensitiveFilename(path);
+    };
+    for(const char house : {'A', 'H', 'O'}) {
+        INFO(house);
+        REQUIRE(ReworkedCampaign::isCompleteSet(house, bundled));
+    }
+}
+
+TEST_CASE("Every mission of a reworked house has a playable map", "[campaign][reworked][data]") {
+    const auto [letter, player] = GENERATE(table<char, std::string>({{'A', "Atreides"}, {'H', "Harkonnen"}, {'O', "Ordos"}}));
     const int mission = GENERATE(range(1, 23));
-    const std::string name = ReworkedCampaign::scenarioFilename('A', mission);
+    const std::string name = ReworkedCampaign::scenarioFilename(letter, mission);
     INFO(name);
     std::string path = mapDirectory() + name;
     REQUIRE(getCaseInsensitiveFilename(path));
     INIFile ini(path);
 
-    REQUIRE(ini.getStringValue("Atreides", "Brain") == "Human");
+    REQUIRE(ini.getStringValue(player, "Brain") == "Human");
     int computerHouses = 0;
-    for(const char* house : {"Harkonnen", "Ordos", "Sardaukar", "Mercenary", "Fremen"}) {
-        if(ini.hasSection(house) && ini.getStringValue(house, "Brain") == "CPU") ++computerHouses;
+    for(const char* house : {"Atreides", "Harkonnen", "Ordos", "Sardaukar", "Mercenary", "Fremen"}) {
+        if(house != player && ini.hasSection(house) && ini.getStringValue(house, "Brain") == "CPU") ++computerHouses;
     }
     REQUIRE(computerHouses >= 1);
 
@@ -114,7 +126,7 @@ TEST_CASE("Every Atreides mission has a playable reworked map", "[campaign][rewo
     const auto map = createMapWithSeed(static_cast<Uint32>(ini.getIntValue("MAP", "Seed", -1)), scale);
     const int offset = scale == 0 ? 1 : (scale == 1 ? 16 : 11);
 
-    bool atreidesYard = false;
+    bool playerYard = false;
     std::set<std::pair<int, int>> occupied;
     for(const auto& key : ini.getSection("STRUCTURES")) {
         if(key.getKeyName().compare(0, 3, "GEN") == 0) continue; // concrete and walls
@@ -124,7 +136,7 @@ TEST_CASE("Every Atreides mission has a playable reworked map", "[campaign][rewo
         INFO(key.getKeyName() << "=" << value);
         const auto [w, h] = structureSize(type);
         REQUIRE(w > 0);
-        if(house == "Atreides" && type == "Const Yard") atreidesYard = true;
+        if(house == player && type == "Const Yard") playerYard = true;
         for(int dy = 0; dy < h; ++dy) {
             for(int dx = 0; dx < w; ++dx) {
                 const int x = position % 64 + dx - offset, y = position / 64 + dy - offset;
@@ -137,10 +149,11 @@ TEST_CASE("Every Atreides mission has a playable reworked map", "[campaign][rewo
             }
         }
     }
-    REQUIRE(atreidesYard);
+    REQUIRE(playerYard);
 
-    // A unit loaded onto a spice bloom stays alive but invisible to every team, so its house can
-    // never be defeated and the mission never ends (RWRK_SCENA013, 2026-11-16 playtest).
+    // A unit loaded onto a spice bloom used to stay alive but invisible to every team, so its house
+    // could never be defeated (RWRK_SCENA013, 2026-11-16 playtest). The loader now keeps it visible
+    // (UnitBase::deployAtMapStart); the reworked missions keep their blooms clear anyway.
     std::set<int> blooms;
     for(const char* key : {"Bloom", "Special"}) {
         std::string list = ini.getStringValue("MAP", key);
