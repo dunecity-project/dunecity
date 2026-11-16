@@ -1,3 +1,23 @@
+## 2026-11-16 - 1.0.873 published
+
+`v1.0.873` is an annotated tag on `af709a0fcf21eb72751fb9bc175038d4e4d212ce` (branch
+`integrate/feature-batch`), pushed 21:21 AEDT after the owner's "make sure its tested but get it into
+production". Evidence: `~/Documents/projects/outputs/release-1.0.873/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below (2d9dd9d6e) plus af709a0fc, which fixed a stale menu check: the
+  first qualification (run 43830538683) failed only in menu_navigation_probe, which still expected
+  Reworked to offer Atreides alone. Qualified: run 43840664794. Tag build: run 43848120690, all jobs passed.
+- Tested at af709a0fc/2d9dd9d6e: AWS Linux headless nightly suite incl. the four AI gates; Mac
+  qualification 221/221; menu_navigation_probe native on the Mini.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (1.0.873/af709a0fc, hashes match; Chrome reached the main menu and the
+  Campaign screen's Maps: Reworked with the REMASTERED badge), website links and What's New.
+  TestFlight not part of this release; Android held.
+- Correction to the candidate entry: menu_navigation_probe did not pass on AWS at d8b2255a9. The queue
+  report printed the fixture test's pass line for it (also at 2d9dd9d6e: "224/224" was 223). On Linux it
+  also fails at "Update confirmation did not appear on its own", already in v1.0.872 (AWS job
+  20261116T202013); a Linux-only known failure, not a 1.0.873 regression.
+
 ## 2026-11-16 - 1.0.873 candidate: reworked (Remastered) campaign, spice bloom ghost fix
 
 Stefan asked for the bundled RWRK_ missions to be completed, offered on the Campaign screen as a
