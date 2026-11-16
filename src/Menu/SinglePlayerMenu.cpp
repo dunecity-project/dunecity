@@ -144,6 +144,7 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
     GameInitSettings init = HouseChoiceMenu::isSingleMission()
         ? GameInitSettings((HOUSETYPE) player, HouseChoiceMenu::getStartLevel(), gameOptions)
         : GameInitSettings((HOUSETYPE) player, gameOptions, HouseChoiceMenu::getStartLevel());
+    if(HouseChoiceMenu::isReworkedMaps()) init.useReworkedMaps();
     const auto campaignSkin = GameInitSettings::sanitizeGraphicsSkin(HouseChoiceMenu::getCampaignSkin());
     init.setCampaignGraphicsSkin(campaignSkin);
     if(supportSelected) {

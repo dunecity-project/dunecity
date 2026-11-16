@@ -319,6 +319,11 @@ Every game is a real match played headless to its end by the balance probe:
   including conquest, defeat and spice quotas; neither forces conquest,
   grants assets nor issues scripted human orders. DuneCity partner diagnostics
   and smoke use the same explicit QuantBot enemy-tier/mode transport.
+  `--reworked` plays the mission's RWRK_ map instead (the campaign menu's
+  Maps: Reworked, `docs/reworked-campaign.md`). The opt-in cell
+  `reworked-player-brutal-v-quantbot-<tier>` schedules the 22 Atreides reworked
+  missions on the gate's seeds; `--cells '^campaign/(reworked-)?player-brutal'
+  --cases atreides` pairs them with the original missions. It reports, it does not gate.
 - Game rules come from the mod (`ModManager::loadEffectiveGameOptions`) as a new Custom Game takes them;
   `--game-options` (All against Atreides: Stefan's own options) applies on top.
 - Once a game minute every house is sampled, and its **sortie** measured: combat ground units more than

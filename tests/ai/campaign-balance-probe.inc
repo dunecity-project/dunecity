@@ -181,6 +181,8 @@ int runCampaignBalanceProbe() {
         init.mission=std::atoi(requestedMission); // Test-only access, provided by -fno-access-control.
         init.filename=GameInitSettings::getScenarioFilename(humanHouse, init.mission);
     }
+    // The campaign menu's Maps: Reworked (docs/reworked-campaign.md), in either campaign mode.
+    if(std::getenv("BALANCE_REWORKED")) init.useReworkedMaps();
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
         std::ifstream file(customMap);
@@ -302,8 +304,9 @@ int runCampaignBalanceProbe() {
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
         throw std::runtime_error("Custom diagnostic did not create the real local observer");
     if(scenario && scenarioSides.empty())
-        SDL_Log("PROBE_CONFIG: campaign_mode=%s mission=%d enemy=%s enemy_difficulty=%s",
-            campaignMode.c_str(),game->getGameInitSettings().getMission(),enemyClass.c_str(),enemy.c_str());
+        SDL_Log("PROBE_CONFIG: campaign_mode=%s mission=%d enemy=%s enemy_difficulty=%s scenario=%s reworked=%d",
+            campaignMode.c_str(),game->getGameInitSettings().getMission(),enemyClass.c_str(),enemy.c_str(),
+            game->getGameInitSettings().getFilename().c_str(),int(game->getGameInitSettings().isReworkedCampaign()));
     if(campaignAiOnly) {
         const House* candidateHouse=game->getHouse(humanHouse);
         if(!candidateHouse || candidateHouse->getPlayerList().size()!=1

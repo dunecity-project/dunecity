@@ -453,6 +453,7 @@ target_sources(dunecity
         misc/format.cpp
         misc/FrameYield.cpp
         misc/IFileStream.cpp
+        misc/ReworkedCampaign.cpp
         misc/md5.cpp
         misc/OFileStream.cpp
 

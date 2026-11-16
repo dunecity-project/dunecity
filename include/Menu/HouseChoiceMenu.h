@@ -50,6 +50,8 @@ public:
     /// The player class of every enemy house.
     static const std::string& getEnemyClass() { return s_enemyClass; }
     static int getCampaignSkin() { return s_campaignSkin; }
+    /// Play the reworked RWRK_ maps (misc/ReworkedCampaign.h) instead of the original missions.
+    static bool isReworkedMaps() { return s_reworkedMaps; }
     static const SettingsClass::GameOptionsClass& getGameOptions() { return s_currentGameOptions; }
 
 private:
@@ -60,6 +62,9 @@ private:
     void onModSelectionChanged(bool interactive);
     void updateModDescription();
     void updateHouseChoice();
+    void refreshHouseChoices();
+    bool reworkedMapsAllowed() const;
+    bool showsRemasteredWatermark() const override { return s_reworkedMaps; }
 
     void onHouseLeft();
     void onHouseRight();
@@ -85,6 +90,7 @@ private:
 
     DropDownBox     startLevelDropDown;
     DropDownBox     campaignSkinDropDown;
+    DropDownBox     campaignMapsDropDown;
     DropDownBox     modDropDown;
     TextView        modDescription;
     std::vector<ModInfo> availableMods;
@@ -98,6 +104,7 @@ private:
 
     bool showLobby;
     CustomGamePlayerPolicy::HouseRoster houseChoices;
+    std::vector<int> reworkedHouses; ///< houses with all 22 reworked missions
     int currentHouseChoiceScrollPos;
 
     // Static storage for AI settings
@@ -108,6 +115,7 @@ private:
     static std::string s_partnerClass;
     static std::string s_enemyClass;
     static int s_campaignSkin;
+    static bool s_reworkedMaps;
     static SettingsClass::GameOptionsClass s_currentGameOptions;
 };
 

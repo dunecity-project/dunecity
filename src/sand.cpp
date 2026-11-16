@@ -38,6 +38,7 @@
 #include <GameInitSettings.h>
 #include <data.h>
 
+#include <misc/ReworkedCampaign.h>
 #include <misc/exceptions.h>
 
 #include <algorithm>
@@ -905,6 +906,9 @@ void startSinglePlayerGame(const GameInitSettings& init)
     while(1) {
 
         try {
+            // Reworked campaign: its briefing, debriefing, statistics and map choice show the
+            // REMASTERED badge. The game screen draws its own, so the menus' badge is off meanwhile.
+            ReworkedCampaign::WatermarkScope remastered(currentGameInitInfo.isReworkedCampaign());
 
             SDL_Log("Initializing game...");
             currentGame = new Game();
@@ -913,7 +917,9 @@ void startSinglePlayerGame(const GameInitSettings& init)
             // get init settings from game as it might have changed (through loading the game)
             currentGameInitInfo = currentGame->getGameInitSettings();
 
+            ReworkedCampaign::setWatermarkVisible(false);
             currentGame->runMainLoop();
+            ReworkedCampaign::setWatermarkVisible(currentGameInitInfo.isReworkedCampaign());
 
             bool bGetNext = true;
             while(bGetNext) {

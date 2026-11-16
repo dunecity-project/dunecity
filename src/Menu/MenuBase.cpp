@@ -23,6 +23,7 @@
 #include <misc/FileSystem.h>
 #include <misc/FrameYield.h>
 #include <misc/draw_util.h>
+#include <misc/ReworkedCampaign.h>
 #include <misc/DiscordManager.h>
 #include <misc/TouchInput.h>
 #include <misc/WebRuntime.h>
@@ -130,6 +131,12 @@ void MenuBase::draw() {
     Window::drawOverlay();
 
     SDL_RenderSetClipRect(renderer, nullptr);
+
+    if(showsRemasteredWatermark()) ReworkedCampaign::drawWatermark(getRendererWidth() - 8, 6);
+}
+
+bool MenuBase::showsRemasteredWatermark() const {
+    return ReworkedCampaign::isWatermarkVisible();
 }
 
 void MenuBase::drawSpecificStuff() {

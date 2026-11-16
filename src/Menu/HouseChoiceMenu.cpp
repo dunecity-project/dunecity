@@ -31,6 +31,7 @@
 #include <GUI/dune/GameOptionsWindow.h>
 #include <Menu/HouseChoiceInfoMenu.h>
 #include <SoundPlayer.h>
+#include <misc/ReworkedCampaign.h>
 
 
 namespace {
@@ -48,6 +49,7 @@ int HouseChoiceMenu::s_startLevel = 1;
 std::string HouseChoiceMenu::s_partnerClass;
 std::string HouseChoiceMenu::s_enemyClass = "qBotEasy";
 int HouseChoiceMenu::s_campaignSkin = 0;
+bool HouseChoiceMenu::s_reworkedMaps = false;
 SettingsClass::GameOptionsClass HouseChoiceMenu::s_currentGameOptions;
 
 HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : MenuBase(), showLobby(showLobby)
@@ -55,6 +57,9 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     OnlineModPolicy::restoreApprovedSelection();
     houseChoices = CustomGamePlayerPolicy::selectableHouses(ModManager::instance().isTornieFamilyContentActive(),
         isHouseAvailable(HOUSE_CUSTOM), ModManager::instance().getPlayableHouses());
+    for(const int house : {HOUSE_ATREIDES, HOUSE_ORDOS, HOUSE_HARKONNEN, HOUSE_MERCENARY, HOUSE_FREMEN, HOUSE_SARDAUKAR}) {
+        if(ReworkedCampaign::isAvailableForHouse(static_cast<HOUSETYPE>(house))) reworkedHouses.push_back(house);
+    }
     s_online = online;
     currentHouseChoiceScrollPos = 0;
     if(!keepRules) {
@@ -141,7 +146,24 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     label("Start from", 48, 294);
     populateLevels();
     startLevelDropDown.setOnSelectionChange([this](bool) { s_startLevel = startLevelDropDown.getSelectedEntryIntData(); });
-    windowWidget.addWidget(&startLevelDropDown, Point(48, 315), Point(256, 22));
+    windowWidget.addWidget(&startLevelDropDown, Point(48, 315), Point(124, 22));
+    // Reworked maps: the RWRK_ missions, played like the campaign (same AI, briefings and map choice).
+    auto* mapsLabel = Label::create(_("Maps"));
+    mapsLabel->setTextFontSize(12);
+    mapsLabel->setTextColor(COLOR_WHITE);
+    mapsLabel->setAlignment(Alignment_Left);
+    windowWidget.addWidget(mapsLabel, Point(180, 294), Point(124, 18));
+    campaignMapsDropDown.addEntry(_("Original"), 0);
+    campaignMapsDropDown.addEntry(_("Reworked"), 1);
+    if(!reworkedMapsAllowed()) s_reworkedMaps = false;
+    campaignMapsDropDown.setSelectedItem(s_reworkedMaps ? 1 : 0);
+    campaignMapsDropDown.setEnabled(reworkedMapsAllowed());
+    campaignMapsDropDown.setOnSelectionChange([this](bool interactive) {
+        if(!interactive) return;
+        s_reworkedMaps = campaignMapsDropDown.getSelectedEntryIntData() == 1 && reworkedMapsAllowed();
+        refreshHouseChoices();
+    });
+    windowWidget.addWidget(&campaignMapsDropDown, Point(180, 315), Point(124, 22));
     label("DuneCity skin", 48, 339);
     campaignSkinDropDown.addEntry(_("Classic"), 0);
     campaignSkinDropDown.addEntry(_("Dune2"), 1);
@@ -218,10 +240,33 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     loadButton.setOnClick([]() { showGameLibrary(); });
     windowWidget.addWidget(&loadButton, Point(320,455), Point(120,24));
     updateConnection();
-    updateHouseChoice();
+    refreshHouseChoices();
 }
 
 HouseChoiceMenu::~HouseChoiceMenu() = default;
+
+bool HouseChoiceMenu::reworkedMapsAllowed() const {
+    // The reworked missions are vanilla-house maps; family editions bring their own campaigns.
+    return !reworkedHouses.empty() && !ModManager::instance().isTornieFamilyContentActive();
+}
+
+void HouseChoiceMenu::refreshHouseChoices() {
+    auto& manager = ModManager::instance();
+    houseChoices = CustomGamePlayerPolicy::selectableHouses(manager.isTornieFamilyContentActive(),
+        isHouseAvailable(HOUSE_CUSTOM), manager.getPlayableHouses());
+    if(s_reworkedMaps) {
+        // Only houses whose whole campaign has been reworked can start a reworked campaign.
+        CustomGamePlayerPolicy::HouseRoster reworked;
+        for(int i = 0; i < houseChoices.count; ++i) {
+            if(std::find(reworkedHouses.begin(), reworkedHouses.end(), houseChoices[i]) != reworkedHouses.end())
+                reworked.houses[reworked.count++] = houseChoices[i];
+        }
+        houseChoices = reworked;
+    }
+    currentHouseChoiceScrollPos = std::clamp(currentHouseChoiceScrollPos, 0,
+        std::max(0, houseChoices.count - kVisibleHouseButtons));
+    updateHouseChoice();
+}
 
 void HouseChoiceMenu::onChildWindowClose(Window* pChildWindow) {
     GameOptionsWindow* pGameOptionsWindow = dynamic_cast<GameOptionsWindow*>(pChildWindow);
@@ -421,11 +466,12 @@ void HouseChoiceMenu::onModSelectionChanged(bool interactive) {
             s_currentGameOptions = effectiveGameOptions;
         }
     }
-    houseChoices = CustomGamePlayerPolicy::selectableHouses(ModManager::instance().isTornieFamilyContentActive(),
-        isHouseAvailable(HOUSE_CUSTOM), manager.getPlayableHouses());
-    currentHouseChoiceScrollPos = std::min(currentHouseChoiceScrollPos,
-        std::max(0, houseChoices.count - kVisibleHouseButtons));
-    updateHouseChoice();
+    if(!reworkedMapsAllowed()) {
+        s_reworkedMaps = false;
+        campaignMapsDropDown.setSelectedItem(0);
+    }
+    campaignMapsDropDown.setEnabled(reworkedMapsAllowed());
+    refreshHouseChoices();
     updateModDescription();
     campaignSkinDropDown.setEnabled(manager.isCityModeActive());
     populateConnections();

@@ -16,6 +16,7 @@
  */
 
 #include <GameInitSettings.h>
+#include <misc/ReworkedCampaign.h>
 #include <misc/CampaignControls.h>
 #include <FileClasses/INIFile.h>
 #include <FileClasses/FileManager.h>
@@ -254,6 +255,8 @@ GameInitSettings::GameInitSettings(const GameInitSettings& prevGameInitInfoClass
     this->alreadyPlayedRegions = alreadyPlayedRegions;
     this->alreadyShownTutorialHints = alreadyShownTutorialHints;
     filename = getScenarioFilename(houseID, mission);
+    // A reworked campaign continues (or retries) with the reworked map of the next mission.
+    if(prevGameInitInfoClass.isReworkedCampaign()) filename = ReworkedCampaign::toReworked(filename);
     setScenarioData({});
     randomSeed = getRandomInt();
 }
@@ -874,6 +877,17 @@ void GameInitSettings::migrateLegacyHouseColorSlots() {
     for(HouseInfo& houseInfo : houseInfoList) {
         houseInfo.colorOfHouse = migrateLegacyHouseColorSlot(houseInfo.colorOfHouse);
     }
+}
+
+bool GameInitSettings::isReworkedCampaign() const {
+    return isScenarioGameType(gameType) && ReworkedCampaign::isReworkedFilename(filename);
+}
+
+void GameInitSettings::useReworkedMaps() {
+    if(!isScenarioGameType(gameType)) {
+        THROW(std::invalid_argument, "GameInitSettings::useReworkedMaps(): only campaign missions have reworked maps.");
+    }
+    filename = ReworkedCampaign::toReworked(filename);
 }
 
 std::string GameInitSettings::getScenarioFilename(HOUSETYPE newHouse, int mission) {

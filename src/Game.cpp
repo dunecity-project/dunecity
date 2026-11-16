@@ -92,6 +92,7 @@ std::mutex Game::performanceLogMutex;
 #include <Menu/MentatHelp.h>
 #include <Menu/BriefingMenu.h>
 #include <Menu/MapChoice.h>
+#include <misc/ReworkedCampaign.h>
 
 #include <House.h>
 #include <Map.h>
@@ -3143,6 +3144,11 @@ void Game::drawScreen()
         SDL_Rect rect=calcDrawingRect(spectatorLabel.get(),sideBarPos.x/2,topBarPos.h+8,HAlign::Center,VAlign::Top);
         SDL_RenderCopy(renderer,spectatorLabel.get(),nullptr,&rect);
     }
+    // The reworked campaign is marked on the map view, under dialogs and menus.
+    if(gameInitSettings.isReworkedCampaign()) {
+        ReworkedCampaign::drawWatermark(sideBarPos.x - 8, topBarPos.h + 6);
+    }
+
     // Child windows belong above all map and HUD readouts. In the small
     // viewport, the sidebar bars and Spectating label otherwise cover them.
     pInterface->drawDialogs();

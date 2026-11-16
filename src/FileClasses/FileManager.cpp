@@ -16,6 +16,7 @@
  */
 
 #include <FileClasses/FileManager.h>
+#include <misc/ReworkedCampaign.h>
 
 #include <globals.h>
 
@@ -382,6 +383,21 @@ sdl2::RWops_ptr FileManager::openFile(const std::string& filename) {
 }
 
 sdl2::RWops_ptr FileManager::openCampaignFile(const std::string& filename) {
+    // Reworked missions are the bundled RWRK_ maps, the same files the Custom Game list shows.
+    if(ReworkedCampaign::isReworkedFilename(filename)) {
+        std::vector<std::string> candidates;
+        for(const auto& searchPath : getSearchPath()) {
+            addCampaignCandidates(candidates, searchPath + "/" + ReworkedCampaign::kMapDirectory, filename);
+        }
+        for(const auto& candidate : candidates) {
+            if(auto rwop = openExternalFileIfPresent(candidate)) {
+                SDL_Log("FileManager: using reworked campaign file '%s' from '%s'", filename.c_str(), candidate.c_str());
+                return rwop;
+            }
+        }
+        THROW(io_error, "Cannot find reworked campaign file '%s' in %s!", filename, ReworkedCampaign::kMapDirectory);
+    }
+
     const auto upperFilename = strToUpper(filename);
     const bool familyData = upperFilename == "CAMPAIGNPLAN.INI"
         || (upperFilename.rfind("COOP/", 0) == 0 && hasIniExtension(filename));

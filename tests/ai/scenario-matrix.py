@@ -260,6 +260,13 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                               kind='campaign', mod='vanilla', partner=partner, enemy_ai='campaign',
                               enemy_difficulty=enemy_difficulty, original_rules=flag, minutes=80,
                               full=1, smoke=0, opt_in=True, measured=True))
+    # Reworked campaign (docs/reworked-campaign.md), only with --cells: the 22 RWRK_ Atreides missions
+    # with the gate's idle human and Brutal support, reported against the same originals
+    # (--cells '^campaign/(reworked-)?player-brutal' --cases atreides).
+    cells.append(dict(category='campaign', name=f'reworked-player-brutal-v-quantbot-{enemy_difficulty}',
+                      kind='campaign', mod='vanilla', partner='brutal', enemy_ai='quantbot',
+                      enemy_difficulty=enemy_difficulty, ai_only=True, minutes=80, full=1, smoke=0,
+                      reworked=True, houses=('atreides',), opt_in=True, measured=True))
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
     # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
     # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
@@ -381,7 +388,7 @@ def schedule(args):
         if count <= 0:
             continue
         if cell['kind'] == 'campaign':
-            for house in ('atreides', 'harkonnen', 'ordos'):
+            for house in cell.get('houses', ('atreides', 'harkonnen', 'ordos')):
                 for level, mission in campaign_missions():
                     seeds = getattr(args, 'campaign_seeds', None)
                     if seeds is None:
@@ -458,6 +465,8 @@ def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
     enemy = 'CA' if cell['enemy_ai'] == 'campaign' else 'Q' + cell['enemy_difficulty'][0].upper()
     mode = '#single-mission' if campaign_mode == 'single' else '#full-campaign'
     rules = {'original_rules': cell['original_rules']} if cell.get('original_rules') else {}
+    if cell.get('reworked'):
+        rules['reworked'] = True
     return dict(**rules, id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category='campaign',
                 cell=f'{cell["name"]}{mode}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
                 map=f'{house} level {level} mission {mission}', house=house, level=level, mission=mission,
@@ -540,6 +549,8 @@ def command(args, binary, game, out):
             cmd += ['--campaign-ai-only']
         if game.get('original_rules'):
             cmd += ['--original-campaign-rules', game['original_rules']]
+        if game.get('reworked'):
+            cmd += ['--reworked']
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']

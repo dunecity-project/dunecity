@@ -483,6 +483,9 @@ parser.add_argument('--scenario', action='store_true',
                          'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
 parser.add_argument('--campaign-mode', choices=('full', 'single'), default='full',
                     help='Authored campaign --scenario: Full campaign (default) or Single mission initialization')
+parser.add_argument('--reworked', action='store_true',
+                    help='Authored campaign --scenario: play the reworked RWRK_ map of the mission '
+                         '(the campaign menu\'s Maps: Reworked; docs/reworked-campaign.md)')
 parser.add_argument('--campaign-ai-only', action='store_true',
                     help='Authored campaign scenario: sole QuantBot on the player house, selected enemy controllers, '
                          'no registered human; retain native mission victory including quotas')
@@ -602,6 +605,8 @@ authored_campaign = args.scenario and not (
     args.custom_map or args.skirmish or args.scenario_sides or args.load_save or args.civ_wars)
 if args.campaign_mode == 'single' and not authored_campaign:
     parser.error('--campaign-mode single needs an authored campaign --scenario, not custom maps, skirmishes, sides or loads.')
+if args.reworked and not authored_campaign:
+    parser.error('--reworked needs an authored campaign --scenario.')
 if args.campaign_ai_only and (not authored_campaign or args.local_spectator):
     parser.error('--campaign-ai-only needs an authored campaign --scenario, without --local-spectator.')
 
@@ -1071,6 +1076,7 @@ if args.scenario:
     if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
     if args.mission: env['BALANCE_MISSION'] = str(args.mission)
     if args.campaign_ai_only: env['BALANCE_CAMPAIGN_AI_ONLY'] = '1'
+    if args.reworked: env['BALANCE_REWORKED'] = '1'
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 if args.helper_style: env['BALANCE_HELPER_STYLE'] = args.helper_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
@@ -1193,7 +1199,7 @@ summary = {'result':results[0],'sourceCommit':source_commit,
            'sourceFingerprintError':source_fingerprint_error,
            'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,
            'enemy_controller':args.enemy_ai,'enemy_difficulty':args.enemy_difficulty,
-           'campaign_mode':args.campaign_mode,'harvester_limit':args.harvester_limit}
+           'campaign_mode':args.campaign_mode,'reworked':args.reworked,'harvester_limit':args.harvester_limit}
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')
