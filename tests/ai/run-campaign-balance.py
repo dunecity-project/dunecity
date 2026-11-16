@@ -316,6 +316,8 @@ parser.add_argument('--scenario-screenshot', type=Path,
                     help='--scenario: save the rendered game screen, centred on --house\'s Construction Yard, '
                          'at --scenario-screenshot-minute (default 1), at --viewport (default 1440x900)')
 parser.add_argument('--scenario-screenshot-minute', type=int, help='--scenario-screenshot: the game minute')
+parser.add_argument('--scenario-screenshot-focus', choices=house_names,
+                    help='--scenario-screenshot: centre on this house\'s first living unit and log all its units')
 parser.add_argument('--load-save', type=Path, help='Continue this savegame instead of starting a new match')
 parser.add_argument('--save-profile', type=Path,
                     help='With --load-save: a player profile whose workshop/ holds the revisions the save pins')
@@ -992,6 +994,8 @@ if args.scenario_screenshot:
     env['BALANCE_SCENARIO_SCREENSHOT'] = str(args.scenario_screenshot.resolve())
     if args.scenario_screenshot_minute is not None:
         env['BALANCE_SCENARIO_SCREENSHOT_MINUTE'] = str(args.scenario_screenshot_minute)
+    if args.scenario_screenshot_focus is not None:
+        env['BALANCE_SCENARIO_SCREENSHOT_FOCUS'] = str(house_names.index(args.scenario_screenshot_focus))
     args.viewport = args.viewport or '1440x900'
 if args.real_video and not args.viewport:
     args.viewport = '1440x900'

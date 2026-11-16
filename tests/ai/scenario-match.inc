@@ -211,14 +211,30 @@ inline std::string classesOf(const House* house) {
 /// match (it plays no house), or "time_limit".
 /// BALANCE_SCENARIO_SCREENSHOT=<png> (BALANCE_SCENARIO_SCREENSHOT_MINUTE, default 1): the real game
 /// screen, centred on the tracked house's Construction Yard, once at that game minute.
+/// BALANCE_SCENARIO_SCREENSHOT_FOCUS=<house> centres it on that house's first living unit instead
+/// and logs every unit of that house (diagnosing a mission that does not end).
 inline void screenshot(Game& game, int trackedHouse, int minute) {
     static bool taken = false;
     const char* path = std::getenv("BALANCE_SCENARIO_SCREENSHOT");
     const char* at = std::getenv("BALANCE_SCENARIO_SCREENSHOT_MINUTE");
     if (taken || !path || minute < (at ? std::atoi(at) : 1)) return;
     taken = true;
+    bool centred = false;
+    if (const char* focus = std::getenv("BALANCE_SCENARIO_SCREENSHOT_FOCUS")) {
+        for (const auto* unit : unitList) {
+            if (unit->getOwner()->getHouseID() != std::atoi(focus) || unit->getHealth() <= 0) continue;
+            const Coord where = unit->getLocation();
+            SDL_Log("SCENARIO_FOCUS_UNIT: house=%d object=%u item=%u x=%d y=%d health=%d active=%d visible_to_tracked=%d",
+                    std::atoi(focus), unit->getObjectID(), unit->getItemID(), where.x, where.y,
+                    unit->getHealth().lround(), int(unit->isActive()), int(unit->isVisible(game.getHouse(trackedHouse)->getTeamID())));
+            if (!centred) {
+                screenborder->setNewScreenCenter(Coord(where.x * TILESIZE + TILESIZE / 2, where.y * TILESIZE + TILESIZE / 2));
+                centred = true;
+            }
+        }
+    }
     for (const auto* structure : structureList)
-        if (structure->getOwner()->getHouseID() == trackedHouse && structure->getItemID() == Structure_ConstructionYard) {
+        if (!centred && structure->getOwner()->getHouseID() == trackedHouse && structure->getItemID() == Structure_ConstructionYard) {
             const Coord yard = structure->getLocation();
             screenborder->setNewScreenCenter(Coord((yard.x + 1) * TILESIZE, (yard.y + 1) * TILESIZE));
             break;
