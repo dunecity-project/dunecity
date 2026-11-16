@@ -1,3 +1,20 @@
+## 2026-11-16 - 1.0.872 published
+
+`v1.0.872` is an annotated tag on `7ffa20b7cbb321781fd8fc1408972833bf6f5ddb` (branch
+`integrate/feature-batch`), pushed 13:58 AEDT after the owner's "release". Evidence:
+`~/Documents/projects/outputs/release-1.0.872/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below. Game code is b2ed3f128; later commits fixed the Linux probe
+  fixture test (950e924b3) and taught the opening-economy probe the payback windtrap rule
+  (ee39df68c, c0b364700, 7ffa20b7c; owner: "Yes, update test").
+- Qualified: run 43790461353 (an earlier qualification failed only in
+  `quantbot_opening-economy_vanilla`, the stale probe). Tag build: run 43795350043, all jobs passed.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (build.json at 1.0.872/7ffa20b7c, hashes match, main menu reached in
+  Chrome), website links and What's New. TestFlight not part of this release; Android held.
+- Website: at the owner's request the What's new page shows 1.0.867 to 1.0.871 as one entry. The
+  website generator reads `changelog/groups.json` (dunelegacy.com ddda999), so release rebuilds keep it.
+
 ## 2026-11-16 - 1.0.872 candidate: campaign helper unit-cap launch and yard upgrade, vanilla payback windtraps
 
 Stefan's save `doesntupgrade.dls` (Atreides, tech 4, Easy QuantBot on the player's house): the yard
