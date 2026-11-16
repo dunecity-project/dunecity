@@ -252,6 +252,14 @@ inline void watchObject(Game& game, int trackedHouse) {
     static const char* watch = std::getenv("BALANCE_SCENARIO_WATCH_OBJECT");
     static int last = -2;
     if (!watch) return;
+    if (game.getGameCycleCount() == 1) {
+        const int team = game.getHouse(trackedHouse)->getTeamID();
+        for (const auto* unit : unitList)
+            if (unit->getOwner()->getTeamID() != team)
+                SDL_Log("SCENARIO_WATCH_START: house=%d object=%u item=%d x=%d y=%d active=%d visible=%d mode=%d",
+                        unit->getOwner()->getHouseID(), unit->getObjectID(), unit->getItemID(), unit->getLocation().x,
+                        unit->getLocation().y, int(unit->isActive()), int(unit->isVisible(team)), int(unit->getAttackMode()));
+    }
     const auto* object = game.getObjectManager().getObject(static_cast<Uint32>(std::atoi(watch)));
     const int team = game.getHouse(trackedHouse)->getTeamID();
     const int state = object ? int(object->isActive()) * 4 + int(object->isVisible(team)) * 2 + int(object->getHealth() > 0) : -1;
