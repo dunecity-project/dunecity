@@ -87,6 +87,14 @@ Fatkin's missions carry `License=LDCPUL` (`data/maps/singleplayer/LDCPUL.TXT`): 
 licensed to Dune Legacy for non-commercial use, modifications permitted with his copyright and
 licence kept. The DuneCity missions carry `Author="DuneCity"` and no licence line.
 
+One change was made to Fatkin's own missions: in `RWRK_SCENA021` and `RWRK_SCENA022` the enemy
+reinforcements follow the same level 8 timing as the generated missions (first waves at minutes
+10-11 instead of 7-8, 'Thopters at 14-15 instead of 10, repeats every 14-16 minutes instead of
+11-12). Each file says so in its header. In the 2026-11-16 playtest at every difficulty (below)
+mission 21 fell within 9-17 minutes in seven of eight setups, against the Campaign AI and at
+Medium included, and mission 22 fell to the Campaign AI at minute 12. His bases, units, houses
+and teams are unchanged.
+
 ## How it works
 
 - A reworked game is one whose scenario filename starts with `RWRK_`
