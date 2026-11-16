@@ -198,6 +198,20 @@ class CampaignCoverageTests(unittest.TestCase):
             '--campaign-mode', 'single', '--cells', 'qb-v-4ah/vanilla']))
         self.assertEqual([game for game in native if game['kind'] != 'campaign'], changed)
 
+    def test_reworked_twins_need_a_cells_pattern_that_names_them(self):
+        schedule = lambda cells: matrix['schedule'](matrix['parser'].parse_args(
+            ['--tier', 'full', '--categories', 'campaign', '--cells', cells]))
+        original = schedule('player-brutal-v-quantbot-easy/vanilla')
+        self.assertEqual(len(original), 66)
+        self.assertFalse(any(game.get('reworked') for game in original))
+        paired = schedule('^campaign/(reworked-)?partner-hard-v-quantbot-easy/vanilla$')
+        reworked = {(game['house'], game['mission'], game['seed']) for game in paired if game.get('reworked')}
+        plain = {(game['house'], game['mission'], game['seed']) for game in paired if not game.get('reworked')}
+        self.assertEqual(len(reworked), 66)
+        self.assertEqual(reworked, plain)
+        self.assertTrue(all(game['id'].startswith('campaign/reworked-partner-hard-v-quantbot-easy/')
+                            for game in paired if game.get('reworked')))
+
     def test_ai_only_diagnostic_drops_the_human_seat_not_the_quantbot_enemy(self):
         args = matrix['parser'].parse_args([
             '--tier', 'full', '--categories', 'campaign', '--campaign-ai-only',

@@ -380,6 +380,10 @@ def schedule(args):
             continue
         if cell.get('opt_in') and not getattr(args, 'cells', None):
             continue
+        # A reworked- twin only when --cells asks for reworked missions: an unanchored pattern for an
+        # original cell ('player-brutal-v-quantbot-easy/vanilla') must not also schedule its twin.
+        if cell.get('reworked') and 'reworked' not in args.cells:
+            continue
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
             count = min(count, args.seeds_per_cell)
