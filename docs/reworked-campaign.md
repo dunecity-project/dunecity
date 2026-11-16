@@ -123,3 +123,37 @@ two houses, `--cases 'atreides|harkonnen|ordos'` all three. Every vanilla campai
 of the enemy's tier, the calibration's even match), and `partner-brutal-v-campaign-ai-release` for
 the Campaign AI enemy. Submit it with `dunecity-queue submit` on a committed revision.
 `run-campaign-balance.py --scenario --reworked` plays one mission.
+
+### Playtest, 2026-11-16
+
+All 66 reworked missions (Atreides, Harkonnen, Ordos) against the same 66 originals on the same
+seeds, 80-minute limit, on AWS. Missions 17-22 are the replay at 3f3ca2b1c, after the level 7-8
+easing; the rest were played at bb85c4ba6 (Atreides) and abafd1e64. Won / lost / not finished, all
+three houses together; no game crashed.
+
+| Setup (idle human + QuantBot support, enemy) | Original | Reworked |
+|---|---|---|
+| Brutal support (a strong player) v QuantBot Easy | 65/1/0 | 63/0/3 |
+| Brutal support v QuantBot Medium | 61/4/1 | 65/0/1 |
+| Brutal support v QuantBot Hard | 57/5/4 | 55/10/1 |
+| Brutal support v QuantBot Brutal | 27/36/3 | 12/54/0 |
+| Easy support v QuantBot Easy | 62/2/2 | 46/5/15 |
+| Medium support v QuantBot Medium | 60/1/5 | 56/4/6 |
+| Hard support v QuantBot Hard | 56/8/2 | 55/7/4 |
+| Brutal support v Campaign AI | 63/2/1 | 64/2/0 |
+
+At Easy, Medium and Hard and against the Campaign AI the reworked missions play about like the
+originals, a little longer. Two differences remain:
+
+- **QuantBot Brutal is much harder** on the reworked maps: Brutal ground waves have no credit
+  cap, so the reworked enemies' extra refineries, harvesters, spice and second house turn into
+  bigger waves; most missions from mission 5 on fall at minute 11-15. The originals at Brutal are
+  already lost from about mission 8.
+- **A weak player at Easy takes longer**: with Easy support, 15 of 66 reworked missions were
+  still running at 80 minutes (2 originals), mostly the level 7-8 missions with three enemy
+  bases; 5 were lost (2 originals).
+
+Single missions that still trail their original: Atreides 22 (Fatkin's) falls to the Campaign AI
+at minute 13 and runs past 80 minutes with Easy and Hard support; Ordos 20 runs past 80 minutes
+in three setups. Mission 21 fell within 8-17 minutes in almost every setup before the level 8
+easing; it now wins 4-7 of 8 setups per house, as its original does (4-6).
