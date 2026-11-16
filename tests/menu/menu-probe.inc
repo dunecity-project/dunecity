@@ -5,6 +5,8 @@
 #include <fstream>
 // Test-only entry point, linked against the real menu objects by run-menu-probe.py.
 #include <Menu/HouseChoiceMenu.h>
+#include <Menu/BriefingMenu.h>
+#include <misc/ReworkedCampaign.h>
 #include <MapEditor/MapEditor.h>
 #include <MapEditor/MapSettingsWindow.h>
 #include <Menu/CustomGamePlayers.h>
@@ -52,6 +54,22 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
     menuRequire(SDL_RenderReadPixels(renderer,nullptr,SDL_PIXELFORMAT_ARGB8888,surface->pixels,surface->pitch)==0,"Capture failed");
     const auto path = std::string(std::getenv("MENU_PROBE_OUT"))+"/"+std::getenv("MENU_PROBE_WIDTH")+"-"+name+".bmp";
     menuRequire(SDL_SaveBMP(surface.get(),path.c_str())==0,"Screenshot write failed");
+}
+/// Gold pixels of the REMASTERED badge (misc/ReworkedCampaign.h) in the screen's top-right corner,
+/// read from the frame menuCapture() just drew.
+int remasteredBadgePixels() {
+    int w, h;
+    SDL_GetRendererOutputSize(renderer, &w, &h);
+    SDL_Rect area { w - w / 4, 0, w / 4, std::max(40, h / 10) };
+    std::vector<Uint32> pixels(static_cast<size_t>(area.w) * area.h);
+    menuRequire(SDL_RenderReadPixels(renderer, &area, SDL_PIXELFORMAT_ARGB8888, pixels.data(), area.w * 4) == 0,
+                "Badge read failed");
+    int gold = 0;
+    for(const Uint32 p : pixels) {
+        const int r = (p >> 16) & 255, g = (p >> 8) & 255, b = p & 255;
+        if(r > 200 && g > 150 && g < 225 && b < 140) ++gold;
+    }
+    return gold;
 }
 #include "user-map-list-probe.inc"
 #include "tornie-family-menu-probe.inc"
@@ -1121,6 +1139,46 @@ int runMenuProbe() {
         menuRequire(menu.isQuiting() && HouseChoiceMenu::getPartnerClass()=="qBotSupportHard"
             && HouseChoiceMenu::getEnemyClass()=="qBotHard" && HouseChoiceMenu::getStartLevel()==7,
             "Start launched stale AI or mission choices");
+    }
+    {
+        // Reworked campaign (docs/reworked-campaign.md): Maps offers Original and Reworked; Reworked
+        // offers only houses with all 22 reworked missions (Atreides), shows the REMASTERED badge
+        // and reaches the launch; Original restores every house and drops the badge.
+        HouseChoiceMenu::s_reworkedMaps=false;
+        HouseChoiceMenu menu(false);
+        auto& maps=menu.campaignMapsDropDown;
+        menuRequire(maps.getNumEntries()==2 && maps.getEntry(0)==_("Original") && maps.getEntry(1)==_("Reworked")
+                    && maps.getSelectedIndex()==0 && maps.isEnabled(),
+                    "Campaign Maps should offer Original (selected) and Reworked");
+        menuRequire(menu.houseChoices.count>1 && !menu.showsRemasteredWatermark(),
+                    "Original maps should offer every house without the badge");
+        menuCapture(menu,"campaign-original-maps");
+        const int originalGold=remasteredBadgePixels();
+        maps.setSelectedItem(1,true);
+        menuRequire(HouseChoiceMenu::isReworkedMaps() && menu.showsRemasteredWatermark(),
+                    "Reworked maps choice did not reach the campaign launch");
+        menuRequire(menu.houseChoices.count==1 && menu.houseChoices[0]==HOUSE_ATREIDES
+                    && HouseChoiceMenu::s_house==HOUSE_ATREIDES,
+                    "Reworked maps should offer only Atreides, the complete reworked campaign");
+        menuCapture(menu,"campaign-reworked-maps");
+        const int reworkedGold=remasteredBadgePixels();
+        menuRequire(reworkedGold>=20 && reworkedGold>originalGold*4+10,
+                    "The Campaign screen does not show the REMASTERED badge for reworked maps");
+        maps.setSelectedItem(0,true);
+        menuRequire(!HouseChoiceMenu::isReworkedMaps() && menu.houseChoices.count>1,
+                    "Original maps did not restore every house");
+    }
+    {
+        // Between reworked missions the briefing carries the badge; an original briefing does not.
+        int gold[2]={0,0};
+        for(const bool reworked : {false,true}) {
+            ReworkedCampaign::WatermarkScope remastered(reworked);
+            BriefingMenu briefing(HOUSE_ATREIDES,12,BRIEFING);
+            menuCapture(briefing,reworked ? "briefing-reworked" : "briefing-original");
+            gold[reworked]=remasteredBadgePixels();
+        }
+        menuRequire(!ReworkedCampaign::isWatermarkVisible(),"The badge scope did not restore the menus");
+        menuRequire(gold[1]>=20 && gold[1]>gold[0]*4+10,"The reworked briefing does not show the REMASTERED badge");
     }
     {
         ListBox list;
