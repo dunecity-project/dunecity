@@ -962,6 +962,12 @@ void runOpeningEconomyProbe(Game& game) {
         // missing and never buys the same buffer twice. A single pending
         // generator that cannot reach the target does not stop the rest.
         if(!house->isPowerRequired()) {
+            // Classic generation gate (VanillaPowerPayback off): the payback rule
+            // defers generation to an otherwise idle yard and is checked above.
+            const auto savedParallelConfig=bot->configOverride;
+            auto classicParallel=std::make_shared<QuantBotConfig>(bot->botConfig());
+            classicParallel->force.vanillaPowerPayback=0;
+            bot->configOverride=classicParallel;
             const int windOutput=-game.objectData.data[Structure_WindTrap][HOUSE_ATREIDES].power;
             require(windOutput>0,"Fixture needs a windtrap that produces power");
             const int savedRequirement=house->powerRequirement;
@@ -1005,6 +1011,7 @@ void runOpeningEconomyProbe(Game& game) {
             house->powerRequirement=savedRequirement;
             house->numItem[Unit_Harvester]=savedWorkers;
             clearOrders();
+            bot->configOverride=savedParallelConfig;
             SDL_Log("POWER_BUFFER_PARALLEL_PASS: pending generation counted once across yards, "
                 "insufficient pending still completed");
         }
