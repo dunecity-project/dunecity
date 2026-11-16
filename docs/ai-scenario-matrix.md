@@ -982,7 +982,12 @@ Mini-only (registered only on macOS, labelled `macos`), each for a concrete reas
 | `native_pointer_mapping_probe` | Real window with Cocoa pointer events against the packaged app's SDL (release-smoke gate). |
 | `mouse_controls_probe` | `--real-video` native renderer plus injected Mac trackpad/wheel events. |
 | `dunelegacy_gpu_tests` | The `[rendering]`/`[gpu]` cases on the native accelerated HiDPI renderer; their software path runs in headless `dunelegacy_tests`. |
-| `native_multiplayer_join_modes`, `spectator_online_end_probe` | Headless, but need the local PHP signalling service (absent on the AWS workers, so they would only skip) and their harnesses still link the macOS bundle. |
+
+The two PHP network probes, `native_multiplayer_join_modes` and `spectator_online_end_probe`, run on
+AWS too (label `network`, registered wherever `DUNECITY_DIRECT_P2P` is on). They start the local PHP
+signalling service (`tools/p2p-signaling`) on 127.0.0.1 and play over libdatachannel, so a host needs
+`php` (the AWS workers have Ubuntu's `php8.3-cli`) and a P2P build (the workers build libdatachannel
+from the same pinned checkout as the Macs). Without PHP they exit 77, a skip, never a pass.
 
 Hosted Linux CI uses Makefiles, not Ninja, so it registers none of these probes; its nightly tier
 does now run `dunelegacy_tests`.

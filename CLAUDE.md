@@ -170,7 +170,7 @@ The four AI gates are `headless` and registered for Linux too: run them on the A
 `dunecity-queue ctest --rev FULL_SHA --machines aws aws-mel2 -R '<gate regex>'` inside
 `agent-workspace run --tests --wait`, not on the Mini (AGENTS.md has the exact command).
 `perf_regression` stays on the Mini: its budgets are calibrated on that machine. Every dummy-driver
-probe is `headless` and runs on AWS too; the five other Mini-only tests and their reasons are in
+probe is `headless` and runs on AWS too; the three other Mini-only tests and their reasons are in
 `docs/ai-scenario-matrix.md`, "Where the gates run".
 
 ## AI test games: scoring and the default rule

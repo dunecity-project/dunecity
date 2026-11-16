@@ -1504,14 +1504,43 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(graphics_skin_probe menu_probe_fixture menu_navigation_probe
             terrain_mix_menu_probe ui_gallery_probe skirmish_probe_fixture retina_resolution_probe PROPERTIES
             TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20)
+        if(DUNECITY_DIRECT_P2P)
+            # The same end online: host, partner and a mid-game spectator as three processes over the
+            # local signaling service (PHP) and WebRTC, each in the real main loop. The spectator ends
+            # on the host's last cycle and digest with the winner on its plate and statistics when the
+            # host leaves after its end message, quits at the decision, while the spectator hangs 20-25 s
+            # or runs at half speed, and in a Dune City game with Natives worms. Skipped without PHP
+            # (the Linux workers have php8.3-cli, CLUSTER.md "Tests").
+            dunecity_add_test(headless nightly LABELS "network" NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/network/run-spectator-end-probe.py
+                --cases end,decision,lag-end,lag-decision,slow,natives
+                --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-online-end-probe)
+            # Cleanup can wait 5s for each of three peers, then 10s+5s for PHP.
+            # Allow that bounded teardown plus profile finalization, without extending
+            # the 1200-second gameplay deadline.
+            set_tests_properties(spectator_online_end_probe PROPERTIES TIMEOUT 1200
+                TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 40
+                RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+            # Headless native joins, not the single-process mp-lobby wiring probe: Vanilla
+            # CampaignCoop, a genuinely generated random skirmish, and a custom map, each
+            # with real local PHP/libdatachannel admission, named guest, committed start
+            # barrier, both humans' executed moves and 13 matching game-state checkpoints.
+            # Missing PHP is an explicit skip, never evidence that these modes were played.
+            dunecity_add_test(headless nightly LABELS "network" NAME native_multiplayer_join_modes COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/network/run-late-join-probe.py
+                --peer-cases campaign skirmish custom --mod vanilla
+                --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-multiplayer-join-modes)
+            set_tests_properties(native_multiplayer_join_modes PROPERTIES TIMEOUT 900
+                TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 40
+                RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        endif()
     endif()
 endif()
 
 # macOS only, each for a concrete reason (docs/ai-scenario-matrix.md, "Where the gates run"):
 # native_pointer_mapping_probe and mouse_controls_probe drive a real window with Cocoa input;
-# perf_regression's budgets are calibrated on a quiet Mac; native_multiplayer_join_modes and
-# spectator_online_end_probe need the local PHP signalling service, which the Linux workers do
-# not have. Every other probe runs on the dummy video driver and is registered above. The
+# perf_regression's budgets are calibrated on a quiet Mac. Every other probe runs on the dummy
+# video driver and is registered above. The
 # diagnostic mains link production menu objects; no test access ships in the app.
 if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
     find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -1531,33 +1560,6 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
                 TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20
                 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         endif()
-        # The same end online: host, partner and a mid-game spectator as three processes over the
-        # local signaling service (PHP) and WebRTC, each in the real main loop. The spectator ends
-        # on the host's last cycle and digest with the winner on its plate and statistics when the
-        # host leaves after its end message, quits at the decision, while the spectator hangs 20-25 s
-        # or runs at half speed, and in a Dune City game with Natives worms. Skipped without PHP.
-        dunecity_add_test(headless nightly LABELS "macos;network" NAME spectator_online_end_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/network/run-spectator-end-probe.py
-            --cases end,decision,lag-end,lag-decision,slow,natives
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/spectator-online-end-probe)
-        # Cleanup can wait 5s for each of three peers, then 10s+5s for PHP.
-        # Allow that bounded teardown plus profile finalization, without extending
-        # the 1200-second gameplay deadline.
-        set_tests_properties(spectator_online_end_probe PROPERTIES TIMEOUT 1200
-            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 40
-            RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
-        # Headless native joins, not the single-process mp-lobby wiring probe: Vanilla
-        # CampaignCoop, a genuinely generated random skirmish, and a custom map, each
-        # with real local PHP/libdatachannel admission, named guest, committed start
-        # barrier, both humans' executed moves and 13 matching game-state checkpoints.
-        # Missing PHP is an explicit skip, never evidence that these modes were played.
-        dunecity_add_test(headless nightly LABELS "macos;network" NAME native_multiplayer_join_modes COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/network/run-late-join-probe.py
-            --peer-cases campaign skirmish custom --mod vanilla
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/native-multiplayer-join-modes)
-        set_tests_properties(native_multiplayer_join_modes PROPERTIES TIMEOUT 900
-            TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 40
-            RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
         dunecity_add_test(gui nightly LABELS "macos" NAME mouse_controls_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --controls-probe --real-video --viewport 640x480 --no-ai-telemetry --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/mouse-controls-probe)
