@@ -398,7 +398,10 @@
 //      it off (UnitBase::deployAtMapStart), so older peers would desync on such a map; the
 //      reworked campaign's co-op games need the RWRK_ maps new in 1.0.873. Save format
 //      unchanged.
-#define NETWORK_PROTOCOL_VERSION            128
+// 129: A player's unit a carryall drops keeps its own attack mode (Guard after a lift) instead
+//      of Area Guard (Carryall::deployUnit), so older peers would desync. Save format
+//      unchanged.
+#define NETWORK_PROTOCOL_VERSION            129
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

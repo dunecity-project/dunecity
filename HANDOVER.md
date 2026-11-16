@@ -1,3 +1,20 @@
+## 2026-11-17 - 1.0.874 candidate: carryall drops keep a player's unit in its own mode
+
+Player report on 1.0.873: units sent to a factory's destination arrived in Area Guard ("Überwachen")
+and chased sandworms. Cause: `Carryall::deployUnit` set every non-harvester it dropped to Area Guard
+(legacy code; lifts are more frequent since the 1.0.812 stall rescue). The owner chose Guard, not Hold,
+as the mode a delivered unit gets ("ok send them in guard"). Notes `releases/desktop/1.0.874.md`.
+
+- Fix cfbd38768: `UnitMovementPolicy::attackModeAfterCarryallDrop`. A human house's unit keeps its own
+  mode (Carryall-requested becomes Guard); attack-move/patrol units still get Area Guard; AI houses,
+  saboteurs (Hunt) and harvesters (Harvest) unchanged. Protocol 129, save format 9886 unchanged.
+- Also in this candidate: 67ba411ca, menu_navigation_probe checks Linux updates as an AppImage and as a
+  package install (test only; removes the Linux known failure accepted for 1.0.873).
+- Gates at cfbd38768: Mini unit tests and perf_regression passed (128.9 s); AWS job
+  20261116T234653-ctest-c4e417 passed 8/8 (dunelegacy_tests, carryall_flight_probe,
+  quantbot_carryall_repair, stalled_carryall_probe with a new Guard check, scenario-matrix smoke, AAA
+  vanilla and Dune2R, FFA army deploys). menu_navigation_probe at 67ba411ca passed on AWS and the Mini.
+
 ## 2026-11-16 - 1.0.873 published
 
 `v1.0.873` is an annotated tag on `af709a0fcf21eb72751fb9bc175038d4e4d212ce` (branch
