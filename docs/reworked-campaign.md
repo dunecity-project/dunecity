@@ -103,5 +103,9 @@ python3 tests/ai/scenario-matrix.py --tier full --categories campaign \
 
 schedules a house's 22 reworked missions and the same 22 originals on the same seeds (idle
 human, Brutal QuantBot support, QuantBot Easy enemies); `--cases 'harkonnen|ordos'` takes those
-two houses, no `--cases` all three. Submit it with `dunecity-queue submit` on a
-committed revision. `run-campaign-balance.py --scenario --reworked` plays one mission.
+two houses, `--cases 'atreides|harkonnen|ordos'` all three. Every vanilla campaign cell has a
+`reworked-` twin, so the other difficulties use the same pattern: `--enemy-difficulty medium` with
+`player-brutal-v-quantbot-medium` (a strong player) or `partner-medium-v-quantbot-medium` (support
+of the enemy's tier, the calibration's even match), and `partner-brutal-v-campaign-ai-release` for
+the Campaign AI enemy. Submit it with `dunecity-queue submit` on a committed revision.
+`run-campaign-balance.py --scenario --reworked` plays one mission.

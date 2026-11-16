@@ -260,13 +260,13 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                               kind='campaign', mod='vanilla', partner=partner, enemy_ai='campaign',
                               enemy_difficulty=enemy_difficulty, original_rules=flag, minutes=80,
                               full=1, smoke=0, opt_in=True, measured=True))
-    # Reworked campaign (docs/reworked-campaign.md), only with --cells: the 22 RWRK_ missions of every
-    # house with a complete reworked set, with the gate's idle human and Brutal support, reported against
-    # the same originals (--cells '^campaign/(reworked-)?player-brutal' --cases 'harkonnen|ordos').
-    cells.append(dict(category='campaign', name=f'reworked-player-brutal-v-quantbot-{enemy_difficulty}',
-                      kind='campaign', mod='vanilla', partner='brutal', enemy_ai='quantbot',
-                      enemy_difficulty=enemy_difficulty, ai_only=True, minutes=80, full=1, smoke=0,
-                      reworked=True, houses=('atreides', 'harkonnen', 'ordos'), opt_in=True, measured=True))
+    # Reworked campaign (docs/reworked-campaign.md), only with --cells: a reworked- twin of every vanilla
+    # campaign cell above plays the 22 RWRK_ missions of every house with a complete reworked set on the
+    # same seeds, reported against the originals
+    # (--cells '^campaign/(reworked-)?player-brutal-v-quantbot-easy/vanilla$' --cases 'harkonnen|ordos').
+    cells.extend(dict(cell, name=f'reworked-{cell["name"]}', reworked=True,
+                      houses=('atreides', 'harkonnen', 'ordos'), opt_in=True, measured=True)
+                 for cell in [c for c in cells if c['category'] == 'campaign' and c['mod'] == 'vanilla'])
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
     # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
     # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
