@@ -16,7 +16,7 @@
  */
 
 #ifndef VERSION
-    #define VERSION "1.0.872"
+    #define VERSION "1.0.873"
 #endif
 
 // Non-CMake builds also default to a development display label. Keep VERSION
