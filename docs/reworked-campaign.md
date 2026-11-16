@@ -16,40 +16,66 @@ limited to those houses while *Reworked* is selected. Stock-take on 2026-11-16:
 | House | Reworked missions | Complete |
 |---|---|---|
 | Atreides | 1-22 (1-11, 21, 22 by Dmitri Fatkin; 12-20 by DuneCity) | yes |
-| Harkonnen | 1-3 | no |
-| Ordos | 1 | no |
+| Harkonnen | 1-22 (1-3 by Dmitri Fatkin; 4-22 by DuneCity) | yes |
+| Ordos | 1-22 (1 by Dmitri Fatkin; 2-22 by DuneCity) | yes |
 | Fremen | 1, 11 | no |
 | Mercenary | 1, 22 | no |
 | Sardaukar | 1 | no |
+
+Fremen, Mercenary and Sardaukar have no Westwood originals in `SCENARIO.PAK`; theirs are in
+`OPENSD2.PAK` and are not reworked yet.
 
 `RWRK_SCENG017/018/020.INI` are Fatkin's base-template sheets for those tech levels, not
 missions. Every mission ID 1-22 is reachable from the region map (`MapChoice`), so a
 complete house needs all 22.
 
-## Missions 12-20 (Atreides)
+## The DuneCity missions
 
-Fatkin's set stopped at mission 11 and resumed at 21. The missing nine were rebuilt from
-the original missions in his style, the way his `RWRK_SCENA022` reworks its original:
+Fatkin's Atreides set stopped at mission 11 and resumed at 21; his Harkonnen set stops at 3 and
+his Ordos set at 1. The missing missions were rebuilt from the originals in his style, the way his
+`RWRK_SCENA022` reworks its original:
 
 - **Same map**: the original seed (terrain), the player's start and units, the original
   enemy base, its turrets and blooms, briefing pictures and win/lose flags.
-- **A second enemy house** on free rock away from the player (its centre 30 tiles from the
-  player's start where the rock allows, never under 24): Mercenary beside Ordos (levels 5 and 7), Sardaukar beside
-  Harkonnen (level 6), Sardaukar beside Harkonnen and Ordos at level 8 (mission 20; there is
-  no room for a fourth base). Its base follows the level's tech: Construction Yard, Windtraps,
-  Refineries, factories, Outpost, WOR, Repair, Hi-Tech and IX, turrets toward the player. Mission
-  20 adds no second Palace: the original Harkonnen one is its superweapon.
-- **Economy and pressure** as in Fatkin's level 5 and 8 missions: two harvesters per enemy
-  refinery, more defenders, about 15 spice fields, four or five AI teams a house, enemy waves
-  (some repeating) and the player's reinforcements; player credits 7,500 / 10,000 / 12,500 /
-  17,000 for levels 5-8, unit cap 32. Nothing is placed on a spice bloom or field: a unit loaded
-  onto a bloom stays alive but invisible to everyone, so its house could never be defeated.
+- **Missions 2-4** (tech level 2) are 32x32 maps with no room for another base. As in Fatkin's
+  own level 2 reworks they keep the original teams and get three or four more defenders, a
+  harvester, enemy credits of at least 300, a few more spice fields and two enemy waves.
+- **A second enemy house** from mission 5, on free rock away from the player (its centre 30
+  tiles from the player's start where the rock allows, never under 24). Each campaign pairs the
+  original enemy with a fixed partner (`CAMPAIGNS` in the generator):
 
-Every building lies on rock inside the map with no overlap; `tests/ReworkedCampaignTestCase.cpp`
-checks that for all 22 missions against the real seed generator. The missions are generated
-deterministically by `tools/reworked-campaign/rework_missions.py ORIGINALS OUT` from the
-original `SCENA012-020.INI` (unpacked from `SCENARIO.PAK`); `scenario_map.py` validates any
-seed-map scenario and renders previews, and can be reused to complete another house.
+  | Campaign | Atreides enemy | Harkonnen enemy | Ordos enemy |
+  |---|---|---|---|
+  | Atreides | - | Sardaukar | Mercenary |
+  | Harkonnen | Sardaukar | - | Mercenary |
+  | Ordos | Mercenary | Sardaukar | - |
+
+  Missions 20-22 (tech level 8) add Sardaukar and Mercenary where the mission lacks them and
+  there is room: Atreides 20 and Harkonnen 20 and 22 have no room for a Mercenary base. The
+  base follows the level's tech: from Fatkin's level 3 and 4 bases (Barracks, Light and Heavy
+  Factory, WOR, Outpost) up to Repair, Hi-Tech, IX and turrets toward the player. No added
+  base gets a Palace: the original Palaces are each mission's superweapons.
+- **Economy and pressure** as in Fatkin's level 3-8 missions: harvesters for every enemy
+  refinery, more defenders, about 15 spice fields, three to five AI teams a house, enemy waves
+  (some repeating) and the player's reinforcements; player credits 2,250 / 4,750 / 7,500 /
+  10,000 / 12,500 / 17,000 for levels 3-8. Each house gets its own special units: Sonic Tanks
+  for Atreides, Devastators for Harkonnen, Deviators for an Ordos enemy (an Ordos player's heavy
+  reinforcement is a Siege Tank), Raider Trikes for Ordos and Quads for Harkonnen, which build no
+  trikes. Nothing is placed on a spice bloom or field. A unit a map started with on a bloom
+  used to load invisible to everyone, so its house could never be defeated; the loader now keeps
+  it visible with the bloom intact (`UnitBase::deployAtMapStart`), and the missions stay clear anyway.
+- **Faults in the originals are left out**: a structure the game would drop on loading (the
+  Hi-Tech over the east edge of the map in `SCENH015`/`SCENO015`, the Light Factory and Spice
+  Silo listed twice in `SCENO005`) is not written, so every listed structure is one the mission
+  really has.
+
+Every building lies on rock inside the map with no overlap and no unit stands on a bloom;
+`tests/ReworkedCampaignTestCase.cpp` checks that for all 22 missions of each complete house
+against the real seed generator. The missions are generated deterministically by
+`tools/reworked-campaign/rework_missions.py ORIGINALS OUT [A|H|O...]` from the original
+`SCEN?0??.INI` (unpacked from `SCENARIO.PAK`); regenerating the Atreides missions reproduces the
+bundled files byte for byte. `scenario_map.py` validates any seed-map scenario and renders
+previews.
 
 Fatkin's missions carry `License=LDCPUL` (`data/maps/singleplayer/LDCPUL.TXT`): his content is
 licensed to Dune Legacy for non-commercial use, modifications permitted with his copyright and
@@ -75,6 +101,7 @@ python3 tests/ai/scenario-matrix.py --tier full --categories campaign \
   --cells '^campaign/(reworked-)?player-brutal-v-quantbot-easy/vanilla$' --cases atreides --list
 ```
 
-schedules the 22 reworked missions and the same 22 originals on the same seeds (idle human,
-Brutal QuantBot support, QuantBot Easy enemies). Submit it with `dunecity-queue submit` on a
+schedules a house's 22 reworked missions and the same 22 originals on the same seeds (idle
+human, Brutal QuantBot support, QuantBot Easy enemies); `--cases 'harkonnen|ordos'` takes those
+two houses, no `--cases` all three. Submit it with `dunecity-queue submit` on a
 committed revision. `run-campaign-balance.py --scenario --reworked` plays one mission.
