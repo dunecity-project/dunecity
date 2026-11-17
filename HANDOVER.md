@@ -1,3 +1,17 @@
+## 2026-11-17 - 1.0.874 published
+
+`v1.0.874` is an annotated tag on `3883134ec40e5fc0c78df43a3c7e7973594f12ac` (branch
+`integrate/feature-batch`), pushed 09:37 AEDT after the owner's "Publish. Also make sure the aws is turned off
+after". Evidence: `~/Documents/projects/outputs/release-1.0.874/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below (carryall drop fix cfbd38768, menu probe 67ba411ca, bump 3883134ec).
+- Tested at 3883134ec: integration CI run 43920821325; Mac qualification run 43923112822; AWS Linux headless
+  nightly suite 224/224 (job 20261117T044134-release-1.0.874-70c3d1, every per-test log checked, incl. the four
+  AI gates and menu_navigation_probe). Tag build: run 43971786960, all jobs passed.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and defaults,
+  browser build (1.0.874/3883134ec, hashes match; Chrome reached the main menu), website links and What's New.
+  TestFlight not part of this release; Android held. Both AWS workers stopped (EC2 describe-instances).
+
 ## 2026-11-17 - 1.0.874 candidate: carryall drops keep a player's unit in its own mode
 
 Player report on 1.0.873: units sent to a factory's destination arrived in Area Guard ("Überwachen")
