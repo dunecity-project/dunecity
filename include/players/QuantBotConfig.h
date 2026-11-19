@@ -330,6 +330,8 @@ struct QuantBotConfig {
         /// helper or enemy, runs at most this many harvesters there; Brutal has no such ceiling, so the
         /// two tiers differ inside the missions' 15-35 minutes. 0 = no ceiling.
         int cityCampaignHardHarvesters;
+        /// The same ceiling for a Medium QuantBot (below Hard's, so the ladder keeps its steps). 0 = none.
+        int cityCampaignMediumHarvesters;
         /// Repair-yard denial is exclusive to Easy campaign enemies. Hashed OFF/ON control.
         bool campaignRepairRoleFix;
         /// Campaign yards upgrade only out of surplus after income and power. Hashed OFF/ON control.
