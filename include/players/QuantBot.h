@@ -1295,6 +1295,11 @@ private:
     bool openingOpenMapNative() const;
     /// FocusFireLevel in effect: native (0) where FocusFireMapScope applies (map or roster).
     int effectiveFocusFireLevel() const;
+    /// TargetPriorityLevel, or 2 under cityCampaignBrutalTactics().
+    int effectiveTargetPriorityLevel() const;
+    /// A Brutal QuantBot in the DuneCity campaign plays its tier's tactics there
+    /// ([Force Concentration] CityCampaignBrutalTactics, docs/city-campaign.md "Brutal's tactics").
+    bool cityCampaignBrutalTactics() const;
     /// VanillaArmyCounterMapScope: VanillaArmyCounters stays inert on this original map or roster.
     bool armyCountersMapExcluded() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }

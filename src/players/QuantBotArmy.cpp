@@ -1001,7 +1001,8 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
 int QuantBot::houseAttackThreshold() const {
     // Campaign mode: the difficulty's threshold; Custom: the global one, except Brutal's own.
     const QuantBotConfig& config = botConfig();
-    const float percent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
+    const float percent = cityCampaignBrutalTactics() ? 0.15f
+        : (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
         ? config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent : config.attackThresholdPercent;
     const FixPoint threshold = FixPoint(static_cast<int>(percent * 100)) / 100;
     const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
@@ -1094,8 +1095,9 @@ void QuantBot::attack(int militaryValue) {
 	// Main attack loop - check military strength threshold
 	// Campaign mode: Use difficulty-specific threshold from config
 	// Custom mode: global threshold, except Brutal uses its 25% difficulty threshold.
-	float attackThresholdPercent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
-		? diffSettings.attackThresholdPercent 
+	float attackThresholdPercent = cityCampaignBrutalTactics() ? 0.15f
+		: (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
+		? diffSettings.attackThresholdPercent
 		: config.attackThresholdPercent;
 	const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
 	int requiredMilitary = houseAttackThreshold();

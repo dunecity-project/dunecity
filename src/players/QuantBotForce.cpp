@@ -1118,8 +1118,7 @@ int QuantBot::perimeterTurrets() const {
 }
 
 bool QuantBot::combatTargetTuningActive() const {
-    const auto& settings = botConfig().force;
-    if (builderOnly() || (!effectiveFocusFireLevel() && !settings.targetPriorityLevel) || !currentGame) return false;
+    if (builderOnly() || (!effectiveFocusFireLevel() && !effectiveTargetPriorityLevel()) || !currentGame) return false;
     return currentGame->getGameInitSettings().getInitialSpiceTilePermille() > 0;
 }
 
@@ -1151,7 +1150,17 @@ bool QuantBot::openingOpenMapNative() const {
     return QuantBotMapScopePolicy::openFlatCrowd(init.getInitialTerrain(), controllers);
 }
 
+bool QuantBot::cityCampaignBrutalTactics() const {
+    return botConfig().force.cityCampaignBrutalTactics && difficulty == Difficulty::Brutal && currentGame
+        && currentGame->getGameInitSettings().isDuneCityCampaign();
+}
+
+int QuantBot::effectiveTargetPriorityLevel() const {
+    return cityCampaignBrutalTactics() ? 2 : botConfig().force.targetPriorityLevel;
+}
+
 int QuantBot::effectiveFocusFireLevel() const {
+    if (cityCampaignBrutalTactics()) return 2;
     const auto& force = botConfig().force;
     if (!force.focusFireLevel || !force.focusFireMapScope || !currentGame) return force.focusFireLevel;
     const auto& init = currentGame->getGameInitSettings();
@@ -1192,10 +1201,9 @@ bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBas
     const int reach = unit->getWeaponRange() + 3;
     const ObjectBase* best = nullptr;
     Force::TargetKey bestKey;
-    const auto& settings = botConfig().force;
     const bool tuning = combatTargetTuningActive();
     const int focusLevel = tuning ? effectiveFocusFireLevel() : 0;
-    const int priorityLevel = tuning ? settings.targetPriorityLevel : 0;
+    const int priorityLevel = tuning ? effectiveTargetPriorityLevel() : 0;
     const auto keyOf = [&](const ObjectBase* object) {
         auto key = targetKeyOf(object);
         if (!tuning) return key;
