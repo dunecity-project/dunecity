@@ -103,12 +103,19 @@ run_phase configure-and-dependencies cmake -S . -B build -G Ninja -DCMAKE_BUILD_
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
     -DVCPKG_TARGET_TRIPLET=arm64-osx -DDUNECITY_BUILD_TESTS=ON
 AWS_STATE="${RUNNER_TEMP:-/tmp}/qualification-aws-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}.json"
+# Only a workflow that follows the AWS job after this lane (qualify-release.yml on main sets
+# the flag) may send the games there; otherwise the Mini plays them as before.
+AWS_GAMES=false
+if [ "$MODE" = release-headless-qualification ] && [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ] \
+    && [ "${DUNECITY_QUALIFY_GAMES_ON_AWS:-}" = 1 ]; then
+    AWS_GAMES=true
+fi
 if [ "$MODE" = release-headless-qualification ]; then
     # Tests register at configure time (no build-time discovery), so the plan is final here.
     # PHP-backed network coverage remains mandatory in the stable Mini lane.
     # Both backends use the same qualification inventory and receipt recipe.
     ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
-    if [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+    if [ "$AWS_GAMES" = true ]; then
         # Test games go to the AWS workers now and run while the Mini compiles; the Mini keeps
         # the quick tests that start no game (scripts/qualification-aws.py).
         MAC_TESTS=$(python3 scripts/qualification-aws.py split --build build --sha "$DUNECITY_CANDIDATE_SOURCE" \
@@ -126,7 +133,7 @@ run_phase compile cmake --build build --config Release --parallel "$CMAKE_BUILD_
 run_phase dependency-audit python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
     ctest_status=0
-    if [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+    if [ "$AWS_GAMES" = true ]; then
         echo "Headless qualification: quick tests on the Mini, test games on AWS"
         run_phase headless-quick ctest --test-dir build --output-on-failure --no-tests=error --parallel 4 \
             -L headless -L nightly -LE network -R "$MAC_TESTS" \
@@ -138,9 +145,11 @@ if [ "$MODE" = release-headless-qualification ]; then
         exit 0
     fi
     # The hosted fallback cannot reach the AWS queue and plays every test game itself.
-    # Single-game probes reserve two CTest slots, so it plays one at a time.
-    echo "Headless qualification: ${RUNNER_ENVIRONMENT:-github-hosted}, 2 CTest slots"
-    run_phase headless-nightly ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 \
+    # Single-game probes reserve two CTest slots: the Mini overlaps two, a hosted Mac plays one.
+    TEST_SLOTS=2
+    if [ "${RUNNER_ENVIRONMENT:-github-hosted}" = self-hosted ]; then TEST_SLOTS=4; fi
+    echo "Headless qualification: ${RUNNER_ENVIRONMENT:-github-hosted}, $TEST_SLOTS CTest slots"
+    run_phase headless-nightly ctest --test-dir build --output-on-failure --no-tests=error --parallel "$TEST_SLOTS" \
         -L headless -L nightly -LE network --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml" || ctest_status=$?
     # CTest 8 means test failures; only exact committed decisions can accept them.
     # Launch/configuration failures and incomplete/skipped XML still fail closed.

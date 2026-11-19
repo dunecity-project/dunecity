@@ -99,6 +99,9 @@ jobs:
           mkdir -p "$QUALIFICATION_VCPKG_CACHE"
           echo "VCPKG_BINARY_SOURCES=clear;files,$QUALIFICATION_VCPKG_CACHE,readwrite" >> "$GITHUB_ENV"
       - name: Qualify frozen staging source before production selection
+        env:
+          # The lane sends test games to AWS only for a workflow that follows them below.
+          DUNECITY_QUALIFY_GAMES_ON_AWS: '1'
         run: |
           if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
             MARKER="$RUNNER_TEMP/qualification-admitted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
