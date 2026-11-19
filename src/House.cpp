@@ -937,7 +937,7 @@ void House::updateBuildLists() {
 
 bool House::meetsStarportPopulation() const {
     if(!currentGame->getGameInitSettings().getGameOptions().starportPopulation
-       || isCampaignGameType(currentGame->gameType)
+       || (isCampaignGameType(currentGame->gameType) && !currentGame->getGameInitSettings().isDuneCityCampaign())
        || !currentGame->isCitySimEnabled()) return true;
     // Mission AI permissions follow each controller's hashed policy; a human-only
     // Single mission and every custom game retain their population requirement.

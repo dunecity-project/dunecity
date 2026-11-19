@@ -302,8 +302,7 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
         && gameMode == GameMode::Custom
         && (getGameInitSettings().getModName() == "vanilla"
             || ModManager::instance().isDuneCityContentActive())
-        && (getGameInitSettings().getGameType() == GameType::CustomGame
-            || getGameInitSettings().getGameType() == GameType::CustomMultiplayer)
+        && customRulesGame()
         && getGameInitSettings().getInitialSpiceTilePermille() > 0;
     // The experimental ceiling applies to every accepted import, including
     // economy/capital paths that do not visit the bargain loop.
@@ -1947,8 +1946,7 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             && gameMode == GameMode::Custom
             && (getGameInitSettings().getModName() == "vanilla"
                 || ModManager::instance().isDuneCityContentActive())
-            && (getGameInitSettings().getGameType() == GameType::CustomGame
-                || getGameInitSettings().getGameType() == GameType::CustomMultiplayer)
+            && customRulesGame()
             && getGameInitSettings().getInitialSpiceTilePermille() > 0;
         const int priceLevel = scope ? policy.starportBuying : 0;
         const int economyPriority = scope ? policy.starportEconomyPriority : 0;

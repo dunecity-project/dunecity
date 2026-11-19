@@ -412,8 +412,7 @@ bool QuantBot::isCivWarsMatch() const {
 bool QuantBot::palaceExperimentScope() const {
     return currentGame && gameMode == GameMode::Custom && difficulty >= Difficulty::Hard
         && !builderOnly() && !campaignPolicyApplies()
-        && (currentGame->getGameInitSettings().getGameType() == GameType::CustomGame
-            || currentGame->getGameInitSettings().getGameType() == GameType::CustomMultiplayer)
+        && customRulesGame()
         && currentGame->getGameInitSettings().getInitialSpiceTilePermille() > 0;
 }
 
@@ -573,8 +572,7 @@ void QuantBot::planCityResearchOrder(BuildPass& pass) {
     if (level == 0 || !pass.citySimEnabled || gameMode != GameMode::Custom
         || campaignPolicyApplies() || !researchLabPolicyActive()
         || !ModManager::instance().isDuneCityContentActive()
-        || (currentGame->getGameInitSettings().getGameType() != GameType::CustomGame
-            && currentGame->getGameInitSettings().getGameType() != GameType::CustomMultiplayer)
+        || !customRulesGame()
         || currentGame->getGameInitSettings().getInitialSpiceTilePermille() <= 0
         // Civilization Wars keeps its required research: the order was never measured there.
         || currentGame->getGameInitSettings().isCivilizationWars()

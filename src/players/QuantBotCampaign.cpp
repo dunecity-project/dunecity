@@ -245,6 +245,13 @@ bool QuantBot::objectivePlanningActive() const {
     return outcome != nullptr && outcome->getTeamID() == getHouse()->getTeamID();
 }
 
+bool QuantBot::customRulesGame() const {
+    if (!currentGame) return false;
+    const auto& init = currentGame->getGameInitSettings();
+    const auto type = init.getGameType();
+    return type == GameType::CustomGame || type == GameType::CustomMultiplayer || init.isDuneCityCampaign();
+}
+
 bool QuantBot::objectiveGracePeriod() const {
     if (!currentGame || getHouse() == nullptr) return false;
     const auto& objectives = currentGame->getMissionObjectives();

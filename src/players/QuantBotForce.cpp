@@ -187,9 +187,7 @@ QuantBotVanillaPolicy::Plan QuantBot::vanillaBoldPlan(QuantBotVanillaPolicy::Obs
 bool QuantBot::citySpiceScope() const {
     if (!autonomousCustomArmy() || fighterOnly() || !currentGame->isCitySimEnabled()
         || getGameInitSettings().getModName() != "dunecity") return false;
-    const auto type = getGameInitSettings().getGameType();
-    return (type == GameType::CustomGame || type == GameType::CustomMultiplayer)
-        && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+    return customRulesGame() && getGameInitSettings().getInitialSpiceTilePermille() > 0;
 }
 
 bool QuantBot::cityEconomyExperimentScope() const {
@@ -706,8 +704,7 @@ int QuantBot::vultureOpportunity(const std::vector<Uint32>& strikeUnits) {
     const int level = botConfig().force.ffaVultureLevel;
     if (level == 0 || !autonomousCustomArmy()) return -1;
     const auto& init = currentGame->getGameInitSettings();
-    const auto type = init.getGameType();
-    if (type != GameType::CustomGame && type != GameType::CustomMultiplayer) return -1;
+    if (!customRulesGame()) return -1;
     if (init.getModName() != "vanilla" && init.getModName() != "dunecity") return -1;
     // Scope is the original occupied controller roster, not surviving runtime houses.
     std::array<int, NUM_HOUSES> teams;

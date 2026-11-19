@@ -229,6 +229,9 @@ public:
     int objectiveTarget(int goal) const;
     /// This house is hostile to the objective house and the map's FirstEnemyAttack has not passed.
     bool objectiveGracePeriod() const;
+    /// A Custom Game (single or multiplayer), or the DuneCity campaign, whose missions are Custom
+    /// city maps: QuantBot's Custom-only policy scopes apply to both.
+    bool customRulesGame() const;
     int campaignHarvesterCeiling() const; // -1 outside policy; zero forbids new workers
     void doProduceItem(const BuilderBase* builder, Uint32 itemID) const;
 
