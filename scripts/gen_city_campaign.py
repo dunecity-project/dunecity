@@ -102,6 +102,119 @@ def render(m: Mission, sc: g.Scenario) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Mission 7: the Shield Wall breach
+# ---------------------------------------------------------------------------
+SHIELD_WALL_BREACH = (66, 54, 13, 20)   # x, y, width, height of the gap the sappers open
+
+
+def scenario_shield_wall_breach() -> g.Scenario:
+    """The Atreides city sits in a basin ringed by the Shield Wall, with its own sand and spice
+    and no worms. The only ways out are two narrow western passes, so the Harkonnen and
+    Sardaukar on the eastern flats must march the long way round - until the eastern wall is
+    breached (SHIELD_WALL_BREACH) and worms and armies come straight through."""
+    import math
+    W, H = 144, 128
+    rng = g.Rng(0x5B1E7)
+    c = g.Canvas(W, H)
+    cx, cy, radius = 40, 64, 33
+    # The basin floor: sand with spice, and a broad rock shelf for the city.
+    c.organic(cx - 2, cy, 19, g.ROCK, rng, lobes=9)
+    c.spice_field(cx + 14, cy - 18, 7, rng, True)
+    c.spice_field(cx + 15, cy + 18, 7, rng, True)
+    # The Shield Wall: a thick mountain ring, open only at two narrow western passes.
+    pts = []
+    for deg in range(0, 361, 6):
+        a = math.radians(deg)
+        pts.append((deg, int(cx + radius * math.cos(a)), int(cy + radius * math.sin(a))))
+    gaps = [(150, 162), (198, 210)]
+    run = []
+    for deg, x, y in pts:
+        if any(lo <= deg <= hi for lo, hi in gaps):
+            if len(run) > 1:
+                c.ribbon(run, g.MOUNTAIN, 6, rng)
+            run = []
+        else:
+            run.append((x, y))
+    if len(run) > 1:
+        c.ribbon(run, g.MOUNTAIN, 6, rng)
+    # Make sure the eastern wall is solid where the breach will open.
+    bx, by, bw, bh = SHIELD_WALL_BREACH
+    c.rect(bx + 1, by, bw - 2, bh, g.MOUNTAIN)
+    # Outside: the eastern flats, two rival bases, open rock for the west passes' outposts.
+    c.organic(118, 34, 16, g.ROCK, rng, lobes=9)    # Harkonnen
+    c.organic(120, 98, 15, g.ROCK, rng, lobes=8)    # Sardaukar
+    c.organic(8, 20, 7, g.ROCK, rng, lobes=4)
+    c.organic(8, 110, 7, g.ROCK, rng, lobes=4)
+    for (sx, sy, r, rich) in [(96, 64, 11, True), (92, 14, 8, False), (94, 116, 8, False),
+                              (136, 66, 7, True), (14, 64, 6, False)]:
+        c.spice_field(sx, sy, r, rng, rich)
+    for (dx, dy) in [(86, 40), (86, 88)]:
+        c.organic(dx, dy, 5, g.DUNES, rng, lobes=4, only_if=(g.SAND,))
+    c.set(104, 64, g.BLOOM)
+
+    sc = g.Scenario(
+        filename="3P - 144x128 - Shield Wall Breach.ini",
+        size_x=W, size_y=H, header=[],
+        basic=g.basic(3, 1, brief="SARDUKAR.WSA", winpic="WIN2.WSA"),
+        houses=[
+            ("Atreides", {"Brain": "Human", "Credits": 9000, "Quota": 0}),
+            ("Harkonnen", {"Brain": "Team2", "Credits": 9000, "Quota": 0}),
+            ("Sardaukar", {"Brain": "Team2", "Credits": 7000, "Quota": 0}),
+        ],
+        canvas=c, choam=dict(g.DEFAULT_CHOAM),
+    )
+    # -- the Atreides basin city ----------------------------------------------
+    ax, ay = cx - 4, cy
+    g.street_path(sc, "Atreides", [(ax - 14, ay - 2), (ax, ay), (ax + 14, ay - 2)], rng, 14)
+    g.street_path(sc, "Atreides", [(ax, ay - 14), (ax + 1, ay + 14)], rng, 10)
+    g.street_path(sc, "Atreides", [(ax - 9, ay - 10), (ax - 8, ay + 10)], rng, 10)
+    g.spurs(sc, "Atreides", [(ax - 14, ay - 2), (ax + 14, ay - 2)], rng, 4)
+    g.anchors(sc, "Atreides", [
+        ("Const Yard", ax, ay - 4), ("Refinery", ax + 6, ay - 8), ("Windtrap", ax - 4, ay - 6),
+        ("Windtrap", ax + 4, ay + 4), ("Windtrap", ax - 6, ay + 4), ("Spice Silo", ax + 8, ay + 2),
+        ("Light Factory", ax - 10, ay - 4), ("Heavy Factory", ax + 9, ay + 7), ("Barracks", ax - 12, ay + 6),
+        ("Outpost", ax + 2, ay + 8), ("Police Station", ax - 2, ay + 10),
+    ])
+    g.zone_districts(sc, "Atreides", [
+        g.District(ax - 16, ay - 14, 32, 12, "RRCIR", fill=72, limit=10),
+        g.District(ax - 16, ay + 2, 32, 14, "RRCCI", fill=72, limit=10),
+    ], rng)
+    g.force(sc, "Atreides", ax + 6, ay + 16, [
+        ("Harvester", "Harvest"), ("Harvester", "Harvest"), ("Carryall", "Area Guard"),
+        ("Tank", "Area Guard"), ("Tank", "Area Guard"), ("Launcher", "Area Guard"),
+        ("Quad", "Area Guard"), ("Trike", "Area Guard"), ("Troopers", "Area Guard"),
+    ])
+    # -- the rivals on the eastern flats ----------------------------------------
+    for owner, (rx, ry), extra, army in [
+        ("Harkonnen", (118, 34), [("Heavy Factory", 124, 30), ("Hightech Factory", 110, 40), ("Repair Yard", 126, 40)],
+         [("Harvester", "Harvest"), ("Harvester", "Harvest"), ("Tank", "Area Guard"), ("Tank", "Area Guard"),
+          ("Siege Tank", "Area Guard"), ("Launcher", "Area Guard"), ("Devastator", "Area Guard"), ("Quad", "Area Guard")]),
+        ("Sardaukar", (120, 98), [("Heavy Factory", 126, 94), ("WOR", 112, 104)],
+         [("Harvester", "Harvest"), ("Tank", "Area Guard"), ("Siege Tank", "Area Guard"),
+          ("Launcher", "Area Guard"), ("Troopers", "Area Guard"), ("Troopers", "Area Guard")]),
+    ]:
+        g.street_path(sc, owner, [(rx - 11, ry), (rx, ry + 1), (rx + 11, ry)], rng, 14)
+        g.street_path(sc, owner, [(rx, ry - 10), (rx + 1, ry + 10)], rng, 10)
+        g.anchors(sc, owner, [
+            ("Const Yard", rx, ry - 3), ("Refinery", rx - 6, ry - 5), ("Windtrap", rx + 4, ry - 6),
+            ("Windtrap", rx - 4, ry + 3), ("Windtrap", rx + 6, ry + 4), ("Light Factory", rx - 8, ry + 5),
+            ("Barracks", rx + 2, ry + 6), ("Outpost", rx - 2, ry - 8),
+        ] + extra)
+        g.zone_districts(sc, owner, [g.District(rx - 13, ry - 12, 26, 24, "RRCCI", fill=62, limit=10)], rng)
+        g.turret_ring(sc, owner, [(rx - 12, ry - 6), (rx - 12, ry + 6), (rx - 6, ry - 12), (rx - 6, ry + 12)], rng)
+        g.force(sc, owner, rx - 14, ry, army)
+    sc.reinforcements = [
+        "Atreides,Harvester,Homebase,9",
+        "Harkonnen,Tank,Enemybase,14",
+        "Harkonnen,Siege Tank,Enemybase,16,+",
+        "Sardaukar,Troopers,Enemybase,18,+",
+        "Atreides,Launcher,Homebase,20",
+    ]
+    g.power_finish(sc)
+    return sc
+
+
+# ---------------------------------------------------------------------------
 # Mission 10: All Against Atreides, rebuilt for city building
 # ---------------------------------------------------------------------------
 def scenario_all_against_atreides_city() -> g.Scenario:
@@ -266,14 +379,15 @@ MISSIONS: List[Mission] = [
         lose="The pass is closed and the towns are burning.",
     ),
     Mission(
-        7, "Shield Wall Rift", g.scenario_shield_wall_rift,
-        briefing=("Your city sits behind the Shield Wall. Harkonnen sappers are mining it: at the tenth minute "
-                  "the wall will break open and sandworms and Harkonnen armies will pour through the rift. "
-                  "Prepare your defences, then destroy all three rival houses."),
-        win="The rift is sealed by Harkonnen dead. Arrakis remembers.",
+        7, "Shield Wall Breach", scenario_shield_wall_breach,
+        briefing=("Your city lies in a basin behind the Shield Wall, safe from worms, reached only through two "
+                  "narrow western passes. Harkonnen sappers are mining the eastern wall: at the twelfth minute it "
+                  "will break open, and sandworms and the Harkonnen and Sardaukar armies will come straight "
+                  "through the breach. Fortify the basin, then destroy both houses."),
+        win="The breach is held and the invaders are destroyed. The basin is safe.",
         lose="The Shield Wall fell, and your city with it.",
-        events=[("Breach1", "10,60,30,10,8,2"),
-                ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen are coming through the rift.")],
+        events=[("Breach1", "12,%d,%d,%d,%d,2" % SHIELD_WALL_BREACH),
+                ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen armies are coming through.")],
     ),
     Mission(
         8, "Tuono Crossing", g.scenario_tuono_crossing,
