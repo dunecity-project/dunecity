@@ -9,6 +9,7 @@ holds the targets: the helper must beat enemies one tier lower, and the win rate
 gently from mission 1 to mission 10.
 """
 import csv
+import json
 import re
 import statistics
 import sys
@@ -32,7 +33,7 @@ def rows(dirs):
 
 
 def main():
-    games = rows(sys.argv[1:])
+    games = rows([a for a in sys.argv[1:] if not a.startswith('--')])
     table = defaultdict(list)
     for row in games:
         mission = int(re.search(r'-m(\d+)/', row['id']).group(1))
@@ -64,6 +65,15 @@ def main():
         print(f'{mission:>7}  ' + '  '.join(cells))
     print(f'{"total":>7}  ' + '  '.join(f'{f"{totals[p][0]}/{totals[p][1]}":>26}' for p in PAIRS))
     print('\nwins: o objectives, s survival, c conquest; L lost, T time limit, E errors; median winning minute')
+    if '--detail' in sys.argv:
+        print('\nper game: mission pair seed outcome minute | objective samples minute:[population,credits,crime,land,enemies]')
+        for row in sorted(games, key=lambda r: r['id']):
+            mission = int(re.search(r'-m(\d+)/', row['id']).group(1))
+            pair = row['cell'].split('#')[0].split('/')[0][7:]
+            samples = json.loads(row.get('objectives') or '{}')
+            last = sorted(samples.items(), key=lambda kv: int(kv[0]))
+            trace = ' '.join(f'{k}:{v}' for k, v in last[-4:])
+            print(f'M{mission:02d} {pair:14} {row["seed"]:>9} {row["outcome"] or row["error"]:10} {row["minutes"]:>6} | {trace}')
 
 
 if __name__ == '__main__':
