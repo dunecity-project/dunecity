@@ -501,7 +501,9 @@ def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
         rules['reworked'] = True
     if cell.get('city'):
         rules['city_campaign'] = True
-    return dict(**rules, id=f'{cell["category"]}/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category=cell['category'],
+    # Campaign research decks (campaign_research.schedule) build cells without a category.
+    category = cell.get('category', 'campaign')
+    return dict(**rules, id=f'{category}/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category=category,
                 cell=f'{cell["name"]}{mode}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
                 map=f'{house} level {level} mission {mission}', house=house, level=level, mission=mission,
                 partner=cell['partner'], enemy_ai=cell['enemy_ai'], enemy_difficulty=cell['enemy_difficulty'],

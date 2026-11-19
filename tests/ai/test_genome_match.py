@@ -120,7 +120,14 @@ class GenomeMatchTests(unittest.TestCase):
     def test_generic_prepare_needs_no_runtime_manifest_or_seeds(self):
         args = league['parser'].parse_args(['--results', 'unused-results', '--build-dir', 'unused-build'])
         with tempfile.TemporaryDirectory() as temporary:
-            with patch.object(league['subprocess'], 'run') as run:
+            def build(command, **kwargs):
+                # Like run-campaign-balance.py --build-only: Linux and Windows record the probe's path.
+                out = Path(command[command.index('--output-dir') + 1])
+                out.mkdir(parents=True, exist_ok=True)
+                (out / 'balance-probe-path.txt').write_text(str(out / 'balance-probe/bin/balance-probe'))
+                return SimpleNamespace(returncode=0, stdout='', stderr='')
+
+            with patch.object(league['subprocess'], 'run', side_effect=build) as run:
                 binary = league['build_probe'](args, Path(temporary))
         command = run.call_args.args[0]
         self.assertIn('--build-only', command)
