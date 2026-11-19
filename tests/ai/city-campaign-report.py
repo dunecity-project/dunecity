@@ -75,9 +75,9 @@ def main():
         for row in games:
             mission = int(re.search(r'-m(\d+)/', row['id']).group(1))
             name = row['cell'].split('#')[0].split('/')[0]
-            found = re.search(r'-((?:[sgw][0-9.]+)+)$', name)
+            found = re.search(r'-((?:[sgwc][0-9.]+)+)$', name)
             strength = found.group(1) if found else 'shipped'
-            pair = re.sub(r'-(?:[sgw][0-9.]+)+$', '', name)
+            pair = re.sub(r'-(?:[sgwc][0-9.]+)+$', '', name)
             kind = 'equal' if pair in EQUAL else 'lower'
             sweep[mission][strength][kind][0] += row['outcome'] == 'won'
             sweep[mission][strength][kind][1] += 1

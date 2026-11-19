@@ -695,14 +695,14 @@ def win_type(result, houses, campaign, lines=()):
     return 'conquest'
 
 
-CITY_VARIANT_KEYS = {'s': '--strength', 'g': '--goals', 'w': '--grace'}
+CITY_VARIANT_KEYS = {'s': '--strength', 'g': '--goals', 'w': '--grace', 'c': '--compact'}
 
 
 def city_variant_args(spec):
     """'s1.5g2w1.5' -> ['--strength', '1.5', '--goals', '2', '--grace', '1.5'] (scripts/gen_city_campaign.py)."""
-    parts = re.findall(r'([sgw])([0-9.]+)', spec)
+    parts = re.findall(r'([sgwc])([0-9.]+)', spec)
     if not parts or ''.join(k + v for k, v in parts) != spec:
-        raise SystemExit(f'Bad --city-variant {spec!r}: letters s (strength), g (goals), w (grace) and numbers')
+        raise SystemExit(f'Bad --city-variant {spec!r}: letters s (strength), g (goals), w (grace), c (compact 1) and numbers')
     return [arg for key, value in parts for arg in (CITY_VARIANT_KEYS[key], value)]
 
 

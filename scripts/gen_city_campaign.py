@@ -59,6 +59,9 @@ class Mission:
     # [DIFFICULTY]: the enemy strength on top of that for the enemy AI's difficulty (Easy ... Brutal),
     # applied by the game when the mission starts (same credits x / grace / rule).
     difficulty: Dict[str, float] = field(default_factory=dict)
+    # A compact layout (at most 64x64 = 4,096 tiles) for this mission, where every difficulty's
+    # map-size army and city limits bind inside the first 15 minutes (docs/city-campaign.md).
+    compact: Optional[Callable[[], g.Scenario]] = None
 
 
 def set_house(sc: g.Scenario, name: str, **values) -> None:
@@ -168,6 +171,64 @@ def render(m: Mission, sc: g.Scenario) -> str:
     extra.append(f"Lose={m.lose}")
     extra.append("")
     return text + "\n".join(extra) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Compact layouts (64x64): the difficulties' map-size limits decide these maps
+# ---------------------------------------------------------------------------
+def compact_sihaya_basin() -> g.Scenario:
+    """Mission 1 on 64x64: a crowded home shelf, three small rock islands to colonise and the
+    Harkonnen on the wide eastern shelf with the best spice."""
+    W = H = 64
+    rng = g.Rng(0x51A64)
+    c = g.Canvas(W, H)
+    c.organic(13, 15, 9, g.ROCK, rng, lobes=6)                        # Atreides shelf
+    c.ribbon([(6, 24), (12, 28), (18, 28)], g.ROCK, 4, rng)          # apron
+    c.organic(49, 45, 11, g.ROCK, rng, lobes=8)                       # Harkonnen shelf
+    c.ribbon([(36, 34), (38, 46), (36, 58)], g.MOUNTAIN, 3, rng)      # their western ridge
+    c.rect(36, 44, 4, 4, g.SAND)                                      # the one gap
+    for (x, y, r) in [(40, 12, 6), (14, 48, 6), (28, 34, 5)]:          # colony islands
+        c.organic(x, y, r, g.ROCK, rng, lobes=5)
+    for (sx, sy, r, rich) in [(26, 10, 4, False), (28, 22, 5, True), (6, 38, 4, False),
+                              (24, 50, 5, True), (52, 22, 5, True), (58, 60, 4, False),
+                              (44, 30, 3, False)]:
+        c.spice_field(sx, sy, r, rng, rich)
+    c.set(32, 42, g.BLOOM)
+    sc = g.Scenario(
+        filename="2P - 64x64 - Sihaya Basin.ini", size_x=W, size_y=H,
+        header=["; Sihaya Basin (compact) -- 64x64, 2 houses, DuneCity campaign mission 1."],
+        basic=g.basic(3, 1, brief="ATTACK.WSA"),
+        houses=[("Atreides", {"Brain": "Human", "Credits": 7000, "Quota": 0}),
+                ("Harkonnen", {"Brain": "Team2", "Credits": 9000, "Quota": 0})],
+        canvas=c, choam=dict(g.DEFAULT_CHOAM),
+    )
+    g.street_path(sc, "Atreides", [(6, 12), (13, 13), (20, 15)], rng, 14)
+    g.street_path(sc, "Atreides", [(8, 19), (15, 20), (20, 19)], rng, 12)
+    g.street_path(sc, "Atreides", [(12, 8), (13, 24)], rng, 8)
+    g.anchors(sc, "Atreides", [("Const Yard", 11, 15), ("Refinery", 16, 11), ("Windtrap", 8, 13),
+                               ("Windtrap", 9, 19), ("Light Factory", 17, 19), ("Spice Silo", 14, 23)])
+    g.zone_districts(sc, "Atreides", [g.District(5, 8, 18, 8, "RRRCI", fill=80, limit=10),
+                                      g.District(5, 16, 18, 9, "RRCCI", fill=70, limit=6)], rng)
+    g.force(sc, "Atreides", 12, 26, [("MCV", "Area Guard"), ("Harvester", "Harvest"),
+                                     ("Harvester", "Harvest"), ("Tank", "Area Guard"),
+                                     ("Quad", "Area Guard"), ("Trike", "Area Guard")], spread=2)
+    g.street_path(sc, "Harkonnen", [(42, 41), (50, 42), (58, 44)], rng, 14)
+    g.street_path(sc, "Harkonnen", [(42, 49), (50, 50), (58, 50)], rng, 14)
+    g.street_path(sc, "Harkonnen", [(49, 36), (50, 56)], rng, 10)
+    g.anchors(sc, "Harkonnen", [("Const Yard", 47, 45), ("Refinery", 53, 40), ("Heavy Factory", 52, 46),
+                                ("Light Factory", 44, 46), ("Windtrap", 45, 40), ("Windtrap", 56, 47),
+                                ("Windtrap", 46, 52), ("Spice Silo", 54, 52), ("Barracks", 58, 41)])
+    g.zone_districts(sc, "Harkonnen", [g.District(40, 36, 22, 9, "IIRC", fill=78, limit=10),
+                                       g.District(40, 45, 22, 12, "RRCCI", fill=78, limit=10)], rng)
+    g.turret_ring(sc, "Harkonnen", [(40, 40), (40, 52), (50, 34), (60, 54)], rng)
+    g.force(sc, "Harkonnen", 50, 54, [("Harvester", "Harvest"), ("Harvester", "Harvest"),
+                                      ("Tank", "Area Guard"), ("Tank", "Area Guard"),
+                                      ("Quad", "Area Guard"), ("Trike", "Area Guard"),
+                                      ("Launcher", "Area Guard")], spread=2)
+    sc.teams = ["Harkonnen,Staging,Wheeled,2,5", "Harkonnen,Normal,Tracked,3,7"]
+    sc.reinforcements = ["Atreides,Harvester,Homebase,10", "Atreides,MCV,Homebase,20"]
+    g.power_finish(sc)
+    return sc
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +465,7 @@ MISSIONS: List[Mission] = [
         lose="The Basin is lost. The Harkonnen own the shelf.",
         objectives={"Population": 20000, "HoldSeconds": 60},
         credits={"Atreides": 12000, "Harkonnen": 5000},
-        zone_cap={"Harkonnen": 30}, first_attack=10,
+        zone_cap={"Harkonnen": 30}, first_attack=10, compact=compact_sihaya_basin,
     ),
     Mission(
         2, "Hagal Flats", g.scenario_hagal_flats,
@@ -513,6 +574,7 @@ def main() -> None:
     parser.add_argument("--goals", type=float, help="variant: population and treasury goals (and a hold-out "
                                                      "timer) x this")
     parser.add_argument("--grace", type=float, help="variant: the enemy grace period (FirstEnemyAttack) x this")
+    parser.add_argument("--compact", type=int, default=0, help="variant: 1 = the mission's compact layout")
     parser.add_argument("--out", type=Path, help="variant file to write instead of the shipped map")
     args = parser.parse_args()
     if args.mission:
@@ -524,6 +586,10 @@ def main() -> None:
                       for k, v in m.objectives.items()}
             m = dataclasses.replace(m, objectives=scaled,
                                     timeout=int(round(m.timeout * args.goals)) if m.timeout else m.timeout)
+        if args.compact:
+            if m.compact is None:
+                parser.error(f"mission {m.number} has no compact layout")
+            m = dataclasses.replace(m, build=m.compact, zone_cap={}, army_keep={})
         if args.grace is not None and m.first_attack:
             m = dataclasses.replace(m, first_attack=max(1, int(round(m.first_attack * args.grace))))
         sc = m.build()
