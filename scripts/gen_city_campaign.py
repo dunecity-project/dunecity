@@ -476,11 +476,12 @@ MISSIONS: List[Mission] = [
     ),
     Mission(
         10, "All Against Atreides", scenario_all_against_atreides_city,
-        briefing=("The Great Houses have united against House Atreides. Build a capital that can feed a war, "
-                  "then destroy every one of them."),
+        briefing=("The Great Houses have united against House Atreides. Build a capital of 60,000 people that "
+                  "can outlast them all - or destroy every one of them."),
+        objectives={"Population": 60000, "HoldSeconds": 120},
         win="House Atreides stands alone on Arrakis. The campaign is won.",
         lose="House Atreides has fallen.",
-        credits={"Atreides": 28000, "Fremen": 4500, "Sardaukar": 4500, "Ordos": 4500, "Harkonnen": 4500},
+        credits={"Atreides": 26000, "Fremen": 4500, "Sardaukar": 4500, "Ordos": 4500, "Harkonnen": 4500},
         first_attack=5,
     ),
 ]
