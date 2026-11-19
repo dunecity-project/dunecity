@@ -313,10 +313,14 @@ Do not terminate accepted jobs or bypass the shared gate to claim immediate
 production priority. A timeout/cancellation terminates the owned queue child and
 preserves failed evidence; it is not permission to relabel the result as a pass.
 
-Independent single-game probes use CTest `PROCESSORS 2`: the Mini qualifier has
-four slots (up to two games), the smaller hosted Mac has two. GUI, network and
-internally parallel multi-game tests retain serial scheduling. Profiles and output
-paths stay separate; no timeouts or assertions are relaxed. The PHP-backed network
+Every test that plays one game at a time uses CTest `PROCESSORS 2`: the Mini
+qualifier has four slots (up to two games), the smaller hosted Mac has two. Only
+the tests listed in `scripts/tests/test_headless_parallel.py` (`EXCLUSIVE`, each
+with its reason) keep `RUN_SERIAL`: real-window/GPU and calibrated performance
+tests, the AI gates and other tests that run several games or path workers at
+once, and the PHP-backed network tests. CI fails if any other test adds
+`RUN_SERIAL`. Profiles and output paths stay separate; no timeouts or assertions
+are relaxed. The PHP-backed network
 test runs in the stable Mini lane, with missing PHP or a skipped case fatal; both
 qualification backends exclude that separately required network scope.
 

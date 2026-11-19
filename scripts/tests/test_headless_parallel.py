@@ -15,7 +15,29 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ('quantbot_custom_attack', 'quantbot_police_placement', 'quantbot_battery_clearance',
-         'trooper_anti_air_probe', 'community_maps_startup', 'body_angle_probe')
+         'trooper_anti_air_probe', 'community_maps_startup', 'body_angle_probe',
+         'menu_navigation_probe', 'natives_probe', 'carryall_flight_probe', 'skirmish_probe_fixture')
+# The only tests that may take the whole machine. Every other test plays at most one game at a
+# time in its own output directory and profile, and uses PROCESSORS instead of RUN_SERIAL.
+EXCLUSIVE = {
+    'dunelegacy_gpu_tests': 'real GPU renderer',
+    'native_pointer_mapping_probe': 'real window and Cocoa input',
+    'mouse_controls_probe': 'real window and Cocoa input',
+    'perf_regression': 'budgets calibrated on a quiet machine',
+    'quantbot_all_against_atreides': 'runs several games at once (--jobs)',
+    'quantbot_all_against_atreides_dune2r': 'runs several games at once (--jobs)',
+    'quantbot_scenario_matrix': 'runs several games at once (--jobs)',
+    'quantbot_ffa_army_deploys': 'runs several games at once',
+    'quantbot_strategy': 'runs its margin seeds as parallel games',
+    'ui_gallery_probe': 'runs two games at once and opens the multiplayer menu port',
+    'transport_containment_probe': 'four path workers in one game',
+    'tornie_object_state_roundtrip': 'four path workers in one game',
+    'native_probe_process_lifecycle': 'times out and kills native probe process groups',
+    'spectator_online_end_probe': 'a local PHP signalling service and several native peers',
+    'native_multiplayer_join_modes': 'a local PHP signalling service and several native peers',
+    'quantbot_city_hard_match_${seed}': 'opt-in 90-minute matches against a wall-clock limit',
+    'quantbot_city_reclaimed_rock_match': 'opt-in 90-minute match against a wall-clock limit',
+}
 WORKER = '''import fcntl, sys, time
 with open(sys.argv[1], 'a') as log:
     for event in ('start', 'end'):
@@ -57,6 +79,17 @@ class SchedulingTests(unittest.TestCase):
 
     def test_hosted_budget_does_not_oversubscribe_games(self):
         self.assertEqual(self.peak(2), 1)
+
+
+class ExclusiveSchedulingTests(unittest.TestCase):
+    def test_only_listed_tests_take_the_whole_machine(self):
+        source = (ROOT / 'tests/CMakeLists.txt').read_text()
+        serial = set()
+        for match in re.finditer(r'set_tests_properties\(\s*(\S+)\s+PROPERTIES([^)]*)\)', source):
+            if re.search(r'\bRUN_SERIAL\s+TRUE\b', match.group(2)):
+                serial.add(match.group(1))
+        self.assertEqual(serial, set(EXCLUSIVE),
+                         'A single-game probe uses PROCESSORS 2; add RUN_SERIAL only with a reason in EXCLUSIVE')
 
 
 class MacDependencyCacheTests(unittest.TestCase):

@@ -959,7 +959,8 @@ with `--report`. Do not launch simultaneous local batches or create another buil
 
 Registration follows capability, not the OS (`tests/CMakeLists.txt`). `gui` means a real window
 and renderer; a probe that runs the game on `SDL_VIDEODRIVER=dummy` with the software renderer is
-`headless`, even when it renders PNGs or needs the machine to itself (that is `RUN_SERIAL`). Every
+`headless`, even when it renders PNGs; one game at a time is `PROCESSORS 2`, and `RUN_SERIAL` is kept
+for the few tests that need the whole machine (`scripts/tests/test_headless_parallel.py`). Every
 headless test registers in macOS and Linux Ninja trees, so `dunecity-queue ctest` runs it on the AWS
 workers. Probe harnesses find their binary and data through `tests/performance/probe_profile.py`:
 `probe_binary` for `run-campaign-balance.py` probes, and `NATIVE_TARGET`, `native_build_commands`,
