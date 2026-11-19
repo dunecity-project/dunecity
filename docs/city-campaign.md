@@ -144,6 +144,7 @@ live in `/Users/stefan/Documents/projects/outputs/city-campaign-20261119/<round>
 | v7 | 6 seeds; harder 5-6, longer Tuono grace, less AAA cash | 107/108 | 18/18 | 14/18 | 16/18 | 16/17 |
 | v8 | Shield Wall needs 50,000 people; Carthag and AAA a little harder | 107/108 | 18/18 | 14/18 | 15/18 | 12/18 |
 | v9 (Brutal v Hard only) | Shield Wall houses at full strength | - | 3/6 | 6/6 | 4/6 | 5/6 |
+| final (8 fresh seeds) | Shield Wall between v8 and v9; 120 minutes | 144/144 | 23/24 | 22/24 | 20/24 | 21/24 after the mission 10 steps below |
 
 Lessons, each now fixed in the maps or the AI:
 
@@ -164,4 +165,39 @@ Lessons, each now fixed in the maps or the AI:
 
 ### Final validation
 
-Pending.
+Eight fresh seeds (30411001, 30412037, 30413041, 30414053, 30415067, 30416079, 30417089,
+30418097) per mission and pairing, 120 game minutes, on the AWS workers. Missions 1-9 at
+`e63e52869` (`outputs/city-campaign-20261119/final`); mission 10 after its last change at
+`9f0067c41` (`final-m10e`; missions 1-9 are unchanged since and the games are deterministic).
+
+| Mission | Brutal v Hard | Hard v Medium | Medium v Easy | All |
+|---|---|---|---|---|
+| 1 Sihaya Basin | 8/8 | 8/8 | 8/8 | 100% |
+| 2 Hagal Flats | 8/8 | 8/8 | 8/8 | 100% |
+| 3 Ash Quarter | 8/8 | 8/8 | 8/8 | 100% |
+| 4 Arrakeen Blackout | 8/8 | 8/8 | 8/8 | 100% |
+| 5 Cielago Watch | 8/8 | 8/8 | 8/8 | 100% |
+| 6 Harg Pass Convoy | 8/8 | 8/8 | 8/8 | 100% |
+| 7 Shield Wall Breach | 7/8 | 8/8 | 8/8 | 96% |
+| 8 Tuono Crossing | 8/8 | 6/8 | 8/8 | 92% |
+| 9 Carthag Vise | 6/8 | 6/8 | 8/8 | 83% |
+| 10 All Against Atreides | 5/8 | 8/8 | 8/8 | 88% |
+
+Every pairing wins every mission most of the time, and the strongest pairing (Brutal v Hard) falls
+from 100% on missions 1-6 to 63% on mission 10. Medium helpers win almost everything against Easy
+houses, which rarely attack. Early missions are won by their city goals in 10-17 minutes (Sihaya,
+Hagal, Ash Quarter, Arrakeen) or by conquest in 25-35 (Cielago, Harg Pass); Shield Wall Breach by
+50,000 people around minute 20, Tuono by its treasury and population at 13-15, Carthag by conquest
+at 20-28 and All Against Atreides by its held capital or conquest at 28-34.
+
+Mission 10 was tuned last on the same seeds. With conquest only, the Medium helper ran out of
+120 minutes against four turtling Easy cities in 6 of 7 games (1/7) while holding a ~60,000-person
+capital, so the city version gained its population goal: 60,000 people held for 2 minutes won
+24/24, held for 8 minutes 23/24, then the four houses' starting credits set the difficulty: 6,000
+with a 4-minute grace won 10/24, 5,000 with 5 minutes 18/24 (Brutal 3/8), 4,750 with 5 minutes
+21/24 (shipped).
+
+The four mandatory AI gates (`quantbot_all_against_atreides`, `..._dune2r`,
+`quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`) and `dunelegacy_tests` passed on AWS at
+`e63e52869` (and on `6569d1c94` and `8d304aba2` before); `perf_regression` passed on the Mini at
+`1cd62fd23`. Later commits change only mission 10's map and the docs.
