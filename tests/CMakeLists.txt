@@ -48,6 +48,42 @@ if(Python3_Interpreter_FOUND)
     dunecity_add_test(headless integration NAME genome_behaviors_contract COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/ai/test_genome_behaviors.py)
     set_tests_properties(genome_behaviors_contract PROPERTIES TIMEOUT 60)
+    # The unit suites of the Python tools: AI research and baselines, the decision log, probe
+    # profiles and Dune2R assets. Nothing ran them until 2026-11-19, and four had broken unseen.
+    foreach(suite IN ITEMS ai/test_ai_baseline_league ai/test_ai_baseline_scorecard
+            ai/test_ai_screen_design ai/test_campaign_research ai/test_civ_wars_matrix
+            ai/test_civ_wars_report ai/test_genome_match ai/test_genome_search ai/test_sweep_controls
+            ai/test_sweep_match test_ai_decisions test_dune2r_asset_catalog
+            test_dune2r_terrain_seam_map test_probe_profile_lifecycle)
+        get_filename_component(suite_name ${suite} NAME)
+        string(REGEX REPLACE "^test_" "python_" suite_name ${suite_name})
+        dunecity_add_test(headless integration NAME ${suite_name} COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/${suite}.py)
+        set_tests_properties(${suite_name} PROPERTIES TIMEOUT 60)
+    endforeach()
+    # The web packager records the checkout's commit, so this suite needs the Git checkout.
+    dunecity_add_test(headless integration NAME python_package_web COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_SOURCE_DIR}/scripts/tests/test_package_web.py)
+    set_tests_properties(python_package_web PROPERTIES TIMEOUT 60)
+    # The asset packagers need Pillow; hosted Linux CI installs python3-pil. Where the
+    # interpreter has no Pillow, configure says so and these suites are not registered.
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import PIL"
+        RESULT_VARIABLE dunecity_pillow_status OUTPUT_QUIET ERROR_QUIET)
+    if(dunecity_pillow_status EQUAL 0)
+        foreach(suite IN ITEMS ${CMAKE_SOURCE_DIR}/scripts/tests/test_package_dune2r_infantry
+                ${CMAKE_CURRENT_SOURCE_DIR}/test_dune2r_atlas_publish
+                ${CMAKE_CURRENT_SOURCE_DIR}/test_dune2r_packaging
+                ${CMAKE_CURRENT_SOURCE_DIR}/test_dunecity_skin_packaging)
+            get_filename_component(suite_name ${suite} NAME)
+            string(REGEX REPLACE "^test_" "python_" suite_name ${suite_name})
+            dunecity_add_test(headless integration NAME ${suite_name} COMMAND ${Python3_EXECUTABLE}
+                ${suite}.py)
+            set_tests_properties(${suite_name} PROPERTIES TIMEOUT 60)
+        endforeach()
+    else()
+        message(STATUS "Pillow is not installed for ${Python3_EXECUTABLE}: the Dune2R and skin "
+                       "packaging unit suites are not registered")
+    endif()
 endif()
 
 # Find Catch2 package
