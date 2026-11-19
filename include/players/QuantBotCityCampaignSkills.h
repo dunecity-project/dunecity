@@ -26,6 +26,7 @@ enum Skill {
     EarlyAttack,         ///< attacks at CityCampaignBrutalAttackPercent of its army ceiling, not 25%
     GrowthTax,           ///< 3% tax while the city is below the growth population, then the default
     HarvesterTargets,    ///< ground combat shoots harvesters first, then artillery (TargetPriorityLevel 2)
+    ArmyFirst,           ///< under attack or out-armed by the enemy it has seen: units before more zoning
     kSkillCount
 };
 
@@ -40,22 +41,24 @@ constexpr std::array<int, kSkillCount> kDefaultTiers{{
     Brutal, // EarlyAttack
     Never,  // GrowthTax
     Never,  // HarvesterTargets
+    Never,  // ArmyFirst
 }};
 
 /// [Force Concentration] keys holding each skill's tier (0 Easy .. 3 Brutal, 4 never).
 constexpr std::array<const char*, kSkillCount> kTierKeys{{
     "CityCampaignSkillTreasuryRelease", "CityCampaignSkillCityServices", "CityCampaignSkillLandValueSiting",
     "CityCampaignSkillPalaceForTax", "CityCampaignSkillFactoriesFirst", "CityCampaignSkillEarlyAttack",
-    "CityCampaignSkillGrowthTax", "CityCampaignSkillHarvesterTargets",
+    "CityCampaignSkillGrowthTax", "CityCampaignSkillHarvesterTargets", "CityCampaignSkillArmyFirst",
 }};
 
 /// Behaviour outside the ladder. Skills the AI already had stay on for every tier; EarlyAttack stays
-/// Brutal's own; GrowthTax and HarvesterTargets are new and stay off.
+/// Brutal's own; GrowthTax, HarvesterTargets and ArmyFirst are new and stay off.
 inline bool nativeSkill(Skill skill, int difficulty) {
     switch (skill) {
         case EarlyAttack: return difficulty == Brutal;
         case GrowthTax:
-        case HarvesterTargets: return false;
+        case HarvesterTargets:
+        case ArmyFirst: return false;
         default: return true;
     }
 }

@@ -669,6 +669,9 @@ struct QuantBotConfig {
         /// Lowest tier per skill (0 Easy .. 3 Brutal, 4 never), indexed by QuantBotCityCampaignSkills::Skill.
         /// Defaults kDefaultTiers; each tier is hashed when it differs from its default.
         std::array<int, QuantBotCityCampaignSkills::kSkillCount> cityCampaignSkillTier;
+        /// ArmyFirst skill: also in effect while the ground army is below this percent of the strongest
+        /// enemy team's remembered army (0 = only under attack). Default 100; hashed when not 100.
+        int cityArmyFirstPercent;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;

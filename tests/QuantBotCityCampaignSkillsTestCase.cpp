@@ -41,6 +41,7 @@ TEST_CASE("City campaign skill ladder: the default tiers", "[quantbot][citycampa
     // Never-tier skills stay off for every tier.
     CHECK_FALSE(ladderSkill(GrowthTax, Brutal));
     CHECK_FALSE(ladderSkill(HarvesterTargets, Brutal));
+    CHECK_FALSE(ladderSkill(ArmyFirst, Brutal));
 }
 
 TEST_CASE("City campaign skill ladder: native behaviour outside the ladder", "[quantbot][citycampaign]") {
@@ -52,6 +53,7 @@ TEST_CASE("City campaign skill ladder: native behaviour outside the ladder", "[q
         CHECK(hasSkill(EarlyAttack, difficulty, Easy, false) == (difficulty == Brutal));
         CHECK_FALSE(hasSkill(GrowthTax, difficulty, Easy, false));
         CHECK_FALSE(hasSkill(HarvesterTargets, difficulty, Easy, false));
+        CHECK_FALSE(hasSkill(ArmyFirst, difficulty, Easy, false));
     }
     // Defend is outside Easy..Brutal: native even with the ladder on.
     CHECK(hasSkill(TreasuryRelease, kDefend, Never, true));
