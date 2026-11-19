@@ -264,7 +264,10 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
     # DCITY missions as Atreides, an idle human with a QuantBot helper one tier above the enemy
     # QuantBots. The missions' native objectives (city goals, deadlines, conquest) end the game;
     # 120 minutes, because a Medium helper clearing four Easy houses (mission 10) can take 90+.
-    for partner, enemy in (('brutal', 'hard'), ('hard', 'medium'), ('medium', 'easy')):
+    # Two gradients (Stefan, 2026-11-19): one tier above the enemies the helper must win, and against
+    # its own tier it must lose at least 60% of games (helper-X-v-X).
+    for partner, enemy in (('brutal', 'hard'), ('hard', 'medium'), ('medium', 'easy'),
+                           ('brutal', 'brutal'), ('hard', 'hard'), ('medium', 'medium')):
         cells.append(dict(category='citycampaign', name=f'helper-{partner}-v-{enemy}', kind='campaign',
                           mod='dunecity', partner=partner, enemy_ai='quantbot', enemy_difficulty=enemy,
                           minutes=120, full=4, smoke=0, city=True, measured=True))

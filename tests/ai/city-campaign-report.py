@@ -3,7 +3,8 @@
 
     python3 tests/ai/city-campaign-report.py RESULTS [RESULTS ...]
 
-One row per mission and helper/enemy pair: wins / games, how they were won (objectives,
+One row per mission and helper/enemy pair (--equal: the same-tier pairings, where the helper
+must lose at least 60%): wins / games, how they were won (objectives,
 survival, conquest), losses, time-limit games and the median end minute. docs/city-campaign.md
 holds the targets: the helper must beat enemies one tier lower, and the win rate should fall
 gently from mission 1 to mission 10.
@@ -16,7 +17,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-PAIRS = ('helper-brutal-v-hard', 'helper-hard-v-medium', 'helper-medium-v-easy')
+LOWER = ('helper-brutal-v-hard', 'helper-hard-v-medium', 'helper-medium-v-easy')
+EQUAL = ('helper-brutal-v-brutal', 'helper-hard-v-hard', 'helper-medium-v-medium')
+PAIRS = EQUAL if '--equal' in sys.argv else LOWER
 
 
 def rows(dirs):
