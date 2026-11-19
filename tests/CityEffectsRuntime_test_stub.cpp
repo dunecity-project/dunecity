@@ -13,16 +13,6 @@
 
 namespace DuneCity {
 
-int32_t CitySimulation::getTotalFunds() const { return totalFunds_; }
-
-bool CitySimulation::spendCityFunds(int32_t amount) {
-    if (totalFunds_ >= amount) {
-        totalFunds_ -= amount;
-        return true;
-    }
-    return false;
-}
-
 void CitySimulation::runEffectsScans()    {}
 void CitySimulation::runZoneGrowth()      {}
 void CitySimulation::runDailyBudget()     {}

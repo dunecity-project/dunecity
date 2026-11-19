@@ -484,10 +484,6 @@ void CitySimulation::executeCityCommand(int playerID, int commandID,
     }
 }
 
-// spendCityFunds is implemented in CityEffectsRuntime.cpp so it can
-// access pLocalHouse directly. The test build provides its own stub
-// in CityEffectsRuntime_test_stub.cpp that operates on totalFunds_.
-
 void DuneCity::CitySimulation::checkAndTriggerMilestones(int32_t totalPop, int32_t totalFunds,
                                                          int32_t resPop, int32_t comPop, int32_t indPop,
                                                          bool hasRoads) {
