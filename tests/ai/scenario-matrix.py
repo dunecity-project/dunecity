@@ -406,13 +406,18 @@ def schedule(args):
         if count <= 0:
             continue
         if cell['kind'] == 'campaign' and cell.get('city'):
-            for mission in (getattr(args, 'city_missions', None) or range(1, 11)):
-                seeds = getattr(args, 'campaign_seeds', None)
-                if seeds is None:
-                    seeds = seeds_for('citycampaign', f'm{mission}', count)
-                for seed in dict.fromkeys(seeds):
-                    # The probe's --level is a 1-9 campaign level; the mission picks the map.
-                    games.append(campaign_game(cell, 'atreides', min(mission, 9), mission, seed, 'full'))
+            for strength in (getattr(args, 'city_strength', None) or [None]):
+                variant = dict(cell, name=f'{cell["name"]}-s{strength:g}') if strength else cell
+                for mission in (getattr(args, 'city_missions', None) or range(1, 11)):
+                    seeds = getattr(args, 'campaign_seeds', None)
+                    if seeds is None:
+                        seeds = seeds_for('citycampaign', f'm{mission}', count)
+                    for seed in dict.fromkeys(seeds):
+                        # The probe's --level is a 1-9 campaign level; the mission picks the map.
+                        game = campaign_game(variant, 'atreides', min(mission, 9), mission, seed, 'full')
+                        if strength:
+                            game['city_strength'] = strength
+                        games.append(game)
             continue
         if cell['kind'] == 'campaign':
             for house in cell.get('houses', ('atreides', 'harkonnen', 'ordos')):
@@ -582,6 +587,8 @@ def command(args, binary, game, out):
             cmd += ['--reworked']
         if game.get('city_campaign'):
             cmd += ['--city-campaign']
+        if game.get('city_strength'):
+            cmd += ['--city-campaign-map', str(out.with_suffix('.city.ini'))]
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
@@ -678,6 +685,12 @@ def win_type(result, houses, campaign, lines=()):
 def play(args, scratch, binary, game):
     out = scratch / f'g{abs(hash(game["id"])) % 10**10}'
     remove_tree(out)
+    variant = out.with_suffix('.city.ini')
+    if game.get('city_strength'):
+        # The shipped mission at another enemy strength, generated from the committed generator.
+        subprocess.run([sys.executable, str(root / 'scripts/gen_city_campaign.py'), '--mission', str(game['mission']),
+                        '--strength', str(game['city_strength']), '--out', str(variant)],
+                       cwd=root, check=True, capture_output=True, text=True)
     started = time.time()
     env = dict(os.environ)
     env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
@@ -702,6 +715,7 @@ def play(args, scratch, binary, game):
     assert '--army-deploys-regression-observer' not in cmd
     assert 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
     outcome = subprocess.run(cmd, cwd=root, capture_output=True, text=True, env=env)
+    variant.unlink(missing_ok=True)
     wall = round(time.time() - started)
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
@@ -1327,6 +1341,9 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--city-strength', nargs='+', type=float,
+                    help='citycampaign: also play each mission at these enemy-strength multipliers (generated '
+                         'variants of the shipped map: enemy credits x S, grace period / S); cells gain -sS')
 parser.add_argument('--city-missions', nargs='+', type=int, choices=range(1, 11),
                     help='citycampaign: only these DuneCity campaign missions (default all ten)')
 parser.add_argument('--campaign-seeds', nargs='+', type=int,

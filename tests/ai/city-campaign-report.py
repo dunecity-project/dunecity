@@ -68,6 +68,31 @@ def main():
         print(f'{mission:>7}  ' + '  '.join(cells))
     print(f'{"total":>7}  ' + '  '.join(f'{f"{totals[p][0]}/{totals[p][1]}":>26}' for p in PAIRS))
     print('\nwins: o objectives, s survival, c conquest; L lost, T time limit, E errors; median winning minute')
+    if '--strength' in sys.argv:
+        # Strength sweep (scenario-matrix --city-strength): per mission and strength, wins of the
+        # same-tier pairings (must stay at or below 40%) and of the one-tier-lower ones.
+        sweep = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0, 0])))
+        for row in games:
+            mission = int(re.search(r'-m(\d+)/', row['id']).group(1))
+            name = row['cell'].split('#')[0].split('/')[0]
+            found = re.search(r'-s([0-9.]+)$', name)
+            strength = float(found.group(1)) if found else 1.0
+            pair = re.sub(r'-s[0-9.]+$', '', name)
+            kind = 'equal' if pair in EQUAL else 'lower'
+            sweep[mission][strength][kind][0] += row['outcome'] == 'won'
+            sweep[mission][strength][kind][1] += 1
+            sweep[mission][strength][pair][0] += row['outcome'] == 'won'
+            sweep[mission][strength][pair][1] += 1
+        print('\nmission strength  same-tier (<=40%)   one-tier-lower   | ' + ' '.join(p[7:] for p in EQUAL + LOWER))
+        for mission in sorted(sweep):
+            for strength in sorted(sweep[mission]):
+                c = sweep[mission][strength]
+                def share(k):
+                    w, n = c[k]
+                    return f'{w}/{n} {100 * w // n if n else 0:>3}%' if n else '-'
+                per = ' '.join(f'{c[p][0]}/{c[p][1]}' if c[p][1] else '-' for p in EQUAL + LOWER)
+                flag = '' if c['equal'][1] == 0 or c['equal'][0] * 10 <= c['equal'][1] * 4 else '  <- same tier wins too often'
+                print(f'{mission:>7} {strength:>8g}  {share("equal"):>16}  {share("lower"):>15}   | {per}{flag}')
     if '--markdown' in sys.argv:
         print('\n| Mission | ' + ' | '.join(p[7:].replace('-v-', ' v ') for p in PAIRS) + ' | All |')
         print('|---' * (len(PAIRS) + 2) + '|')

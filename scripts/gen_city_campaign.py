@@ -52,6 +52,10 @@ class Mission:
     zone_cap: Dict[str, int] = field(default_factory=dict)    # keep at most N R/C/I lots per house
     army_keep: Dict[str, int] = field(default_factory=dict)   # keep at most N starting combat units
     drop_houses: Sequence[str] = ()       # houses removed from the layout entirely
+    # Enemy strength: every enemy house's starting credits x strength and the grace period / strength.
+    # Calibrated against both gradients (docs/city-campaign.md): one tier up the helper must win,
+    # at its own tier it must lose at least 60% of games.
+    strength: float = 1.0
 
 
 def set_house(sc: g.Scenario, name: str, **values) -> None:
@@ -120,6 +124,10 @@ def render(m: Mission, sc: g.Scenario) -> str:
         set_house(sc, house, Credits=amount)
     for house, brain in m.brains.items():
         set_house(sc, house, Brain=brain)
+    if m.strength != 1.0:
+        for house, body in list(sc.houses):
+            if house != "Atreides":
+                set_house(sc, house, Credits=int(round(int(body["Credits"]) * m.strength / 100.0)) * 100)
     for house in m.drop_houses:
         drop_house(sc, house)
     for house, keep in m.zone_cap.items():
@@ -137,7 +145,8 @@ def render(m: Mission, sc: g.Scenario) -> str:
     extra: List[str] = []
     events = list(m.events)
     if m.first_attack:
-        events.insert(0, ("FirstEnemyAttack", str(m.first_attack)))
+        grace = max(1, int(round(m.first_attack / m.strength)))
+        events.insert(0, ("FirstEnemyAttack", str(grace)))
     if m.objectives:
         extra.append("[OBJECTIVES]")
         extra += [f"{k}={v}" for k, v in m.objectives.items()]
@@ -488,6 +497,26 @@ MISSIONS: List[Mission] = [
 
 
 def main() -> None:
+    import argparse
+    import dataclasses
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--mission", type=int, choices=range(1, 11),
+                        help="write only this mission (a balance variant with --strength/--out)")
+    parser.add_argument("--strength", type=float, help="enemy strength multiplier for the variant")
+    parser.add_argument("--out", type=Path, help="variant file to write instead of the shipped map")
+    args = parser.parse_args()
+    if args.mission:
+        m = next(x for x in MISSIONS if x.number == args.mission)
+        if args.strength is not None:
+            m = dataclasses.replace(m, strength=m.strength * args.strength)
+        sc = m.build()
+        g.check(sc)
+        text = render(m, sc)
+        g.check_text(sc, text)
+        path = args.out or (OUT_DIR / sc.filename)
+        path.write_text(text, encoding="utf-8")
+        print(f"{path}: mission {m.number} strength {m.strength:g}")
+        return
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for m in MISSIONS:
         sc = m.build()

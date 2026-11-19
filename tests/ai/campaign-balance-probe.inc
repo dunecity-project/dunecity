@@ -185,6 +185,12 @@ int runCampaignBalanceProbe() {
     if(std::getenv("BALANCE_REWORKED")) init.useReworkedMaps();
     // The campaign menu's Maps: DuneCity (docs/city-campaign.md): DCITY_M?? as Atreides.
     if(std::getenv("BALANCE_CITY_CAMPAIGN")) init.useDuneCityCampaign(requestedMission ? std::atoi(requestedMission) : 1);
+    // A balance variant of that mission's map (scenario-matrix --city-strength).
+    if(const char* variant = std::getenv("BALANCE_CITY_CAMPAIGN_MAP")) {
+        std::ifstream file(variant);
+        if(!file) throw std::runtime_error("Cannot read the city campaign map variant");
+        init.setScenarioData(std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>()));
+    }
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
         std::ifstream file(customMap);

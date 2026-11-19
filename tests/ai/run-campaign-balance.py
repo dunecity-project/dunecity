@@ -497,6 +497,8 @@ parser.add_argument('--reworked', action='store_true',
 parser.add_argument('--city-campaign', action='store_true',
                     help='Authored campaign --scenario: play DuneCity campaign mission --mission (DCITY_M??, '
                          'Atreides; the campaign menu\'s Maps: DuneCity; docs/city-campaign.md)')
+parser.add_argument('--city-campaign-map', type=Path,
+                    help='--city-campaign: play this generated variant of the mission map (scenario-matrix --city-strength)')
 parser.add_argument('--campaign-ai-only', action='store_true',
                     help='Authored campaign scenario: sole QuantBot on the player house, selected enemy controllers, '
                          'no registered human; retain native mission victory including quotas')
@@ -1104,6 +1106,9 @@ if args.scenario:
     if args.campaign_ai_only: env['BALANCE_CAMPAIGN_AI_ONLY'] = '1'
     if args.reworked: env['BALANCE_REWORKED'] = '1'
     if args.city_campaign: env['BALANCE_CITY_CAMPAIGN'] = '1'
+    if args.city_campaign_map:
+        if not args.city_campaign: parser.error('--city-campaign-map needs --city-campaign.')
+        env['BALANCE_CITY_CAMPAIGN_MAP'] = str(args.city_campaign_map.resolve())
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
 if args.helper_style: env['BALANCE_HELPER_STYLE'] = args.helper_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.

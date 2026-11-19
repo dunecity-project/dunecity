@@ -19,6 +19,7 @@
 #define INIMAP_H
 
 #include <FileClasses/INIFile.h>
+#include <misc/DuneCityCampaign.h>
 #include <FileClasses/FileManager.h>
 
 #include <DataTypes.h>
@@ -46,8 +47,16 @@ public:
         // The single-mission picker uses Skirmish, but still loads campaign
         // scenarios. Use the same resolver so loose Tornie scenario copies
         // cannot replace the original houses outside the Tornie mod.
-        if(gameType == GameType::Campaign || gameType == GameType::Skirmish) {
+        if((gameType == GameType::Campaign || gameType == GameType::Skirmish)
+           && !(DuneCityCampaign::isCampaignFilename(this->mapname) && !mapdata.empty())) {
+            // A DuneCity campaign mission with map data supplied by its settings plays that data:
+            // the playtest harness's balance variants (tests/ai/scenario-matrix.py --city-strength).
+            // Offline play never supplies any (the next mission clears it).
             inifile = std::make_unique<INIFile>(pFileManager->openCampaignFile(this->mapname).get());
+        } else if(gameType == GameType::Campaign || gameType == GameType::Skirmish) {
+            SDL_RWops* RWops = SDL_RWFromConstMem(mapdata.c_str(), mapdata.size());
+            inifile = std::make_unique<INIFile>(RWops);
+            SDL_RWclose(RWops);
         } else if(gameType == GameType::CustomGame || gameType == GameType::CustomMultiplayer || isCoopGameType(gameType)) {
             SDL_RWops* RWops = SDL_RWFromConstMem(mapdata.c_str(), mapdata.size());
             inifile = std::make_unique<INIFile>(RWops);
