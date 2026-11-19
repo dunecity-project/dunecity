@@ -108,6 +108,7 @@ target_sources(dunelegacy_tests
         CustomGamePlayerPolicyTestCase.cpp
         CampaignPlanTestCase.cpp
         ReworkedCampaignTestCase.cpp
+        MissionObjectivesTestCase.cpp
         CoopCampaignRuntimeTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Campaign/CoopCampaignSession.cpp
         ${CMAKE_SOURCE_DIR}/src/Campaign/CoopCampaignTransition.cpp

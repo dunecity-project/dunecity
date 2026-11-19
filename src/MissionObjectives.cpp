@@ -14,19 +14,6 @@
 
 #include <algorithm>
 
-namespace MissionObjectivePolicy {
-
-std::string groupedNumber(int value) {
-    std::string digits = std::to_string(value < 0 ? -static_cast<long long>(value) : value);
-    std::string out;
-    for(size_t i = 0; i < digits.size(); ++i) {
-        if(i > 0 && (digits.size() - i) % 3 == 0) out += ',';
-        out += digits[i];
-    }
-    return value < 0 ? "-" + out : out;
-}
-
-} // namespace MissionObjectivePolicy
 
 using namespace MissionObjectivePolicy;
 

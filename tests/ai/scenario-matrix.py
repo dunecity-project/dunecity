@@ -79,7 +79,7 @@ CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBr
            'CA': 'CampaignAIPlayer'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
 DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
-CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'controls')
+CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'citycampaign', 'ladder', 'mp', 'team', 'controls')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint',
@@ -260,6 +260,13 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                               kind='campaign', mod='vanilla', partner=partner, enemy_ai='campaign',
                               enemy_difficulty=enemy_difficulty, original_rules=flag, minutes=80,
                               full=1, smoke=0, opt_in=True, measured=True))
+    # DuneCity campaign (docs/city-campaign.md), only with --categories citycampaign: the ten
+    # DCITY missions as Atreides, an idle human with a QuantBot helper one tier above the enemy
+    # QuantBots. The missions' native objectives (city goals, deadlines, conquest) end the game.
+    for partner, enemy in (('brutal', 'hard'), ('hard', 'medium'), ('medium', 'easy')):
+        cells.append(dict(category='citycampaign', name=f'helper-{partner}-v-{enemy}', kind='campaign',
+                          mod='dunecity', partner=partner, enemy_ai='quantbot', enemy_difficulty=enemy,
+                          minutes=90, full=4, smoke=0, city=True, measured=True))
     # Reworked campaign (docs/reworked-campaign.md), only with --cells: a reworked- twin of every vanilla
     # campaign cell above plays the 22 RWRK_ missions of every house with a complete reworked set on the
     # same seeds, reported against the originals
@@ -380,6 +387,8 @@ def schedule(args):
             continue
         if cell.get('opt_in') and not getattr(args, 'cells', None):
             continue
+        if cell.get('city') and 'citycampaign' not in (args.categories or ()):
+            continue
         # A reworked- twin only when --cells asks for reworked missions: an unanchored pattern for an
         # original cell ('player-brutal-v-quantbot-easy/vanilla') must not also schedule its twin.
         if cell.get('reworked') and 'reworked' not in args.cells:
@@ -390,6 +399,14 @@ def schedule(args):
         if cell['category'] == 'aaa' and getattr(args, 'aaa_seeds', None) and args.tier == 'full':
             count = args.aaa_seeds
         if count <= 0:
+            continue
+        if cell['kind'] == 'campaign' and cell.get('city'):
+            for mission in (getattr(args, 'city_missions', None) or range(1, 11)):
+                seeds = getattr(args, 'campaign_seeds', None)
+                if seeds is None:
+                    seeds = seeds_for('citycampaign', f'm{mission}', count)
+                for seed in dict.fromkeys(seeds):
+                    games.append(campaign_game(cell, 'atreides', mission, mission, seed, 'full'))
             continue
         if cell['kind'] == 'campaign':
             for house in cell.get('houses', ('atreides', 'harkonnen', 'ordos')):
@@ -471,7 +488,9 @@ def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
     rules = {'original_rules': cell['original_rules']} if cell.get('original_rules') else {}
     if cell.get('reworked'):
         rules['reworked'] = True
-    return dict(**rules, id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category='campaign',
+    if cell.get('city'):
+        rules['city_campaign'] = True
+    return dict(**rules, id=f'{cell["category"]}/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category=cell['category'],
                 cell=f'{cell["name"]}{mode}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
                 map=f'{house} level {level} mission {mission}', house=house, level=level, mission=mission,
                 partner=cell['partner'], enemy_ai=cell['enemy_ai'], enemy_difficulty=cell['enemy_difficulty'],
@@ -555,6 +574,8 @@ def command(args, binary, game, out):
             cmd += ['--original-campaign-rules', game['original_rules']]
         if game.get('reworked'):
             cmd += ['--reworked']
+        if game.get('city_campaign'):
+            cmd += ['--city-campaign']
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
@@ -635,9 +656,13 @@ def campaign_roster_error(game, houses):
     return ''
 
 
-def win_type(result, houses, campaign):
+def win_type(result, houses, campaign, lines=()):
     if not result or result.get('outcome') != 'won' or not campaign:
         return ''
+    if any('MISSION_OBJECTIVES met' in line for line in lines):
+        return 'objectives'
+    if int(result.get('win_flags') or 0) & 8 and any(h['alive'] == '1' for h in houses if h['team'] != '1'):
+        return 'survival'
     if int(result.get('quota') or 0) > 0 and int(result.get('win_flags') or 0) & 4 and \
             any(h['alive'] == '1' for h in houses if h['team'] != '1'):
         return 'quota'
@@ -693,7 +718,7 @@ def play(args, scratch, binary, game):
            'triggers': result.get('triggers', ''), 'fired': result.get('fired', ''),
            'win_flags': result.get('win_flags', ''), 'quota': result.get('quota', ''),
            'city_pop': result.get('city_pop', ''),
-           'win_type': win_type(result, houses, campaign), 'digest': digest, 'wall_s': wall,
+           'win_type': win_type(result, houses, campaign, lines), 'digest': digest, 'wall_s': wall,
            'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
            'endgame_audit': json.dumps(endgame_audit, sort_keys=True, separators=(',', ':')),
            'source_commit': summary.get('sourceCommit', ''),
@@ -1291,6 +1316,8 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--city-missions', nargs='+', type=int, choices=range(1, 11),
+                    help='citycampaign: only these DuneCity campaign missions (default all ten)')
 parser.add_argument('--campaign-seeds', nargs='+', type=int,
                     help='Explicit fresh campaign seeds, shared across selected missions; default retains '
                          'the fixed campaign gate seeds. Does not alter non-campaign games.')

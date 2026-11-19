@@ -95,7 +95,15 @@ inline bool held(Uint32 since, Uint32 now, Uint32 holdCycles) {
 }
 
 /// "8,000" for 8000: the targets are read by players, not engineers.
-std::string groupedNumber(int value);
+inline std::string groupedNumber(int value) {
+    const std::string digits = std::to_string(value < 0 ? -static_cast<long long>(value) : static_cast<long long>(value));
+    std::string out;
+    for(size_t i = 0; i < digits.size(); ++i) {
+        if(i > 0 && (digits.size() - i) % 3 == 0) out += ',';
+        out += digits[i];
+    }
+    return value < 0 ? "-" + out : out;
+}
 
 } // namespace MissionObjectivePolicy
 

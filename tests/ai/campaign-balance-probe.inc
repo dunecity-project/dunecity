@@ -183,6 +183,8 @@ int runCampaignBalanceProbe() {
     }
     // The campaign menu's Maps: Reworked (docs/reworked-campaign.md), in either campaign mode.
     if(std::getenv("BALANCE_REWORKED")) init.useReworkedMaps();
+    // The campaign menu's Maps: DuneCity (docs/city-campaign.md): DCITY_M?? as Atreides.
+    if(std::getenv("BALANCE_CITY_CAMPAIGN")) init.useDuneCityCampaign(requestedMission ? std::atoi(requestedMission) : 1);
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
         std::ifstream file(customMap);

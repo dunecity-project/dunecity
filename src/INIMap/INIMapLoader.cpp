@@ -1474,7 +1474,7 @@ HOUSETYPE INIMapLoader::getHouseID(const std::string& name) {
 
 void INIMapLoader::loadObjectivesAndEvents() {
     auto& objectives = pGame->getMissionObjectives();
-    objectives.loadFromINI(*inifile);
+    objectives.loadFromINI(*inifile.get());
     const int timeout = inifile->getIntValue("BASIC", "TIMEOUT", 0);
     if(timeout > 0 && (pGame->winFlags & WINLOSEFLAGS_TIMEOUT) != 0) {
         objectives.deadlineCycle = MILLI2CYCLES(timeout * 60 * 1000);
