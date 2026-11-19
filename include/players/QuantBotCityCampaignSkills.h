@@ -55,8 +55,12 @@ constexpr std::array<const char*, kSkillCount> kTierKeys{{
 }};
 
 /// Thinking speed: a tier decides on one AI pass in this many (1 = every pass, about 0.8 s). Slower
-/// tiers zone, produce and command their units less often. Indexed Easy..Brutal.
-constexpr std::array<int, 4> kDefaultThinkPasses{{1, 1, 1, 1}};
+/// tiers zone, produce and command their units less often. Indexed Easy..Brutal. The skills above moved
+/// a Hard helper's wins by at most a few of 80; a Hard helper deciding on every 2nd, 3rd or 4th pass
+/// lost 7, 12 and 20 of its 24 (docs/city-campaign.md, "The skill ladder"). With 8/6/3/1 a Brutal helper
+/// won 18 more of 80 games against Hard enemies than a Hard helper, and a Hard helper 23 more against
+/// Medium enemies than a Medium one.
+constexpr std::array<int, 4> kDefaultThinkPasses{{8, 6, 3, 1}};
 constexpr std::array<const char*, 4> kThinkKeys{{
     "CityCampaignThinkEasy", "CityCampaignThinkMedium", "CityCampaignThinkHard", "CityCampaignThinkBrutal",
 }};

@@ -92,5 +92,7 @@ TEST_CASE("City campaign skill ladder: thinking speed", "[quantbot][citycampaign
     const std::array<int, 4> wild{{0, 99, 2, -3}};
     CHECK(thinkPasses(Easy, wild, true) == 1);
     CHECK(thinkPasses(Medium, wild, true) == kMaxThinkPasses);
-    for (int passes : kDefaultThinkPasses) CHECK(passes == 1);
+    // Each tier thinks at least as fast as the one below; Brutal on every pass.
+    for (int tier = Easy; tier < Brutal; ++tier) CHECK(kDefaultThinkPasses[tier] >= kDefaultThinkPasses[tier + 1]);
+    CHECK(kDefaultThinkPasses[Brutal] == 1);
 }
