@@ -936,6 +936,21 @@ def load(dirs):
     return games, houses
 
 
+def replay_problem(original, replay):
+    """Why a '#replay' game fails to prove determinism, or None when both final digests match.
+
+    A game that never printed its final digest records an empty one, and two empty digests
+    must not pass as a reproduced game."""
+    if original is None:
+        return 'replay has no original game'
+    if not original['digest'] or not replay['digest']:
+        return (f'replay check has no final digest (original {original["digest"] or "missing"}, '
+                f'replay {replay["digest"] or "missing"})')
+    if original['digest'] != replay['digest']:
+        return f'replay diverged: final digest {replay["digest"]} != {original["digest"]}'
+    return None
+
+
 def smoke_checks(args, results):
     games, houses = load([results])
     ok = True
@@ -961,9 +976,9 @@ def smoke_checks(args, results):
                 if sortied < 2:
                     problems.append(f'only {sortied} house(s) left base or killed anything')
         if gid.endswith('#replay'):
-            original = games.get(gid[:-len('#replay')])
-            if original and original['digest'] != game['digest']:
-                problems.append(f'replay diverged: final digest {game["digest"]} != {original["digest"]}')
+            problem = replay_problem(games.get(gid[:-len('#replay')]), game)
+            if problem:
+                problems.append(problem)
         ok &= not problems
         print(f'  {"PASS" if not problems else "FAIL"} {gid}: {outcome_label(game)} {game["winner"]} '
               f'{game["minutes"]} min{"; " + "; ".join(problems) if problems else ""}')

@@ -1,4 +1,5 @@
-"""Campaign fixture scheduling, command and captured-roster checks; no builds or games."""
+"""Campaign fixture scheduling, command and captured-roster checks, and the smoke replay
+check; no builds or games."""
 import ast
 from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
@@ -299,6 +300,20 @@ class CampaignCoverageTests(unittest.TestCase):
         games = namespace['schedule'](matrix['argparse'].Namespace(cases='campaign', rounds=1))
         self.assertEqual(games[0]['case'], 'campaign')
         self.assertEqual(games[0]['id'], 'campaign-quantbot-easy-full/0')
+
+
+class SmokeReplayCheckTests(unittest.TestCase):
+    # The smoke tier replays the Construction Yard duel to prove determinism. A game that
+    # never printed its final digest records '', and '' == '' must not count as reproduced.
+    def test_replay_needs_both_final_digests_and_a_match(self):
+        replay_problem = matrix['replay_problem']
+        game = lambda digest: {'digest': digest}
+        self.assertIsNone(replay_problem(game('838d4011501c1cd2'), game('838d4011501c1cd2')))
+        self.assertIn('diverged', replay_problem(game('838d4011501c1cd2'), game('9a39d8e612300c36')))
+        for original, replay in (('', ''), ('838d4011501c1cd2', ''), ('', '838d4011501c1cd2')):
+            with self.subTest(original=original, replay=replay):
+                self.assertIn('no final digest', replay_problem(game(original), game(replay)) or '')
+        self.assertIn('no original game', replay_problem(None, game('838d4011501c1cd2')))
 
 
 if __name__ == '__main__':
