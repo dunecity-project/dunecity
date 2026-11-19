@@ -316,7 +316,7 @@ if(APPLE)
     dunecity_add_test(gui nightly LABELS "macos" NAME dunelegacy_gpu_tests
         COMMAND dunelegacy_tests "[rendering],[gpu]")
     set_tests_properties(dunelegacy_gpu_tests PROPERTIES RUN_SERIAL TRUE
-        ENVIRONMENT "DUNECITY_RENDERER_TEST_GPU=1;DUNE2R_GPU_TEST=1;DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}")
+        ENVIRONMENT "DUNECITY_RENDERER_TEST_GPU=1;DUNE2R_GPU_TEST=1;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}")
 endif()
 dunecity_add_test(headless integration NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threading]")
 dunecity_add_test(headless integration NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
@@ -565,7 +565,7 @@ endif()
 # it falls back to the working directory and so to the test target's POST_BUILD
 # copy of data/, which carries no dependency on the maps themselves.
 set_tests_properties(dunelegacy_tests lobby_authorization_tests workshop_store_tests map_chooser_tests dune2r_presentation_tests rts_controls_tests skirmish_generator_tests ${SKIRMISH_SWEEP_TESTS} ${SKIRMISH_MATRIX_TESTS} civilization_wars_tests sidebar_grid_tests classic_desert_ui_tests PROPERTIES
-    ENVIRONMENT "DUNECITY_DATADIR=${CMAKE_SOURCE_DIR}/data;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
+    ENVIRONMENT "DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
 )
 
 # Copy test data to build directory
