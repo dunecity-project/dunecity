@@ -320,6 +320,12 @@ struct QuantBotConfig {
         /// three times the spice still needed, so the mission can be won on credits.
         /// Hashed; default on. OFF retains unrestricted spending.
         bool campaignHelperQuotaSaving;
+        /// DuneCity campaign goals ([OBJECTIVES], docs/city-campaign.md): the QuantBot serving the
+        /// objective house plans for them - it banks a treasury goal (silos first, then spending
+        /// only the surplus above the goal once half of it is banked, unless the base is in a
+        /// military emergency), lifts its city ceiling to a population goal, and funds police
+        /// for a crime or land value goal. 0 OFF, 1 ON (default). Only maps with goals change.
+        int cityObjectivePlanning;
         /// Repair-yard denial is exclusive to Easy campaign enemies. Hashed OFF/ON control.
         bool campaignRepairRoleFix;
         /// Campaign yards upgrade only out of surplus after income and power. Hashed OFF/ON control.

@@ -539,6 +539,7 @@ void QuantBot::build(int militaryValue) {
     planVanillaCoreDefence(pass);
     planCityResearchOrder(pass);
     planTechSavings(pass);
+    planMissionObjectives(pass);
     planCapitalCandidates(pass);
     planVanillaBoldCapital(pass);
     chooseCapitalPlan(pass);
@@ -1422,6 +1423,8 @@ void QuantBot::planCityState(BuildPass& pass) {
             serviceBudget=cityLandValueBudget(pass.money,committedPoliceCost);
             affordable=serviceBudget.funding;
         }
+        // A crime goal is the mission: fund every station fully while there is working cash.
+        if (objectiveTarget(MissionObjectivePolicy::Crime) > 0 && pass.money >= 1000) affordable = 100;
         // Cuts enforce the recurring limit immediately. Recovered headroom
         // waits for review; the optional longer small-increase review prevents
         // the deadband from leaving a solvent city's funding permanently low.
@@ -1473,6 +1476,10 @@ void QuantBot::planCityState(BuildPass& pass) {
 }
 
 bool QuantBot::cityLandValueServiceScope() const {
+    // A crime or land value goal needs the police services from the first developed block.
+    if (currentGame && currentGame->isCitySimEnabled()
+        && (objectiveTarget(MissionObjectivePolicy::Crime) > 0 || objectiveTarget(MissionObjectivePolicy::LandValue) > 0))
+        return true;
     const auto& force=botConfig().force;
     return (force.cityLandValueServices || force.cityGrowthStageTax) && citySpiceFfaScope(4);
 }
@@ -4295,6 +4302,28 @@ Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builde
     const int houseID = getHouse()->getHouseID();
     const auto& data = currentGame->objectData.data;
     const int capacity = getHouse()->getCapacity();
+    // A treasury goal needs the storage to hold it: earned credits never exceed capacity.
+    if (const int goal = objectiveTarget(MissionObjectivePolicy::Credits); goal > 0) {
+        int64_t projected = int64_t(capacity) + getHouse()->getStartingCredits().lround();
+        bool pending = false;
+        for (Uint32 item=Structure_FirstID; item<=Structure_LastID; ++item) {
+            if (!isStructure(item) || data[item][houseID].capacity<=0 || item==Structure_ConstructionYard) continue;
+            const int queued = std::max(0,rawPlannedItemCount(pass,item)-getHouse()->getNumItems(item));
+            pending |= queued>0;
+            projected += int64_t(queued)*data[item][houseID].capacity;
+        }
+        if (!pending && projected < int64_t(goal) + 1000 && !builder->isUpgrading()
+            && builder->getProductionQueueSize()==0 && getHouse()->hasPower()
+            && campaignAvailableToBuild(builder,Structure_Silo)
+            && pass.money>=buildingCapitalCost(pass,Structure_Silo)) {
+            const Coord site=findPlaceLocation(Structure_Silo);
+            if (site.isValid() && dangerAt(site,getStructureSize(Structure_Silo))==0) {
+                traceDecision("objective_storage",AITelemetry::Record().set("goal",goal)
+                    .set("projected_capacity",projected).set("credits",getHouse()->getCredits()));
+                return Structure_Silo;
+            }
+        }
+    }
     if (!botConfig().force.storageCapacity && !pass.techSavings) {
         const int pendingCapacity = std::max(0,pass.itemCount[Structure_Refinery]
             -getAIRefineryBays())*data[Structure_Refinery][houseID].capacity;
@@ -6336,4 +6365,22 @@ bool QuantBot::balanceRefineryReturn(const Harvester* harvester) {
         .set("object", harvester->getObjectID()).set("from", current->getObjectID())
         .set("to", best->getObjectID()).set("saved_cycles", currentCycles - bestCycles));
     return true;
+}
+
+
+void QuantBot::planMissionObjectives(BuildPass& pass) {
+    // A treasury goal is won by what the house holds, so once half of it is banked the bot spends
+    // only the surplus above the goal - unless the base is in a military emergency, when the army
+    // keeps its money (losing the base loses the mission anyway).
+    const int goal = objectiveTarget(MissionObjectivePolicy::Credits);
+    if (goal <= 0) return;
+    const int banked = getHouse()->getCredits();
+    if (banked * 2 < goal || pass.militaryEmergency) return;
+    const int surplus = std::max(0, banked - goal);
+    if (pass.money > surplus) {
+        if (pass.emitStatsLog && AITelemetry::log().enabled())
+            traceDecision("objective_treasury_hold",AITelemetry::Record().set("goal",goal).set("banked",banked)
+                .set("spendable",pass.money).set("surplus",surplus));
+        pass.money = surplus;
+    }
 }

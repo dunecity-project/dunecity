@@ -223,6 +223,10 @@ public:
     bool campaignCanAddHarvester() const;
     /// Full campaign policy, plus Single mission/co-op when its hashed switch is on.
     bool campaignPolicyApplies() const;
+    /// This bot serves the house whose [OBJECTIVES] goals decide the mission (cityObjectivePlanning).
+    bool objectivePlanningActive() const;
+    /// The goal's target when objectivePlanningActive() and the map sets it, else 0.
+    int objectiveTarget(int goal) const;
     int campaignHarvesterCeiling() const; // -1 outside policy; zero forbids new workers
     void doProduceItem(const BuilderBase* builder, Uint32 itemID) const;
 
@@ -1997,6 +2001,8 @@ private:
     /// Net-income buckets, a legal next technology and its bounded savings plan.
     bool simpleTechPolicyActive() const;
     void planTechSavings(BuildPass& pass);
+    /// DuneCity campaign goals: keep a treasury goal's bank (docs/city-campaign.md).
+    void planMissionObjectives(BuildPass& pass);
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool incomeTechAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);

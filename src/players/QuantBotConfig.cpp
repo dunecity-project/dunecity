@@ -384,6 +384,7 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignAdaptiveReadiness = true;
     force.campaignAllyStrengthFloor = true;
     force.campaignHelperQuotaSaving = true;
+    force.cityObjectivePlanning = 1;
     force.campaignDeferredYardUpgrade = true;
     force.campaignRepairRoleFix = true;
     force.campaignPowerExperiment = 0;
@@ -873,6 +874,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
         iniFile.setBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
+        iniFile.setIntValue("Force Concentration", "CityObjectivePlanning", force.cityObjectivePlanning);
         iniFile.setBoolValue("Force Concentration", "CampaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
         iniFile.setBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
         iniFile.setIntValue("Force Concentration", "CampaignPowerExperiment", force.campaignPowerExperiment);
@@ -1200,6 +1202,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignAdaptiveReadiness = iniFile.getBoolValue("Force Concentration", "CampaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     force.campaignAllyStrengthFloor = iniFile.getBoolValue("Force Concentration", "CampaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
     force.campaignHelperQuotaSaving = iniFile.getBoolValue("Force Concentration", "CampaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
+    force.cityObjectivePlanning = std::clamp(iniFile.getIntValue("Force Concentration", "CityObjectivePlanning", force.cityObjectivePlanning), 0, 1);
     force.campaignDeferredYardUpgrade = iniFile.getBoolValue("Force Concentration", "CampaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
     force.campaignRepairRoleFix = iniFile.getBoolValue("Force Concentration", "CampaignRepairRoleFix", force.campaignRepairRoleFix);
     force.campaignPowerExperiment = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignPowerExperiment", force.campaignPowerExperiment), 0, 2);
@@ -1899,6 +1902,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignAdaptiveReadiness", force.campaignAdaptiveReadiness);
     addNamed("campaignAllyStrengthFloor", force.campaignAllyStrengthFloor);
     addNamed("campaignHelperQuotaSaving", force.campaignHelperQuotaSaving);
+    // Hashed only when it differs from the default, so configurations without it keep their identity.
+    if (force.cityObjectivePlanning != 1) addNamed("cityObjectivePlanning", force.cityObjectivePlanning);
     addNamed("campaignDeferredYardUpgrade", force.campaignDeferredYardUpgrade);
     addNamed("campaignRepairRoleFix", force.campaignRepairRoleFix);
     addNamed("campaignPowerExperiment", force.campaignPowerExperiment);

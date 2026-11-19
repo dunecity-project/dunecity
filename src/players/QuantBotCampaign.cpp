@@ -28,6 +28,9 @@ int QuantBot::getCityPopulationLimit(int mapArea) const {
     // helpers in a human-controlled house and support-mode controllers.
     const bool hardCityMatch = difficulty == Difficulty::Hard && botConfig().force.hardCityMatch;
     int limit = QuantBotCityPolicy::populationLimit(static_cast<int>(difficulty), mapArea, hardCityMatch);
+    // A population goal is never above the bot's own ceiling: the house it serves must reach it.
+    if (const int goal = objectiveTarget(MissionObjectivePolicy::Population); goal > 0 && limit != QuantBotCityPolicy::kUnlimited)
+        limit = std::max(limit, goal + goal / 4);
     // Hard grows past its base ceiling while another house's city (last census, the same
     // structure population the ceiling is checked against) is bigger, up to that city.
     const auto* sim = currentGame->getCitySimulation();
@@ -233,6 +236,19 @@ bool QuantBot::campaignPolicyApplies() const {
     if(currentGame && currentGame->getGameInitSettings().isDuneCityCampaign()) return false;
     return currentGame && (isCampaignGameType(currentGame->gameType)
         || (isScenarioGameType(currentGame->gameType) && botConfig().force.singleMissionCampaignPolicy));
+}
+
+bool QuantBot::objectivePlanningActive() const {
+    if (!currentGame || botConfig().force.cityObjectivePlanning == 0 || switchedOff() || getHouse() == nullptr) return false;
+    if (!currentGame->getMissionObjectives().isActive()) return false;
+    const House* outcome = currentGame->getOutcomeHouse();
+    return outcome != nullptr && outcome->getTeamID() == getHouse()->getTeamID();
+}
+
+int QuantBot::objectiveTarget(int goal) const {
+    if (goal < 0 || goal >= MissionObjectivePolicy::GoalCount || !objectivePlanningActive()) return 0;
+    const auto& targets = currentGame->getMissionObjectives().targets;
+    return targets.used[goal] ? std::max(1, targets.value[goal]) : 0;
 }
 
 bool QuantBot::isCampaignEnemy() const {

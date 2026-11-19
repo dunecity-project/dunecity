@@ -113,7 +113,9 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 
     // Single missions already use campaign mode, including the legacy OFF arm.
     // Policy scope is separate from campaign progression and saved AI mode.
-    if (isScenarioGameType(currentGame->gameType) || currentGame->gameType == GameType::LoadSavegame) {
+    // The DuneCity campaign's maps are Custom-Game city maps: every QuantBot keeps Custom rules there.
+    if ((isScenarioGameType(currentGame->gameType) || currentGame->gameType == GameType::LoadSavegame)
+        && !currentGame->getGameInitSettings().isDuneCityCampaign()) {
 		gameMode = GameMode::Campaign;
 	}
 	else {
