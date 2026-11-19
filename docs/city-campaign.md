@@ -15,8 +15,29 @@ follow each other in order; a lost mission is replayed. There is no region map.
 
 ## Missions
 
-The mission table, objectives and measured win rates are in the "Playtest results" section below;
-`scripts/gen_city_campaign.py` is the source of truth for every number.
+`scripts/gen_city_campaign.py` is the source of truth for every number; this table is generated
+from the shipped maps. "Grace" is `FirstEnemyAttack`.
+
+| # | Mission | Map | Atreides credits | Enemy houses (credits) | Grace | Win |
+|---|---|---|---|---|---|---|
+| 1 | Sihaya Basin | 128x128 | 12,000 | Harkonnen 5,000 | 10 min | 20,000 people, or destroy every enemy house |
+| 2 | Hagal Flats | 128x128 | 12,000 | Ordos 4,000, Harkonnen 4,000 | 9 min | 30,000 credits, or destroy every enemy house |
+| 3 | Ash Quarter | 128x128 | 14,000 | Harkonnen 7,000, Mercenary 4,000 | 9 min | 75,000 people and crime at most 63, or destroy every enemy house |
+| 4 | Arrakeen Blackout | 128x128 | 15,000 | Mercenary 6,000, Harkonnen 6,000 | 8 min | 60,000 people and land value at least 90, or destroy every enemy house |
+| 5 | Cielago Watch | 96x96 | 13,000 | Harkonnen 10,000, Ordos 10,000 | 3 min | hold out 30 min, or destroy every enemy house |
+| 6 | Harg Pass Convoy | 160x128 | 10,000 | Harkonnen 14,000, Mercenary 8,000 | 3 min | destroy every enemy house |
+| 7 | Shield Wall Breach | 144x128 | 16,000 | Harkonnen 7,000, Sardaukar 5,000 | 10 min | 50,000 people, or destroy every enemy house; the wall opens at minute 12 |
+| 8 | Tuono Crossing | 160x96 | 14,000 | Harkonnen 4,000, Sardaukar 6,000 | 13 min | 12,000 people and 30,000 credits, or destroy every enemy house |
+| 9 | Carthag Vise | 128x128 | 21,000 | Harkonnen 4,000, Ordos 4,000, Sardaukar 1,500 | 10 min | destroy every enemy house |
+| 10 | All Against Atreides | 160x160 | 28,000 | Fremen, Sardaukar, Ordos, Harkonnen 4,500 each | 5 min | destroy every enemy house |
+
+Missions 1-6, 8 and 9 keep the terrain and towns of the city scenarios of the same name
+(`docs/city-scenarios.md`), with enemy cities and armies trimmed where the generator says so.
+Mission 7 is new: the Atreides city sits in a worm-free basin ringed by the Shield Wall, reached
+only through two narrow western passes; at minute 12 the eastern wall opens (the enemy route drops
+from 142 to 82 tiles) and two sandworms surface in the gap. Mission 10 is the bundled All against
+Atreides premise rebuilt for city building: a 160x160 map with a broad Atreides plateau in the
+north and four allied rival plateaus, each with its own spice and room to grow a city.
 
 ## Mission goals: `[OBJECTIVES]`
 
