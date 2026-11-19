@@ -126,6 +126,9 @@ public:
     /// [EVENTS] FirstEnemyAttack=N: no house hostile to the objective house launches an attack
     /// wave before this cycle (0 = none). A campaign mission's opening grace period.
     Uint32 enemyFirstAttackCycle = 0;
+    /// The objective house's treasury at the first evaluation (-1 before it): a treasury goal's
+    /// progress is what the house has added since.
+    Sint32 startCredits = -1;
 
     bool isActive() const { return targets.any(); }
     /// The opening grace period still holds at @a cycle.
@@ -147,6 +150,9 @@ public:
 
     /// One sentence for the news ticker at the start of the mission.
     std::string summary() const;
+
+    /// The two-minute sample last logged (runtime only, never saved or simulated).
+    Uint32 lastSampleBucket = INVALID_GAMECYCLE;
 
     /// Evaluated every this many cycles (about half a second at the default speed).
     static constexpr Uint32 kEvaluateEveryCycles = 32;

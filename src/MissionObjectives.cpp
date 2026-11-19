@@ -51,6 +51,7 @@ std::string goalName(Goal goal, int target) {
 void MissionObjectives::loadFromINI(const INIFile& inifile) {
     targets = Targets{};
     enemyFirstAttackCycle = 0;
+    startCredits = -1;
     holdingSinceCycle = INVALID_GAMECYCLE;
     announcedMask = 0;
     if(!inifile.hasSection(kSection)) return;
@@ -75,6 +76,7 @@ void MissionObjectives::save(OutputStream& stream) const {
     stream.writeUint32(deadlineCycle);
     stream.writeBool(deadlineWins);
     stream.writeUint32(enemyFirstAttackCycle);
+    stream.writeSint32(startCredits);
 }
 
 void MissionObjectives::load(InputStream& stream) {
@@ -87,6 +89,7 @@ void MissionObjectives::load(InputStream& stream) {
     deadlineCycle = stream.readUint32();
     deadlineWins = stream.readBool();
     enemyFirstAttackCycle = stream.readUint32();
+    startCredits = stream.readSint32();
 }
 
 Metrics MissionObjectives::measure(const Game& constGame, const House& house) {
@@ -118,6 +121,7 @@ void MissionObjectives::update(Game& game) {
     House* house = game.getOutcomeHouse();
     if(house == nullptr) return;
     const Metrics m = measure(game, *house);
+    if(startCredits < 0) startCredits = m.credits;
 
     constexpr Uint32 kSummaryShown = 1u << 31;
     if((announcedMask & kSummaryShown) == 0) {
@@ -133,10 +137,13 @@ void MissionObjectives::update(Game& game) {
         game.addToNewsTicker(_("Objective reached: ") + goalName(static_cast<Goal>(g), targets.value[g]));
     }
 
-    // A compact trace every five game minutes (read by tests/ai/scenario-matrix.py).
-    if(now % MILLI2CYCLES(300000) == 0)
+    // A compact trace every two game minutes (read by tests/ai/scenario-matrix.py). The bucket
+    // is runtime-only: it decides nothing but a log line.
+    if(const Uint32 bucket = now / MILLI2CYCLES(120000); bucket != lastSampleBucket) {
+        lastSampleBucket = bucket;
         SDL_Log("MISSION_OBJECTIVES_SAMPLE: minute=%u population=%d credits=%d crime=%d land=%d pollution=%d sampled=%d enemies=%d",
                 now / MILLI2CYCLES(60000), m.population, m.credits, m.crime, m.landValue, m.pollution, int(m.sampled), m.enemiesLeft);
+    }
 
     const bool all = allMet(targets, m);
     holdingSinceCycle = holdingSince(all, holdingSinceCycle, now);

@@ -6367,13 +6367,17 @@ bool QuantBot::balanceRefineryReturn(const Harvester* harvester) {
 
 
 void QuantBot::planMissionObjectives(BuildPass& pass) {
-    // A treasury goal is won by what the house holds, so once half of it is banked the bot spends
+    // A treasury goal is won by what the house holds, so once it has banked half of what the goal
+    // asks beyond its starting treasury, the bot spends
     // only the surplus above the goal - unless the base is in a military emergency, when the army
     // keeps its money (losing the base loses the mission anyway).
     const int goal = objectiveTarget(MissionObjectivePolicy::Credits);
     if (goal <= 0) return;
     const int banked = getHouse()->getCredits();
-    if (banked * 2 < goal || pass.militaryEmergency) return;
+    // Progress is what the house has added to its starting treasury: starting cash already near
+    // the goal must not freeze the opening build-up (Tuono, v3: 14,000 of 15,000 at minute 0).
+    const int start = std::max(0, int(currentGame->getMissionObjectives().startCredits));
+    if (goal <= start || int64_t(banked - start) * 2 < int64_t(goal - start) || pass.militaryEmergency) return;
     const int surplus = std::max(0, banked - goal);
     if (pass.money > surplus) {
         if (pass.emitStatsLog && AITelemetry::log().enabled())

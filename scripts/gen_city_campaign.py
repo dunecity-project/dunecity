@@ -382,13 +382,13 @@ MISSIONS: List[Mission] = [
     Mission(
         1, "Sihaya Basin", g.scenario_sihaya_basin,
         briefing=("The Basin township has outgrown its shelf. CHOAM has released two mothballed MCVs. "
-                  "Settle the open rock islands and grow the colony to 15,000 people. "
+                  "Settle the open rock islands and grow the colony to 20,000 people. "
                   "The Harkonnen on the eastern shelf will raid your harvesters; destroying them also ends the mission."),
         win="Sihaya is a city now. The Landsraad has noticed.",
         lose="The Basin is lost. The Harkonnen own the shelf.",
-        objectives={"Population": 15000, "HoldSeconds": 60},
+        objectives={"Population": 20000, "HoldSeconds": 60},
         credits={"Atreides": 12000, "Harkonnen": 5000},
-        zone_cap={"Harkonnen": 30}, first_attack=12,
+        zone_cap={"Harkonnen": 30}, first_attack=10,
     ),
     Mission(
         2, "Hagal Flats", g.scenario_hagal_flats,
@@ -399,7 +399,7 @@ MISSIONS: List[Mission] = [
         lose="Hagal is bankrupt and overrun.",
         objectives={"Credits": 30000, "HoldSeconds": 30},
         credits={"Atreides": 12000, "Ordos": 4000, "Harkonnen": 4000},
-        zone_cap={"Ordos": 16, "Harkonnen": 16}, first_attack=10,
+        zone_cap={"Ordos": 16, "Harkonnen": 16}, first_attack=9,
     ),
     Mission(
         3, "Ash Quarter", g.scenario_ash_quarter,
@@ -410,26 +410,27 @@ MISSIONS: List[Mission] = [
         lose="The gangs and their paymasters have taken the city.",
         objectives={"Population": 45000, "MaxCrime": 63, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 7000, "Mercenary": 4000},
-        army_keep={"Harkonnen": 6}, first_attack=10,
+        army_keep={"Harkonnen": 6}, first_attack=9,
     ),
     Mission(
         4, "Arrakeen Blackout", g.scenario_arrakeen_blackout,
         briefing=("Arrakeen has lost its power grid and its people are leaving. Restore power, rebuild the "
-                  "districts and lift the city to 40,000 people with middle-class land value. "
+                  "districts and lift the city to 60,000 people with middle-class land value. "
                   "Harkonnen and Mercenary raiders will strike while the lights are out."),
         win="Arrakeen shines again. The Duke's capital is secure.",
         lose="Arrakeen is dark and its people are gone.",
-        objectives={"Population": 40000, "MinLandValue": 80, "HoldSeconds": 60},
-        credits={"Atreides": 15000, "Mercenary": 5000, "Harkonnen": 5000}, first_attack=9,
+        objectives={"Population": 60000, "MinLandValue": 90, "HoldSeconds": 60},
+        credits={"Atreides": 15000, "Mercenary": 6000, "Harkonnen": 6000}, first_attack=8,
     ),
     Mission(
         5, "Cielago Watch", g.scenario_cielago_watch,
         briefing=("The Watch holds a relay mesa between Harkonnen and Ordos territory. CHOAM will lift the "
-                  "garrison out in 30 minutes. Until then the Watch must hold."),
+                  "garrison out in 30 minutes. Until then the Watch must hold - or destroy both houses first."),
         win="The Watch held. The garrison is relieved with honour.",
         lose="The Watch has fallen.",
-        win_flags=10, lose_flags=8, timeout=30,
-        credits={"Atreides": 14000, "Harkonnen": 6000, "Ordos": 6000}, first_attack=6,
+        # Holding out wins at the timer; destroying both houses wins earlier.
+        win_flags=11, lose_flags=9, timeout=30,
+        credits={"Atreides": 14000, "Harkonnen": 8000, "Ordos": 8000}, first_attack=5,
     ),
     Mission(
         6, "Harg Pass Convoy", g.scenario_harg_pass_convoy,
@@ -437,7 +438,7 @@ MISSIONS: List[Mission] = [
                   "links, grow what you can and destroy the Harkonnen and Mercenary bases that raid them."),
         win="The pass is open. Spice flows to Arrakeen again.",
         lose="The pass is closed and the towns are burning.",
-        credits={"Atreides": 10000, "Harkonnen": 9000, "Mercenary": 5000}, first_attack=6,
+        credits={"Atreides": 10000, "Harkonnen": 10000, "Mercenary": 6000}, first_attack=5,
     ),
     Mission(
         7, "Shield Wall Breach", scenario_shield_wall_breach,
@@ -447,18 +448,19 @@ MISSIONS: List[Mission] = [
                   "through the breach. Fortify the basin, then destroy both houses."),
         win="The breach is held and the invaders are destroyed. The basin is safe.",
         lose="The Shield Wall fell, and your city with it.",
-        credits={"Atreides": 12000, "Harkonnen": 8000, "Sardaukar": 6000}, first_attack=8,
+        credits={"Atreides": 16000, "Harkonnen": 6000, "Sardaukar": 4000},
+        army_keep={"Harkonnen": 4, "Sardaukar": 3}, first_attack=10,
         events=[("Breach1", "12,%d,%d,%d,%d,2" % SHIELD_WALL_BREACH),
                 ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen armies are coming through.")],
     ),
     Mission(
         8, "Tuono Crossing", g.scenario_tuono_crossing,
         briefing=("No construction yard, a supply ledge and a mobile column. Deploy the MCV on open rock, "
-                  "found a colony of 10,000 people and bank 15,000 credits before the Harkonnen and Sardaukar "
+                  "found a colony of 10,000 people and bank 35,000 credits before the Harkonnen and Sardaukar "
                   "can stop you - or destroy them both."),
         win="Tuono Crossing is a city. The Emperor's legions withdraw.",
         lose="The expedition has failed.",
-        objectives={"Population": 10000, "Credits": 15000, "HoldSeconds": 60},
+        objectives={"Population": 10000, "Credits": 35000, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 5000, "Sardaukar": 8000}, first_attack=10,
     ),
     Mission(
@@ -467,8 +469,8 @@ MISSIONS: List[Mission] = [
                   "on the ridge. Hold the core, keep the refineries running and destroy all three hostile houses."),
         win="The Vise is broken. Carthag is ours.",
         lose="Carthag has fallen to the Harkonnen.",
-        credits={"Atreides": 14000, "Harkonnen": 8000, "Ordos": 8000, "Sardaukar": 4000},
-        zone_cap={"Harkonnen": 30, "Ordos": 30}, first_attack=6,
+        credits={"Atreides": 18000, "Harkonnen": 6000, "Ordos": 6000, "Sardaukar": 3000},
+        zone_cap={"Harkonnen": 20, "Ordos": 20}, army_keep={"Harkonnen": 3, "Ordos": 3}, first_attack=8,
     ),
     Mission(
         10, "All Against Atreides", scenario_all_against_atreides_city,
@@ -476,7 +478,8 @@ MISSIONS: List[Mission] = [
                   "then destroy every one of them."),
         win="House Atreides stands alone on Arrakis. The campaign is won.",
         lose="House Atreides has fallen.",
-        first_attack=5,
+        credits={"Atreides": 40000, "Fremen": 3000, "Sardaukar": 3000, "Ordos": 3000, "Harkonnen": 3000},
+        army_keep={"Fremen": 3, "Sardaukar": 3, "Ordos": 3, "Harkonnen": 3}, first_attack=6,
     ),
 ]
 
