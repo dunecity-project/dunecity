@@ -54,6 +54,20 @@ constexpr std::array<const char*, kSkillCount> kTierKeys{{
     "CityCampaignSkillGrowWhenSafe",
 }};
 
+/// Thinking speed: a tier decides on one AI pass in this many (1 = every pass, about 0.8 s). Slower
+/// tiers zone, produce and command their units less often. Indexed Easy..Brutal.
+constexpr std::array<int, 4> kDefaultThinkPasses{{1, 1, 1, 1}};
+constexpr std::array<const char*, 4> kThinkKeys{{
+    "CityCampaignThinkEasy", "CityCampaignThinkMedium", "CityCampaignThinkHard", "CityCampaignThinkBrutal",
+}};
+constexpr int kMaxThinkPasses = 8;
+
+/// AI passes per decision for this difficulty: the tier's value on the ladder, 1 elsewhere.
+inline int thinkPasses(int difficulty, const std::array<int, 4>& table, bool ladder) {
+    if (!ladder || difficulty < Easy || difficulty > Brutal) return 1;
+    return table[difficulty] < 1 ? 1 : table[difficulty] > kMaxThinkPasses ? kMaxThinkPasses : table[difficulty];
+}
+
 /// Behaviour outside the ladder. Skills the AI already had stay on for every tier; EarlyAttack stays
 /// Brutal's own; GrowthTax, HarvesterTargets, ArmyFirst and GrowWhenSafe are new and stay off.
 inline bool nativeSkill(Skill skill, int difficulty) {

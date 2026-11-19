@@ -1304,6 +1304,8 @@ private:
     /// Whether this house plays a skill of the DuneCity campaign skill ladder
     /// (QuantBotCityCampaignSkills.h): its tier's skills in campaign missions, native behaviour elsewhere.
     bool cityCampaignSkill(QuantBotCityCampaignSkills::Skill skill) const;
+    /// AI passes per decision on the campaign ladder (thinking speed); 1 everywhere else.
+    int cityCampaignThinkPasses() const;
     /// The game is a DuneCity campaign mission; cached, the init settings never change in a game.
     bool duneCityCampaignGame() const;
     mutable std::optional<bool> duneCityCampaignGameCache;

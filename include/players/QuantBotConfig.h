@@ -677,6 +677,9 @@ struct QuantBotConfig {
         /// last minute. Defaults 150 and 4000; each hashed when it differs.
         int cityGrowWhenSafePercent;
         int cityGrowWhenSafeFloor;
+        /// Thinking speed per tier on the campaign ladder (QuantBotCityCampaignSkills::kThinkKeys): the tier
+        /// decides on one AI pass in N. Default 1 for every tier; each hashed when it differs.
+        std::array<int, 4> cityCampaignThinkPasses;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;

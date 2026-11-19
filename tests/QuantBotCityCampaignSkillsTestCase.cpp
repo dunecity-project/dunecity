@@ -82,3 +82,15 @@ TEST_CASE("City campaign skill ladder: one distinct config key per skill", "[qua
         CHECK(tier <= Never);
     }
 }
+
+TEST_CASE("City campaign skill ladder: thinking speed", "[quantbot][citycampaign]") {
+    const std::array<int, 4> table{{4, 3, 2, 1}};
+    CHECK(thinkPasses(Easy, table, true) == 4);
+    CHECK(thinkPasses(Brutal, table, true) == 1);
+    CHECK(thinkPasses(Easy, table, false) == 1);
+    CHECK(thinkPasses(4, table, true) == 1); // Defend keeps every pass
+    const std::array<int, 4> wild{{0, 99, 2, -3}};
+    CHECK(thinkPasses(Easy, wild, true) == 1);
+    CHECK(thinkPasses(Medium, wild, true) == kMaxThinkPasses);
+    for (int passes : kDefaultThinkPasses) CHECK(passes == 1);
+}

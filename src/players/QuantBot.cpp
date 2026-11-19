@@ -712,6 +712,10 @@ void QuantBot::update() {
 		// we are not updating this AI player this cycle
 		return;
 	}
+    // Thinking speed on the DuneCity campaign ladder: a slower tier skips whole passes (units, army
+    // posture and building), deterministically from the cycle counter and staggered by house.
+    if (const int passes = cityCampaignThinkPasses(); passes > 1
+        && (scheduleCycle / AIUPDATEINTERVAL + Uint32(scheduleHouse)) % Uint32(passes) != 0) return;
 
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
     // R and U and the late-game target choices H and Z read it), before anything this pass consults it.

@@ -490,6 +490,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityArmyFirstPercent = 100;
     force.cityGrowWhenSafePercent = 150;
     force.cityGrowWhenSafeFloor = 4000;
+    force.cityCampaignThinkPasses = QuantBotCityCampaignSkills::kDefaultThinkPasses;
     force.cityPowerGrowthHorizon = false;
     force.cityBoomWorkers = false;
     force.cityBoomRefineries = false;
@@ -988,6 +989,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CityArmyFirstPercent", force.cityArmyFirstPercent);
         iniFile.setIntValue("Force Concentration", "CityGrowWhenSafePercent", force.cityGrowWhenSafePercent);
         iniFile.setIntValue("Force Concentration", "CityGrowWhenSafeFloor", force.cityGrowWhenSafeFloor);
+        for (int tier = 0; tier < 4; ++tier)
+            iniFile.setIntValue("Force Concentration", QuantBotCityCampaignSkills::kThinkKeys[tier], force.cityCampaignThinkPasses[tier]);
         iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
         iniFile.setBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
         iniFile.setBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
@@ -1350,6 +1353,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityArmyFirstPercent = std::clamp(iniFile.getIntValue("Force Concentration", "CityArmyFirstPercent", force.cityArmyFirstPercent), 0, 400);
     force.cityGrowWhenSafePercent = std::clamp(iniFile.getIntValue("Force Concentration", "CityGrowWhenSafePercent", force.cityGrowWhenSafePercent), 0, 1000);
     force.cityGrowWhenSafeFloor = std::clamp(iniFile.getIntValue("Force Concentration", "CityGrowWhenSafeFloor", force.cityGrowWhenSafeFloor), 0, 100000);
+    for (int tier = 0; tier < 4; ++tier)
+        force.cityCampaignThinkPasses[tier] = std::clamp(iniFile.getIntValue("Force Concentration",
+            QuantBotCityCampaignSkills::kThinkKeys[tier], force.cityCampaignThinkPasses[tier]), 1, QuantBotCityCampaignSkills::kMaxThinkPasses);
     force.cityPowerGrowthHorizon = iniFile.getBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
     force.cityBoomWorkers = iniFile.getBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
     force.cityBoomRefineries = iniFile.getBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
@@ -2042,6 +2048,9 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.cityArmyFirstPercent != 100) addNamed("cityArmyFirstPercent", force.cityArmyFirstPercent);
     if (force.cityGrowWhenSafePercent != 150) addNamed("cityGrowWhenSafePercent", force.cityGrowWhenSafePercent);
     if (force.cityGrowWhenSafeFloor != 4000) addNamed("cityGrowWhenSafeFloor", force.cityGrowWhenSafeFloor);
+    for (int tier = 0; tier < 4; ++tier)
+        if (force.cityCampaignThinkPasses[tier] != QuantBotCityCampaignSkills::kDefaultThinkPasses[tier])
+            addNamed(QuantBotCityCampaignSkills::kThinkKeys[tier], force.cityCampaignThinkPasses[tier]);
     addNamed("cityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
     addNamed("cityBoomWorkers", force.cityBoomWorkers);
     addNamed("cityBoomRefineries", force.cityBoomRefineries);

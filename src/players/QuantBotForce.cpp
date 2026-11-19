@@ -1167,6 +1167,12 @@ bool QuantBot::cityCampaignSkill(QuantBotCityCampaignSkills::Skill skill) const 
         force.cityCampaignSkillLadder && duneCityCampaignGame());
 }
 
+int QuantBot::cityCampaignThinkPasses() const {
+    const auto& force = botConfig().force;
+    return QuantBotCityCampaignSkills::thinkPasses(static_cast<int>(difficulty), force.cityCampaignThinkPasses,
+        force.cityCampaignSkillLadder && duneCityCampaignGame());
+}
+
 int QuantBot::effectiveTargetPriorityLevel() const {
     // HarvesterTargets: the campaign skill shoots harvesters first, then artillery; an explicit level wins.
     const int level = botConfig().force.targetPriorityLevel;
