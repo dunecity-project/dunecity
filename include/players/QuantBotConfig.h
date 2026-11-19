@@ -640,6 +640,12 @@ struct QuantBotConfig {
         /// every yard zoning while its army was destroyed with 20,000 credits banked
         /// (docs/city-campaign.md, "Brutal's yards"). Hashed when OFF.
         bool productionBeforeCityGrowth;
+        /// Experimental/default off: Brutal's DuneCity economy step (8-12 worker opening floor, equal
+        /// army capital per worker) only while no enemy alliance has more houses than its own and it
+        /// does not estimate itself outnumbered - the rule vanilla custom games already apply. A
+        /// lone DuneCity campaign house facing two to four allied enemies opens military-first as
+        /// Hard does. Hashed when ON.
+        bool brutalCityEconomyOutnumbered;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;

@@ -1851,6 +1851,18 @@ void QuantBot::planSpiceEconomy(BuildPass& pass) {
     // Atreides) the economy-first opening lost 6 of 6.
     pass.brutalCityEconomy = pass.citySimEnabled && gameMode == GameMode::Custom
         && difficulty == Difficulty::Brutal;
+    // BrutalCityEconomyOutnumbered: the same rule in DuneCity, counted per enemy alliance so a
+    // free-for-all (every house its own team) keeps the step.
+    if (pass.brutalCityEconomy && botConfig().force.brutalCityEconomyOutnumbered) {
+        int ownTeam = 0, largestEnemyTeam = 0;
+        std::map<int, int> enemyTeams;
+        for (int i = 0; i < NUM_HOUSES; ++i)
+            if (const House* other = currentGame->getHouse(i); other && !other->isNatives() && other->isAlive()) {
+                if (other->getTeamID() == getHouse()->getTeamID()) ++ownTeam;
+                else largestEnemyTeam = std::max(largestEnemyTeam, ++enemyTeams[other->getTeamID()]);
+            }
+        if (largestEnemyTeam > ownTeam || outnumberedByEstimate()) pass.brutalCityEconomy = false;
+    }
     int ownTeamHouses = 0, enemyHouses = 0;
     if (!pass.brutalCityEconomy && difficulty == Difficulty::Brutal)
         for (int i = 0; i < NUM_HOUSES; ++i)
