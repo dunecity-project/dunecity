@@ -406,8 +406,10 @@ def schedule(args):
         if count <= 0:
             continue
         if cell['kind'] == 'campaign' and cell.get('city'):
-            for strength in (getattr(args, 'city_strength', None) or [None]):
-                variant = dict(cell, name=f'{cell["name"]}-s{strength:g}') if strength else cell
+            specs = [f's{s:g}' for s in (getattr(args, 'city_strength', None) or [])]
+            specs += getattr(args, 'city_variant', None) or []
+            for spec in (specs or [None]):
+                variant = dict(cell, name=f'{cell["name"]}-{spec}') if spec else cell
                 for mission in (getattr(args, 'city_missions', None) or range(1, 11)):
                     seeds = getattr(args, 'campaign_seeds', None)
                     if seeds is None:
@@ -415,8 +417,8 @@ def schedule(args):
                     for seed in dict.fromkeys(seeds):
                         # The probe's --level is a 1-9 campaign level; the mission picks the map.
                         game = campaign_game(variant, 'atreides', min(mission, 9), mission, seed, 'full')
-                        if strength:
-                            game['city_strength'] = strength
+                        if spec:
+                            game['city_variant'] = spec
                         games.append(game)
             continue
         if cell['kind'] == 'campaign':
@@ -589,7 +591,7 @@ def command(args, binary, game, out):
             cmd += ['--reworked']
         if game.get('city_campaign'):
             cmd += ['--city-campaign']
-        if game.get('city_strength'):
+        if game.get('city_variant'):
             cmd += ['--city-campaign-map', str(out.with_suffix('.city.ini'))]
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
@@ -684,14 +686,25 @@ def win_type(result, houses, campaign, lines=()):
     return 'conquest'
 
 
+CITY_VARIANT_KEYS = {'s': '--strength', 'g': '--goals', 'w': '--grace'}
+
+
+def city_variant_args(spec):
+    """'s1.5g2w1.5' -> ['--strength', '1.5', '--goals', '2', '--grace', '1.5'] (scripts/gen_city_campaign.py)."""
+    parts = re.findall(r'([sgw])([0-9.]+)', spec)
+    if not parts or ''.join(k + v for k, v in parts) != spec:
+        raise SystemExit(f'Bad --city-variant {spec!r}: letters s (strength), g (goals), w (grace) and numbers')
+    return [arg for key, value in parts for arg in (CITY_VARIANT_KEYS[key], value)]
+
+
 def play(args, scratch, binary, game):
     out = scratch / f'g{abs(hash(game["id"])) % 10**10}'
     remove_tree(out)
     variant = out.with_suffix('.city.ini')
-    if game.get('city_strength'):
-        # The shipped mission at another enemy strength, generated from the committed generator.
+    if game.get('city_variant'):
+        # A variant of the shipped mission, generated from the committed generator.
         subprocess.run([sys.executable, str(root / 'scripts/gen_city_campaign.py'), '--mission', str(game['mission']),
-                        '--strength', str(game['city_strength']), '--out', str(variant)],
+                        *city_variant_args(game['city_variant']), '--out', str(variant)],
                        cwd=root, check=True, capture_output=True, text=True)
     started = time.time()
     env = dict(os.environ)
@@ -1346,6 +1359,9 @@ parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this 
 parser.add_argument('--city-strength', nargs='+', type=float,
                     help='citycampaign: also play each mission at these enemy-strength multipliers (generated '
                          'variants of the shipped map: enemy credits x S, grace period / S); cells gain -sS')
+parser.add_argument('--city-variant', nargs='+',
+                    help='citycampaign: also play each mission as these generated variants, e.g. s1.5g2w1.5: enemy '
+                         'strength x1.5, population/treasury goals x2, grace period x1.5; cells gain -SPEC')
 parser.add_argument('--city-missions', nargs='+', type=int, choices=range(1, 11),
                     help='citycampaign: only these DuneCity campaign missions (default all ten)')
 parser.add_argument('--campaign-seeds', nargs='+', type=int,

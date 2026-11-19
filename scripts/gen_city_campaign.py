@@ -510,19 +510,30 @@ def main() -> None:
     parser.add_argument("--mission", type=int, choices=range(1, 11),
                         help="write only this mission (a balance variant with --strength/--out)")
     parser.add_argument("--strength", type=float, help="enemy strength multiplier for the variant")
+    parser.add_argument("--goals", type=float, help="variant: population and treasury goals (and a hold-out "
+                                                     "timer) x this")
+    parser.add_argument("--grace", type=float, help="variant: the enemy grace period (FirstEnemyAttack) x this")
     parser.add_argument("--out", type=Path, help="variant file to write instead of the shipped map")
     args = parser.parse_args()
     if args.mission:
         m = next(x for x in MISSIONS if x.number == args.mission)
         if args.strength is not None:
             m = dataclasses.replace(m, strength=m.strength * args.strength)
+        if args.goals is not None:
+            scaled = {k: (int(round(v * args.goals / 1000.0)) * 1000 if k in ("Population", "Credits") else v)
+                      for k, v in m.objectives.items()}
+            m = dataclasses.replace(m, objectives=scaled,
+                                    timeout=int(round(m.timeout * args.goals)) if m.timeout else m.timeout)
+        if args.grace is not None and m.first_attack:
+            m = dataclasses.replace(m, first_attack=max(1, int(round(m.first_attack * args.grace))))
         sc = m.build()
         g.check(sc)
         text = render(m, sc)
         g.check_text(sc, text)
         path = args.out or (OUT_DIR / sc.filename)
         path.write_text(text, encoding="utf-8")
-        print(f"{path}: mission {m.number} strength {m.strength:g}")
+        print(f"{path}: mission {m.number} strength {m.strength:g} objectives {m.objectives} "
+              f"timeout {m.timeout} first attack {m.first_attack}")
         return
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for m in MISSIONS:
