@@ -6387,7 +6387,20 @@ void QuantBot::planMissionObjectives(BuildPass& pass) {
     // the "spend freely until halfway" rule left Brutal and Hard helpers on 1,000-5,000 credits
     // against a 35,000 goal for 45 minutes.)
     const int goal = objectiveTarget(MissionObjectivePolicy::Credits);
-    if (goal <= 0 || pass.militaryEmergency) return;
+    if (goal <= 0) return;
+    // Under attack, or with a ground army below half of the strongest enemy's, the house spends:
+    // losing the base loses the mission anyway. militaryEmergency alone is only computed while a
+    // house saves for technology, so on low-spice Tuono the helper banked 13,000-19,800 credits
+    // while its army fell to nothing and its base was destroyed.
+    if (pass.militaryEmergency || pass.defendingEconomy || pass.groundThreatAsset.isValid()
+        || ownGroundArmyValue() * 2 < enemyThreatEstimate()) {
+        if (pass.emitStatsLog && AITelemetry::log().enabled())
+            traceDecision("objective_treasury_release",AITelemetry::Record().set("goal",goal)
+                .set("banked",getHouse()->getCredits()).set("defending",pass.defendingEconomy)
+                .set("threat",pass.groundThreatAsset.isValid()).set("own_army",int64_t(ownGroundArmyValue()))
+                .set("enemy_army",int64_t(enemyThreatEstimate())));
+        return;
+    }
     const int banked = getHouse()->getCredits();
     const int start = std::max(0, int(currentGame->getMissionObjectives().startCredits));
     const int64_t income = (getHouse()->getHarvestedSpice() + getHouse()->getCityTaxReceipts()).lround();
