@@ -59,6 +59,10 @@ class Mission:
     # [DIFFICULTY]: the enemy strength on top of that for the enemy AI's difficulty (Easy ... Brutal),
     # applied by the game when the mission starts (same credits x / grace / rule).
     difficulty: Dict[str, float] = field(default_factory=dict)
+    # Low spice (Stefan, 2026-11-19: "these campaign maps ... should have low spice. it is supposed to
+    # be about building a city"): thick spice and blooms go, and every field is eroded from its edge
+    # until at most this share of the layout's spice tiles is left.
+    spice_keep: float = 0.25
     # A compact layout (at most 64x64 = 4,096 tiles) for this mission, where every difficulty's
     # map-size army and city limits bind inside the first 15 minutes (docs/city-campaign.md).
     compact: Optional[Callable[[], g.Scenario]] = None
@@ -117,7 +121,37 @@ def drop_house(sc: g.Scenario, owner: str) -> None:
     sc.teams = [t for t in sc.teams if not t.startswith(owner + ",")]
 
 
+def thin_spice(sc: g.Scenario, keep: float) -> Tuple[int, int]:
+    """Low-spice campaign maps: thick spice becomes ordinary spice, blooms become sand, and each
+    field loses its outer ring of tiles, pass after pass, while more than `keep` of the original
+    spice tiles remain. Field positions stay; small fields vanish, large ones keep their cores.
+    Returns (spice tiles before, after)."""
+    c = sc.canvas
+    for y in range(c.h):
+        for x in range(c.w):
+            if c.g[y][x] == g.THICK:
+                c.g[y][x] = g.SPICE
+            elif c.g[y][x] == g.BLOOM:
+                c.g[y][x] = g.SAND
+    tiles = {(x, y) for y in range(c.h) for x in range(c.w) if c.g[y][x] == g.SPICE}
+    before = len(tiles)
+    target = int(before * keep)
+    while len(tiles) > target:
+        edge = sorted(t for t in tiles
+                      if any((t[0] + dx, t[1] + dy) not in tiles for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))))
+        if not edge:
+            break
+        # The last pass stops at the target: drop edge tiles evenly across the map, not row by row.
+        excess = len(tiles) - target
+        drop = edge if len(edge) <= excess else edge[::max(1, len(edge) // excess)][:excess]
+        for (x, y) in drop:
+            tiles.discard((x, y))
+            c.g[y][x] = g.SAND
+    return before, len(tiles)
+
+
 def render(m: Mission, sc: g.Scenario) -> str:
+    thin_spice(sc, m.spice_keep)
     sc.filename = f"DCITY_M{m.number:02d}.INI"
     sc.basic = g.basic(m.win_flags, m.lose_flags, m.timeout, m.tech,
                        brief=sc.basic.get("BriefPicture", "ATTACK.WSA"),
