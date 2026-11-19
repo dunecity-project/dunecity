@@ -35,8 +35,6 @@ EXCLUSIVE = {
     'native_probe_process_lifecycle': 'times out and kills native probe process groups',
     'spectator_online_end_probe': 'a local PHP signalling service and several native peers',
     'native_multiplayer_join_modes': 'a local PHP signalling service and several native peers',
-    'quantbot_city_hard_match_${seed}': 'opt-in 90-minute matches against a wall-clock limit',
-    'quantbot_city_reclaimed_rock_match': 'opt-in 90-minute match against a wall-clock limit',
 }
 WORKER = '''import fcntl, sys, time
 with open(sys.argv[1], 'a') as log:
