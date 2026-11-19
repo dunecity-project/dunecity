@@ -64,7 +64,7 @@ constexpr std::array<int, 4> kDefaultThinkPasses{{8, 6, 3, 1}};
 constexpr std::array<const char*, 4> kThinkKeys{{
     "CityCampaignThinkEasy", "CityCampaignThinkMedium", "CityCampaignThinkHard", "CityCampaignThinkBrutal",
 }};
-constexpr int kMaxThinkPasses = 8;
+constexpr int kMaxThinkPasses = 16;
 
 /// AI passes per decision for this difficulty: the tier's value on the ladder, 1 elsewhere.
 inline int thinkPasses(int difficulty, const std::array<int, 4>& table, bool ladder) {

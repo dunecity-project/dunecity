@@ -125,17 +125,16 @@ TEST_CASE("DuneCity campaign maps carry a briefing, valid goals and in-bounds br
         REQUIRE_FALSE(ini.getStringValue("BRIEFING", "Win").empty());
         REQUIRE_FALSE(ini.getStringValue("BRIEFING", "Lose").empty());
         REQUIRE(ini.hasSection("Atreides"));
-        // [DIFFICULTY]: an enemy strength per QuantBot difficulty, rising with the difficulty.
+        // [DIFFICULTY]: an enemy strength per QuantBot difficulty. Not monotone: on the campaign
+        // skill ladder a lower tier thinks more slowly (QuantBotCityCampaignSkills.h), so its houses
+        // may need more starting credits than a higher tier's for the same fight.
         if(ini.hasSection("DIFFICULTY")) {
-            int previous = 0;
             for(const char* difficulty : {"Easy", "Medium", "Hard", "Brutal"}) {
                 REQUIRE(ini.hasKey("DIFFICULTY", difficulty));
                 const double value = ini.getDoubleValue("DIFFICULTY", difficulty, 0.0);
                 REQUIRE(value >= 0.25);
                 REQUIRE(value <= 10.0);
-                const int permille = MissionObjectivePolicy::strengthPermille(value);
-                REQUIRE(permille >= previous);
-                previous = permille;
+                REQUIRE(MissionObjectivePolicy::strengthPermille(value) == int(value * 1000 + 0.5));
             }
         }
         // Bit 0x10 is meaningless (protocol 85); city goals only come from [OBJECTIVES].
