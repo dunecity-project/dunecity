@@ -232,7 +232,6 @@ target_sources(dunelegacy_tests
         ${CMAKE_SOURCE_DIR}/src/misc/FileSystem.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/fnkdat.cpp
         globals_test_stub.cpp
-        TextManager_stub.cpp
         # ENet library sources (needed for NetworkManager tests)
         ${CMAKE_SOURCE_DIR}/src/enet/callbacks.c
         ${CMAKE_SOURCE_DIR}/src/enet/compress.c
