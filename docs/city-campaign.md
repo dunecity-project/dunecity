@@ -97,6 +97,12 @@ erodes every field from its edge until a quarter of the layout's spice tiles rem
 (`thin_spice`, `Mission.spice_keep`): 2-5% of each map instead of 6-19%. Field positions stay;
 the largest fields keep their cores and the smallest vanish, so taxes carry the economy.
 
+Cities need rock (Stefan: "remember we need rock for building cities"): every rock shelf then grows
+ring by ring into the open sand beside it, never onto spice or mountains, until at least 30% of the
+map is rock (`grow_rock`, `Mission.rock_floor`; Hagal Flats was 15%, Harg Pass 17%, Cielago 19%).
+Shield Wall Breach grows only inside its basin (to 75% of the basin floor), so the flats outside
+keep the sand its breach worms cross.
+
 ## Briefings: `[BRIEFING]`
 
 `Text=`, `Win=` and `Lose=` are the Mentat's briefing and debriefing for a DuneCity campaign

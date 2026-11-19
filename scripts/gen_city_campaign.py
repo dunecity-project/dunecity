@@ -63,6 +63,12 @@ class Mission:
     # be about building a city"): thick spice and blooms go, and every field is eroded from its edge
     # until at most this share of the layout's spice tiles is left.
     spice_keep: float = 0.25
+    # Cities need rock (Stefan, 2026-11-19: "remember we need rock for building cities"): the rock
+    # shelves grow ring by ring into the sand around them until at least this share of the map is
+    # rock (0 = the layout as drawn).
+    rock_floor: float = 0.30
+    # Grow rock only inside this disc (x, y, radius); the floor is then that disc's rock share.
+    rock_area: Optional[Tuple[int, int, int]] = None
     # A compact layout (at most 64x64 = 4,096 tiles) for this mission, where every difficulty's
     # map-size army and city limits bind inside the first 15 minutes (docs/city-campaign.md).
     compact: Optional[Callable[[], g.Scenario]] = None
@@ -150,8 +156,36 @@ def thin_spice(sc: g.Scenario, keep: float) -> Tuple[int, int]:
     return before, len(tiles)
 
 
+def grow_rock(sc: g.Scenario, floor: float,
+              area: Optional[Tuple[int, int, int]] = None) -> Tuple[int, int]:
+    """Room to build: every rock shelf grows one ring at a time into the open sand and dunes beside
+    it (never onto spice or mountains), until `floor` of the map (or of `area`, a disc x, y,
+    radius) is rock. Towns, roads and structures already stand on rock and stay where they are.
+    Returns (rock tiles before, after) within the map or area."""
+    c = sc.canvas
+    def inside(x: int, y: int) -> bool:
+        return c.inside(x, y) and (area is None or (x - area[0]) ** 2 + (y - area[1]) ** 2 <= area[2] ** 2)
+    cells = [(x, y) for y in range(c.h) for x in range(c.w) if inside(x, y)]
+    rock = {t for t in cells if c.g[t[1]][t[0]] == g.ROCK}
+    before = len(rock)
+    target = int(len(cells) * floor)
+    while len(rock) < target:
+        ring = sorted({(x + dx, y + dy) for (x, y) in rock for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                       if inside(x + dx, y + dy) and c.g[y + dy][x + dx] in (g.SAND, g.DUNES)})
+        if not ring:
+            break
+        need = target - len(rock)
+        add = ring if len(ring) <= need else ring[::max(1, len(ring) // need)][:need]
+        for (x, y) in add:
+            c.g[y][x] = g.ROCK
+            rock.add((x, y))
+    return before, len(rock)
+
+
 def render(m: Mission, sc: g.Scenario) -> str:
     thin_spice(sc, m.spice_keep)
+    if m.rock_floor:
+        grow_rock(sc, m.rock_floor, m.rock_area)
     sc.filename = f"DCITY_M{m.number:02d}.INI"
     sc.basic = g.basic(m.win_flags, m.lose_flags, m.timeout, m.tech,
                        brief=sc.basic.get("BriefPicture", "ATTACK.WSA"),
@@ -562,6 +596,7 @@ MISSIONS: List[Mission] = [
         lose="The Shield Wall fell, and your city with it.",
         credits={"Atreides": 16000, "Harkonnen": 7000, "Sardaukar": 5000},
         army_keep={"Harkonnen": 5, "Sardaukar": 4}, first_attack=10,
+        rock_floor=0.75, rock_area=(40, 64, 28),   # the basin only: the flats keep the worms' sand
         events=[("Breach1", "12,%d,%d,%d,%d,2" % SHIELD_WALL_BREACH),
                 ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen armies are coming through.")],
     ),
