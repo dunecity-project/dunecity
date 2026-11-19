@@ -29,7 +29,7 @@ from the shipped maps. "Grace" is `FirstEnemyAttack`.
 | 7 | Shield Wall Breach | 144x128 | 16,000 | Harkonnen 7,000, Sardaukar 5,000 | 10 min | 50,000 people, or destroy every enemy house; the wall opens at minute 12 |
 | 8 | Tuono Crossing | 160x96 | 14,000 | Harkonnen 4,000, Sardaukar 6,000 | 13 min | 12,000 people and 30,000 credits, or destroy every enemy house |
 | 9 | Carthag Vise | 128x128 | 21,000 | Harkonnen 4,000, Ordos 4,000, Sardaukar 1,500 | 10 min | destroy every enemy house |
-| 10 | All Against Atreides | 160x160 | 26,000 | Fremen, Sardaukar, Ordos, Harkonnen 6,000 each | 4 min | 60,000 people held for 8 min, or destroy every enemy house |
+| 10 | All Against Atreides | 160x160 | 26,000 | Fremen, Sardaukar, Ordos, Harkonnen 5,000 each | 5 min | 60,000 people held for 8 min, or destroy every enemy house |
 
 Missions 1-6, 8 and 9 keep the terrain and towns of the city scenarios of the same name
 (`docs/city-scenarios.md`), with enemy cities and armies trimmed where the generator says so.

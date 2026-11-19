@@ -481,8 +481,8 @@ MISSIONS: List[Mission] = [
         objectives={"Population": 60000, "HoldSeconds": 480},
         win="House Atreides stands alone on Arrakis. The campaign is won.",
         lose="House Atreides has fallen.",
-        credits={"Atreides": 26000, "Fremen": 6000, "Sardaukar": 6000, "Ordos": 6000, "Harkonnen": 6000},
-        first_attack=4,
+        credits={"Atreides": 26000, "Fremen": 5000, "Sardaukar": 5000, "Ordos": 5000, "Harkonnen": 5000},
+        first_attack=5,
     ),
 ]
 
