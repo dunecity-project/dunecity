@@ -1150,17 +1150,16 @@ bool QuantBot::openingOpenMapNative() const {
     return QuantBotMapScopePolicy::openFlatCrowd(init.getInitialTerrain(), controllers);
 }
 
-bool QuantBot::cityCampaignBrutalTactics() const {
-    return botConfig().force.cityCampaignBrutalTactics && difficulty == Difficulty::Brutal && currentGame
-        && currentGame->getGameInitSettings().isDuneCityCampaign();
+int QuantBot::cityCampaignBrutalAttackPercent() const {
+    return difficulty == Difficulty::Brutal && currentGame && currentGame->getGameInitSettings().isDuneCityCampaign()
+        ? botConfig().force.cityCampaignBrutalAttackPercent : 0;
 }
 
 int QuantBot::effectiveTargetPriorityLevel() const {
-    return cityCampaignBrutalTactics() ? 2 : botConfig().force.targetPriorityLevel;
+    return botConfig().force.targetPriorityLevel;
 }
 
 int QuantBot::effectiveFocusFireLevel() const {
-    if (cityCampaignBrutalTactics()) return 2;
     const auto& force = botConfig().force;
     if (!force.focusFireLevel || !force.focusFireMapScope || !currentGame) return force.focusFireLevel;
     const auto& init = currentGame->getGameInitSettings();

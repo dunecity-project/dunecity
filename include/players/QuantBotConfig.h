@@ -646,12 +646,12 @@ struct QuantBotConfig {
         /// lone DuneCity campaign house facing two to four allied enemies opens military-first as
         /// Hard does. Hashed when ON.
         bool brutalCityEconomyOutnumbered;
-        /// A Brutal QuantBot in the DuneCity campaign (helper or enemy) focuses fire on the weakest
-        /// target in reach (FocusFireLevel 2), shoots harvesters then artillery first
-        /// (TargetPriorityLevel 2) and attacks at 15% of its army ceiling instead of 25%. Before it,
+        /// A Brutal QuantBot in the DuneCity campaign (helper or enemy) attacks once its army holds
+        /// this percent of its army ceiling instead of the tier's 25% (0 = the native 25%). Before it,
         /// a Brutal helper won no more often than a Hard one, so no mission could sit between the
-        /// tiers (docs/city-campaign.md, "Brutal's tactics"). Hashed when OFF.
-        bool cityCampaignBrutalTactics;
+        /// tiers; at 15% it won 52 of 69 screen games where it had won 41 and a Hard helper 34
+        /// (docs/city-campaign.md, "Brutal's attack threshold"). Default 15; hashed when not 15.
+        int cityCampaignBrutalAttackPercent;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;
