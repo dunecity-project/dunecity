@@ -91,6 +91,17 @@ TEST_CASE("Mission objectives: grouped numbers", "[MissionObjectives]") {
     REQUIRE(groupedNumber(-20000) == "-20,000");
 }
 
+TEST_CASE("DuneCity campaign: enemy strength by difficulty", "[DuneCityCampaign]") {
+    using namespace MissionObjectivePolicy;
+    CHECK(scaledCredits(5000, 1000) == 5000);
+    CHECK(scaledCredits(5000, 2500) == 12500);
+    CHECK(scaledCredits(4750, 1300) == 6200);   // 6175 rounds to 100 credits
+    CHECK(scaledCredits(0, 3000) == 0);
+    CHECK(scaledGrace(37500, 2000) == 18750);
+    CHECK(scaledGrace(37500, 2500) == 15000);
+    CHECK(scaledGrace(1000, 0) == 1000);
+}
+
 TEST_CASE("DuneCity campaign filenames", "[DuneCityCampaign]") {
     REQUIRE(DuneCityCampaign::scenarioFilename(1) == "DCITY_M01.INI");
     REQUIRE(DuneCityCampaign::scenarioFilename(10) == "DCITY_M10.INI");
@@ -111,6 +122,17 @@ TEST_CASE("DuneCity campaign maps carry a briefing, valid goals and in-bounds br
         REQUIRE_FALSE(ini.getStringValue("BRIEFING", "Win").empty());
         REQUIRE_FALSE(ini.getStringValue("BRIEFING", "Lose").empty());
         REQUIRE(ini.hasSection("Atreides"));
+        // [DIFFICULTY]: an enemy strength per QuantBot difficulty, rising with the difficulty.
+        if(ini.hasSection("DIFFICULTY")) {
+            int previous = 0;
+            for(const char* difficulty : {"Easy", "Medium", "Hard", "Brutal"}) {
+                const int permille = MissionObjectivePolicy::enemyStrengthPermille(ini, difficulty);
+                REQUIRE(permille >= 250);
+                REQUIRE(permille <= 10000);
+                REQUIRE(permille >= previous);
+                previous = permille;
+            }
+        }
         // Bit 0x10 is meaningless (protocol 85); city goals only come from [OBJECTIVES].
         REQUIRE((ini.getIntValue("BASIC", "WinFlags", 3) & 0x10) == 0);
         const int width = ini.getIntValue("MAP", "SizeX"), height = ini.getIntValue("MAP", "SizeY");

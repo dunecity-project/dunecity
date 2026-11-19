@@ -17,6 +17,12 @@
 
 using namespace MissionObjectivePolicy;
 
+int MissionObjectivePolicy::enemyStrengthPermille(const INIFile& inifile, const std::string& difficulty) {
+    if(difficulty.empty() || !inifile.hasKey("DIFFICULTY", difficulty)) return 1000;
+    const double value = inifile.getDoubleValue("DIFFICULTY", difficulty, 1.0);
+    return std::clamp(static_cast<int>(value * 1000.0 + 0.5), 250, 10000);
+}
+
 namespace {
 
 constexpr const char* kSection = "OBJECTIVES";

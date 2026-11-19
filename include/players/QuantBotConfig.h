@@ -326,6 +326,10 @@ struct QuantBotConfig {
         /// military emergency), lifts its city ceiling to a population goal, and funds police
         /// for a crime or land value goal. 0 OFF, 1 ON (default). Only maps with goals change.
         int cityObjectivePlanning;
+        /// DuneCity campaign difficulty lever (docs/city-campaign.md, "Difficulty"): a Hard QuantBot,
+        /// helper or enemy, runs at most this many harvesters there; Brutal has no such ceiling, so the
+        /// two tiers differ inside the missions' 15-35 minutes. 0 = no ceiling.
+        int cityCampaignHardHarvesters;
         /// Repair-yard denial is exclusive to Easy campaign enemies. Hashed OFF/ON control.
         bool campaignRepairRoleFix;
         /// Campaign yards upgrade only out of surplus after income and power. Hashed OFF/ON control.

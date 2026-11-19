@@ -733,6 +733,24 @@ void INIMapLoader::loadHouses()
                 startingCredits = inifile->getIntValue("Player1", "Credits", DEFAULT_STARTINGCREDITS);
         }
 
+        // DuneCity campaign [DIFFICULTY] (docs/city-campaign.md): an enemy house's strength for its AI's
+        // difficulty. The grace period follows the strongest enemy (loadObjectivesAndEvents).
+        if(pGame->getGameInitSettings().isDuneCityCampaign() && houseID != pGame->getGameInitSettings().getHouseID()) {
+            std::string difficulty;
+            for(const auto& info : resolvedHouseInfo.playerInfoList) {
+                const auto* data = PlayerFactory::getByPlayerClass(info.playerClass);
+                if(data != nullptr && !data->getDifficulty().empty()) { difficulty = data->getDifficulty(); break; }
+            }
+            const int permille = MissionObjectivePolicy::enemyStrengthPermille(*inifile.get(), difficulty);
+            if(permille != 1000) {
+                const int scaled = MissionObjectivePolicy::scaledCredits(startingCredits, permille);
+                SDL_Log("DuneCity campaign: %s (%s) at strength %d per mille, credits %d -> %d",
+                        houseName.c_str(), difficulty.c_str(), permille, startingCredits, scaled);
+                startingCredits = scaled;
+            }
+            if(!difficulty.empty()) enemyStrengthPermille = std::max(enemyStrengthPermille, permille);
+        }
+
         int maxUnits = 0;
         const int unitOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride;
         const bool originalCampaignHouse = getQuantBotConfig().originalCampaignAI
@@ -1475,6 +1493,11 @@ HOUSETYPE INIMapLoader::getHouseID(const std::string& name) {
 void INIMapLoader::loadObjectivesAndEvents() {
     auto& objectives = pGame->getMissionObjectives();
     objectives.loadFromINI(*inifile.get());
+    if(enemyStrengthPermille > 0 && enemyStrengthPermille != 1000) {
+        objectives.enemyFirstAttackCycle = MissionObjectivePolicy::scaledGrace(objectives.enemyFirstAttackCycle, enemyStrengthPermille);
+        SDL_Log("DuneCity campaign: enemy grace period %u cycles at strength %d per mille",
+                objectives.enemyFirstAttackCycle, enemyStrengthPermille);
+    }
     objectives.conquestWins = (pGame->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0
         && (pGame->loseFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0;
     const int timeout = inifile->getIntValue("BASIC", "TIMEOUT", 0);

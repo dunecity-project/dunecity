@@ -56,6 +56,9 @@ class Mission:
     # Calibrated against both gradients (docs/city-campaign.md): one tier up the helper must win,
     # at its own tier it must lose at least 60% of games.
     strength: float = 1.0
+    # [DIFFICULTY]: the enemy strength on top of that for the enemy AI's difficulty (Easy ... Brutal),
+    # applied by the game when the mission starts (same credits x / grace / rule).
+    difficulty: Dict[str, float] = field(default_factory=dict)
 
 
 def set_house(sc: g.Scenario, name: str, **values) -> None:
@@ -154,6 +157,10 @@ def render(m: Mission, sc: g.Scenario) -> str:
     if events:
         extra.append("[EVENTS]")
         extra += [f"{k}={v}" for k, v in events]
+        extra.append("")
+    if m.difficulty:
+        extra.append("[DIFFICULTY]")
+        extra += [f"{k}={v:g}" for k, v in m.difficulty.items()]
         extra.append("")
     extra.append("[BRIEFING]")
     extra.append(f"Text={m.briefing}")

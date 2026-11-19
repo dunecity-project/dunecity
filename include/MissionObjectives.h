@@ -105,6 +105,22 @@ inline std::string groupedNumber(int value) {
     return value < 0 ? "-" + out : out;
 }
 
+/// [DIFFICULTY] of a DuneCity campaign map: how strong the enemy houses are for the enemy AI's
+/// difficulty label (QuantBot "Easy" ... "Brutal"), in per mille; 1000 when the map or the label
+/// has none. Starting credits are multiplied by it, the FirstEnemyAttack grace divided by it.
+int enemyStrengthPermille(const INIFile& inifile, const std::string& difficulty);
+
+/// Starting credits at that strength, rounded to 100 credits.
+inline int scaledCredits(int credits, int permille) {
+    const long long scaled = static_cast<long long>(credits) * permille / 1000;
+    return static_cast<int>((scaled + 50) / 100 * 100);
+}
+
+/// The grace period at that strength.
+inline Uint32 scaledGrace(Uint32 cycles, int permille) {
+    return permille > 0 ? static_cast<Uint32>(static_cast<unsigned long long>(cycles) * 1000 / permille) : cycles;
+}
+
 } // namespace MissionObjectivePolicy
 
 class Game;

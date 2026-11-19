@@ -57,6 +57,8 @@ private:
 
     Game* pGame;
     bool originalCoopOwners = false;
+    /// DuneCity campaign [DIFFICULTY]: the strongest enemy house's strength (per mille), 0 before any.
+    int enemyStrengthPermille = 0;
     std::map<std::string, HOUSETYPE> housename2house;
 };
 

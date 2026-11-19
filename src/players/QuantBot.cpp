@@ -657,6 +657,10 @@ void QuantBot::update() {
     // Only opposing Brutal houses receive the seven-worker difficulty ceiling.
     if (const int ceiling = harvesterCountCeiling(); ceiling > 0)
         baseHarvesterLimit = std::min(baseHarvesterLimit, ceiling);
+    // The DuneCity campaign's difficulty lever between Hard and Brutal (cityCampaignHardHarvesters).
+    if (const int ceiling = config.force.cityCampaignHardHarvesters;
+        ceiling > 0 && difficulty == Difficulty::Hard && getGameInitSettings().isDuneCityCampaign())
+        baseHarvesterLimit = std::min(baseHarvesterLimit, ceiling);
     // A custom game's difficulty harvester limit for the map size (QuantBot Config.ini
     // HarvesterLimit*Map: on 96-128 maps Easy 8, Medium 15, Hard 40, Brutal 100) is a real ceiling:
     // until 1.0.849 the spice budget above overwrote it and every difficulty planned the same fleet
