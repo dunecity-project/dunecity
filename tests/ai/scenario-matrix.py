@@ -84,7 +84,7 @@ GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect'
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint',
                'style_seats', 'control_diagnostics', 'campaign_mode', 'partner', 'enemy_ai',
-               'enemy_difficulty', 'helper_style', 'ai_configs', 'setup_identity') + genome_qualification.FIELDS
+               'enemy_difficulty', 'helper_style', 'ai_configs', 'setup_identity', 'objectives') + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
@@ -729,6 +729,11 @@ def play(args, scratch, binary, game):
            'ai_configs': json.dumps({r['house']: r.get('config_hash', '') for l in lines if 'SCENARIO_AI_CONFIG:' in l for r in [parse(l, 'SCENARIO_AI_CONFIG:')]}, sort_keys=True),
            'setup_identity': json.dumps(next((parse(l, 'SCENARIO_SETUP:') for l in lines if 'SCENARIO_SETUP:' in l), {}), sort_keys=True),
            'control_diagnostics': int(getattr(args, 'control_diagnostics', False)),
+           # DuneCity campaign goals: minute -> [population, credits, crime, land value, enemies left].
+           'objectives': json.dumps({r['minute']: [int(r['population']), int(r['credits']), int(r['crime']), int(r['land']),
+                                                    int(r['enemies'])]
+                                     for l in lines if 'MISSION_OBJECTIVES_SAMPLE:' in l
+                                     for r in [parse(l, 'MISSION_OBJECTIVES_SAMPLE:')]}, separators=(',', ':')),
            **{key: game.get(key, '') for key in ('campaign_mode', 'partner', 'enemy_ai', 'enemy_difficulty')}}
     if campaign and not row['error']:
         row['error'] = campaign_roster_error(game, houses)

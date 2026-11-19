@@ -129,6 +129,11 @@ void MissionObjectives::update(Game& game) {
         game.addToNewsTicker(_("Objective reached: ") + goalName(static_cast<Goal>(g), targets.value[g]));
     }
 
+    // A compact trace every five game minutes (read by tests/ai/scenario-matrix.py).
+    if(now % MILLI2CYCLES(300000) == 0)
+        SDL_Log("MISSION_OBJECTIVES_SAMPLE: minute=%u population=%d credits=%d crime=%d land=%d pollution=%d sampled=%d enemies=%d",
+                now / MILLI2CYCLES(60000), m.population, m.credits, m.crime, m.landValue, m.pollution, int(m.sampled), m.enemiesLeft);
+
     const bool all = allMet(targets, m);
     holdingSinceCycle = holdingSince(all, holdingSinceCycle, now);
     const Uint32 holdCycles = MILLI2CYCLES(static_cast<Uint32>(targets.holdSeconds) * 1000);
