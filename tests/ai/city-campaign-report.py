@@ -65,6 +65,19 @@ def main():
         print(f'{mission:>7}  ' + '  '.join(cells))
     print(f'{"total":>7}  ' + '  '.join(f'{f"{totals[p][0]}/{totals[p][1]}":>26}' for p in PAIRS))
     print('\nwins: o objectives, s survival, c conquest; L lost, T time limit, E errors; median winning minute')
+    if '--markdown' in sys.argv:
+        print('\n| Mission | ' + ' | '.join(p[7:].replace('-v-', ' v ') for p in PAIRS) + ' | All |')
+        print('|---' * (len(PAIRS) + 2) + '|')
+        for mission in range(1, 11):
+            cells, won_all, n_all = [], 0, 0
+            for pair in PAIRS:
+                group = table.get((mission, pair), [])
+                won = sum(r['outcome'] == 'won' for r in group)
+                won_all += won
+                n_all += len(group)
+                cells.append(f'{won}/{len(group)}' if group else '-')
+            share = f'{100 * won_all // n_all}%' if n_all else '-'
+            print(f'| {mission} | ' + ' | '.join(cells) + f' | {share} |')
     if '--detail' in sys.argv:
         print('\nper game: mission pair seed outcome minute | objective samples minute:[population,credits,crime,land,enemies]')
         for row in sorted(games, key=lambda r: r['id']):

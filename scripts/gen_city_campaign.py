@@ -404,11 +404,11 @@ MISSIONS: List[Mission] = [
     Mission(
         3, "Ash Quarter", g.scenario_ash_quarter,
         briefing=("The Ash Quarter's tenements have been abandoned to gangs. Restore order: bring crime "
-                  "down to Safe and grow the city to 45,000 people. Police stations, fewer polluted blocks "
+                  "down to Safe and grow the city to 75,000 people. Police stations, fewer polluted blocks "
                   "and higher land value all cut crime. Harkonnen and Mercenaries profit from the chaos."),
         win="The Quarter is safe again. Its people have returned.",
         lose="The gangs and their paymasters have taken the city.",
-        objectives={"Population": 45000, "MaxCrime": 63, "HoldSeconds": 60},
+        objectives={"Population": 75000, "MaxCrime": 63, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 7000, "Mercenary": 4000},
         army_keep={"Harkonnen": 6}, first_attack=9,
     ),
@@ -445,7 +445,8 @@ MISSIONS: List[Mission] = [
         briefing=("Your city lies in a basin behind the Shield Wall, safe from worms, reached only through two "
                   "narrow western passes. Harkonnen sappers are mining the eastern wall: at the twelfth minute it "
                   "will break open, and sandworms and the Harkonnen and Sardaukar armies will come straight "
-                  "through the breach. Fortify the basin, then destroy both houses."),
+                  "through the breach. Hold the basin and grow the city to 35,000 people - or destroy both houses."),
+        objectives={"Population": 35000, "HoldSeconds": 60},
         win="The breach is held and the invaders are destroyed. The basin is safe.",
         lose="The Shield Wall fell, and your city with it.",
         credits={"Atreides": 16000, "Harkonnen": 6000, "Sardaukar": 4000},
