@@ -47,6 +47,11 @@ class Mission:
     credits: Dict[str, int] = field(default_factory=dict)
     brains: Dict[str, str] = field(default_factory=dict)
     adjust: Optional[Callable[[g.Scenario], None]] = None
+    # Balance levers, measured with tests/ai/scenario-matrix.py --categories citycampaign.
+    first_attack: int = 0                 # [EVENTS] FirstEnemyAttack: minutes before enemy waves
+    zone_cap: Dict[str, int] = field(default_factory=dict)    # keep at most N R/C/I lots per house
+    army_keep: Dict[str, int] = field(default_factory=dict)   # keep at most N starting combat units
+    drop_houses: Sequence[str] = ()       # houses removed from the layout entirely
 
 
 def set_house(sc: g.Scenario, name: str, **values) -> None:
@@ -63,6 +68,45 @@ def drop_reinforcements(sc: g.Scenario, owner: str) -> None:
     sc.reinforcements = [r for r in sc.reinforcements if not r.startswith(owner + ",")]
 
 
+ZONES = ("Residential Zone", "Commercial Zone", "Industrial Zone")
+NON_COMBAT = ("Harvester", "Carryall", "MCV", "Sandworm")
+
+
+def cap_zones(sc: g.Scenario, owner: str, keep: int) -> None:
+    """Keep the first `keep` R/C/I lots of a house (generation order: its core districts first)."""
+    kept = 0
+    out = []
+    for s in sc.structures:
+        if s.owner == owner and s.name in ZONES:
+            kept += 1
+            if kept > keep:
+                continue
+        out.append(s)
+    sc.structures = out
+
+
+def cap_army(sc: g.Scenario, owner: str, keep: int) -> None:
+    """Keep at most `keep` starting combat units of a house; workers and transports stay."""
+    kept = 0
+    out = []
+    for u in sc.units:
+        if u.owner == owner and u.name not in NON_COMBAT:
+            kept += 1
+            if kept > keep:
+                continue
+        out.append(u)
+    sc.units = out
+
+
+def drop_house(sc: g.Scenario, owner: str) -> None:
+    sc.structures = [s for s in sc.structures if s.owner != owner]
+    sc.units = [u for u in sc.units if u.owner != owner]
+    sc.roads = [r for r in sc.roads if r[0] != owner]
+    sc.houses = [h for h in sc.houses if h[0] != owner]
+    sc.reinforcements = [r for r in sc.reinforcements if not r.startswith(owner + ",")]
+    sc.teams = [t for t in sc.teams if not t.startswith(owner + ",")]
+
+
 def render(m: Mission, sc: g.Scenario) -> str:
     sc.filename = f"DCITY_M{m.number:02d}.INI"
     sc.basic = g.basic(m.win_flags, m.lose_flags, m.timeout, m.tech,
@@ -76,6 +120,12 @@ def render(m: Mission, sc: g.Scenario) -> str:
         set_house(sc, house, Credits=amount)
     for house, brain in m.brains.items():
         set_house(sc, house, Brain=brain)
+    for house in m.drop_houses:
+        drop_house(sc, house)
+    for house, keep in m.zone_cap.items():
+        cap_zones(sc, house, keep)
+    for house, keep in m.army_keep.items():
+        cap_army(sc, house, keep)
     if m.adjust:
         m.adjust(sc)
     sc.header = [
@@ -85,13 +135,16 @@ def render(m: Mission, sc: g.Scenario) -> str:
     ]
     text = sc.render()
     extra: List[str] = []
+    events = list(m.events)
+    if m.first_attack:
+        events.insert(0, ("FirstEnemyAttack", str(m.first_attack)))
     if m.objectives:
         extra.append("[OBJECTIVES]")
         extra += [f"{k}={v}" for k, v in m.objectives.items()]
         extra.append("")
-    if m.events:
+    if events:
         extra.append("[EVENTS]")
-        extra += [f"{k}={v}" for k, v in m.events]
+        extra += [f"{k}={v}" for k, v in events]
         extra.append("")
     extra.append("[BRIEFING]")
     extra.append(f"Text={m.briefing}")
@@ -329,39 +382,45 @@ MISSIONS: List[Mission] = [
     Mission(
         1, "Sihaya Basin", g.scenario_sihaya_basin,
         briefing=("The Basin township has outgrown its shelf. CHOAM has released two mothballed MCVs. "
-                  "Settle the open rock islands and grow the colony to 6,000 people. "
+                  "Settle the open rock islands and grow the colony to 15,000 people. "
                   "The Harkonnen on the eastern shelf will raid your harvesters; destroying them also ends the mission."),
         win="Sihaya is a city now. The Landsraad has noticed.",
         lose="The Basin is lost. The Harkonnen own the shelf.",
-        objectives={"Population": 6000, "HoldSeconds": 30},
-        credits={"Atreides": 8000, "Harkonnen": 6000},
+        objectives={"Population": 15000, "HoldSeconds": 60},
+        credits={"Atreides": 12000, "Harkonnen": 5000},
+        zone_cap={"Harkonnen": 30}, first_attack=12,
     ),
     Mission(
         2, "Hagal Flats", g.scenario_hagal_flats,
         briefing=("CHOAM wants a strong treasury on Hagal before it will finance the next colony. "
-                  "Bank 20,000 credits. Taxes and refined spice both count, but only what your silos can store. "
+                  "Bank 30,000 credits. Taxes and refined spice both count, but only what your silos can store. "
                   "Two rival houses will raid the spice fields."),
         win="The treasury is full. CHOAM has opened its accounts to House Atreides.",
         lose="Hagal is bankrupt and overrun.",
-        objectives={"Credits": 20000, "HoldSeconds": 20},
+        objectives={"Credits": 30000, "HoldSeconds": 30},
+        credits={"Atreides": 12000, "Ordos": 4000, "Harkonnen": 4000},
+        zone_cap={"Ordos": 16, "Harkonnen": 16}, first_attack=10,
     ),
     Mission(
         3, "Ash Quarter", g.scenario_ash_quarter,
         briefing=("The Ash Quarter's tenements have been abandoned to gangs. Restore order: bring crime "
-                  "down to Safe and grow the city to 8,000 people. Police stations, fewer polluted blocks "
+                  "down to Safe and grow the city to 45,000 people. Police stations, fewer polluted blocks "
                   "and higher land value all cut crime. Harkonnen and Mercenaries profit from the chaos."),
         win="The Quarter is safe again. Its people have returned.",
         lose="The gangs and their paymasters have taken the city.",
-        objectives={"Population": 8000, "MaxCrime": 63, "HoldSeconds": 30},
+        objectives={"Population": 45000, "MaxCrime": 63, "HoldSeconds": 60},
+        credits={"Atreides": 14000, "Harkonnen": 7000, "Mercenary": 4000},
+        army_keep={"Harkonnen": 6}, first_attack=10,
     ),
     Mission(
         4, "Arrakeen Blackout", g.scenario_arrakeen_blackout,
         briefing=("Arrakeen has lost its power grid and its people are leaving. Restore power, rebuild the "
-                  "districts and lift the city to 12,000 people with middle-class land value. "
+                  "districts and lift the city to 40,000 people with middle-class land value. "
                   "Harkonnen and Mercenary raiders will strike while the lights are out."),
         win="Arrakeen shines again. The Duke's capital is secure.",
         lose="Arrakeen is dark and its people are gone.",
-        objectives={"Population": 12000, "MinLandValue": 80, "HoldSeconds": 30},
+        objectives={"Population": 40000, "MinLandValue": 80, "HoldSeconds": 60},
+        credits={"Atreides": 15000, "Mercenary": 5000, "Harkonnen": 5000}, first_attack=9,
     ),
     Mission(
         5, "Cielago Watch", g.scenario_cielago_watch,
@@ -370,6 +429,7 @@ MISSIONS: List[Mission] = [
         win="The Watch held. The garrison is relieved with honour.",
         lose="The Watch has fallen.",
         win_flags=10, lose_flags=8, timeout=30,
+        credits={"Atreides": 14000, "Harkonnen": 6000, "Ordos": 6000}, first_attack=6,
     ),
     Mission(
         6, "Harg Pass Convoy", g.scenario_harg_pass_convoy,
@@ -377,6 +437,7 @@ MISSIONS: List[Mission] = [
                   "links, grow what you can and destroy the Harkonnen and Mercenary bases that raid them."),
         win="The pass is open. Spice flows to Arrakeen again.",
         lose="The pass is closed and the towns are burning.",
+        credits={"Atreides": 10000, "Harkonnen": 9000, "Mercenary": 5000}, first_attack=6,
     ),
     Mission(
         7, "Shield Wall Breach", scenario_shield_wall_breach,
@@ -386,6 +447,7 @@ MISSIONS: List[Mission] = [
                   "through the breach. Fortify the basin, then destroy both houses."),
         win="The breach is held and the invaders are destroyed. The basin is safe.",
         lose="The Shield Wall fell, and your city with it.",
+        credits={"Atreides": 12000, "Harkonnen": 8000, "Sardaukar": 6000}, first_attack=8,
         events=[("Breach1", "12,%d,%d,%d,%d,2" % SHIELD_WALL_BREACH),
                 ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen armies are coming through.")],
     ),
@@ -396,7 +458,8 @@ MISSIONS: List[Mission] = [
                   "can stop you - or destroy them both."),
         win="Tuono Crossing is a city. The Emperor's legions withdraw.",
         lose="The expedition has failed.",
-        objectives={"Population": 10000, "Credits": 15000, "HoldSeconds": 30},
+        objectives={"Population": 10000, "Credits": 15000, "HoldSeconds": 60},
+        credits={"Atreides": 14000, "Harkonnen": 5000, "Sardaukar": 8000}, first_attack=10,
     ),
     Mission(
         9, "Carthag Vise", g.scenario_carthag_vise,
@@ -404,6 +467,8 @@ MISSIONS: List[Mission] = [
                   "on the ridge. Hold the core, keep the refineries running and destroy all three hostile houses."),
         win="The Vise is broken. Carthag is ours.",
         lose="Carthag has fallen to the Harkonnen.",
+        credits={"Atreides": 14000, "Harkonnen": 8000, "Ordos": 8000, "Sardaukar": 4000},
+        zone_cap={"Harkonnen": 30, "Ordos": 30}, first_attack=6,
     ),
     Mission(
         10, "All Against Atreides", scenario_all_against_atreides_city,
@@ -411,6 +476,7 @@ MISSIONS: List[Mission] = [
                   "then destroy every one of them."),
         win="House Atreides stands alone on Arrakis. The campaign is won.",
         lose="House Atreides has fallen.",
+        first_attack=5,
     ),
 ]
 

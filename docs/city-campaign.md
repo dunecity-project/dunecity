@@ -52,6 +52,10 @@ up to `worms` (0-8) new Natives sandworms surface in the gap, and the news ticke
 `BreachNMessage` (default "The Shield Wall has been breached!"). The breach is a saved trigger
 (`BreachTrigger`, trigger type 3).
 
+`FirstEnemyAttack=N` is a campaign mission's opening grace period: no QuantBot house hostile to
+the objective house launches an attack wave before game minute N (they still build, defend and
+fight what comes to them). It is saved with the objectives.
+
 ## Briefings: `[BRIEFING]`
 
 `Text=`, `Win=` and `Lose=` are the Mentat's briefing and debriefing for a DuneCity campaign

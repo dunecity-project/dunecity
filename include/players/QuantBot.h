@@ -227,6 +227,8 @@ public:
     bool objectivePlanningActive() const;
     /// The goal's target when objectivePlanningActive() and the map sets it, else 0.
     int objectiveTarget(int goal) const;
+    /// This house is hostile to the objective house and the map's FirstEnemyAttack has not passed.
+    bool objectiveGracePeriod() const;
     int campaignHarvesterCeiling() const; // -1 outside policy; zero forbids new workers
     void doProduceItem(const BuilderBase* builder, Uint32 itemID) const;
 

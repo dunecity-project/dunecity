@@ -245,6 +245,14 @@ bool QuantBot::objectivePlanningActive() const {
     return outcome != nullptr && outcome->getTeamID() == getHouse()->getTeamID();
 }
 
+bool QuantBot::objectiveGracePeriod() const {
+    if (!currentGame || getHouse() == nullptr) return false;
+    const auto& objectives = currentGame->getMissionObjectives();
+    if (!objectives.enemyAttacksHeld(getGameCycleCount())) return false;
+    const House* outcome = currentGame->getOutcomeHouse();
+    return outcome != nullptr && outcome->getTeamID() != getHouse()->getTeamID();
+}
+
 int QuantBot::objectiveTarget(int goal) const {
     if (goal < 0 || goal >= MissionObjectivePolicy::GoalCount || !objectivePlanningActive()) return 0;
     const auto& targets = currentGame->getMissionObjectives().targets;

@@ -50,6 +50,7 @@ std::string goalName(Goal goal, int target) {
 
 void MissionObjectives::loadFromINI(const INIFile& inifile) {
     targets = Targets{};
+    enemyFirstAttackCycle = 0;
     holdingSinceCycle = INVALID_GAMECYCLE;
     announcedMask = 0;
     if(!inifile.hasSection(kSection)) return;
@@ -60,6 +61,7 @@ void MissionObjectives::loadFromINI(const INIFile& inifile) {
     }
     if(inifile.getBoolValue(kSection, "DefeatEnemies", false)) targets.used[DefeatEnemies] = true;
     targets.holdSeconds = std::clamp(inifile.getIntValue(kSection, "HoldSeconds", 30), 0, 600);
+    enemyFirstAttackCycle = MILLI2CYCLES(static_cast<Uint32>(std::clamp(inifile.getIntValue("EVENTS", "FirstEnemyAttack", 0), 0, 120)) * 60 * 1000);
 }
 
 void MissionObjectives::save(OutputStream& stream) const {
@@ -72,6 +74,7 @@ void MissionObjectives::save(OutputStream& stream) const {
     stream.writeUint32(announcedMask);
     stream.writeUint32(deadlineCycle);
     stream.writeBool(deadlineWins);
+    stream.writeUint32(enemyFirstAttackCycle);
 }
 
 void MissionObjectives::load(InputStream& stream) {
@@ -83,6 +86,7 @@ void MissionObjectives::load(InputStream& stream) {
     announcedMask = stream.readUint32();
     deadlineCycle = stream.readUint32();
     deadlineWins = stream.readBool();
+    enemyFirstAttackCycle = stream.readUint32();
 }
 
 Metrics MissionObjectives::measure(const Game& constGame, const House& house) {

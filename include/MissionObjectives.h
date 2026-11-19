@@ -123,8 +123,13 @@ public:
     Uint32 deadlineCycle = 0;
     /// True when the TimeOut is a survival victory (LoseFlags 0x08) rather than a deadline.
     bool deadlineWins = false;
+    /// [EVENTS] FirstEnemyAttack=N: no house hostile to the objective house launches an attack
+    /// wave before this cycle (0 = none). A campaign mission's opening grace period.
+    Uint32 enemyFirstAttackCycle = 0;
 
     bool isActive() const { return targets.any(); }
+    /// The opening grace period still holds at @a cycle.
+    bool enemyAttacksHeld(Uint32 cycle) const { return cycle < enemyFirstAttackCycle; }
 
     /// Reads [OBJECTIVES]; leaves the targets empty when the section is absent.
     void loadFromINI(const INIFile& inifile);

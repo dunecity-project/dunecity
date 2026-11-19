@@ -1484,7 +1484,7 @@ void INIMapLoader::loadObjectivesAndEvents() {
     if(!inifile->hasSection("EVENTS")) return;
     for(const INIFile::Key& key : inifile->getSection("EVENTS")) {
         const std::string name = key.getKeyName();
-        if(name.rfind("Breach", 0) != 0 || name.find("Message") != std::string::npos) continue;
+        if(name.rfind("Breach", 0) != 0 || name.find("Message") != std::string::npos) continue; // FirstEnemyAttack: MissionObjectives
         std::vector<int> values;
         std::string field;
         std::istringstream input(key.getStringValue());

@@ -809,7 +809,10 @@ void QuantBot::update() {
 	}
 
 	if (!builderOnly()) {
-		if (attackTimer <= 0) {
+		if (attackTimer <= 0 && objectiveGracePeriod()) {
+			// A campaign mission's opening grace period ([EVENTS] FirstEnemyAttack): no wave yet.
+			attackTimer = MILLI2CYCLES(15000);
+		} else if (attackTimer <= 0) {
 			attack(militaryValue);
 		} else {
 			attackTimer -= AIUPDATEINTERVAL;

@@ -407,7 +407,8 @@ def schedule(args):
                 if seeds is None:
                     seeds = seeds_for('citycampaign', f'm{mission}', count)
                 for seed in dict.fromkeys(seeds):
-                    games.append(campaign_game(cell, 'atreides', mission, mission, seed, 'full'))
+                    # The probe's --level is a 1-9 campaign level; the mission picks the map.
+                    games.append(campaign_game(cell, 'atreides', min(mission, 9), mission, seed, 'full'))
             continue
         if cell['kind'] == 'campaign':
             for house in cell.get('houses', ('atreides', 'harkonnen', 'ordos')):
