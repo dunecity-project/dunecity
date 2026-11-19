@@ -10,7 +10,8 @@
 #include <mod/Workshop.h>
 #include <FileClasses/INIFile.h>
 
-#include <cstdlib>
+#include "TestSourceDir.h"
+
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -24,10 +25,7 @@ struct RestoreZoom {
 };
 
 std::string readSource(const std::string& relative) {
-    const char* configured = std::getenv("DUNE_CITY_SOURCE_DIR");
-    const auto root = configured ? std::filesystem::path(configured)
-        : std::filesystem::path(__FILE__).parent_path().parent_path();
-    std::ifstream input(root / relative);
+    std::ifstream input(testSourceDir() / relative);
     REQUIRE(input.good());
     return {(std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>()};
 }
