@@ -296,6 +296,15 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                 smoke = 2 if (strong, weak, map_name) == ('QH', 'QE', 'rs-vanilla') else 0
                 cells.append(match('ladder', f'{strong}-v-{weak}-{map_name}', mod, ffa(strong, weak),
                                    expect=('wins', 1), smoke=smoke, full=seeds, both_sides=True, **where))
+    # Opt-in (--cells): compact DuneCity maps, where the difficulties' map-size limits (64x64: army
+    # Easy 8,000 / Medium 12,000 / Hard 20,000, Brutal rolling; city Easy 10,000 ... Hard 40,000)
+    # bind inside the first 15 minutes (docs/city-campaign.md, "Map size and the ladder").
+    for strong, weak in (('QB', 'QH'), ('QH', 'QM'), ('QM', 'QE')):
+        for size, minutes in ((64, 45), (80, 45)):
+            cells.append(dict(match('ladder', f'{strong}-v-{weak}-compact-rs{size}-dunecity', 'dunecity',
+                                    ffa(strong, weak), expect=('wins', 1), smoke=0, full=ladder_seeds // 2,
+                                    both_sides=True, skirmish=skirmish_spec(size, 'small', 0), minutes=minutes),
+                              opt_in=True, measured=True))
     # 6. Most-played bundled multiplayer maps (dunelegacy.com/usage.html, all time, 2026-10-18).
     for name, players in (('2P - 128x128 - 1v1 - Habbanya-Penny', 1), ('2P - 128x128 - 1v1 - Tuono-Orac', 1),
                           ('2P - 128x128 - 1v1 - Sihaya-Chvrches', 1), ('4P - 128x64 - 2v2 - Sihaya-Toto', 2),
