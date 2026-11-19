@@ -962,7 +962,8 @@ and renderer; a probe that runs the game on `SDL_VIDEODRIVER=dummy` with the sof
 `headless`, even when it renders PNGs; one game at a time is `PROCESSORS 2`, and `RUN_SERIAL` is kept
 for the few tests that need the whole machine (`scripts/tests/test_headless_parallel.py`). Every
 headless test registers in macOS and Linux Ninja trees, so `dunecity-queue ctest` runs it on the AWS
-workers. Probe harnesses find their binary and data through `tests/performance/probe_profile.py`:
+workers; the Mini's release qualification sends its test games there too (`docs/release-operations.md`,
+"Test games run on AWS"). Probe harnesses find their binary and data through `tests/performance/probe_profile.py`:
 `probe_binary` for `run-campaign-balance.py` probes, and `NATIVE_TARGET`, `native_build_commands`,
 `native_probe_binary` for the standalone diagnostic mains (on Linux the probe links into a private
 `OUT/NAME/bin/` whose `../share/DuneCity` is the build's `bin/`, the game's executable-relative data

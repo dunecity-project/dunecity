@@ -102,6 +102,20 @@ run_phase configure-and-dependencies cmake -S . -B build -G Ninja -DCMAKE_BUILD_
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
     -DVCPKG_TARGET_TRIPLET=arm64-osx -DDUNECITY_BUILD_TESTS=ON
+AWS_STATE="${RUNNER_TEMP:-/tmp}/qualification-aws-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}.json"
+if [ "$MODE" = release-headless-qualification ]; then
+    # Tests register at configure time (no build-time discovery), so the plan is final here.
+    # PHP-backed network coverage remains mandatory in the stable Mini lane.
+    # Both backends use the same qualification inventory and receipt recipe.
+    ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
+    if [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+        # Test games go to the AWS workers now and run while the Mini compiles; the Mini keeps
+        # the quick tests that start no game (scripts/qualification-aws.py).
+        MAC_TESTS=$(python3 scripts/qualification-aws.py split --build build --sha "$DUNECITY_CANDIDATE_SOURCE" \
+            --state "$AWS_STATE")
+        run_phase aws-submit python3 scripts/qualification-aws.py submit --state "$AWS_STATE"
+    fi
+fi
 # Snapshot installed static SDL bytes and their SPDX/ABI recipes before the game
 # link. The later diagnostic export refuses any source/toolchain/SDK drift.
 if [ "${PACKAGE_BUILD:-false}" = true ] && [ "$MODE" != release-headless-qualification ]; then
@@ -111,16 +125,22 @@ fi
 run_phase compile cmake --build build --config Release --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 run_phase dependency-audit python3 scripts/check-build-deps.py build
 if [ "$MODE" = release-headless-qualification ]; then
-    # Single-game probes reserve two CTest slots. The Mini can overlap two;
-    # the smaller hosted Mac keeps one, alongside eligible lightweight tests.
-    TEST_SLOTS=2
-    if [ "${RUNNER_ENVIRONMENT:-github-hosted}" = self-hosted ]; then TEST_SLOTS=4; fi
-    echo "Headless qualification: ${RUNNER_ENVIRONMENT:-github-hosted}, $TEST_SLOTS CTest slots"
-    # PHP-backed network coverage remains mandatory in the stable Mini lane.
-    # Both backends use the same qualification inventory and receipt recipe.
-    ctest --test-dir build --show-only=json-v1 -L headless -L nightly -LE network > build/macos-headless-plan.json
     ctest_status=0
-    run_phase headless-nightly ctest --test-dir build --output-on-failure --no-tests=error --parallel "$TEST_SLOTS" \
+    if [ "${RUNNER_ENVIRONMENT:-}" = self-hosted ]; then
+        echo "Headless qualification: quick tests on the Mini, test games on AWS"
+        run_phase headless-quick ctest --test-dir build --output-on-failure --no-tests=error --parallel 4 \
+            -L headless -L nightly -LE network -R "$MAC_TESTS" \
+            --output-junit "$GITHUB_WORKSPACE/build/macos-headless-mac-results.xml" || ctest_status=$?
+        if [ "$ctest_status" -ne 0 ] && [ "$ctest_status" -ne 8 ]; then exit "$ctest_status"; fi
+        build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
+        # The workflow follows the AWS job outside the Mini gate, then merges and checks
+        # every result (qualification-aws.py finish).
+        exit 0
+    fi
+    # The hosted fallback cannot reach the AWS queue and plays every test game itself.
+    # Single-game probes reserve two CTest slots, so it plays one at a time.
+    echo "Headless qualification: ${RUNNER_ENVIRONMENT:-github-hosted}, 2 CTest slots"
+    run_phase headless-nightly ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 \
         -L headless -L nightly -LE network --output-junit "$GITHUB_WORKSPACE/build/macos-headless-results.xml" || ctest_status=$?
     # CTest 8 means test failures; only exact committed decisions can accept them.
     # Launch/configuration failures and incomplete/skipped XML still fail closed.

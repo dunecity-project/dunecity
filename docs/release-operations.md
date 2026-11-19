@@ -269,10 +269,18 @@ gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref main 
 python3 scripts/release-automation.py reuse-qualification --sha "$FULL_SHA" --directory "$EVIDENCE_DIR/qualification"
 ```
 
+Dispatch from `main` (`--ref main`): the host gate refuses a qualification workflow run from
+any other ref with "platform job ID is not approved", and the refused run then queues a
+hosted fallback.
+
 The Mini is optional capacity. The host gate admits only the separately hash-approved
 qualification workflow on `main`, with a successful candidate
 selection and no production reservation. The workspace and queue atomically admit
-one verification lane without waiting; a refusal triggers a hosted run. An offline
+one verification lane. While another agent holds the workspace gate the qualifier
+retries every 30 seconds for up to 30 minutes (19 November 2026: both automatic Mini
+attempts that day met a held gate, and their hosted fallbacks took about two hours); a
+refusal that outlasts that window triggers a hosted run. A lane that started is never
+retried. An offline
 or occupied runner gets a two-minute queue window, then a hosted dispatch and
 cancellation of the queued attempt. A runner assignment racing cancellation may
 briefly start the old lane; its queue wrapper terminates only that owned child.
@@ -305,7 +313,22 @@ package ABI compatibility, and compiler caches validate each compiler invocation
 and its source inputs. Mini qualification never falls back to signing caches.
 A new key initially needs warming in
 the default-branch scope; a cache written only by integration/PR CI is not a
-default-branch cache for a later tag. Its job limit is 60 minutes, versus 120 on hosted Mac.
+default-branch cache for a later tag. Its job limit is 90 minutes (up to 30 waiting for the
+gate, the rest for the Mini lane and the AWS games), versus 120 on hosted Mac.
+
+**Test games run on AWS (from 19 November 2026).** On the Mini, `scripts/qualification-aws.py`
+splits the frozen plan right after configuration: every test that plays a game (`PROCESSORS`
+2 or more, `RUN_SERIAL`, or a probe fixture; 164 of 236 tests, about 3,000 of 3,100 test
+seconds) goes to the AWS workers as one `dunecity-queue` job pinned to the candidate SHA, at
+priority 10, ahead of research. The Mini compiles and runs the 72 quick tests that start no
+game, then releases its gate; the workflow follows the AWS job outside it (at most 40
+minutes, then the job is cancelled and qualification fails), writes it as JUnit with
+`dunecity-queue report JOB --junit`, merges it into `macos-headless-results.xml` and runs the
+same receipt check. A pass that needed the queue's retry on another worker counts as a
+failure, because the Mac run has no retries. The receipt's `qualification.linux` names the
+queue job, its source commit (which must equal the candidate) and the tests it ran; Mac game
+coverage of the candidate comes from integration CI's macOS job, not this qualifier. The
+hosted fallback cannot reach the queue and still plays every game itself.
 Any production reservation refuses new Mini verification admissions, including
 the same source SHA. Admission is not preemption: a production request arriving
 after qualification starts waits for that admitted job to finish or time out.
@@ -313,8 +336,8 @@ Do not terminate accepted jobs or bypass the shared gate to claim immediate
 production priority. A timeout/cancellation terminates the owned queue child and
 preserves failed evidence; it is not permission to relabel the result as a pass.
 
-Every test that plays one game at a time uses CTest `PROCESSORS 2`: the Mini
-qualifier has four slots (up to two games), the smaller hosted Mac has two. Only
+Every test that plays one game at a time uses CTest `PROCESSORS 2`: the hosted Mac has two
+slots (one game at a time), and the AWS queue weights tests by its own table. Only
 the tests listed in `scripts/tests/test_headless_parallel.py` (`EXCLUSIVE`, each
 with its reason) keep `RUN_SERIAL`: real-window/GPU and calibrated performance
 tests, the AI gates and other tests that run several games or path workers at

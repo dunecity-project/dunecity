@@ -48,7 +48,8 @@ jobs:
     needs: [select-candidate]
     if: needs.select-candidate.outputs.run == 'true'
     runs-on: ${{ needs.select-candidate.outputs.backend == 'mini' && fromJSON('["self-hosted", "macOS", "ARM64", "dunecity-builder"]') || fromJSON('["macos-15"]') }}
-    timeout-minutes: ${{ needs.select-candidate.outputs.backend == 'mini' && 60 || 120 }}
+    # Mini: up to 30 minutes waiting for its turn, about 6 on the Mini, about 15 for the AWS games.
+    timeout-minutes: ${{ needs.select-candidate.outputs.backend == 'mini' && 90 || 120 }}
     outputs:
       admitted: ${{ steps.admission.outputs.admitted }}
     env:
@@ -100,12 +101,29 @@ jobs:
       - name: Qualify frozen staging source before production selection
         run: |
           if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
-            # No --wait: busy resources fall back instead of delaying production.
-            agent-workspace run --project dunecity --owner "github:$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:qualify" --tests -- \
-              dunecity-queue reservation run --cwd "$GITHUB_WORKSPACE" --rev "$DUNECITY_CANDIDATE_SOURCE" \
-                --owner "github:$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:qualify" --repository "$GITHUB_REPOSITORY" \
-                --run-id "$GITHUB_RUN_ID" --lane macos-qualification --purpose verification -- \
-                bash "$GITHUB_WORKSPACE/scripts/macos-ci-lane.sh" release-headless-qualification
+            MARKER="$RUNNER_TEMP/qualification-admitted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            AWS_STATE="$RUNNER_TEMP/qualification-aws-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
+            # Wait up to 30 minutes for the Mini's turn: another agent's build, test or Git
+            # step usually ends sooner than the two-hour hosted fallback. Only a refusal
+            # before the lane started is retried; a started lane's failure is final.
+            deadline=$((SECONDS + 1800))
+            while :; do
+              status=0
+              agent-workspace run --project dunecity --owner "github:$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:qualify" --tests -- \
+                dunecity-queue reservation run --cwd "$GITHUB_WORKSPACE" --rev "$DUNECITY_CANDIDATE_SOURCE" \
+                  --owner "github:$GITHUB_RUN_ID:$GITHUB_RUN_ATTEMPT:qualify" --repository "$GITHUB_REPOSITORY" \
+                  --run-id "$GITHUB_RUN_ID" --lane macos-qualification --purpose verification -- \
+                  bash "$GITHUB_WORKSPACE/scripts/macos-ci-lane.sh" release-headless-qualification || status=$?
+              if [ "$status" -eq 0 ] || [ -f "$MARKER" ] || [ "$SECONDS" -ge "$deadline" ]; then break; fi
+              echo "Mini busy (exit $status); retrying for $(( (deadline - SECONDS) / 60 )) more minutes"
+              sleep 30
+            done
+            if [ "$status" -ne 0 ]; then
+              python3 scripts/qualification-aws.py cancel --state "$AWS_STATE" || true
+              exit "$status"
+            fi
+            # The test games ran on AWS; follow them outside the Mini gate, then merge and check.
+            python3 scripts/qualification-aws.py finish --build build --state "$AWS_STATE" --timeout-minutes 40
           else
             bash scripts/macos-ci-lane.sh release-headless-qualification
           fi
