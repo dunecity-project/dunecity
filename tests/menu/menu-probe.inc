@@ -8,6 +8,7 @@
 #include <Menu/HouseChoiceMenu.h>
 #include <Menu/BriefingMenu.h>
 #include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 #include <MapEditor/MapEditor.h>
 #include <MapEditor/MapSettingsWindow.h>
 #include <Menu/CustomGamePlayers.h>
@@ -1142,15 +1143,16 @@ int runMenuProbe() {
             "Start launched stale AI or mission choices");
     }
     {
-        // Reworked campaign (docs/reworked-campaign.md): Maps offers Original and Reworked; Reworked
-        // offers only houses with all 22 reworked missions (Atreides, Harkonnen and Ordos), shows
+        // Reworked campaign (docs/reworked-campaign.md): Maps offers Original, Reworked and DuneCity;
+        // Reworked offers only houses with all 22 reworked missions (Atreides, Harkonnen and Ordos), shows
         // the REMASTERED badge and reaches the launch; Original restores every house and drops the badge.
         HouseChoiceMenu::s_reworkedMaps=false;
+        HouseChoiceMenu::s_duneCityCampaign=false;
         HouseChoiceMenu menu(false);
         auto& maps=menu.campaignMapsDropDown;
-        menuRequire(maps.getNumEntries()==2 && maps.getEntry(0)==_("Original") && maps.getEntry(1)==_("Reworked")
-                    && maps.getSelectedIndex()==0 && maps.isEnabled(),
-                    "Campaign Maps should offer Original (selected) and Reworked");
+        menuRequire(maps.getNumEntries()==3 && maps.getEntry(0)==_("Original") && maps.getEntry(1)==_("Reworked")
+                    && maps.getEntry(2)==_("DuneCity") && maps.getSelectedIndex()==0 && maps.isEnabled(),
+                    "Campaign Maps should offer Original (selected), Reworked and DuneCity");
         menuRequire(menu.houseChoices.count>1 && !menu.showsRemasteredWatermark(),
                     "Original maps should offer every house without the badge");
         menuCapture(menu,"campaign-original-maps");
@@ -1172,6 +1174,41 @@ int runMenuProbe() {
         maps.setSelectedItem(0,true);
         menuRequire(!HouseChoiceMenu::isReworkedMaps() && menu.houseChoices.count>1,
                     "Original maps did not restore every house");
+        // The DuneCity campaign needs city mode: in vanilla the choice falls back to Original.
+        maps.setSelectedItem(2,true);
+        menuRequire(!HouseChoiceMenu::isDuneCityCampaign() && maps.getSelectedIndex()==0 && menu.houseChoices.count>1,
+                    "Vanilla must not start the DuneCity campaign");
+    }
+    {
+        // DuneCity campaign (docs/city-campaign.md): with the DuneCity mod, Maps: DuneCity offers only
+        // Atreides and its ten missions; Original restores every house and the original levels.
+        auto& mods=ModManager::instance();
+        const std::string previousMod=mods.getActiveModName();
+        menuRequire(mods.setActiveMod("dunecity"), "Cannot select Dune City for the city campaign");
+        HouseChoiceMenu::s_reworkedMaps=false;
+        HouseChoiceMenu::s_duneCityCampaign=false;
+        {
+            HouseChoiceMenu menu(false);
+            auto& maps=menu.campaignMapsDropDown;
+            menuRequire(maps.isEnabled() && maps.getEntry(2)==_("DuneCity"), "Dune City cannot choose the city campaign");
+            maps.setSelectedItem(2,true);
+            menuRequire(HouseChoiceMenu::isDuneCityCampaign() && !HouseChoiceMenu::isReworkedMaps()
+                        && maps.getSelectedIndex()==2,
+                        "Maps: DuneCity did not reach the campaign launch");
+            menuRequire(menu.houseChoices.count==1 && menu.houseChoices[0]==DuneCityCampaign::kHouse,
+                        "The DuneCity campaign should offer only Atreides");
+            menuRequire(menu.startLevelDropDown.getNumEntries()==DuneCityCampaign::kMissions
+                        && menu.startLevelDropDown.getEntry(DuneCityCampaign::kMissions-1)
+                               ==_("Mission ")+std::to_string(DuneCityCampaign::kMissions),
+                        "The DuneCity campaign should list its ten missions");
+            menuCapture(menu,"campaign-dunecity-maps");
+            maps.setSelectedItem(0,true);
+            menuRequire(!HouseChoiceMenu::isDuneCityCampaign() && menu.houseChoices.count>1
+                        && menu.startLevelDropDown.getNumEntries()==(HouseChoiceMenu::isSingleMission() ? 22 : 9),
+                        "Original maps did not restore every house and the original levels");
+        }
+        HouseChoiceMenu::s_duneCityCampaign=false;
+        menuRequire(mods.setActiveMod(previousMod), "Cannot restore the mod after the city campaign check");
     }
     {
         // Between reworked missions the briefing carries the badge; an original briefing does not.

@@ -15,6 +15,7 @@
 #include <Network/WorkshopGameContent.h>
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
+#include <algorithm>
 #include <utility>
 #include <fstream>
 #include <memory>
@@ -473,6 +474,20 @@ void researchWriteLegacyLayout(Game& game, Uint32 version, const std::string& fi
             && bytes.find(encoded, offset + 1) == std::string::npos,
             "Synthetic legacy fixture could not identify exactly one serialized House");
         bytes.erase(offset + encoded.size() - 17, 17);
+    }
+    // 9887 added the mission objectives between the win/lose flags and the map; 9882 and 9883
+    // have none, so their loader would read these bytes as map data. The objectives followed
+    // by the start of the map record mark exactly one place in the save.
+    static_assert(SAVEGAMEVERSION_MISSION_OBJECTIVES > 9883, "Synthetic legacy layouts predate mission objectives");
+    {
+        OMemoryStream objectives; objectives.open(); game.getMissionObjectives().save(objectives);
+        OMemoryStream map; map.open(); currentGameMap->save(map);
+        const std::string removed(objectives.getData(), objectives.getDataLength());
+        const std::string anchor = removed + std::string(map.getData(), std::min<std::size_t>(map.getDataLength(), 64));
+        const auto offset = bytes.find(anchor);
+        researchRequire(!removed.empty() && offset != std::string::npos && bytes.find(anchor, offset + 1) == std::string::npos,
+                        "Synthetic legacy fixture could not identify exactly one saved mission objectives record");
+        bytes.erase(offset, removed.size());
     }
     OMemoryStream setup; setup.open(); game.getGameInitSettings().save(setup);
     const std::string encoded(setup.getData(), setup.getDataLength());
