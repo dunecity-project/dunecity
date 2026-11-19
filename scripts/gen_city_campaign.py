@@ -445,8 +445,8 @@ MISSIONS: List[Mission] = [
         briefing=("Your city lies in a basin behind the Shield Wall, safe from worms, reached only through two "
                   "narrow western passes. Harkonnen sappers are mining the eastern wall: at the twelfth minute it "
                   "will break open, and sandworms and the Harkonnen and Sardaukar armies will come straight "
-                  "through the breach. Hold the basin and grow the city to 35,000 people - or destroy both houses."),
-        objectives={"Population": 35000, "HoldSeconds": 60},
+                  "through the breach. Hold the basin and grow the city to 50,000 people - or destroy both houses."),
+        objectives={"Population": 50000, "HoldSeconds": 60},
         win="The breach is held and the invaders are destroyed. The basin is safe.",
         lose="The Shield Wall fell, and your city with it.",
         credits={"Atreides": 16000, "Harkonnen": 6000, "Sardaukar": 4000},
@@ -470,9 +470,9 @@ MISSIONS: List[Mission] = [
                   "on the ridge. Hold the core, keep the refineries running and destroy all three hostile houses."),
         win="The Vise is broken. Carthag is ours.",
         lose="Carthag has fallen to the Harkonnen.",
-        credits={"Atreides": 25000, "Harkonnen": 4000, "Ordos": 4000, "Sardaukar": 1500},
+        credits={"Atreides": 23000, "Harkonnen": 4000, "Ordos": 4000, "Sardaukar": 1500},
         zone_cap={"Harkonnen": 10, "Ordos": 10}, army_keep={"Harkonnen": 2, "Ordos": 2, "Sardaukar": 2},
-        first_attack=11,
+        first_attack=10,
     ),
     Mission(
         10, "All Against Atreides", scenario_all_against_atreides_city,
@@ -480,7 +480,7 @@ MISSIONS: List[Mission] = [
                   "then destroy every one of them."),
         win="House Atreides stands alone on Arrakis. The campaign is won.",
         lose="House Atreides has fallen.",
-        credits={"Atreides": 32000, "Fremen": 4500, "Sardaukar": 4500, "Ordos": 4500, "Harkonnen": 4500},
+        credits={"Atreides": 30000, "Fremen": 4500, "Sardaukar": 4500, "Ordos": 4500, "Harkonnen": 4500},
         first_attack=5,
     ),
 ]

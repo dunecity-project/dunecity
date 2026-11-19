@@ -110,4 +110,29 @@ default (`--seeds-per-cell`, `--city-missions`), 90 game minutes. `win_type` rec
 
 ## Playtest results
 
+Every round played all ten missions on the AWS workers with the three pairings above; results
+live in `/Users/stefan/Documents/projects/outputs/city-campaign-20261119/<round>`.
+
+| Round | What changed | Missions 1-6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|
+| baseline | the ten city-scenario layouts, Campaign-mode enemies | 1 and 4 won by objectives in 1-2 min; 2, 3, 5 lost to rushes at 5-13 min | lost | lost at 5 min | lost | probe error (level 10) |
+| v3 | grace periods, rebalanced credits, raised goals | 72/72 | 0/8 | 0/12 | 1/9 | 6/12 |
+| v5 | Custom rules, harder 1-6, easier 7/9/10, treasury from the starting cash | 72/72 | 6/12 | 6/12 | 3/12 | 12/12 |
+| v6 | treasury floor from earned income | 72/72 | 6/7 | 6/12 | 6/12 | 12/12 |
+
+Lessons, each now fixed in the maps or the AI:
+
+- Two Custom-rule enemies that each start richer than the player rush it in the first 5-13 minutes
+  even against a Brutal helper; `FirstEnemyAttack` grace periods and player-favoured treasuries
+  open the early missions, and both shrink towards mission 10.
+- Pre-placed lots develop within a minute, so a prebuilt city's population is effectively its
+  starting population: population goals sit well above it (Ash Quarter starts above 45,000).
+- A treasury goal needs saving discipline: counting starting cash as progress froze Tuono's helper
+  (14,000 of 15,000 at minute 0); spending freely until halfway left Brutal and Hard helpers on a
+  few thousand credits; the earned-income floor fills Hagal by minute 11-14.
+- Medium helpers beat Easy enemies on every mission in every round: Easy QuantBots barely attack.
+  The curve is set by the Brutal v Hard and Hard v Medium pairings.
+
+### Final validation
+
 Pending.
