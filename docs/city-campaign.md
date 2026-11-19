@@ -79,6 +79,24 @@ up to `worms` (0-8) new Natives sandworms surface in the gap, and the news ticke
 the objective house launches an attack wave before game minute N (they still build, defend and
 fight what comes to them). It is saved with the objectives.
 
+## Difficulty: `[DIFFICULTY]`
+
+`Easy=`, `Medium=`, `Hard=`, `Brutal=`: how strong the enemy houses are for the enemy AI's
+difficulty (the campaign menu's enemy AI; QuantBot labels). When the mission starts, every enemy
+house's starting credits are multiplied by the value of its AI's difficulty (rounded to 100) and
+the `FirstEnemyAttack` grace period is divided by the strongest enemy's value
+(`MissionObjectivePolicy::enemyStrengthPermille`, `INIMapLoader`). A missing key or an AI without a
+difficulty label plays the map as authored (1.0). The generator writes each mission's values
+(`Mission.difficulty` in `scripts/gen_city_campaign.py`).
+
+## Low spice
+
+Stefan, 2026-11-19: "these campaign maps ... should have low spice. it is supposed to be about
+building a city". The generator turns thick spice into ordinary spice, removes spice blooms and
+erodes every field from its edge until a quarter of the layout's spice tiles remain
+(`thin_spice`, `Mission.spice_keep`): 2-5% of each map instead of 6-19%. Field positions stay;
+the largest fields keep their cores and the smallest vanish, so taxes carry the economy.
+
 ## Briefings: `[BRIEFING]`
 
 `Text=`, `Win=` and `Lose=` are the Mentat's briefing and debriefing for a DuneCity campaign
@@ -113,6 +131,35 @@ serves the objective house:
 - population goal: its Custom city ceiling is at least 125% of the goal;
 - crime or land value goal: police services (first station, catchment placement, land value
   budget) from the first developed block, with police funded at 100% while it has working cash.
+
+### The tiers in the campaign
+
+The campaign has to work two ways at once (Stefan, 2026-11-19): a helper beats enemies one tier
+lower, and loses at least 60% of its games against enemies of its own tier (Medium v Medium, Hard
+v Hard, Brutal v Brutal). Both can only hold when a Brutal helper plays better than a Hard one, and
+in these 15-35 minute missions it did not: on the same seeds and maps a Brutal helper won 106 of 200
+games against Hard enemies where a Hard helper won 100 (`sweep-v1`), so every map strength that let
+Brutal beat Hard also let Hard beat Hard. Two AI changes fix that:
+
+- **A funded production backlog takes a yard before city growth** (`[Force Concentration]
+  ProductionBeforeCityGrowth`, default on, hashed when off; all city games). A traced mission 6 game
+  showed a Brutal helper, which has no city ceiling, keep all four construction yards on "dedicated
+  city growth" for eight minutes while it reported a funded heavy-unit backlog, banked 13,000-22,000
+  credits and lost its army; Hard's city ceiling ended its zoning and it built 13 factories. The
+  ladder A/B on the DuneCity skirmish maps (450 games per arm) is neutral (Brutal v Hard long maps
+  +0.01 [-0.03, +0.05], fewer time-outs).
+- **Brutal attacks at 15% of its army ceiling in the campaign** (`[Force Concentration]
+  CityCampaignBrutalAttackPercent`, default 15, 0 = the tier's 25%; DuneCity campaign only). A
+  helper-only screen (Brutal helper v Hard enemies, ten missions at their balance points, eight
+  seeds): 15% won 57 of 80 where native Brutal won 43 and a Hard helper 36. Focus fire level 2 (50)
+  and target priority level 2 (51) helped alone but not combined with it (all three 49; both
+  without it 42), so they stay off.
+
+What did not separate the tiers, measured and dropped: harvester ceilings per tier (a handicap,
+not a fix; removed), longer missions (goals x2-x6 with later first attacks: Brutal 21/80 v Hard
+19/80, Hard 23/80 v Medium 22/80), compact 64x64 maps where the tiers' map-size limits bind (Brutal
+v Hard 11-6 in skirmish, start side decides; compact mission 1 Brutal 4/8 v Hard 6/8), and Brutal
+opening military-first when outnumbered (54 v 60 of 72, worse).
 
 ## Playtests
 
