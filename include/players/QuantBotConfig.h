@@ -672,6 +672,11 @@ struct QuantBotConfig {
         /// ArmyFirst skill: also in effect while the ground army is below this percent of the strongest
         /// enemy team's remembered army (0 = only under attack). Default 100; hashed when not 100.
         int cityArmyFirstPercent;
+        /// GrowWhenSafe skill: no new units while the ground army is at least CityGrowWhenSafeFloor credits
+        /// and this percent of the strongest enemy team's remembered army, and no structure was lost in the
+        /// last minute. Defaults 150 and 4000; each hashed when it differs.
+        int cityGrowWhenSafePercent;
+        int cityGrowWhenSafeFloor;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;

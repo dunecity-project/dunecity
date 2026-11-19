@@ -1010,6 +1010,21 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     if (pass.surplusArmy) forceStats.surplusPeak = std::max(forceStats.surplusPeak, pass.militaryValue - militaryValueLimit);
     pass.citySimEnabled = currentGame && currentGame->isCitySimEnabled();
     planCityBoom(pass);
+    // GrowWhenSafe (campaign skill): an army above its floor that already outweighs the strongest enemy
+    // team it has seen buys no more units, so the cash builds the city; a structure lost within the last
+    // minute lifts the hold. ArmyFirst's opposite: units before zoning cost a Hard helper 15 of 80 games.
+    if (pass.citySimEnabled && !builderOnly() && cityCampaignSkill(QuantBotCityCampaignSkills::GrowWhenSafe)) {
+        const auto& f = botConfig().force;
+        const int64_t own = ownGroundArmyValue();
+        const Uint32 now = getGameCycleCount();
+        const bool attacked = std::any_of(recentStructureLosses.begin(), recentStructureLosses.end(),
+            [&](const auto& loss) { return now - loss.cycle < MILLI2CYCLES(60000); });
+        if (!attacked && own >= f.cityGrowWhenSafeFloor && own * 100 >= enemyThreatEstimate() * f.cityGrowWhenSafePercent) {
+            pass.militaryBudget = std::min(pass.militaryBudget, pass.militaryValue);
+            pass.lightBudget = pass.militaryBudget;
+            pass.surplusArmy = false;
+        }
+    }
     // One reading of the remaining field, shared by the space decision here and
     // by the cash decisions further down. A tiny field that supports no worker
     // must not count as viable for one and not the other: "any spice at all"
