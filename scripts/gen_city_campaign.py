@@ -430,7 +430,7 @@ MISSIONS: List[Mission] = [
         lose="The Watch has fallen.",
         # Holding out wins at the timer; destroying both houses wins earlier.
         win_flags=11, lose_flags=9, timeout=30,
-        credits={"Atreides": 14000, "Harkonnen": 8000, "Ordos": 8000}, first_attack=5,
+        credits={"Atreides": 13000, "Harkonnen": 9000, "Ordos": 9000}, first_attack=4,
     ),
     Mission(
         6, "Harg Pass Convoy", g.scenario_harg_pass_convoy,
@@ -438,7 +438,7 @@ MISSIONS: List[Mission] = [
                   "links, grow what you can and destroy the Harkonnen and Mercenary bases that raid them."),
         win="The pass is open. Spice flows to Arrakeen again.",
         lose="The pass is closed and the towns are burning.",
-        credits={"Atreides": 10000, "Harkonnen": 10000, "Mercenary": 6000}, first_attack=5,
+        credits={"Atreides": 10000, "Harkonnen": 12000, "Mercenary": 7000}, first_attack=4,
     ),
     Mission(
         7, "Shield Wall Breach", scenario_shield_wall_breach,
@@ -456,11 +456,11 @@ MISSIONS: List[Mission] = [
     Mission(
         8, "Tuono Crossing", g.scenario_tuono_crossing,
         briefing=("No construction yard, a supply ledge and a mobile column. Deploy the MCV on open rock, "
-                  "found a colony of 10,000 people and bank 35,000 credits before the Harkonnen and Sardaukar "
+                  "found a colony of 12,000 people and bank 30,000 credits before the Harkonnen and Sardaukar "
                   "can stop you - or destroy them both."),
         win="Tuono Crossing is a city. The Emperor's legions withdraw.",
         lose="The expedition has failed.",
-        objectives={"Population": 10000, "Credits": 35000, "HoldSeconds": 60},
+        objectives={"Population": 12000, "Credits": 30000, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 5000, "Sardaukar": 8000}, first_attack=10,
     ),
     Mission(
@@ -469,8 +469,9 @@ MISSIONS: List[Mission] = [
                   "on the ridge. Hold the core, keep the refineries running and destroy all three hostile houses."),
         win="The Vise is broken. Carthag is ours.",
         lose="Carthag has fallen to the Harkonnen.",
-        credits={"Atreides": 18000, "Harkonnen": 6000, "Ordos": 6000, "Sardaukar": 3000},
-        zone_cap={"Harkonnen": 20, "Ordos": 20}, army_keep={"Harkonnen": 3, "Ordos": 3}, first_attack=8,
+        credits={"Atreides": 22000, "Harkonnen": 5000, "Ordos": 5000, "Sardaukar": 2000},
+        zone_cap={"Harkonnen": 14, "Ordos": 14}, army_keep={"Harkonnen": 2, "Ordos": 2, "Sardaukar": 2},
+        first_attack=10,
     ),
     Mission(
         10, "All Against Atreides", scenario_all_against_atreides_city,
@@ -478,8 +479,8 @@ MISSIONS: List[Mission] = [
                   "then destroy every one of them."),
         win="House Atreides stands alone on Arrakis. The campaign is won.",
         lose="House Atreides has fallen.",
-        credits={"Atreides": 40000, "Fremen": 3000, "Sardaukar": 3000, "Ordos": 3000, "Harkonnen": 3000},
-        army_keep={"Fremen": 3, "Sardaukar": 3, "Ordos": 3, "Harkonnen": 3}, first_attack=6,
+        credits={"Atreides": 35000, "Fremen": 4000, "Sardaukar": 4000, "Ordos": 4000, "Harkonnen": 4000},
+        army_keep={"Fremen": 5, "Sardaukar": 5, "Ordos": 5, "Harkonnen": 5}, first_attack=5,
     ),
 ]
 

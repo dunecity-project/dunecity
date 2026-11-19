@@ -8943,9 +8943,10 @@ void Game::drawObjectivesPanel() {
         width = std::max(width, w);
         height += h + 2;
     }
-    // Top right of the map view: the city placement hint owns the top left while a road or zone
-    // is being placed, and the F12 overlay (off by default) is the only other thing up here.
-    const int left = std::max(8, sideBarPos.x - 14 - width), top = topBarPos.h + 8;
+    // Top right of the map view, below the zoom / AI-role button row (GameInterface: at most 44
+    // pixels tall, 6 below the top bar): the city placement hint owns the top left while a road or
+    // zone is being placed.
+    const int left = std::max(8, sideBarPos.x - 14 - width), top = topBarPos.h + 6 + 44 + 10;
     SDL_Rect plate{left - 6, top - 4, width + 12, height + 6};
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     renderFillRect(renderer, &plate, COLOR_RGBA(0, 0, 0, 150));

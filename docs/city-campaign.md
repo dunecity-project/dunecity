@@ -81,11 +81,14 @@ original campaign:
 `tests/ai/play-styles/city-objective-planning-off.ini` for the OFF arm). The QuantBot that
 serves the objective house:
 
-- treasury goal: orders Silos until storage plus starting credits can hold the goal, and once it
+- treasury goal: orders Silos until storage plus starting credits can hold the goal, and keeps a
+  bank floor of half of all income earned since the start (refined spice plus taxes), so the
+  starting cash stays free for the build-up while the treasury rises with the economy; once it
   has added half of what the goal asks beyond the mission's starting treasury (recorded at the
-  first evaluation and saved), spends only the surplus above the goal, except in a military
-  emergency. Counting the starting cash as progress froze Tuono's helper on 14,000 of a 15,000
-  goal from minute 0 (v3);
+  first evaluation and saved) it spends only the surplus above the goal. A military emergency
+  releases the bank. Counting the starting cash as progress froze Tuono's helper from minute 0
+  (v3); spending freely until halfway left Brutal and Hard helpers on a few thousand credits for
+  45 minutes (v5);
 - population goal: its Custom city ceiling is at least 125% of the goal;
 - crime or land value goal: police services (first station, catchment placement, land value
   budget) from the first developed block, with police funded at 100% while it has working cash.

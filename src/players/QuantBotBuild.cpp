@@ -6367,22 +6367,25 @@ bool QuantBot::balanceRefineryReturn(const Harvester* harvester) {
 
 
 void QuantBot::planMissionObjectives(BuildPass& pass) {
-    // A treasury goal is won by what the house holds, so once it has banked half of what the goal
-    // asks beyond its starting treasury, the bot spends
-    // only the surplus above the goal - unless the base is in a military emergency, when the army
-    // keeps its money (losing the base loses the mission anyway).
+    // A treasury goal is won by what the house holds. The bot keeps a floor of half of all the
+    // income it has earned since the start (refined spice and taxes), so its starting cash stays
+    // free for the build-up but the bank rises with the economy; once it has added half of what
+    // the goal asks beyond the starting treasury it spends only the surplus above the goal. A
+    // military emergency releases the bank: losing the base loses the mission anyway. (Tuono, v5:
+    // the "spend freely until halfway" rule left Brutal and Hard helpers on 1,000-5,000 credits
+    // against a 35,000 goal for 45 minutes.)
     const int goal = objectiveTarget(MissionObjectivePolicy::Credits);
-    if (goal <= 0) return;
+    if (goal <= 0 || pass.militaryEmergency) return;
     const int banked = getHouse()->getCredits();
-    // Progress is what the house has added to its starting treasury: starting cash already near
-    // the goal must not freeze the opening build-up (Tuono, v3: 14,000 of 15,000 at minute 0).
     const int start = std::max(0, int(currentGame->getMissionObjectives().startCredits));
-    if (goal <= start || int64_t(banked - start) * 2 < int64_t(goal - start) || pass.militaryEmergency) return;
-    const int surplus = std::max(0, banked - goal);
-    if (pass.money > surplus) {
+    const int64_t income = (getHouse()->getHarvestedSpice() + getHouse()->getCityTaxReceipts()).lround();
+    int64_t floor = std::min<int64_t>(goal, income / 2);
+    if (goal > start && int64_t(banked - start) * 2 >= int64_t(goal - start)) floor = goal;
+    const int spendable = int(std::max<int64_t>(0, banked - floor));
+    if (pass.money > spendable) {
         if (pass.emitStatsLog && AITelemetry::log().enabled())
             traceDecision("objective_treasury_hold",AITelemetry::Record().set("goal",goal).set("banked",banked)
-                .set("spendable",pass.money).set("surplus",surplus));
-        pass.money = surplus;
+                .set("floor",floor).set("income",income).set("spendable",pass.money));
+        pass.money = spendable;
     }
 }
