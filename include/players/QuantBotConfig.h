@@ -634,6 +634,12 @@ struct QuantBotConfig {
         /// Experimental/default off: a single yard reserves profitable growth
         /// against two completed ordinary infrastructure orders per extra zone.
         bool citySingleYardGrowth;
+        /// A funded production backlog (every heavy or light factory busy, the funded army short of its
+        /// plan by a factory's price and the cash to build one) takes a construction yard before the
+        /// dedicated city-growth yard does. Without it a house with no city ceiling (Brutal) kept
+        /// every yard zoning while its army was destroyed with 20,000 credits banked
+        /// (docs/city-campaign.md, "Brutal's yards"). Hashed when OFF.
+        bool productionBeforeCityGrowth;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;

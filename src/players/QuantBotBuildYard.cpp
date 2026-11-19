@@ -718,9 +718,13 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
     // at 0, so this allocation would buy a lot that cannot develop and
     // spend the civic's down payment doing it. The civic rule below
     // owns the decision in that case.
+    // A funded production backlog outranks the growth allocation (productionBeforeCityGrowth):
+    // this yard falls through to the heavy/light unit backlog rules below instead of zoning.
+    const bool productionLaneDue = botConfig().force.productionBeforeCityGrowth
+        && (yardTurn.heavyBacklog || yardTurn.lightBacklog);
     if (yardTurn.itemID==NONE_ID && pass.cityGrowthProtected && capitalPending(pass)
         && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
-        && !yardTurn.civicClaimsYard) {
+        && !yardTurn.civicClaimsYard && !productionLaneDue) {
         yardTurn.itemID=affordableCityZone(pass, turn.pBuilder,pass.money);
         if (yardTurn.itemID!=NONE_ID) yardTurn.structureRule="dedicated_city_growth";
     }
