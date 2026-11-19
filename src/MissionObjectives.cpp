@@ -182,7 +182,7 @@ std::vector<std::pair<std::string, bool>> MissionObjectives::describe(const Game
                                               : fmt::sprintf(_("Defeat the enemy: %d houses left"), m.enemiesLeft));
     if(conquestWins && !targets.used[DefeatEnemies]) {
         // The usual Dune victory still stands beside any city goals.
-        const char* text = isActive() || deadlineCycle > 0 ? _("Or destroy every enemy house: %d left")
+        const std::string text = isActive() || deadlineCycle > 0 ? _("Or destroy every enemy house: %d left")
                                                            : _("Destroy every enemy house: %d left");
         lines.emplace_back(fmt::sprintf(text, m.enemiesLeft), m.enemiesLeft == 0);
     }
