@@ -117,7 +117,13 @@ TEST_CASE("DuneCity campaign maps carry a briefing, valid goals and in-bounds br
         if(ini.hasSection("EVENTS")) {
             for(const auto& key : ini.getSection("EVENTS")) {
                 const std::string keyName = key.getKeyName();
-                if(keyName.find("Message") != std::string::npos) continue;
+                if(keyName == "FirstEnemyAttack") {
+                    const int minutes = key.getIntValue(-1);
+                    REQUIRE(minutes >= 0);
+                    REQUIRE(minutes <= 120);
+                    continue;
+                }
+                if(keyName.rfind("Breach", 0) != 0 || keyName.find("Message") != std::string::npos) continue;
                 std::vector<int> v;
                 std::stringstream in(key.getStringValue());
                 std::string field;
