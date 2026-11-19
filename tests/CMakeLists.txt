@@ -1003,8 +1003,9 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): Stefan's
         # "All against Atreides" setup played to the end - vanilla, Atreides QuantBot Brutal
         # (local spectator) against four AI Player (hard) houses, his Game Options (unit and
-        # harvester overrides 0). Atreides must eliminate every house within 40 game minutes
-        # on all six seeds; 1.0.796 does so (32-37 min), 1.0.812-1.0.842 lose or take 42-71.
+        # harvester overrides 0). Atreides must eliminate every house within 50 game minutes
+        # (Stefan, 2026-11-07; it was 40) on all six seeds; 1.0.796 does so (32-37 min),
+        # 1.0.812-1.0.842 lose or take 42-71.
         # docs/quantbot-all-against-atreides.md.
         dunecity_add_test(headless nightly NAME quantbot_all_against_atreides COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-all-against-atreides.py --jobs 3 --win-minutes 50
@@ -1024,8 +1025,9 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         # armies, 40,000 cities, Stefan's game options), seeds 9101, 9103, 9105 three at a time.
         # Fails when, on 9101, no wave of 30+ units has left by minute 8 or a house keeps its idle
         # reserve 80%+ inside its own base for more than 6 minutes in a row, or when no seed has a
-        # house eliminated by minute 30 - 1.0.847 summed every enemy into "outnumbered" and never
-        # attacked. One seed's elimination time is chance (12-seed sweep, run-ffa-army-deploys.py).
+        # house eliminated by minute 35 (30 until the 2026-11-05 trooper defence change) - 1.0.847
+        # summed every enemy into "outnumbered" and never attacked. One seed's elimination time is
+        # chance (12-seed sweep, run-ffa-army-deploys.py).
         # docs/formations.md, "Free-for-all: the army deploys". A batch harness: --fresh replays all
         # three seeds here; dunecity-queue submit can also play them as cluster units.
         dunecity_add_test(headless nightly NAME quantbot_ffa_army_deploys COMMAND ${Python3_EXECUTABLE}
