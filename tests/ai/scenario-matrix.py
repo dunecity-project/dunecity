@@ -262,11 +262,12 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                               full=1, smoke=0, opt_in=True, measured=True))
     # DuneCity campaign (docs/city-campaign.md), only with --categories citycampaign: the ten
     # DCITY missions as Atreides, an idle human with a QuantBot helper one tier above the enemy
-    # QuantBots. The missions' native objectives (city goals, deadlines, conquest) end the game.
+    # QuantBots. The missions' native objectives (city goals, deadlines, conquest) end the game;
+    # 120 minutes, because a Medium helper clearing four Easy houses (mission 10) can take 90+.
     for partner, enemy in (('brutal', 'hard'), ('hard', 'medium'), ('medium', 'easy')):
         cells.append(dict(category='citycampaign', name=f'helper-{partner}-v-{enemy}', kind='campaign',
                           mod='dunecity', partner=partner, enemy_ai='quantbot', enemy_difficulty=enemy,
-                          minutes=90, full=4, smoke=0, city=True, measured=True))
+                          minutes=120, full=4, smoke=0, city=True, measured=True))
     # Reworked campaign (docs/reworked-campaign.md), only with --cells: a reworked- twin of every vanilla
     # campaign cell above plays the 22 RWRK_ missions of every house with a complete reworked set on the
     # same seeds, reported against the originals

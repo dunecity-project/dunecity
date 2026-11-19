@@ -105,7 +105,8 @@ python3 tests/ai/city-campaign-report.py RESULTS
 
 `--categories citycampaign` plays every mission with an idle human and a QuantBot helper one
 tier above the enemy QuantBots (Brutal v Hard, Hard v Medium, Medium v Easy), four seeds each by
-default (`--seeds-per-cell`, `--city-missions`), 90 game minutes. `win_type` records
+default (`--seeds-per-cell`, `--city-missions`, `--campaign-seeds`), 120 game minutes (rounds up to
+v9 used 90). `win_type` records
 `objectives`, `survival` or `conquest`.
 
 ## Playtest results
@@ -119,6 +120,9 @@ live in `/Users/stefan/Documents/projects/outputs/city-campaign-20261119/<round>
 | v3 | grace periods, rebalanced credits, raised goals | 72/72 | 0/8 | 0/12 | 1/9 | 6/12 |
 | v5 | Custom rules, harder 1-6, easier 7/9/10, treasury from the starting cash | 72/72 | 6/12 | 6/12 | 3/12 | 12/12 |
 | v6 | treasury floor from earned income | 72/72 | 6/7 | 6/12 | 6/12 | 12/12 |
+| v7 | 6 seeds; harder 5-6, longer Tuono grace, less AAA cash | 107/108 | 18/18 | 14/18 | 16/18 | 16/17 |
+| v8 | Shield Wall needs 50,000 people; Carthag and AAA a little harder | 107/108 | 18/18 | 14/18 | 15/18 | 12/18 |
+| v9 (Brutal v Hard only) | Shield Wall houses at full strength | - | 3/6 | 6/6 | 4/6 | 5/6 |
 
 Lessons, each now fixed in the maps or the AI:
 
@@ -130,8 +134,12 @@ Lessons, each now fixed in the maps or the AI:
 - A treasury goal needs saving discipline: counting starting cash as progress froze Tuono's helper
   (14,000 of 15,000 at minute 0); spending freely until halfway left Brutal and Hard helpers on a
   few thousand credits; the earned-income floor fills Hagal by minute 11-14.
-- Medium helpers beat Easy enemies on every mission in every round: Easy QuantBots barely attack.
-  The curve is set by the Brutal v Hard and Hard v Medium pairings.
+- Medium helpers beat Easy enemies on almost every mission in every round: Easy QuantBots barely
+  attack. The curve is set by the Brutal v Hard and Hard v Medium pairings.
+- With the same seeds and maps the games are deterministic: missions 1-6 of v8 reproduced v7 game
+  for game, so a round only needs to replay the missions that changed.
+- Shield Wall Breach is decided by the race between the basin city reaching its population goal and
+  the assault that follows the breach (v9: lost games collapsed at 27-30 minutes).
 
 ### Final validation
 
