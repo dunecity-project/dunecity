@@ -110,6 +110,12 @@ inline std::string groupedNumber(int value) {
 /// has none. Starting credits are multiplied by it, the FirstEnemyAttack grace divided by it.
 int enemyStrengthPermille(const INIFile& inifile, const std::string& difficulty);
 
+/// One [DIFFICULTY] value in per mille, kept within 0.25 .. 10.
+inline int strengthPermille(double value) {
+    const int permille = static_cast<int>(value * 1000.0 + 0.5);
+    return permille < 250 ? 250 : permille > 10000 ? 10000 : permille;
+}
+
 /// Starting credits at that strength, rounded to 100 credits.
 inline int scaledCredits(int credits, int permille) {
     const long long scaled = static_cast<long long>(credits) * permille / 1000;

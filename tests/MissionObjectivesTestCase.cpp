@@ -100,6 +100,9 @@ TEST_CASE("DuneCity campaign: enemy strength by difficulty", "[DuneCityCampaign]
     CHECK(scaledGrace(37500, 2000) == 18750);
     CHECK(scaledGrace(37500, 2500) == 15000);
     CHECK(scaledGrace(1000, 0) == 1000);
+    CHECK(strengthPermille(2.5) == 2500);
+    CHECK(strengthPermille(0.1) == 250);
+    CHECK(strengthPermille(40.0) == 10000);
 }
 
 TEST_CASE("DuneCity campaign filenames", "[DuneCityCampaign]") {
@@ -126,9 +129,11 @@ TEST_CASE("DuneCity campaign maps carry a briefing, valid goals and in-bounds br
         if(ini.hasSection("DIFFICULTY")) {
             int previous = 0;
             for(const char* difficulty : {"Easy", "Medium", "Hard", "Brutal"}) {
-                const int permille = MissionObjectivePolicy::enemyStrengthPermille(ini, difficulty);
-                REQUIRE(permille >= 250);
-                REQUIRE(permille <= 10000);
+                REQUIRE(ini.hasKey("DIFFICULTY", difficulty));
+                const double value = ini.getDoubleValue("DIFFICULTY", difficulty, 0.0);
+                REQUIRE(value >= 0.25);
+                REQUIRE(value <= 10.0);
+                const int permille = MissionObjectivePolicy::strengthPermille(value);
                 REQUIRE(permille >= previous);
                 previous = permille;
             }
