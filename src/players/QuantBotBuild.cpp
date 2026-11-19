@@ -535,10 +535,10 @@ void QuantBot::build(int militaryValue) {
     planCityBootstrap(pass);
     planOpeningProduction(pass);
     planDefenceCoverage(pass);
-    pass.cityArmyFirst = pass.citySimEnabled && !builderOnly()
-        && cityCampaignSkill(QuantBotCityCampaignSkills::ArmyFirst)
-        && (pass.defendingEconomy || pass.groundThreatAsset.isValid()
-            || ownGroundArmyValue() * 100 < enemyThreatEstimate() * botConfig().force.cityArmyFirstPercent);
+    if (const int panic = cityCampaignPanicPercent(); panic != QuantBotCityCampaignSkills::kNoPanic)
+        pass.cityPanic = pass.citySimEnabled && !builderOnly()
+            && (pass.defendingEconomy || pass.groundThreatAsset.isValid()
+                || ownGroundArmyValue() * 100 < enemyThreatEstimate() * panic);
     planVanillaCoreDefence(pass);
     planCityResearchOrder(pass);
     planTechSavings(pass);
@@ -1010,21 +1010,6 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
     if (pass.surplusArmy) forceStats.surplusPeak = std::max(forceStats.surplusPeak, pass.militaryValue - militaryValueLimit);
     pass.citySimEnabled = currentGame && currentGame->isCitySimEnabled();
     planCityBoom(pass);
-    // GrowWhenSafe (campaign skill): an army above its floor that already outweighs the strongest enemy
-    // team it has seen buys no more units, so the cash builds the city; a structure lost within the last
-    // minute lifts the hold. ArmyFirst's opposite: units before zoning cost a Hard helper 15 of 80 games.
-    if (pass.citySimEnabled && !builderOnly() && cityCampaignSkill(QuantBotCityCampaignSkills::GrowWhenSafe)) {
-        const auto& f = botConfig().force;
-        const int64_t own = ownGroundArmyValue();
-        const Uint32 now = getGameCycleCount();
-        const bool attacked = std::any_of(recentStructureLosses.begin(), recentStructureLosses.end(),
-            [&](const auto& loss) { return now - loss.cycle < MILLI2CYCLES(60000); });
-        if (!attacked && own >= f.cityGrowWhenSafeFloor && own * 100 >= enemyThreatEstimate() * f.cityGrowWhenSafePercent) {
-            pass.militaryBudget = std::min(pass.militaryBudget, pass.militaryValue);
-            pass.lightBudget = pass.militaryBudget;
-            pass.surplusArmy = false;
-        }
-    }
     // One reading of the remaining field, shared by the space decision here and
     // by the cash decisions further down. A tiny field that supports no worker
     // must not count as viable for one and not the other: "any spice at all"
@@ -2315,8 +2300,8 @@ bool QuantBot::powerGenerationPending(BuildPass& pass) {
 Uint32 QuantBot::chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly) {
     const int zones = pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]+pass.itemCount[Structure_ZoneIndustrial];
     if (!campaignAllowsZone(zones)) return Uint32(NONE_ID);
-    // ArmyFirst: while threatened the money buys units; the city keeps only its seed.
-    if (pass.cityArmyFirst && !bootstrap && zones >= CityEconomyInvestmentPolicy::kBootstrapZoneSeed) return Uint32(NONE_ID);
+    // Campaign ladder panic: while threatened the money buys units; the city keeps only its seed.
+    if (pass.cityPanic && !bootstrap && zones >= CityEconomyInvestmentPolicy::kBootstrapZoneSeed) return Uint32(NONE_ID);
 
     auto ranked = QuantBotBuildPolicy::rankZones(
         pass.itemCount[Structure_ZoneResidential], pass.itemCount[Structure_ZoneCommercial],
@@ -5809,7 +5794,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // Crime protection keeps the winning allocation; growth resumes after its
     // order is accepted. A lone opening yard retains its tech path.
     Uint32 dedicatedCityYard=NONE_ID;
-    const bool threatBudget = pass.cityBoomArmy || pass.cityArmyFirst || (botConfig().force.cityThreatBudget && pass.citySimEnabled
+    const bool threatBudget = pass.cityBoomArmy || pass.cityPanic || (botConfig().force.cityThreatBudget && pass.citySimEnabled
         && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0 && pass.defendingEconomy);
     if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital

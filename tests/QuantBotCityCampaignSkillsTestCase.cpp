@@ -41,8 +41,6 @@ TEST_CASE("City campaign skill ladder: the default tiers", "[quantbot][citycampa
     // Never-tier skills stay off for every tier.
     CHECK_FALSE(ladderSkill(GrowthTax, Brutal));
     CHECK_FALSE(ladderSkill(HarvesterTargets, Brutal));
-    CHECK_FALSE(ladderSkill(ArmyFirst, Brutal));
-    CHECK_FALSE(ladderSkill(GrowWhenSafe, Brutal));
 }
 
 TEST_CASE("City campaign skill ladder: native behaviour outside the ladder", "[quantbot][citycampaign]") {
@@ -54,8 +52,6 @@ TEST_CASE("City campaign skill ladder: native behaviour outside the ladder", "[q
         CHECK(hasSkill(EarlyAttack, difficulty, Easy, false) == (difficulty == Brutal));
         CHECK_FALSE(hasSkill(GrowthTax, difficulty, Easy, false));
         CHECK_FALSE(hasSkill(HarvesterTargets, difficulty, Easy, false));
-        CHECK_FALSE(hasSkill(ArmyFirst, difficulty, Easy, false));
-        CHECK_FALSE(hasSkill(GrowWhenSafe, difficulty, Easy, false));
     }
     // Defend is outside Easy..Brutal: native even with the ladder on.
     CHECK(hasSkill(TreasuryRelease, kDefend, Never, true));
@@ -95,4 +91,14 @@ TEST_CASE("City campaign skill ladder: thinking speed", "[quantbot][citycampaign
     // Each tier thinks at least as fast as the one below; Brutal on every pass.
     for (int tier = Easy; tier < Brutal; ++tier) CHECK(kDefaultThinkPasses[tier] >= kDefaultThinkPasses[tier + 1]);
     CHECK(kDefaultThinkPasses[Brutal] == 1);
+}
+
+TEST_CASE("City campaign skill ladder: panic under pressure", "[quantbot][citycampaign]") {
+    const std::array<int, 4> table{{100, 50, 0, kNoPanic}};
+    CHECK(panicPercent(Easy, table, true) == 100);
+    CHECK(panicPercent(Hard, table, true) == 0);
+    CHECK(panicPercent(Brutal, table, true) == kNoPanic);
+    CHECK(panicPercent(Easy, table, false) == kNoPanic);
+    CHECK(panicPercent(4, table, true) == kNoPanic); // Defend keeps its native play
+    for (int panic : kDefaultPanicPercent) CHECK(panic >= kNoPanic);
 }

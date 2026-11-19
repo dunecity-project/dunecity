@@ -669,14 +669,10 @@ struct QuantBotConfig {
         /// Lowest tier per skill (0 Easy .. 3 Brutal, 4 never), indexed by QuantBotCityCampaignSkills::Skill.
         /// Defaults kDefaultTiers; each tier is hashed when it differs from its default.
         std::array<int, QuantBotCityCampaignSkills::kSkillCount> cityCampaignSkillTier;
-        /// ArmyFirst skill: also in effect while the ground army is below this percent of the strongest
-        /// enemy team's remembered army (0 = only under attack). Default 100; hashed when not 100.
-        int cityArmyFirstPercent;
-        /// GrowWhenSafe skill: no new units while the ground army is at least CityGrowWhenSafeFloor credits
-        /// and this percent of the strongest enemy team's remembered army, and no structure was lost in the
-        /// last minute. Defaults 150 and 4000; each hashed when it differs.
-        int cityGrowWhenSafePercent;
-        int cityGrowWhenSafeFloor;
+        /// Panic under pressure per tier on the campaign ladder (QuantBotCityCampaignSkills::kPanicKeys):
+        /// -1 never, 0 only under attack, N below N% of the strongest enemy team's remembered army.
+        /// Each hashed when it differs from its default.
+        std::array<int, 4> cityCampaignPanicPercent;
         /// Thinking speed per tier on the campaign ladder (QuantBotCityCampaignSkills::kThinkKeys): the tier
         /// decides on one AI pass in N. Default 1 for every tier; each hashed when it differs.
         std::array<int, 4> cityCampaignThinkPasses;

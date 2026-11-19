@@ -487,9 +487,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityLandValueSiting = true;
     force.cityCampaignSkillLadder = true;
     force.cityCampaignSkillTier = QuantBotCityCampaignSkills::kDefaultTiers;
-    force.cityArmyFirstPercent = 100;
-    force.cityGrowWhenSafePercent = 150;
-    force.cityGrowWhenSafeFloor = 4000;
+    force.cityCampaignPanicPercent = QuantBotCityCampaignSkills::kDefaultPanicPercent;
     force.cityCampaignThinkPasses = QuantBotCityCampaignSkills::kDefaultThinkPasses;
     force.cityPowerGrowthHorizon = false;
     force.cityBoomWorkers = false;
@@ -986,9 +984,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityCampaignSkillLadder", force.cityCampaignSkillLadder);
         for (int skill = 0; skill < QuantBotCityCampaignSkills::kSkillCount; ++skill)
             iniFile.setIntValue("Force Concentration", QuantBotCityCampaignSkills::kTierKeys[skill], force.cityCampaignSkillTier[skill]);
-        iniFile.setIntValue("Force Concentration", "CityArmyFirstPercent", force.cityArmyFirstPercent);
-        iniFile.setIntValue("Force Concentration", "CityGrowWhenSafePercent", force.cityGrowWhenSafePercent);
-        iniFile.setIntValue("Force Concentration", "CityGrowWhenSafeFloor", force.cityGrowWhenSafeFloor);
+        for (int tier = 0; tier < 4; ++tier)
+            iniFile.setIntValue("Force Concentration", QuantBotCityCampaignSkills::kPanicKeys[tier], force.cityCampaignPanicPercent[tier]);
         for (int tier = 0; tier < 4; ++tier)
             iniFile.setIntValue("Force Concentration", QuantBotCityCampaignSkills::kThinkKeys[tier], force.cityCampaignThinkPasses[tier]);
         iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
@@ -1350,9 +1347,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         force.cityCampaignSkillTier[skill] = std::clamp(iniFile.getIntValue("Force Concentration",
             QuantBotCityCampaignSkills::kTierKeys[skill], force.cityCampaignSkillTier[skill]),
             int(QuantBotCityCampaignSkills::Easy), int(QuantBotCityCampaignSkills::Never));
-    force.cityArmyFirstPercent = std::clamp(iniFile.getIntValue("Force Concentration", "CityArmyFirstPercent", force.cityArmyFirstPercent), 0, 400);
-    force.cityGrowWhenSafePercent = std::clamp(iniFile.getIntValue("Force Concentration", "CityGrowWhenSafePercent", force.cityGrowWhenSafePercent), 0, 1000);
-    force.cityGrowWhenSafeFloor = std::clamp(iniFile.getIntValue("Force Concentration", "CityGrowWhenSafeFloor", force.cityGrowWhenSafeFloor), 0, 100000);
+    for (int tier = 0; tier < 4; ++tier)
+        force.cityCampaignPanicPercent[tier] = std::clamp(iniFile.getIntValue("Force Concentration",
+            QuantBotCityCampaignSkills::kPanicKeys[tier], force.cityCampaignPanicPercent[tier]), QuantBotCityCampaignSkills::kNoPanic, 400);
     for (int tier = 0; tier < 4; ++tier)
         force.cityCampaignThinkPasses[tier] = std::clamp(iniFile.getIntValue("Force Concentration",
             QuantBotCityCampaignSkills::kThinkKeys[tier], force.cityCampaignThinkPasses[tier]), 1, QuantBotCityCampaignSkills::kMaxThinkPasses);
@@ -2045,9 +2042,9 @@ std::string QuantBotConfig::getConfigHash() const {
     for (int skill = 0; skill < QuantBotCityCampaignSkills::kSkillCount; ++skill)
         if (force.cityCampaignSkillTier[skill] != QuantBotCityCampaignSkills::kDefaultTiers[skill])
             addNamed(QuantBotCityCampaignSkills::kTierKeys[skill], force.cityCampaignSkillTier[skill]);
-    if (force.cityArmyFirstPercent != 100) addNamed("cityArmyFirstPercent", force.cityArmyFirstPercent);
-    if (force.cityGrowWhenSafePercent != 150) addNamed("cityGrowWhenSafePercent", force.cityGrowWhenSafePercent);
-    if (force.cityGrowWhenSafeFloor != 4000) addNamed("cityGrowWhenSafeFloor", force.cityGrowWhenSafeFloor);
+    for (int tier = 0; tier < 4; ++tier)
+        if (force.cityCampaignPanicPercent[tier] != QuantBotCityCampaignSkills::kDefaultPanicPercent[tier])
+            addNamed(QuantBotCityCampaignSkills::kPanicKeys[tier], force.cityCampaignPanicPercent[tier]);
     for (int tier = 0; tier < 4; ++tier)
         if (force.cityCampaignThinkPasses[tier] != QuantBotCityCampaignSkills::kDefaultThinkPasses[tier])
             addNamed(QuantBotCityCampaignSkills::kThinkKeys[tier], force.cityCampaignThinkPasses[tier]);

@@ -263,9 +263,9 @@ struct QuantBot::BuildPass {
     std::set<Uint32> orderedThisTick{};
     bool roadMaintenanceAttempted{};
     bool defendingEconomy{};
-    /// ArmyFirst campaign skill in effect this pass: under attack, an enemy ground force at an asset,
-    /// or its ground army below the strongest enemy team's remembered army. No zoning beyond the seed.
-    bool cityArmyFirst{};
+    /// Campaign ladder panic in effect this pass (QuantBotCityCampaignSkills::kPanicKeys): no zoning
+    /// beyond the seed city and no dedicated growth yard, so the money buys units.
+    bool cityPanic{};
     bool campaignThreatProduction{};
     // CampaignHelperFactoryFirst: support house below its army floor still lacks a Heavy Factory.
     bool campaignHelperFactoryFirst{};
