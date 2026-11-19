@@ -1567,5 +1567,14 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
                 automation.headless_qualification(self.root)
 
 
+def load_tests(loader, tests, pattern):
+    # CI runs this file by name; the AWS-split qualification tests live beside it.
+    spec = importlib.util.spec_from_file_location('test_qualification_aws', Path(__file__).with_name('test_qualification_aws.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    tests.addTests(loader.loadTestsFromModule(module))
+    return tests
+
+
 if __name__ == '__main__':
     unittest.main()
