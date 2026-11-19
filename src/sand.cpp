@@ -927,7 +927,7 @@ void startSinglePlayerGame(const GameInitSettings& init)
                     case GAME_DEBRIEFING_WIN: {
                         SDL_Log("Debriefing...");
                         {
-                            BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_WIN);
+                            BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_WIN, currentGameInitInfo.getFilename());
                             briefing.showMenu();
                         }
 
@@ -939,7 +939,7 @@ void startSinglePlayerGame(const GameInitSettings& init)
 
                         const int houseID = currentGameInitInfo.getHouseID();
 
-                        if(currentGameInitInfo.getGameType() == GameType::Campaign) {
+                        if(currentGameInitInfo.getGameType() == GameType::Campaign && !currentGameInitInfo.isDuneCityCampaign()) {
                             const int level = missionNumberToLevelNumber(currentGameInitInfo.getMission());
 
                             if(level == 4 && (ModManager::instance().isTornieFamilyContentActive() || houseID == HOUSE_HARKONNEN || houseID == HOUSE_ATREIDES || houseID == HOUSE_ORDOS)) {
@@ -960,7 +960,7 @@ void startSinglePlayerGame(const GameInitSettings& init)
 
                     case GAME_DEBRIEFING_LOST: {
                         SDL_Log("Debriefing...");
-                        BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_LOST);
+                        BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_LOST, currentGameInitInfo.getFilename());
                         briefing.showMenu();
                     } break;
 

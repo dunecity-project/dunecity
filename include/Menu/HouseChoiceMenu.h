@@ -52,6 +52,8 @@ public:
     static int getCampaignSkin() { return s_campaignSkin; }
     /// Play the reworked RWRK_ maps (misc/ReworkedCampaign.h) instead of the original missions.
     static bool isReworkedMaps() { return s_reworkedMaps; }
+    /// Maps: DuneCity - the ten-mission Atreides city campaign (misc/DuneCityCampaign.h).
+    static bool isDuneCityCampaign() { return s_duneCityCampaign; }
     static const SettingsClass::GameOptionsClass& getGameOptions() { return s_currentGameOptions; }
 
 private:
@@ -64,6 +66,7 @@ private:
     void updateHouseChoice();
     void refreshHouseChoices();
     bool reworkedMapsAllowed() const;
+    bool duneCityCampaignAllowed() const;
     bool showsRemasteredWatermark() const override { return s_reworkedMaps; }
 
     void onHouseLeft();
@@ -116,6 +119,7 @@ private:
     static std::string s_enemyClass;
     static int s_campaignSkin;
     static bool s_reworkedMaps;
+    static bool s_duneCityCampaign;
     static SettingsClass::GameOptionsClass s_currentGameOptions;
 };
 

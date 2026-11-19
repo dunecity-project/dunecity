@@ -32,6 +32,7 @@
 #include <Menu/HouseChoiceInfoMenu.h>
 #include <SoundPlayer.h>
 #include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 
 
 namespace {
@@ -50,6 +51,7 @@ std::string HouseChoiceMenu::s_partnerClass;
 std::string HouseChoiceMenu::s_enemyClass = "qBotEasy";
 int HouseChoiceMenu::s_campaignSkin = 0;
 bool HouseChoiceMenu::s_reworkedMaps = false;
+bool HouseChoiceMenu::s_duneCityCampaign = false;
 SettingsClass::GameOptionsClass HouseChoiceMenu::s_currentGameOptions;
 
 HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : MenuBase(), showLobby(showLobby)
@@ -155,12 +157,19 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     windowWidget.addWidget(mapsLabel, Point(180, 294), Point(124, 18));
     campaignMapsDropDown.addEntry(_("Original"), 0);
     campaignMapsDropDown.addEntry(_("Reworked"), 1);
+    campaignMapsDropDown.addEntry(_("DuneCity"), 2);
     if(!reworkedMapsAllowed()) s_reworkedMaps = false;
-    campaignMapsDropDown.setSelectedItem(s_reworkedMaps ? 1 : 0);
-    campaignMapsDropDown.setEnabled(reworkedMapsAllowed());
+    if(!duneCityCampaignAllowed()) s_duneCityCampaign = false;
+    campaignMapsDropDown.setSelectedItem(s_duneCityCampaign ? 2 : s_reworkedMaps ? 1 : 0);
+    campaignMapsDropDown.setEnabled(reworkedMapsAllowed() || duneCityCampaignAllowed());
     campaignMapsDropDown.setOnSelectionChange([this](bool interactive) {
         if(!interactive) return;
-        s_reworkedMaps = campaignMapsDropDown.getSelectedEntryIntData() == 1 && reworkedMapsAllowed();
+        const int maps = campaignMapsDropDown.getSelectedEntryIntData();
+        s_reworkedMaps = maps == 1 && reworkedMapsAllowed();
+        s_duneCityCampaign = maps == 2 && duneCityCampaignAllowed();
+        if(maps != (s_duneCityCampaign ? 2 : s_reworkedMaps ? 1 : 0))
+            campaignMapsDropDown.setSelectedItem(s_duneCityCampaign ? 2 : s_reworkedMaps ? 1 : 0);
+        populateLevels();
         refreshHouseChoices();
     });
     windowWidget.addWidget(&campaignMapsDropDown, Point(180, 315), Point(124, 22));
@@ -245,6 +254,11 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
 
 HouseChoiceMenu::~HouseChoiceMenu() = default;
 
+bool HouseChoiceMenu::duneCityCampaignAllowed() const {
+    // City-sim missions: they need the DuneCity mod (city mode) and the ten bundled maps.
+    return ModManager::instance().isCityModeActive() && DuneCityCampaign::isAvailable();
+}
+
 bool HouseChoiceMenu::reworkedMapsAllowed() const {
     // The reworked missions are vanilla-house maps; family editions bring their own campaigns.
     return !reworkedHouses.empty() && !ModManager::instance().isTornieFamilyContentActive();
@@ -254,7 +268,13 @@ void HouseChoiceMenu::refreshHouseChoices() {
     auto& manager = ModManager::instance();
     houseChoices = CustomGamePlayerPolicy::selectableHouses(manager.isTornieFamilyContentActive(),
         isHouseAvailable(HOUSE_CUSTOM), manager.getPlayableHouses());
-    if(s_reworkedMaps) {
+    if(s_duneCityCampaign) {
+        // The DuneCity campaign is an Atreides campaign.
+        CustomGamePlayerPolicy::HouseRoster atreides;
+        for(int i = 0; i < houseChoices.count; ++i)
+            if(houseChoices[i] == DuneCityCampaign::kHouse) atreides.houses[atreides.count++] = houseChoices[i];
+        houseChoices = atreides;
+    } else if(s_reworkedMaps) {
         // Only houses whose whole campaign has been reworked can start a reworked campaign.
         CustomGamePlayerPolicy::HouseRoster reworked;
         for(int i = 0; i < houseChoices.count; ++i) {
@@ -366,9 +386,11 @@ void HouseChoiceMenu::onHouseButton(int button) {
 
 void HouseChoiceMenu::populateLevels() {
     startLevelDropDown.clearAllEntries();
-    s_startLevel = std::clamp(s_startLevel, 1, s_singleMission ? 22 : 9);
-    for(int i = 1; i <= (s_singleMission ? 22 : 9); ++i)
-        startLevelDropDown.addEntry((s_singleMission ? _("Mission ") : _("Level ")) + std::to_string(i), i);
+    // The DuneCity campaign has one mission per level, ten of them.
+    const int levels = s_duneCityCampaign ? DuneCityCampaign::kMissions : s_singleMission ? 22 : 9;
+    s_startLevel = std::clamp(s_startLevel, 1, levels);
+    for(int i = 1; i <= levels; ++i)
+        startLevelDropDown.addEntry((s_singleMission || s_duneCityCampaign ? _("Mission ") : _("Level ")) + std::to_string(i), i);
     startLevelDropDown.setSelectedItem(s_startLevel - 1);
 }
 
@@ -466,11 +488,11 @@ void HouseChoiceMenu::onModSelectionChanged(bool interactive) {
             s_currentGameOptions = effectiveGameOptions;
         }
     }
-    if(!reworkedMapsAllowed()) {
-        s_reworkedMaps = false;
-        campaignMapsDropDown.setSelectedItem(0);
-    }
-    campaignMapsDropDown.setEnabled(reworkedMapsAllowed());
+    if(!reworkedMapsAllowed()) s_reworkedMaps = false;
+    if(!duneCityCampaignAllowed()) s_duneCityCampaign = false;
+    campaignMapsDropDown.setSelectedItem(s_duneCityCampaign ? 2 : s_reworkedMaps ? 1 : 0);
+    campaignMapsDropDown.setEnabled(reworkedMapsAllowed() || duneCityCampaignAllowed());
+    populateLevels();
     refreshHouseChoices();
     updateModDescription();
     campaignSkinDropDown.setEnabled(manager.isCityModeActive());

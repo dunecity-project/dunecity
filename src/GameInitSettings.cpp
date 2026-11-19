@@ -17,6 +17,7 @@
 
 #include <GameInitSettings.h>
 #include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 #include <misc/CampaignControls.h>
 #include <FileClasses/INIFile.h>
 #include <FileClasses/FileManager.h>
@@ -254,9 +255,14 @@ GameInitSettings::GameInitSettings(const GameInitSettings& prevGameInitInfoClass
     mission = nextMission;
     this->alreadyPlayedRegions = alreadyPlayedRegions;
     this->alreadyShownTutorialHints = alreadyShownTutorialHints;
-    filename = getScenarioFilename(houseID, mission);
-    // A reworked campaign continues (or retries) with the reworked map of the next mission.
-    if(prevGameInitInfoClass.isReworkedCampaign()) filename = ReworkedCampaign::toReworked(filename);
+    if(prevGameInitInfoClass.isDuneCityCampaign()) {
+        // The DuneCity campaign is a fixed list: no region map, no house scenario letter.
+        filename = DuneCityCampaign::scenarioFilename(mission);
+    } else {
+        filename = getScenarioFilename(houseID, mission);
+        // A reworked campaign continues (or retries) with the reworked map of the next mission.
+        if(prevGameInitInfoClass.isReworkedCampaign()) filename = ReworkedCampaign::toReworked(filename);
+    }
     setScenarioData({});
     randomSeed = getRandomInt();
 }
@@ -881,6 +887,20 @@ void GameInitSettings::migrateLegacyHouseColorSlots() {
 
 bool GameInitSettings::isReworkedCampaign() const {
     return isScenarioGameType(gameType) && ReworkedCampaign::isReworkedFilename(filename);
+}
+
+bool GameInitSettings::isDuneCityCampaign() const {
+    return isScenarioGameType(gameType) && DuneCityCampaign::isCampaignFilename(filename);
+}
+
+void GameInitSettings::useDuneCityCampaign(int newMission) {
+    if(!isScenarioGameType(gameType) || newMission < 1 || newMission > DuneCityCampaign::kMissions) {
+        THROW(std::invalid_argument, "GameInitSettings::useDuneCityCampaign(): only campaign missions 1-%d.",
+              DuneCityCampaign::kMissions);
+    }
+    houseID = DuneCityCampaign::kHouse;
+    mission = newMission;
+    filename = DuneCityCampaign::scenarioFilename(newMission);
 }
 
 void GameInitSettings::useReworkedMaps() {

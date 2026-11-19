@@ -93,6 +93,7 @@ std::mutex Game::performanceLogMutex;
 #include <Menu/BriefingMenu.h>
 #include <Menu/MapChoice.h>
 #include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 
 #include <House.h>
 #include <Map.h>
@@ -982,7 +983,8 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             chaosMode.generate(objectData.data, gameInitSettings.isChaosModeEnabled(), randomGen);
             objectData.logSettings();
 
-            if(gameInitSettings.getMission() != 0) {
+            // DuneCity campaign missions keep their authored TechLevel (misc/DuneCityCampaign.h).
+            if(gameInitSettings.getMission() != 0 && !gameInitSettings.isDuneCityCampaign()) {
                 techLevel = ((gameInitSettings.getMission() + 1)/3) + 1 ;
             }
 
@@ -1010,7 +1012,7 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             if(bReplay == false && gameInitSettings.getGameType() != GameType::CustomGame && !isNetworkGameType(gameInitSettings.getGameType())) {
                 /* do briefing */
                 SDL_Log("Briefing...");
-                BriefingMenu(gameInitSettings.getHouseID(), gameInitSettings.getMission(),BRIEFING).showMenu();
+                BriefingMenu(gameInitSettings.getHouseID(), gameInitSettings.getMission(),BRIEFING,gameInitSettings.getFilename()).showMenu();
             }
         } break;
 
@@ -3108,6 +3110,8 @@ void Game::drawScreen()
         SDL_RenderCopy(renderer, pTimeTexture.get(), nullptr, &drawLocation);
     }
 
+    drawObjectivesPanel();
+
     if(finished) {
         std::string message;
 
@@ -4471,6 +4475,9 @@ void Game::updateGameState() {
         // would give every airport two independent chances per pass.
     }
 
+    // Authored mission goals read the city state the phase above just produced.
+    missionObjectives.update(*this);
+
     if((indicatorFrame != NONE_ID) && (--indicatorTimer <= 0)) {
         indicatorTimer = indicatorTime;
         if(++indicatorFrame > 2) {
@@ -5141,7 +5148,10 @@ GameInitSettings Game::getNextGameInitSettings()
             }
             int nextMission = gameInitSettings.getMission();
             Uint32 alreadyPlayedRegions = gameInitSettings.getAlreadyPlayedRegions();
-            if(currentMission >= -1) {
+            if(gameInitSettings.isDuneCityCampaign()) {
+                // A fixed mission list: the next one after a win, the same one again after a loss.
+                if(won) nextMission = std::min(gameInitSettings.getMission() + 1, DuneCityCampaign::kMissions);
+            } else if(currentMission >= -1) {
                 // do map choice
                 SDL_Log("Map Choice...");
                 MapChoice mapChoice(gameInitSettings.getHouseID(), currentMission, alreadyPlayedRegions);
@@ -5190,7 +5200,8 @@ int Game::whatNext()
             if(bQuitGame == true) {
                 return GAME_RETURN_TO_MENU;
             } else if(won == true) {
-                if(gameInitSettings.getMission() == 22) {
+                if(gameInitSettings.getMission() == 22
+                   || (gameInitSettings.isDuneCityCampaign() && gameInitSettings.getMission() >= DuneCityCampaign::kMissions)) {
                     // there is no mission after this mission
                     whatNextParam = GAME_RETURN_TO_MENU;
                 } else {
@@ -5618,6 +5629,8 @@ bool Game::loadSaveGame(InputStream& stream) {
 
     winFlags = stream.readUint32();
     loseFlags = stream.readUint32();
+    missionObjectives = MissionObjectives{};
+    if(savegameVersion >= SAVEGAMEVERSION_MISSION_OBJECTIVES) missionObjectives.load(stream);
 
     logLoadStage("map tiles");
     currentGameMap->load(stream);
@@ -5905,6 +5918,7 @@ void Game::saveGame(OutputStream& fs) {
 
     fs.writeUint32(winFlags);
     fs.writeUint32(loseFlags);
+    missionObjectives.save(fs);
 
     currentGameMap->save(fs);
 
@@ -8906,4 +8920,36 @@ void Game::loadObserverRuntime(const std::string& bytes) {
     for(auto* structure : structureList)
         if(auto* zone=dynamic_cast<ZoneStructure*>(structure)) zone->refreshZonePowerDraw();
     if(in.getRemainingLength()!=0) throw std::runtime_error("Extra spectator checkpoint data");
+}
+
+
+void Game::drawObjectivesPanel() {
+    if(!missionObjectives.isActive() || finished) return;
+    auto lines = missionObjectives.describe(*this);
+    if(lines.empty()) return;
+    lines.insert(lines.begin(), {std::string(_("Objectives")), true});
+    if(lines != objectivePanelLines || objectivePanelTextures.size() != lines.size()) {
+        objectivePanelLines = lines;
+        objectivePanelTextures.clear();
+        for(size_t i = 0; i < lines.size(); ++i) {
+            const Uint32 color = i == 0 ? COLOR_WHITE : (lines[i].second ? COLOR_RGB(120, 220, 120) : COLOR_RGB(235, 205, 120));
+            objectivePanelTextures.push_back(pFontManager->createTextureWithText((i == 0 ? "" : "- ") + lines[i].first, color, 14));
+        }
+    }
+    int width = 0, height = 0;
+    for(const auto& texture : objectivePanelTextures) {
+        int w = 0, h = 0;
+        SDL_QueryTexture(texture.get(), nullptr, nullptr, &w, &h);
+        width = std::max(width, w);
+        height += h + 2;
+    }
+    const int left = 8, top = topBarPos.h + 8;
+    SDL_Rect plate{left - 6, top - 4, width + 12, height + 6};
+    renderFillRect(renderer, &plate, COLOR_RGBA(0, 0, 0, 150));
+    int y = top;
+    for(const auto& texture : objectivePanelTextures) {
+        SDL_Rect drawLocation = calcDrawingRect(texture.get(), left, y);
+        SDL_RenderCopy(renderer, texture.get(), nullptr, &drawLocation);
+        y += drawLocation.h + 2;
+    }
 }

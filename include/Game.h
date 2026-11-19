@@ -32,6 +32,7 @@
 #include <INIMap/INIMapLoader.h>
 #include <GameInitSettings.h>
 #include <Trigger/TriggerManager.h>
+#include <MissionObjectives.h>
 #include <players/Player.h>
 #include <players/HumanPlayer.h>
 #include <misc/SDL2pp.h>
@@ -181,6 +182,9 @@ public:
         \return the trigger manager
     */
     TriggerManager& getTriggerManager() { return triggerManager; };
+    /// Authored DuneCity mission goals ([OBJECTIVES], docs/city-campaign.md).
+    MissionObjectives& getMissionObjectives() { return missionObjectives; }
+    const MissionObjectives& getMissionObjectives() const { return missionObjectives; }
 
     /**
         Get the explosion list.
@@ -1292,6 +1296,11 @@ private:
     CursorManager       cursorManager;          ///< This manages all hardware cursors
 
     TriggerManager      triggerManager;         ///< This is the manager for all the triggers the scenario has (e.g. reinforcements)
+    MissionObjectives   missionObjectives;      ///< [OBJECTIVES] goals; saved from SAVEGAMEVERSION 9887
+    /// The objectives panel's last lines and their textures (rebuilt only when the text changes).
+    std::vector<std::pair<std::string, bool>> objectivePanelLines;
+    std::vector<sdl2::texture_ptr> objectivePanelTextures;
+    void drawObjectivesPanel();
 
     bool    bQuitGame = false;                  ///< Should the game be quited after this game quit
     MatchControlState matchControl;

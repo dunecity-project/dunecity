@@ -16,6 +16,9 @@
  */
 
 #include <Menu/BriefingMenu.h>
+#include <misc/DuneCityCampaign.h>
+#include <FileClasses/FileManager.h>
+#include <FileClasses/INIFile.h>
 
 #include <globals.h>
 
@@ -28,7 +31,7 @@
 #include <mod/ModManager.h>
 
 
-BriefingMenu::BriefingMenu(int newHouse,int mission,int type) : MentatMenu(newHouse) {
+BriefingMenu::BriefingMenu(int newHouse,int mission,int type,const std::string& scenarioFilename) : MentatMenu(newHouse) {
     this->mission = mission;
     this->type = type;
 
@@ -73,6 +76,19 @@ BriefingMenu::BriefingMenu(int newHouse,int mission,int type) : MentatMenu(newHo
         } break;
     }
 
+
+    if(DuneCityCampaign::isCampaignFilename(scenarioFilename)) {
+        // DuneCity campaign: the mission's own words, written into the map ([BRIEFING]).
+        try {
+            auto file = pFileManager->openCampaignFile(scenarioFilename);
+            INIFile ini(file.get());
+            const char* key = type == DEBRIEFING_WIN ? "Win" : type == DEBRIEFING_LOST ? "Lose" : "Text";
+            const std::string authored = ini.getStringValue("BRIEFING", key, "");
+            if(!authored.empty()) text = authored;
+        } catch(const std::exception& e) {
+            SDL_Log("BriefingMenu: no briefing for '%s': %s", scenarioFilename.c_str(), e.what());
+        }
+    }
 
     setText(text);
     animation.setAnimation(anim);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 
 #include <FileClasses/FileManager.h>
 #include <FileClasses/FontManager.h>
@@ -44,3 +45,21 @@ void drawWatermark(int right, int y, bool fromBottom) {
 }
 
 } // namespace ReworkedCampaign
+
+namespace DuneCityCampaign {
+
+bool isAvailable() {
+    for(int mission = 1; mission <= kMissions; ++mission) {
+        bool found = false;
+        for(const auto& searchPath : FileManager::getSearchPath()) {
+            if(getCaseInsensitiveFilename(searchPath + "/" + kMapDirectory + "/" + scenarioFilename(mission))) {
+                found = true;
+                break;
+            }
+        }
+        if(!found) return false;
+    }
+    return true;
+}
+
+} // namespace DuneCityCampaign

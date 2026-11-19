@@ -49,6 +49,8 @@ private:
     void loadExtraCoopForces();
     void loadAITeams();
     void loadView();
+    /// DuneCity: [OBJECTIVES] goals and [EVENTS] breaches (docs/city-campaign.md).
+    void loadObjectivesAndEvents();
 
     House* getOrCreateHouse(int house);
     HOUSETYPE getHouseID(const std::string& name);

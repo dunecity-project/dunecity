@@ -211,7 +211,11 @@
 // 9883: MOD18 drops obsolete research map area and adds mountain scenery; MOD17/9882 stays frozen.
 // 9884: MOD19 adds technology installments; houses capture study terms and exact payments.
 // 9885: QuantBot persists sustained, serviceable repair-capacity pressure.
-#define SAVEGAMEVERSION     9886
+// 9887: Game saves the authored mission objectives ([OBJECTIVES]) after the win/lose flags, and
+//       triggers may be the new BreachTrigger (type 3, [EVENTS] BreachN).
+#define SAVEGAMEVERSION     9887
+/// First save with MissionObjectives and BreachTrigger.
+#define SAVEGAMEVERSION_MISSION_OBJECTIVES 9887
 /// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).
 #define SAVEGAMEVERSION_TORNIE546 9878
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.

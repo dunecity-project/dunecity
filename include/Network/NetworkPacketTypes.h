@@ -401,7 +401,11 @@
 // 129: A player's unit a carryall drops keeps its own attack mode (Guard after a lift) instead
 //      of Area Guard (Carryall::deployUnit), so older peers would desync. Save format
 //      unchanged.
-#define NETWORK_PROTOCOL_VERSION            129
+// 130: The DuneCity campaign (docs/city-campaign.md): a map's [OBJECTIVES] city goals end the
+//      game (population, treasury, crime, land value, pollution), [EVENTS] BreachN opens a
+//      mountain wall at its minute (BreachTrigger), and QuantBot plans for the goals of the
+//      house it serves. Older peers would end or simulate those maps differently. Save 9887.
+#define NETWORK_PROTOCOL_VERSION            130
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

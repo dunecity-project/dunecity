@@ -32,7 +32,9 @@
 class BriefingMenu : public MentatMenu
 {
 public:
-    BriefingMenu(int newHouse,int mission, int type);
+    /// `scenarioFilename` names the mission's map: a DuneCity campaign mission (DCITY_M??) takes
+    /// its text from the map's [BRIEFING] section (Text, Win, Lose) instead of the TEXT files.
+    BriefingMenu(int newHouse,int mission, int type, const std::string& scenarioFilename = "");
     virtual ~BriefingMenu();
 
     void onMentatTextFinished() override;

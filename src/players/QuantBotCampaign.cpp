@@ -228,6 +228,9 @@ int QuantBot::campaignAllyHarvesterLimit() const {
 }
 
 bool QuantBot::campaignPolicyApplies() const {
+    // The DuneCity campaign's missions are Custom-Game city maps: its QuantBots keep the Custom
+    // rules those maps were balanced for (misc/DuneCityCampaign.h).
+    if(currentGame && currentGame->getGameInitSettings().isDuneCityCampaign()) return false;
     return currentGame && (isCampaignGameType(currentGame->gameType)
         || (isScenarioGameType(currentGame->gameType) && botConfig().force.singleMissionCampaignPolicy));
 }

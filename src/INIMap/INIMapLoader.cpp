@@ -27,6 +27,8 @@
 
 #include <Trigger/ReinforcementTrigger.h>
 #include <Trigger/TimeoutTrigger.h>
+#include <Trigger/BreachTrigger.h>
+#include <MissionObjectives.h>
 
 #include <misc/format.h>
 #include <misc/exceptions.h>
@@ -42,6 +44,7 @@
 #include <globals.h>
 
 #include <algorithm>
+#include <sstream>
 #include <vector>
 
 namespace {
@@ -222,6 +225,7 @@ void INIMapLoader::load() {
     loadAITeams();
     loadView();
     loadChoam();
+    loadObjectivesAndEvents();
 }
 
 /**
@@ -701,6 +705,14 @@ void INIMapLoader::loadHouses()
             playerSectionsOnMap.erase(playerSectionsOnMap.begin() + randomIndex);
         }
 
+        // The DuneCity campaign keeps a map's rivalries: the campaign roster puts every computer
+        // house on team 2, but Brain=Team3 / Team4 houses there fight each other too.
+        if(pGame->getGameInitSettings().isDuneCityCampaign() && houseID != pGame->getGameInitSettings().getHouseID()) {
+            const std::string brain = strToLower(inifile->getStringValue(houseName, "Brain", ""));
+            int brainTeam = 0;
+            if(brain.rfind("team", 0) == 0 && parseString(brain.substr(4), brainTeam) && brainTeam >= 2 && brainTeam < NUM_TEAMS)
+                resolvedHouseInfo.team = brainTeam;
+        }
         // Keep only fully resolved entries. A skipped Random entry used to remain
         // in houseInfoListSetup and could later bind local vision to the wrong slot.
         pGame->houseInfoListSetup.push_back(resolvedHouseInfo);
@@ -1456,5 +1468,39 @@ HOUSETYPE INIMapLoader::getHouseID(const std::string& name) {
         return housename2house[lowerName];
     } else {
         return getHouseByName(lowerName);
+    }
+}
+
+
+void INIMapLoader::loadObjectivesAndEvents() {
+    auto& objectives = pGame->getMissionObjectives();
+    objectives.loadFromINI(*inifile);
+    const int timeout = inifile->getIntValue("BASIC", "TIMEOUT", 0);
+    if(timeout > 0 && (pGame->winFlags & WINLOSEFLAGS_TIMEOUT) != 0) {
+        objectives.deadlineCycle = MILLI2CYCLES(timeout * 60 * 1000);
+        objectives.deadlineWins = (pGame->loseFlags & WINLOSEFLAGS_TIMEOUT) != 0;
+    }
+
+    if(!inifile->hasSection("EVENTS")) return;
+    for(const INIFile::Key& key : inifile->getSection("EVENTS")) {
+        const std::string name = key.getKeyName();
+        if(name.rfind("Breach", 0) != 0 || name.find("Message") != std::string::npos) continue;
+        std::vector<int> values;
+        std::string field;
+        std::istringstream input(key.getStringValue());
+        bool valid = true;
+        while(std::getline(input, field, ',')) {
+            int value = 0;
+            if(!parseString(field, value)) { valid = false; break; }
+            values.push_back(value);
+        }
+        if(!valid || values.size() < 5 || values[0] < 0 || values[3] <= 0 || values[4] <= 0) {
+            logWarning(key.getLineNumber(), "Invalid breach event (minute,x,y,width,height[,worms]): " + key.getStringValue());
+            continue;
+        }
+        const int worms = values.size() > 5 ? std::clamp(values[5], 0, 8) : 0;
+        const std::string message = inifile->getStringValue("EVENTS", name + "Message", "");
+        pGame->getTriggerManager().addTrigger(std::make_unique<BreachTrigger>(
+            MILLI2CYCLES(static_cast<Uint32>(values[0]) * 60 * 1000), values[1], values[2], values[3], values[4], worms, message));
     }
 }

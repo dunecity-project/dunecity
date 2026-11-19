@@ -145,6 +145,7 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
         ? GameInitSettings((HOUSETYPE) player, HouseChoiceMenu::getStartLevel(), gameOptions)
         : GameInitSettings((HOUSETYPE) player, gameOptions, HouseChoiceMenu::getStartLevel());
     if(HouseChoiceMenu::isReworkedMaps()) init.useReworkedMaps();
+    if(HouseChoiceMenu::isDuneCityCampaign()) init.useDuneCityCampaign(HouseChoiceMenu::getStartLevel());
     const auto campaignSkin = GameInitSettings::sanitizeGraphicsSkin(HouseChoiceMenu::getCampaignSkin());
     init.setCampaignGraphicsSkin(campaignSkin);
     if(supportSelected) {
@@ -174,7 +175,8 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
         }
     }
 
-    if(HouseChoiceMenu::isOnline()) {
+    // The DuneCity campaign is offline only for now (its co-op has not been played).
+    if(HouseChoiceMenu::isOnline() && !HouseChoiceMenu::isDuneCityCampaign()) {
         init.enableCoop(!HouseChoiceMenu::isSingleMission(), settings.general.playerName + "'s co-op game");
         auto file = pFileManager->openCampaignFile(init.getFilename());
         const auto size = SDL_RWsize(file.get());
