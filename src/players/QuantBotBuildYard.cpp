@@ -721,7 +721,8 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
     // A funded production backlog outranks the growth allocation (productionBeforeCityGrowth):
     // this yard falls through to the heavy/light unit backlog rules below instead of zoning.
     const bool productionLaneDue = botConfig().force.productionBeforeCityGrowth
-        && (yardTurn.heavyBacklog || yardTurn.lightBacklog);
+        && (yardTurn.heavyBacklog || yardTurn.lightBacklog)
+        && cityCampaignSkill(QuantBotCityCampaignSkills::FactoriesFirst);
     if (yardTurn.itemID==NONE_ID && pass.cityGrowthProtected && capitalPending(pass)
         && pass.capitalCandidates[pass.capitalChoice].builder==turn.pBuilder->getObjectID()
         && !yardTurn.civicClaimsYard && !productionLaneDue) {
@@ -2407,6 +2408,7 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
         // commercial lots to lift; it no longer waits for 5,000 spare credits and both factories.
         if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && palaceAllowed
             && botConfig().force.cityLandValueSiting && pass.citySimEnabled && pass.stablePower
+            && cityCampaignSkill(QuantBotCityCampaignSkills::PalaceForTax)
             && pass.itemCount[Structure_ZoneResidential] + pass.itemCount[Structure_ZoneCommercial] >= 12
             && pass.money >= int(data[Structure_Palace][houseID].price) + 1000
             && campaignAvailableToBuild(turn.pBuilder,Structure_Palace)

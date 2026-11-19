@@ -485,6 +485,8 @@ QuantBotConfig::QuantBotConfig() {
     force.brutalCityEconomyOutnumbered = false;
     force.cityCampaignBrutalAttackPercent = 15;
     force.cityLandValueSiting = true;
+    force.cityCampaignSkillLadder = true;
+    force.cityCampaignSkillTier = QuantBotCityCampaignSkills::kDefaultTiers;
     force.cityPowerGrowthHorizon = false;
     force.cityBoomWorkers = false;
     force.cityBoomRefineries = false;
@@ -977,6 +979,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "BrutalCityEconomyOutnumbered", force.brutalCityEconomyOutnumbered);
         iniFile.setIntValue("Force Concentration", "CityCampaignBrutalAttackPercent", force.cityCampaignBrutalAttackPercent);
         iniFile.setBoolValue("Force Concentration", "CityLandValueSiting", force.cityLandValueSiting);
+        iniFile.setBoolValue("Force Concentration", "CityCampaignSkillLadder", force.cityCampaignSkillLadder);
+        for (int skill = 0; skill < QuantBotCityCampaignSkills::kSkillCount; ++skill)
+            iniFile.setIntValue("Force Concentration", QuantBotCityCampaignSkills::kTierKeys[skill], force.cityCampaignSkillTier[skill]);
         iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
         iniFile.setBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
         iniFile.setBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
@@ -1331,6 +1336,11 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.brutalCityEconomyOutnumbered = iniFile.getBoolValue("Force Concentration", "BrutalCityEconomyOutnumbered", force.brutalCityEconomyOutnumbered);
     force.cityCampaignBrutalAttackPercent = std::clamp(iniFile.getIntValue("Force Concentration", "CityCampaignBrutalAttackPercent", force.cityCampaignBrutalAttackPercent), 0, 100);
     force.cityLandValueSiting = iniFile.getBoolValue("Force Concentration", "CityLandValueSiting", force.cityLandValueSiting);
+    force.cityCampaignSkillLadder = iniFile.getBoolValue("Force Concentration", "CityCampaignSkillLadder", force.cityCampaignSkillLadder);
+    for (int skill = 0; skill < QuantBotCityCampaignSkills::kSkillCount; ++skill)
+        force.cityCampaignSkillTier[skill] = std::clamp(iniFile.getIntValue("Force Concentration",
+            QuantBotCityCampaignSkills::kTierKeys[skill], force.cityCampaignSkillTier[skill]),
+            int(QuantBotCityCampaignSkills::Easy), int(QuantBotCityCampaignSkills::Never));
     force.cityPowerGrowthHorizon = iniFile.getBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
     force.cityBoomWorkers = iniFile.getBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
     force.cityBoomRefineries = iniFile.getBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
@@ -2016,6 +2026,10 @@ std::string QuantBotConfig::getConfigHash() const {
     // Hashed only when it differs from the default, so configurations without it keep their identity.
     if (force.cityCampaignBrutalAttackPercent != 15) addNamed("cityCampaignBrutalAttackPercent", force.cityCampaignBrutalAttackPercent);
     if (!force.cityLandValueSiting) addNamed("cityLandValueSiting", force.cityLandValueSiting);
+    if (!force.cityCampaignSkillLadder) addNamed("cityCampaignSkillLadder", force.cityCampaignSkillLadder);
+    for (int skill = 0; skill < QuantBotCityCampaignSkills::kSkillCount; ++skill)
+        if (force.cityCampaignSkillTier[skill] != QuantBotCityCampaignSkills::kDefaultTiers[skill])
+            addNamed(QuantBotCityCampaignSkills::kTierKeys[skill], force.cityCampaignSkillTier[skill]);
     addNamed("cityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
     addNamed("cityBoomWorkers", force.cityBoomWorkers);
     addNamed("cityBoomRefineries", force.cityBoomRefineries);

@@ -652,7 +652,8 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     // (CityEffects.h); its site is worth the own residential and commercial lots that bonus reaches.
     std::vector<Coord> landValueLots;
     const bool landValueBooster = botConfig().force.cityLandValueSiting && currentGame && currentGame->isCitySimEnabled()
-        && (itemID == Structure_Palace || itemID == Structure_Stadium);
+        && (itemID == Structure_Palace || itemID == Structure_Stadium)
+        && cityCampaignSkill(QuantBotCityCampaignSkills::LandValueSiting);
     if (landValueBooster)
         for (const auto* structure : getStructureList())
             if (structure->getOwner() == getHouse() && (structure->getItemID() == Structure_ZoneResidential

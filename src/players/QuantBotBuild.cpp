@@ -1351,9 +1351,11 @@ void QuantBot::planCityBoom(BuildPass& pass) {
 void QuantBot::planCityState(BuildPass& pass) {
     int houseID = getHouse()->getHouseID();
     pass.cityLandValueServices = cityLandValueServiceScope();
+    // CityGrowthStageTax in its land-value scope, or the GrowthTax campaign skill.
+    const bool growthStageTax = (pass.cityLandValueServices && botConfig().force.cityGrowthStageTax)
+        || (pass.citySimEnabled && cityCampaignSkill(QuantBotCityCampaignSkills::GrowthTax));
     // Per-house city stats — CitySimulation now tracks these per player.
-    if (pass.cityBoom == CityBoomKind::ShortTax
-        && !(pass.cityLandValueServices && botConfig().force.cityGrowthStageTax)) {
+    if (pass.cityBoom == CityBoomKind::ShortTax && !growthStageTax) {
         auto* sim = currentGame->getCitySimulation();
         const int tax = pass.cityBoomFunding ? 3 : DuneCity::kDefaultCityTaxRate;
         if (sim->getCityTax(houseID) != tax) {
@@ -1384,7 +1386,7 @@ void QuantBot::planCityState(BuildPass& pass) {
         }
     }
 
-    if (pass.cityLandValueServices && botConfig().force.cityGrowthStageTax) {
+    if (growthStageTax) {
         auto* sim = currentGame->getCitySimulation();
         const int population = QuantBotCityPolicy::displayPopulation(pass.ownTotalPop);
         const int threshold = botConfig().force.cityGrowthTaxPopulation;
@@ -1475,8 +1477,10 @@ void QuantBot::planCityState(BuildPass& pass) {
 
 bool QuantBot::cityLandValueServiceScope() const {
     // A crime or land value goal needs the police services from the first developed block.
+    // CityServices is a campaign skill (Medium and up): an Easy house builds police only for dangerous crime.
     if (currentGame && currentGame->isCitySimEnabled()
-        && (objectiveTarget(MissionObjectivePolicy::Crime) > 0 || objectiveTarget(MissionObjectivePolicy::LandValue) > 0))
+        && (objectiveTarget(MissionObjectivePolicy::Crime) > 0 || objectiveTarget(MissionObjectivePolicy::LandValue) > 0)
+        && cityCampaignSkill(QuantBotCityCampaignSkills::CityServices))
         return true;
     const auto& force=botConfig().force;
     return (force.cityLandValueServices || force.cityGrowthStageTax) && citySpiceFfaScope(4);
@@ -6392,8 +6396,10 @@ void QuantBot::planMissionObjectives(BuildPass& pass) {
     // losing the base loses the mission anyway. militaryEmergency alone is only computed while a
     // house saves for technology, so on low-spice Tuono the helper banked 13,000-19,800 credits
     // while its army fell to nothing and its base was destroyed.
-    if (pass.militaryEmergency || pass.defendingEconomy || pass.groundThreatAsset.isValid()
-        || ownGroundArmyValue() * 2 < enemyThreatEstimate()) {
+    // TreasuryRelease is a campaign skill (Medium and up): an Easy house keeps saving under attack.
+    if (cityCampaignSkill(QuantBotCityCampaignSkills::TreasuryRelease)
+        && (pass.militaryEmergency || pass.defendingEconomy || pass.groundThreatAsset.isValid()
+            || ownGroundArmyValue() * 2 < enemyThreatEstimate())) {
         if (pass.emitStatsLog && AITelemetry::log().enabled())
             traceDecision("objective_treasury_release",AITelemetry::Record().set("goal",goal)
                 .set("banked",getHouse()->getCredits()).set("defending",pass.defendingEconomy)

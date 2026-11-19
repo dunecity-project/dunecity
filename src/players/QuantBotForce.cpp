@@ -1151,12 +1151,26 @@ bool QuantBot::openingOpenMapNative() const {
 }
 
 int QuantBot::cityCampaignBrutalAttackPercent() const {
-    return difficulty == Difficulty::Brutal && currentGame && currentGame->getGameInitSettings().isDuneCityCampaign()
+    return duneCityCampaignGame() && cityCampaignSkill(QuantBotCityCampaignSkills::EarlyAttack)
         ? botConfig().force.cityCampaignBrutalAttackPercent : 0;
 }
 
+bool QuantBot::duneCityCampaignGame() const {
+    if (!currentGame) return false;
+    if (!duneCityCampaignGameCache) duneCityCampaignGameCache = currentGame->getGameInitSettings().isDuneCityCampaign();
+    return *duneCityCampaignGameCache;
+}
+
+bool QuantBot::cityCampaignSkill(QuantBotCityCampaignSkills::Skill skill) const {
+    const auto& force = botConfig().force;
+    return QuantBotCityCampaignSkills::hasSkill(skill, static_cast<int>(difficulty), force.cityCampaignSkillTier[skill],
+        force.cityCampaignSkillLadder && duneCityCampaignGame());
+}
+
 int QuantBot::effectiveTargetPriorityLevel() const {
-    return botConfig().force.targetPriorityLevel;
+    // HarvesterTargets: the campaign skill shoots harvesters first, then artillery; an explicit level wins.
+    const int level = botConfig().force.targetPriorityLevel;
+    return level || !cityCampaignSkill(QuantBotCityCampaignSkills::HarvesterTargets) ? level : 2;
 }
 
 int QuantBot::effectiveFocusFireLevel() const {

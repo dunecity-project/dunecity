@@ -21,7 +21,9 @@
 #include <DataTypes.h>
 #include <data.h>
 #include <players/QuantBotStrategy.h>
+#include <players/QuantBotCityCampaignSkills.h>
 
+#include <array>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -659,6 +661,14 @@ struct QuantBotConfig {
         /// land-value investment once 12 such lots stand, without waiting for 5,000 spare credits
         /// and both factories. Default ON; hashed when OFF.
         bool cityLandValueSiting;
+        /// DuneCity campaign skill ladder (QuantBotCityCampaignSkills.h; Stefan, 2026-11-20): in campaign
+        /// missions each tier plays only the skills whose tier is at or below its own, so Easy, Medium,
+        /// Hard and Brutal differ in how they use the same income, not only in ceilings the low-spice
+        /// maps never reach. Default ON; hashed when OFF. Off, every tier keeps its native skills.
+        bool cityCampaignSkillLadder;
+        /// Lowest tier per skill (0 Easy .. 3 Brutal, 4 never), indexed by QuantBotCityCampaignSkills::Skill.
+        /// Defaults kDefaultTiers; each tier is hashed when it differs from its default.
+        std::array<int, QuantBotCityCampaignSkills::kSkillCount> cityCampaignSkillTier;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;
