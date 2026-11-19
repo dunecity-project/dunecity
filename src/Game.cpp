@@ -8924,7 +8924,7 @@ void Game::loadObserverRuntime(const std::string& bytes) {
 
 
 void Game::drawObjectivesPanel() {
-    if(!missionObjectives.isActive() || finished) return;
+    if(finished) return;
     auto lines = missionObjectives.describe(*this);
     if(lines.empty()) return;
     lines.insert(lines.begin(), {std::string(_("Objectives")), true});
@@ -8943,9 +8943,13 @@ void Game::drawObjectivesPanel() {
         width = std::max(width, w);
         height += h + 2;
     }
-    const int left = 8, top = topBarPos.h + 8;
+    // Top right of the map view: the city placement hint owns the top left while a road or zone
+    // is being placed, and the F12 overlay (off by default) is the only other thing up here.
+    const int left = std::max(8, sideBarPos.x - 14 - width), top = topBarPos.h + 8;
     SDL_Rect plate{left - 6, top - 4, width + 12, height + 6};
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     renderFillRect(renderer, &plate, COLOR_RGBA(0, 0, 0, 150));
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     int y = top;
     for(const auto& texture : objectivePanelTextures) {
         SDL_Rect drawLocation = calcDrawingRect(texture.get(), left, y);

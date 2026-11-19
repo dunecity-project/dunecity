@@ -77,6 +77,7 @@ void MissionObjectives::save(OutputStream& stream) const {
     stream.writeBool(deadlineWins);
     stream.writeUint32(enemyFirstAttackCycle);
     stream.writeSint32(startCredits);
+    stream.writeBool(conquestWins);
 }
 
 void MissionObjectives::load(InputStream& stream) {
@@ -90,6 +91,7 @@ void MissionObjectives::load(InputStream& stream) {
     deadlineWins = stream.readBool();
     enemyFirstAttackCycle = stream.readUint32();
     startCredits = stream.readSint32();
+    conquestWins = stream.readBool();
 }
 
 Metrics MissionObjectives::measure(const Game& constGame, const House& house) {
@@ -157,7 +159,8 @@ void MissionObjectives::update(Game& game) {
 
 std::vector<std::pair<std::string, bool>> MissionObjectives::describe(const Game& game) const {
     std::vector<std::pair<std::string, bool>> lines;
-    if(!isActive()) return lines;
+    // Other maps keep their old screen unless they set city goals.
+    if(!isActive() && !game.getGameInitSettings().isDuneCityCampaign()) return lines;
     const House* house = game.getOutcomeHouse();
     if(house == nullptr) return lines;
     const Metrics m = measure(game, *house);
@@ -177,6 +180,12 @@ std::vector<std::pair<std::string, bool>> MissionObjectives::describe(const Game
     if(targets.used[DefeatEnemies])
         add(DefeatEnemies, m.enemiesLeft == 0 ? std::string(_("Enemies defeated"))
                                               : fmt::sprintf(_("Defeat the enemy: %d houses left"), m.enemiesLeft));
+    if(conquestWins && !targets.used[DefeatEnemies]) {
+        // The usual Dune victory still stands beside any city goals.
+        const char* text = isActive() || deadlineCycle > 0 ? _("Or destroy every enemy house: %d left")
+                                                           : _("Destroy every enemy house: %d left");
+        lines.emplace_back(fmt::sprintf(text, m.enemiesLeft), m.enemiesLeft == 0);
+    }
     const Uint32 now = game.getGameCycleCount();
     const Uint32 holdCycles = MILLI2CYCLES(static_cast<Uint32>(targets.holdSeconds) * 1000);
     if(holdingSinceCycle != INVALID_GAMECYCLE && holdCycles > 0) {

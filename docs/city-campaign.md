@@ -40,8 +40,10 @@ keeps `WinFlags` bit 1 is still won by destroying every enemy; `WinFlags=2` with
 time-out is a survival victory. `WinFlags` bit 0x10 stays meaningless (protocol 85).
 
 The game evaluates the goals every 32 cycles after the city phase, announces the summary and each
-reached goal in the news ticker, and shows an **Objectives** panel at the top left of the map
-with each goal's current value, the hold countdown and any time limit. The goals and their hold
+reached goal in the news ticker, and shows an **Objectives** panel at the top right of the map
+with each goal's current value, the hold countdown and any time limit. On DuneCity campaign
+missions the panel is shown even without city goals: it counts the enemy houses still standing
+when destroying them wins, and shows the hold-out or deadline clock. The goals and their hold
 state are saved (`SAVEGAMEVERSION` 9887). Protocol 130.
 
 ## Timed events: `[EVENTS]`

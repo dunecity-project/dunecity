@@ -129,6 +129,8 @@ public:
     /// The objective house's treasury at the first evaluation (-1 before it): a treasury goal's
     /// progress is what the house has added since.
     Sint32 startCredits = -1;
+    /// Destroying every enemy house also wins (WinFlags/LoseFlags bit 0x01): the panel says so.
+    bool conquestWins = false;
 
     bool isActive() const { return targets.any(); }
     /// The opening grace period still holds at @a cycle.
@@ -145,7 +147,8 @@ public:
     /// Called once per game cycle after the city simulation: ends the mission when the goals have held.
     void update(Game& game);
 
-    /// The lines of the in-game objectives panel (empty when inactive or without a house).
+    /// The lines of the in-game objectives panel (empty without a house, or when the map has no
+    /// goals and is not a DuneCity campaign mission).
     std::vector<std::pair<std::string, bool>> describe(const Game& game) const;
 
     /// One sentence for the news ticker at the start of the mission.
