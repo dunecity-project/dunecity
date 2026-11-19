@@ -137,6 +137,30 @@ serves the objective house:
 - population goal: its Custom city ceiling is at least 125% of the goal;
 - crime or land value goal: police services (first station, catchment placement, land value
   budget) from the first developed block, with police funded at 100% while it has working cash.
+- a treasury goal never starves the defence: the hold releases while the house defends its
+  economy, while an enemy ground force threatens one of its assets, or while its ground army is
+  below half of the strongest enemy's estimated army (`objective_treasury_release`). It relied on
+  `militaryEmergency`, which is computed only while a house saves for technology, so on low-spice
+  Tuono the helper banked 13,000-19,800 credits while its army fell to nothing.
+
+### City growth and land value on low spice
+
+Stefan: "the ai needs to be tuned to know how to grow a city to boost economy when there is low
+spice" and "the AI needs to learn how to boost property prices. for example palaces boost nearby
+property values which is good for tax". On the low-spice maps spice runs out by minute 10-15 and
+taxes carry the economy: a Hard helper on Harg Pass grows from 13,000 people to 100,000-133,000
+by minute 30-40, while enemies that keep idle harvesters stall (a Hard Harkonnen at 14,000).
+
+- **Land value** (`[Force Concentration] CityLandValueSiting`, default on, hashed when off; overlay
+  `city-land-value-siting-off`). A Palace or Stadium lifts land value by 40 within 8 tiles
+  (`CityEffects.h`). Their sites are now scored by the land-value falloff they put on the house's
+  own residential and commercial lots, and `palace_land_value` buys a palace (within the palace
+  target) once a dozen such lots stand and its price plus 1,000 is in hand, instead of after 5,000
+  spare credits and both factories. Paired on 76 low-spice games (Hard helper v Hard, eight seeds,
+  all missions): tax receipts +8% at minute 20 and +6% at minute 25, population +6%, wins 61 v 62.
+- Existing city-economy switches did not help here (helper-only, 80 paired games each): spice
+  transition and single-yard growth changed nothing, power-growth horizon +1 win, spice-capacity
+  runway cut population at minute 15 from 25,500 to 17,000.
 
 ### The tiers in the campaign
 
