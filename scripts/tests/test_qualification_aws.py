@@ -241,9 +241,13 @@ class ReceiptTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
-    def test_mini_waits_a_bounded_time_and_follows_aws_outside_its_gate(self):
+    def test_aws_games_only_with_a_bounded_wait_and_following_aws_outside_the_gate(self):
         workflow = (ROOT / '.github/workflows/qualify-release.yml').read_text()
         step = workflow[workflow.index('Qualify frozen staging source'):workflow.index('Report whether Mini')]
+        if "DUNECITY_QUALIFY_GAMES_ON_AWS: '1'" not in step:
+            # Until main's control workflow enables it, the Mini plays every game itself.
+            self.assertNotIn('qualification-aws.py', step)
+            return
         self.assertIn('deadline=$((SECONDS + 1800))', step)
         self.assertIn('[ -f "$MARKER" ]', step)   # A started lane is never retried.
         loop_end = step.index('done\n')

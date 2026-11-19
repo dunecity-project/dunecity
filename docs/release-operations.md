@@ -276,8 +276,8 @@ hosted fallback.
 The Mini is optional capacity. The host gate admits only the separately hash-approved
 qualification workflow on `main`, with a successful candidate
 selection and no production reservation. The workspace and queue atomically admit
-one verification lane. While another agent holds the workspace gate the qualifier
-retries every 30 seconds for up to 30 minutes (19 November 2026: both automatic Mini
+one verification lane. With the workflow from PR #128 on `main`, while another agent holds
+the workspace gate the qualifier retries every 30 seconds for up to 30 minutes (19 November 2026: both automatic Mini
 attempts that day met a held gate, and their hosted fallbacks took about two hours); a
 refusal that outlasts that window triggers a hosted run. A lane that started is never
 retried. An offline
@@ -316,7 +316,11 @@ the default-branch scope; a cache written only by integration/PR CI is not a
 default-branch cache for a later tag. Its job limit is 90 minutes (up to 30 waiting for the
 gate, the rest for the Mini lane and the AWS games), versus 120 on hosted Mac.
 
-**Test games run on AWS (from 19 November 2026).** On the Mini, `scripts/qualification-aws.py`
+**Test games run on AWS** once `main`'s `qualify-release.yml` sets
+`DUNECITY_QUALIFY_GAMES_ON_AWS: '1'` on the qualify step (PR #128); staging keeps a
+byte-identical copy of `main`'s workflow, and without the flag the Mini plays every game as
+before. Install the new workflow hash in the Mini gate (`~/.config/agent-workspace/github-runner.json`,
+`qualification.allowed_workflow_sha256`) before the merge. On the Mini, `scripts/qualification-aws.py`
 splits the frozen plan right after configuration: every test that plays a game (`PROCESSORS`
 2 or more, `RUN_SERIAL`, or a probe fixture; 164 of 236 tests, about 3,000 of 3,100 test
 seconds) goes to the AWS workers as one `dunecity-queue` job pinned to the candidate SHA, at
