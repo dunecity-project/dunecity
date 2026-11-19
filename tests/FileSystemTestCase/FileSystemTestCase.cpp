@@ -1,41 +1,33 @@
-#include "FileSystemTestCase.h"
+/*
+ *  FileSystemTestCase.cpp - getBasename and getDirname
+ *
+ *  Ported from the original Dune Legacy CppUnit suite, which only the retired
+ *  autotools build listed and so never ran.
+ */
 
+#include <catch2/catch_test_macros.hpp>
 #include <misc/FileSystem.h>
 
-#include <cppunit/extensions/HelperMacros.h>
-
-CPPUNIT_TEST_SUITE_REGISTRATION(FileSystemTestCase);
-
-
-void FileSystemTestCase::setUp() {
+TEST_CASE("getBasename drops directories and trailing slashes", "[filesystem][paths]") {
+    CHECK(getBasename("test") == "test");
+    CHECK(getBasename("/test") == "test");
+    CHECK(getBasename("/test/") == "test");
+    CHECK(getBasename("./test.txt") == "test.txt");
+    CHECK(getBasename("/bla/test.txt") == "test.txt");
+    CHECK(getBasename("/") == "/");
 }
 
-void FileSystemTestCase::tearDown() {
+TEST_CASE("getBasename can also drop the last extension", "[filesystem][paths]") {
+    CHECK(getBasename("test.txt", true) == "test");
+    CHECK(getBasename("/test.txt", true) == "test");
+    CHECK(getBasename("/test.txt/", true) == "test");
+    CHECK(getBasename("./test.txt.txt", true) == "test.txt");
+    CHECK(getBasename("/bla/test.txt.txt", true) == "test.txt");
 }
 
-void FileSystemTestCase::testBasename() {
-	CPPUNIT_ASSERT(getBasename("test") == "test");
-	CPPUNIT_ASSERT(getBasename("/test") == "test");
-	CPPUNIT_ASSERT(getBasename("/test/") == "test");
-	CPPUNIT_ASSERT(getBasename("./test.txt") == "test.txt");
-	CPPUNIT_ASSERT(getBasename("/bla/test.txt") == "test.txt");
-	CPPUNIT_ASSERT(getBasename("/") == "/");
+TEST_CASE("getDirname drops the last path element", "[filesystem][paths]") {
+    CHECK(getDirname("/test/test") == "/test");
+    CHECK(getDirname("/test/test/") == "/test");
+    CHECK(getDirname("test") == ".");
+    CHECK(getDirname("/") == "/");
 }
-
-void FileSystemTestCase::testBasenameExtension() {
-	CPPUNIT_ASSERT(getBasename("test.txt", true) == "test");
-	CPPUNIT_ASSERT(getBasename("/test.txt", true) == "test");
-	CPPUNIT_ASSERT(getBasename("/test.txt/", true) == "test");
-	CPPUNIT_ASSERT(getBasename("./test.txt.txt", true) == "test.txt");
-	CPPUNIT_ASSERT(getBasename("/bla/test.txt.txt", true) == "test.txt");
-}
-
-void FileSystemTestCase::testDirname() {
-	CPPUNIT_ASSERT(getDirname("/test/test") == "/test");
-	CPPUNIT_ASSERT(getDirname("/test/test/") == "/test");
-	CPPUNIT_ASSERT(getDirname("test") == ".");
-	CPPUNIT_ASSERT(getDirname("/") == "/");
-
-}
-
-

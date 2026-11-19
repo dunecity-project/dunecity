@@ -228,6 +228,9 @@ target_sources(dunelegacy_tests
         ${CMAKE_SOURCE_DIR}/src/audio/sounds.cpp
         ${CMAKE_SOURCE_DIR}/src/mod/Dune2RAssetManager.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/ENetHttp.cpp
+        # INIFile reading and write-back, and the path helpers.
+        INIFileTestCase/INIFileTestCase.cpp
+        FileSystemTestCase/FileSystemTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/INIFile.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/FileSystem.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/fnkdat.cpp
