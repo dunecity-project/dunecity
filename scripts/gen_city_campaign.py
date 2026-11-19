@@ -557,7 +557,9 @@ MISSIONS: List[Mission] = [
         lose="The gangs and their paymasters have taken the city.",
         objectives={"Population": 75000, "MaxCrime": 63, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 7000, "Mercenary": 4000},
-        army_keep={"Harkonnen": 6}, first_attack=9,
+        # Grace 18 (was 9): with 9 every helper tier was overrun at minutes 10-12, so a Brutal helper
+        # won no more often than a Hard one; doubled, Brutal v Hard won 3/4 where Hard v Hard won 0/4.
+        army_keep={"Harkonnen": 6}, first_attack=18,
         difficulty={"Easy": 2.5, "Medium": 2.5, "Hard": 2.5, "Brutal": 3.5},
     ),
     Mission(
@@ -601,7 +603,9 @@ MISSIONS: List[Mission] = [
         win="The breach is held and the invaders are destroyed. The basin is safe.",
         lose="The Shield Wall fell, and your city with it.",
         credits={"Atreides": 16000, "Harkonnen": 7000, "Sardaukar": 5000},
-        army_keep={"Harkonnen": 5, "Sardaukar": 4}, first_attack=10,
+        # Grace 30 (was 10): the attack waves wait for the breach to play out, so the helper's own
+        # play decides more of the mission (Brutal v Hard 3/4 where Hard v Hard won 2/4 at 0.85).
+        army_keep={"Harkonnen": 5, "Sardaukar": 4}, first_attack=30,
         rock_floor=0.75, rock_area=(40, 64, 28),   # the basin only: the flats keep the worms' sand
         events=[("Breach1", "12,%d,%d,%d,%d,2" % SHIELD_WALL_BREACH),
                 ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen armies are coming through.")],
