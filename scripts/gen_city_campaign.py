@@ -534,6 +534,7 @@ MISSIONS: List[Mission] = [
         objectives={"Population": 20000, "HoldSeconds": 60},
         credits={"Atreides": 12000, "Harkonnen": 5000},
         zone_cap={"Harkonnen": 30}, first_attack=10, compact=compact_sihaya_basin,
+        difficulty={"Easy": 3.5, "Medium": 3.5, "Hard": 3.5, "Brutal": 3.5},
     ),
     Mission(
         2, "Hagal Flats", g.scenario_hagal_flats,
@@ -545,6 +546,7 @@ MISSIONS: List[Mission] = [
         objectives={"Credits": 30000, "HoldSeconds": 30},
         credits={"Atreides": 12000, "Ordos": 4000, "Harkonnen": 4000},
         zone_cap={"Ordos": 16, "Harkonnen": 16}, first_attack=9,
+        difficulty={"Easy": 3, "Medium": 3, "Hard": 3.25, "Brutal": 3.25},
     ),
     Mission(
         3, "Ash Quarter", g.scenario_ash_quarter,
@@ -556,6 +558,7 @@ MISSIONS: List[Mission] = [
         objectives={"Population": 75000, "MaxCrime": 63, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 7000, "Mercenary": 4000},
         army_keep={"Harkonnen": 6}, first_attack=9,
+        difficulty={"Easy": 2.5, "Medium": 2.5, "Hard": 2.5, "Brutal": 3.5},
     ),
     Mission(
         4, "Arrakeen Blackout", g.scenario_arrakeen_blackout,
@@ -566,6 +569,7 @@ MISSIONS: List[Mission] = [
         lose="Arrakeen is dark and its people are gone.",
         objectives={"Population": 60000, "MinLandValue": 90, "HoldSeconds": 60},
         credits={"Atreides": 15000, "Mercenary": 6000, "Harkonnen": 6000}, first_attack=8,
+        difficulty={"Easy": 3.5, "Medium": 3.5, "Hard": 3.5, "Brutal": 3.5},
     ),
     Mission(
         5, "Cielago Watch", g.scenario_cielago_watch,
@@ -576,6 +580,7 @@ MISSIONS: List[Mission] = [
         # Holding out wins at the timer; destroying both houses wins earlier.
         win_flags=11, lose_flags=9, timeout=30,
         credits={"Atreides": 13000, "Harkonnen": 10000, "Ordos": 10000}, first_attack=3,
+        difficulty={"Easy": 0.85, "Medium": 1.15, "Hard": 1.75, "Brutal": 2},
     ),
     Mission(
         6, "Harg Pass Convoy", g.scenario_harg_pass_convoy,
@@ -584,6 +589,7 @@ MISSIONS: List[Mission] = [
         win="The pass is open. Spice flows to Arrakeen again.",
         lose="The pass is closed and the towns are burning.",
         credits={"Atreides": 10000, "Harkonnen": 14000, "Mercenary": 8000}, first_attack=3,
+        difficulty={"Easy": 1.1, "Medium": 1.1, "Hard": 1.1, "Brutal": 1.1},
     ),
     Mission(
         7, "Shield Wall Breach", scenario_shield_wall_breach,
@@ -599,6 +605,7 @@ MISSIONS: List[Mission] = [
         rock_floor=0.75, rock_area=(40, 64, 28),   # the basin only: the flats keep the worms' sand
         events=[("Breach1", "12,%d,%d,%d,%d,2" % SHIELD_WALL_BREACH),
                 ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen armies are coming through.")],
+        difficulty={"Easy": 1, "Medium": 1, "Hard": 1.4, "Brutal": 1.4},
     ),
     Mission(
         8, "Tuono Crossing", g.scenario_tuono_crossing,
@@ -609,6 +616,7 @@ MISSIONS: List[Mission] = [
         lose="The expedition has failed.",
         objectives={"Population": 12000, "Credits": 30000, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 4000, "Sardaukar": 6000}, first_attack=13,
+        difficulty={"Easy": 0.9, "Medium": 1, "Hard": 1, "Brutal": 1},
     ),
     Mission(
         9, "Carthag Vise", g.scenario_carthag_vise,
@@ -619,6 +627,7 @@ MISSIONS: List[Mission] = [
         credits={"Atreides": 21000, "Harkonnen": 4000, "Ordos": 4000, "Sardaukar": 1500},
         zone_cap={"Harkonnen": 10, "Ordos": 10}, army_keep={"Harkonnen": 2, "Ordos": 2, "Sardaukar": 2},
         first_attack=10,
+        difficulty={"Easy": 2, "Medium": 2.25, "Hard": 2.25, "Brutal": 2.5},
     ),
     Mission(
         10, "All Against Atreides", scenario_all_against_atreides_city,
@@ -629,6 +638,7 @@ MISSIONS: List[Mission] = [
         lose="House Atreides has fallen.",
         credits={"Atreides": 26000, "Fremen": 4750, "Sardaukar": 4750, "Ordos": 4750, "Harkonnen": 4750},
         first_attack=5,
+        difficulty={"Easy": 0.6, "Medium": 0.6, "Hard": 0.8, "Brutal": 1.4},
     ),
 ]
 
