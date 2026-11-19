@@ -484,6 +484,7 @@ QuantBotConfig::QuantBotConfig() {
     force.productionBeforeCityGrowth = true;
     force.brutalCityEconomyOutnumbered = false;
     force.cityCampaignBrutalAttackPercent = 15;
+    force.cityLandValueSiting = true;
     force.cityPowerGrowthHorizon = false;
     force.cityBoomWorkers = false;
     force.cityBoomRefineries = false;
@@ -975,6 +976,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "ProductionBeforeCityGrowth", force.productionBeforeCityGrowth);
         iniFile.setBoolValue("Force Concentration", "BrutalCityEconomyOutnumbered", force.brutalCityEconomyOutnumbered);
         iniFile.setIntValue("Force Concentration", "CityCampaignBrutalAttackPercent", force.cityCampaignBrutalAttackPercent);
+        iniFile.setBoolValue("Force Concentration", "CityLandValueSiting", force.cityLandValueSiting);
         iniFile.setBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
         iniFile.setBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
         iniFile.setBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
@@ -1328,6 +1330,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.productionBeforeCityGrowth = iniFile.getBoolValue("Force Concentration", "ProductionBeforeCityGrowth", force.productionBeforeCityGrowth);
     force.brutalCityEconomyOutnumbered = iniFile.getBoolValue("Force Concentration", "BrutalCityEconomyOutnumbered", force.brutalCityEconomyOutnumbered);
     force.cityCampaignBrutalAttackPercent = std::clamp(iniFile.getIntValue("Force Concentration", "CityCampaignBrutalAttackPercent", force.cityCampaignBrutalAttackPercent), 0, 100);
+    force.cityLandValueSiting = iniFile.getBoolValue("Force Concentration", "CityLandValueSiting", force.cityLandValueSiting);
     force.cityPowerGrowthHorizon = iniFile.getBoolValue("Force Concentration", "CityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
     force.cityBoomWorkers = iniFile.getBoolValue("Force Concentration", "CityBoomWorkers", force.cityBoomWorkers);
     force.cityBoomRefineries = iniFile.getBoolValue("Force Concentration", "CityBoomRefineries", force.cityBoomRefineries);
@@ -2012,6 +2015,7 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.brutalCityEconomyOutnumbered) addNamed("brutalCityEconomyOutnumbered", force.brutalCityEconomyOutnumbered);
     // Hashed only when it differs from the default, so configurations without it keep their identity.
     if (force.cityCampaignBrutalAttackPercent != 15) addNamed("cityCampaignBrutalAttackPercent", force.cityCampaignBrutalAttackPercent);
+    if (!force.cityLandValueSiting) addNamed("cityLandValueSiting", force.cityLandValueSiting);
     addNamed("cityPowerGrowthHorizon", force.cityPowerGrowthHorizon);
     addNamed("cityBoomWorkers", force.cityBoomWorkers);
     addNamed("cityBoomRefineries", force.cityBoomRefineries);

@@ -652,6 +652,13 @@ struct QuantBotConfig {
         /// tiers; at 15% it won 52 of 69 screen games where it had won 41 and a Hard helper 34
         /// (docs/city-campaign.md, "Brutal's attack threshold"). Default 15; hashed when not 15.
         int cityCampaignBrutalAttackPercent;
+        /// City land value (Stefan, 2026-11-19: "the AI needs to learn how to boost property prices.
+        /// for example palaces boost nearby property values which is good for tax"). A Palace or
+        /// Stadium lifts land value by 40 within 8 tiles (CityEffects.h): its site is scored by the
+        /// own residential and commercial lots that bonus reaches, and a palace is ordered as a
+        /// land-value investment once 12 such lots stand, without waiting for 5,000 spare credits
+        /// and both factories. Default ON; hashed when OFF.
+        bool cityLandValueSiting;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;

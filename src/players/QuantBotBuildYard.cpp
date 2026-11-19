@@ -2402,6 +2402,17 @@ void QuantBot::chooseYardCivicAndDefence(BuildPass& pass, BuilderTurn& turn, Yar
         const bool palaceAllowed = !pass.vanillaFfaTechDeferred && !pass.vanillaBoldTechDeferred
             && pass.itemCount[Structure_Palace] < pass.palaceTarget
             && !pass.orderedThisTick.count(Structure_Palace);
+        // CityLandValueSiting: a palace is also a land-value investment (+40 within 8 tiles of the
+        // lots it is sited among), worth its price once a city has a dozen residential and
+        // commercial lots to lift; it no longer waits for 5,000 spare credits and both factories.
+        if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && palaceAllowed
+            && botConfig().force.cityLandValueSiting && pass.citySimEnabled && pass.stablePower
+            && pass.itemCount[Structure_ZoneResidential] + pass.itemCount[Structure_ZoneCommercial] >= 12
+            && pass.money >= int(data[Structure_Palace][houseID].price) + 1000
+            && campaignAvailableToBuild(turn.pBuilder,Structure_Palace)
+            && findPlaceLocation(Structure_Palace).isValid()) {
+            yardTurn.itemID = Structure_Palace; yardTurn.structureRule = "palace_land_value";
+        }
         if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic
                             && pass.money > 5000
                             && campaignAvailableToBuild(turn.pBuilder,Structure_Palace)

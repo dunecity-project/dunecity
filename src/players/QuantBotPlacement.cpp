@@ -648,6 +648,17 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         }
     }
 
+    // CityLandValueSiting: a Palace or Stadium lifts land value by its park bonus (40) within 8 tiles
+    // (CityEffects.h); its site is worth the own residential and commercial lots that bonus reaches.
+    std::vector<Coord> landValueLots;
+    const bool landValueBooster = botConfig().force.cityLandValueSiting && currentGame && currentGame->isCitySimEnabled()
+        && (itemID == Structure_Palace || itemID == Structure_Stadium);
+    if (landValueBooster)
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && (structure->getItemID() == Structure_ZoneResidential
+                    || structure->getItemID() == Structure_ZoneCommercial))
+                landValueLots.push_back(structure->getLocation());
+
     // Resolve nearest origins and full-footprint pollution separation once,
     // instead of scanning every neighbour again at every candidate. These
     // fields include the same live buildings and other yards' reservations.
@@ -1412,6 +1423,14 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 				}
 			}
 		}
+
+                if (landValueBooster) {
+                    // The simulation stamps the bonus with a linear falloff over Chebyshev distance.
+                    const int cx = placeLocationX + newSizeX / 2, cy = placeLocationY + newSizeY / 2;
+                    const int bonus = DuneCity::getParkLandValueBonus(itemID), radius = DuneCity::getParkLandValueRadius(itemID);
+                    for (const auto& lot : landValueLots)
+                        locationScore += DuneCity::falloff(bonus, std::max(std::abs(lot.x + 1 - cx), std::abs(lot.y + 1 - cy)), radius + 1);
+                }
 
                 int siteTier = 0;
                 // Plain numbers per candidate; the telemetry record is written once, for the
