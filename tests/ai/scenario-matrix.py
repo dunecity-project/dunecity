@@ -337,7 +337,8 @@ def campaign_missions():
 
 
 def seeds_for(category, cell_name, count):
-    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517}[category]
+    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517,
+            'citycampaign': 20261119}[category]
     offset = sum(ord(ch) for ch in cell_name) % 97
     return [base + 1009 * (i + offset) for i in range(count)]
 
