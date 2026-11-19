@@ -102,6 +102,113 @@ def render(m: Mission, sc: g.Scenario) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Mission 10: All Against Atreides, rebuilt for city building
+# ---------------------------------------------------------------------------
+def scenario_all_against_atreides_city() -> g.Scenario:
+    """The bundled All against Atreides premise (one Atreides capital against four allied
+    houses) on a 160x160 map with room to build a city on both sides: a broad Atreides
+    plateau in the north with its own spice, and four rival plateaus with space to grow."""
+    W, H = 160, 160
+    rng = g.Rng(0xAA7C1)
+    c = g.Canvas(W, H)
+
+    # The Atreides capital: a wide northern plateau behind a broken mountain arc.
+    c.organic(80, 30, 26, g.ROCK, rng, lobes=11)
+    c.ribbon([(36, 8), (52, 4), (80, 3), (108, 4), (124, 8)], g.MOUNTAIN, 5, rng)
+    c.ribbon([(44, 58), (60, 64)], g.MOUNTAIN, 5, rng)
+    c.ribbon([(100, 64), (116, 58)], g.MOUNTAIN, 5, rng)
+    # The four allied houses, each on its own plateau with room to expand.
+    rivals = {
+        "Fremen": (22, 74), "Sardaukar": (138, 74),
+        "Ordos": (34, 132), "Harkonnen": (126, 132),
+    }
+    for (rx, ry) in rivals.values():
+        c.organic(rx, ry, 17, g.ROCK, rng, lobes=9)
+    # Contested middle ground: open rock for expansions and a central spice basin.
+    c.organic(80, 100, 11, g.ROCK, rng, lobes=6)
+    c.ribbon([(60, 118), (80, 128), (100, 118)], g.MOUNTAIN, 6, rng)
+
+    for (sx, sy, r, rich) in [(40, 34, 10, True), (120, 34, 10, True), (80, 70, 11, True),
+                              (52, 92, 9, True), (108, 92, 9, True), (80, 148, 10, True),
+                              (12, 104, 8, False), (148, 104, 8, False), (20, 40, 7, False),
+                              (140, 40, 7, False)]:
+        c.spice_field(sx, sy, r, rng, rich)
+    for (dx, dy) in [(60, 48), (100, 48), (80, 116)]:
+        c.organic(dx, dy, 5, g.DUNES, rng, lobes=4, only_if=(g.SAND,))
+    c.set(80, 84, g.BLOOM)
+    c.set(30, 100, g.BLOOM)
+    c.set(130, 100, g.BLOOM)
+
+    sc = g.Scenario(
+        filename="5P - 160x160 - All Against Atreides City.ini",
+        size_x=W, size_y=H,
+        header=[],
+        basic=g.basic(3, 1, brief="SARDUKAR.WSA", winpic="WIN2.WSA"),
+        houses=[
+            ("Atreides", {"Brain": "Human", "Credits": 30000, "Quota": 0}),
+            ("Fremen", {"Brain": "Team2", "Credits": 5000, "Quota": 0}),
+            ("Sardaukar", {"Brain": "Team2", "Credits": 5000, "Quota": 0}),
+            ("Ordos", {"Brain": "Team2", "Credits": 5000, "Quota": 0}),
+            ("Harkonnen", {"Brain": "Team2", "Credits": 5000, "Quota": 0}),
+        ],
+        canvas=c,
+        choam=dict(g.DEFAULT_CHOAM),
+    )
+
+    # -- the Atreides capital -------------------------------------------------
+    ax, ay = 80, 30
+    g.street_path(sc, "Atreides", [(ax - 18, ay), (ax, ay + 2), (ax + 18, ay)], rng, 14)
+    g.street_path(sc, "Atreides", [(ax, ay - 12), (ax + 1, ay + 14)], rng, 10)
+    g.street_path(sc, "Atreides", [(ax - 10, ay - 8), (ax - 9, ay + 10)], rng, 10)
+    g.spurs(sc, "Atreides", [(ax - 18, ay), (ax + 18, ay)], rng, 5)
+    g.anchors(sc, "Atreides", [
+        ("Const Yard", ax, ay - 4), ("Refinery", ax - 6, ay - 6), ("Windtrap", ax + 4, ay - 6),
+        ("Windtrap", ax - 4, ay + 4), ("Windtrap", ax + 6, ay + 4), ("Spice Silo", ax + 8, ay - 4),
+        ("Light Factory", ax - 12, ay + 4), ("Barracks", ax + 12, ay + 4), ("Outpost", ax + 2, ay + 6),
+    ])
+    g.zone_districts(sc, "Atreides", [
+        g.District(ax - 20, ay - 12, 40, 10, "RRCIR", fill=70, limit=8),
+        g.District(ax - 20, ay + 2, 40, 12, "RRCCI", fill=70, limit=8),
+    ], rng)
+    g.force(sc, "Atreides", ax, ay + 16, [
+        ("Harvester", "Harvest"), ("Harvester", "Harvest"), ("Carryall", "Area Guard"),
+        ("Siege Tank", "Area Guard"), ("Siege Tank", "Area Guard"), ("Tank", "Area Guard"),
+        ("Tank", "Area Guard"), ("Launcher", "Area Guard"), ("Quad", "Area Guard"),
+        ("Trike", "Area Guard"), ("Troopers", "Area Guard"), ("Troopers", "Area Guard"),
+    ])
+
+    # -- four allied rivals, each a small working town --------------------------
+    special = {"Harkonnen": "Devastator", "Ordos": "Deviator", "Sardaukar": "Siege Tank", "Fremen": "Siege Tank"}
+    for owner, (rx, ry) in rivals.items():
+        g.street_path(sc, owner, [(rx - 10, ry), (rx, ry + 1), (rx + 10, ry)], rng, 14)
+        g.street_path(sc, owner, [(rx, ry - 9), (rx + 1, ry + 9)], rng, 10)
+        g.anchors(sc, owner, [
+            ("Const Yard", rx, ry - 3), ("Refinery", rx - 5, ry - 5), ("Windtrap", rx + 4, ry - 5),
+            ("Windtrap", rx - 4, ry + 3), ("Light Factory", rx + 5, ry + 3), ("Barracks", rx - 8, ry + 6),
+            ("Outpost", rx + 2, ry + 5),
+        ])
+        if owner in ("Harkonnen", "Sardaukar"):
+            g.anchors(sc, owner, [("Heavy Factory", rx + 8, ry - 2), ("Windtrap", rx + 9, ry + 6)])
+        g.zone_districts(sc, owner, [g.District(rx - 12, ry - 10, 24, 20, "RRCI", fill=60, limit=6)], rng)
+        g.turret_ring(sc, owner, [(rx - 9, ry - 8), (rx + 9, ry - 8), (rx + 9, ry + 9), (rx - 9, ry + 9)], rng)
+        g.force(sc, owner, rx, ry + 12, [
+            ("Harvester", "Harvest"), ("Tank", "Area Guard"), ("Tank", "Area Guard"),
+            ("Launcher", "Area Guard"), ("Quad", "Area Guard"), (special[owner], "Area Guard"),
+            ("Troopers", "Area Guard"),
+        ])
+    sc.reinforcements = [
+        "Atreides,Harvester,Homebase,8",
+        "Atreides,Siege Tank,Homebase,20",
+        "Harkonnen,Tank,Homebase,18,+",
+        "Ordos,Tank,Homebase,22,+",
+        "Sardaukar,Troopers,Homebase,26,+",
+        "Fremen,Troopers,Homebase,30,+",
+    ]
+    g.power_finish(sc)
+    return sc
+
+
+# ---------------------------------------------------------------------------
 # The missions, easiest first
 # ---------------------------------------------------------------------------
 
@@ -185,7 +292,7 @@ MISSIONS: List[Mission] = [
         lose="Carthag has fallen to the Harkonnen.",
     ),
     Mission(
-        10, "All Against Atreides", g.scenario_coriolis_gap,
+        10, "All Against Atreides", scenario_all_against_atreides_city,
         briefing=("The Great Houses have united against House Atreides. Build a capital that can feed a war, "
                   "then destroy every one of them."),
         win="House Atreides stands alone on Arrakis. The campaign is won.",

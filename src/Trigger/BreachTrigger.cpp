@@ -2,6 +2,7 @@
 #include <Trigger/BreachTrigger.h>
 
 #include <globals.h>
+#include <FileClasses/TextManager.h>
 #include <Game.h>
 #include <House.h>
 #include <Map.h>

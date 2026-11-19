@@ -52,7 +52,8 @@ bool isAvailable() {
     for(int mission = 1; mission <= kMissions; ++mission) {
         bool found = false;
         for(const auto& searchPath : FileManager::getSearchPath()) {
-            if(getCaseInsensitiveFilename(searchPath + "/" + kMapDirectory + "/" + scenarioFilename(mission))) {
+            std::string path = searchPath + "/" + kMapDirectory + "/" + scenarioFilename(mission);
+            if(getCaseInsensitiveFilename(path)) {
                 found = true;
                 break;
             }
