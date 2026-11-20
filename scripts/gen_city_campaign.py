@@ -534,7 +534,7 @@ MISSIONS: List[Mission] = [
         objectives={"Population": 20000, "HoldSeconds": 60},
         credits={"Atreides": 12000, "Harkonnen": 5000},
         zone_cap={"Harkonnen": 30}, first_attack=10, compact=compact_sihaya_basin,
-        difficulty={"Easy": 3.5, "Medium": 3.5, "Hard": 3.5, "Brutal": 3.5},
+        difficulty={"Easy": 8.4, "Medium": 5.05, "Hard": 3.35, "Brutal": 3.45},
     ),
     Mission(
         2, "Hagal Flats", g.scenario_hagal_flats,
@@ -546,7 +546,7 @@ MISSIONS: List[Mission] = [
         objectives={"Credits": 30000, "HoldSeconds": 30},
         credits={"Atreides": 12000, "Ordos": 4000, "Harkonnen": 4000},
         zone_cap={"Ordos": 16, "Harkonnen": 16}, first_attack=9,
-        difficulty={"Easy": 3, "Medium": 3, "Hard": 3.25, "Brutal": 3.25},
+        difficulty={"Easy": 4, "Medium": 2.9, "Hard": 2.8, "Brutal": 3.15},
     ),
     Mission(
         3, "Ash Quarter", g.scenario_ash_quarter,
@@ -560,7 +560,7 @@ MISSIONS: List[Mission] = [
         # Grace 18 (was 9): with 9 every helper tier was overrun at minutes 10-12, so a Brutal helper
         # won no more often than a Hard one; doubled, Brutal v Hard won 3/4 where Hard v Hard won 0/4.
         army_keep={"Harkonnen": 6}, first_attack=18,
-        difficulty={"Easy": 2.5, "Medium": 2.5, "Hard": 2.5, "Brutal": 3.5},
+        difficulty={"Easy": 6, "Medium": 3.4, "Hard": 3, "Brutal": 3.2},
     ),
     Mission(
         4, "Arrakeen Blackout", g.scenario_arrakeen_blackout,
@@ -570,7 +570,11 @@ MISSIONS: List[Mission] = [
         win="Arrakeen shines again. The Duke's capital is secure.",
         lose="Arrakeen is dark and its people are gone.",
         objectives={"Population": 60000, "MinLandValue": 90, "HoldSeconds": 60},
-        credits={"Atreides": 15000, "Mercenary": 6000, "Harkonnen": 6000}, first_attack=8,
+        # Grace 45 (was 8): the grace is divided by the enemy's [DIFFICULTY], so 8 minutes at 3.5 sent the
+        # first wave at minute 2 and every helper tier was overrun at minutes 10-13 (Brutal v Hard won no
+        # more often than Hard v Hard). A Brutal helper reaches the goals at minutes 11-16, a Hard one at
+        # 19-24: the grace now ends between the two.
+        credits={"Atreides": 15000, "Mercenary": 6000, "Harkonnen": 6000}, first_attack=45,
         difficulty={"Easy": 3.5, "Medium": 3.5, "Hard": 3.5, "Brutal": 3.5},
     ),
     Mission(
@@ -582,7 +586,7 @@ MISSIONS: List[Mission] = [
         # Holding out wins at the timer; destroying both houses wins earlier.
         win_flags=11, lose_flags=9, timeout=30,
         credits={"Atreides": 13000, "Harkonnen": 10000, "Ordos": 10000}, first_attack=3,
-        difficulty={"Easy": 0.85, "Medium": 1.15, "Hard": 1.75, "Brutal": 2},
+        difficulty={"Easy": 1.2, "Medium": 1.4, "Hard": 1.5, "Brutal": 1.75},
     ),
     Mission(
         6, "Harg Pass Convoy", g.scenario_harg_pass_convoy,
@@ -591,7 +595,7 @@ MISSIONS: List[Mission] = [
         win="The pass is open. Spice flows to Arrakeen again.",
         lose="The pass is closed and the towns are burning.",
         credits={"Atreides": 10000, "Harkonnen": 14000, "Mercenary": 8000}, first_attack=3,
-        difficulty={"Easy": 1.1, "Medium": 1.1, "Hard": 1.1, "Brutal": 1.1},
+        difficulty={"Easy": 0.9, "Medium": 0.9, "Hard": 1, "Brutal": 1.15},
     ),
     Mission(
         7, "Shield Wall Breach", scenario_shield_wall_breach,
@@ -603,9 +607,12 @@ MISSIONS: List[Mission] = [
         win="The breach is held and the invaders are destroyed. The basin is safe.",
         lose="The Shield Wall fell, and your city with it.",
         credits={"Atreides": 16000, "Harkonnen": 7000, "Sardaukar": 5000},
-        # Grace 30 (was 10): the attack waves wait for the breach to play out, so the helper's own
-        # play decides more of the mission (Brutal v Hard 3/4 where Hard v Hard won 2/4 at 0.85).
-        army_keep={"Harkonnen": 5, "Sardaukar": 4}, first_attack=30,
+        # Grace 40 (was 10, then 30): the attack waves wait for the breach to play out, so the helper's own
+        # play decides the mission. The grace is divided by the enemy's [DIFFICULTY]: 30 at 1.4-1.7 sent
+        # the first wave at minutes 18-21, before either helper tier had 50,000 people, and Brutal v Hard
+        # won no more often than Hard v Hard. A Brutal helper reaches the goal at minutes 22-31, a Hard
+        # one at 29-36.
+        army_keep={"Harkonnen": 5, "Sardaukar": 4}, first_attack=40,
         rock_floor=0.75, rock_area=(40, 64, 28),   # the basin only: the flats keep the worms' sand
         events=[("Breach1", "12,%d,%d,%d,%d,2" % SHIELD_WALL_BREACH),
                 ("Breach1Message", "The Shield Wall has been breached! Sandworms and Harkonnen armies are coming through.")],
@@ -620,7 +627,7 @@ MISSIONS: List[Mission] = [
         lose="The expedition has failed.",
         objectives={"Population": 12000, "Credits": 30000, "HoldSeconds": 60},
         credits={"Atreides": 14000, "Harkonnen": 4000, "Sardaukar": 6000}, first_attack=13,
-        difficulty={"Easy": 0.9, "Medium": 1, "Hard": 1, "Brutal": 1},
+        difficulty={"Easy": 2.15, "Medium": 0.9, "Hard": 0.9, "Brutal": 1.05},
     ),
     Mission(
         9, "Carthag Vise", g.scenario_carthag_vise,
@@ -631,7 +638,7 @@ MISSIONS: List[Mission] = [
         credits={"Atreides": 21000, "Harkonnen": 4000, "Ordos": 4000, "Sardaukar": 1500},
         zone_cap={"Harkonnen": 10, "Ordos": 10}, army_keep={"Harkonnen": 2, "Ordos": 2, "Sardaukar": 2},
         first_attack=10,
-        difficulty={"Easy": 2, "Medium": 2.25, "Hard": 2.25, "Brutal": 2.5},
+        difficulty={"Easy": 2.45, "Medium": 2.3, "Hard": 2.4, "Brutal": 2.5},
     ),
     Mission(
         10, "All Against Atreides", scenario_all_against_atreides_city,
@@ -642,7 +649,7 @@ MISSIONS: List[Mission] = [
         lose="House Atreides has fallen.",
         credits={"Atreides": 26000, "Fremen": 4750, "Sardaukar": 4750, "Ordos": 4750, "Harkonnen": 4750},
         first_attack=5,
-        difficulty={"Easy": 0.6, "Medium": 0.6, "Hard": 0.8, "Brutal": 1.4},
+        difficulty={"Easy": 1.45, "Medium": 0.95, "Hard": 1.1, "Brutal": 1.5},
     ),
 ]
 
