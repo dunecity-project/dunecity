@@ -263,9 +263,6 @@ struct QuantBot::BuildPass {
     std::set<Uint32> orderedThisTick{};
     bool roadMaintenanceAttempted{};
     bool defendingEconomy{};
-    /// Campaign ladder panic in effect this pass (QuantBotCityCampaignSkills::kPanicKeys): no zoning
-    /// beyond the seed city and no dedicated growth yard, so the money buys units.
-    bool cityPanic{};
     bool campaignThreatProduction{};
     // CampaignHelperFactoryFirst: support house below its army floor still lacks a Heavy Factory.
     bool campaignHelperFactoryFirst{};

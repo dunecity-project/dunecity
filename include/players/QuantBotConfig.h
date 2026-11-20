@@ -669,12 +669,9 @@ struct QuantBotConfig {
         /// Lowest tier per skill (0 Easy .. 3 Brutal, 4 never), indexed by QuantBotCityCampaignSkills::Skill.
         /// Defaults kDefaultTiers; each tier is hashed when it differs from its default.
         std::array<int, QuantBotCityCampaignSkills::kSkillCount> cityCampaignSkillTier;
-        /// Panic under pressure per tier on the campaign ladder (QuantBotCityCampaignSkills::kPanicKeys):
-        /// -1 never, 0 only under attack, N below N% of the strongest enemy team's remembered army.
-        /// Each hashed when it differs from its default.
-        std::array<int, 4> cityCampaignPanicPercent;
         /// Thinking speed per tier on the campaign ladder (QuantBotCityCampaignSkills::kThinkKeys): the tier
-        /// decides on one AI pass in N. Default 1 for every tier; each hashed when it differs.
+        /// decides on one AI pass in N. Defaults kDefaultThinkPasses (Easy 8, Medium 6, Hard 3, Brutal 1); each hashed
+        /// when it differs.
         std::array<int, 4> cityCampaignThinkPasses;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.

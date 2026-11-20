@@ -535,10 +535,6 @@ void QuantBot::build(int militaryValue) {
     planCityBootstrap(pass);
     planOpeningProduction(pass);
     planDefenceCoverage(pass);
-    if (const int panic = cityCampaignPanicPercent(); panic != QuantBotCityCampaignSkills::kNoPanic)
-        pass.cityPanic = pass.citySimEnabled && !builderOnly()
-            && (pass.defendingEconomy || pass.groundThreatAsset.isValid()
-                || ownGroundArmyValue() * 100 < enemyThreatEstimate() * panic);
     planVanillaCoreDefence(pass);
     planCityResearchOrder(pass);
     planTechSavings(pass);
@@ -2300,8 +2296,6 @@ bool QuantBot::powerGenerationPending(BuildPass& pass) {
 Uint32 QuantBot::chooseCityZone(BuildPass& pass, const BuilderBase* builder, bool bootstrap, bool missingOnly) {
     const int zones = pass.itemCount[Structure_ZoneResidential]+pass.itemCount[Structure_ZoneCommercial]+pass.itemCount[Structure_ZoneIndustrial];
     if (!campaignAllowsZone(zones)) return Uint32(NONE_ID);
-    // Campaign ladder panic: while threatened the money buys units; the city keeps only its seed.
-    if (pass.cityPanic && !bootstrap && zones >= CityEconomyInvestmentPolicy::kBootstrapZoneSeed) return Uint32(NONE_ID);
 
     auto ranked = QuantBotBuildPolicy::rankZones(
         pass.itemCount[Structure_ZoneResidential], pass.itemCount[Structure_ZoneCommercial],
@@ -5794,7 +5788,7 @@ void QuantBot::chooseCapitalPlan(BuildPass& pass) {
     // Crime protection keeps the winning allocation; growth resumes after its
     // order is accepted. A lone opening yard retains its tech path.
     Uint32 dedicatedCityYard=NONE_ID;
-    const bool threatBudget = pass.cityBoomArmy || pass.cityPanic || (botConfig().force.cityThreatBudget && pass.citySimEnabled
+    const bool threatBudget = pass.cityBoomArmy || (botConfig().force.cityThreatBudget && pass.citySimEnabled
         && gameMode == GameMode::Custom && !campaignPolicyApplies()
         && lastCalculatedSpice > 0 && pass.defendingEconomy);
     if (pass.sharedSpending && pass.citySimEnabled && pass.cityYards>1 && !pass.protectionCapital

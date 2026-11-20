@@ -1306,8 +1306,6 @@ private:
     bool cityCampaignSkill(QuantBotCityCampaignSkills::Skill skill) const;
     /// AI passes per decision on the campaign ladder (thinking speed); 1 everywhere else.
     int cityCampaignThinkPasses() const;
-    /// Panic percent on the campaign ladder (QuantBotCityCampaignSkills::kPanicKeys); kNoPanic elsewhere.
-    int cityCampaignPanicPercent() const;
     /// The game is a DuneCity campaign mission; cached, the init settings never change in a game.
     bool duneCityCampaignGame() const;
     mutable std::optional<bool> duneCityCampaignGameCache;

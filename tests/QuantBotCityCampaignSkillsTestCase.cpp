@@ -92,13 +92,3 @@ TEST_CASE("City campaign skill ladder: thinking speed", "[quantbot][citycampaign
     for (int tier = Easy; tier < Brutal; ++tier) CHECK(kDefaultThinkPasses[tier] >= kDefaultThinkPasses[tier + 1]);
     CHECK(kDefaultThinkPasses[Brutal] == 1);
 }
-
-TEST_CASE("City campaign skill ladder: panic under pressure", "[quantbot][citycampaign]") {
-    const std::array<int, 4> table{{100, 50, 0, kNoPanic}};
-    CHECK(panicPercent(Easy, table, true) == 100);
-    CHECK(panicPercent(Hard, table, true) == 0);
-    CHECK(panicPercent(Brutal, table, true) == kNoPanic);
-    CHECK(panicPercent(Easy, table, false) == kNoPanic);
-    CHECK(panicPercent(4, table, true) == kNoPanic); // Defend keeps its native play
-    for (int panic : kDefaultPanicPercent) CHECK(panic >= kNoPanic);
-}

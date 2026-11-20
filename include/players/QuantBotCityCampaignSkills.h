@@ -67,23 +67,6 @@ inline int thinkPasses(int difficulty, const std::array<int, 4>& table, bool lad
     return table[difficulty] < 1 ? 1 : table[difficulty] > kMaxThinkPasses ? kMaxThinkPasses : table[difficulty];
 }
 
-/// Panic under pressure: while under attack, with an enemy ground force at one of its assets, or with
-/// its ground army below this percent of the strongest enemy team it has seen, a tier zones nothing
-/// beyond its seed city and its money buys units (0 = only under attack, kNoPanic = never). Keeping
-/// the city growing is the skill: units before zoning cost a Hard helper 8 (attack only), 11 (50%)
-/// and 15 (100%) of its 24 wins in 80 games against Hard enemies. Indexed Easy..Brutal.
-constexpr int kNoPanic = -1;
-constexpr std::array<int, 4> kDefaultPanicPercent{{kNoPanic, kNoPanic, kNoPanic, kNoPanic}};
-constexpr std::array<const char*, 4> kPanicKeys{{
-    "CityCampaignPanicEasy", "CityCampaignPanicMedium", "CityCampaignPanicHard", "CityCampaignPanicBrutal",
-}};
-
-/// The tier's panic percent on the ladder; kNoPanic elsewhere.
-inline int panicPercent(int difficulty, const std::array<int, 4>& table, bool ladder) {
-    if (!ladder || difficulty < Easy || difficulty > Brutal) return kNoPanic;
-    return table[difficulty] < kNoPanic ? kNoPanic : table[difficulty];
-}
-
 /// Behaviour outside the ladder. Skills the AI already had stay on for every tier; EarlyAttack stays
 /// Brutal's own; GrowthTax and HarvesterTargets are new and stay off.
 inline bool nativeSkill(Skill skill, int difficulty) {
