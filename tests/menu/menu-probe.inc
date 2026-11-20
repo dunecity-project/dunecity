@@ -1143,16 +1143,16 @@ int runMenuProbe() {
             "Start launched stale AI or mission choices");
     }
     {
-        // Reworked campaign (docs/reworked-campaign.md): Maps offers Original, Reworked and DuneCity;
-        // Reworked offers only houses with all 22 reworked missions (Atreides, Harkonnen and Ordos), shows
-        // the REMASTERED badge and reaches the launch; Original restores every house and drops the badge.
+        // Reworked campaign (docs/reworked-campaign.md): Maps offers Original and Reworked (the DuneCity
+        // campaign has its own main-menu screen); Reworked offers only houses with all 22 reworked missions
+        // (Atreides, Harkonnen and Ordos), shows the REMASTERED badge and reaches the launch; Original
+        // restores every house and drops the badge.
         HouseChoiceMenu::s_reworkedMaps=false;
-        HouseChoiceMenu::s_duneCityCampaign=false;
         HouseChoiceMenu menu(false);
         auto& maps=menu.campaignMapsDropDown;
-        menuRequire(maps.getNumEntries()==3 && maps.getEntry(0)==_("Original") && maps.getEntry(1)==_("Reworked")
-                    && maps.getEntry(2)==_("DuneCity") && maps.getSelectedIndex()==0 && maps.isEnabled(),
-                    "Campaign Maps should offer Original (selected), Reworked and DuneCity");
+        menuRequire(maps.getNumEntries()==2 && maps.getEntry(0)==_("Original") && maps.getEntry(1)==_("Reworked")
+                    && maps.getSelectedIndex()==0 && maps.isEnabled() && !HouseChoiceMenu::isDuneCityCampaign(),
+                    "Campaign Maps should offer Original (selected) and Reworked");
         menuRequire(menu.houseChoices.count>1 && !menu.showsRemasteredWatermark(),
                     "Original maps should offer every house without the badge");
         menuCapture(menu,"campaign-original-maps");
@@ -1174,40 +1174,56 @@ int runMenuProbe() {
         maps.setSelectedItem(0,true);
         menuRequire(!HouseChoiceMenu::isReworkedMaps() && menu.houseChoices.count>1,
                     "Original maps did not restore every house");
-        // The DuneCity campaign needs city mode: in vanilla the choice falls back to Original.
-        maps.setSelectedItem(2,true);
-        menuRequire(!HouseChoiceMenu::isDuneCityCampaign() && maps.getSelectedIndex()==0 && menu.houseChoices.count>1,
-                    "Vanilla must not start the DuneCity campaign");
     }
     {
-        // DuneCity campaign (docs/city-campaign.md): with the DuneCity mod, Maps: DuneCity offers only
-        // Atreides and its ten missions; Original restores every house and the original levels.
+        // DuneCity Campaign (docs/city-campaign.md): its own screen, without the connection, maps and mod
+        // choices. Without the DuneCity mod it offers no start; with it, Atreides alone and the ten
+        // missions, the start mission's name and goals, and a launch that keeps the choices.
         auto& mods=ModManager::instance();
         const std::string previousMod=mods.getActiveModName();
-        menuRequire(mods.setActiveMod("dunecity"), "Cannot select Dune City for the city campaign");
-        HouseChoiceMenu::s_reworkedMaps=false;
-        HouseChoiceMenu::s_duneCityCampaign=false;
+        HouseChoiceMenu::s_reworkedMaps=true;
+        menuRequire(mods.setActiveMod("vanilla"), "Cannot select vanilla for the city campaign check");
         {
-            HouseChoiceMenu menu(false);
-            auto& maps=menu.campaignMapsDropDown;
-            menuRequire(maps.isEnabled() && maps.getEntry(2)==_("DuneCity"), "Dune City cannot choose the city campaign");
-            maps.setSelectedItem(2,true);
+            HouseChoiceMenu menu(false,false,false,true);
+            menuRequire(!menu.hostCoopButton.isEnabled(), "Without the DuneCity mod the DuneCity Campaign offers a start");
+        }
+        menuRequire(mods.setActiveMod(DuneCityCampaign::kMod), "Cannot select Dune City for the city campaign");
+        HouseChoiceMenu::s_startLevel=1;
+        {
+            HouseChoiceMenu menu(true,false,false,true);
             menuRequire(HouseChoiceMenu::isDuneCityCampaign() && !HouseChoiceMenu::isReworkedMaps()
-                        && maps.getSelectedIndex()==2,
-                        "Maps: DuneCity did not reach the campaign launch");
-            menuRequire(menu.houseChoices.count==1 && menu.houseChoices[0]==DuneCityCampaign::kHouse,
-                        "The DuneCity campaign should offer only Atreides");
+                        && !HouseChoiceMenu::isOnline() && !menu.showsRemasteredWatermark(),
+                        "The DuneCity Campaign screen does not launch the offline city campaign");
+            menuRequire(menu.campaignMapsDropDown.getNumEntries()==0 && menu.availableMods.empty()
+                        && menu.modDropDown.getNumEntries()==0,
+                        "The DuneCity Campaign screen should offer no maps or mod choice");
+            menuRequire(menu.houseChoices.count==1 && menu.houseChoices[0]==DuneCityCampaign::kHouse
+                        && menu.house2Button.isVisible() && !menu.house1Button.isVisible() && !menu.house3Button.isVisible(),
+                        "The DuneCity campaign should offer only Atreides, centred");
             menuRequire(menu.startLevelDropDown.getNumEntries()==DuneCityCampaign::kMissions
                         && menu.startLevelDropDown.getEntry(DuneCityCampaign::kMissions-1)
                                ==_("Mission ")+std::to_string(DuneCityCampaign::kMissions),
                         "The DuneCity campaign should list its ten missions");
-            menuCapture(menu,"campaign-dunecity-maps");
-            maps.setSelectedItem(0,true);
-            menuRequire(!HouseChoiceMenu::isDuneCityCampaign() && menu.houseChoices.count>1
-                        && menu.startLevelDropDown.getNumEntries()==(HouseChoiceMenu::isSingleMission() ? 22 : 9),
-                        "Original maps did not restore every house and the original levels");
+            menuRequire(menu.missionLabel.getText()=="Mission 1: Sihaya Basin"
+                        && menu.missionDescription.getText().rfind("Goal: 20,000 people", 0)==0,
+                        "The DuneCity Campaign screen does not show the start mission's goals");
+            menu.startLevelDropDown.setSelectedItem(6,true);
+            menuRequire(menu.missionLabel.getText()=="Mission 7: Shield Wall Breach",
+                        "The mission panel does not follow the start mission");
+            menuCapture(menu,"campaign-dunecity");
+            menu.hostCoopButton.handleMouseLeft(10,10,true);
+            menu.hostCoopButton.handleMouseLeft(10,10,false);
+            menuRequire(menu.isQuiting() && HouseChoiceMenu::getStartLevel()==7
+                        && HouseChoiceMenu::s_house==DuneCityCampaign::kHouse,
+                        "Start did not launch the chosen DuneCity mission");
         }
-        HouseChoiceMenu::s_duneCityCampaign=false;
+        {
+            // The regular Campaign screen leaves the city campaign.
+            HouseChoiceMenu menu(false);
+            menuRequire(!HouseChoiceMenu::isDuneCityCampaign() && menu.houseChoices.count>1,
+                        "The Campaign screen kept the DuneCity campaign");
+        }
+        HouseChoiceMenu::s_reworkedMaps=false;
         menuRequire(mods.setActiveMod(previousMod), "Cannot restore the mod after the city campaign check");
     }
     {
@@ -1246,6 +1262,13 @@ int runMenuProbe() {
         SDL_Log("MENU_VERSION_PASS: %s", menu.modVersionLabel.getText().c_str());
         menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.randomSkirmishButton.isVisible()
             && menu.civWarsButton.isVisible() && menu.onlineButton.isVisible(), "Home play actions missing");
+        // DuneCity Campaign took Continue's place (Stefan, 2026-11-21), directly below Campaign.
+        menuRequire(menu.duneCityCampaignButton.isVisible() && menu.duneCityCampaignButton.getText()=="DuneCity Campaign"
+            && menu.windowWidget.getWidgetPosition(&menu.duneCityCampaignButton).y
+               > menu.windowWidget.getWidgetPosition(&menu.campaignButton).y
+            && menu.windowWidget.getWidgetPosition(&menu.duneCityCampaignButton).y
+               < menu.windowWidget.getWidgetPosition(&menu.customButton).y,
+            "DuneCity Campaign is not between Campaign and Custom Game");
         menuRequire(menu.windowWidget.getWidgetPosition(&menu.civWarsButton).y
             > menu.windowWidget.getWidgetPosition(&menu.randomSkirmishButton).y,
             "Civilization Wars is not below Random Skirmish");
@@ -1254,11 +1277,8 @@ int runMenuProbe() {
             && menu.modesButton.getText()=="Extras", "Workshop and Extras destinations are not distinct");
         menuRequire(!menu.campaignButton.keyboardFocusVisible,"Home shows unsolicited keyboard focus");
         menuCapture(menu,"home");
-        menu.canContinue=true; menu.refreshContextButtons();
-        menuCapture(menu,"home-continue");
-        menu.canContinue=false; menu.refreshContextButtons();
         SDL_Event tab{}; tab.type=SDL_KEYDOWN; tab.key.keysym.sym=SDLK_TAB;
-        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.civWarsButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
+        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.duneCityCampaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.civWarsButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
 #if defined(DUNECITY_DESKTOP_UPDATER)
         tabOrder.push_back(&menu.updateButton);
 #endif
