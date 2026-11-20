@@ -436,6 +436,7 @@ target_sources(dunecity
         Trigger/ReinforcementTrigger.cpp
         Trigger/TimeoutTrigger.cpp
         Trigger/BreachTrigger.cpp
+        MissionBriefing.cpp
         MissionObjectives.cpp
 
         # DuneCity - city-building simulation layer

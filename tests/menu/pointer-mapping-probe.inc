@@ -54,7 +54,7 @@ void verifyMenu(const char* phase, bool offscreen = false) {
             int((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0));
     MainMenu menu;
     int clicked = -1;
-    TextButton* buttons[] = {&menu.continueButton, &menu.onlineButton, &menu.campaignButton,
+    TextButton* buttons[] = {&menu.duneCityCampaignButton, &menu.onlineButton, &menu.campaignButton,
         &menu.customButton, &menu.randomSkirmishButton, &menu.civWarsButton, &menu.loadButton,
         &menu.optionsButton, &menu.editorsButton, &menu.modesButton, &menu.quitButton, &menu.updateButton};
     for(int i = 0; i < int(std::size(buttons)); ++i)

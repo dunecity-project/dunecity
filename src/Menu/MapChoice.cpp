@@ -20,6 +20,7 @@
 #include <globals.h>
 
 #include <FileClasses/FileManager.h>
+#include <FileClasses/FontManager.h>
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
 #include <FileClasses/INIFile.h>
@@ -32,8 +33,11 @@
 
 #include <sand.h>
 #include <mod/ModManager.h>
+#include <misc/DuneCityCampaign.h>
 
-MapChoice::MapChoice(int newHouse, unsigned int lastMission, Uint32 oldAlreadyPlayedRegions) : MenuBase() {
+#include <algorithm>
+
+void MapChoice::setUp(int newHouse) {
     disableQuiting(true);
     selectedRegion = -1;
     selectionTime = 0;
@@ -43,8 +47,6 @@ MapChoice::MapChoice(int newHouse, unsigned int lastMission, Uint32 oldAlreadyPl
     curHouse2Blit = 0;
     curRegion2Blit = 0;
     curBlendBlitter = nullptr;
-    lastScenario = (lastMission + 1)/3 + 1;
-    alreadyPlayedRegions = oldAlreadyPlayedRegions;
     house = newHouse;
     campaignHouseCount = ModManager::instance().isTornieFamilyContentActive() ? NUM_PLAYER_HOUSES : NUM_CAMPAIGN_HOUSES;
 
@@ -65,6 +67,12 @@ MapChoice::MapChoice(int newHouse, unsigned int lastMission, Uint32 oldAlreadyPl
 
     // load all data from ini
     loadINI();
+}
+
+MapChoice::MapChoice(int newHouse, unsigned int lastMission, Uint32 oldAlreadyPlayedRegions) : MenuBase() {
+    lastScenario = (lastMission + 1)/3 + 1;
+    alreadyPlayedRegions = oldAlreadyPlayedRegions;
+    setUp(newHouse);
 
     int numSelectableRegions = 0;
     int numRegions = 0;
@@ -120,6 +128,52 @@ MapChoice::MapChoice(int newHouse, unsigned int lastMission, Uint32 oldAlreadyPl
     }
 }
 
+MapChoice::MapChoice(int newHouse, const DuneCityConquest& won) : MenuBase() {
+    lastScenario = 1;
+    alreadyPlayedRegions = 0;
+    setUp(newHouse);
+    conquest = true;
+
+    const std::vector<int> order = conquestOrder();
+    const int mission = std::clamp(won.missionWon, 1, DuneCityCampaign::kMissions);
+    const auto [first, last] = DuneCityCampaign::conquestRange(mission, static_cast<int>(order.size()));
+    conqueredRegions.assign(order.begin(), order.begin() + first);
+    newRegions.assign(order.begin() + first, order.begin() + last);
+
+    // Every win starts from the planet: black, the planet fading in, then the region map.
+    mapSurface = convertSurfaceToDisplayFormat(pGFXManager->getUIGraphicSurface(UI_MapChoicePlanet));
+    SDL_Rect dest = { 16, 48, 608, 240 };
+    SDL_FillRect(mapSurface.get(), &dest, COLOR_BLACK);
+    mapTexture = sdl2::texture_ptr{ SDL_CreateTexture(renderer, SCREEN_FORMAT, SDL_TEXTUREACCESS_STREAMING, mapSurface->w, mapSurface->h) };
+    SDL_SetTextureBlendMode(mapTexture.get(), SDL_BLENDMODE_BLEND);
+    mapChoiceState = MAPCHOICESTATE_FADEINPLANET;
+
+    const std::string houseName = getHouseNameByNumber(static_cast<HOUSETYPE>(house));
+    const std::string title = fmt::sprintf(_("Mission %d of %d won"), mission, DuneCityCampaign::kMissions);
+    conquestTitle = pFontManager->createTextureWithText(title, getHouseColorRGB(house, 2), 24);
+    conquestTitleShadow = pFontManager->createTextureWithText(title, COLOR_RGB(60, 36, 0), 24);
+    if(!won.missionName.empty()) msgticker.addMessage(fmt::sprintf(_("%s is won."), won.missionName));
+    if(mission >= DuneCityCampaign::kMissions) conquestClosing = fmt::sprintf(_("Arrakis belongs to House %s."), houseName);
+    else if(!won.nextName.empty()) conquestClosing = fmt::sprintf(_("Next: %s."), won.nextName);
+    else conquestClosing = fmt::sprintf(_("Next: mission %d."), mission + 1);
+}
+
+std::vector<int> MapChoice::conquestOrder() const {
+    std::vector<int> order;
+    const auto take = [this, &order](int region) {
+        if(region >= 1 && region < static_cast<int>(piecePosition.size())
+           && std::find(order.begin(), order.end(), region) == order.end()) order.push_back(region);
+    };
+    for(unsigned int s = 1; s < group.size(); ++s) {
+        for(int region : group[s].newRegion[house]) take(region);
+        for(int h = 0; h < static_cast<int>(group[s].newRegion.size()); ++h)
+            if(h != house) for(int region : group[s].newRegion[h]) take(region);
+    }
+    // Regions no group hands out still belong to the planet: the last missions take them.
+    for(int region = 1; region < static_cast<int>(piecePosition.size()); ++region) take(region);
+    return order;
+}
+
 MapChoice::~MapChoice() = default;
 
 int MapChoice::showMenu()
@@ -129,7 +183,33 @@ int MapChoice::showMenu()
     return MenuBase::showMenu();
 }
 
+void MapChoice::drawConquestTitle() {
+    // The art's title (MAPMACH.CPS, doubled: columns 132-507, rows 2-31 of the 640x400 frame,
+    // above the bar from row 34) says "Select your next conquest". Cover it with the band's own
+    // text-free stretch at columns 24-120, repeated, and write this screen's title.
+    SDL_Texture* art = pBackground.get();
+    if(art == nullptr || conquestTitle == nullptr) return;
+    const Point origin = getPosition();
+    const int frameX = centerAreaRect.x, frameY = centerAreaRect.y;
+    constexpr int kTop = 0, kBottom = 34, kLeft = 124, kRight = 516, kSource = 24, kTile = 96;
+    for(int x = kLeft; x < kRight; x += kTile) {
+        const int w = std::min(kTile, kRight - x);
+        SDL_Rect src{ frameX - origin.x + kSource, frameY - origin.y + kTop, w, kBottom - kTop };
+        SDL_Rect dest{ frameX + x, frameY + kTop, w, kBottom - kTop };
+        SDL_RenderCopy(renderer, art, &src, &dest);
+    }
+    int w = 0, h = 0;
+    SDL_QueryTexture(conquestTitle.get(), nullptr, nullptr, &w, &h);
+    SDL_Rect dest{ frameX + (centerAreaRect.w - w) / 2, frameY + (kBottom - h) / 2, w, h };
+    if(conquestTitleShadow != nullptr) {
+        SDL_Rect shadow{ dest.x + 1, dest.y + 1, w, h };
+        SDL_RenderCopy(renderer, conquestTitleShadow.get(), nullptr, &shadow);
+    }
+    SDL_RenderCopy(renderer, conquestTitle.get(), nullptr, &dest);
+}
+
 void MapChoice::drawSpecificStuff() {
+    if(conquest) drawConquestTitle();
     SDL_UpdateTexture(mapTexture.get(), nullptr, mapSurface->pixels, mapSurface->pitch);
     SDL_RenderCopy(renderer, mapTexture.get(), nullptr, &centerAreaRect);
 
@@ -158,7 +238,7 @@ void MapChoice::drawSpecificStuff() {
         } break;
 
         case MAPCHOICESTATE_SHOWPLANET: {
-            if(SDL_GetTicks() - stateSwitchTime > (bFastBlending ? 500U : 4000U)) {
+            if(SDL_GetTicks() - stateSwitchTime > (bFastBlending ? 500U : conquest ? 2500U : 4000U)) {
                 mapChoiceState = MAPCHOICESTATE_BLENDPLANET;
             }
         } break;
@@ -186,7 +266,7 @@ void MapChoice::drawSpecificStuff() {
         } break;
 
         case MAPCHOICESTATE_SHOWMAPONLY: {
-            if(SDL_GetTicks() - stateSwitchTime > (bFastBlending ? 500U : 4000U)) {
+            if(SDL_GetTicks() - stateSwitchTime > (bFastBlending ? 500U : conquest ? 1500U : 4000U)) {
                 mapChoiceState = MAPCHOICESTATE_BLENDMAP;
             }
         } break;
@@ -214,7 +294,19 @@ void MapChoice::drawSpecificStuff() {
         } break;
 
         case MAPCHOICESTATE_BLENDING: {
-            if(curBlendBlitter == nullptr) {
+            if(conquest && curBlendBlitter == nullptr) {
+                if(nextNewRegion < newRegions.size()) {
+                    // This win's regions take the house's colour, one after another.
+                    const int pieceNum = newRegions[nextNewRegion++];
+                    sdl2::surface_ptr pPieceSurface = convertSurfaceToDisplayFormat(pGFXManager->getMapChoicePieceSurface(pieceNum, house));
+                    SDL_Rect dest = calcDrawingRect(pPieceSurface.get(), piecePosition[pieceNum].x, piecePosition[pieceNum].y);
+                    curBlendBlitter = std::make_unique<BlendBlitter>(std::move(pPieceSurface), mapSurface.get(), dest);
+                } else {
+                    msgticker.addMessage(conquestClosing);
+                    stateSwitchTime = SDL_GetTicks();
+                    mapChoiceState = MAPCHOICESTATE_CONQUERED;
+                }
+            } else if(curBlendBlitter == nullptr) {
                 while(  (curHouse2Blit < static_cast<unsigned int>(campaignHouseCount)) &&
                         (curRegion2Blit >= group[lastScenario].newRegion[(curHouse2Blit + house) % campaignHouseCount].size())) {
                         curRegion2Blit = 0;
@@ -280,6 +372,11 @@ void MapChoice::drawSpecificStuff() {
             }
         } break;
 
+        case MAPCHOICESTATE_CONQUERED: {
+            // A click or key continues sooner (doInput).
+            if(SDL_GetTicks() - stateSwitchTime > 6000U) quit();
+        } break;
+
         case MAPCHOICESTATE_BLINKING:
         {
             if(((SDL_GetTicks() - selectionTime) % 900) < 450) {
@@ -316,6 +413,16 @@ void MapChoice::drawSpecificStuff() {
 }
 
 bool MapChoice::doInput(SDL_Event &event) {
+    if(conquest) {
+        const bool pressed = (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT)
+                             || event.type == SDL_KEYDOWN;
+        if(pressed) {
+            // Once the regions stand coloured a press continues; before that it speeds up.
+            if(mapChoiceState == MAPCHOICESTATE_CONQUERED && SDL_GetTicks() - stateSwitchTime > 500U) quit();
+            else bFastBlending = true;
+        }
+        return MenuBase::doInput(event);
+    }
     if((event.type == SDL_MOUSEBUTTONUP) && (event.button.button == SDL_BUTTON_LEFT)) {
         if(mapChoiceState == MAPCHOICESTATE_ARROWS) {
             int x = event.button.x-centerAreaRect.x;
@@ -355,6 +462,15 @@ void MapChoice::createMapSurfaceWithPieces(unsigned int scenario) {
     mapSurface = convertSurfaceToDisplayFormat(pGFXManager->getUIGraphicSurface(UI_MapChoiceMap));
     mapTexture = sdl2::texture_ptr{ SDL_CreateTexture(renderer, SCREEN_FORMAT, SDL_TEXTUREACCESS_STREAMING, mapSurface->w, mapSurface->h) };
     SDL_SetTextureBlendMode(mapTexture.get(), SDL_BLENDMODE_BLEND);
+
+    if(conquest) {
+        for(int pieceNum : conqueredRegions) {
+            SDL_Surface* pieceSurface = pGFXManager->getMapChoicePieceSurface(pieceNum, house);
+            SDL_Rect dest = calcDrawingRect(pieceSurface, piecePosition[pieceNum].x, piecePosition[pieceNum].y);
+            SDL_BlitSurface(pieceSurface, nullptr, mapSurface.get(), &dest);
+        }
+        return;
+    }
 
     if (group.size() < 2)
         return;

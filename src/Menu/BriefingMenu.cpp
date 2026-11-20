@@ -28,6 +28,7 @@
 #include <FileClasses/TextManager.h>
 #include <FileClasses/music/MusicPlayer.h>
 #include <misc/draw_util.h>
+#include <misc/format.h>
 #include <mod/ModManager.h>
 
 
@@ -85,6 +86,7 @@ BriefingMenu::BriefingMenu(int newHouse,int mission,int type,const std::string& 
             const char* key = type == DEBRIEFING_WIN ? "Win" : type == DEBRIEFING_LOST ? "Lose" : "Text";
             const std::string authored = ini.getStringValue("BRIEFING", key, "");
             if(!authored.empty()) text = authored;
+            missionName = ini.getStringValue("BRIEFING", "Name", "");
         } catch(const std::exception& e) {
             SDL_Log("BriefingMenu: no briefing for '%s': %s", scenarioFilename.c_str(), e.what());
         }
@@ -96,6 +98,14 @@ BriefingMenu::BriefingMenu(int newHouse,int mission,int type,const std::string& 
 }
 
 BriefingMenu::~BriefingMenu() = default;
+
+void BriefingMenu::setObjectives(const MissionObjectivePolicy::Briefing& briefing) {
+    if(type != BRIEFING) return;
+    std::string overview = missionName.empty() ? fmt::sprintf(_("Mission %d"), mission)
+                                               : fmt::sprintf(_("Mission %d: %s"), mission, missionName);
+    for(const std::string& line : MissionObjectivePolicy::briefingLines(briefing)) overview += "\n" + line;
+    setFinalText(overview);
+}
 
 void BriefingMenu::onMentatTextFinished() {
     proccedButton.setEnabled(true);

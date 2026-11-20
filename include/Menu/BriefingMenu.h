@@ -19,6 +19,7 @@
 #define BRIEFINGMENU_H
 
 #include "MentatMenu.h"
+#include <MissionObjectives.h>
 #include <FileClasses/Animation.h>
 #include <GUI/PictureButton.h>
 #include <GUI/dune/AnimationLabel.h>
@@ -37,12 +38,16 @@ public:
     BriefingMenu(int newHouse,int mission, int type, const std::string& scenarioFilename = "");
     virtual ~BriefingMenu();
 
+    /// A DuneCity campaign briefing ends on the mission's name and goals, shown with Proceed.
+    void setObjectives(const MissionObjectivePolicy::Briefing& briefing);
+
     void onMentatTextFinished() override;
 
     int showMenu() override;
 
 private:
     std::string text;
+    std::string missionName; ///< [BRIEFING] Name of a DuneCity campaign mission
 
     void onRepeat();
     void onProcced();

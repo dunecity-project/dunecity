@@ -34,6 +34,8 @@
 #include <Menu/SinglePlayerSkirmishMenu.h>
 #include <Menu/HouseChoiceMenu.h>
 #include <Menu/CoopCampaignMenu.h>
+#include <Menu/RandomSkirmishMenu.h>
+#include <misc/DuneCityCampaign.h>
 #include <mod/ModManager.h>
 #include <Network/OnlineModPolicy.h>
 
@@ -117,11 +119,22 @@ void SinglePlayerMenu::onCampaign() {
 }
 
 void SinglePlayerMenu::playCampaign(bool showLobby) {
+    runCampaign(showLobby, false);
+}
+
+void SinglePlayerMenu::playDuneCityCampaign() {
+    // No mod choice: like Civilization Wars, the campaign switches to its own mod and leaves it
+    // active. The screen says so and offers no start when the mod or the maps are missing.
+    RandomSkirmish::activateMod(DuneCityCampaign::kMod);
+    runCampaign(false, true);
+}
+
+void SinglePlayerMenu::runCampaign(bool showLobby, bool duneCity) {
   // Hosting from the online lobby is always online; otherwise start from the last choice.
-  bool online = showLobby || settings.general.campaignOnline;
+  bool online = !duneCity && (showLobby || settings.general.campaignOnline);
   bool keepRules = false;
   for(;;) {
-    int player = HouseChoiceMenu(online, keepRules, showLobby).showMenu();
+    int player = HouseChoiceMenu(online, keepRules, showLobby, duneCity).showMenu();
     keepRules = true;
 
     if(player < 0) {
@@ -144,8 +157,8 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
     GameInitSettings init = HouseChoiceMenu::isSingleMission()
         ? GameInitSettings((HOUSETYPE) player, HouseChoiceMenu::getStartLevel(), gameOptions)
         : GameInitSettings((HOUSETYPE) player, gameOptions, HouseChoiceMenu::getStartLevel());
-    if(HouseChoiceMenu::isReworkedMaps()) init.useReworkedMaps();
     if(HouseChoiceMenu::isDuneCityCampaign()) init.useDuneCityCampaign(HouseChoiceMenu::getStartLevel());
+    else if(HouseChoiceMenu::isReworkedMaps()) init.useReworkedMaps();
     const auto campaignSkin = GameInitSettings::sanitizeGraphicsSkin(HouseChoiceMenu::getCampaignSkin());
     init.setCampaignGraphicsSkin(campaignSkin);
     if(supportSelected) {

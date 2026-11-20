@@ -17,23 +17,9 @@
 
 using namespace MissionObjectivePolicy;
 
-int MissionObjectivePolicy::enemyStrengthPermille(const INIFile& inifile, const std::string& difficulty) {
-    if(difficulty.empty() || !inifile.hasKey("DIFFICULTY", difficulty)) return 1000;
-    return strengthPermille(inifile.getDoubleValue("DIFFICULTY", difficulty, 1.0));
-}
-
 namespace {
 
-constexpr const char* kSection = "OBJECTIVES";
-
-struct KeySpec { Goal goal; const char* key; int low; int high; };
-constexpr KeySpec kKeys[] = {
-    {Population, "Population", 1, 10000000},
-    {Credits, "Credits", 1, House::MAX_GAME_CREDITS},
-    {Crime, "MaxCrime", 0, 255},
-    {LandValue, "MinLandValue", 1, 250},
-    {Pollution, "MaxPollution", 0, 255},
-};
+static_assert(kMaxCreditsGoal == House::MAX_GAME_CREDITS, "a treasury goal is capped like the treasury");
 
 std::string clock(Uint32 cycles) {
     const Uint32 seconds = cycles * GAMESPEED_DEFAULT / 1000;
@@ -53,21 +39,22 @@ std::string goalName(Goal goal, int target) {
 
 } // namespace
 
+Briefing MissionObjectives::briefing() const {
+    Briefing out;
+    out.targets = targets;
+    out.conquestWins = conquestWins;
+    out.deadlineSeconds = cyclesToSeconds(deadlineCycle);
+    out.deadlineWins = deadlineWins;
+    out.firstAttackSeconds = cyclesToSeconds(enemyFirstAttackCycle);
+    return out;
+}
+
 void MissionObjectives::loadFromINI(const INIFile& inifile) {
-    targets = Targets{};
-    enemyFirstAttackCycle = 0;
+    targets = targetsFromINI(inifile);
+    enemyFirstAttackCycle = firstAttackCycles(inifile);
     startCredits = -1;
     holdingSinceCycle = INVALID_GAMECYCLE;
     announcedMask = 0;
-    if(!inifile.hasSection(kSection)) return;
-    for(const auto& spec : kKeys) {
-        if(!inifile.hasKey(kSection, spec.key)) continue;
-        targets.used[spec.goal] = true;
-        targets.value[spec.goal] = std::clamp(inifile.getIntValue(kSection, spec.key, spec.low), spec.low, spec.high);
-    }
-    if(inifile.getBoolValue(kSection, "DefeatEnemies", false)) targets.used[DefeatEnemies] = true;
-    targets.holdSeconds = std::clamp(inifile.getIntValue(kSection, "HoldSeconds", 30), 0, 600);
-    enemyFirstAttackCycle = MILLI2CYCLES(static_cast<Uint32>(std::clamp(inifile.getIntValue("EVENTS", "FirstEnemyAttack", 0), 0, 120)) * 60 * 1000);
 }
 
 void MissionObjectives::save(OutputStream& stream) const {

@@ -91,6 +91,81 @@ TEST_CASE("Mission objectives: grouped numbers", "[MissionObjectives]") {
     REQUIRE(groupedNumber(-20000) == "-20,000");
 }
 
+TEST_CASE("Mission objectives: briefing lines", "[MissionObjectives]") {
+    Briefing b;
+    b.targets = targets({{Population, 20000}});
+    b.targets.holdSeconds = 60;
+    b.conquestWins = true;
+    b.firstAttackSeconds = 118;
+    CHECK(briefingLines(b) == std::vector<std::string>{
+        "Goal: 20,000 people, held for 1 minute.",
+        "Or destroy every enemy house.",
+        "Enemy attacks can begin at minute 2."});
+
+    b = Briefing{};
+    b.targets = targets({{Population, 75000}, {Crime, 63}});
+    b.targets.holdSeconds = 480;
+    CHECK(briefingLines(b).front() == "Goal: 75,000 people and crime at most 63 (Safe), held for 8 minutes.");
+
+    // A survival mission: holding out is the goal, conquest the alternative.
+    b = Briefing{};
+    b.deadlineSeconds = 30 * 60;
+    b.deadlineWins = true;
+    b.conquestWins = true;
+    b.firstAttackSeconds = 20;
+    CHECK(briefingLines(b) == std::vector<std::string>{
+        "Goal: hold out for 30 minutes.",
+        "Or destroy every enemy house.",
+        "Enemy attacks can begin within the first minute."});
+
+    // Conquest only; a deadline that loses is a time limit, not a goal.
+    b = Briefing{};
+    b.conquestWins = true;
+    b.deadlineSeconds = 45 * 60;
+    CHECK(briefingLines(b) == std::vector<std::string>{"Goal: destroy every enemy house.", "Time limit: 45 minutes."});
+
+    // DefeatEnemies as a goal: no separate conquest alternative.
+    b = Briefing{};
+    b.targets = targets({{Credits, 30000}, {DefeatEnemies, 1}});
+    b.targets.holdSeconds = 0;
+    b.conquestWins = true;
+    CHECK(briefingLines(b) == std::vector<std::string>{"Goal: 30,000 credits in the treasury and every enemy house destroyed."});
+    CHECK(briefingLines(Briefing{}).empty());
+}
+
+TEST_CASE("DuneCity campaign: each win colours its share of the planet", "[DuneCityCampaign]") {
+    for(const int regions : {27, 10, 31}) {
+        int next = 0;
+        for(int mission = 1; mission <= DuneCityCampaign::kMissions; ++mission) {
+            const auto [first, last] = DuneCityCampaign::conquestRange(mission, regions);
+            CHECK(first == next);
+            CHECK(last > first);
+            next = last;
+        }
+        CHECK(next == regions);
+    }
+    CHECK(DuneCityCampaign::conquestRange(1, 27) == std::pair<int, int>{0, 2});
+    CHECK(DuneCityCampaign::conquestRange(10, 27) == std::pair<int, int>{24, 27});
+}
+
+TEST_CASE("DuneCity campaign maps name their mission and brief its goals", "[DuneCityCampaign]") {
+    for(int mission = 1; mission <= DuneCityCampaign::kMissions; ++mission) {
+        const std::string name = DuneCityCampaign::scenarioFilename(mission);
+        INFO(name);
+        INIFile ini(mapDirectory() + name);
+        CHECK_FALSE(ini.getStringValue("BRIEFING", "Name").empty());
+        for(const char* difficulty : {"Easy", "Medium", "Hard", "Brutal"}) {
+            const auto lines = briefingLines(briefingFromINI(ini, difficulty));
+            REQUIRE_FALSE(lines.empty());
+            CHECK(lines.front().rfind("Goal: ", 0) == 0);
+        }
+    }
+    // Sihaya Basin on Medium: FirstEnemyAttack=10 at strength 5 is a first attack at minute 2.
+    INIFile ini(mapDirectory() + DuneCityCampaign::scenarioFilename(1));
+    CHECK(briefingFromINI(ini, "Medium").firstAttackSeconds == 120);
+    CHECK(briefingFromINI(ini, "").firstAttackSeconds == 600);
+}
+
 TEST_CASE("DuneCity campaign: enemy strength by difficulty", "[DuneCityCampaign]") {
     using namespace MissionObjectivePolicy;
     CHECK(scaledCredits(5000, 1000) == 5000);

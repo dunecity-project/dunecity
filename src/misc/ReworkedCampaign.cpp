@@ -4,6 +4,7 @@
 
 #include <FileClasses/FileManager.h>
 #include <FileClasses/FontManager.h>
+#include <FileClasses/INIFile.h>
 #include <globals.h>
 #include <misc/FileSystem.h>
 #include <misc/draw_util.h>
@@ -61,6 +62,17 @@ bool isAvailable() {
         if(!found) return false;
     }
     return true;
+}
+
+std::string missionName(int mission) {
+    if(mission < 1 || mission > kMissions) return {};
+    try {
+        auto file = pFileManager->openCampaignFile(scenarioFilename(mission));
+        INIFile ini(file.get());
+        return ini.getStringValue("BRIEFING", "Name", "");
+    } catch(const std::exception&) {
+        return {};
+    }
 }
 
 } // namespace DuneCityCampaign

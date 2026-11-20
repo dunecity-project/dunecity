@@ -105,6 +105,20 @@ inline std::string groupedNumber(int value) {
     return value < 0 ? "-" + out : out;
 }
 
+/// The highest treasury goal: the treasury's own cap (House::MAX_GAME_CREDITS).
+inline constexpr int kMaxCreditsGoal = 999999;
+
+/// [OBJECTIVES] of a scenario INI; no goal is used when the section is absent.
+Targets targetsFromINI(const INIFile& inifile);
+
+/// [EVENTS] FirstEnemyAttack as authored (before the enemy strength), in game cycles; 0 for none.
+Uint32 firstAttackCycles(const INIFile& inifile);
+
+/// Game cycles as seconds at the default game speed.
+inline int cyclesToSeconds(Uint32 cycles) {
+    return static_cast<int>(static_cast<unsigned long long>(cycles) * GAMESPEED_DEFAULT / 1000);
+}
+
 /// [DIFFICULTY] of a DuneCity campaign map: how strong the enemy houses are for the enemy AI's
 /// difficulty label (QuantBot "Easy" ... "Brutal"), in per mille; 1000 when the map or the label
 /// has none. Starting credits are multiplied by it, the FirstEnemyAttack grace divided by it.
@@ -126,6 +140,24 @@ inline int scaledCredits(int credits, int permille) {
 inline Uint32 scaledGrace(Uint32 cycles, int permille) {
     return permille > 0 ? static_cast<Uint32>(static_cast<unsigned long long>(cycles) * 1000 / permille) : cycles;
 }
+
+/// What a mission asks of the player, as the Mentat's briefing and the DuneCity Campaign menu
+/// tell it (Stefan, 2026-11-21: "an overview of the map objectives").
+struct Briefing {
+    Targets targets;
+    bool conquestWins = false;  ///< destroying every enemy house also wins
+    int deadlineSeconds = 0;    ///< the TimeOut, 0 for none
+    bool deadlineWins = false;  ///< the TimeOut is a survival victory, not a deadline
+    int firstAttackSeconds = 0; ///< [EVENTS] FirstEnemyAttack after the enemy strength, 0 for none
+};
+
+/// A few short lines: "Goal: 20,000 people, held for 1 minute.", "Or destroy every enemy house.",
+/// "Enemy attacks can begin at minute 2." Empty when the mission asks for nothing.
+std::vector<std::string> briefingLines(const Briefing& briefing);
+
+/// The briefing of a mission INI for an enemy AI difficulty label (its [DIFFICULTY] strength
+/// divides the first-attack grace, as when the mission loads).
+Briefing briefingFromINI(const INIFile& inifile, const std::string& difficulty);
 
 } // namespace MissionObjectivePolicy
 
@@ -175,6 +207,9 @@ public:
 
     /// One sentence for the news ticker at the start of the mission.
     std::string summary() const;
+
+    /// The loaded mission's goals for the Mentat's briefing (MissionObjectivePolicy::briefingLines).
+    MissionObjectivePolicy::Briefing briefing() const;
 
     /// The two-minute sample last logged (runtime only, never saved or simulated).
     Uint32 lastSampleBucket = INVALID_GAMECYCLE;

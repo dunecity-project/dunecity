@@ -30,6 +30,8 @@
 #include <Menu/BriefingMenu.h>
 #include <Menu/CampaignStatsMenu.h>
 #include <Menu/CustomGameStatsMenu.h>
+#include <Menu/MapChoice.h>
+#include <misc/DuneCityCampaign.h>
 
 #include <CutScenes/Meanwhile.h>
 #include <CutScenes/Finale.h>
@@ -938,6 +940,17 @@ void startSinglePlayerGame(const GameInitSettings& init)
                         }
 
                         const int houseID = currentGameInitInfo.getHouseID();
+
+                        if(currentGameInitInfo.isDuneCityCampaign()) {
+                            // No region map: the planet takes the house's colour, a share per win.
+                            SDL_Log("DuneCity campaign conquest...");
+                            const int mission = currentGameInitInfo.getMission();
+                            MapChoice::DuneCityConquest won;
+                            won.missionWon = mission;
+                            won.missionName = DuneCityCampaign::missionName(mission);
+                            if(mission < DuneCityCampaign::kMissions) won.nextName = DuneCityCampaign::missionName(mission + 1);
+                            MapChoice(houseID, won).showMenu();
+                        }
 
                         if(currentGameInitInfo.getGameType() == GameType::Campaign && !currentGameInitInfo.isDuneCityCampaign()) {
                             const int level = missionNumberToLevelNumber(currentGameInitInfo.getMission());

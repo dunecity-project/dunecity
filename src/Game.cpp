@@ -1012,7 +1012,10 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             if(bReplay == false && gameInitSettings.getGameType() != GameType::CustomGame && !isNetworkGameType(gameInitSettings.getGameType())) {
                 /* do briefing */
                 SDL_Log("Briefing...");
-                BriefingMenu(gameInitSettings.getHouseID(), gameInitSettings.getMission(),BRIEFING,gameInitSettings.getFilename()).showMenu();
+                BriefingMenu briefing(gameInitSettings.getHouseID(), gameInitSettings.getMission(),BRIEFING,gameInitSettings.getFilename());
+                // DuneCity campaign: the Mentat ends on the mission's goals (Stefan, 2026-11-21).
+                if(gameInitSettings.isDuneCityCampaign()) briefing.setObjectives(missionObjectives.briefing());
+                briefing.showMenu();
             }
         } break;
 

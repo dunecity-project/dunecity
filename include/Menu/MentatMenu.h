@@ -37,6 +37,10 @@ public:
 
     void setText(const std::string& text);
 
+    /// Shown, all at once, once the narration has finished, beside the menu's buttons (a
+    /// DuneCity campaign briefing's objectives). Empty: the text area clears, as before.
+    void setFinalText(const std::string& text) { finalText = text; }
+
     void drawSpecificStuff() override;
 
     void update() override;
@@ -90,6 +94,7 @@ protected:
     AnimationLabel  specialAnim;
     AnimationLabel  shoulderAnim;
     Label           textLabel;
+    std::string     finalText;
 
 };
 

@@ -49,7 +49,5 @@ SettingsClass::GameOptionsClass initialCustomGameRules();
 void playCustomGame(bool online, bool publicGame = true, bool randomMap = false, bool civilizationWars = false,
                     const SettingsClass::GameOptionsClass* initialRules = nullptr);
 void showGameLibrary(bool replays = false);
-bool hasRecentGame();
-void continueRecentGame();
 
 #endif

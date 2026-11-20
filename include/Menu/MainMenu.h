@@ -69,9 +69,9 @@ private:
     PictureLabel logoPicture;
     PictureLabel buttonBorder;
 
-    TextButton      continueButton, customButton, randomSkirmishButton, civWarsButton, onlineButton, loadButton;
-    bool canContinue = false;
+    TextButton      customButton, randomSkirmishButton, civWarsButton, onlineButton, loadButton;
     TextButton      campaignButton;
+    TextButton      duneCityCampaignButton; ///< The ten-mission DuneCity campaign (misc/DuneCityCampaign.h).
     TextButton      modesButton;
     TextButton      editorsButton;
     TextButton      dune2rEditorButton;
