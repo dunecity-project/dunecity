@@ -11,9 +11,11 @@ win (2026-11-21), installed on his Air, then "deploy ... to production". Design 
   QuantBot city-campaign planning and skill ladder (thinking speed 8/6/3/1 passes per decision on the
   campaign only), DuneCity Campaign menu/briefing/planet screen (f34efa859, probe 7cb425b3f), test and
   CI housekeeping from 19 Nov. Protocol 130, save format 9887.
-- QuantBot changes outside the campaign (every DuneCity game, default on): Palace/Stadium siting and a
-  palace order for land value (CityLandValueSiting), and a funded production backlog takes a yard before
-  city growth (ProductionBeforeCityGrowth).
+- QuantBot change outside the campaign (every DuneCity game, default on): Palace/Stadium siting and a
+  palace order for land value (CityLandValueSiting). ProductionBeforeCityGrowth (a funded production
+  backlog takes a yard before city growth) is campaign-only (FactoriesFirst, Hard and Brutal): in every
+  game it failed quantbot_shared-spending_dunecity at the first candidate c9b6b16c6, whose AWS suite also
+  caught the genome inventory missing the ladder's looped keys and four new switches.
 - Final city-campaign validation (val-final2 at 5d7ff1f84, 480 games, 8 fresh seeds): Medium v Easy 72%,
   Hard v Medium 64%, Brutal v Hard 62%; Medium v Medium 22%, Hard v Hard 36%, Brutal v Brutal 30%.
   Ash Quarter and Shield Wall Breach still do not separate Brutal from Hard helpers.

@@ -241,10 +241,13 @@ decisions the AI already made, kept from the lower tiers.
 | GrowthTax | none | 3% tax while the city is small (screened, no gain) |
 | HarvesterTargets | none | ground combat shoots harvesters first (screened, no gain) |
 
-FactoriesFirst is `[Force Concentration] ProductionBeforeCityGrowth` (default on), which every
-other city game plays: a traced mission 6 game showed a Brutal helper keep all four construction
-yards on city growth for eight minutes while it reported a funded heavy-unit backlog, banked
-13,000-22,000 credits and lost its army. EarlyAttack's 15% (`CityCampaignBrutalAttackPercent`,
+FactoriesFirst is `[Force Concentration] ProductionBeforeCityGrowth` (default on) on the campaign
+ladder only: a traced mission 6 game showed a Brutal helper keep all four construction yards on city
+growth for eight minutes while it reported a funded heavy-unit backlog, banked 13,000-22,000 credits
+and lost its army. Other city games do not play it (`nativeSkill`): there the dedicated growth yard
+of a rich house keeps zoning while another yard builds the factories, which the
+`quantbot_shared-spending_dunecity` probe checks for the reported 100,000-credit opening (the rule
+in every game failed it when 1.0.875 was qualified). EarlyAttack's 15% (`CityCampaignBrutalAttackPercent`,
 0 = the tier's 25%; overlay `city-campaign-brutal-attack-native`) won 57 of 80 games for a Brutal
 helper against Hard enemies where 25% won 43.
 

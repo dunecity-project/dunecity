@@ -66,10 +66,13 @@ inline int thinkPasses(int difficulty, const std::array<int, 4>& table, bool lad
 }
 
 /// Behaviour outside the ladder. Skills the AI already had stay on for every tier; EarlyAttack stays
-/// Brutal's own; GrowthTax and HarvesterTargets are new and stay off.
+/// Brutal's own; FactoriesFirst, GrowthTax and HarvesterTargets are new and stay off. FactoriesFirst
+/// is a campaign fix: in other city games a rich house keeps its dedicated growth yard zoning while
+/// another yard builds factories (shared_spending probe, the reported 100,000-credit opening).
 inline bool nativeSkill(Skill skill, int difficulty) {
     switch (skill) {
         case EarlyAttack: return difficulty == Brutal;
+        case FactoriesFirst:
         case GrowthTax:
         case HarvesterTargets: return false;
         default: return true;

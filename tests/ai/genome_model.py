@@ -42,6 +42,13 @@ _GETTER = re.compile(
     r'("[^"\n]+"|section)\s*,\s*(prefix\s*\+\s*"[^"\n]+"|"[^"\n]+")'
     r'(?:\s*,\s*([A-Za-z_][A-Za-z0-9_.]*)\s*(?=\)))?')
 _KINDS = {'Bool': 'bool', 'Int': 'int', 'Double': 'decimal', 'String': 'enum'}
+# The DuneCity campaign skill ladder reads one int key per array entry in a loop
+# (include/players/QuantBotCityCampaignSkills.h): kTierKeys with kDefaultTiers, kThinkKeys with
+# kDefaultThinkPasses. The inventory expands those arrays rather than guessing loop bodies.
+_LADDER_GETTER = re.compile(
+    r'iniFile\.getIntValue\(\s*("[^"\n]+")\s*,\s*QuantBotCityCampaignSkills::(kTierKeys|kThinkKeys)\[\w+\]')
+_LADDER_DEFAULTS = {'kTierKeys': 'kDefaultTiers', 'kThinkKeys': 'kDefaultThinkPasses'}
+_LADDER_TIERS = {'Easy': '0', 'Medium': '1', 'Hard': '2', 'Brutal': '3', 'Never': '4'}
 
 
 def _fail(message):
@@ -90,6 +97,25 @@ def _function(text, name):
     return _block(text, match.end())
 
 
+def _ladder_arrays():
+    header = _cpp_text((ROOT / 'include/players/QuantBotCityCampaignSkills.h').read_text(encoding='utf-8'))
+
+    def array(name):
+        match = re.search(r'\b' + name + r'\s*\{\{([^}]*)\}\}', header)
+        if not match:
+            _fail('cannot inventory the city campaign ladder array: ' + name)
+        return match[1]
+
+    result = {}
+    for keys, defaults in _LADDER_DEFAULTS.items():
+        names = re.findall(r'"([^"]+)"', array(keys))
+        values = [_LADDER_TIERS.get(word, word) for word in re.findall(r'\b\w+\b', array(defaults))]
+        if not names or len(names) != len(values):
+            _fail('city campaign ladder keys and defaults differ in length: ' + keys)
+        result[keys] = list(zip(names, values))
+    return result
+
+
 def _reader_catalog(source):
     """Expand genuine getters, not a second hard-coded list of boolean keys.
 
@@ -103,9 +129,15 @@ def _reader_catalog(source):
 
     def collect(body, section=None, prefix=None, member=None, parameter='settings'):
         matches = list(_GETTER.finditer(body))
+        ladder = list(_LADDER_GETTER.finditer(body))
         scalar_calls = len(re.findall(r'iniFile\.get(?:Bool|Int|Double)Value\(', body))
-        if sum(match[1] != 'String' for match in matches) != scalar_calls:
+        if sum(match[1] != 'String' for match in matches) + len(ladder) != scalar_calls:
             _fail('unrecognized scalar config getter; update genome inventory')
+        if ladder:
+            arrays = _ladder_arrays()
+            for match in ladder:
+                for key, default in arrays[match[2]]:
+                    catalog[(match[1][1:-1], key)] = ('int', default)
         for match in matches:
             raw_kind, raw_section, raw_key, fallback = match.groups()
             actual_section = section if raw_section == 'section' else raw_section[1:-1]

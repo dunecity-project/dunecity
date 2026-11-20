@@ -45,11 +45,13 @@ TEST_CASE("City campaign skill ladder: the default tiers", "[quantbot][citycampa
 
 TEST_CASE("City campaign skill ladder: native behaviour outside the ladder", "[quantbot][citycampaign]") {
     for (int difficulty = Easy; difficulty <= kDefend; ++difficulty) {
-        for (Skill skill : {TreasuryRelease, CityServices, LandValueSiting, PalaceForTax, FactoriesFirst}) {
+        for (Skill skill : {TreasuryRelease, CityServices, LandValueSiting, PalaceForTax}) {
             CHECK(hasSkill(skill, difficulty, Never, false));
             CHECK(hasSkill(skill, difficulty, Brutal, false));
         }
         CHECK(hasSkill(EarlyAttack, difficulty, Easy, false) == (difficulty == Brutal));
+        // A campaign fix: other city games keep the dedicated growth yard zoning.
+        CHECK_FALSE(hasSkill(FactoriesFirst, difficulty, Easy, false));
         CHECK_FALSE(hasSkill(GrowthTax, difficulty, Easy, false));
         CHECK_FALSE(hasSkill(HarvesterTargets, difficulty, Easy, false));
     }
