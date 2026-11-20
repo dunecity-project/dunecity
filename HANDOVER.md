@@ -1,3 +1,25 @@
+## 2026-11-21 - 1.0.875 candidate: the DuneCity Campaign
+
+Stefan asked for a ten-mission DuneCity city campaign (2026-11-19), the same-tier rule (a helper loses
+at least 60% against enemies of its own tier), a skill ladder for the tiers ("Yes, build it"), then a
+DuneCity Campaign main-menu item in place of Continue with Mentat goals and the planet colouring after a
+win (2026-11-21), installed on his Air, then "deploy ... to production". Design and playtests:
+`docs/city-campaign.md`; notes `releases/desktop/1.0.875.md`.
+
+- Content since v1.0.874: mission objectives ([OBJECTIVES], objectives panel, save 9887), Shield Wall
+  breach events, ten DCITY_M missions (low spice, rock for cities, per-difficulty enemy strength),
+  QuantBot city-campaign planning and skill ladder (thinking speed 8/6/3/1 passes per decision on the
+  campaign only), DuneCity Campaign menu/briefing/planet screen (f34efa859, probe 7cb425b3f), test and
+  CI housekeeping from 19 Nov. Protocol 130, save format 9887.
+- QuantBot changes outside the campaign (every DuneCity game, default on): Palace/Stadium siting and a
+  palace order for land value (CityLandValueSiting), and a funded production backlog takes a yard before
+  city growth (ProductionBeforeCityGrowth).
+- Final city-campaign validation (val-final2 at 5d7ff1f84, 480 games, 8 fresh seeds): Medium v Easy 72%,
+  Hard v Medium 64%, Brutal v Hard 62%; Medium v Medium 22%, Hard v Hard 36%, Brutal v Brutal 30%.
+  Ash Quarter and Shield Wall Breach still do not separate Brutal from Hard helpers.
+- Gates at earlier commits: AWS AI gates and dunelegacy_tests at 26d1da4a8, Mini perf_regression at
+  cf2cb621b; release gates at the candidate: `~/Documents/projects/outputs/release-1.0.875/gates.md`.
+
 ## 2026-11-17 - 1.0.874 published
 
 `v1.0.874` is an annotated tag on `3883134ec40e5fc0c78df43a3c7e7973594f12ac` (branch
