@@ -652,7 +652,7 @@ struct QuantBotConfig {
         /// this percent of its army ceiling instead of the tier's 25% (0 = the native 25%). Before it,
         /// a Brutal helper won no more often than a Hard one, so no mission could sit between the
         /// tiers; at 15% it won 52 of 69 screen games where it had won 41 and a Hard helper 34
-        /// (docs/city-campaign.md, "Brutal's attack threshold"). Default 15; hashed when not 15.
+        /// (docs/city-campaign.md, "The tiers in the campaign: the skill ladder"). Default 15; hashed when not 15.
         int cityCampaignBrutalAttackPercent;
         /// City land value (Stefan, 2026-11-19: "the AI needs to learn how to boost property prices.
         /// for example palaces boost nearby property values which is good for tax"). A Palace or

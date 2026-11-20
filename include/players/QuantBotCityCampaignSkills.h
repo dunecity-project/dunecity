@@ -5,13 +5,12 @@
 /// DuneCity campaign skill ladder (Stefan, 2026-11-20: "Yes, build it").
 ///
 /// On the low-spice campaign maps no difficulty reaches its army or city ceiling, so the tiers played
-/// the same game: a Brutal helper beat a Hard enemy 114 times in 160 where a Hard helper won 116.
-/// Same-tier games losing 60% and one-tier-lower games winning half cannot both hold while the helper
-/// tiers are equal (docs/city-campaign.md, "The skill ladder"). Each skill below is a decision that
-/// turns the same income into more power; a tier plays with every skill whose tier is at or below its
-/// own. Scope: DuneCity campaign missions only, helpers and enemies alike, while
-/// [Force Concentration] CityCampaignSkillLadder is on. Everywhere else every QuantBot keeps its
-/// native behaviour (nativeSkill).
+/// the same game: a Brutal helper beat Hard enemies no more often than a Hard helper did. Same-tier
+/// games losing 60% and one-tier-lower games winning half cannot both hold while the helper tiers are
+/// equal (docs/city-campaign.md, "The tiers in the campaign: the skill ladder"). Each tier thinks at
+/// its own speed and plays the skills whose tier is at or below its own. Scope: DuneCity campaign
+/// missions only, helpers and enemies alike, while [Force Concentration] CityCampaignSkillLadder is
+/// on. Everywhere else every QuantBot keeps its native behaviour (nativeSkill).
 namespace QuantBotCityCampaignSkills {
 
 /// Mirrors QuantBot::Difficulty for Easy..Brutal; Never keeps a skill from every tier.
@@ -52,9 +51,8 @@ constexpr std::array<const char*, kSkillCount> kTierKeys{{
 /// Thinking speed: a tier decides on one AI pass in this many (1 = every pass, about 0.8 s). Slower
 /// tiers zone, produce and command their units less often. Indexed Easy..Brutal. The skills above moved
 /// a Hard helper's wins by at most a few of 80; a Hard helper deciding on every 2nd, 3rd or 4th pass
-/// lost 7, 12 and 20 of its 24 (docs/city-campaign.md, "The skill ladder"). With 8/6/3/1 a Brutal helper
-/// won 18 more of 80 games against Hard enemies than a Hard helper, and a Hard helper 23 more against
-/// Medium enemies than a Medium one.
+/// lost 7, 12 and 20 of its 24. With 8/6/3/1 a Brutal helper won 18 more of 80 games against Hard
+/// enemies than a Hard helper, and a Hard helper 23 more against Medium enemies than a Medium one.
 constexpr std::array<int, 4> kDefaultThinkPasses{{8, 6, 3, 1}};
 constexpr std::array<const char*, 4> kThinkKeys{{
     "CityCampaignThinkEasy", "CityCampaignThinkMedium", "CityCampaignThinkHard", "CityCampaignThinkBrutal",

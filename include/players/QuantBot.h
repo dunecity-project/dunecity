@@ -1298,8 +1298,8 @@ private:
     /// TargetPriorityLevel in effect.
     int effectiveTargetPriorityLevel() const;
     /// A QuantBot with the EarlyAttack skill in the DuneCity campaign (Brutal by default) attacks at
-    /// CityCampaignBrutalAttackPercent of its army ceiling (docs/city-campaign.md, "Brutal's attack
-    /// threshold"); 0 when it does not.
+    /// CityCampaignBrutalAttackPercent of its army ceiling (docs/city-campaign.md, "The tiers
+    /// in the campaign: the skill ladder"); 0 when it does not.
     int cityCampaignBrutalAttackPercent() const;
     /// Whether this house plays a skill of the DuneCity campaign skill ladder
     /// (QuantBotCityCampaignSkills.h): its tier's skills in campaign missions, native behaviour elsewhere.
