@@ -16,17 +16,18 @@ follow each other in order; a lost mission is replayed. There is no region map.
 ## Missions
 
 `scripts/gen_city_campaign.py` is the source of truth for every number; this table is generated
-from the shipped maps. "Grace" is `FirstEnemyAttack`.
+from the shipped maps. "Grace" is `FirstEnemyAttack` as authored; the game divides it by the
+enemy strength of the chosen difficulty ("Enemy strength per mission").
 
 | # | Mission | Map | Atreides credits | Enemy houses (credits) | Grace | Win |
 |---|---|---|---|---|---|---|
 | 1 | Sihaya Basin | 128x128 | 12,000 | Harkonnen 5,000 | 10 min | 20,000 people, or destroy every enemy house |
 | 2 | Hagal Flats | 128x128 | 12,000 | Ordos 4,000, Harkonnen 4,000 | 9 min | 30,000 credits, or destroy every enemy house |
-| 3 | Ash Quarter | 128x128 | 14,000 | Harkonnen 7,000, Mercenary 4,000 | 9 min | 75,000 people and crime at most 63, or destroy every enemy house |
-| 4 | Arrakeen Blackout | 128x128 | 15,000 | Mercenary 6,000, Harkonnen 6,000 | 8 min | 60,000 people and land value at least 90, or destroy every enemy house |
+| 3 | Ash Quarter | 128x128 | 14,000 | Harkonnen 7,000, Mercenary 4,000 | 18 min | 75,000 people and crime at most 63, or destroy every enemy house |
+| 4 | Arrakeen Blackout | 128x128 | 15,000 | Mercenary 6,000, Harkonnen 6,000 | 45 min | 60,000 people and land value at least 90, or destroy every enemy house |
 | 5 | Cielago Watch | 96x96 | 13,000 | Harkonnen 10,000, Ordos 10,000 | 3 min | hold out 30 min, or destroy every enemy house |
 | 6 | Harg Pass Convoy | 160x128 | 10,000 | Harkonnen 14,000, Mercenary 8,000 | 3 min | destroy every enemy house |
-| 7 | Shield Wall Breach | 144x128 | 16,000 | Harkonnen 7,000, Sardaukar 5,000 | 10 min | 50,000 people, or destroy every enemy house; the wall opens at minute 12 |
+| 7 | Shield Wall Breach | 144x128 | 16,000 | Harkonnen 7,000, Sardaukar 5,000 | 40 min | 50,000 people, or destroy every enemy house; the wall opens at minute 12 |
 | 8 | Tuono Crossing | 160x96 | 14,000 | Harkonnen 4,000, Sardaukar 6,000 | 13 min | 12,000 people and 30,000 credits, or destroy every enemy house |
 | 9 | Carthag Vise | 128x128 | 21,000 | Harkonnen 4,000, Ordos 4,000, Sardaukar 1,500 | 10 min | destroy every enemy house |
 | 10 | All Against Atreides | 160x160 | 26,000 | Fremen, Sardaukar, Ordos, Harkonnen 4,750 each | 5 min | 60,000 people held for 8 min, or destroy every enemy house |
@@ -162,34 +163,122 @@ by minute 30-40, while enemies that keep idle harvesters stall (a Hard Harkonnen
   transition and single-yard growth changed nothing, power-growth horizon +1 win, spice-capacity
   runway cut population at minute 15 from 25,500 to 17,000.
 
-### The tiers in the campaign
+### The tiers in the campaign: the skill ladder
 
-The campaign has to work two ways at once (Stefan, 2026-11-19): a helper beats enemies one tier
-lower, and loses at least 60% of its games against enemies of its own tier (Medium v Medium, Hard
-v Hard, Brutal v Brutal). Both can only hold when a Brutal helper plays better than a Hard one, and
-in these 15-35 minute missions it did not: on the same seeds and maps a Brutal helper won 106 of 200
-games against Hard enemies where a Hard helper won 100 (`sweep-v1`), so every map strength that let
-Brutal beat Hard also let Hard beat Hard. Two AI changes fix that:
+The campaign has to work two ways at once. Stefan, 2026-11-19: a helper beats enemies one tier
+lower; and "the player support ai should lose at least 60% of the time or the map or ai needs
+tuning for medium vs medium, hard - hard, brutal - brutal". A map strength can only satisfy both when
+the helper one tier up plays clearly better than a same-tier helper. On the low-spice maps no tier
+reaches its army or city ceiling, so the tiers played the same game: on the same seeds and maps a
+Brutal helper won 106 of 200 games against Hard enemies where a Hard helper won 100.
+Stefan, 2026-11-20: "Yes, build it" (give the tiers distinct skills).
 
-- **A funded production backlog takes a yard before city growth** (`[Force Concentration]
-  ProductionBeforeCityGrowth`, default on, hashed when off; all city games). A traced mission 6 game
-  showed a Brutal helper, which has no city ceiling, keep all four construction yards on "dedicated
-  city growth" for eight minutes while it reported a funded heavy-unit backlog, banked 13,000-22,000
-  credits and lost its army; Hard's city ceiling ended its zoning and it built 13 factories. The
-  ladder A/B on the DuneCity skirmish maps (450 games per arm) is neutral (Brutal v Hard long maps
-  +0.01 [-0.03, +0.05], fewer time-outs).
-- **Brutal attacks at 15% of its army ceiling in the campaign** (`[Force Concentration]
-  CityCampaignBrutalAttackPercent`, default 15, 0 = the tier's 25%; DuneCity campaign only). A
-  helper-only screen (Brutal helper v Hard enemies, ten missions at their balance points, eight
-  seeds): 15% won 57 of 80 where native Brutal won 43 and a Hard helper 36. Focus fire level 2 (50)
-  and target priority level 2 (51) helped alone but not combined with it (all three 49; both
-  without it 42), so they stay off.
+`include/players/QuantBotCityCampaignSkills.h`, `[Force Concentration] CityCampaignSkillLadder`
+(default on, hashed when off; overlay `city-campaign-skill-ladder-off`). It applies only in DuneCity
+campaign missions, to helpers and enemies alike; everywhere else every QuantBot keeps its native
+behaviour.
 
-What did not separate the tiers, measured and dropped: harvester ceilings per tier (a handicap,
-not a fix; removed), longer missions (goals x2-x6 with later first attacks: Brutal 21/80 v Hard
-19/80, Hard 23/80 v Medium 22/80), compact 64x64 maps where the tiers' map-size limits bind (Brutal
-v Hard 11-6 in skirmish, start side decides; compact mission 1 Brutal 4/8 v Hard 6/8), and Brutal
-opening military-first when outnumbered (54 v 60 of 72, worse).
+**Thinking speed** separates the tiers. A tier decides on one AI pass in N (`CityCampaignThink<Tier>`,
+1-16; an AI pass is 50 cycles, about 0.8 s): Easy 8, Medium 6, Hard 3, Brutal 1. A slower tier zones,
+orders production and commands its units less often; its income and ceilings are the same. A Hard
+helper deciding on every 2nd, 3rd, 4th or 6th pass won 17, 12, 4 and 5 of 80 games against Hard
+enemies where every pass won 24 (`hs-think-hard-*`). With 8/6/3/1 on eight seeds at the earlier
+strengths (`tl-8631`, 80 games per pairing):
+
+| Pairing | Medium v Easy | Medium v Medium | Hard v Medium | Hard v Hard | Brutal v Hard | Brutal v Brutal |
+|---|---|---|---|---|---|---|
+| Helper wins | 67 | 36 | 59 | 22 | 40 | 21 |
+
+The helper one tier up now wins 23 (Hard v Medium) and 18 (Brutal v Hard) more games than a
+same-tier helper against the same enemies; before the ladder the gap was 0-6.
+
+**Skills** (`CityCampaignSkill<Name>`, the lowest tier that plays each; 4 = no tier): small
+decisions the AI already made, kept from the lower tiers.
+
+| Skill | Tier | What it does |
+|---|---|---|
+| TreasuryRelease | Medium | a house saving for a credits goal spends the bank when its base is threatened |
+| CityServices | Medium | a crime or land-value goal gets police beside the homes and the land-value police budget |
+| LandValueSiting | Hard | a Palace or Stadium is sited among the house's own homes and shops |
+| PalaceForTax | Hard | a Palace is bought as a land-value investment once 12 homes and shops stand |
+| FactoriesFirst | Hard | a funded factory backlog takes a construction yard before zoning does |
+| EarlyAttack | Brutal | attacks at `CityCampaignBrutalAttackPercent` (15%) of its army ceiling, not 25% |
+| GrowthTax | none | 3% tax while the city is small (screened, no gain) |
+| HarvesterTargets | none | ground combat shoots harvesters first (screened, no gain) |
+
+FactoriesFirst is `[Force Concentration] ProductionBeforeCityGrowth` (default on), which every
+other city game plays: a traced mission 6 game showed a Brutal helper keep all four construction
+yards on city growth for eight minutes while it reported a funded heavy-unit backlog, banked
+13,000-22,000 credits and lost its army. EarlyAttack's 15% (`CityCampaignBrutalAttackPercent`,
+0 = the tier's 25%; overlay `city-campaign-brutal-attack-native`) won 57 of 80 games for a Brutal
+helper against Hard enemies where 25% won 43.
+
+The skills alone moved a Hard helper's wins by at most a few of 80 (`ladder-v1`: Brutal v Hard 21,
+Hard v Hard 24); taking EarlyAttack from Brutal cost 6 of 240 (`ea-never` 116 v `ea-ctl` 122).
+
+Tried and dropped, measured on the same seeds:
+
+- a steeper thinking ladder, 12/8/4/1, fitted worse across the ten missions (total shortfall 0.59
+  against 0.44 for 8/6/3/1, `grid-12841`);
+- **panic** (zone nothing beyond the seed city and buy units while threatened or outnumbered) as a
+  lower-tier handicap: a Hard helper with it won 12-17 of 80 against Hard enemies where it won 24
+  (`hs-panic-*`), but a Medium helper with it could not beat Easy enemies on missions 7, 8 and 10
+  at any strength (`grid-p8631`, `grid-p12841`); removed;
+- Army-first openings and holding zoning until the army was safe (-8 to -15 and -2 of 80); removed;
+- longer goals with later first attacks (`goals-v1`: Brutal v Hard 58/96, Hard v Hard 56/96) and the
+  existing combat switches (focus fire, turret and repair knock-outs; best +8 of 80).
+
+### Enemy strength per mission
+
+`[DIFFICULTY]` sets each tier's enemy strength per mission:
+
+| Mission | Grace | Easy | Medium | Hard | Brutal | First wave, minute (Easy / Medium / Hard / Brutal) |
+|---|---|---|---|---|---|---|
+| 1 Sihaya Basin | 10 | 6.8 | 5 | 3.25 | 3.35 | 1.5 / 2 / 3 / 3 |
+| 2 Hagal Flats | 9 | 4.3 | 2.95 | 2.95 | 3.25 | 2 / 3 / 3 / 3 |
+| 3 Ash Quarter | 18 | 6 | 3.3 | 2.85 | 2.95 | 3 / 5 / 6 / 6 |
+| 4 Arrakeen Blackout | 45 | 8.4 | 3.6 | 3.2 | 3.35 | 5 / 12 / 14 / 13 |
+| 5 Cielago Watch | 3 | 1.2 | 1.35 | 1.55 | 1.6 | 2 / 2 / 2 / 2 |
+| 6 Harg Pass Convoy | 3 | 0.85 | 0.95 | 1 | 1.1 | 4 / 3 / 3 / 3 |
+| 7 Shield Wall Breach | 40 | 1.55 | 1.3 | 1.7 | 1.65 | 26 / 31 / 24 / 24 |
+| 8 Tuono Crossing | 13 | 2.15 | 0.9 | 0.95 | 1.05 | 6 / 14 / 14 / 12 |
+| 9 Carthag Vise | 10 | 2.55 | 2.3 | 2.4 | 2.5 | 4 / 4 / 4 / 4 |
+| 10 All Against Atreides | 5 | 1.45 | 1 | 1 | 1.45 | 3 / 5 / 5 / 3 |
+
+"Grace" is the authored `FirstEnemyAttack`; the first wave comes at grace / strength.
+
+The values come from a strength grid: every mission at x0.4, 0.6, 0.85, 1, 1.2, 1.7 and 2.4 of a
+base value, all six pairings, eight seeds (`grid-v1`, `grid-v1b`, `grid-m37`, `grid-m47`), pooled
+with two fresh-seed validations at the values they played (`val-r1`, `val-final`): 24 seeds per
+mission near the chosen values. A logistic fit per pairing (per-mission intercepts and slopes, the
+slopes shrunk towards the pairing's slope) gives the strength where:
+
+- Medium and Hard: the same-tier helper wins at most 35% and the helper one tier up at least 55%,
+  aiming the one-tier-up rate at a target that falls from 85% on mission 1 to 55% on mission 10;
+  where no strength satisfies both, the same-tier rule (at most 40%) wins;
+- Easy: a Medium helper wins at that falling target;
+- Brutal: a Brutal helper wins at most 35% falling to 25%.
+
+The values need not rise from Easy to Brutal: a slower tier needs more starting credits to be a
+match for the same helper (mission 1: Easy 6.8, Brutal 3.35). Easy enemies barely attack, so on
+missions 3, 4, 8 and 10 a Medium helper still wins more often than the falling target at x2.4, the
+top of the grid.
+
+The grace before the first wave is divided by the enemy's strength, so a mission whose enemies are
+strong attacks early. Where that sent the first wave before either helper tier could finish its
+city, the tiers did not separate, and the grace was lengthened instead: Ash Quarter 9 -> 18 minutes,
+Arrakeen Blackout 8 -> 45 (8 at 3.5 sent the first wave at minute 2; every helper was overrun at
+minutes 10-13), Shield Wall Breach 10 -> 40 (30 at 1.4-1.7 sent it at minutes 18-21, before a
+Brutal helper reached 50,000 people at 22-31). With grace 45 Arrakeen Blackout separates the tiers
+(fit at the shipped values: Hard v Hard 32%, Brutal v Hard 58%).
+
+Ash Quarter and Shield Wall Breach still do not: at every strength a Brutal helper beats Hard
+enemies about as often as a Hard helper does (fit at the shipped values: Hard v Hard 43% and
+Brutal v Hard 39% on Ash Quarter, 42% and 44% on Shield Wall Breach). Their Hard values aim at the
+same-tier rule, so a Brutal helper wins only about 40% there. On Shield Wall Breach a Brutal helper
+reaches 50,000 people sooner (winning games: median minute 27 against 32 for a Hard helper,
+`grid-m47` at x0.85-1.2) but loses as often, at minutes 27-47 after the breach; the cause is not
+traced yet.
 
 ## Playtests
 
@@ -201,16 +290,36 @@ agent-workspace run --project dunecity --owner OWNER --tests --wait -- dunecity-
 python3 tests/ai/city-campaign-report.py RESULTS
 ```
 
-`--categories citycampaign` plays every mission with an idle human and a QuantBot helper one
-tier above the enemy QuantBots (Brutal v Hard, Hard v Medium, Medium v Easy), four seeds each by
+`--categories citycampaign` plays every mission with an idle human and a QuantBot helper against
+enemy QuantBots in six pairings: one tier above the enemies (Brutal v Hard, Hard v Medium, Medium v
+Easy) and the same tier (Brutal v Brutal, Hard v Hard, Medium v Medium), four seeds each by
 default (`--seeds-per-cell`, `--city-missions`, `--campaign-seeds`), 120 game minutes (rounds up to
 v9 used 90). `win_type` records
 `objectives`, `survival` or `conquest`.
 
+To recalibrate the strengths, play a grid (`--city-strength 0.4 0.6 0.85 1 1.2 1.7 2.4
+--campaign-seeds` eight seeds, about an hour for ten missions on the two workers), then fit:
+
+```sh
+python3 tests/ai/city-campaign-calibrate.py GRID [VALIDATION...] --eval   # predictions and fitted values
+python3 tests/ai/city-campaign-calibrate.py GRID [VALIDATION...] --write  # into the generator
+python3 scripts/gen_city_campaign.py
+```
+
+The script takes each game's strength from its `-sS` multiplier and the generator at the game's
+source commit, leaves out games whose mission had another grace period then, and searches only
+the strengths the games played. Validate the new values on fresh seeds: with eight seeds a single
+mission's rate moves by about 17 points from seed luck alone, so judge the six pairings over all
+ten missions (80 games each) and read single missions from the fit.
+
 ## Playtest results
 
-Every round played all ten missions on the AWS workers with the three pairings above; results
-live in `/Users/stefan/Documents/projects/outputs/city-campaign-20261119/<round>`.
+Results live in `/Users/stefan/Documents/projects/outputs/city-campaign-20261119/<round>`.
+
+### Before the same-tier rule
+
+The first rounds played all ten missions with the three one-tier-up pairings only, before the
+low-spice maps and the skill ladder; their result folders are deleted.
 
 | Round | What changed | Missions 1-6 | 7 | 8 | 9 | 10 |
 |---|---|---|---|---|---|---|
@@ -240,41 +349,43 @@ Lessons, each now fixed in the maps or the AI:
 - Shield Wall Breach is decided by the race between the basin city reaching its population goal and
   the assault that follows the breach (v9: lost games collapsed at 27-30 minutes).
 
+That round's validation (eight seeds, 120 game minutes) had every one-tier-up pairing win every
+mission most of the time, Brutal v Hard falling from 100% on missions 1-6 to 63% on mission 10. It
+was superseded by the same-tier rule, the low-spice maps and the skill ladder.
+
 ### Final validation
 
-Eight fresh seeds (30411001, 30412037, 30413041, 30414053, 30415067, 30416079, 30417089,
-30418097) per mission and pairing, 120 game minutes, on the AWS workers. Missions 1-9 at
-`e63e52869` (`outputs/city-campaign-20261119/final`); mission 10 after its last change at
-`9f0067c41` (`final-m10e`; missions 1-9 are unchanged since and the games are deterministic).
+Eight fresh seeds (13131013, 13132027, 13133039, 13134051, 13135063, 13136077, 13137089,
+13138099) per mission and pairing, 120 game minutes, on the AWS workers at `5d7ff1f84`, the shipped
+values (`outputs/city-campaign-20261119/val-final2`, 480 games, no errors):
 
-| Mission | Brutal v Hard | Hard v Medium | Medium v Easy | All |
-|---|---|---|---|---|
-| 1 Sihaya Basin | 8/8 | 8/8 | 8/8 | 100% |
-| 2 Hagal Flats | 8/8 | 8/8 | 8/8 | 100% |
-| 3 Ash Quarter | 8/8 | 8/8 | 8/8 | 100% |
-| 4 Arrakeen Blackout | 8/8 | 8/8 | 8/8 | 100% |
-| 5 Cielago Watch | 8/8 | 8/8 | 8/8 | 100% |
-| 6 Harg Pass Convoy | 8/8 | 8/8 | 8/8 | 100% |
-| 7 Shield Wall Breach | 7/8 | 8/8 | 8/8 | 96% |
-| 8 Tuono Crossing | 8/8 | 6/8 | 8/8 | 92% |
-| 9 Carthag Vise | 6/8 | 6/8 | 8/8 | 83% |
-| 10 All Against Atreides | 5/8 | 8/8 | 8/8 | 88% |
+| Mission | Medium v Easy | Hard v Medium | Brutal v Hard | Medium v Medium | Hard v Hard | Brutal v Brutal |
+|---|---|---|---|---|---|---|
+| 1 Sihaya Basin | 6/8 | 4/8 | 5/8 | 3/8 | 5/8 | 3/8 |
+| 2 Hagal Flats | 7/8 | 7/8 | 7/8 | 3/8 | 2/8 | 2/8 |
+| 3 Ash Quarter | 7/8 | 6/8 | 3/8 | 1/8 | 5/8 | 1/8 |
+| 4 Arrakeen Blackout | 8/8 | 4/8 | 5/8 | 2/8 | 4/8 | 3/8 |
+| 5 Cielago Watch | 5/8 | 4/8 | 5/8 | 2/8 | 3/8 | 3/8 |
+| 6 Harg Pass Convoy | 5/8 | 6/8 | 6/8 | 1/8 | 1/8 | 5/8 |
+| 7 Shield Wall Breach | 4/8 | 4/8 | 5/8 | 2/8 | 3/8 | 3/8 |
+| 8 Tuono Crossing | 8/8 | 5/8 | 6/8 | 1/8 | 2/8 | 3/8 |
+| 9 Carthag Vise | 3/8 | 5/8 | 4/8 | 0/8 | 3/8 | 1/8 |
+| 10 All Against Atreides | 5/8 | 6/8 | 4/8 | 3/8 | 1/8 | 0/8 |
+| **All** | **58/80 (72%)** | **51/80 (64%)** | **50/80 (62%)** | **18/80 (22%)** | **29/80 (36%)** | **24/80 (30%)** |
+| Target | at least 50% | at least 50% | at least 50% | at most 40% | at most 40% | at most 40% |
 
-Every pairing wins every mission most of the time, and the strongest pairing (Brutal v Hard) falls
-from 100% on missions 1-6 to 63% on mission 10. Medium helpers win almost everything against Easy
-houses, which rarely attack. Early missions are won by their city goals in 10-17 minutes (Sihaya,
-Hagal, Ash Quarter, Arrakeen) or by conquest in 25-35 (Cielago, Harg Pass); Shield Wall Breach by
-50,000 people around minute 20, Tuono by its treasury and population at 13-15, Carthag by conquest
-at 20-28 and All Against Atreides by its held capital or conquest at 28-34.
-
-Mission 10 was tuned last on the same seeds. With conquest only, the Medium helper ran out of
-120 minutes against four turtling Easy cities in 6 of 7 games (1/7) while holding a ~60,000-person
-capital, so the city version gained its population goal: 60,000 people held for 2 minutes won
-24/24, held for 8 minutes 23/24, then the four houses' starting credits set the difficulty: 6,000
-with a 4-minute grace won 10/24, 5,000 with 5 minutes 18/24 (Brutal 3/8), 4,750 with 5 minutes
-21/24 (shipped).
+Every pairing meets Stefan's rules over the campaign: a helper one tier up wins 72%, 64% and 62%,
+and a same-tier helper loses 78%, 64% and 70% of its games. The helper one tier up wins 21 (Brutal
+v Hard) and 33 (Hard v Medium) more games of 80 than a same-tier helper against the same enemies. The
+values before the last refit met the rules too on another eight fresh seeds (`val-final`: 79%, 58%,
+56% and 29%, 39%, 20%). Single missions vary by about 17 points with eight seeds; the fit over every
+game (24-32 seeds per mission near the shipped values) is the better per-mission estimate
+(`tests/ai/city-campaign-calibrate.py --eval`). It puts every mission's same-tier rates at or below
+40% and every one-tier-up rate at 51% or more, except on the two missions where the tiers do not
+separate: Ash Quarter (Hard v Hard 43%, Brutal v Hard 39%) and Shield Wall Breach (42%, 44%).
 
 The four mandatory AI gates (`quantbot_all_against_atreides`, `..._dune2r`,
 `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`) and `dunelegacy_tests` passed on AWS at
-`e63e52869` (and on `6569d1c94` and `8d304aba2` before); `perf_regression` passed on the Mini at
-`1cd62fd23`. Later commits change only mission 10's map and the docs.
+`26d1da4a8`; `perf_regression` passed on the Mini at `cf2cb621b`. Later commits change only the
+campaign maps' strengths, code comments, the calibration script and the docs, and
+`dunelegacy_tests` passed again on the staging build.
