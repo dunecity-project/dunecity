@@ -304,17 +304,21 @@ inline int perimeterTurretGoal(int64_t own, int64_t enemy) {
 // Stefan, 2026-11-21 (save nobuildup): a house that is losing should defend with rocket turret
 // clusters and build its army up, not feed one unit at a time into a defence it cannot win.
 
-/// TurretClusters: while outnumbered, one rocket turret per kClusterCreditsPerTurret of the
-/// estimate's lead over our army, at most kClusterTurretsMax, kClusterPerCore around each core
-/// building (yard, factories, refinery, port, repair yard) within kClusterReachTiles of it.
+/// TurretClusters: while outnumbered, rocket turrets stand in tight groups around the core
+/// buildings (yard, factories, refinery, port, repair yard): one per kClusterCreditsPerTurret of
+/// the enemy estimate (its whole army, not only its lead: a Fortress start already rings every
+/// core with turrets, so a lead-sized goal is met from the first minute), at most
+/// kClusterTurretsMax, kClusterPerCore within kClusterReachTiles of each core.
+/// v1 (lead-sized, 4 per core within 4 tiles, max 16) never placed a turret in 24 games of
+/// Stefan's lobby: docs/formations.md, "Turret clusters and the held mass".
 constexpr int kClusterCreditsPerTurret = 1000;
-constexpr int kClusterTurretsMax = 16;
-constexpr int kClusterPerCore = 4;
-constexpr int kClusterReachTiles = 4;
+constexpr int kClusterTurretsMax = 40;
+constexpr int kClusterPerCore = 8;
+constexpr int kClusterReachTiles = 5;
 inline int clusterTurretGoal(int64_t own, int64_t enemy) {
     if (!outnumbered(own, enemy)) return 0;
-    const int64_t lead = enemy - std::max<int64_t>(0, own);
-    return int(std::min<int64_t>(kClusterTurretsMax, (lead + kClusterCreditsPerTurret - 1) / kClusterCreditsPerTurret));
+    return int(std::min<int64_t>(kClusterTurretsMax, (std::max<int64_t>(0, enemy) + kClusterCreditsPerTurret - 1)
+        / kClusterCreditsPerTurret));
 }
 /// MassHold: our live turrets within this many tiles of an attacked building fight for it.
 constexpr int kMassTurretSupportTiles = 10;
