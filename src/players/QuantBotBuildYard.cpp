@@ -353,6 +353,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardTurretCluster(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (pass.economyProject != NONE_ID) {
+        // NuclearConsolidation / PalaceDistricts (default off): the city economy project.
+        chooseYardEconomyProject(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     // Duel plans spend the opening grant differently, after real power/air
     // emergencies but before optional city growth, imports and repair support.
     const int duelPlan = duelOpeningPlan();
@@ -1014,6 +1019,106 @@ void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardT
         .set("builder", turn.pBuilder->getObjectID()).set("item", item)
         .set("x", pass.turretClusterSite.x).set("y", pass.turretClusterSite.y)
         .set("goal", clusterTurretGoal()).set("cluster_turrets", clusterTurrets()).set("money", pass.money));
+}
+
+void QuantBot::planCityEconomyProjects(BuildPass& pass) {
+    // NuclearConsolidation / PalaceDistricts (default off, docs/formations.md "Economy: nuclear
+    // consolidation and palace districts").
+    namespace Force = ForceConcentrationPolicy;
+    pass.economyProject = NONE_ID;
+    pass.economyProjectReserve = 0;
+    pass.economyProjectSite = Coord::Invalid();
+    pass.economyProjectOrdered = false;
+    const auto& force = botConfig().force;
+    if ((!force.nuclearConsolidation && !force.palaceDistricts) || !pass.citySimEnabled
+        || gameMode != GameMode::Custom) return;
+    const auto& data = currentGame->objectData.data;
+    const int houseID = getHouse()->getHouseID();
+    auto buildable = [&](Uint32 item) {
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+                && structure->getItemID() == Structure_ConstructionYard
+                && campaignAvailableToBuild(static_cast<const BuilderBase*>(structure), item)) return true;
+        return false;
+    };
+    if (force.nuclearConsolidation) {
+        const int windOutput = std::max(1, -int(data[Structure_WindTrap][houseID].power));
+        const int64_t produced = getHouse()->getProducedPower(), required = getHouse()->getPowerRequirement();
+        const int traps = getHouse()->getNumItems(Structure_WindTrap);
+        // Retire one Wind Trap (the one with most of our lots around it) while the rest still
+        // covers demand plus the city power reserve and one more Wind Trap of margin.
+        const bool spare = produced - windOutput - required >= int64_t(pass.cityPowerReserve) + windOutput;
+        if (traps > 0 && getHouse()->getNumItems(Structure_NuclearPlant) > 0 && spare) {
+            std::vector<Coord> lots;
+            for (const auto* structure : getStructureList())
+                if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+                    && DuneCity::isCityZoneStructure(structure->getItemID())) lots.push_back(structure->getLocation());
+            Uint32 chosen = NONE_ID;
+            int best = -1;
+            for (const auto* structure : getStructureList()) {
+                if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+                    || structure->getItemID() != Structure_WindTrap) continue;
+                int near = 0;
+                const Coord at = structure->getLocation();
+                for (const Coord lot : lots)
+                    if (std::max(std::abs(lot.x - at.x), std::abs(lot.y - at.y)) <= 6) ++near;
+                if (near > best) { best = near; chosen = structure->getObjectID(); }
+            }
+            if (auto* trap = dynamic_cast<StructureBase*>(currentGame->getObjectManager().getObject(chosen))) {
+                const Coord at = trap->getLocation();
+                traceDecision("wind_trap_retired", AITelemetry::Record().set("object", chosen).set("x", at.x)
+                    .set("y", at.y).set("lots_near", best).set("produced", int(produced)).set("required", int(required))
+                    .set("reserve", pass.cityPowerReserve).set("wind_traps", traps));
+                trap->demolish();
+                pass.itemCount[Structure_WindTrap]--;
+            }
+        }
+        // A Nuclear Plant is the project while there are Wind Traps to replace and they cannot be
+        // retired yet (and none is already queued).
+        if (traps >= Force::kConsolidateWindTraps && !spare
+            && pass.itemCount[Structure_NuclearPlant] == getHouse()->getNumItems(Structure_NuclearPlant)
+            && buildable(Structure_NuclearPlant)) {
+            pass.economyProject = Structure_NuclearPlant;
+            pass.economyProjectReserve = data[Structure_NuclearPlant][houseID].price;
+        }
+    }
+    if (force.palaceDistricts && pass.economyProject == NONE_ID && pass.stablePower) {
+        const int lots = pass.itemCount[Structure_ZoneResidential] + pass.itemCount[Structure_ZoneCommercial];
+        int goal = Force::palaceDistrictGoal(lots);
+        if (getGameInitSettings().getGameOptions().onlyOnePalace) goal = 1;
+        if (lots >= Force::kPalaceDistrictMinLots && pass.itemCount[Structure_Palace] < goal
+            && buildable(Structure_Palace)) {
+            pass.economyProjectSite = findPalaceDistrictSite();
+            if (pass.economyProjectSite.isValid()) {
+                pass.economyProject = Structure_Palace;
+                pass.economyProjectReserve = data[Structure_Palace][houseID].price;
+            }
+        }
+    }
+}
+
+void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    if (pass.economyProjectOrdered || pass.economyProject == NONE_ID || yardTurn.itemID != NONE_ID
+        || yardTurn.skipRemainingStructureLogic || pass.orderedThisTick.count(pass.economyProject)
+        || !campaignAvailableToBuild(turn.pBuilder, pass.economyProject)) return;
+    const Uint32 item = pass.economyProject;
+    const bool palace = item == Structure_Palace;
+    if (pass.money < pass.economyProjectReserve) {
+        yardTurn.skipRemainingStructureLogic = true;
+        yardTurn.serviceSavingHold = true;
+        yardTurn.structureRule = palace ? "save_palace_district" : "save_nuclear_consolidation";
+        return;
+    }
+    if (!palace && findPlaceLocation(item).isInvalid()) return;
+    pass.economyProjectOrdered = true;
+    yardTurn.itemID = item;
+    yardTurn.crimeServiceSite = palace ? pass.economyProjectSite : Coord::Invalid();
+    yardTurn.structureRule = palace ? "palace_district" : "nuclear_consolidation";
+    yardTurn.skipRemainingStructureLogic = true;
+    traceDecision("economy_project", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+        .set("item", item).set("x", pass.economyProjectSite.x).set("y", pass.economyProjectSite.y)
+        .set("money", pass.money).set("wind_traps", getHouse()->getNumItems(Structure_WindTrap))
+        .set("palaces", pass.itemCount[Structure_Palace]));
 }
 
 void QuantBot::chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {

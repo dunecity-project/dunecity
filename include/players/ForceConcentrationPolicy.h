@@ -343,6 +343,30 @@ constexpr int kRaidStrengthBps = 15000;
 /// and kGangUpOwnBps of ours.
 constexpr int kGangUpOwnBps = 15000;
 
+// ---- City economy (NuclearConsolidation / PalaceDistricts, default off) -------------------------
+//
+// Stefan, 2026-11-21: "palaces are an effective way to boost value. you can delete buildings to make
+// room to add them into residential / commercial areas. furthermore you can delete windtraps and have
+// nuclear to free up space." A Nuclear Plant (3x3, 2,000 power) replaces 20 Wind Traps (2x2 each);
+// a Palace pays R+C tax and adds +40 land value within 8 tiles (tax scales with land value).
+
+/// NuclearConsolidation: from this many Wind Traps a Nuclear Plant is funded ahead of units while
+/// the Wind Traps cannot yet be retired, and Wind Traps are demolished (nearest the city first)
+/// while produced power minus their output still covers demand plus the city power reserve.
+constexpr int kConsolidateWindTraps = 10;
+/// PalaceDistricts: one Palace per this many R+C lots, at most kPalaceDistrictsMax, each sited
+/// where at least kPalaceDistrictMinLots R+C lots not yet in a palace's reach stand within
+/// kPalaceReachTiles of its centre; own lots of at most kPalaceClearDensity in its footprint are
+/// demolished (at most 4), nothing else.
+constexpr int kPalaceLotsPerPalace = 30;
+constexpr int kPalaceDistrictsMax = 4;
+constexpr int kPalaceDistrictMinLots = 12;
+constexpr int kPalaceReachTiles = 8;
+constexpr int kPalaceClearDensity = 1;
+inline int palaceDistrictGoal(int residentialAndCommercialLots) {
+    return std::clamp(residentialAndCommercialLots / kPalaceLotsPerPalace, 1, kPalaceDistrictsMax);
+}
+
 /// MassHold: our live turrets within this many tiles of an attacked building fight for it.
 constexpr int kMassTurretSupportTiles = 10;
 

@@ -502,7 +502,9 @@ bool QuantBot::preservesGroundAccess(Uint32 item, Coord pos, const std::vector<U
 bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& zones) const {
     zones.clear();
     auto* sim = currentGame->isCitySimEnabled() ? currentGame->getCitySimulation() : nullptr;
-    if (!sim || (item != Structure_HeavyFactory && item != Structure_NuclearPlant && item != Structure_WindTrap)) return false;
+    // PalaceDistricts (default off): a palace may displace own low-density lots of any land value.
+    const bool palace = item == Structure_Palace && botConfig().force.palaceDistricts;
+    if (!sim || (!palace && item != Structure_HeavyFactory && item != Structure_NuclearPlant && item != Structure_WindTrap)) return false;
     const Coord size = getStructureSize(item);
     bool range = false;
     for (int y=pos.y; y<pos.y+size.y; ++y) for (int x=pos.x; x<pos.x+size.x; ++x) {
@@ -514,11 +516,71 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
         const auto* zone = dynamic_cast<const ZoneStructure*>(object);
         if (!zone || zone->getOwner() != getHouse()) return false;
         const Coord z = zone->getLocation();
-        if (sim->getLandValueMap().worldGet(z.x,z.y) > 64
-            || zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None) return false;
+        if (zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None) return false;
+        if (palace ? getMap().getTile(z.x,z.y)->getCityZoneDensity() > ForceConcentrationPolicy::kPalaceClearDensity
+                   : sim->getLandValueMap().worldGet(z.x,z.y) > 64) return false;
         if (std::find(zones.begin(),zones.end(),zone->getObjectID()) == zones.end()) zones.push_back(zone->getObjectID());
     }
     return range && !zones.empty() && zones.size() <= 4;
+}
+
+Coord QuantBot::findPalaceDistrictSite() {
+    AITelemetry::PerformanceScope perfScope("ai.findPalaceDistrictSite", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Force = ForceConcentrationPolicy;
+    if (!currentGame->isCitySimEnabled()) return Coord::Invalid();
+    const int w = getMap().getSizeX(), h = getMap().getSizeY(), reach = Force::kPalaceReachTiles;
+    const Coord size = getStructureSize(Structure_Palace);
+    std::vector<Coord> palaces;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && structure->getItemID() == Structure_Palace)
+            palaces.push_back(structure->getLocation() + Coord(1, 1));
+    for (const auto& entry : reservedStructures)
+        if (entry.second.item == Structure_Palace) palaces.push_back(entry.second.location + Coord(1, 1));
+    // R/C lot origins no palace reaches yet, as a prefix-sum grid.
+    std::vector<int> sum(size_t(w + 1) * (h + 1), 0);
+    auto at = [&](int x, int y) -> int& { return sum[size_t(y) * (w + 1) + x]; };
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || (structure->getItemID() != Structure_ZoneResidential && structure->getItemID() != Structure_ZoneCommercial)) continue;
+        const Coord o = structure->getLocation();
+        bool reached = false;
+        for (const Coord c : palaces) reached = reached || std::max(std::abs(c.x - o.x), std::abs(c.y - o.y)) <= reach;
+        if (!reached && o.x >= 0 && o.y >= 0 && o.x < w && o.y < h) at(o.x + 1, o.y + 1) += 1;
+    }
+    for (int y = 1; y <= h; ++y) for (int x = 1; x <= w; ++x) at(x, y) += at(x - 1, y) + at(x, y - 1) - at(x - 1, y - 1);
+    auto lotsAround = [&](int cx, int cy) {
+        const int x0 = std::max(0, cx - reach), y0 = std::max(0, cy - reach);
+        const int x1 = std::min(w - 1, cx + reach), y1 = std::min(h - 1, cy + reach);
+        return at(x1 + 1, y1 + 1) - at(x0, y1 + 1) - at(x1 + 1, y0) + at(x0, y0);
+    };
+    struct Candidate { int lots, x, y; };
+    std::vector<Candidate> candidates;
+    for (int y = 0; y + size.y <= h; ++y)
+        for (int x = 0; x + size.x <= w; ++x) {
+            const int lots = lotsAround(x + 1, y + 1);
+            if (lots >= Force::kPalaceDistrictMinLots) candidates.push_back({lots, x, y});
+        }
+    std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.lots > b.lots; });
+    constexpr size_t kChecked = 600;
+    int bestScore = std::numeric_limits<int>::min(), bestLots = 0, bestCleared = 0;
+    Coord best = Coord::Invalid();
+    for (size_t i = 0; i < candidates.size() && i < kChecked; ++i) {
+        const auto& c = candidates[i];
+        if (c.lots * 10 <= bestScore) break;   // sorted: nothing later can beat the best
+        const Coord pos(c.x, c.y);
+        std::vector<Uint32> cleared;
+        const bool redevelop = redevelopmentZones(Structure_Palace, pos, cleared);
+        if (!redevelop && !placeableAmongOwnUnits(c.x, c.y, size.x, size.y, Structure_Palace)) continue;
+        if (overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
+            || dangerAt(pos, size) > 0 || !preservesGroundAccess(Structure_Palace, pos)
+            || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, Structure_Palace).preservesConnections) continue;
+        const int score = c.lots * 10 - int(cleared.size()) * 30;
+        if (score > bestScore) { bestScore = score; best = pos; bestLots = c.lots; bestCleared = int(cleared.size()); }
+    }
+    traceDecision("palace_district_site", AITelemetry::Record().set("valid", best.isValid()).set("x", best.x)
+        .set("y", best.y).set("lots", bestLots).set("cleared", bestCleared).set("candidates", int(candidates.size()))
+        .set("palaces", int(palaces.size())));
+    return best;
 }
 
 Coord QuantBot::findRedevelopmentSite(Uint32 item) {

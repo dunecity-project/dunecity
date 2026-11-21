@@ -366,6 +366,8 @@ QuantBotConfig::QuantBotConfig() {
     force.counterPunch = false;
     force.leaderRaid = false;
     force.gangUpLeader = false;
+    force.nuclearConsolidation = false;
+    force.palaceDistricts = false;
     force.vanillaCoreDefenceThreatBps = 5000;
     force.vanillaArmyCounters = true;  // counters50-S5, default since protocol 119
     force.vanillaArmyCounterBlendBps = 5000;
@@ -870,6 +872,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CounterPunch", force.counterPunch);
         iniFile.setBoolValue("Force Concentration", "LeaderRaid", force.leaderRaid);
         iniFile.setBoolValue("Force Concentration", "GangUpLeader", force.gangUpLeader);
+        iniFile.setBoolValue("Force Concentration", "NuclearConsolidation", force.nuclearConsolidation);
+        iniFile.setBoolValue("Force Concentration", "PalaceDistricts", force.palaceDistricts);
         iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
         iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
         iniFile.setIntValue("Force Concentration", "VanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
@@ -1201,6 +1205,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.counterPunch = iniFile.getBoolValue("Force Concentration", "CounterPunch", force.counterPunch);
     force.leaderRaid = iniFile.getBoolValue("Force Concentration", "LeaderRaid", force.leaderRaid);
     force.gangUpLeader = iniFile.getBoolValue("Force Concentration", "GangUpLeader", force.gangUpLeader);
+    force.nuclearConsolidation = iniFile.getBoolValue("Force Concentration", "NuclearConsolidation", force.nuclearConsolidation);
+    force.palaceDistricts = iniFile.getBoolValue("Force Concentration", "PalaceDistricts", force.palaceDistricts);
     // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
     force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
         "Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps));
@@ -1930,6 +1936,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.counterPunch) addNamed("counterPunch", force.counterPunch);
     if (force.leaderRaid) addNamed("leaderRaid", force.leaderRaid);
     if (force.gangUpLeader) addNamed("gangUpLeader", force.gangUpLeader);
+    if (force.nuclearConsolidation) addNamed("nuclearConsolidation", force.nuclearConsolidation);
+    if (force.palaceDistricts) addNamed("palaceDistricts", force.palaceDistricts);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
     addNamed("vanillaArmyCounters", force.vanillaArmyCounters);
     addNamed("vanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);

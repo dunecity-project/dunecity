@@ -2021,6 +2021,15 @@ private:
     /// while outnumbered and short of the cluster goal, a Rocket Turret's price is protected
     /// from every non-yard producer this pass (pass.turretClusterReserve).
     void planTurretClusters(BuildPass& pass);
+    /// NuclearConsolidation / PalaceDistricts (default off; docs/formations.md "Economy: nuclear
+    /// consolidation and palace districts"): retire surplus Wind Traps now, and choose this pass's
+    /// economy project (a Nuclear Plant, else a Palace with its district site).
+    void planCityEconomyProjects(BuildPass& pass);
+    void chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// PalaceDistricts: the Palace site with the most R+C lots within kPalaceReachTiles that no
+    /// palace reaches yet (at least kPalaceDistrictMinLots), its footprint free or only own lots of
+    /// low density, fewest such lots first; invalid when none.
+    Coord findPalaceDistrictSite();
     bool turretClustersActive() const;
     int clusterTurretGoal() const;
     /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.
