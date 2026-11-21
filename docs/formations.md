@@ -1685,6 +1685,41 @@ long no-spice lobby: the first change that wins games there) and costs a weaker 
 v1's limits remain the best for the weak seat. The open design question is when to spend liberally
 (e.g. only from cash above a reserve, not ahead of units).
 
+### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
+
+Stefan suggested introducing parks from the original Micropolis. The Park structure (item 89, save 9888,
+protocol 131; docs/city-economy-balance.md, "Parks") is the Micropolis park tool: 1x1, 10 credits, one
++15 park-terrain source, about +7 land value on its 3x3 terrain block and +1 next door, never developing
+its own block. `[Force Concentration] ParkDistricts` (default off, hashed when on; `QuantBotParks.cpp`,
+`ParkDistrictPolicy.h`) lets QuantBot plant them in city Custom games: after the economy project, one
+park at a time (none queued or unplaced), at most one per two own R+C lots (from 4 lots), never during
+an air, ground or economy defence. The site is the legal tile in the 3x3 terrain block that adds the
+most land value to our R/C land-value blocks (at least 4 summed, capped at 250 per block): open ground
+first, then a road tile whose removal keeps every road connection and every neighbouring lot a side for
+its road. The `city-park` skirmish probe has a qBotMedium plant three parks beside its lots in about
+four minutes of a generated DuneCity match.
+
+**Screen** (commit `4e3969db6`, AWS, seat-only `park-districts` overlay; results
+`~/Documents/projects/outputs/ai-nobuildup-20261121/economy/parks/`, `analyse.py`, `summary.md`), paired by
+game against the economy screens' controls. A re-run of 36 of those control games on the park commit
+matched every digest, outcome, place and minute, so the item-89 change leaves the native game as it was.
+
+| Set (games) | ParkDistricts v control | seat won / eliminated (control, parks) | time-outs (control, parks) | structures at end | army at end (k) | enemy value killed (k) |
+|---|---|---|---|---|---|---|
+| Stefan's lobby, tech 5, no spice, 120 min (24) | +0.045 [+0.000, +0.122] | 0/1, 0/0 | 24, 24 | **+58.8** | **+2.4 [+0.4, +4.4]** | **+11.1 [+2.2, +20.4]** |
+| weak seat 128, Hard v Brutal (144) | +0.032 [-0.091, +0.154] | 29/102, 33/103 | 17, 10 | +15.1 | +1.3 | -2.1 |
+| DuneCity ladder + skirmish + CY (204) | -0.005 [-0.100, +0.090] | 154/45, 154/46 | 5, 4 | +14.8 | +0.3 | **-13.4 [-24.8, -2.6]** |
+| all (372) | +0.013 [-0.059, +0.083] | | | | | |
+
+These full-tier sets record no tax or population samples; the extra structures are the parks (about 59
+per seat in the lobby's 40k cities). In the lobby the parks seat ends with a larger army and kills more,
+which fits more tax in the long no-spice game; it is never eliminated there, but every lobby game still
+times out. Elsewhere placement is level; on the generated ladder maps the seat kills less.
+
+**Decision.** Default off. Parks are cheap and harmless to placement here (no set worse; the lobby's
+interval touches 0 from above), but the screen does not clear the default rule. A next step would be the
+lobby at 240 minutes and parks combined with the economy package, where land value already pays.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
