@@ -1471,13 +1471,38 @@ the seat), 5 / 2 / 1 with MassHold / TurretClusters / both.
 | seat weakest in control (9 games): placement score | -0.50 | +0.19 [+0.00, +0.46] | +0.17 [+0.00, +0.42] | +0.17 [+0.00, +0.42] |
 | seat weakest: kill - loss | -13.3k | -1.3k [-17.3, +14.4] | **+27.7k [+1.7, +54.0]** | **+23.3k [+5.8, +41.6]** |
 
-**Decision.** Both stay default off: no placement interval is above 0, because even 240-minute games
-of this lobby are time-outs. When the seat is the weakest, every arm only ever improves its place
-(lower bound +0.00) and the turret arms trade clearly better, which is the case Stefan reported;
-overall the turret arms turtle (85 more buildings, a smaller army, a better trade, fewer
-eliminations) and MassHold is neutral. In the save, MassHold is what stops the trickle and cut the
-leader's kills by 40%. A default needs a positive placement interval on lobbies that finish, not
-worse on Fortress, Brutal and `/weak`, and the four mandatory AI gates.
+**A range of maps** (Stefan: "try different maps, try a range of maps"; source `b5ab5a018`, 704 games
+on AWS, results and `analyse.py` in `~/Documents/projects/outputs/ai-nobuildup-20261121/maps/`). The
+candidate is the Brutal first seat with the switch; control plays the same game ids natively.
+- `cv`: the 13 handmade control maps (Bottle Neck, Sihaya-Pip, Kleiner Lvl, Tuono-Blake, Mountain
+  Pass, Wormhole, Habbanya-Froiud, Fortress, Fertile Basin, Enclaves, Alkozeltser 4, 4P DuneCity,
+  Sardaukar Outpost), QB against QH/QM/QE/AH/AM, `--tier controls --control-diagnostics
+  --control-seeds 10801 11810 12819 13828`.
+- `cd`: the same maps in the DuneCity mod (`--control-mod dunecity`; the 4P DuneCity map plays the
+  same four games in both sets).
+- `mx`: Brutal v Hard on the four long ladder maps (128/160, vanilla/DuneCity, both starts) and the
+  Random Skirmish 2/4/5/6/8-player and CY cells with a Brutal first seat (`--seeds-per-cell 6`).
+
+Most of these games are decided (136 of 176 in control), so placement now separates the arms
+(paired by game, 95% bootstrap):
+
+| Set (games) | control seat score | MassHold | TurretClusters | both |
+|---|---|---|---|---|
+| `cv` handmade, vanilla (52) | +0.199 | -0.032 [-0.121, +0.055] | -0.057 [-0.298, +0.183] | -0.041 [-0.290, +0.209] |
+| `cd` handmade, DuneCity (52) | +0.259 | +0.051 [-0.046, +0.159] | **-0.311 [-0.503, -0.124]** | **-0.372 [-0.579, -0.178]** |
+| `mx` ladder, skirmish, CY (72) | +0.391 | +0.059 [-0.044, +0.178] | **-0.175 [-0.346, -0.014]** | **-0.174 [-0.350, -0.011]** |
+| all (176) | +0.295 | +0.030 [-0.029, +0.093] | **-0.180 [-0.295, -0.067]** | **-0.193 [-0.313, -0.077]** |
+| seat won / eliminated / time-outs | 81 / 60 / 40 | 87 / 57 / 38 | 61 / 76 / 46 | 61 / 77 / 51 |
+
+**Decision.** TurretClusters is rejected: where games are decided it loses (-0.18 placement over 176
+games, 20 fewer wins, 16 more eliminations; worst in the DuneCity mod and on the long ladder maps).
+Turtling keeps a house alive in a game nobody finishes, and costs it the games that do finish. It
+stays a default-off switch, kept as negative evidence. MassHold is never worse in any set and
+slightly ahead overall (+0.03 [-0.03, +0.09], 6 more wins, 3 fewer eliminations), it is what stops
+the trickle in the save, and when the seat is the weakest in the 240-minute lobby it only ever
+improved its place (+0.19 [+0.00, +0.46]); but no interval is above 0 yet, so it also stays default
+off. Its default needs a larger screen of the same map set (roughly four times the games for a
++0.03 effect), the Fortress/Brutal/`/weak` checks and the four mandatory AI gates.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
