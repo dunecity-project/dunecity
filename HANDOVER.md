@@ -1,3 +1,22 @@
+## 2026-11-21 - Next batch: anonymous installation id in match analytics
+
+Stefan asked for daily player counts and unique players on the usage page. Browser ("Player") and
+iPhone/iPad ("Mobile") games nearly all share a default name, so counting by name fails there. The
+website side is live (VR48/dunelegacy.com PR 24; protocol: `metaserver/ANALYTICS.md`, "Installation id").
+
+- b70062e73: each installation keeps 128 random bits (`std::random_device`, 32 lowercase hex) in
+  `[General] Analytics Install ID` of the settings file, created at startup when missing or malformed
+  (`misc/AnalyticsInstallID`) and synced to IDBFS in the browser. The analytics report adds
+  `"install_id"` only to the reporting client's own human row (`pLocalPlayer`); never AI or remote rows,
+  the root, network packets or logs. `schema_version` stays 3.
+- Tested at b70062e73: Mini `dunelegacy_tests` (five new `[analytics]` cases); AWS `natives_probe` job
+  20261121T123801-ctest-f3b800 (real payload: played, spectated, lockstep host/guest/viewer); integration
+  CI 44851717053 (all platforms). Browser: staging run 44853189783, `/play-staging` 1.0.875dev+b70062e73970
+  wrote the id to IDBFS (`/home/web_user_staging`) and read the same one back after a reload.
+- After the first version with it ships: check on production that `analytics_players.install_key` fills and
+  the usage page shows its "players counted by anonymous installation ID" note, then name that version in
+  the website's `docs/usage-statistics.md`.
+
 ## 2026-11-21 - 1.0.875 published
 
 `v1.0.875` is an annotated tag on `31135f315ba00de138ec6f40f69ee3cd6151a17f` (branch
