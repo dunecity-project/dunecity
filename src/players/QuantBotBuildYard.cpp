@@ -909,37 +909,73 @@ void QuantBot::chooseYardVanillaCoreDefence(BuildPass& pass, BuilderTurn& turn, 
 
 void QuantBot::planTurretClusters(BuildPass& pass) {
     // TurretClusters (default off, docs/formations.md "Turret clusters and the held mass"): while
-    // outnumbered and short of the cluster goal, with a yard able to build a Rocket Turret and a
-    // legal cluster site, every non-yard producer protects the turret's price this pass.
+    // outnumbered and short of the cluster goal, every non-yard producer protects a Rocket Turret's
+    // price this pass (with a legal cluster site), or - while no yard can build one yet - the price
+    // of the yard upgrade that unlocks it.
     pass.turretClusterReserve = 0;
     pass.turretClusterOrdered = false;
     pass.turretClusterSite = Coord::Invalid();
+    pass.turretClusterUpgradeYard = NONE_ID;
+    if (!botConfig().force.turretClusters) return;
     const int goal = clusterTurretGoal();
-    if (goal <= 0) return;
-    const int have = clusterTurrets();
-    if (have >= goal) return;
-    bool buildable = false;
-    for (const auto* structure : getStructureList()) {
-        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
-            || structure->getItemID() != Structure_ConstructionYard) continue;
-        const auto* yard = static_cast<const BuilderBase*>(structure);
-        if (yard->getCurrentUpgradeLevel() >= 2 && campaignAvailableToBuild(yard, Structure_RocketTurret)) {
-            buildable = true;
-            break;
+    const int have = goal > 0 ? clusterTurrets() : 0;
+    const char* reason = goal <= 0 ? "not_outnumbered" : have >= goal ? "goal_met" : nullptr;
+    const BuilderBase* buildable = nullptr;
+    const BuilderBase* upgradable = nullptr;
+    if (!reason) {
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+                || structure->getItemID() != Structure_ConstructionYard) continue;
+            const auto* yard = static_cast<const BuilderBase*>(structure);
+            if (yard->getCurrentUpgradeLevel() >= 2 && campaignAvailableToBuild(yard, Structure_RocketTurret)) {
+                buildable = yard;
+                break;
+            }
+            if (!upgradable && yard->getCurrentUpgradeLevel() < 2 && !yard->isUpgrading()) upgradable = yard;
+        }
+        if (!buildable && upgradable) {
+            pass.turretClusterUpgradeYard = upgradable->getObjectID();
+            pass.turretClusterReserve = upgradable->getUpgradeCost();
+            reason = "upgrade_yard";
+        } else if (!buildable) {
+            reason = "no_rocket_yard";
+        } else {
+            pass.turretClusterSite = findClusterTurretLocation();
+            if (pass.turretClusterSite.isInvalid()) reason = "no_site";
+            else {
+                pass.turretClusterReserve = currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].price;
+                reason = "turret";
+            }
         }
     }
-    if (!buildable) return;
-    pass.turretClusterSite = findClusterTurretLocation();
-    if (pass.turretClusterSite.isInvalid()) return;
-    pass.turretClusterReserve = currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].price;
+    traceDecision("turret_cluster_plan", AITelemetry::Record().set("reason", reason).set("goal", goal)
+        .set("cluster_turrets", have).set("reserve", pass.turretClusterReserve)
+        .set("own_estimate", int(teamGroundArmyValue())).set("enemy_estimate", int(enemyThreatEstimate())));
 }
 
 void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
-    // One cluster turret per pass across all yards, after power recovery and the essentials and
-    // ahead of optional growth; the yard saves for it while it cannot pay (planTurretClusters).
-    if (pass.turretClusterOrdered || pass.turretClusterReserve <= 0 || pass.turretClusterSite.isInvalid()
-        || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
-        || pass.orderedThisTick.count(Structure_RocketTurret)
+    // One cluster turret (or the upgrade that unlocks it) per pass across all yards, after power
+    // recovery and the essentials and ahead of optional growth; the yard saves for it meanwhile.
+    if (pass.turretClusterOrdered || pass.turretClusterReserve <= 0
+        || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic) return;
+    if (pass.turretClusterUpgradeYard != NONE_ID) {
+        if (turn.pBuilder->getObjectID() != pass.turretClusterUpgradeYard || turn.pBuilder->isUpgrading()) return;
+        yardTurn.skipRemainingStructureLogic = true;
+        if (pass.money < pass.turretClusterReserve || turn.pBuilder->getHealth() < turn.pBuilder->getMaxHealth()) {
+            if (turn.pBuilder->getHealth() < turn.pBuilder->getMaxHealth() && !turn.pBuilder->isRepairing())
+                doRepair(turn.pBuilder);
+            yardTurn.serviceSavingHold = true;
+            yardTurn.structureRule = "save_turret_cluster_upgrade";
+            return;
+        }
+        pass.turretClusterOrdered = true;
+        const bool accepted = upgradeWithLogging(pass, turn, __LINE__);
+        yardTurn.structureRule = "turret_cluster_upgrade";
+        traceDecision("turret_cluster", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+            .set("upgrade", true).set("accepted", accepted).set("money", pass.money));
+        return;
+    }
+    if (pass.turretClusterSite.isInvalid() || pass.orderedThisTick.count(Structure_RocketTurret)
         || turn.pBuilder->getCurrentUpgradeLevel() < 2
         || !campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)) return;
     const auto& data = currentGame->objectData.data;
