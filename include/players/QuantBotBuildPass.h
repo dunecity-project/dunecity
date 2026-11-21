@@ -301,6 +301,8 @@ struct QuantBot::BuildPass {
     Coord turretClusterSite = Coord::Invalid();
     /// No yard can build a Rocket Turret yet: the reserve funds this yard's upgrade first.
     Uint32 turretClusterUpgradeYard = NONE_ID;
+    /// Rocket Turret, or Gun Turret while no yard can build (or be upgraded to build) a Rocket Turret.
+    Uint32 turretClusterItem = NONE_ID;
     bool vanillaFfaLargeScope{};
     bool vanillaFfaThreatProduction{};
     bool vanillaFfaLightWorkingCash{};

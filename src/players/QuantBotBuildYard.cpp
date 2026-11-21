@@ -916,12 +916,14 @@ void QuantBot::planTurretClusters(BuildPass& pass) {
     pass.turretClusterOrdered = false;
     pass.turretClusterSite = Coord::Invalid();
     pass.turretClusterUpgradeYard = NONE_ID;
+    pass.turretClusterItem = NONE_ID;
     if (!botConfig().force.turretClusters) return;
     const int goal = clusterTurretGoal();
     const int have = goal > 0 ? clusterTurrets() : 0;
     const char* reason = goal <= 0 ? "not_outnumbered" : have >= goal ? "goal_met" : nullptr;
     const BuilderBase* buildable = nullptr;
     const BuilderBase* upgradable = nullptr;
+    const BuilderBase* gunYard = nullptr;
     if (!reason) {
         for (const auto* structure : getStructureList()) {
             if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
@@ -931,20 +933,25 @@ void QuantBot::planTurretClusters(BuildPass& pass) {
                 buildable = yard;
                 break;
             }
-            if (!upgradable && yard->getCurrentUpgradeLevel() < 2 && !yard->isUpgrading()) upgradable = yard;
+            // Only an upgrade the yard is actually allowed now (the tech level caps it).
+            if (!upgradable && yard->getCurrentUpgradeLevel() < 2 && yard->isAllowedToUpgrade() && !yard->isUpgrading())
+                upgradable = yard;
+            if (!gunYard && campaignAvailableToBuild(yard, Structure_GunTurret)) gunYard = yard;
         }
         if (!buildable && upgradable) {
             pass.turretClusterUpgradeYard = upgradable->getObjectID();
             pass.turretClusterReserve = upgradable->getUpgradeCost();
             reason = "upgrade_yard";
-        } else if (!buildable) {
-            reason = "no_rocket_yard";
+        } else if (!buildable && !gunYard) {
+            reason = "no_turret_yard";
         } else {
+            // Gun Turrets while no yard can build or unlock a Rocket Turret yet.
+            pass.turretClusterItem = buildable ? Uint32(Structure_RocketTurret) : Uint32(Structure_GunTurret);
             pass.turretClusterSite = findClusterTurretLocation();
             if (pass.turretClusterSite.isInvalid()) reason = "no_site";
             else {
-                pass.turretClusterReserve = currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].price;
-                reason = "turret";
+                pass.turretClusterReserve = currentGame->objectData.data[pass.turretClusterItem][getHouse()->getHouseID()].price;
+                reason = buildable ? "rocket_turret" : "gun_turret";
             }
         }
     }
@@ -975,12 +982,14 @@ void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardT
             .set("upgrade", true).set("accepted", accepted).set("money", pass.money));
         return;
     }
-    if (pass.turretClusterSite.isInvalid() || pass.orderedThisTick.count(Structure_RocketTurret)
-        || turn.pBuilder->getCurrentUpgradeLevel() < 2
-        || !campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)) return;
+    const Uint32 item = pass.turretClusterItem;
+    const bool rocket = item == Structure_RocketTurret;
+    if (pass.turretClusterSite.isInvalid() || item == NONE_ID || pass.orderedThisTick.count(item)
+        || (rocket && turn.pBuilder->getCurrentUpgradeLevel() < 2)
+        || !campaignAvailableToBuild(turn.pBuilder, item)) return;
     const auto& data = currentGame->objectData.data;
     const int houseID = getHouse()->getHouseID();
-    if (!hasPowerBufferForTurret(pass)) {
+    if (rocket && !hasPowerBufferForTurret(pass)) {
         if (!powerGenerationPending(pass) && campaignAvailableToBuild(turn.pBuilder, Structure_WindTrap)
             && pass.money >= data[Structure_WindTrap][houseID].price && findPlaceLocation(Structure_WindTrap).isValid()) {
             yardTurn.itemID = Structure_WindTrap;
@@ -997,12 +1006,13 @@ void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardT
     }
     pass.turretClusterOrdered = true;
     ++forceStats.clusterTurretOrders;
-    yardTurn.itemID = Structure_RocketTurret;
+    yardTurn.itemID = item;
     yardTurn.crimeServiceSite = pass.turretClusterSite;
     yardTurn.structureRule = "turret_cluster";
     yardTurn.skipRemainingStructureLogic = true;
     traceDecision("turret_cluster", AITelemetry::Record()
-        .set("builder", turn.pBuilder->getObjectID()).set("x", pass.turretClusterSite.x).set("y", pass.turretClusterSite.y)
+        .set("builder", turn.pBuilder->getObjectID()).set("item", item)
+        .set("x", pass.turretClusterSite.x).set("y", pass.turretClusterSite.y)
         .set("goal", clusterTurretGoal()).set("cluster_turrets", clusterTurrets()).set("money", pass.money));
 }
 
