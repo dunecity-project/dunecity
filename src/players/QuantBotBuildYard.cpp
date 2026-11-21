@@ -1089,9 +1089,13 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         // stadium, palaces are more efficient otherwise"). One pending at a time.
         const int lots = pass.itemCount[Structure_ZoneResidential] + pass.itemCount[Structure_ZoneCommercial];
         const bool palaceCapped = getGameInitSettings().getGameOptions().onlyOnePalace && pass.itemCount[Structure_Palace] >= 1;
-        const Uint32 item = !palaceCapped && buildable(Structure_Palace) ? Uint32(Structure_Palace)
-            : pass.itemCount[Structure_Stadium] == 0 && buildable(Structure_Stadium) ? Uint32(Structure_Stadium)
-            : Uint32(NONE_ID);
+        // StadiumDistricts (default off; Stefan: "if we don't have tech 8 then yes you could look at
+        // stadiums"): while no Palace can be built at all, every district gets a Stadium.
+        const bool palaceNow = !palaceCapped && buildable(Structure_Palace);
+        const bool stadiumDistricts = force.stadiumDistricts && !buildable(Structure_Palace);
+        const Uint32 item = palaceNow ? Uint32(Structure_Palace)
+            : (pass.itemCount[Structure_Stadium] == 0 || stadiumDistricts) && buildable(Structure_Stadium)
+                ? Uint32(Structure_Stadium) : Uint32(NONE_ID);
         const bool pending = pass.itemCount[Structure_Palace] != getHouse()->getNumItems(Structure_Palace)
             || pass.itemCount[Structure_Stadium] != getHouse()->getNumItems(Structure_Stadium);
         if (item != NONE_ID && !pending && lots >= Force::kPalaceDistrictMinLots) {

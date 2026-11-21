@@ -227,6 +227,13 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
         cells.append(dict(match('skirmish', 'weak-4p-ffa-qh-v-3qb', mod, ffa('QH', 'QB', 'QB', 'QB'),
                                 skirmish=skirmish_spec(128, 'medium', 2), minutes=90, full=48),
                           opt_in=True, measured=True))
+    # The weak seat at tech 5 (no Palace until research reaches tech 8; Stefan's lobby is tech 5).
+    cells.append(dict(match('skirmish', 'weak-1v1-qh-v-qb-rs128-tech5', 'dunecity', ffa('QH', 'QB'),
+                            skirmish=skirmish_spec(128, 'medium', 0, tech=5), minutes=90, full=16, both_sides=True),
+                      opt_in=True, measured=True))
+    cells.append(dict(match('skirmish', 'weak-4p-ffa-qh-v-3qb-tech5', 'dunecity', ffa('QH', 'QB', 'QB', 'QB'),
+                            skirmish=skirmish_spec(128, 'medium', 2, tech=5), minutes=105, full=16),
+                      opt_in=True, measured=True))
     # The same weak seat on larger generated DuneCity maps (economy confirmation, 2026-11-21).
     cells.append(dict(match('skirmish', 'weak-1v1-qh-v-qb-rs160', 'dunecity', ffa('QH', 'QB'),
                             skirmish=skirmish_spec(160, 'medium', 0), minutes=90, full=24, both_sides=True),
