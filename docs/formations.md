@@ -1829,6 +1829,9 @@ NuclearConsolidation, PalaceDistricts, StadiumDistricts and LandmarkAnchoring de
 (+0.100 [+0.049, +0.154], 452 games), is not worse on Fortress, Brutal or the weak seat, passes the
 four mandatory AI gates and the unit tests, and acts only in city skirmish games. The play style
 `economy-anchor` now equals the default; an off arm needs those five set to false.
+`perf_regression` passes on the Mini at `7db8baf56` (budget used: CPU mean 0.033/0.250, house p99
+0.044/1.000, house max 2.678/10.000, eight-house CPU p99 1.182/1.600, frame CPU p99 4.100/5.500,
+main-loop frame p99 4.815/8.000, menu other 0.001/0.300).
 
 ### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
 
