@@ -1571,6 +1571,75 @@ combination are level; nothing helps the weak seat (a Hard house against Brutal 
 often). Across MassHold, TurretClusters and these three, changing when and where an outmatched
 army fights does not change who wins; the gap is the army and economy itself.
 
+### Economy: nuclear consolidation and palace districts (`NuclearConsolidation`, `PalaceDistricts`, 2026-11-21, default off)
+
+Stefan: "needs to be economy and turtly and holding back forces ... palaces are an effective way to
+boost value. you can delete buildings to make room to add them into residential / commercial areas.
+furthermore you can delete windtraps and have nuclear to free up space." City simulation only.
+
+Facts behind it (`config/ObjectData`, `CityEffects.h`, `docs/city-economy-balance.md`): a Wind Trap is
+2x2, 300 credits, 100 power; a Nuclear Plant 3x3, 2,000 credits, 2,000 power (tech 6); a Palace 3x3,
+2,000 credits (tech 8), pays R+C tax like a high zone and adds +40 land value within 8 tiles, and city
+tax scales with the house's average land value. In the `nobuildup` save the weak houses own 38 and 25
+Wind Traps, 4 and 2 reactors and no Palace (the leader 124 Wind Traps, 2 Palaces).
+
+- `NuclearConsolidation`: from 10 Wind Traps a Nuclear Plant is the house's economy project (funded
+  ahead of units) while the Wind Traps cannot be retired; once a reactor stands, all new city power
+  capacity is a reactor (a yard that cannot build one defers to one that can unless power is short);
+  Wind Traps are demolished, most lots around them first, while the rest covers demand, the city power
+  reserve, the turret power buffer, the committed demand and one more Wind Trap - always keeping 2: a
+  Wind Trap is the prerequisite of the reactor and of almost every other building (factories,
+  refinery, radar, turrets, Police Station, Stadium, Airport).
+- `PalaceDistricts`: one Palace per 30 R+C lots (1-4; 1 with Only One Palace) is the project,
+  funded ahead of units, sited where most R+C lots no palace reaches yet stand within 8 tiles (at least
+  12); own lots of density at most 1 in its footprint are demolished through redevelopment.
+
+Bugs found by the check games before the screen (all fixed, `333f5b420`..`1afd9ca57`): the city
+generator choice turned the reactor order into a Wind Trap; yard selection dropped every chosen site
+except Rocket Turrets and Police Stations (so Palace district sites, and the Gun Turret cluster sites
+of `TurretClusters`, were re-sited by the ordinary search - the earlier TurretClusters screens placed
+Gun Turrets by the city turret search, Rocket Turrets in clusters); retiring the last Wind Traps made
+reactors unbuildable, so 33-53 new Wind Traps a game were built and retired again.
+
+**Screen** (source `1afd9ca57`, AWS, seat-only; DuneCity maps: the 13 handmade maps in the DuneCity
+mod, the DuneCity Brutal v Hard ladder maps, 2P and 6P Random Skirmish and the CY duel, the DuneCity
+weak-seat cells, and Stefan's lobby at 120 minutes; results `~/Documents/projects/outputs/
+ai-nobuildup-20261121/economy/`, `analyse.py`, `econ_metrics.py`, `confirm.py`), 136 games per arm:
+
+| Set (games) | Nuclear | Palace | both | both + MassHold | both + MassHold + TurretClusters |
+|---|---|---|---|---|---|
+| handmade, DuneCity (52) | -0.006 | +0.017 | +0.036 | -0.039 | **-0.296** |
+| DuneCity ladder, skirmish, CY (36) | **+0.212** | **+0.106** | **+0.281** | **+0.281** | +0.022 |
+| weak seat (24) | **+0.264** | +0.014 | **+0.233** | **+0.299** | -0.031 |
+| Stefan's lobby (24; tech 5, no reactor or palace in 120 min) | 0 | 0 | 0 | +0.028 | +0.056 |
+| all (136) | **+0.100 [+0.018, +0.191]** | +0.037 | **+0.129 [+0.043, +0.223]** | **+0.117 [+0.024, +0.216]** | -0.103 |
+| seat won / eliminated (control 45 / 43) | 54 / 34 | 48 / 39 | 58 / 34 | 58 / 36 | 38 / 52 |
+
+**Confirmation** on fresh games (16 new handmade seeds, 12 more per DuneCity ladder map, the weak-seat
+cells raised to 16 seeds; source `59a11e2a1`; screen ids excluded), 280 games per arm:
+
+| Set | both | both + MassHold |
+|---|---|---|
+| handmade, DuneCity (208) | -0.003 [-0.067, +0.060] | +0.021 [-0.056, +0.098] |
+| DuneCity ladder, skirmish (48) | +0.042 [-0.083, +0.172] | +0.099 [-0.078, +0.281] |
+| weak seat (24) | +0.170 [-0.170, +0.524] | +0.201 [-0.087, +0.531] |
+| all fresh (280) | +0.020 [-0.041, +0.080] | +0.050 [-0.021, +0.120] |
+| seat won / eliminated (control 126 / 79) | 128 / 77 | 139 / 71 |
+| pooled with the screen (392) | +0.059 [+0.006, +0.113] | +0.075 [+0.016, +0.135] |
+
+The economy itself grows on fresh games (handmade DuneCity maps, 208 games, both / both + MassHold):
+population at minute 60 **+4,174 / +6,171** (+8% / +12%), tax at minute 60 **+1,664 / +2,080**
+(+14% / +18%), mean army **+1.6k / +2.0k** (+9% / +11%), all intervals above 0.
+
+**Decision.** Both stay default off for now. The economy package is the first change in this series
+that measurably strengthens the AI: a larger city, more tax and a larger army, replicated on fresh
+games; better placement where the AI is the weaker side or on generated DuneCity maps (positive in the
+screen and in the confirmation), level on the handmade DuneCity maps. MassHold on top is slightly
+better in every set. Turret clusters undo it. The fresh-game interval alone still includes 0 (the
+pooled one, which includes the selecting screen, does not), so a default needs a confirmation where
+the effect lives (weak seat and generated DuneCity maps, more seeds), the Fortress/Brutal/`/weak`
+checks and the four mandatory AI gates.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
