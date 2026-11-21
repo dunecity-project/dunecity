@@ -1092,7 +1092,8 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         // StadiumDistricts (default off; Stefan: "if we don't have tech 8 then yes you could look at
         // stadiums"): while no Palace can be built at all, every district gets a Stadium.
         const bool palaceNow = !palaceCapped && buildable(Structure_Palace);
-        const bool stadiumDistricts = force.stadiumDistricts && !buildable(Structure_Palace);
+        // ... but not while outnumbered: a weak house at tech 5 lost -0.21 paying 3,000 a Stadium before units.
+        const bool stadiumDistricts = force.stadiumDistricts && !buildable(Structure_Palace) && !outnumberedByEstimate();
         const Uint32 item = palaceNow ? Uint32(Structure_Palace)
             : (pass.itemCount[Structure_Stadium] == 0 || stadiumDistricts) && buildable(Structure_Stadium)
                 ? Uint32(Structure_Stadium) : Uint32(NONE_ID);

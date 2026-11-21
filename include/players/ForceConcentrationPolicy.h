@@ -350,10 +350,10 @@ constexpr int kGangUpOwnBps = 15000;
 // nuclear to free up space." A Nuclear Plant (3x3, 2,000 power) replaces 20 Wind Traps (2x2 each);
 // a Palace pays R+C tax and adds +40 land value within 8 tiles (tax scales with land value).
 
-/// NuclearConsolidation: from this many Wind Traps (v1: 10) a Nuclear Plant is funded ahead of units while
+/// NuclearConsolidation: from this many Wind Traps a Nuclear Plant is funded ahead of units while
 /// the Wind Traps cannot yet be retired, and Wind Traps are demolished (nearest the city first)
 /// while produced power minus their output still covers demand plus the city power reserve.
-constexpr int kConsolidateWindTraps = 3;
+constexpr int kConsolidateWindTraps = 10;   // 3 (tried 2026-11-21): -1.03 in Brutal v Hard duels, an early 2,000-credit reactor before any army
 /// ... and always keeps this many: a Wind Trap is the prerequisite of the Nuclear Plant (and of the
 /// refinery, radar and factories), so retiring the last one makes the next reactor unbuildable.
 constexpr int kKeepWindTraps = 2;
