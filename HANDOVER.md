@@ -1,3 +1,25 @@
+## 2026-11-21 - 1.0.875 published
+
+`v1.0.875` is an annotated tag on `31135f315ba00de138ec6f40f69ee3cd6151a17f` (branch
+`integrate/feature-batch`), pushed 10:53 AEDT after the owner's "deploy" / "to production" (and "publish").
+Evidence: `~/Documents/projects/outputs/release-1.0.875/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below, plus 7cb425b3f (menu probe follows the DuneCity Campaign menu item) and
+  31135f315 (fix after the first candidate c9b6b16c6 failed 8 tests: FactoriesFirst/ProductionBeforeCityGrowth
+  campaign-ladder only; genome inventory reads the ladder's looped keys; four switches registered).
+- Tested at 31135f315: AWS Linux headless nightly suite 239/239 (job 20261121T100137-release-1.0.875-e12c51,
+  every per-test log checked, incl. the four AI gates, menu_navigation_probe and the shared-spending probe);
+  Mini perf_regression (97.9 s), unit tests and the nine previously failing tests; integration CI run 44833649801;
+  Mac qualification run 44835538345 (reuse-qualification passed).
+- Tag build run 44840078078: attempt 1 failed only at build-macos runner set-up, because the Mini gate refused
+  build.yml 96231d07... (changed since 1.0.874 by e63e52869, one Linux apt package). Reviewed and appended to
+  `allowed_workflow_sha256` in `~/.config/agent-workspace/github-runner.json`; attempt 2 (`resume build`) passed
+  every job. Lesson: a release whose build.yml differs from the last bound hash needs the rebind before the tag.
+- The Mini pointer was parked at the top screen edge (75,0); centred before the tag (packaged fullscreen pointer case).
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and defaults,
+  browser build (1.0.875/31135f315, hashes match; Chrome reached the main menu with DuneCity Campaign), website
+  links and What's New. TestFlight not part of this release; Android held. Both AWS workers stopped.
+
 ## 2026-11-21 - 1.0.875 candidate: the DuneCity Campaign
 
 Stefan asked for a ten-mission DuneCity city campaign (2026-11-19), the same-tier rule (a helper loses
