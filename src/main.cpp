@@ -55,6 +55,7 @@
 #include <misc/SDL2pp.h>
 #include <misc/RendererInitialization.h>
 #include <misc/md5.h>
+#include <misc/AnalyticsInstallID.h>
 #include <misc/WebRuntime.h>
 #include <misc/MacTrackpad.h>
 
@@ -1258,6 +1259,21 @@ int main(int argc, char *argv[]) {
 
             settings.general.playIntro = myINIFile.getBoolValue("General","Play Intro",false);
             settings.general.playerName = myINIFile.getStringValue("General","Player Name","Player");
+            {
+                // Created once per installation and kept with the settings, so resetting them
+                // resets it. Never derived from the device, account, name or network, and never
+                // logged; only the match analytics report sends it (misc/AnalyticsInstallID.h).
+                bool created = false;
+                settings.general.analyticsInstallID = AnalyticsInstallID::loadOrCreate(myINIFile, created);
+                if(created) {
+                    if(myINIFile.saveChangesTo(configfilepath)) {
+                        // The browser keeps the settings file in IDBFS; write it through so a reload keeps the id.
+                        WebRuntime::syncPersistentFiles();
+                    } else {
+                        SDL_Log("Warning: could not save the analytics installation id to the configuration file");
+                    }
+                }
+            }
             settings.general.language = myINIFile.getStringValue("General","Language","en");
             settings.general.scrollSpeed = myINIFile.getIntValue("General","Scroll Speed",50);
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);

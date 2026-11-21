@@ -29,6 +29,7 @@
 #include <misc/IFileStream.h>
 #include <dunecity/CitySimulation.h>
 #include <units/AmbientAirplane.h>
+#include <misc/AnalyticsInstallID.h>
 #endif
 
 #include <cstdlib>
@@ -644,9 +645,30 @@ void expectWatchedEnd(Game& game, const std::string& label, Uint32 decided, int 
             game.finishedLevelCycle, decided, text.c_str(), natives(game)->getNumUnits());
 }
 
+/// This installation's analytics id is in @a payload exactly once, on the row of the human player
+/// named @a ownName, or nowhere when @a ownName is empty (a spectated game has no own row).
+void expectInstallID(const std::string& payload, const std::string& label, const std::string& ownName) {
+    const std::string& id = settings.general.analyticsInstallID;
+    nRequire(AnalyticsInstallID::isValid(id), label + ": the probe profile has no valid analytics installation id");
+    size_t fields = 0;
+    for(size_t at = payload.find("install_id"); at != std::string::npos; at = payload.find("install_id", at + 1)) ++fields;
+    nRequire(fields == (ownName.empty() ? 0u : 1u), label + ": " + std::to_string(fields) + " install_id fields, expected "
+             + (ownName.empty() ? "none" : "one, on " + ownName + "'s row"));
+    nRequire(payload.substr(0, payload.find("\"players\":")).find(id) == std::string::npos, label + ": the installation id is outside the player rows");
+    if(ownName.empty()) return;
+    const size_t at = payload.find(",\"install_id\":\"" + id + '"');
+    nRequire(at != std::string::npos, label + ": the install_id is not this installation's id");
+    const size_t row = payload.rfind("{\"slot\":", at);
+    nRequire(row != std::string::npos, label + ": the install_id is not in a player row");
+    const std::string head = payload.substr(row, at - row);
+    nRequire(head.find("\"player_name\":\"" + ownName + '"') != std::string::npos && head.find("\"controller\":\"human\"") != std::string::npos,
+             label + ": the install_id is on another row: " + head);
+}
+
 /// The analytics end payload: one row per player, Natives nowhere, the right winner (-1: none).
 void expectAnalytics(Game& game, const std::string& label, int winnerHouse) {
     const std::string payload = game.buildMatchAnalyticsPayload(true);
+    expectInstallID(payload, label, game.isObserving() ? std::string() : settings.general.playerName);
     nRequire(payload.find("\"house_name\":\"Natives\"") == std::string::npos, label + ": the analytics payload names the Natives");
     nRequire(payload.find("\"house_slot\":" + std::to_string(HOUSE_NATIVES) + ",") == std::string::npos,
              label + ": the analytics payload has a Natives row");
@@ -973,6 +995,8 @@ void runLockstepInteractions() {
                 peer.name.c_str(), peer.digests.size(), decided, peer.finishedAt, peer.won ? 1 : 0, peer.watched,
                 nativesHouse->getNumUnits(), peer.digests.back().c_str());
         if(peer.observer) expectWatchedEnd(*game, "lockstep spectator", decided, guestHouse);
+        // Two human rows on every peer: the id goes on the peer's own row only, never the other human's.
+        expectInstallID(game->buildMatchAnalyticsPayload(true), "lockstep " + peer.name, peer.observer ? std::string() : peer.name);
         nEnd(game);
     }
     settings.general.playerName = "Natives tester";

@@ -450,6 +450,7 @@ target_sources(dunecity
         dunecity/CityEvaluation.cpp
 
         # misc
+        misc/AnalyticsInstallID.cpp
         misc/draw_util.cpp
         misc/FileSystem.cpp
         misc/fnkdat.cpp

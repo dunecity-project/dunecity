@@ -25,6 +25,7 @@
 #include <misc/GameActivity.h>
 #include <misc/MacTrackpad.h>
 #include <misc/WatchedResultLayout.h>
+#include <misc/AnalyticsInstallID.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -1221,6 +1222,11 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
                 << ",\"controller\":\"" << controller << '"'
                 << ",\"player_class\":" << AITelemetry::Record::quote(playerClass)
                 << ",\"shared_house_players\":" << players.size();
+            // The anonymous installation id goes on this client's own human row only: never on an
+            // AI's, a remote player's (a multiplayer game is reported by its host) or the root.
+            row << AnalyticsInstallID::playerRowField(
+                player.get() == pLocalPlayer && std::string(controller) == "human",
+                settings.general.analyticsInstallID);
             if (std::string(controller) == "ai" || qbot) {
                 // A QuantBot's role can be switched in game (CMD_AI_SUPPORT_ROLE): report its live one.
                 const auto* playerData = PlayerFactory::getByPlayerClass(playerClass);

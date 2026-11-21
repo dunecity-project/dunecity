@@ -275,6 +275,9 @@ target_sources(dunelegacy_tests
         INIFileTestCase/INIFileTestCase.cpp
         FileSystemTestCase/FileSystemTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/INIFile.cpp
+        # The anonymous analytics installation id kept in the settings file.
+        AnalyticsInstallIDTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/misc/AnalyticsInstallID.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/FileSystem.cpp
         ${CMAKE_SOURCE_DIR}/src/misc/fnkdat.cpp
         globals_test_stub.cpp

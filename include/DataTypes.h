@@ -183,6 +183,7 @@ public:
     public:
         bool            playIntro;          ///< Play the intro when starting the game?
         std::string     playerName;         ///< The name of the player used for multiplayer games
+        std::string     analyticsInstallID; ///< Anonymous random id of this installation; match analytics only (misc/AnalyticsInstallID.h)
         std::string     language;           ///< Language code: "en" = English, "fr" = French, "de" = German
         int             scrollSpeed;        ///< Scroll speed in pixels
         bool            showTutorialHints;  ///< If true, tutorial hints are shown during the game
