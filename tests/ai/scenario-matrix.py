@@ -222,10 +222,10 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
     # Only with --cells; for seat-only screens (--seat-style).
     for mod in ('vanilla', 'dunecity'):
         cells.append(dict(match('skirmish', 'weak-1v1-qh-v-qb-rs128', mod, ffa('QH', 'QB'),
-                                skirmish=skirmish_spec(128, 'medium', 0), minutes=75, full=8, both_sides=True),
+                                skirmish=skirmish_spec(128, 'medium', 0), minutes=75, full=16, both_sides=True),
                           opt_in=True, measured=True))
         cells.append(dict(match('skirmish', 'weak-4p-ffa-qh-v-3qb', mod, ffa('QH', 'QB', 'QB', 'QB'),
-                                skirmish=skirmish_spec(128, 'medium', 2), minutes=90, full=8),
+                                skirmish=skirmish_spec(128, 'medium', 2), minutes=90, full=16),
                           opt_in=True, measured=True))
     # The same lobby played to 240 minutes (its 120-minute games nearly all time out with every
     # house alive, so placement cannot separate a candidate from the control).
