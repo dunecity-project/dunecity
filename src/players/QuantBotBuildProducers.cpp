@@ -924,7 +924,7 @@ Uint32 QuantBot::economicGenerator(BuildPass& pass, BuilderTurn& turn) {
     int repairMilli=0;
     for (const auto* structure:getStructureList())
         if (structure->getOwner()==getHouse() && structure->getHealth()>0
-            && structure->getItemID()!=Structure_Wall
+            && structure->getItemID()!=Structure_Wall && structure->getItemID()!=Structure_Park
             && (repairPolicyMaintains(pass, structure)
                 || QuantBotBuildPolicy::repairWhenWealthy(pass.money)))
             repairMilli+=QuantBotBuildPolicy::repairCreditsPerHitpointMilli(

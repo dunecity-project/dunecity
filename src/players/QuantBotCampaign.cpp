@@ -286,7 +286,7 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
                 const auto* house=getHouse(h);
                 if(house && !house->isNatives() && house->isAlive()
                    && house->getTeamID()==getHouse()->getTeamID()
-                   && house->getNumStructures()>house->getNumItems(Structure_Wall)) ++bases;
+                   && house->getNumStructures()>house->getNumItems(Structure_Wall)+house->getNumItems(Structure_Park)) ++bases;
             }
             profile.value=CampaignDifficultyPolicy::hardWaveValue(profile.value,bases,force.campaignHouseWaveExperiment,
                 force.campaignHouseWaveOneValue,force.campaignHouseWaveTwoValue,force.campaignHouseWaveThreeValue);

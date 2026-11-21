@@ -2030,6 +2030,13 @@ private:
     /// kPalaceReachTiles that no Palace or Stadium reaches yet (at least kPalaceDistrictMinLots), its
     /// footprint free or only own lots of low density, fewest such lots first; invalid when none.
     Coord findPalaceDistrictSite(Uint32 item, int minLots);
+    /// ParkDistricts (default off; docs/formations.md "Parks in the districts", QuantBotParks.cpp):
+    /// a Park when one is due (ParkDistrictPolicy) and a site raises our R/C land value enough.
+    void chooseYardParkDistrict(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// The legal Park tile in the 3x3 park-terrain block that adds the most land value to the
+    /// blocks of our R/C lots (at least ParkDistrictPolicy::kMinGain; open ground before roads that
+    /// can be spared); invalid when none.  gain receives that land value.
+    Coord findParkDistrictSite(int* gain = nullptr);
     bool turretClustersActive() const;
     int clusterTurretGoal() const;
     /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.

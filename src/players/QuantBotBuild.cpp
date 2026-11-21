@@ -3267,7 +3267,7 @@ UnitMixPolicy::Mix QuantBot::vanillaArmyCounterMix(const BuildPass& pass, const 
         if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) return false;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
-            case Structure_Road: case Structure_PowerLine: return false;
+            case Structure_Road: case Structure_PowerLine: case Structure_Park: return false;
             default: return true;
         }
     };

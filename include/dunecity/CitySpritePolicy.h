@@ -17,6 +17,9 @@ constexpr int industrialColumns = 5;
 constexpr int industrialRows = 18; // 2 value tiers * (static + 8 phases)
 constexpr int specialFrames = 9;
 constexpr int roadRows = 9;
+/// Park atlas: WOODS2..WOODS5 (Micropolis tiles 40-43), then the four FOUNTAIN frames (840-843).
+constexpr int parkFrames = 8;
+constexpr int parkFountainFrame = 4;
 constexpr uint32_t frameCycles = MILLI2CYCLES(128);
 
 inline uint32_t siteSeed(int x, int y) {
@@ -84,6 +87,14 @@ inline int stadiumFrame(uint32_t cycle, int x, int y, bool powered) {
     // freezes on pause and remains stable across saves/replays.
     const bool playing = ((cycle / MILLI2CYCLES(1000) + siteSeed(x, y)) & 31u) < 8;
     return powered && playing ? 1 + phase(cycle) : 0;
+}
+
+/// Micropolis putDownPark picks getRandom(4): WOODS2..WOODS5, or the animated fountain for 4.
+/// The site picks the variant here, so it draws no random number and survives save/load.
+inline int parkFrame(uint32_t cycle, int x, int y) {
+    const uint32_t seed = siteSeed(x, y);
+    const int variant = static_cast<int>(seed % 5u);
+    return variant < parkFountainFrame ? variant : parkFountainFrame + (phase(cycle, seed) & 3);
 }
 }
 #endif

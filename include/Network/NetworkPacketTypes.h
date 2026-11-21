@@ -405,7 +405,10 @@
 //      game (population, treasury, crime, land value, pollution), [EVENTS] BreachN opens a
 //      mountain wall at its minute (BreachTrigger), and QuantBot plans for the goals of the
 //      house it serves. Older peers would end or simulate those maps differently. Save 9887.
-#define NETWORK_PROTOCOL_VERSION            130
+// 131: The Park structure (item 89; Num_ItemID 90, so the ObjectData hash changes): a 1x1
+//      city-mode park that adds park land-value terrain. Older peers cannot build, place or
+//      load it. Save 9888.
+#define NETWORK_PROTOCOL_VERSION            131
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

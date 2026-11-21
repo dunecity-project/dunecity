@@ -47,6 +47,7 @@ TEST_CASE("CityBuildLogic: city-only placement set covers every city item",
     REQUIRE(DuneCity::isCityOnlyStructure(Structure_PoliceStation));
     REQUIRE(DuneCity::isCityOnlyStructure(Structure_Stadium));
     REQUIRE(DuneCity::isCityOnlyStructure(Structure_Airport));
+    REQUIRE(DuneCity::isCityOnlyStructure(Structure_Park));
 
     REQUIRE_FALSE(DuneCity::isCityOnlyStructure(Structure_Slab1));
     REQUIRE_FALSE(DuneCity::isCityOnlyStructure(Structure_ConstructionYard));

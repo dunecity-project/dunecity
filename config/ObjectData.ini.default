@@ -513,6 +513,22 @@ Builder = Construction Yard
 TechLevel = 1
 Prerequisite = Windtrap
 
+[Park]
+# DuneCity city-mode-only. The Micropolis park tool (tool.cpp putDownPark,
+# gCostOf[TOOL_PARK] = 10): a 1x1 tile of woods or a fountain. Each park is one
+# +15 natural-terrain source on the land-value map, like the original's trees;
+# it raises the developed blocks around it and does not develop its own.
+# No power, no prerequisite, no concrete, no decay.
+Enabled = true
+HitPoints = 50
+Price = 10
+Power = 0
+ViewRange = 1
+BuildTime = 8
+InfSpawnProp = 0
+Builder = Construction Yard
+TechLevel = 1
+
 [Stadium]
 # DuneCity civic building. 3x3 footprint. Provides a large land-value
 # and quality-of-life boost to surrounding residential/commercial areas.

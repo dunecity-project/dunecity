@@ -67,6 +67,7 @@
 #include <structures/NuclearPlant.h>
 #include <structures/PoliceStation.h>
 #include <structures/Stadium.h>
+#include <structures/Park.h>
 #include <structures/Airport.h>
 #include <structures/WOR.h>
 #include <structures/ZoneStructure.h>
@@ -621,7 +622,7 @@ bool isAutonomousTargetVetoed(const ObjectBase& seeker, const ObjectBase& candid
 // 0 = normal, 1 = walls (slightly deprioritized), 2 = carryalls (heavily deprioritized)
 int getTargetDeprioritizationLevel(const ObjectBase& candidate) {
     if(isCarryallUnit(candidate.getItemID())) return 2;
-    if(candidate.getItemID() == Structure_Wall) return 1;
+    if(candidate.getItemID() == Structure_Wall || candidate.getItemID() == Structure_Park) return 1;
     return 0;
 }
 
@@ -937,8 +938,8 @@ const StructureBase* ObjectBase::findClosestTargetStructure() const {
             const auto closestPoint = pStructure->getClosestPoint(getLocation());
             auto structureDistance = blockDistance(getLocation(), closestPoint);
 
-            if(pStructure->getItemID() == Structure_Wall) {
-                structureDistance += 20000000; //so that walls are targeted very last
+            if(pStructure->getItemID() == Structure_Wall || pStructure->getItemID() == Structure_Park) {
+                structureDistance += 20000000; //so that walls (and parks) are targeted very last
             }
 
             if(structureDistance < closestDistance) {
@@ -1102,6 +1103,7 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario, 
         case Structure_ZoneCommercial:      newObject = new CommercialZone(Owner); break;
         case Structure_ZoneIndustrial:      newObject = new IndustrialZone(Owner); break;
         case Structure_Stadium:             newObject = new Stadium(Owner); break;
+        case Structure_Park:                newObject = new Park(Owner); break;
         case Structure_Airport:             newObject = new Airport(Owner); break;
 
         case Unit_Carryall:                 newObject = new Carryall(Owner); break;
@@ -1254,6 +1256,7 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
         case Structure_ZoneCommercial:      newObject = new CommercialZone(stream); break;
         case Structure_ZoneIndustrial:      newObject = new IndustrialZone(stream); break;
         case Structure_Stadium:             newObject = new Stadium(stream); break;
+        case Structure_Park:                newObject = new Park(stream); break;
         case Structure_Airport:             newObject = new Airport(stream); break;
 
         case Unit_Carryall:                 newObject = new Carryall(stream); break;

@@ -160,6 +160,7 @@ target_sources(dunelegacy_tests
         MapCatalogueTestCase.cpp
         CityTrafficPolicyTestCase.cpp
         CitySpritePolicyTestCase.cpp
+        ParkTestCase.cpp
         CityAircraftPolicyTestCase.cpp
         RendererSizeTestCase.cpp
         HotkeysTestCase.cpp
@@ -1488,7 +1489,7 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(skirmish_probe_fixture PROPERTIES TIMEOUT 600 PROCESSORS 2
             FIXTURES_SETUP skirmish_native_fixture)
         foreach(case IN ITEMS menu mp-lobby legacy-map vanilla-1v1 allied-2v3 city-192 stefan-128
-                partner-support partner-quantbot partner-fighter spectate render
+                partner-support partner-quantbot partner-fighter spectate render city-park
                 civ-menu civ-1v1 civ-2v2 civ-3v3 civ-research)
             set(sizes 1024x768)
             set(prefix skirmish_generator_probe)

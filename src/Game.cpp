@@ -5488,6 +5488,20 @@ bool Game::loadSaveGame(InputStream& stream) {
             for(int item = 0; item < Num_ItemID; ++item) objectData.data[item][HOUSE_NATIVES] = objectData.data[item][HOUSE_HARKONNEN];
         }
     }
+    if(objectData.getLoadedItemCount() <= Structure_Park) {
+        // A save from before the Park (9888) has no row for it. The Park takes the plain values of
+        // the active ObjectData.ini, as a new game would; every peer of a loaded multiplayer game
+        // runs the same mod, so they all read the same file. Without one it stays disabled. Older
+        // missing rows keep their established behaviour (disabled).
+        try {
+            auto fresh = std::make_unique<ObjectData>();
+            fresh->loadFromINIFile(ModManager::instance().getActiveObjectDataPath(), false);
+            for(int item = std::max<int>(objectData.getLoadedItemCount(), Structure_Park); item < Num_ItemID; ++item)
+                for(int house = 0; house < NUM_HOUSES; ++house) objectData.data[item][house] = fresh->data[item][house];
+        } catch(const std::exception& e) {
+            SDL_Log("Game::loadSaveGame(): no ObjectData.ini for items added after this save (%s); they stay disabled", e.what());
+        }
+    }
     if(savegameVersion >= SAVEGAMEVERSION_TORNIE546) {
         chaosMode.load(stream);
         if(chaosMode.isEnabled() != gameInitSettings.isChaosModeEnabled())

@@ -610,7 +610,8 @@ inline std::array<Uint32, 3> rankZones(int residential, int commercial, int indu
 // deploys is never queued, so it cannot be prepared in advance either.
 inline bool foundationExemptItem(Uint32 item) {
     return item == NONE_ID || item == Structure_Wall || item == Structure_Slab1
-        || item == Structure_Slab4 || item == Structure_Road || item == Structure_PowerLine;
+        || item == Structure_Slab4 || item == Structure_Road || item == Structure_PowerLine
+        || item == Structure_Park;
 }
 
 // BuilderBase::updateProductionProgress() multiplies build speed by the

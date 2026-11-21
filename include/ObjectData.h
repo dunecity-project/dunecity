@@ -95,6 +95,10 @@ public:
     */
     void load(InputStream& stream, int savedItemCount = 0, int savedHouseCount = NUM_HOUSES);
 
+    /// Item rows the last load() read from its stream (Num_ItemID when nothing was loaded).
+    /// Rows from there up to Num_ItemID were appended after that save was written.
+    int getLoadedItemCount() const { return loadedItemCount; }
+
     /**
         Logs all loaded object data to SDL log for debugging.
     */
@@ -143,6 +147,7 @@ public:
     int unitLimitHugeMap;            ///< Max units per house for huge maps (128x128 or larger)
 
 private:
+    int loadedItemCount = Num_ItemID; ///< runtime only, never saved
 
     int loadIntValue(const INIFile& objectDataFile, const std::string& section, const std::string& key, char houseChar, int defaultValue = 0);
     bool loadBoolValue(const INIFile& objectDataFile, const std::string& section, const std::string& key, char houseChar, bool defaultValue = false);

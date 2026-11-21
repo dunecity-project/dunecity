@@ -100,6 +100,11 @@ def build(raw_dir):
             frames.append((phase + 1, 0, composite(tiles, active_base, size, repl, target=48)))
         save(name, 9, 1, 48, frames, 1)
 
+    # Park (Micropolis tool.cpp putDownPark): WOODS2..WOODS5 (tiles 40-43), then the
+    # animated FOUNTAIN (840-843). One 16-pixel tile per frame, the 1x1 footprint.
+    frames = [(n, 0, tiles[tile]) for n, tile in enumerate([40, 41, 42, 43, 840, 841, 842, 843])]
+    save("park", 8, 1, 16, frames, 5)
+
     # Retain DuneCity's asphalt curbs, but preserve original vehicle pixels and
     # markings. The old recolour erased black cars and stamped a dot over them.
     frames = []

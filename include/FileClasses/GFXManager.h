@@ -170,6 +170,7 @@ typedef enum {
     ObjPic_TameSandworm,
     ObjPic_NapalmRocket,
     ObjPic_SlowRocket,
+    ObjPic_Park,           ///< DuneCity: Micropolis park tiles (WOODS2-5 + fountain, 1x1 footprint)
     NUM_OBJPICS
 } ObjPic_enum;
 
@@ -191,7 +192,7 @@ static const std::array<std::string, NUM_OBJPICS> ObjPicNames =  { { "Tank_Base"
     "CityHelicopter", "CityAirplane", "Doublefinery", "FlameQuad", "GasInfantry",
     "EliteOrnithopter", "RaiderQuad", "RangedTankBase", "RangedTankTurret", "SlowTankBase",
     "SlowTankTurret", "Slowpost", "CapacityHarvester", "FastHarvester", "TameSandworm",
-    "NapalmRocket", "SlowRocket" } };
+    "NapalmRocket", "SlowRocket", "Park" } };
 
 #define GROUNDUNIT_ROW(i) (i+2)|TILE_NORMAL,(i+1)|TILE_NORMAL,i|TILE_NORMAL,(i+1)|TILE_FLIPV,(i+2)|TILE_FLIPV,(i+3)|TILE_FLIPV, (i+4)|TILE_NORMAL,(i+3)|TILE_NORMAL
 #define AIRUNIT_ROW(i) (i+2)|TILE_NORMAL,(i+1)|TILE_NORMAL,i|TILE_NORMAL,(i+1)|TILE_FLIPV,(i+2)|TILE_FLIPV,(i+1)|TILE_ROTATE, i|TILE_FLIPH,(i+1)|TILE_FLIPH
@@ -285,6 +286,7 @@ typedef enum {
     Picture_CapacityHarvester,
     Picture_FastHarvester,
     Picture_Slowpost,
+    Picture_Park,                  ///< DuneCity: Micropolis park portrait (park atlas cells)
     NUM_SMALLDETAILPICS
 } SmallDetailPics_Enum;
 

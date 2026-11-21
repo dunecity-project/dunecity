@@ -358,6 +358,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardEconomyProject(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (botConfig().force.parkDistricts) {
+        // ParkDistricts (default off): a 10-credit Micropolis park where it raises our R/C land value.
+        chooseYardParkDistrict(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     // Duel plans spend the opening grant differently, after real power/air
     // emergencies but before optional city growth, imports and repair support.
     const int duelPlan = duelOpeningPlan();
@@ -3053,10 +3058,11 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     const bool fieldSite = yardTurn.structureRule
         && std::string_view(yardTurn.structureRule) == "spice_field_outpost"
         && (yardTurn.itemID == Structure_Refinery || yardTurn.itemID == Structure_GunTurret);
-    // TurretClusters / PalaceDistricts (default off) chose their sites (cluster Gun Turrets too).
+    // TurretClusters / PalaceDistricts / ParkDistricts (default off) chose their sites (cluster Gun Turrets too).
     const bool economySite = yardTurn.structureRule
         && (std::string_view(yardTurn.structureRule) == "turret_cluster"
-            || std::string_view(yardTurn.structureRule) == "palace_district");
+            || std::string_view(yardTurn.structureRule) == "palace_district"
+            || std::string_view(yardTurn.structureRule) == "park_district");
     if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite
         && !coreDefenceSite && !fieldSite && !economySite)
         yardTurn.crimeServiceSite = Coord::Invalid();

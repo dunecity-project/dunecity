@@ -18,6 +18,7 @@
  */
 
 #include <MapEditor/MapEditor.h>
+#include <dunecity/CitySpritePolicy.h>
 
 #include <MapEditor/MapGenerator.h>
 #include <MapEditor/MapMirror.h>
@@ -2121,6 +2122,7 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
                 case Structure_PoliceStation:       objectPic = ObjPic_PoliceStation;       break;
                 case Structure_Stadium:             objectPic = ObjPic_Stadium;             break;
                 case Structure_Airport:             objectPic = ObjPic_Airport;             break;
+                case Structure_Park:                objectPic = ObjPic_Park;                break;
                 case Structure_AdvancedWindTrap:    objectPic = ObjPic_AdvancedWindTrap;    break;
                 case Structure_AdvancedWindTrapMK2: objectPic = ObjPic_AdvancedWindTrap2x3; break;
                 case Structure_AdvancedWindTrapMK3: objectPic = ObjPic_AdvancedWindTrap3x2; break;
@@ -2153,6 +2155,7 @@ void MapEditor::drawMap(ScreenBorder* pScreenborder, bool bCompleteMap) {
             else if(structure.itemID == Structure_ZoneResidential
                  || structure.itemID == Structure_ZoneCommercial
                  || structure.itemID == Structure_ZoneIndustrial) frameIdx = 0;
+            else if(structure.itemID == Structure_Park) frameIdx = DuneCity::CitySprites::parkFrame(0, position.x, position.y);
             SDL_Rect source = { frameSize.x*frameIdx, 0, frameSize.x, frameSize.y };
             SDL_Rect dest = { pScreenborder->world2screenX(position.x*TILESIZE), pScreenborder->world2screenY(position.y*TILESIZE), frameSize.x, frameSize.y };
 

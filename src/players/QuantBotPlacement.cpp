@@ -647,6 +647,8 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool localRepair = itemID == Structure_RepairYard && repairCapacityDemandActive()
         && getHouse()->getNumItems(Structure_RepairYard) > 0 && !acceptedRepair;
     if (localRepair && !repairPlacementReady) return Coord::Invalid();
+    // ParkDistricts (default off): a Park is only ever placed where it raises our R/C land value.
+    if (itemID == Structure_Park) return findParkDistrictSite();
 	// Check per-build-cycle cache first
 	auto cacheIt = placementCache.find(itemID);
 	if (cacheIt != placementCache.end()) {
@@ -986,7 +988,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         shieldTiles.assign(static_cast<size_t>(mapW)*mapH, 0);
         for (const auto* structure : getStructureList()) {
             if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
-                || structure->getItemID() == Structure_Wall) continue;
+                || structure->getItemID() == Structure_Wall || structure->getItemID() == Structure_Park) continue;
             const Coord at = structure->getLocation(), size = structure->getStructureSize();
             frontDepth = std::max(frontDepth, int64_t(2*at.x + size.x - 2*baseCenter.x)*threatDX
                 + int64_t(2*at.y + size.y - 2*baseCenter.y)*threatDY);

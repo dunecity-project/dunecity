@@ -338,6 +338,7 @@ void CitySimulation::runEffectsScans() {
     std::vector<int> buildingOwnerAt(micropolisLandValue ? static_cast<size_t>(mapWidth_) * mapHeight_ : 0, kNoBuilding);
     if (micropolisLandValue)
         placedBuildings([&](int x, int y, const StructureBase* building) {
+            if (!developsLandValueBlock(building->getItemID())) return;
             const Coord size = building->getStructureSize();
             const int owner = building->getOwner() ? building->getOwner()->getHouseID() : -1;
             for (int ty = y; ty < std::min(mapHeight_, y + size.y); ++ty)
@@ -476,7 +477,7 @@ void CitySimulation::runEffectsScans() {
         // building (roads only) keeps the centroid of its developed blocks.
         std::vector<long long> zoneX(sumX.size(), 0), zoneY(sumX.size(), 0), zones(sumX.size(), 0);
         placedBuildings([&](int x, int y, const StructureBase* building) {
-            if (building->getItemID() == Structure_Wall) return;
+            if (building->getItemID() == Structure_Wall || building->getItemID() == Structure_Park) return;
             const Coord size = building->getStructureSize();
             const int cx = std::min(mapWidth_ - 1, x + size.x / 2), cy = std::min(mapHeight_ - 1, y + size.y / 2);
             const int cid = clusterId[(cy / bs) * blocksW + cx / bs];
@@ -832,7 +833,7 @@ void CitySimulation::runEffectsScans() {
         int sampleCount[kMaxCityHouses] = {};
         forEachStructureOrigin(map, [&](int x, int y, const StructureBase* pStruct) {
             const House* owner = pStruct->getOwner();
-            if (!owner) return;
+            if (!owner || !developsLandValueBlock(pStruct->getItemID())) return; // parks are not property
             const int hID = owner->getHouseID();
             if (hID < 0 || hID >= kMaxCityHouses) return;
             const int lv = landValueMap_.get(x / bsLv, y / bsLv);

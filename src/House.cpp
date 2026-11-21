@@ -507,7 +507,8 @@ bool House::isAlive() const {
     const int fightingUnits = numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall]
         - getNumHarvesters() - numItem[Unit_Frigate] - numItem[Unit_Sandworm]
         - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter];
-    return teamID == 0 || isNatives() || numStructures - numItem[Structure_Wall] > 0 || fightingUnits > 0;
+    // Walls and parks alone do not keep a house in the game.
+    return teamID == 0 || isNatives() || numStructures - numItem[Structure_Wall] - numItem[Structure_Park] > 0 || fightingUnits > 0;
 }
 
 bool House::isGroundUnitLimitReached() const {
@@ -1665,7 +1666,8 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
             // auto-tiled road overlay doesn't render under the building
             // art. Players can still place buildings on top of these
             // auto-roads later (road is a tile flag, not a StructureBase).
-            if (currentGame && currentGame->isCitySimEnabled() && itemID != Structure_Wall) {
+            // A Micropolis park is laid on bare ground with no road frontage.
+            if (currentGame && currentGame->isCitySimEnabled() && itemID != Structure_Wall && itemID != Structure_Park) {
                 const int sx = newStructure->getStructureSizeX();
                 const int sy = newStructure->getStructureSizeY();
                 for (int dy = 0; dy < sy; ++dy) {
@@ -1691,7 +1693,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 }
             }
 
-            if ((builderID != NONE_ID) && (itemID != Structure_Wall)) {
+            if ((builderID != NONE_ID) && (itemID != Structure_Wall) && (itemID != Structure_Park)) {
                 newStructure->setJustPlaced();
             }
 

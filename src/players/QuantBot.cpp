@@ -869,7 +869,8 @@ void QuantBot::onObjectWasBuilt(const ObjectBase* pObject) {
 
 void QuantBot::onDecrementStructures(int itemID, const Coord& location) {
     if (currentGame
-            && itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall)
+            && itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall
+            && itemID != Structure_Park)
         recentStructureLosses.push_back({location, getStructureSize(itemID), getGameCycleCount(), static_cast<Uint32>(itemID)});
     if (itemID == Structure_RocketTurret) ++forceStats.turretsLost;
     dangerUpdated = std::numeric_limits<Uint32>::max();

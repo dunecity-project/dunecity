@@ -97,6 +97,31 @@ shared with fixed-price research, and can be set in Game Rules, defaults or mod 
 Frozen 9882/MOD17 carries no scenery byte; its retired research-area field is consumed
 and ignored rather than changing its layout in place.
 
+### Parks (structure `Park`, item 89; save 9888, protocol 131)
+
+The Micropolis park tool, built from the Construction Yard in city mode only: a 1x1 structure
+for **10 credits** (`gCostOf[TOOL_PARK]` in `tool.cpp`), no power, no prerequisite, build time
+8, 50 hit points. Its art is the original park tiles (`putDownPark`): one of the four woods
+tiles WOODS2-WOODS5 or, one park in five, the animated fountain, chosen from the site so the
+choice draws no random number and survives save/load (`CitySprites::parkFrame`).
+
+In Micropolis a wooded park tile lies below RUBBLE, so the land-value scan counts it as natural
+terrain (+15 before the one-pass terrain smooth) and does not count it as development: a block
+holding only park stays at zero and never enters the city's average. DuneCity does the same:
+a Park is one **+15 park-terrain source** on the grid walls, turrets and mountains already use
+(`usesParkTerrain`), worth about **+7 land value on every tile of its 3x3 terrain block and +1
+on the four neighbouring blocks**; parks in one block stack. A Park does not develop its own
+block, does not count in its owner's land-value average or environment samples, and does not
+move the city centre (`developsLandValueBlock`). Unlike the original's fountain variant (which
+counts as development and adds no terrain), every DuneCity park variant gives the same bonus.
+
+Like a wall it needs no concrete and does not decay, gets no auto-paved road ring, is targeted
+last and never keeps a house alive on its own. Older saves have no Park row in their object
+table; on load it takes the active mod's `ObjectData.ini` values, as a new game would. Mods
+with their own `ObjectData.ini` (Tornie, the community presets) have no `[Park]` section, so
+the Park stays disabled there until one is added. QuantBot builds parks only with the default-off
+`ParkDistricts` switch (docs/formations.md, "Parks in the districts").
+
 ### Unpowered zones (match rule `Unpowered Zones Vacate`, default on; MOD18, protocol 112)
 
 R/C/I lots use their owner's produced/required power, with positive generation required even

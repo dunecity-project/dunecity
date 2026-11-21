@@ -66,7 +66,7 @@ bool usesSharedCityAtlas(unsigned int id) {
     return id == ObjPic_ZoneResidential || id == ObjPic_ZoneCommercial
         || id == ObjPic_ZoneIndustrial || id == ObjPic_CityRoad
         || id == ObjPic_Stadium || id == ObjPic_Airport || id == ObjPic_NuclearPlant
-        || id == ObjPic_CityHelicopter || id == ObjPic_CityAirplane;
+        || id == ObjPic_CityHelicopter || id == ObjPic_CityAirplane || id == ObjPic_Park;
 }
 
 constexpr int kEnhancedDirectionCount = 8;
@@ -276,6 +276,7 @@ static const Coord objPicTiles[] {
     { 1, 9 },   // ObjPic_TameSandworm
     { 16, 1 },  // ObjPic_NapalmRocket
     { 16, 1 },  // ObjPic_SlowRocket
+    { DuneCity::CitySprites::parkFrames, 1 }, // ObjPic_Park (WOODS2-5, fountain x4)
 };
 static_assert(sizeof(objPicTiles) / sizeof(objPicTiles[0]) == NUM_OBJPICS,
               "objPicTiles must have one entry per ObjPic enum value");
@@ -491,6 +492,7 @@ GFXManager::GFXManager() {
             {ObjPic_Stadium, "stadium", 3 * D2_TILESIZE},
             {ObjPic_Airport, "airport", 3 * D2_TILESIZE},
             {ObjPic_NuclearPlant, "nuclear", 3 * D2_TILESIZE},
+            {ObjPic_Park, "park", D2_TILESIZE},
         };
         for (const auto& spec : cityAtlases) {
             sdl2::surface_ptr atlas;
@@ -2050,10 +2052,7 @@ GFXManager::GFXManager() {
     // Nuclear plant, police, stadium, airport build-menu icons — pull
     // first frame from their Micropolis atlases so they're recognizable.
     {
-        auto makeStructDetailPic = [&](int objPicID, int frameW, int frameH) -> sdl2::texture_ptr {
-            SDL_Surface* src = objPic[objPicID][HOUSE_HARKONNEN][0].get();
-            if (!src) return sdl2::texture_ptr{};
-            sdl2::surface_ptr cell = getSubPicture(src, 0, 0, frameW, frameH);
+        auto makeDetailPicFromCell = [&](sdl2::surface_ptr cell, int frameW, int frameH) -> sdl2::texture_ptr {
             if (!cell) return sdl2::texture_ptr{};
             sdl2::surface_ptr canvas{ SDL_CreateRGBSurface(0, 91, 55,
                 SCREEN_BPP, RMASK, GMASK, BMASK, AMASK) };
@@ -2076,6 +2075,11 @@ GFXManager::GFXManager() {
             if (tex) SDL_SetTextureBlendMode(tex.get(), SDL_BLENDMODE_BLEND);
             return tex;
         };
+        auto makeStructDetailPic = [&](int objPicID, int frameW, int frameH) -> sdl2::texture_ptr {
+            SDL_Surface* src = objPic[objPicID][HOUSE_HARKONNEN][0].get();
+            if (!src) return sdl2::texture_ptr{};
+            return makeDetailPicFromCell(getSubPicture(src, 0, 0, frameW, frameH), frameW, frameH);
+        };
         auto nucTex = makeStructDetailPic(ObjPic_NuclearPlant, 3 * D2_TILESIZE, 3 * D2_TILESIZE);
         if (nucTex) smallDetailPicTex[Picture_NuclearPlant] = std::move(nucTex);
         else        smallDetailPicTex[Picture_NuclearPlant] = extractSmallDetailPic("HTEC.WSA");
@@ -2091,6 +2095,24 @@ GFXManager::GFXManager() {
         auto airTex = makeStructDetailPic(ObjPic_Airport, 3 * D2_TILESIZE, 3 * D2_TILESIZE);
         if (airTex) smallDetailPicTex[Picture_Airport] = std::move(airTex);
         else        smallDetailPicTex[Picture_Airport] = extractSmallDetailPic("STARPORT.WSA");
+
+        // Park: a 3x2 patch of its own atlas cells (four woods, two fountains), as a player's
+        // row of Micropolis park tiles would look, rather than one 16-pixel tile.
+        if (SDL_Surface* parkAtlas = objPic[ObjPic_Park][HOUSE_HARKONNEN][0].get()) {
+            sdl2::surface_ptr patch{ SDL_CreateRGBSurface(0, 3 * D2_TILESIZE, 2 * D2_TILESIZE,
+                SCREEN_BPP, RMASK, GMASK, BMASK, AMASK) };
+            if (patch) {
+                static constexpr int cells[6] = {0, 1, DuneCity::CitySprites::parkFountainFrame, 2, 3, 1};
+                SDL_SetSurfaceBlendMode(parkAtlas, SDL_BLENDMODE_NONE);
+                for (int n = 0; n < 6; ++n) {
+                    SDL_Rect from{cells[n] * D2_TILESIZE, 0, D2_TILESIZE, D2_TILESIZE};
+                    SDL_Rect to{(n % 3) * D2_TILESIZE, (n / 3) * D2_TILESIZE, D2_TILESIZE, D2_TILESIZE};
+                    SDL_BlitSurface(parkAtlas, &from, patch.get(), &to);
+                }
+                smallDetailPicTex[Picture_Park] = makeDetailPicFromCell(std::move(patch), 3 * D2_TILESIZE, 2 * D2_TILESIZE);
+            }
+        }
+        if (!smallDetailPicTex[Picture_Park]) smallDetailPicTex[Picture_Park] = extractSmallDetailPic("SLAB.WSA");
 
         smallDetailPicTex[Picture_Hospital] = makeStructDetailPic(ObjPic_Hospital, 2 * D2_TILESIZE, 2 * D2_TILESIZE);
         smallDetailPicTex[Picture_Church] = makeStructDetailPic(ObjPic_Church, 2 * D2_TILESIZE, 2 * D2_TILESIZE);

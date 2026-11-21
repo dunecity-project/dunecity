@@ -302,6 +302,7 @@ target_sources(dunecity
         players/QuantBotBuildProducers.cpp
         players/QuantBotBuildYard.cpp
         players/QuantBotPlacement.cpp
+        players/QuantBotParks.cpp
         players/QuantBotArmy.cpp
         players/QuantBotBlob.cpp
         players/QuantBotForce.cpp
@@ -356,6 +357,7 @@ target_sources(dunecity
         structures/NuclearPlant.cpp
         structures/PoliceStation.cpp
         structures/Stadium.cpp
+        structures/Park.cpp
         structures/Airport.cpp
         structures/ZoneStructure.cpp
 

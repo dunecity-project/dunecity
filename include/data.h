@@ -173,7 +173,8 @@ typedef enum {
     Unit_FastHarvester = 86,
     Unit_TameSandworm = 87,
     Structure_ResearchLab = 88,        ///< Optional per-house technology research, all content families.
-    ItemID_LastID = 88,
+    Structure_Park = 89,               ///< DuneCity: 1x1 Micropolis park (10 credits, park land-value terrain; save 9888)
+    ItemID_LastID = 89,
 
     Num_ItemID
 } ItemID_enum;
@@ -233,7 +234,7 @@ inline bool isUnit(int itemID) { return (itemID >= Unit_FirstID && itemID <= Uni
     \param itemID   the ID of the item (e.g. Structure_ConstructionYard)
     \return true if it is a structure, false otherwise
 */
-inline bool isStructure(int itemID) { return (itemID >= Structure_FirstID && itemID <= Structure_LastID) || (itemID >= Structure_Stadium && itemID <= Structure_ExtLastID) || (itemID >= Structure_AdvancedWindTrap && itemID <= Structure_AdvancedWindTrapMK2) || itemID == Structure_TechCenter || itemID == Structure_AdvancedWindTrapMK3 || itemID == Structure_Scoutpost || itemID == Structure_LoveFactory || itemID == Structure_Flamepost || itemID == Structure_ChaosFactory || itemID == Structure_Chemipost || itemID == Structure_Doublefinery || itemID == Structure_Slowpost || itemID == Structure_ResearchLab; }
+inline bool isStructure(int itemID) { return (itemID >= Structure_FirstID && itemID <= Structure_LastID) || (itemID >= Structure_Stadium && itemID <= Structure_ExtLastID) || (itemID >= Structure_AdvancedWindTrap && itemID <= Structure_AdvancedWindTrapMK2) || itemID == Structure_TechCenter || itemID == Structure_AdvancedWindTrapMK3 || itemID == Structure_Scoutpost || itemID == Structure_LoveFactory || itemID == Structure_Flamepost || itemID == Structure_ChaosFactory || itemID == Structure_Chemipost || itemID == Structure_Doublefinery || itemID == Structure_Slowpost || itemID == Structure_ResearchLab || itemID == Structure_Park; }
 
 /**
     This function determines if the specified itemID is a DuneCity zone structure.

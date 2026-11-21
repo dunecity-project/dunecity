@@ -213,7 +213,12 @@
 // 9885: QuantBot persists sustained, serviceable repair-capacity pressure.
 // 9887: Game saves the authored mission objectives ([OBJECTIVES]) after the win/lose flags, and
 //       triggers may be the new BreachTrigger (type 3, [EVENTS] BreachN).
-#define SAVEGAMEVERSION     9887
+// 9888: The Park structure (Structure_Park, item 89): the ObjectData table and every per-item
+//       house table hold 90 items, and a Park object may follow. No field changes: an older save
+//       stores 89 rows and its Park row takes the active ObjectData.ini (Game::loadSaveGame).
+#define SAVEGAMEVERSION     9888
+/// First save that may hold Park objects (item 89; Num_ItemID 90).
+#define SAVEGAMEVERSION_PARK 9888
 /// First save with MissionObjectives and BreachTrigger.
 #define SAVEGAMEVERSION_MISSION_OBJECTIVES 9887
 /// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).

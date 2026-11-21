@@ -391,6 +391,7 @@ void ObjectData::load(InputStream& stream, int savedItemCount, int savedHouseCou
     // and we're loading that save in an older build, skip the extras.
     int itemsToLoad = (savedItemCount <= Num_ItemID) ? savedItemCount : Num_ItemID;
     int itemsToSkip = (savedItemCount > Num_ItemID) ? (savedItemCount - Num_ItemID) : 0;
+    loadedItemCount = itemsToLoad;
 
     for(int i=0;i<itemsToLoad;i++) {
         for(int h=0;h<savedHouseCount;h++) {

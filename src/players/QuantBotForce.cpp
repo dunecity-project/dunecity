@@ -57,7 +57,7 @@ Force::TargetKey targetKeyOf(const ObjectBase* object) {
     key.id = object->getObjectID();
     key.health = object->getHealth().lround();
     if (object->isAStructure()) {
-        key.cls = object->getItemID() == Structure_Wall ? Force::Wall
+        key.cls = object->getItemID() == Structure_Wall || object->getItemID() == Structure_Park ? Force::Wall
             : object->canAttack() ? Force::ArmedBuilding : Force::Building;
     } else {
         key.cls = object->canAttack() && mobileCombatItem(object->getItemID()) ? Force::ArmedUnit : Force::Unarmed;
@@ -362,6 +362,7 @@ const QuantBot::CityBoomSurvey& QuantBot::cityBoomSurvey() const {
         if (structure->getOwner() != getHouse() || structure->getHealth() <= 0 || !structure->isActive()) continue;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+            case Structure_Park:
                 continue;
             default: break;
         }
@@ -415,6 +416,7 @@ const QuantBot::CityBoomSurvey& QuantBot::cityBoomSurvey() const {
             || !enemy[structure->getOwner()->getHouseID()] || structure->getHealth() <= 0 || !structure->isActive()) continue;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+            case Structure_Park:
                 continue;
             default: break;
         }
@@ -544,7 +546,7 @@ void QuantBot::vanillaReactiveSurvey(QuantBotVanillaPolicy::Observation& receipt
         if (!structure->getOwner() || structure->getHealth() <= 0) return false;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
-            case Structure_Road: case Structure_PowerLine: return false;
+            case Structure_Road: case Structure_PowerLine: case Structure_Park: return false;
             default: return true;
         }
     };
@@ -776,7 +778,7 @@ const ObjectBase* QuantBot::vultureObjective(const UnitBase* lead, int team) con
             || structure->getHealth() <= 0) continue;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
-            case Structure_Road: case Structure_PowerLine: continue;
+            case Structure_Road: case Structure_PowerLine: case Structure_Park: continue;
             default: break;
         }
         int score = tiles(lead->getLocation(), structure->getLocation());
@@ -1546,6 +1548,7 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
         || structure->getHealth() <= 0) return false;
     switch (structure->getItemID()) {
         case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+        case Structure_Park:
             return false;
         default: break;
     }

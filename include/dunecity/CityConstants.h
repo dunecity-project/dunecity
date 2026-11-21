@@ -47,7 +47,8 @@ inline bool isCityOnlyStructure(int itemID) {
         || itemID == Structure_NuclearPlant
         || itemID == Structure_PoliceStation
         || itemID == Structure_Stadium
-        || itemID == Structure_Airport;
+        || itemID == Structure_Airport
+        || itemID == Structure_Park;
 }
 
 /// Displayed city population a house needs to start a Starport (match rule `Starport Population`).

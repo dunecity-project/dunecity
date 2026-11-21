@@ -31,6 +31,11 @@
 #include <GUI/ObjectInterfaces/ResearchLabInterface.h>
 #include <dunecity/CityConstants.h>
 #include <dunecity/CityEffects.h>
+#include <dunecity/CitySpritePolicy.h>
+#include <structures/ConstructionYard.h>
+#include <players/ParkDistrictPolicy.h>
+#include <players/QuantBotConfig.h>
+#include <Command.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/IMemoryStream.h>
@@ -40,10 +45,12 @@
 #include <misc/string_util.h>
 #include <sand.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <deque>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 
 void startCivWarsProbeGame(const GameInitSettings& init);
@@ -117,6 +124,11 @@ Params caseParams(const std::string& name) {
         p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "vanilla"; p.mode = Mode::Vanilla;
         p.playerSide = Side{"qBotFighterMedium", BaseSize::Medium, 3, 0};
         p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 0};
+    } else if(name == "city-park") {
+        // The player's own Medium base and 5,000-people city beside one QuantBot (park-probe.inc).
+        p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "dunecity"; p.mode = Mode::DuneCity;
+        p.playerSide = Side{"", BaseSize::Medium, 3, 2};
+        p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 3};
     } else {
         skirmishRequire(false, "Unknown probe case " + name);
     }
@@ -869,6 +881,7 @@ void runMultiplayerLobby() {
 }
 
 #include "civ-wars-probe.inc"
+#include "park-probe.inc"
 
 }
 
@@ -888,6 +901,7 @@ int runSkirmishProbe() {
     else if(kind == "civ-menu") runCivMenu();
     else if(kind == "civ-research") runCivResearch();
     else if(kind == "civ-1v1" || kind == "civ-2v2" || kind == "civ-3v3") runCivMatch(kind);
+    else if(kind == "city-park") ParkProbe::runParkProbe();
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);
     SDL_Log("SKIRMISH_PROBE_PASS: %s", kind.c_str());
     return MENU_QUIT_DEFAULT;

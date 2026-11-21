@@ -55,6 +55,7 @@ namespace DuneCity {
 //   Gun Turret        -> Park bonus + 15% Police
 //   Rocket Turret     -> one park terrain source, 15% police coverage
 //   Wall               -> Park bonus only
+//   Park               -> Micropolis park: park terrain only (does not develop its block)
 //   Sand (terrain)     -> Water (land-value bonus)
 //   Mountain (terrain) -> Forest (Micropolis terrain bonus, Mountain Scenery rule)
 // =============================================================================
@@ -305,14 +306,23 @@ inline FixPoint getPoliceAnnualCost(int itemID) {
     }
 }
 
-// --- Park-style land-value bonus (Wall / Turrets) ----------------------------
+// --- Park-style land-value bonus (Park / Wall / Turrets) ---------------------
 
 inline bool usesParkTerrain(int itemID) {
-    return itemID == Structure_Wall || itemID == Structure_GunTurret || itemID == Structure_RocketTurret;
+    return itemID == Structure_Park || itemID == Structure_Wall || itemID == Structure_GunTurret
+        || itemID == Structure_RocketTurret;
+}
+
+/// Micropolis's wooded park tiles lie below RUBBLE: they add terrain but do not develop their
+/// land-value block (only tiles from ROADBASE up do), so a park alone earns no land value and
+/// never enters a house's average; it raises the developed blocks around it.
+inline bool developsLandValueBlock(int itemID) {
+    return itemID != Structure_Park;
 }
 
 inline int getParkLandValueBonus(int itemID) {
     switch (itemID) {
+        case Structure_Park:            return kParkLandValueBonus; // Micropolis woods: +15 terrain
         case Structure_Wall:            return kParkLandValueBonus;
         case Structure_GunTurret:       return kParkLandValueBonus; // one park source
         case Structure_RocketTurret:    return kParkLandValueBonus;

@@ -84,6 +84,7 @@ SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
         case Structure_NuclearPlant:        newPicID = Picture_NuclearPlant;        break;
         case Structure_PoliceStation:       newPicID = Picture_PoliceStation;       break;
         case Structure_Stadium:            newPicID = Picture_Stadium;             break;
+        case Structure_Park:               newPicID = Picture_Park;                break;
         case Structure_Airport:            newPicID = Picture_Airport;             break;
         case Structure_AdvancedWindTrap:   newPicID = Picture_AdvancedWindTrap;    break;
         case Structure_AdvancedWindTrapMK2:newPicID = Picture_AdvancedWindTrap;    break;
@@ -267,6 +268,7 @@ Coord getStructureSize(int itemID) {
         case Structure_Road:                return Coord(1,1); break;
         case Structure_PowerLine:           return Coord(1,1); break;
         case Structure_Stadium:             return Coord(3,3); break;
+        case Structure_Park:                return Coord(1,1); break;
         case Structure_Airport:             return Coord(3,3); break;
         case Structure_AdvancedWindTrap:    return Coord(3,3); break;
         case Structure_AdvancedWindTrapMK2: return Coord(2,3); break;
@@ -321,6 +323,7 @@ Uint32  getItemIDByName(const std::string& name) {
     else if(lowerName == "road")                                                   return Structure_Road;
     else if((lowerName == "power line") || (lowerName == "powerline"))              return Structure_PowerLine;
     else if(lowerName == "stadium")                                                return Structure_Stadium;
+    else if(lowerName == "park")                                                   return Structure_Park;
     else if(lowerName == "airport")                                                return Structure_Airport;
     else if((lowerName == "advanced windtrap") || (lowerName == "advanced wind trap") || (lowerName == "advanced windtrap 3x3") || (lowerName == "advanced wind trap 3x3")) return Structure_AdvancedWindTrap;
     else if((lowerName == "advanced windtrap mk2") || (lowerName == "advanced wind trap mk2") || (lowerName == "advanced windtrap 2x3") || (lowerName == "advanced wind trap 2x3")) return Structure_AdvancedWindTrapMK2;
@@ -422,6 +425,7 @@ std::string getItemNameByID(Uint32 itemID) {
         case Structure_Road:                return "Road";              break;
         case Structure_PowerLine:           return "Power Line";        break;
         case Structure_Stadium:             return "Stadium";           break;
+        case Structure_Park:                return "Park";              break;
         case Structure_Airport:             return "Airport";           break;
         case Structure_AdvancedWindTrap:    return "Advanced Windtrap 3x3"; break;
         case Structure_AdvancedWindTrapMK2: return "Advanced Windtrap 2x3"; break;
@@ -525,6 +529,7 @@ std::string resolveItemName(int itemID) {
         case Structure_Road:                return _("Road");                              break;
         case Structure_PowerLine:           return _("Power Line");                        break;
         case Structure_Stadium:             return _("Stadium");                           break;
+        case Structure_Park:                return _("Park");                              break;
         case Structure_Airport:             return _("Airport");                           break;
         case Structure_AdvancedWindTrap:    return _("Advanced Windtrap");                 break;
         case Structure_AdvancedWindTrapMK2: return _("Advanced Windtrap");                 break;

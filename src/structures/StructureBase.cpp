@@ -238,7 +238,7 @@ void StructureBase::assignToMap(const Coord& pos) {
                 if(!preparedFoundation && currentGame->getGameInitSettings().getGameOptions().concreteRequired && (currentGame->gameState != GameState::Start)) {
                     bFoundNonConcreteTile = true;
 
-                    if((itemID != Structure_Wall) && (itemID != Structure_ConstructionYard)) {
+                    if((itemID != Structure_Wall) && (itemID != Structure_ConstructionYard) && (itemID != Structure_Park)) {
                         setHealth(getHealth() - FixPoint(getMaxHealth())/(2*structureSize.x*structureSize.y));
                     }
                 }
@@ -685,8 +685,8 @@ void StructureBase::setJustPlaced() {
 void StructureBase::updateDegradation() {
     namespace Decay = DuneCity::Degradation;
 
-    // Dynasty excludes walls (and slabs, which are tiles here) from both loops.
-    if(itemID == Structure_Wall) return;
+    // Dynasty excludes walls (and slabs, which are tiles here) from both loops; parks follow walls.
+    if(itemID == Structure_Wall || itemID == Structure_Park) return;
 
     // Foundation decay is independent of power. Dynasty checks the half-health
     // threshold before applying the full house amount, so the final hit can
