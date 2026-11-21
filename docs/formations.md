@@ -1685,6 +1685,83 @@ long no-spice lobby: the first change that wins games there) and costs a weaker 
 v1's limits remain the best for the weak seat. The open design question is when to spend liberally
 (e.g. only from cash above a reserve, not ahead of units).
 
+### Spare cash and landmark anchoring (economy v5, `LandmarkAnchoring`, 2026-11-21, default off)
+
+**v5** (`fa2793f30`) answers the open question above. The core projects keep v1's priority, funded
+ahead of units: a reactor from 10 Wind Traps, and one Palace per 30 R+C lots (at most 4, 12 lots per
+site). Everything beyond them is bought only from cash `kSpareCashReserve` (2,000) above its price, and
+never saved for. That covers more Palaces (8-lot districts), the one Stadium, Stadium districts before
+Palaces, and a reactor below 10 Wind Traps.
+
+**LandmarkAnchoring** comes from a human builder's game on the MacBook Air (1v1, 160x160 DuneCity,
+tech 9, against QuantBot Brutal). It was decoded from `replay/auto.rpl`; the recipe is in
+`outputs/ai-nobuildup-20261121/builder-game/`. The first Stadium went down at minute 6 with no lot near
+it, and 37 R/C lots then filled its 8-tile reach. The second landmark had 16 lots before it and 28
+after, the Palace 31 and 13. No industrial lot was within 8 tiles of a landmark, and 72% of all 149
+lots ended in a landmark's reach. Power was nuclear only from minute 3. At city year 10 the human's land
+value was 116 against the AI's 67, and its tax was four times the AI's. With the switch on:
+
+- an R/C lot inside an own (or reserved) Palace or Stadium's reach scores `kLandmarkLotBonus` (+60),
+  and an industrial lot -60;
+- a landmark site counts free buildable tiles in its reach (inside build range, outside other
+  landmarks) as room, one lot per 6 tiles, alongside the lots already there;
+- the first landmark is planned once the house has 4 R+C lots.
+
+Local check games (Brutal v Hard and weak seat, 60 min, 4 seats per arm): every anchored site counted
+room (up to 17 lots), and 48% of R/C lots ended in reach against 44% without anchoring.
+
+Screen: seat-only on the same game ids as v1-v4 (`economy/v5cmp.py`, `v5econ.md`), 800 games per arm.
+
+| Set (games) | v5 vs control | v5 + anchoring vs control | anchoring vs v5 | v5 + anchoring vs v4 | v5 + anchoring vs v1 |
+|---|---|---|---|---|---|
+| handmade DuneCity (260) | +0.040 | **+0.083** | +0.042 | **+0.064** | **+0.073** |
+| Brutal v Hard mix (204) | **+0.073** | **+0.081** | +0.008 | -0.004 | -0.018 |
+| weak seat 128 (144) | +0.063 | +0.056 | -0.007 | +0.023 | -0.097 [-0.201, +0.004] |
+| weak seat 160 (72) | +0.082 | **+0.160** | +0.078 | +0.122 | +0.028 |
+| weak seat tech 5 (48) | -0.083 | -0.083 [-0.264, +0.083] | 0 | +0.125 | - |
+| Stefan's lobby 120 / 240 min (24 / 48) | +0.083 / **+0.109** | +0.149 / **+0.137** | +0.066 / +0.028 | 0 / -0.052 | +0.122 / - |
+| all | **+0.054 [+0.018, +0.091]** | **+0.080 [+0.041, +0.119]** | +0.025 [-0.005, +0.056] | **+0.039 [+0.002, +0.076]** | +0.009 [-0.029, +0.047] (704) |
+
+For reference on the same 800 ids, v4 against control is +0.041 [-0.001, +0.083]. On the 704 ids
+without tech 5 and the 240-minute lobby, v1 against control is +0.078 [+0.036, +0.120].
+
+The economy (difference from control, all six sets; bold = interval excludes 0):
+
+| | control | v1 | v4 | v5 | v5 + anchoring |
+|---|---|---|---|---|---|
+| tax at minute 60 | 11,125 | **+2,380** | **+2,387** | **+3,029** | **+3,249** |
+| tax at the end | 12,108 | **+2,365** | **+2,659** | **+3,359** | **+3,724** (+31%) |
+| population at minute 60 | 47,736 | **+7,324** | **+5,009** | **+8,945** | **+8,687** |
+| mean army | 12.5k | **+1.6k** | **+1.4k** | **+1.4k** | **+1.6k** |
+| enemy value killed, lobby 120 | 211.7k | -2.4k | **+79.3k** | **+38.7k** | **+60.0k** |
+
+**Reading.** Spare-cash extras keep most of v4's lobby gain and none of its weak-seat cost against
+control. Anchoring adds tax on top, and v5 + anchoring is the best version against control on these
+800 games. It is level with v1 overall; the one soft spot is the weak seat at 128x128 against v1
+(-0.097, interval just reaching 0). In the 240-minute lobby v4 still wins most often.
+
+**Confirmation** (pre-registered before any fresh result: v5 + anchoring against control, and against
+v1; fresh games only; all arms on source `95b6752d2`; `economy/confirm5.py`, `confirm5.md`), 452 games
+per arm: handmade DuneCity on 20 new seeds (40801 + 1009i) and the Brutal v Hard DuneCity ladder on
+seeds 49-96.
+
+| Set (games) | v5 + anchoring vs control | v5 + anchoring vs v1 | v1 vs control |
+|---|---|---|---|
+| handmade DuneCity (260) | **+0.131 [+0.062, +0.202]** | +0.007 | **+0.124** |
+| Brutal v Hard ladder 128/160 (192) | +0.059 [-0.018, +0.138] | +0.018 | +0.040 |
+| all (452) | **+0.100 [+0.049, +0.154]** | +0.012 [-0.030, +0.054] | **+0.088 [+0.040, +0.139]** |
+| seat won / eliminated (control 242 / 109) | 277 / 97 | (v1 273 / 101) | 273 / 101 |
+
+On the same fresh games, v5 + anchoring adds **+2,829 tax at the end** (+22%), **+6,768 population at
+minute 60** and **+1.8k mean army** over control; v1 adds +2,448, +5,710 and +1.7k. The differences
+from v1 (+381 tax, +1,058 population) are not significant.
+
+**Decision.** v5 + anchoring is confirmed on fresh games as the strongest economy package so far: as
+strong as v1 where v1 is strongest, with the most tax, and the only version that also wins Stefan's
+lobby against control (+0.137 at 240 minutes). It stays default off. A default needs the
+Fortress/Brutal/`/weak` checks (tech-5 weak seat -0.083 [-0.264, +0.083] in the screen) and the four
+mandatory AI gates; MassHold, part of the package, also acts outside the city simulation.
+
 ### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
 
 Stefan suggested introducing parks from the original Micropolis. The Park structure (item 89, save 9888,
