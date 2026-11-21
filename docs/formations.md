@@ -1518,6 +1518,59 @@ map sets. It stays default off; a default change for the behaviour alone would b
 placement rule does not make, and would still need the Fortress/Brutal/`/weak` checks and the four
 mandatory AI gates.
 
+### Counter-punch, leader raids and ganging up (`CounterPunch`, `LeaderRaid`, `GangUpLeader`, 2026-11-21, default off)
+
+Stefan: the held mass should become "a counter offensive with momentum"; "try different maps, not
+just that map". A weak house cannot beat the leader's army head-on, so these three choose the
+moment or the target (code: `QuantBot::directedWave()` in `QuantBotForce.cpp`, hooks in `attack()` and
+`launchGroundHunt()`; constants in `ForceConcentrationPolicy.h`; derived each attack check from live
+state and the saved wave/defence state, nothing new saved; `directed_wave` trace):
+
+- `CounterPunch`: a ground defence at home in the last 90 s, no visible hostile ground fighter within
+  14 tiles of our buildings, no tracked wave still hunting and none launched in the last 3 minutes:
+  the available army leaves at once (army threshold, wave readiness, bundle and outnumbered gates
+  skipped) for the house with the most visible ground value within 48 tiles of our base.
+- `LeaderRaid`: 60% of the largest enemy army stands beyond 32 tiles of its base and our ground army
+  is 1.5x its guard (its ground units and turrets within 24 tiles of its base centre): the army goes
+  for the leader's production and economy, past the same gates.
+- `GangUpLeader`: free-for-all, one enemy house has at least every other enemy's visible ground value
+  combined and 1.5x ours: ordinary waves target it (no gate skipped).
+
+A local check (8 games each, one Hard house against three Brutal) fired the counter-punch in 4 games,
+the raid in 5 and the gang-up in 2, always for the candidate seat only.
+
+**Screen** (source `98600ecb8`, AWS, seat-only, results and `analyse.py` / `confirm.py` in
+`~/Documents/projects/outputs/ai-nobuildup-20261121/momentum/`): the `cv`/`cd`/`mx` sets above plus
+new opt-in weak-seat cells (`skirmish/weak-1v1-qh-v-qb-rs128`, both starts, and
+`skirmish/weak-4p-ffa-qh-v-3qb`, vanilla and DuneCity; the candidate is the Hard seat). Control and
+MassHold reproduce the earlier `b5ab5a018` screen exactly. 224 games per arm, 181 decided in control:
+
+| Set (games) | MassHold | CounterPunch | LeaderRaid | GangUpLeader | all four |
+|---|---|---|---|---|---|
+| `cv` handmade, vanilla (52) | -0.032 | +0.043 | -0.013 | -0.034 | -0.059 |
+| `cd` handmade, DuneCity (52) | +0.051 | +0.045 | -0.040 | -0.040 | -0.025 |
+| `mx` ladder, skirmish, CY (72) | +0.059 | **+0.142 [+0.031, +0.270]** | +0.047 | +0.002 | +0.019 |
+| weak seat (48) | +0.040 | -0.017 | +0.010 | +0.007 | -0.092 |
+| all (224) | +0.032 [-0.016, +0.084] | **+0.062 [+0.004, +0.122]** | +0.005 [-0.063, +0.074] | -0.015 [-0.044, +0.015] | -0.033 [-0.107, +0.040] |
+| seat won / eliminated (control 86 / 100) | 93 / 97 | 95 / 97 | 88 / 100 | 86 / 103 | 86 / 103 |
+
+**CounterPunch confirmation** on fresh games (16 new control seeds per handmade set, 12 more per
+ladder cell; ids of the screen excluded; the 4P DuneCity map's `cd` duplicates dropped):
+
+| Set | fresh games | CounterPunch | pooled with the screen |
+|---|---|---|---|
+| `cv` | 208 | -0.024 [-0.088, +0.040] | -0.010 [-0.070, +0.050] (260) |
+| `cd` | 192 | -0.011 [-0.061, +0.038] | -0.006 [-0.051, +0.038] (240) |
+| `mx` | 96 | +0.062 [-0.047, +0.180] | +0.096 [+0.016, +0.182] (168) |
+| all | 496 | **-0.002 [-0.041, +0.037]**; 54 better / 55 worse / 387 same | +0.018 [-0.017, +0.053] (668) |
+
+**Decision.** All three stay default off. CounterPunch's screen result (one of five arms clearing 0)
+did not replicate on fresh games; overall it is level, with only a hint on the Brutal v Hard ladder
+and skirmish set (pooled +0.096 includes the selecting games). LeaderRaid, GangUpLeader and the
+combination are level; nothing helps the weak seat (a Hard house against Brutal ones loses about as
+often). Across MassHold, TurretClusters and these three, changing when and where an outmatched
+army fights does not change who wins; the gap is the army and economy itself.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
