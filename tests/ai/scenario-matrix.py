@@ -247,6 +247,15 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                             skirmish=skirmish_spec(128, 'fortress', 0, city=4, spice=0, sand=30, rock=40,
                                                    mountain=30, tech=5, credits=20000, symmetric=1),
                             minutes=240, full=48), opt_in=True, measured=True))
+    # Fortress 1v1 mirror (default-change check, 2026-11-22): the Fortress duel of formation-duel.py
+    # (Random Skirmish 1v1, Fortress bases, 20,000-credit armies) as a scenario cell, so a play style
+    # can go on the first seat (--seat-style). Hard and Brutal mirrors, both starts. Only with --cells.
+    for mod in ('vanilla', 'dunecity'):
+        for code in ('QH', 'QB'):
+            for size in (128, 160, 192):
+                cells.append(dict(match('skirmish', f'fortress-1v1-{code.lower()}-mirror-rs{size}', mod, ffa(code, code),
+                                        skirmish=skirmish_spec(size, 'fortress', 5), minutes=45, full=8,
+                                        both_sides=True), opt_in=True, measured=True))
     # 2. Construction Yard only, default credits.
     c = lambda name, mod, slots, size, **kw: cells.append(
         match('cy', name, mod, slots, skirmish=skirmish_spec(size, 'cy', 0), **kw))
