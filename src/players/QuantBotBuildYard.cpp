@@ -2819,7 +2819,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     // Include committed consumers, but never change vanilla policy.
     // NuclearConsolidation (default off) chose a reactor to replace Wind Traps, not to size demand.
     if (yardTurn.isCitySim && (yardTurn.itemID == Structure_NuclearPlant || yardTurn.itemID == Structure_WindTrap)
-        && pass.itemCount[Structure_WindTrap] > 0
+        && (pass.itemCount[Structure_WindTrap] > 0
+            || (botConfig().force.nuclearConsolidation && getHouse()->getNumItems(Structure_NuclearPlant) > 0))
         && std::string_view(yardTurn.structureRule) != "nuclear_consolidation") {
         const int need = std::max(1,getHouse()->getPowerRequirement()
             + pass.cityPowerReserve - getHouse()->getProducedPower());
