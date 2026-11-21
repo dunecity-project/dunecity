@@ -456,6 +456,12 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             if (candidate.distance<=ForceConcentrationPolicy::kSizedBandTiles) reachable+=candidate.value;
         const ObjectBase* asset=isProtectedAsset(protectedAsset) ? protectedAsset : victim;
         const int64_t support=asset && asset->isAStructure() ? turretSupportNear(asset) : 0;
+        if (int64_t(committed)+support>=ForceConcentrationPolicy::sizedRequired(threatValue)) {
+            ++forceStats.massHolds;
+            traceDecision("defence_turret_covered",AITelemetry::Record().set("target",intruder->getObjectID())
+                .set("threat_value",threatValue).set("committed_value",committed).set("turret_support",support));
+            return;
+        }
         if (!ForceConcentrationPolicy::answerable(threatValue,int64_t(committed)+support,reachable)) {
             ++forceStats.massHolds;
             traceDecision("defence_declined",AITelemetry::Record().set("target",intruder->getObjectID())
@@ -786,6 +792,9 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     // reach together cannot match is not fed one unit at a time. Nobody new goes; the free
     // troops in reach gather at the home rally instead, in Area Guard, so the army builds up
     // until a defence can be answered or the next wave can leave.
+    // Our turrets beside the building also fight it: with MassHold they count towards the
+    // answer, and when they and the troops already there cover the sized answer nobody new goes.
+    int64_t turretSupport=0;
     if (botConfig().force.massHold) {
         int64_t reachable=0;
         std::vector<Uint32> inReach;
@@ -794,7 +803,15 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
                 reachable+=candidate.value;
                 inReach.push_back(candidate.id);
             }
-        const int64_t support=turretSupportNear(building);
+        const int64_t support=turretSupport=turretSupportNear(building);
+        if (int64_t(committed)+support>=ForceConcentrationPolicy::sizedRequired(threat)) {
+            ++forceStats.massHolds;
+            traceDecision("defence_turret_covered",AITelemetry::Record()
+                .set("target",intruder->getObjectID()).set("building",building->getObjectID())
+                .set("threat_value",threat).set("committed_value",committed)
+                .set("turret_support",support).set("candidates",int(candidates.size())));
+            return;
+        }
         if (!ForceConcentrationPolicy::answerable(threat,int64_t(committed)+support,reachable)) {
             const int gathered=gatherHeldMass(inReach);
             ++forceStats.massHolds;
@@ -819,14 +836,14 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
             const auto* unit=static_cast<const UnitBase*>(getObject(candidate.id));
             responders.push_back({candidate.id,candidate.value,candidate.distance,standsInBundle(unit)});
         }
-        response=ForceConcentrationPolicy::sizedPool(ForceConcentrationPolicy::sizedRequired(threat),committed,
+        response=ForceConcentrationPolicy::sizedPool(ForceConcentrationPolicy::sizedRequired(threat),committed+turretSupport,
             responders,ForceConcentrationPolicy::kSizedBandTiles);
         forceStats.sizedResponses+=int(response.size());
     } else if (pool || recall || muster) {
         std::vector<ForceConcentrationPolicy::Responder> responders;
         for (const auto& candidate : candidates) responders.push_back({candidate.id,candidate.value,candidate.distance});
         const int64_t required=pool ? ForceConcentrationPolicy::poolRequired(threat) : SimpleArmyPolicy::responseValue(threat);
-        response=ForceConcentrationPolicy::pool(required,committed,responders,band,recall);
+        response=ForceConcentrationPolicy::pool(required,committed+turretSupport,responders,band,recall);
         for (const auto& candidate : candidates)
             if (candidate.distance>band && std::find(response.begin(),response.end(),candidate.id)!=response.end()) ++recalled;
         forceStats.pooled+=int(response.size());
@@ -837,7 +854,7 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
             candidates.end());
         // The nearest troops, until together with those already in the fight they
         // outweigh the threat at the building.
-        response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
+        response=SimpleArmyPolicy::reinforcements(threat,int(committed+turretSupport),candidates);
     }
     std::vector<Uint32> musterIds;
     // Defence is never slowed to a formation pace (docs/formations.md): each troop walks
