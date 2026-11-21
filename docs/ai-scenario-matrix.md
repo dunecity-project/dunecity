@@ -319,6 +319,13 @@ Every game is a real match played headless to its end by the balance probe:
   including conquest, defeat and spice quotas; neither forces conquest,
   grants assets nor issues scripted human orders. DuneCity partner diagnostics
   and smoke use the same explicit QuantBot enemy-tier/mode transport.
+  `--reworked` plays the mission's RWRK_ map instead (the campaign menu's
+  Maps: Reworked, `docs/reworked-campaign.md`). Every vanilla campaign cell has an
+  opt-in `reworked-` twin (`reworked-player-brutal-v-quantbot-<tier>`,
+  `reworked-partner-<tier>-v-quantbot-<tier>`, `reworked-partner-brutal-v-campaign-ai-release`, ...)
+  that plays the 22 reworked missions of Atreides, Harkonnen and Ordos on the same seeds;
+  `--cells '^campaign/(reworked-)?player-brutal-v-quantbot-easy/vanilla$' --cases atreides`
+  pairs them with the original missions. They report, they do not gate.
 - Game rules come from the mod (`ModManager::loadEffectiveGameOptions`) as a new Custom Game takes them;
   `--game-options` (All against Atreides: Stefan's own options) applies on top.
 - Once a game minute every house is sampled, and its **sortie** measured: combat ground units more than
@@ -948,6 +955,51 @@ Air commands; it never submits the dirty checkout. For explicit independent shar
 add `--shard K/N`, give each shard a distinct results directory, and combine them
 with `--report`. Do not launch simultaneous local batches or create another build tree.
 
+## Where the gates run
+
+Registration follows capability, not the OS (`tests/CMakeLists.txt`). `gui` means a real window
+and renderer; a probe that runs the game on `SDL_VIDEODRIVER=dummy` with the software renderer is
+`headless`, even when it renders PNGs; one game at a time is `PROCESSORS 2`, and `RUN_SERIAL` is kept
+for the few tests that need the whole machine (`scripts/tests/test_headless_parallel.py`). Every
+headless test registers in macOS and Linux Ninja trees, so `dunecity-queue ctest` runs it on the AWS
+workers; the Mini's release qualification sends its test games there too (`docs/release-operations.md`,
+"Test games run on AWS"). Probe harnesses find their binary and data through `tests/performance/probe_profile.py`:
+`probe_binary` for `run-campaign-balance.py` probes, and `NATIVE_TARGET`, `native_build_commands`,
+`native_probe_binary` for the standalone diagnostic mains (on Linux the probe links into a private
+`OUT/NAME/bin/` whose `../share/DuneCity` is the build's `bin/`, the game's executable-relative data
+directory). The sealed menu/skirmish/gallery/skin fixtures (`tests/menu/probe_fixture.py`) hash
+`bin/{config,data,imported_sprites,mods}` there instead of the bundle's `Resources`.
+
+The mandatory AI gates on AWS, from a committed SHA:
+
+```sh
+agent-workspace run --project dunecity --owner OWNER --tests --wait -- dunecity-queue ctest \
+  --cwd /Users/stefan/Documents/projects/dunecity-feature-batch --rev FULL_SHA --machines aws aws-mel2 \
+  -R '^(quantbot_all_against_atreides|quantbot_all_against_atreides_dune2r|quantbot_scenario_matrix|quantbot_ffa_army_deploys)$'
+dunecity-queue report JOB --follow     # outside the wrapper
+# Everything AWS can run: -L nightly -LE gui (add -L integration for the quick tier).
+```
+
+`run-ffa-army-deploys.py` is also a batch harness (`--results`), so `dunecity-queue submit` can play
+its three seeds as separate units and check them once collected.
+
+Mini-only (registered only on macOS, labelled `macos`), each for a concrete reason:
+
+| Test | Why it stays on the Mini |
+|---|---|
+| `perf_regression` | Budgets are multiples of a calibration loop timed on a quiet Mac; it also launches a game through the real main menu. Kept `gui` so headless queues never take it. Run it alone. |
+| `native_pointer_mapping_probe` | Real window with Cocoa pointer events against the packaged app's SDL (release-smoke gate). |
+| `mouse_controls_probe` | `--real-video` native renderer plus injected Mac trackpad/wheel events. |
+| `dunelegacy_gpu_tests` | The `[rendering]`/`[gpu]` cases on the native accelerated HiDPI renderer; their software path runs in headless `dunelegacy_tests`. |
+
+The two PHP network probes, `native_multiplayer_join_modes` and `spectator_online_end_probe`, run on
+AWS too (label `network`, registered wherever `DUNECITY_DIRECT_P2P` is on). They start the local PHP
+signalling service (`tools/p2p-signaling`) on 127.0.0.1 and play over libdatachannel, so a host needs
+`php` (the AWS workers have Ubuntu's `php8.3-cli`) and a P2P build (the workers build libdatachannel
+from the same pinned checkout as the Macs). Without PHP they exit 77, a skip, never a pass.
+
+Hosted Linux CI uses Makefiles, not Ninja, so it registers none of these probes; its nightly tier
+does now run `dunelegacy_tests`.
 
 ## Machines and time
 

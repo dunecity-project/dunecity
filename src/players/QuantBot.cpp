@@ -113,7 +113,9 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 
     // Single missions already use campaign mode, including the legacy OFF arm.
     // Policy scope is separate from campaign progression and saved AI mode.
-    if (isScenarioGameType(currentGame->gameType) || currentGame->gameType == GameType::LoadSavegame) {
+    // The DuneCity campaign's maps are Custom-Game city maps: every QuantBot keeps Custom rules there.
+    if ((isScenarioGameType(currentGame->gameType) || currentGame->gameType == GameType::LoadSavegame)
+        && !currentGame->getGameInitSettings().isDuneCityCampaign()) {
 		gameMode = GameMode::Campaign;
 	}
 	else {
@@ -325,6 +327,16 @@ void QuantBot::update() {
 
         if (campaignCityEconomy()) noteCampaignOriginalState();
 
+        if (botConfig().force.campaignRepairRoleFix) {
+            // Helpers of every tier and Medium+ enemies may establish repairs.
+            // Easy enemies retain their authored setup without adding a yard.
+            if (campaignPolicyApplies() && getHouse()->getTechLevel() > 4
+                && !(isCampaignEnemy() && difficulty == Difficulty::Easy)) {
+                initialItemCount[Structure_RepairYard] = std::max(1, initialItemCount[Structure_RepairYard]);
+                initialItemCount[Structure_Radar] = std::max(1, initialItemCount[Structure_Radar]);
+                initialItemCount[Structure_LightFactory] = std::max(1, initialItemCount[Structure_LightFactory]);
+            }
+        } else {
 		// Allow campaign controllers one repair yard. A Medium opponent gets exactly one,
         // whatever the mission starts it with; Medium support keeps its starting count.
 		// Note: supportMode sets gameMode to Custom, so check currentGame->gameType instead
@@ -345,6 +357,8 @@ void QuantBot::update() {
 
 			logDebug("Allow Campaign AI one Repair Yard (support: %s)", builderOnly() ? "yes" : "no");
 		}
+
+        }
 
 		// Calculate the total military value of the player
 		initialMilitaryValue = 0;
@@ -698,6 +712,10 @@ void QuantBot::update() {
 		// we are not updating this AI player this cycle
 		return;
 	}
+    // Thinking speed on the DuneCity campaign ladder: a slower tier skips whole passes (units, army
+    // posture and building), deterministically from the cycle counter and staggered by house.
+    if (const int passes = cityCampaignThinkPasses(); passes > 1
+        && (scheduleCycle / AIUPDATEINTERVAL + Uint32(scheduleHouse)) % Uint32(passes) != 0) return;
 
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
     // R and U and the late-game target choices H and Z read it), before anything this pass consults it.
@@ -795,7 +813,10 @@ void QuantBot::update() {
 	}
 
 	if (!builderOnly()) {
-		if (attackTimer <= 0) {
+		if (attackTimer <= 0 && objectiveGracePeriod()) {
+			// A campaign mission's opening grace period ([EVENTS] FirstEnemyAttack): no wave yet.
+			attackTimer = MILLI2CYCLES(15000);
+		} else if (attackTimer <= 0) {
 			attack(militaryValue);
 		} else {
 			attackTimer -= AIUPDATEINTERVAL;

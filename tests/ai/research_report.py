@@ -119,6 +119,9 @@ def preregistered_cluster_sd(design):
 
 
 def validate_manifest(manifest, base):
+    if manifest.get('population') == 'campaign':
+        import campaign_research
+        return campaign_research.validate_manifest(manifest, base)
     require(manifest.get('schema') == SCHEMA, 'Unsupported experiment manifest')
     diagnostic = manifest.get('purpose') == 'diagnostic'
     require('purpose' not in manifest or diagnostic, 'Unsupported experiment purpose')
@@ -1036,6 +1039,9 @@ def decide(stage, facts):
 def experiment_report(path, stage, control_directory, candidate_directory, evidence=None):
     path = Path(path)
     manifest = compact_json(path)
+    if manifest.get('population') == 'campaign':
+        import campaign_research
+        return campaign_research.experiment_report(path, stage, control_directory, candidate_directory, evidence)
     provenance = validate_manifest(manifest, path.parent)
     require(stage in manifest['stages'], 'Stage not in preregistered manifest')
     diagnostic = manifest.get('purpose') == 'diagnostic'

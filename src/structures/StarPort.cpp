@@ -278,7 +278,8 @@ void StarPort::updateBuildList() {
         const ObjectData::ObjectDataStruct& objData = currentGame->objectData.data[itemOrder[i]][getTechnologyHouseID()];
 
         // Exclude ornithopters from starport in campaign games (can still build from factory)
-        bool isOrnithopterInCampaign = (itemOrder[i] == Unit_Ornithopter && isCampaignGameType(currentGame->gameType));
+        bool isOrnithopterInCampaign = (itemOrder[i] == Unit_Ornithopter && isCampaignGameType(currentGame->gameType)
+                                        && !currentGame->getGameInitSettings().isDuneCityCampaign());
 
         if(itemOrder[i] != Unit_ChemicalCarryall && objData.enabled && (choam.getNumAvailable(itemOrder[i]) != INVALID) && !isOrnithopterInCampaign) {
             insertItem(buildList, iter, itemOrder[i], choam.getPrice(itemOrder[i], !familyActive));

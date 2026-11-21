@@ -18,6 +18,7 @@
 #include <Trigger/TriggerManager.h>
 #include <Trigger/ReinforcementTrigger.h>
 #include <Trigger/TimeoutTrigger.h>
+#include <Trigger/BreachTrigger.h>
 
 #include <misc/exceptions.h>
 
@@ -69,6 +70,9 @@ void TriggerManager::saveTrigger(OutputStream& stream, const Trigger* t) const
     } else if(dynamic_cast<const TimeoutTrigger*>(t)) {
         stream.writeUint32(TriggerManager::Type_TimeoutTrigger);
         t->save(stream);
+    } else if(dynamic_cast<const BreachTrigger*>(t)) {
+        stream.writeUint32(TriggerManager::Type_BreachTrigger);
+        t->save(stream);
     }
 }
 
@@ -83,6 +87,10 @@ std::unique_ptr<Trigger> TriggerManager::loadTrigger(InputStream& stream)
 
         case TriggerManager::Type_TimeoutTrigger: {
             return std::make_unique<TimeoutTrigger>(stream);
+        } break;
+
+        case TriggerManager::Type_BreachTrigger: {
+            return std::make_unique<BreachTrigger>(stream);
         } break;
 
         default: {

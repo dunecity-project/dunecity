@@ -575,6 +575,10 @@ int runStalledCarryallProbe() {
         stallRequire(tank->getLocation() != boxCentre, "The unit was put back where it was stuck");
         stallRequire(!currentGameMap->getTile(boxCentre)->hasAGroundObject(),
                      "Ghost occupancy left behind at the stall site");
+        // A player's unit guards where it was put, like one that drove there. Area Guard chased
+        // sandworms off a factory's destination (player report on 1.0.873).
+        stallRequire(tank->getAttackMode() == GUARD,
+                     "A player's delivered unit did not come down in Guard");
         SDL_Log("STALLED_CARRYALL_PROBE_DELIVERY: ticks=%d missed_tiles=%d", ticks, missed);
         tank->cancelDeployment(); carry->cancelDeployment();
     }

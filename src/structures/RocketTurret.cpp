@@ -66,7 +66,9 @@ RocketTurret::~RocketTurret() = default;
 
 void RocketTurret::updateStructureSpecificStuff() {
     if( ( DuneCity::rocketTurretPowered(currentGame->getGameInitSettings().getGameOptions().rocketTurretsNeedPower, getOwner()->getProducedPower(), getOwner()->getPowerRequirement()) )
-        || ( ((isCampaignGameType(currentGame->gameType)) || ((currentGame->gameType == GameType::Skirmish || currentGame->gameType == GameType::SkirmishCoop))) && getOwner()->isAI() && getOwner()->isPowerRequired()) ) {
+        || ( ((isCampaignGameType(currentGame->gameType)) || ((currentGame->gameType == GameType::Skirmish || currentGame->gameType == GameType::SkirmishCoop))) && getOwner()->isAI() && getOwner()->isPowerRequired()
+             // The DuneCity campaign plays its Custom city maps' rules: every turret needs power.
+             && !currentGame->getGameInitSettings().isDuneCityCampaign()) ) {
         TurretBase::updateStructureSpecificStuff();
     }
 }

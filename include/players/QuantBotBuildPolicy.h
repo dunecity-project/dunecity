@@ -78,6 +78,12 @@ inline bool militaryItem(Uint32 item) {
         && item != Unit_CapacityHarvester && item != Unit_FastHarvester
         && item != Unit_MCV && item != Unit_Sandworm;
 }
+/// CampaignHelperStarportArmy/FactoryLast: the heavy ground combat imports (Heavy Factory
+/// tanks and the house specials); trikes, quads, infantry and aircraft are excluded.
+inline bool campaignHelperHeavyImport(Uint32 item) {
+    return item == Unit_Tank || item == Unit_SiegeTank || item == Unit_Launcher
+        || item == Unit_Devastator || item == Unit_SonicTank || item == Unit_Deviator;
+}
 inline QuantBotSpendingPolicy::Bucket spendingBucket(Uint32 item) {
     using Bucket = QuantBotSpendingPolicy::Bucket;
     if (militaryItem(item) || item == Structure_GunTurret || item == Structure_RocketTurret
@@ -683,6 +689,13 @@ inline bool repairMaintainsValue(Uint32 item, bool citySim, int maxHealth, int p
 // The engine charges per repair tick, so it must have something to charge.
 inline bool canAffordRepairTick(int credits) { return credits >= 5; }
 inline bool repairWhenWealthy(int availableMoney) { return availableMoney > 5000; }
+
+// Campaign upgrades and diagnostic power purchases leave working cash intact.
+inline bool campaignYardUpgradeFunded(bool powered, bool earningIncome, bool workersNeeded,
+                                      int spendable, int upgradeCost, int economyReserve) {
+    return powered && earningIncome && !workersNeeded && upgradeCost > 0
+        && int64_t(spendable) >= int64_t(upgradeCost) + std::max(2000, economyReserve);
+}
 
 // The 2x2 slab is one order and one placement where Slab1 needs four, and
 // every ordinary building now waits for its full foundation. The yard

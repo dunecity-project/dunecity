@@ -1,0 +1,64 @@
+#include <players/OriginalCampaignPolicy.h>
+#include <misc/Random.h>
+#include <catch2/catch_test_macros.hpp>
+#include <set>
+
+TEST_CASE("Original campaign production uses original order and random replacement", "[campaign-ai]") {
+    using namespace OriginalCampaignPolicy;
+    const auto available = [](int item) { return item == Unit_Launcher || item == Unit_Tank || item == Unit_SiegeTank; };
+    REQUIRE(pickUnit(available, [] { return 1; }) == Unit_SiegeTank);
+    // Original order is Launcher, Tank, SiegeTank. A late low-priority roll can
+    // replace a Devastator with a Quad, unlike a simple weighted-best selector.
+    REQUIRE(pickUnit([](int item) { return item == Unit_Devastator || item == Unit_Quad; }, [] { return 0; }) == Unit_Quad);
+    REQUIRE(pickUnit([](int) { return false; }, [] { return 0; }) == ItemID_Invalid);
+    REQUIRE(buildPriority(Unit_Soldier) == 10);
+    REQUIRE(buildPriority(Unit_Trooper) == 20);
+    Random first(9602), replay(9602);
+    std::set<int> produced;
+    for (int n = 0; n < 1000; ++n) {
+        const auto choices = [](int item) { return item == Unit_Devastator || item == Unit_Quad; };
+        const int item = pickUnit(choices, [&] { return first.rand(0, 255); });
+        REQUIRE(item == pickUnit(choices, [&] { return replay.rand(0, 255); }));
+        produced.insert(item);
+    }
+    REQUIRE(produced == std::set<int>{Unit_Devastator, Unit_Quad});
+}
+
+TEST_CASE("Original campaign AI wakes only on the other side's sight of a ground unit", "[campaign-ai]") {
+    using OriginalCampaignPolicy::sightActivates;
+    REQUIRE(sightActivates(false, false, false, true));
+    REQUIRE_FALSE(sightActivates(false, false, false, false)); // not uncovered yet
+    REQUIRE_FALSE(sightActivates(true, false, false, true));   // the computer house seeing the player
+    REQUIRE_FALSE(sightActivates(false, false, true, true));   // aircraft never wake a house
+    REQUIRE_FALSE(sightActivates(false, true, false, true));   // allies
+}
+
+TEST_CASE("Original campaign missions create no teams", "[campaign-ai]") {
+    using namespace OriginalCampaignPolicy;
+    // "1=Ordos,Normal,Foot,2,4": the original loader wants a comma after the fifth value.
+    REQUIRE(authoredTeamLineCommas == 4);
+    REQUIRE_FALSE(referenceCreatesTeam(authoredTeamLineCommas));
+    REQUIRE(referenceCreatesTeam(5));
+}
+
+TEST_CASE("Original campaign houses stop at their authored unit cap", "[campaign-ai]") {
+    using namespace OriginalCampaignPolicy;
+    REQUIRE(defaultUnitCap == 39);
+    REQUIRE_FALSE(unitCapBlocks(25, 24, false));
+    REQUIRE(unitCapBlocks(25, 25, false));
+    REQUIRE(unitCapBlocks(20, 22, false));        // the mission placed more than the cap
+    REQUIRE_FALSE(unitCapBlocks(25, 40, true));   // aircraft are never refused
+    REQUIRE_FALSE(unitCapBlocks(0, 500, false));  // no cap: older saves and explicit overrides
+    // The shipped "unlimited" (0) and "map default" (-1) both keep the mission's number.
+    REQUIRE(keepsAuthoredUnitCap(true, true, 0));
+    REQUIRE(keepsAuthoredUnitCap(true, true, -1));
+    REQUIRE_FALSE(keepsAuthoredUnitCap(true, true, 60));   // an explicit number wins
+    REQUIRE_FALSE(keepsAuthoredUnitCap(true, false, 0));   // custom maps follow the lobby
+    REQUIRE_FALSE(keepsAuthoredUnitCap(false, true, 0));   // QuantBot and pre-9886 houses
+}
+
+TEST_CASE("Original campaign structure and unit targeting differ at distance", "[campaign-ai]") {
+    REQUIRE(OriginalCampaignPolicy::targetPriority(300, 3, true) == 100);
+    REQUIRE(OriginalCampaignPolicy::targetPriority(300, 3, false) == 101);
+    REQUIRE(OriginalCampaignPolicy::targetPriority(300, 0, true) == 300);
+}

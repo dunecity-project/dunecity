@@ -187,9 +187,7 @@ QuantBotVanillaPolicy::Plan QuantBot::vanillaBoldPlan(QuantBotVanillaPolicy::Obs
 bool QuantBot::citySpiceScope() const {
     if (!autonomousCustomArmy() || fighterOnly() || !currentGame->isCitySimEnabled()
         || getGameInitSettings().getModName() != "dunecity") return false;
-    const auto type = getGameInitSettings().getGameType();
-    return (type == GameType::CustomGame || type == GameType::CustomMultiplayer)
-        && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+    return customRulesGame() && getGameInitSettings().getInitialSpiceTilePermille() > 0;
 }
 
 bool QuantBot::cityEconomyExperimentScope() const {
@@ -706,8 +704,7 @@ int QuantBot::vultureOpportunity(const std::vector<Uint32>& strikeUnits) {
     const int level = botConfig().force.ffaVultureLevel;
     if (level == 0 || !autonomousCustomArmy()) return -1;
     const auto& init = currentGame->getGameInitSettings();
-    const auto type = init.getGameType();
-    if (type != GameType::CustomGame && type != GameType::CustomMultiplayer) return -1;
+    if (!customRulesGame()) return -1;
     if (init.getModName() != "vanilla" && init.getModName() != "dunecity") return -1;
     // Scope is the original occupied controller roster, not surviving runtime houses.
     std::array<int, NUM_HOUSES> teams;
@@ -1121,8 +1118,7 @@ int QuantBot::perimeterTurrets() const {
 }
 
 bool QuantBot::combatTargetTuningActive() const {
-    const auto& settings = botConfig().force;
-    if (builderOnly() || (!effectiveFocusFireLevel() && !settings.targetPriorityLevel) || !currentGame) return false;
+    if (builderOnly() || (!effectiveFocusFireLevel() && !effectiveTargetPriorityLevel()) || !currentGame) return false;
     return currentGame->getGameInitSettings().getInitialSpiceTilePermille() > 0;
 }
 
@@ -1152,6 +1148,35 @@ bool QuantBot::openingOpenMapNative() const {
     for (const auto& house : init.getHouseInfoList())
         if (!house.playerInfoList.empty()) ++controllers;
     return QuantBotMapScopePolicy::openFlatCrowd(init.getInitialTerrain(), controllers);
+}
+
+int QuantBot::cityCampaignBrutalAttackPercent() const {
+    return duneCityCampaignGame() && cityCampaignSkill(QuantBotCityCampaignSkills::EarlyAttack)
+        ? botConfig().force.cityCampaignBrutalAttackPercent : 0;
+}
+
+bool QuantBot::duneCityCampaignGame() const {
+    if (!currentGame) return false;
+    if (!duneCityCampaignGameCache) duneCityCampaignGameCache = currentGame->getGameInitSettings().isDuneCityCampaign();
+    return *duneCityCampaignGameCache;
+}
+
+bool QuantBot::cityCampaignSkill(QuantBotCityCampaignSkills::Skill skill) const {
+    const auto& force = botConfig().force;
+    return QuantBotCityCampaignSkills::hasSkill(skill, static_cast<int>(difficulty), force.cityCampaignSkillTier[skill],
+        force.cityCampaignSkillLadder && duneCityCampaignGame());
+}
+
+int QuantBot::cityCampaignThinkPasses() const {
+    const auto& force = botConfig().force;
+    return QuantBotCityCampaignSkills::thinkPasses(static_cast<int>(difficulty), force.cityCampaignThinkPasses,
+        force.cityCampaignSkillLadder && duneCityCampaignGame());
+}
+
+int QuantBot::effectiveTargetPriorityLevel() const {
+    // HarvesterTargets: the campaign skill shoots harvesters first, then artillery; an explicit level wins.
+    const int level = botConfig().force.targetPriorityLevel;
+    return level || !cityCampaignSkill(QuantBotCityCampaignSkills::HarvesterTargets) ? level : 2;
 }
 
 int QuantBot::effectiveFocusFireLevel() const {
@@ -1195,10 +1220,9 @@ bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBas
     const int reach = unit->getWeaponRange() + 3;
     const ObjectBase* best = nullptr;
     Force::TargetKey bestKey;
-    const auto& settings = botConfig().force;
     const bool tuning = combatTargetTuningActive();
     const int focusLevel = tuning ? effectiveFocusFireLevel() : 0;
-    const int priorityLevel = tuning ? settings.targetPriorityLevel : 0;
+    const int priorityLevel = tuning ? effectiveTargetPriorityLevel() : 0;
     const auto keyOf = [&](const ObjectBase* object) {
         auto key = targetKeyOf(object);
         if (!tuning) return key;

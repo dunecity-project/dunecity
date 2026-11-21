@@ -25,6 +25,7 @@
 #include <misc/GameActivity.h>
 #include <misc/MacTrackpad.h>
 #include <misc/WatchedResultLayout.h>
+#include <misc/AnalyticsInstallID.h>
 #include <GUI/dune/JoinProgressWindow.h>
 #include <GUI/dune/JoinRequestsWindow.h>
 #include <GUI/dune/FeedbackWindow.h>
@@ -92,6 +93,8 @@ std::mutex Game::performanceLogMutex;
 #include <Menu/MentatHelp.h>
 #include <Menu/BriefingMenu.h>
 #include <Menu/MapChoice.h>
+#include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 
 #include <House.h>
 #include <Map.h>
@@ -120,6 +123,8 @@ std::mutex Game::performanceLogMutex;
 #include <units/InfantryBase.h>
 #include <units/GroundUnit.h>
 #include <units/Carryall.h>
+#include <units/Devastator.h>
+#include <units/MCV.h>
 #include <units/AmbientAirplane.h>
 #include <units/AmbientHelicopter.h>
 #include <structures/Airport.h>
@@ -979,7 +984,8 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             chaosMode.generate(objectData.data, gameInitSettings.isChaosModeEnabled(), randomGen);
             objectData.logSettings();
 
-            if(gameInitSettings.getMission() != 0) {
+            // DuneCity campaign missions keep their authored TechLevel (misc/DuneCityCampaign.h).
+            if(gameInitSettings.getMission() != 0 && !gameInitSettings.isDuneCityCampaign()) {
                 techLevel = ((gameInitSettings.getMission() + 1)/3) + 1 ;
             }
 
@@ -1007,7 +1013,10 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             if(bReplay == false && gameInitSettings.getGameType() != GameType::CustomGame && !isNetworkGameType(gameInitSettings.getGameType())) {
                 /* do briefing */
                 SDL_Log("Briefing...");
-                BriefingMenu(gameInitSettings.getHouseID(), gameInitSettings.getMission(),BRIEFING).showMenu();
+                BriefingMenu briefing(gameInitSettings.getHouseID(), gameInitSettings.getMission(),BRIEFING,gameInitSettings.getFilename());
+                // DuneCity campaign: the Mentat ends on the mission's goals (Stefan, 2026-11-21).
+                if(gameInitSettings.isDuneCityCampaign()) briefing.setObjectives(missionObjectives.briefing());
+                briefing.showMenu();
             }
         } break;
 
@@ -1213,6 +1222,11 @@ std::string Game::buildMatchAnalyticsPayload(bool finishedMatch) const {
                 << ",\"controller\":\"" << controller << '"'
                 << ",\"player_class\":" << AITelemetry::Record::quote(playerClass)
                 << ",\"shared_house_players\":" << players.size();
+            // The anonymous installation id goes on this client's own human row only: never on an
+            // AI's, a remote player's (a multiplayer game is reported by its host) or the root.
+            row << AnalyticsInstallID::playerRowField(
+                player.get() == pLocalPlayer && std::string(controller) == "human",
+                settings.general.analyticsInstallID);
             if (std::string(controller) == "ai" || qbot) {
                 // A QuantBot's role can be switched in game (CMD_AI_SUPPORT_ROLE): report its live one.
                 const auto* playerData = PlayerFactory::getByPlayerClass(playerClass);
@@ -3105,6 +3119,8 @@ void Game::drawScreen()
         SDL_RenderCopy(renderer, pTimeTexture.get(), nullptr, &drawLocation);
     }
 
+    drawObjectivesPanel();
+
     if(finished) {
         std::string message;
 
@@ -3141,6 +3157,12 @@ void Game::drawScreen()
         SDL_Rect rect=calcDrawingRect(spectatorLabel.get(),sideBarPos.x/2,topBarPos.h+8,HAlign::Center,VAlign::Top);
         SDL_RenderCopy(renderer,spectatorLabel.get(),nullptr,&rect);
     }
+    // The reworked campaign is marked in the map view's free bottom-right corner (the top-right
+    // one holds the zoom buttons), under dialogs and menus.
+    if(gameInitSettings.isReworkedCampaign()) {
+        ReworkedCampaign::drawWatermark(sideBarPos.x - 8, getRendererHeight() - 8, true);
+    }
+
     // Child windows belong above all map and HUD readouts. In the small
     // viewport, the sidebar bars and Spectating label otherwise cover them.
     pInterface->drawDialogs();
@@ -3556,7 +3578,7 @@ case CursorMode_Heal: {
 
         const Uint8 *keystate = SDL_GetKeyboardState(nullptr);
         const bool cameraKeys=!chatMode && !pInterface->hasChildWindow();
-        const bool wasd=cameraKeys && settings.general.wasdCamera && !(SDL_GetModState() & (KMOD_SHIFT|KMOD_CTRL|KMOD_ALT|KMOD_GUI));
+        const bool wasd=cameraKeys && Hotkeys::wasdScrolls(settings.general.wasdCamera, SDL_GetModState());
         const SDL_Point touchEdge = TouchInput::edgeScroll();
         scrollDownMode = (touchPointer ? touchEdge.y > 0 : drawnMouseY >= getRendererHeight()-1-SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_DOWN]) || (wasd && keystate[SDL_SCANCODE_S]);
         scrollLeftMode = (touchPointer ? touchEdge.x < 0 : drawnMouseX <= SCROLLBORDER) || (cameraKeys && keystate[SDL_SCANCODE_LEFT]) || (wasd && keystate[SDL_SCANCODE_A]);
@@ -4462,6 +4484,9 @@ void Game::updateGameState() {
         // would give every airport two independent chances per pass.
     }
 
+    // Authored mission goals read the city state the phase above just produced.
+    missionObjectives.update(*this);
+
     if((indicatorFrame != NONE_ID) && (--indicatorTimer <= 0)) {
         indicatorTimer = indicatorTime;
         if(++indicatorFrame > 2) {
@@ -5132,7 +5157,10 @@ GameInitSettings Game::getNextGameInitSettings()
             }
             int nextMission = gameInitSettings.getMission();
             Uint32 alreadyPlayedRegions = gameInitSettings.getAlreadyPlayedRegions();
-            if(currentMission >= -1) {
+            if(gameInitSettings.isDuneCityCampaign()) {
+                // A fixed mission list: the next one after a win, the same one again after a loss.
+                if(won) nextMission = std::min(gameInitSettings.getMission() + 1, DuneCityCampaign::kMissions);
+            } else if(currentMission >= -1) {
                 // do map choice
                 SDL_Log("Map Choice...");
                 MapChoice mapChoice(gameInitSettings.getHouseID(), currentMission, alreadyPlayedRegions);
@@ -5181,7 +5209,8 @@ int Game::whatNext()
             if(bQuitGame == true) {
                 return GAME_RETURN_TO_MENU;
             } else if(won == true) {
-                if(gameInitSettings.getMission() == 22) {
+                if(gameInitSettings.getMission() == 22
+                   || (gameInitSettings.isDuneCityCampaign() && gameInitSettings.getMission() >= DuneCityCampaign::kMissions)) {
                     // there is no mission after this mission
                     whatNextParam = GAME_RETURN_TO_MENU;
                 } else {
@@ -5609,6 +5638,8 @@ bool Game::loadSaveGame(InputStream& stream) {
 
     winFlags = stream.readUint32();
     loseFlags = stream.readUint32();
+    missionObjectives = MissionObjectives{};
+    if(savegameVersion >= SAVEGAMEVERSION_MISSION_OBJECTIVES) missionObjectives.load(stream);
 
     logLoadStage("map tiles");
     currentGameMap->load(stream);
@@ -5896,6 +5927,7 @@ void Game::saveGame(OutputStream& fs) {
 
     fs.writeUint32(winFlags);
     fs.writeUint32(loseFlags);
+    missionObjectives.save(fs);
 
     currentGameMap->save(fs);
 
@@ -6474,6 +6506,15 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             default: return;
         }
     }
+    // Configurable command shortcuts (misc/Hotkeys.h): a named action, never a translated key,
+    // so a rebound action does not also answer to its old key. Unbound or unavailable presses
+    // continue to the fixed shortcuts below.
+    if(const auto hotkey = settings.hotkeys.match(keyboardEvent.keysym.sym, keyboardEvent.keysym.mod,
+                                                  settings.general.wasdCamera,
+                                                  [this](Hotkeys::Action action) { return isHotkeyAvailable(action); })) {
+        runHotkeyAction(hotkey->action, hotkey->extraShift);
+        return;
+    }
     switch(keyboardEvent.keysym.sym) {
 
         case SDLK_0: {
@@ -6597,73 +6638,6 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             requestGameSpeed(std::max(getGameSpeed()-1, GAMESPEED_MIN));
         } break;
 
-        case SDLK_b: {
-            if (citySimEnabled_ && (SDL_GetModState() & KMOD_SHIFT)) {
-                onCityBudget();
-            }
-        } break;
-
-        case SDLK_c: {
-            if (citySimEnabled_ && (SDL_GetModState() & KMOD_SHIFT)) {
-                pInterface->toggleCityStatsOverlay();
-            } else {
-                setCursorMode(CursorMode_Capture);
-            }
-        } break;
-
-        case SDLK_z: {
-            if (!citySimEnabled_) {
-                break;
-            }
-            if (currentCursorMode == CursorMode_CityZone) {
-                setCursorMode(CursorMode_Normal);
-            } else {
-                setCursorMode(CursorMode_CityZone);
-                selectedZoneType_ = DuneCity::ZoneType::Residential;
-            }
-        } break;
-
-        case SDLK_a: {
-            if(keyboardEvent.keysym.mod & (KMOD_ALT|KMOD_GUI)) break;
-            if(keyboardEvent.keysym.mod & KMOD_CTRL) {
-                // Ctrl+A (also Ctrl+Shift+A): every own combat unit on the map.
-                selectAllCombatUnits();
-                break;
-            }
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT))break;
-            // Attack cursor: an enemy is attacked, ground is attack-moved to, Ctrl+ground fires at it
-            setCursorMode(CursorMode_Attack);
-        } break;
-
-        case SDLK_q: {
-            // Cmd+Q stays the platform quit shortcut.
-            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT)) break;
-            setCursorMode(CursorMode_Patrol);
-        } break;
-
-        case SDLK_s: {
-            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT)) break;
-            UnitBase* responder=nullptr;
-            for(Uint32 id:selectedList) {
-                auto* unit=dynamic_cast<UnitBase*>(objectManager.getObject(id));
-                if(unit && canControlHouse(unit->getOwner()) && unit->isRespondable()) {
-                    unit->handleSetAttackModeClick(STOP); responder=unit;
-                }
-            }
-            if(responder) responder->playConfirmSound();
-        } break;
-
-        case SDLK_t: {
-            if(keyboardEvent.keysym.mod & (KMOD_ALT|KMOD_GUI)) break;
-            if(keyboardEvent.keysym.mod & KMOD_SHIFT) {
-                bShowTime = !bShowTime;
-                break;
-            }
-            selectSameUnitTypes((keyboardEvent.keysym.mod & KMOD_CTRL)!=0);
-        } break;
-
         case SDLK_ESCAPE: {
             if (currentCursorMode == CursorMode_CityZone || currentCursorMode == CursorMode_CityRoad || isPlanningPlacement()) {
                 setCursorMode(CursorMode_Normal);
@@ -6734,62 +6708,9 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
             bShowFPS = !bShowFPS;
         } break;
 
-        case SDLK_o: {
-            if((SDL_GetModState() & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) == 0) {
-                selectAllOrnithopters();
-            }
-        } break;
-
-        case SDLK_m: {
-            //set object to move
-            setCursorMode(CursorMode_Move);
-        } break;
-
-        case SDLK_g: {
-            // select next construction yard
-            std::set<Uint32> itemIDs;
-            itemIDs.insert(Structure_ConstructionYard);
-            selectNextStructureOfType(itemIDs);
-        } break;
-
-        case SDLK_f: {
-            // Ctrl+F switches formation moves, Ctrl+Shift+F picks the next shape; plain F keeps
-            // selecting the next factory.
-            if(SDL_GetModState() & KMOD_CTRL) {
-                if(SDL_GetModState() & KMOD_SHIFT) cycleFormationShape();
-                else toggleFormationMoves();
-                break;
-            }
-            // select next factory
-            std::set<Uint32> itemIDs;
-            itemIDs.insert(Structure_Barracks);
-            itemIDs.insert(Structure_WOR);
-            itemIDs.insert(Structure_LightFactory);
-            itemIDs.insert(Structure_HeavyFactory);
-            itemIDs.insert(Structure_HighTechFactory);
-            itemIDs.insert(Structure_StarPort);
-            selectNextStructureOfType(itemIDs);
-        } break;
-
         case SDLK_p: {
-            if(SDL_GetModState() & KMOD_CTRL) {
-                // fall through to SDLK_PRINT
-            } else {
-                // Place structure
-                if(selectedList.size() == 1) {
-                    ConstructionYard* pConstructionYard = dynamic_cast<ConstructionYard*>(objectManager.getObject(*selectedList.begin()));
-                    if(pConstructionYard != nullptr) {
-                        if(currentCursorMode == CursorMode_Placing) {
-                            setCursorMode(CursorMode_Normal);
-                        } else if(pConstructionYard->mayPlaceByHand()) {
-                            setCursorMode(CursorMode_Placing);
-                        }
-                    }
-                }
-
-                break;  // do not fall through
-            }
-
+            // Ctrl+P is the fixed screenshot shortcut; plain P is the configurable Place structure.
+            if(!(keyboardEvent.keysym.mod & KMOD_CTRL)) break;
         } // fall through
 
         case SDLK_PRINTSCREEN:
@@ -6798,68 +6719,6 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
                 takePeriodicalScreenshots = !takePeriodicalScreenshots;
             } else {
                 takeScreenshot();
-            }
-        } break;
-
-        case SDLK_h: {
-            // Harvesters return (Shift queues the return); every other selected unit holds.
-            if(keyboardEvent.keysym.mod & (KMOD_CTRL|KMOD_ALT|KMOD_GUI)) break;
-            const bool queued = (keyboardEvent.keysym.mod & KMOD_SHIFT) != 0;
-            UnitBase* holder = nullptr;
-            for(Uint32 objectID : selectedList) {
-                ObjectBase* pObject = objectManager.getObject(objectID);
-                if(isHarvesterLikeObject(pObject)) {
-                    if(queued && canControlHouse(pObject->getOwner()) && pObject->isRespondable()) {
-                        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
-                            static_cast<Uint32>(UnitOrderType::HarvesterReturn), 0, 0));
-                    } else {
-                        harvesterHandleReturnClick(pObject);
-                    }
-                } else if(auto* pUnit = dynamic_cast<UnitBase*>(pObject);
-                          pUnit != nullptr && canControlHouse(pUnit->getOwner()) && pUnit->isRespondable()) {
-                    pUnit->handleSetAttackModeClick(HOLD);
-                    holder = pUnit;
-                }
-            }
-            if(holder != nullptr) holder->playConfirmSound();
-        } break;
-
-
-        case SDLK_r: {
-            if (citySimEnabled_ && (SDL_GetModState() & KMOD_SHIFT)) {
-                if (currentCursorMode == CursorMode_CityRoad) {
-                    setCursorMode(CursorMode_Normal);
-                } else {
-                    setCursorMode(CursorMode_CityRoad);
-                    addToNewsTicker(_("Road tool selected: click rock or slab tiles to place roads."));
-                }
-            } else {
-                for(Uint32 objectID : selectedList) {
-                    ObjectBase* pObject = objectManager.getObject(objectID);
-                    if(pObject->isAStructure()) {
-                        static_cast<StructureBase*>(pObject)->handleRepairClick();
-                    } else if(pObject->isAGroundUnit() && pObject->getHealth() < pObject->getMaxHealth()) {
-                        static_cast<GroundUnit*>(pObject)->handleSendToRepairClick();
-                    }
-                }
-            }
-        } break;
-
-
-        case SDLK_d: {
-            if(settings.general.wasdCamera && !(keyboardEvent.keysym.mod & KMOD_SHIFT))break;
-            setCursorMode(CursorMode_CarryallDrop);
-        } break;
-
-        case SDLK_u: {
-            for(Uint32 objectID : selectedList) {
-                ObjectBase* pObject = objectManager.getObject(objectID);
-                if(pObject->isABuilder()) {
-                    BuilderBase* pBuilder = static_cast<BuilderBase*>(pObject);
-                    if(pBuilder->getHealth() >= pBuilder->getMaxHealth() && pBuilder->isAllowedToUpgrade()) {
-                        pBuilder->handleUpgradeClick();
-                    }
-                }
             }
         } break;
 
@@ -6884,6 +6743,166 @@ void Game::handleKeyInput(SDL_KeyboardEvent& keyboardEvent)
 
         default: {
         } break;
+    }
+}
+
+bool Game::isHotkeyAvailable(Hotkeys::Action action) const {
+    switch(action) {
+        case Hotkeys::Action::CityZoneTool: case Hotkeys::Action::CityRoadTool:
+        case Hotkeys::Action::CityBudget: case Hotkeys::Action::CityStatsOverlay:
+            return citySimEnabled_;
+        // The Sabotage mode and the Heal order exist only with Tornie-family content, like
+        // their panel buttons.
+        case Hotkeys::Action::Sabotage: case Hotkeys::Action::Heal:
+            return ModManager::instance().isTornieFamilyContentActive();
+        default:
+            return true;
+    }
+}
+
+void Game::setSelectedUnitsAttackMode(ATTACKMODE mode) {
+    // The same CMD_UNIT_SETMODE the unit panel buttons send, for every selected unit this
+    // player may command.
+    UnitBase* responder = nullptr;
+    for(Uint32 id : selectedList) {
+        auto* unit = dynamic_cast<UnitBase*>(objectManager.getObject(id));
+        if(unit && canControlHouse(unit->getOwner()) && unit->isRespondable()
+           && (mode != SABOTAGE || unit->canCaptureStructures())) {
+            unit->handleSetAttackModeClick(mode);
+            responder = unit;
+        }
+    }
+    if(responder) responder->playConfirmSound();
+}
+
+void Game::runHotkeyAction(Hotkeys::Action action, bool extraShift) {
+    using Hotkeys::Action;
+    switch(action) {
+        // Order cursors: Shift at the click queues (docs/rts-controls.md); Ctrl+ground fires.
+        case Action::Move: setCursorMode(CursorMode_Move); break;
+        case Action::AttackMove: setCursorMode(CursorMode_Attack); break;
+        case Action::Patrol: setCursorMode(CursorMode_Patrol); break;
+        case Action::Capture: setCursorMode(CursorMode_Capture); break;
+        case Action::CarryallDrop: setCursorMode(CursorMode_CarryallDrop); break;
+
+        case Action::Stop: setSelectedUnitsAttackMode(STOP); break;
+        case Action::Guard: setSelectedUnitsAttackMode(GUARD); break;
+        case Action::AreaGuard: setSelectedUnitsAttackMode(AREAGUARD); break;
+        case Action::Ambush: setSelectedUnitsAttackMode(AMBUSH); break;
+        case Action::Hunt: setSelectedUnitsAttackMode(HUNT); break;
+        case Action::Retreat: setSelectedUnitsAttackMode(RETREAT); break;
+        case Action::Sabotage: setSelectedUnitsAttackMode(SABOTAGE); break;
+
+        // The same commands the Deploy and Self-destruct panel buttons send.
+        case Action::DeployMCV:
+        case Action::SelfDestruct: {
+            for(Uint32 objectID : selectedList) {
+                auto* pUnit = dynamic_cast<UnitBase*>(objectManager.getObject(objectID));
+                if(pUnit == nullptr || !canControlHouse(pUnit->getOwner()) || !pUnit->isRespondable()) continue;
+                if(action == Action::DeployMCV) {
+                    if(auto* pMCV = dynamic_cast<MCV*>(pUnit)) pMCV->handleDeployClick();
+                } else if(auto* pDevastator = dynamic_cast<Devastator*>(pUnit)) {
+                    pDevastator->handleStartDevastateClick();
+                }
+            }
+        } break;
+        // CursorManager refuses the cursor unless a selected unit can heal.
+        case Action::Heal: setCursorMode(CursorMode_Heal); break;
+
+        case Action::Hold: {
+            // Harvesters return (Shift on top of the key queues the return); every other
+            // selected unit holds.
+            UnitBase* holder = nullptr;
+            for(Uint32 objectID : selectedList) {
+                ObjectBase* pObject = objectManager.getObject(objectID);
+                if(isHarvesterLikeObject(pObject)) {
+                    if(extraShift && canControlHouse(pObject->getOwner()) && pObject->isRespondable()) {
+                        cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
+                            static_cast<Uint32>(UnitOrderType::HarvesterReturn), 0, 0));
+                    } else {
+                        harvesterHandleReturnClick(pObject);
+                    }
+                } else if(auto* pUnit = dynamic_cast<UnitBase*>(pObject);
+                          pUnit != nullptr && canControlHouse(pUnit->getOwner()) && pUnit->isRespondable()) {
+                    pUnit->handleSetAttackModeClick(HOLD);
+                    holder = pUnit;
+                }
+            }
+            if(holder != nullptr) holder->playConfirmSound();
+        } break;
+
+        case Action::Repair: {
+            for(Uint32 objectID : selectedList) {
+                ObjectBase* pObject = objectManager.getObject(objectID);
+                if(pObject == nullptr) continue;
+                if(pObject->isAStructure()) {
+                    static_cast<StructureBase*>(pObject)->handleRepairClick();
+                } else if(pObject->isAGroundUnit() && pObject->getHealth() < pObject->getMaxHealth()) {
+                    static_cast<GroundUnit*>(pObject)->handleSendToRepairClick();
+                }
+            }
+        } break;
+
+        case Action::Upgrade: {
+            for(Uint32 objectID : selectedList) {
+                ObjectBase* pObject = objectManager.getObject(objectID);
+                if(pObject != nullptr && pObject->isABuilder()) {
+                    BuilderBase* pBuilder = static_cast<BuilderBase*>(pObject);
+                    if(pBuilder->getHealth() >= pBuilder->getMaxHealth() && pBuilder->isAllowedToUpgrade()) {
+                        pBuilder->handleUpgradeClick();
+                    }
+                }
+            }
+        } break;
+
+        case Action::PlaceStructure: {
+            if(selectedList.size() == 1) {
+                auto* pConstructionYard = dynamic_cast<ConstructionYard*>(objectManager.getObject(*selectedList.begin()));
+                if(pConstructionYard != nullptr) {
+                    if(currentCursorMode == CursorMode_Placing) {
+                        setCursorMode(CursorMode_Normal);
+                    } else if(pConstructionYard->mayPlaceByHand()) {
+                        setCursorMode(CursorMode_Placing);
+                    }
+                }
+            }
+        } break;
+
+        case Action::NextConstructionYard:
+            selectNextStructureOfType({Structure_ConstructionYard});
+            break;
+        case Action::NextFactory:
+            selectNextStructureOfType({Structure_Barracks, Structure_WOR, Structure_LightFactory,
+                                       Structure_HeavyFactory, Structure_HighTechFactory, Structure_StarPort});
+            break;
+        case Action::SelectOrnithopters: selectAllOrnithopters(); break;
+        case Action::SelectSameTypeOnScreen: selectSameUnitTypes(false); break;
+        case Action::SelectSameTypeOnMap: selectSameUnitTypes(true); break;
+        case Action::SelectAllCombatUnits: selectAllCombatUnits(); break;
+        case Action::ToggleFormationMoves: toggleFormationMoves(); break;
+        case Action::NextFormationShape: cycleFormationShape(); break;
+        case Action::ToggleMovementPaths: toggleMovementPaths(); break;
+
+        case Action::CityZoneTool: {
+            if(currentCursorMode == CursorMode_CityZone) {
+                setCursorMode(CursorMode_Normal);
+            } else {
+                setCursorMode(CursorMode_CityZone);
+                selectedZoneType_ = DuneCity::ZoneType::Residential;
+            }
+        } break;
+        case Action::CityRoadTool: {
+            if(currentCursorMode == CursorMode_CityRoad) {
+                setCursorMode(CursorMode_Normal);
+            } else {
+                setCursorMode(CursorMode_CityRoad);
+                addToNewsTicker(_("Road tool selected: click rock or slab tiles to place roads."));
+            }
+        } break;
+        case Action::CityBudget: onCityBudget(); break;
+        case Action::CityStatsOverlay: pInterface->toggleCityStatsOverlay(); break;
+        case Action::ToggleGameTime: bShowTime = !bShowTime; break;
+        case Action::Count: break;
     }
 }
 
@@ -7970,7 +7989,9 @@ void Game::drawCityPlacementHint() {
         return;
     }
 
-    const std::string hint = std::string(DuneCity::getRoadPlacementModeLabel()) + "\nShift+R toggle · Click to place · Esc cancels";
+    const std::string roadKey = Hotkeys::displayName(settings.hotkeys.effective(Hotkeys::Action::CityRoadTool, settings.general.wasdCamera));
+    const std::string hint = std::string(DuneCity::getRoadPlacementModeLabel())
+        + (roadKey.empty() ? std::string("\n") : "\n" + roadKey + " toggle · ") + "Click to place · Esc cancels";
     sdl2::texture_ptr hintTexture = pFontManager->createTextureWithMultilineText(hint, COLOR_WHITE, 12, true);
     if (!hintTexture) {
         return;
@@ -8908,4 +8929,41 @@ void Game::loadObserverRuntime(const std::string& bytes) {
     for(auto* structure : structureList)
         if(auto* zone=dynamic_cast<ZoneStructure*>(structure)) zone->refreshZonePowerDraw();
     if(in.getRemainingLength()!=0) throw std::runtime_error("Extra spectator checkpoint data");
+}
+
+
+void Game::drawObjectivesPanel() {
+    if(finished) return;
+    auto lines = missionObjectives.describe(*this);
+    if(lines.empty()) return;
+    lines.insert(lines.begin(), {std::string(_("Objectives")), true});
+    if(lines != objectivePanelLines || objectivePanelTextures.size() != lines.size()) {
+        objectivePanelLines = lines;
+        objectivePanelTextures.clear();
+        for(size_t i = 0; i < lines.size(); ++i) {
+            const Uint32 color = i == 0 ? COLOR_WHITE : (lines[i].second ? COLOR_RGB(120, 220, 120) : COLOR_RGB(235, 205, 120));
+            objectivePanelTextures.push_back(pFontManager->createTextureWithText((i == 0 ? "" : "- ") + lines[i].first, color, 14));
+        }
+    }
+    int width = 0, height = 0;
+    for(const auto& texture : objectivePanelTextures) {
+        int w = 0, h = 0;
+        SDL_QueryTexture(texture.get(), nullptr, nullptr, &w, &h);
+        width = std::max(width, w);
+        height += h + 2;
+    }
+    // Top right of the map view, below the zoom / AI-role button row (GameInterface: at most 44
+    // pixels tall, 6 below the top bar): the city placement hint owns the top left while a road or
+    // zone is being placed.
+    const int left = std::max(8, sideBarPos.x - 14 - width), top = topBarPos.h + 6 + 44 + 10;
+    SDL_Rect plate{left - 6, top - 4, width + 12, height + 6};
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    renderFillRect(renderer, &plate, COLOR_RGBA(0, 0, 0, 150));
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    int y = top;
+    for(const auto& texture : objectivePanelTextures) {
+        SDL_Rect drawLocation = calcDrawingRect(texture.get(), left, y);
+        SDL_RenderCopy(renderer, texture.get(), nullptr, &drawLocation);
+        y += drawLocation.h + 2;
+    }
 }

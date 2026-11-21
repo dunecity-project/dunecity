@@ -537,12 +537,29 @@ void runCustomAttackProbe(Game& game) {
         reset(QuantBot::Difficulty::Easy);bot->launchGroundHunt();
         game.gameType=GameType::Campaign;
         auto* helperReserve=army.back();
+        // CampaignHelperDefenceLeash off: the helper's reserve regroups on its army's centroid,
+        // whatever the Custom reserve rule does.
+        const int shippedLeash=getQuantBotConfig().force.campaignHelperDefenceLeash;
+        require(shippedLeash==14,"The shipped campaign helper defence leash is not 14 tiles");
+        getQuantBotConfig().force.campaignHelperDefenceLeash=0;
         bot->doMove2Pos(helperReserve,helperReserve->getX(),helperReserve->getY(),false);
         helperReserve->setForced(false);
         const auto assaultCenter=bot->findSquadCenter(house->getHouseID());
         bot->moveToOptimalSquadPosition(helperReserve,1);
         require(blockDistance(helperReserve->getGuardPoint(),assaultCenter)<=3,
             "Custom reserve rule changed campaign helper movement");
+        // Shipped leash: a centroid the wave has drawn beyond the leash is no regroup point; the
+        // reserve regroups within the leash of its own buildings. A centroid inside it still is.
+        getQuantBotConfig().force.campaignHelperDefenceLeash=shippedLeash;
+        bot->doMove2Pos(helperReserve,helperReserve->getX(),helperReserve->getY(),false);
+        helperReserve->setForced(false);
+        bot->moveToOptimalSquadPosition(helperReserve,1);
+        const int centroidTiles=bot->campaignHelperStructureDistance(assaultCenter);
+        require(centroidTiles!=std::numeric_limits<int>::max(),"The campaign helper probe house owns no building");
+        require(centroidTiles>shippedLeash
+                ? bot->campaignHelperStructureDistance(helperReserve->getGuardPoint())<=shippedLeash
+                : blockDistance(helperReserve->getGuardPoint(),assaultCenter)<=3,
+            "Campaign helper reserve regrouped beyond its defence leash");
         game.gameType=GameType::CustomGame;
         reset(QuantBot::Difficulty::Easy);
         getQuantBotConfig().easy.attackForceMilitaryValueRatio=0;

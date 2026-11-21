@@ -3,8 +3,12 @@
 #include <Network/CustomGamePlayerPolicy.h>
 #include <misc/OMemoryStream.h>
 #include <fstream>
+#include <set>
 // Test-only entry point, linked against the real menu objects by run-menu-probe.py.
 #include <Menu/HouseChoiceMenu.h>
+#include <Menu/BriefingMenu.h>
+#include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 #include <MapEditor/MapEditor.h>
 #include <MapEditor/MapSettingsWindow.h>
 #include <Menu/CustomGamePlayers.h>
@@ -52,6 +56,22 @@ void menuCapture(Window& menu, const std::string& name, bool overlay = false) {
     menuRequire(SDL_RenderReadPixels(renderer,nullptr,SDL_PIXELFORMAT_ARGB8888,surface->pixels,surface->pitch)==0,"Capture failed");
     const auto path = std::string(std::getenv("MENU_PROBE_OUT"))+"/"+std::getenv("MENU_PROBE_WIDTH")+"-"+name+".bmp";
     menuRequire(SDL_SaveBMP(surface.get(),path.c_str())==0,"Screenshot write failed");
+}
+/// Gold pixels of the REMASTERED badge (misc/ReworkedCampaign.h) in the screen's top-right corner,
+/// read from the frame menuCapture() just drew.
+int remasteredBadgePixels() {
+    int w, h;
+    SDL_GetRendererOutputSize(renderer, &w, &h);
+    SDL_Rect area { w - w / 4, 0, w / 4, std::max(40, h / 10) };
+    std::vector<Uint32> pixels(static_cast<size_t>(area.w) * area.h);
+    menuRequire(SDL_RenderReadPixels(renderer, &area, SDL_PIXELFORMAT_ARGB8888, pixels.data(), area.w * 4) == 0,
+                "Badge read failed");
+    int gold = 0;
+    for(const Uint32 p : pixels) {
+        const int r = (p >> 16) & 255, g = (p >> 8) & 255, b = p & 255;
+        if(r > 200 && g > 150 && g < 225 && b < 140) ++gold;
+    }
+    return gold;
 }
 #include "user-map-list-probe.inc"
 #include "tornie-family-menu-probe.inc"
@@ -1123,6 +1143,102 @@ int runMenuProbe() {
             "Start launched stale AI or mission choices");
     }
     {
+        // Reworked campaign (docs/reworked-campaign.md): Maps offers Original and Reworked (the DuneCity
+        // campaign has its own main-menu screen); Reworked offers only houses with all 22 reworked missions
+        // (Atreides, Harkonnen and Ordos), shows the REMASTERED badge and reaches the launch; Original
+        // restores every house and drops the badge.
+        HouseChoiceMenu::s_reworkedMaps=false;
+        HouseChoiceMenu menu(false);
+        auto& maps=menu.campaignMapsDropDown;
+        menuRequire(maps.getNumEntries()==2 && maps.getEntry(0)==_("Original") && maps.getEntry(1)==_("Reworked")
+                    && maps.getSelectedIndex()==0 && maps.isEnabled() && !HouseChoiceMenu::isDuneCityCampaign(),
+                    "Campaign Maps should offer Original (selected) and Reworked");
+        menuRequire(menu.houseChoices.count>1 && !menu.showsRemasteredWatermark(),
+                    "Original maps should offer every house without the badge");
+        menuCapture(menu,"campaign-original-maps");
+        const int originalGold=remasteredBadgePixels();
+        maps.setSelectedItem(1,true);
+        menuRequire(HouseChoiceMenu::isReworkedMaps() && menu.showsRemasteredWatermark(),
+                    "Reworked maps choice did not reach the campaign launch");
+        {
+            std::set<int> offered;
+            for(int i = 0; i < menu.houseChoices.count; ++i) offered.insert(menu.houseChoices[i]);
+            const std::set<int> complete{HOUSE_ATREIDES, HOUSE_HARKONNEN, HOUSE_ORDOS};
+            menuRequire(menu.houseChoices.count==3 && offered==complete && complete.count(HouseChoiceMenu::s_house)==1,
+                        "Reworked maps should offer only Atreides, Harkonnen and Ordos, the complete reworked campaigns");
+        }
+        menuCapture(menu,"campaign-reworked-maps");
+        const int reworkedGold=remasteredBadgePixels();
+        menuRequire(reworkedGold>=20 && reworkedGold>originalGold*4+10,
+                    "The Campaign screen does not show the REMASTERED badge for reworked maps");
+        maps.setSelectedItem(0,true);
+        menuRequire(!HouseChoiceMenu::isReworkedMaps() && menu.houseChoices.count>1,
+                    "Original maps did not restore every house");
+    }
+    {
+        // DuneCity Campaign (docs/city-campaign.md): its own screen, without the connection, maps and mod
+        // choices. Without the DuneCity mod it offers no start; with it, Atreides alone and the ten
+        // missions, the start mission's name and goals, and a launch that keeps the choices.
+        auto& mods=ModManager::instance();
+        const std::string previousMod=mods.getActiveModName();
+        HouseChoiceMenu::s_reworkedMaps=true;
+        menuRequire(mods.setActiveMod("vanilla"), "Cannot select vanilla for the city campaign check");
+        {
+            HouseChoiceMenu menu(false,false,false,true);
+            menuRequire(!menu.hostCoopButton.isEnabled(), "Without the DuneCity mod the DuneCity Campaign offers a start");
+        }
+        menuRequire(mods.setActiveMod(DuneCityCampaign::kMod), "Cannot select Dune City for the city campaign");
+        HouseChoiceMenu::s_startLevel=1;
+        {
+            HouseChoiceMenu menu(true,false,false,true);
+            menuRequire(HouseChoiceMenu::isDuneCityCampaign() && !HouseChoiceMenu::isReworkedMaps()
+                        && !HouseChoiceMenu::isOnline() && !menu.showsRemasteredWatermark(),
+                        "The DuneCity Campaign screen does not launch the offline city campaign");
+            menuRequire(menu.campaignMapsDropDown.getNumEntries()==0 && menu.availableMods.empty()
+                        && menu.modDropDown.getNumEntries()==0,
+                        "The DuneCity Campaign screen should offer no maps or mod choice");
+            menuRequire(menu.houseChoices.count==1 && menu.houseChoices[0]==DuneCityCampaign::kHouse
+                        && menu.house2Button.isVisible() && !menu.house1Button.isVisible() && !menu.house3Button.isVisible(),
+                        "The DuneCity campaign should offer only Atreides, centred");
+            menuRequire(menu.startLevelDropDown.getNumEntries()==DuneCityCampaign::kMissions
+                        && menu.startLevelDropDown.getEntry(DuneCityCampaign::kMissions-1)
+                               ==_("Mission ")+std::to_string(DuneCityCampaign::kMissions),
+                        "The DuneCity campaign should list its ten missions");
+            menuRequire(menu.missionLabel.getText()=="Mission 1: Sihaya Basin"
+                        && menu.missionDescription.getText().rfind("Goal: 20,000 people", 0)==0,
+                        "The DuneCity Campaign screen does not show the start mission's goals");
+            menu.startLevelDropDown.setSelectedItem(6,true);
+            menuRequire(menu.missionLabel.getText()=="Mission 7: Shield Wall Breach",
+                        "The mission panel does not follow the start mission");
+            menuCapture(menu,"campaign-dunecity");
+            menu.hostCoopButton.handleMouseLeft(10,10,true);
+            menu.hostCoopButton.handleMouseLeft(10,10,false);
+            menuRequire(menu.isQuiting() && HouseChoiceMenu::getStartLevel()==7
+                        && HouseChoiceMenu::s_house==DuneCityCampaign::kHouse,
+                        "Start did not launch the chosen DuneCity mission");
+        }
+        {
+            // The regular Campaign screen leaves the city campaign.
+            HouseChoiceMenu menu(false);
+            menuRequire(!HouseChoiceMenu::isDuneCityCampaign() && menu.houseChoices.count>1,
+                        "The Campaign screen kept the DuneCity campaign");
+        }
+        HouseChoiceMenu::s_reworkedMaps=false;
+        menuRequire(mods.setActiveMod(previousMod), "Cannot restore the mod after the city campaign check");
+    }
+    {
+        // Between reworked missions the briefing carries the badge; an original briefing does not.
+        int gold[2]={0,0};
+        for(const bool reworked : {false,true}) {
+            ReworkedCampaign::WatermarkScope remastered(reworked);
+            BriefingMenu briefing(HOUSE_ATREIDES,12,BRIEFING);
+            menuCapture(briefing,reworked ? "briefing-reworked" : "briefing-original");
+            gold[reworked]=remasteredBadgePixels();
+        }
+        menuRequire(!ReworkedCampaign::isWatermarkVisible(),"The badge scope did not restore the menus");
+        menuRequire(gold[1]>=20 && gold[1]>gold[0]*4+10,"The reworked briefing does not show the REMASTERED badge");
+    }
+    {
         ListBox list;
         list.addEntry("First");list.addEntry("Second");
         list.resize(200,100);
@@ -1146,6 +1262,13 @@ int runMenuProbe() {
         SDL_Log("MENU_VERSION_PASS: %s", menu.modVersionLabel.getText().c_str());
         menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.randomSkirmishButton.isVisible()
             && menu.civWarsButton.isVisible() && menu.onlineButton.isVisible(), "Home play actions missing");
+        // DuneCity Campaign took Continue's place (Stefan, 2026-11-21), directly below Campaign.
+        menuRequire(menu.duneCityCampaignButton.isVisible() && menu.duneCityCampaignButton.getText()=="DuneCity Campaign"
+            && menu.windowWidget.getWidgetPosition(&menu.duneCityCampaignButton).y
+               > menu.windowWidget.getWidgetPosition(&menu.campaignButton).y
+            && menu.windowWidget.getWidgetPosition(&menu.duneCityCampaignButton).y
+               < menu.windowWidget.getWidgetPosition(&menu.customButton).y,
+            "DuneCity Campaign is not between Campaign and Custom Game");
         menuRequire(menu.windowWidget.getWidgetPosition(&menu.civWarsButton).y
             > menu.windowWidget.getWidgetPosition(&menu.randomSkirmishButton).y,
             "Civilization Wars is not below Random Skirmish");
@@ -1154,11 +1277,8 @@ int runMenuProbe() {
             && menu.modesButton.getText()=="Extras", "Workshop and Extras destinations are not distinct");
         menuRequire(!menu.campaignButton.keyboardFocusVisible,"Home shows unsolicited keyboard focus");
         menuCapture(menu,"home");
-        menu.canContinue=true; menu.refreshContextButtons();
-        menuCapture(menu,"home-continue");
-        menu.canContinue=false; menu.refreshContextButtons();
         SDL_Event tab{}; tab.type=SDL_KEYDOWN; tab.key.keysym.sym=SDLK_TAB;
-        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.civWarsButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
+        std::vector<TextButton*> tabOrder{&menu.campaignButton,&menu.duneCityCampaignButton,&menu.customButton,&menu.randomSkirmishButton,&menu.civWarsButton,&menu.loadButton,&menu.optionsButton,&menu.editorsButton,&menu.modesButton,&menu.quitButton};
 #if defined(DUNECITY_DESKTOP_UPDATER)
         tabOrder.push_back(&menu.updateButton);
 #endif
@@ -1181,8 +1301,40 @@ int runMenuProbe() {
 #if defined(DUNECITY_DESKTOP_UPDATER)
         auto& updater = DesktopUpdater::instance();
         menu.bFirstLaunchPromptChecked = true;
-        MainMenu::updatePromptOfferedThisLaunch = false;
         updater.manifest_.version = "9.0.0";
+#if defined(__linux__)
+        // Linux installs updates in-game only into a user-owned AppImage
+        // ($APPIMAGE), and this build tree is not one. First check it as a
+        // DEB/RPM install sees it, then stand in for an AppImage.
+        struct AppImageStandIn {
+            const char* old = getenv("APPIMAGE");
+            const bool had = old != nullptr;
+            const std::string previous = old ? old : "";
+            const std::filesystem::path image = std::filesystem::absolute(
+                std::filesystem::path(getConfigFilepath()).parent_path() / "menu-probe-update.AppImage");
+            ~AppImageStandIn() {
+                if (had) setenv("APPIMAGE", previous.c_str(), 1); else unsetenv("APPIMAGE");
+                std::error_code ignored; std::filesystem::remove(image, ignored);
+            }
+        } appImage;
+        unsetenv("APPIMAGE");
+        MainMenu::updatePromptOfferedThisLaunch = false;
+        updater.state_ = DesktopUpdater::State::Available;
+        menu.update(); menu.update();
+        menuRequire(!updater.supported() && menu.updateButton.getText()=="Update available",
+            "A non-AppImage Linux install lost its update notice");
+        menuRequire(!menu.pChildWindow && !menu.updatePromptOpen,
+            "A non-AppImage Linux install opened an unsolicited update dialog");
+        menu.onUpdate();
+        menuRequire(dynamic_cast<MsgBox*>(menu.pChildWindow) && !menu.updatePromptOpen,
+            "The update button no longer explains manual updates outside an AppImage");
+        menu.closeChildWindow();
+        menu.processChildWindowOpenCloses();
+        std::ofstream(appImage.image) << "menu probe AppImage stand-in\n";
+        setenv("APPIMAGE", appImage.image.c_str(), 1);
+        menuRequire(updater.supported(), "A user-owned AppImage cannot install updates");
+#endif
+        MainMenu::updatePromptOfferedThisLaunch = false;
         updater.state_ = DesktopUpdater::State::Current;
         menu.update();
         menuRequire(!menu.pChildWindow && !menu.updatePromptOpen, "Up-to-date launch opened an update dialog");
@@ -2343,7 +2495,7 @@ int runMenuProbe() {
     }
     {
         OptionsMenu menu;
-        for(int page=0;page<5;++page) { menu.showPage(page); menuCapture(menu,"settings-"+std::to_string(page)); }
+        for(int page=0;page<6;++page) { menu.showPage(page); menuCapture(menu,"settings-"+std::to_string(page)); }
         menuRequire(menu.interfaceSizeDropDownBox.getParent()==&menu.interfaceHBox,"Interface size missing from Settings");
         menuRequire(menu.pages[1].getMinimumSize().y <= menu.pages[1].getSize().y,"Graphics controls overflow");
         menuRequire(menu.pages[4].getMinimumSize().y <= menu.pages[4].getSize().y,"Advanced controls overflow");
@@ -2375,6 +2527,112 @@ int runMenuProbe() {
             && savedOptions.getBoolValue("General","Left Click Orders",false)
             && !savedOptions.getBoolValue("General","Movement Paths",true),"Input options not persisted");
         menuRequire(menu.isQuiting(),"Unchanged legacy network field blocked audio apply");
+    }
+    {
+        // Hotkeys tab at this size: every tab and control on screen, real key capture through the
+        // menu's input path (Escape cancels the capture, not Settings), Back discards, Apply persists.
+        using Hotkeys::Action;
+        const auto original = settings.hotkeys;
+        auto keyDown = [](OptionsMenu& menu, SDL_Keycode sym, Uint16 mod) {
+            SDL_Event event{}; event.type=SDL_KEYDOWN; event.key.keysym.sym=sym; event.key.keysym.mod=mod;
+            menu.doInput(event);
+        };
+        auto rowOf = [](Action action) { return static_cast<int>(action); };
+        {
+            OptionsMenu menu;
+            menu.showPage(OptionsMenu::hotkeysPage);
+            auto& page = menu.pages[OptionsMenu::hotkeysPage];
+            menuRequire(page.getMinimumSize().y <= page.getSize().y, "Hotkeys controls overflow Settings");
+            const Point pagePos = menu.windowWidget.getWidgetPosition(&page);
+            menuRequire(pagePos.y + page.getSize().y <= menu.windowWidget.getWidgetPosition(&menu.backButton).y,
+                        "Hotkeys page overlaps Back/Apply");
+            int lastRight = 0;
+            for(int i=0;i<6;++i) {
+                const Point tab = menu.windowWidget.getWidgetPosition(&menu.pageButtons[i]);
+                const Point size = menu.pageButtons[i].getSize();
+                menuRequire(tab.x >= lastRight && tab.x + size.x <= menu.getSize().x && size.x >= menu.pageButtons[i].getMinimumSize().x,
+                            "Settings tabs overlap, leave the screen or clip their names");
+                lastRight = tab.x + size.x;
+            }
+            menuRequire(menu.hotkeyListBox.getSize().y >= 80, "Hotkeys list too short to use");
+            menuRequire(page.getWidgetPosition(&menu.hotkeyFixedLabel).y + menu.hotkeyFixedLabel.getSize().y <= page.getSize().y,
+                        "Fixed shortcut summary is cut off");
+            menuRequire(menu.hotkeyListBox.getNumEntries()==Hotkeys::actionCount, "Hotkeys list misses commands");
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AreaGuard))=="Area Guard:  X"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Guard))=="Guard:  E"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::NextConstructionYard))=="Select next Construction Yard:  G"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Move))=="Move:  M",
+                        "Hotkey rows do not show Guard E, Area Guard X, Construction Yard G and Move M");
+            // The rows show the keys in effect for the WASD choice ticked on Controls: off, A, S
+            // and D are plain command keys; on, they scroll and their commands need Shift.
+            const bool tickedWasd = menu.wasdCameraCheckbox.isChecked();
+            menu.wasdCameraCheckbox.setChecked(false);
+            menu.onChangeOption(true);
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AttackMove))=="Attack Move:  A"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Stop))=="Stop:  S"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::CarryallDrop))=="Request Carryall drop:  D",
+                        "Without the WASD camera the rows do not show Attack Move A, Stop S and Carryall drop D");
+            menu.wasdCameraCheckbox.setChecked(true);
+            menu.onChangeOption(true);
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::AttackMove))=="Attack Move:  Shift+A"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Stop))=="Stop:  Shift+S"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::CarryallDrop))=="Request Carryall drop:  Shift+D"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Patrol))=="Patrol:  Q"
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Guard))=="Guard:  E",
+                        "With the WASD camera the rows do not show Shift+A, Shift+S and Shift+D, or changed another key");
+            menu.wasdCameraCheckbox.setChecked(tickedWasd);
+            menu.onChangeOption(true);
+
+            menu.hotkeyListBox.setSelectedItem(rowOf(Action::Guard));
+            menu.onHotkeyChange();
+            keyDown(menu, SDLK_ESCAPE, KMOD_NONE);
+            menuRequire(!menu.isQuiting() && menu.capturingHotkey<0 && menu.pendingHotkeys==settings.hotkeys,
+                        "Escape during hotkey capture left Settings or changed a key");
+            menu.onHotkeyChange();
+            keyDown(menu, SDLK_1, KMOD_NONE);
+            keyDown(menu, SDLK_LSHIFT, KMOD_LSHIFT);
+            menuRequire(menu.capturingHotkey==rowOf(Action::Guard) && menu.pendingHotkeys==settings.hotkeys,
+                        "A control-group digit or lone Shift was taken as a hotkey");
+            keyDown(menu, SDLK_y, KMOD_NONE);
+            menuRequire(menu.capturingHotkey<0 && menu.pendingHotkeys.get(Action::Guard)==Hotkeys::Binding{SDLK_y,0}
+                        && !menu.pendingHotkeys.get(Action::DeployMCV).bound(),
+                        "Capturing Y did not move it from Deploy MCV to Guard");
+            menuRequire(menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).find(": ")!=std::string::npos
+                        && menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).substr(menu.hotkeyListBox.getEntry(rowOf(Action::Guard)).size()-1)=="Y",
+                        "Hotkeys list not refreshed after a capture");
+            menuRequire(menu.acceptButton.isEnabled() && settings.hotkeys==original, "Hotkey edit not pending until Apply");
+            menuCapture(menu,"settings-hotkeys-edited");
+            menu.onOptionsCancel();
+            menuRequire(settings.hotkeys==original, "Back kept an edited hotkey");
+        }
+        {
+            OptionsMenu menu;
+            menu.hotkeyListBox.setSelectedItem(rowOf(Action::Stop));
+            menu.onHotkeyClear();
+            menu.hotkeyListBox.setSelectedItem(rowOf(Action::Guard));
+            menu.onHotkeyChange();
+            keyDown(menu, SDLK_y, KMOD_NONE);
+            menu.onOptionsOK();
+            INIFile saved(getConfigFilepath());
+            menuRequire(menu.isQuiting() && settings.hotkeys.get(Action::Guard)==Hotkeys::Binding{SDLK_y,0}
+                        && !settings.hotkeys.get(Action::Stop).bound()
+                        && saved.getStringValue("Hotkeys","Guard")=="Y" && saved.getStringValue("Hotkeys","Stop")=="None"
+                        && saved.getStringValue("Hotkeys","Deploy MCV")=="None"
+                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="G",
+                        "Edited hotkeys not applied or persisted");
+        }
+        {
+            OptionsMenu menu;
+            menu.onHotkeyDefaults();
+            menu.onOptionsOK();
+            INIFile saved(getConfigFilepath());
+            menuRequire(settings.hotkeys==Hotkeys::Bindings::defaults() && saved.getStringValue("Hotkeys","Guard")=="E"
+                        && saved.getStringValue("Hotkeys","Area Guard")=="X" && saved.getStringValue("Hotkeys","Stop")=="S"
+                        && saved.getStringValue("Hotkeys","Attack Move")=="A" && saved.getStringValue("Hotkeys","Move")=="M"
+                        && saved.getStringValue("Hotkeys","Deploy MCV")=="Y"
+                        && saved.getStringValue("Hotkeys","Next Construction Yard")=="G",
+                        "Default hotkeys not restored or persisted");
+        }
     }
     {
         menuRequire(ModManager::instance().setActiveMod("dunecity"),"Skin options fixture mod unavailable");

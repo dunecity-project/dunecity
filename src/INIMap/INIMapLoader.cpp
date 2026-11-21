@@ -10,6 +10,8 @@
 #include <players/Player.h>
 #include <players/AIPlayer.h>
 #include <players/HumanPlayer.h>
+#include <players/OriginalCampaignPolicy.h>
+#include <players/QuantBotConfig.h>
 #include <Map.h>
 #include <ScreenBorder.h>
 #include <MapSeed.h>
@@ -25,6 +27,8 @@
 
 #include <Trigger/ReinforcementTrigger.h>
 #include <Trigger/TimeoutTrigger.h>
+#include <Trigger/BreachTrigger.h>
+#include <MissionObjectives.h>
 
 #include <misc/format.h>
 #include <misc/exceptions.h>
@@ -40,6 +44,7 @@
 #include <globals.h>
 
 #include <algorithm>
+#include <sstream>
 #include <vector>
 
 namespace {
@@ -220,6 +225,7 @@ void INIMapLoader::load() {
     loadAITeams();
     loadView();
     loadChoam();
+    loadObjectivesAndEvents();
 }
 
 /**
@@ -699,6 +705,14 @@ void INIMapLoader::loadHouses()
             playerSectionsOnMap.erase(playerSectionsOnMap.begin() + randomIndex);
         }
 
+        // The DuneCity campaign keeps a map's rivalries: the campaign roster puts every computer
+        // house on team 2, but Brain=Team3 / Team4 houses there fight each other too.
+        if(pGame->getGameInitSettings().isDuneCityCampaign() && houseID != pGame->getGameInitSettings().getHouseID()) {
+            const std::string brain = strToLower(inifile->getStringValue(houseName, "Brain", ""));
+            int brainTeam = 0;
+            if(brain.rfind("team", 0) == 0 && parseString(brain.substr(4), brainTeam) && brainTeam >= 2 && brainTeam < NUM_TEAMS)
+                resolvedHouseInfo.team = brainTeam;
+        }
         // Keep only fully resolved entries. A skipped Random entry used to remain
         // in houseInfoListSetup and could later bind local vision to the wrong slot.
         pGame->houseInfoListSetup.push_back(resolvedHouseInfo);
@@ -719,9 +733,36 @@ void INIMapLoader::loadHouses()
                 startingCredits = inifile->getIntValue("Player1", "Credits", DEFAULT_STARTINGCREDITS);
         }
 
+        // DuneCity campaign [DIFFICULTY] (docs/city-campaign.md): an enemy house's strength for its AI's
+        // difficulty. The grace period follows the strongest enemy (loadObjectivesAndEvents).
+        if(pGame->getGameInitSettings().isDuneCityCampaign() && houseID != pGame->getGameInitSettings().getHouseID()) {
+            std::string difficulty;
+            for(const auto& info : resolvedHouseInfo.playerInfoList) {
+                const auto* data = PlayerFactory::getByPlayerClass(info.playerClass);
+                if(data != nullptr && !data->getDifficulty().empty()) { difficulty = data->getDifficulty(); break; }
+            }
+            const int permille = MissionObjectivePolicy::enemyStrengthPermille(*inifile.get(), difficulty);
+            if(permille != 1000) {
+                const int scaled = MissionObjectivePolicy::scaledCredits(startingCredits, permille);
+                SDL_Log("DuneCity campaign: %s (%s) at strength %d per mille, credits %d -> %d",
+                        houseName.c_str(), difficulty.c_str(), permille, startingCredits, scaled);
+                startingCredits = scaled;
+            }
+            if(!difficulty.empty()) enemyStrengthPermille = std::max(enemyStrengthPermille, permille);
+        }
+
         int maxUnits = 0;
-        if(currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride >= 0) {
-            maxUnits = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride;
+        const int unitOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride;
+        const bool originalCampaignHouse = getQuantBotConfig().originalCampaignAI
+            && std::any_of(resolvedHouseInfo.playerInfoList.begin(), resolvedHouseInfo.playerInfoList.end(),
+                           [](const GameInitSettings::PlayerInfo& info) { return info.playerClass == "CampaignAIPlayer"; });
+        if(OriginalCampaignPolicy::keepsAuthoredUnitCap(originalCampaignHouse, isScenarioGameType(pGame->gameType), unitOverride)) {
+            // Dune II: every computer house keeps the MaxUnit its mission authored. The shipped
+            // "unlimited" override would otherwise let it build without end (docs/original-campaign-ai.md).
+            const int maxUnit = inifile->getIntValue(houseName, "MaxUnit", OriginalCampaignPolicy::defaultUnitCap);
+            maxUnits = inifile->getIntValue(houseName, "MaxUnits", maxUnit);
+        } else if(unitOverride >= 0) {
+            maxUnits = unitOverride;
         } else {
             // Use map size defaults from ObjectData.ini
             const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
@@ -1138,7 +1179,7 @@ void INIMapLoader::loadExtraCoopForces() {
                            || !currentGameMap->tileExists(x, y)) continue;
                         const auto* tile = currentGameMap->getTile(x, y);
                         if(tile->hasAGroundObject() || !unit->canPass(x, y)) continue;
-                        unit->deploy(Coord(x, y));
+                        unit->deployAtMapStart(Coord(x, y));
                         unit->doSetAttackMode(AREAGUARD);
                         placed = true;
                     }
@@ -1445,5 +1486,46 @@ HOUSETYPE INIMapLoader::getHouseID(const std::string& name) {
         return housename2house[lowerName];
     } else {
         return getHouseByName(lowerName);
+    }
+}
+
+
+void INIMapLoader::loadObjectivesAndEvents() {
+    auto& objectives = pGame->getMissionObjectives();
+    objectives.loadFromINI(*inifile.get());
+    if(enemyStrengthPermille > 0 && enemyStrengthPermille != 1000) {
+        objectives.enemyFirstAttackCycle = MissionObjectivePolicy::scaledGrace(objectives.enemyFirstAttackCycle, enemyStrengthPermille);
+        SDL_Log("DuneCity campaign: enemy grace period %u cycles at strength %d per mille",
+                objectives.enemyFirstAttackCycle, enemyStrengthPermille);
+    }
+    objectives.conquestWins = (pGame->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0
+        && (pGame->loseFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0;
+    const int timeout = inifile->getIntValue("BASIC", "TIMEOUT", 0);
+    if(timeout > 0 && (pGame->winFlags & WINLOSEFLAGS_TIMEOUT) != 0) {
+        objectives.deadlineCycle = MILLI2CYCLES(timeout * 60 * 1000);
+        objectives.deadlineWins = (pGame->loseFlags & WINLOSEFLAGS_TIMEOUT) != 0;
+    }
+
+    if(!inifile->hasSection("EVENTS")) return;
+    for(const INIFile::Key& key : inifile->getSection("EVENTS")) {
+        const std::string name = key.getKeyName();
+        if(name.rfind("Breach", 0) != 0 || name.find("Message") != std::string::npos) continue; // FirstEnemyAttack: MissionObjectives
+        std::vector<int> values;
+        std::string field;
+        std::istringstream input(key.getStringValue());
+        bool valid = true;
+        while(std::getline(input, field, ',')) {
+            int value = 0;
+            if(!parseString(field, value)) { valid = false; break; }
+            values.push_back(value);
+        }
+        if(!valid || values.size() < 5 || values[0] < 0 || values[3] <= 0 || values[4] <= 0) {
+            logWarning(key.getLineNumber(), "Invalid breach event (minute,x,y,width,height[,worms]): " + key.getStringValue());
+            continue;
+        }
+        const int worms = values.size() > 5 ? std::clamp(values[5], 0, 8) : 0;
+        const std::string message = inifile->getStringValue("EVENTS", name + "Message", "");
+        pGame->getTriggerManager().addTrigger(std::make_unique<BreachTrigger>(
+            MILLI2CYCLES(static_cast<Uint32>(values[0]) * 60 * 1000), values[1], values[2], values[3], values[4], worms, message));
     }
 }

@@ -894,12 +894,25 @@ void blockedAndFirst(const char* mod) {
         require(!world.bot->repairYardAdmitted(pending), "Pending first repair prerequisite was duplicated");
         world.bot->difficulty = QuantBot::Difficulty::Medium;
         world.bot->initialItemCount[Structure_RepairYard] = 0;
+        // Repair demand and the campaign difficulty restriction are independent.
+        // Retain the legacy OFF control without requiring its Medium ban under
+        // the corrected default: only an Easy campaign enemy is prohibited.
+        const bool savedRoleFix = world.config->force.campaignRepairRoleFix;
+        world.config->force.campaignRepairRoleFix = false;
         require(!world.bot->canAddRepairYard(0) || world.game->isCitySimEnabled(),
-            "Treatment loosened non-city Medium's repair restriction");
+            "Repair demand changed the legacy OFF Medium restriction");
+        world.config->force.campaignRepairRoleFix = true;
+        require(world.bot->canAddRepairYard(0), "Custom Medium inherited a campaign repair prohibition");
         const auto originalType = world.game->gameType;
         world.game->gameType = GameType::Campaign;
         require(!world.bot->repairCapacityDemandActive(), "Treatment changed authored campaign reconstruction");
+        world.bot->difficulty = QuantBot::Difficulty::Easy;
+        require(world.bot->isCampaignEnemy() && !world.bot->canAddRepairYard(0),
+            "Repair demand bypassed the Easy campaign enemy prohibition");
+        world.bot->difficulty = QuantBot::Difficulty::Medium;
+        require(world.bot->canAddRepairYard(0), "Medium campaign enemy retained the Easy repair prohibition");
         world.game->gameType = originalType;
+        world.config->force.campaignRepairRoleFix = savedRoleFix;
     }
     SDL_Log("REPAIR_CAPACITY_CASE: transport access completed_return first_prerequisite restrictions passed");
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise live joining over real local PHP and WebRTC, then compare resumed game state.
 
-Requires the existing macOS Ninja Release build and bundled game assets. Uses an isolated
+Requires the existing Ninja Release build (macOS or Linux) and its game assets. Uses an isolated
 profile and dummy SDL drivers. Logs and the test executable are retained in --output-dir.
 
 --peer-cases campaign skirmish custom --mod vanilla is the headless native join gate:
@@ -33,7 +33,10 @@ import time
 import uuid
 
 root = Path(__file__).resolve().parents[2]
-parser = argparse.ArgumentParser(description=__doc__)
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
+parser =argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path)
 parser.add_argument('--endpoint', help='Explicit isolated HTTPS test service; never use the production lobby.')
@@ -105,8 +108,8 @@ if peer_probe and (any((out / case).exists() for case in peer_cases) or (out / '
     out = out / ('run-' + uuid.uuid4().hex[:10])
     out.mkdir()
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-lines = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+lines = native_build_commands(build)
 main = (root / 'src/main.cpp').read_text()
 needle = 'int menuResult = MainMenu().showMenu();'
 if main.count(needle) != 1:
@@ -120,7 +123,7 @@ if peer_probe:
     main = main.replace(clamp, '(void)displayIndex;')
 pos = main.index('int main(')
 include = root / 'tests/network' / ('tornie-peer-probe.inc' if peer_probe else 'late-join-probe.inc')
-main = main[:pos] + '#include "' + str(include) + '"\n' + main[pos:]
+main = main[:pos] + NATIVE_INCLUDES + '#include "' + str(include) + '"\n' + main[pos:]
 source = out / 'late-join-probe-main.cpp'
 source.write_text(main)
 cc = shlex.split(next(line for line in lines if ' -c ' in line and '/src/main.cpp' in line))
@@ -141,12 +144,7 @@ if args.four_corners: map_path = root / 'data/maps/singleplayer/4P - 128x128 - 4
 if args.twin_cities: map_path = root / 'data/maps/singleplayer/2P - 256x256 - Twin Cities.ini'
 cc.append('-fno-access-control')
 cc.append('-DPROBE_MAP_PATH="' + str(map_path) + '"')
-app = out / 'late-join-probe.app/Contents'
-(app / 'MacOS').mkdir(parents=True, exist_ok=True)
-resources = app / 'Resources'
-if not resources.exists():
-    resources.symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-binary = app / 'MacOS/late-join-probe'
+binary = native_probe_binary(build, out, 'late-join-probe')
 link = shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
 link = link[link.index('&&')+1:]
 link = link[:link.index('&&')]

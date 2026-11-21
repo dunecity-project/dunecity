@@ -435,6 +435,9 @@ target_sources(dunecity
         Trigger/TriggerManager.cpp
         Trigger/ReinforcementTrigger.cpp
         Trigger/TimeoutTrigger.cpp
+        Trigger/BreachTrigger.cpp
+        MissionBriefing.cpp
+        MissionObjectives.cpp
 
         # DuneCity - city-building simulation layer
         dunecity/CitySimulation.cpp
@@ -447,12 +450,14 @@ target_sources(dunecity
         dunecity/CityEvaluation.cpp
 
         # misc
+        misc/AnalyticsInstallID.cpp
         misc/draw_util.cpp
         misc/FileSystem.cpp
         misc/fnkdat.cpp
         misc/format.cpp
         misc/FrameYield.cpp
         misc/IFileStream.cpp
+        misc/ReworkedCampaign.cpp
         misc/md5.cpp
         misc/OFileStream.cpp
 

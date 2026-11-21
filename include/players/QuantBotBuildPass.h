@@ -264,6 +264,35 @@ struct QuantBot::BuildPass {
     bool roadMaintenanceAttempted{};
     bool defendingEconomy{};
     bool campaignThreatProduction{};
+    // CampaignHelperFactoryFirst: support house below its army floor still lacks a Heavy Factory.
+    bool campaignHelperFactoryFirst{};
+    // CampaignHelperStarportArmy: support house's ground army value short of that target
+    // (0 = switch off, out of scope or target met). The Starport imports heavies against it.
+    int64_t campaignHelperStarportDeficit{};
+    // CampaignHelperImportCap: support house below its army target; no seventh harvester
+    // or third carryall, owned or queued.
+    bool campaignHelperImportCap{};
+    // CampaignHelperFactoryLast: support house with a Starport holds its first Heavy Factory.
+    bool campaignHelperFactoryLast{};
+    // CampaignHelperEarlyStarport: support house's refineries before its Starport (0 = off or
+    // out of scope); the remaining opening refineries follow the port, before the Repair Yard.
+    int campaignHelperEarlyStarport{};
+    // CampaignHelperBeeline: support house whose opening ladder is unfinished. Only this goal
+    // (next refinery, the Starport or the Repair Yard), its missing prerequisites and the
+    // switch's exceptions are bought; NONE_ID whenever the flag is false.
+    bool campaignHelperBeeline{};
+    Uint32 campaignHelperBeelineGoal = NONE_ID;
+    // CampaignHelperOpeningRefineries: support house's bounded opening refinery goal before the
+    // Starport (0 = off or out of scope; the default goal then applies).
+    int campaignHelperOpeningRefineries{};
+    // CampaignHelperRefineryGoal: support house's bounded refinery total once its Repair Yard
+    // stands or cannot be built (0 = off, out of scope or not yet due).
+    int campaignHelperRefineryGoal{};
+    // CampaignHelperCarryallRatio: harvesting carryalls the support house keeps, owned or
+    // queued (0 = off or out of scope).
+    int campaignHelperCarryallTarget{};
+    // CampaignHelperSecondYard: the support house's one Starport MCV is due now.
+    bool campaignHelperSecondYard{};
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
     bool vanillaFfaLargeScope{};

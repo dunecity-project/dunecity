@@ -21,6 +21,7 @@
 #include <Definitions.h>
 #include <TechResearch.h>
 #include <misc/SDL2pp.h>
+#include <misc/Hotkeys.h>
 
 // Libraries
 #include <string>
@@ -182,6 +183,7 @@ public:
     public:
         bool            playIntro;          ///< Play the intro when starting the game?
         std::string     playerName;         ///< The name of the player used for multiplayer games
+        std::string     analyticsInstallID; ///< Anonymous random id of this installation; match analytics only (misc/AnalyticsInstallID.h)
         std::string     language;           ///< Language code: "en" = English, "fr" = French, "de" = German
         int             scrollSpeed;        ///< Scroll speed in pixels
         bool            showTutorialHints;  ///< If true, tutorial hints are shown during the game
@@ -206,6 +208,9 @@ public:
         bool            customGameOnline = false;  ///< Custom game setup: last Offline/Online choice (remembered across games)
         std::string     customGameMod;             ///< Custom game setup: last mod the player picked (empty: follow the active mod)
     } general;
+
+    /// Personal command shortcuts ([Hotkeys] in the player's config file; misc/Hotkeys.h).
+    Hotkeys::Bindings hotkeys = Hotkeys::Bindings::defaults();
 
     class VideoClass {
     public:

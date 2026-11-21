@@ -495,6 +495,39 @@ CampaignHomeFields=2
 # Campaign support, positive initial spice, actual ground attack on a live worker only.
 # Reuse sized rescue: 0=OFF, 1=require 100% threat coverage, 2=require 150%; buildings unchanged.
 CampaignSizedWorkerRescue=0
+# Campaign support with a Starport builds its first Heavy Factory only after its first Repair
+# Yard, and only once the Starport has no tank, siege tank or launcher in stock at or below list
+# price (or cash is above 2,500): the Starport supplies the early army. Hashed; OFF builds the
+# Heavy Factory as soon as it is chosen. City campaigns are unchanged.
+CampaignHelperFactoryLast=1
+# Campaign support troops that are not out with an attack wave do not chase a target, or answer a
+# ground contact, more than this many tiles from the nearest building the house owns; they return
+# to their assembly point. 0=OFF. Hashed.
+CampaignHelperDefenceLeash=14
+# Campaign support lays no concrete, except under Light and Heavy Factories, the High-Tech Factory,
+# WOR and Barracks (CampaignHelperFactoryConcrete): a producer on bare rock starts at half health
+# and builds at half speed. Hashed; OFF lays concrete under every building.
+CampaignHelperNoConcrete=1
+CampaignHelperFactoryConcrete=1
+# Campaign support with a Starport available builds this many refineries before the Starport, and
+# grows to the refinery goal once its Repair Yard stands, both bounded by the map's spice; it
+# plans 1.75 harvesters per refinery and keeps one carryall per CarryallRatio harvesters.
+# 0=OFF for each. Hashed.
+CampaignHelperOpeningRefineries=6
+CampaignHelperRefineryGoal=8
+CampaignHelperCarryallRatio=2
+# Campaign support upgrades its Construction Yard once its first Light Factory stands, outside the
+# deferred spare-cash rule (0=OFF, 1=as soon as affordable, 2=after Light Factory, 3=after Heavy
+# Factory, 4=after Heavy Factory and the full harvester fleet). Hashed.
+CampaignHelperYardUpgradeTiming=2
+# Campaign support at the ground unit limit attacks with the army it has when that army is below its
+# readiness: the strength floor can otherwise ask for more than the unit cap can hold. Hashed.
+CampaignHelperUnitCapLaunch=1
+# Custom and skirmish QuantBots playing vanilla power rules buy the windtraps that close a power
+# shortage when its running cost (repairs plus the refinery pay a damaged refinery loses) repays
+# them within this many game minutes, ordering them only when the yard has nothing else to build.
+# 0=OFF. Hashed.
+VanillaPowerPayback=25
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.

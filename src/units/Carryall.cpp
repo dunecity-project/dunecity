@@ -35,6 +35,7 @@
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/GroundUnit.h>
+#include <units/UnitMovementPolicy.h>
 #include <units/CarryallFlight.h>
 
 Carryall::Carryall(House* newOwner, int unitItemID) : AirUnit(newOwner)
@@ -280,13 +281,11 @@ void Carryall::deployUnit(Uint32 unitID)
             Coord deployPos = currentGameMap->findDeploySpot(pUnit, location, currentGame->randomGen);
             pUnit->setForced(false); // Stop units being forced if they are deployed
             pUnit->deploy(deployPos);
-            if(pUnit->getItemID() == Unit_Saboteur) {
-                pUnit->doSetAttackMode(HUNT);
-            } else if(!isHarvesterLikeUnit(pUnit->getItemID())) {
-                pUnit->doSetAttackMode(AREAGUARD);
-            } else {
-                pUnit->doSetAttackMode(HARVEST);
-            }
+            // A player's unit keeps its own mode (Guard after a lift); bots still get Area Guard.
+            pUnit->doSetAttackMode(UnitMovementPolicy::attackModeAfterCarryallDrop(
+                pUnit->getAttackMode(), pUnit->getItemID() == Unit_Saboteur,
+                isHarvesterLikeUnit(pUnit->getItemID()), pUnit->getOwner()->isAI(),
+                pUnit->isAttackMoving()));
         }
 
         if (pickedUpUnitList.empty()) {

@@ -31,6 +31,13 @@
 #include <GUI/dune/GameOptionsWindow.h>
 #include <Menu/HouseChoiceInfoMenu.h>
 #include <SoundPlayer.h>
+#include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
+#include <misc/format.h>
+#include <FileClasses/FileManager.h>
+#include <FileClasses/INIFile.h>
+#include <MissionObjectives.h>
+#include <players/PlayerFactory.h>
 
 
 namespace {
@@ -48,14 +55,22 @@ int HouseChoiceMenu::s_startLevel = 1;
 std::string HouseChoiceMenu::s_partnerClass;
 std::string HouseChoiceMenu::s_enemyClass = "qBotEasy";
 int HouseChoiceMenu::s_campaignSkin = 0;
+bool HouseChoiceMenu::s_reworkedMaps = false;
+bool HouseChoiceMenu::s_duneCityCampaign = false;
 SettingsClass::GameOptionsClass HouseChoiceMenu::s_currentGameOptions;
 
-HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : MenuBase(), showLobby(showLobby)
+HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby, bool duneCity)
+ : MenuBase(), showLobby(showLobby), duneCityOnly(duneCity)
 {
     OnlineModPolicy::restoreApprovedSelection();
     houseChoices = CustomGamePlayerPolicy::selectableHouses(ModManager::instance().isTornieFamilyContentActive(),
         isHouseAvailable(HOUSE_CUSTOM), ModManager::instance().getPlayableHouses());
-    s_online = online;
+    for(const int house : {HOUSE_ATREIDES, HOUSE_ORDOS, HOUSE_HARKONNEN, HOUSE_MERCENARY, HOUSE_FREMEN, HOUSE_SARDAUKAR}) {
+        if(ReworkedCampaign::isAvailableForHouse(static_cast<HOUSETYPE>(house))) reworkedHouses.push_back(house);
+    }
+    // The DuneCity campaign is offline only for now (its co-op has not been played).
+    s_online = online && !duneCityOnly;
+    s_duneCityCampaign = duneCityOnly;
     currentHouseChoiceScrollPos = 0;
     if(!keepRules) {
         s_currentGameOptions = effectiveGameOptions;
@@ -73,9 +88,11 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     setWindowWidget(&windowWidget);
 
 
-    titleLabel.setText(_("Campaign"));
+    titleLabel.setText(duneCityOnly ? _("DuneCity Campaign") : _("Campaign"));
     titleLabel.setTextColor(COLOR_WHITE);
-    titleLabel.setTextFontSize(20);
+    int titleSize = 20;
+    while(titleSize > 12 && GUIStyle::getInstance().getMinimumLabelSize(titleLabel.getText(), titleSize).x > 174) --titleSize;
+    titleLabel.setTextFontSize(titleSize);
     titleLabel.setAlignment(Alignment_HCenter);
     windowWidget.addWidget(&titleLabel, Point(48,0), Point(174,26));
     onlineDescription.setTextFontSize(10);
@@ -91,12 +108,12 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
         if(interactive) rememberPlayMode(PlayModeScope::Campaign, s_online);
         updateConnection();
     });
-    windowWidget.addWidget(&connectionDropDown, Point(48,30), Point(174,24));
+    if(!duneCityOnly) windowWidget.addWidget(&connectionDropDown, Point(48,30), Point(174,24));
     journeyDropDown.addEntry(_("Full campaign"), 0);
     journeyDropDown.addEntry(_("Single mission"), 1);
     journeyDropDown.setSelectedItem(s_singleMission ? 1 : 0);
     journeyDropDown.setOnSelectionChange([this](bool interactive) { if(interactive) { s_singleMission = journeyDropDown.getSelectedIndex() == 1; populateLevels(); updateConnection(); } });
-    windowWidget.addWidget(&journeyDropDown, Point(232,30), Point(174,24));
+    windowWidget.addWidget(&journeyDropDown, Point(duneCityOnly ? 48 : 232,30), Point(174,24));
     visibilityDropDown.addEntry(_("Private - invite code"), 0);
     visibilityDropDown.addEntry(_("Public - anyone"), 1);
     visibilityDropDown.setSelectedItem(s_publicGame ? 1 : 0);
@@ -140,8 +157,33 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     };
     label("Start from", 48, 294);
     populateLevels();
-    startLevelDropDown.setOnSelectionChange([this](bool) { s_startLevel = startLevelDropDown.getSelectedEntryIntData(); });
-    windowWidget.addWidget(&startLevelDropDown, Point(48, 315), Point(256, 22));
+    startLevelDropDown.setOnSelectionChange([this](bool) {
+        s_startLevel = startLevelDropDown.getSelectedEntryIntData();
+        updateMissionDescription();
+    });
+    windowWidget.addWidget(&startLevelDropDown, Point(48, 315), Point(124, 22));
+    // Reworked maps: the RWRK_ missions, played like the campaign (same AI, briefings and map choice).
+    // The DuneCity campaign has its own screen (duneCityOnly), so it is no choice here.
+    if(!duneCityOnly) {
+        auto* mapsLabel = Label::create(_("Maps"));
+        mapsLabel->setTextFontSize(12);
+        mapsLabel->setTextColor(COLOR_WHITE);
+        mapsLabel->setAlignment(Alignment_Left);
+        windowWidget.addWidget(mapsLabel, Point(180, 294), Point(124, 18));
+        campaignMapsDropDown.addEntry(_("Original"), 0);
+        campaignMapsDropDown.addEntry(_("Reworked"), 1);
+        if(!reworkedMapsAllowed()) s_reworkedMaps = false;
+        campaignMapsDropDown.setSelectedItem(s_reworkedMaps ? 1 : 0);
+        campaignMapsDropDown.setEnabled(reworkedMapsAllowed());
+        campaignMapsDropDown.setOnSelectionChange([this](bool interactive) {
+            if(!interactive) return;
+            s_reworkedMaps = campaignMapsDropDown.getSelectedEntryIntData() == 1 && reworkedMapsAllowed();
+            campaignMapsDropDown.setSelectedItem(s_reworkedMaps ? 1 : 0);
+            populateLevels();
+            refreshHouseChoices();
+        });
+        windowWidget.addWidget(&campaignMapsDropDown, Point(180, 315), Point(124, 22));
+    }
     label("DuneCity skin", 48, 339);
     campaignSkinDropDown.addEntry(_("Classic"), 0);
     campaignSkinDropDown.addEntry(_("Dune2"), 1);
@@ -152,21 +194,32 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     campaignSkinDropDown.setEnabled(ModManager::instance().isCityModeActive());
     windowWidget.addWidget(&campaignSkinDropDown, Point(160, 337), Point(144, 24));
 
-    label("Campaign mod", 48, 365);
-    availableMods = ModManager::instance().listModChoices();
-    int activeIndex = 0;
-    for(size_t i = 0; i < availableMods.size(); ++i) {
-        const auto& mod = availableMods[i];
-        modDropDown.addEntry(mod.selectionLabel(), static_cast<int>(i));
-        if(mod.matchesSelectionName(ModManager::instance().getActiveModName())) activeIndex = static_cast<int>(i);
+    if(duneCityOnly) {
+        // No mod choice: the campaign plays the DuneCity mod. Its place shows the start mission.
+        missionLabel.setTextFontSize(12);
+        missionLabel.setTextColor(COLOR_WHITE);
+        missionLabel.setAlignment(Alignment_Left);
+        windowWidget.addWidget(&missionLabel, Point(48, 365), Point(256, 18));
+        missionDescription.setTextFontSize(11);
+        missionDescription.setTextColor(COLOR_WHITE);
+        windowWidget.addWidget(&missionDescription, Point(48, 385), Point(256, 66));
+    } else {
+        label("Campaign mod", 48, 365);
+        availableMods = ModManager::instance().listModChoices();
+        int activeIndex = 0;
+        for(size_t i = 0; i < availableMods.size(); ++i) {
+            const auto& mod = availableMods[i];
+            modDropDown.addEntry(mod.selectionLabel(), static_cast<int>(i));
+            if(mod.matchesSelectionName(ModManager::instance().getActiveModName())) activeIndex = static_cast<int>(i);
+        }
+        modDropDown.setSelectedItem(activeIndex);
+        modDropDown.setOnSelectionChange(std::bind(&HouseChoiceMenu::onModSelectionChanged, this, std::placeholders::_1));
+        windowWidget.addWidget(&modDropDown, Point(48, 386), Point(256, 22));
+        modDescription.setTextFontSize(11);
+        modDescription.setTextColor(COLOR_WHITE);
+        windowWidget.addWidget(&modDescription, Point(48, 411), Point(256, 38));
+        updateModDescription();
     }
-    modDropDown.setSelectedItem(activeIndex);
-    modDropDown.setOnSelectionChange(std::bind(&HouseChoiceMenu::onModSelectionChanged, this, std::placeholders::_1));
-    windowWidget.addWidget(&modDropDown, Point(48, 386), Point(256, 22));
-    modDescription.setTextFontSize(11);
-    modDescription.setTextColor(COLOR_WHITE);
-    windowWidget.addWidget(&modDescription, Point(48, 411), Point(256, 38));
-    updateModDescription();
 
     // AI partner: AI over full width, then Difficulty and Role side by side.
     label("AI partner", 336, 294);
@@ -181,7 +234,8 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     supportDescription.setTextFontSize(10);
     supportDescription.setTextColor(COLOR_WHITE);
     supportDescription.setAlignment(Alignment_Left);
-    windowWidget.addWidget(&supportDescription, Point(336, 361), Point(256, 26));
+    // Two size-10 lines need 28 rows: 26 cut the descenders of the second line.
+    windowWidget.addWidget(&supportDescription, Point(336, 361), Point(256, 28));
     onPartnerChanged(false);
 
     // Enemy AI: AI and Difficulty on one row; opponents always build and fight.
@@ -195,7 +249,8 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     enemyDescription.setTextFontSize(10);
     enemyDescription.setTextColor(COLOR_WHITE);
     enemyDescription.setAlignment(Alignment_Left);
-    windowWidget.addWidget(&enemyDescription, Point(336, 429), Point(256, 26));
+    // Two rows higher so the taller label still ends above the button row at 455.
+    windowWidget.addWidget(&enemyDescription, Point(336, 427), Point(256, 28));
     onEnemyChanged(false);
 
     gameOptionsButton.setText(_("Game Rules"));
@@ -216,10 +271,66 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby) : 
     loadButton.setOnClick([]() { showGameLibrary(); });
     windowWidget.addWidget(&loadButton, Point(320,455), Point(120,24));
     updateConnection();
-    updateHouseChoice();
+    refreshHouseChoices();
+    updateMissionDescription();
 }
 
 HouseChoiceMenu::~HouseChoiceMenu() = default;
+
+void HouseChoiceMenu::updateMissionDescription() {
+    if(!duneCityOnly) return;
+    const int mission = std::clamp(s_startLevel, 1, DuneCityCampaign::kMissions);
+    std::string name;
+    std::string goals;
+    try {
+        auto file = pFileManager->openCampaignFile(DuneCityCampaign::scenarioFilename(mission));
+        INIFile ini(file.get());
+        name = ini.getStringValue("BRIEFING", "Name", "");
+        // The enemy AI's difficulty sets the enemy strength, and with it the first attack.
+        const auto* enemy = PlayerFactory::getByPlayerClass(s_enemyClass);
+        const std::string difficulty = enemy != nullptr ? enemy->getDifficulty() : std::string();
+        for(const auto& line : MissionObjectivePolicy::briefingLines(MissionObjectivePolicy::briefingFromINI(ini, difficulty)))
+            goals += (goals.empty() ? "" : "\n") + line;
+    } catch(const std::exception& e) {
+        goals = e.what();
+    }
+    missionLabel.setText(name.empty() ? fmt::sprintf(_("Mission %d"), mission) : fmt::sprintf(_("Mission %d: %s"), mission, name));
+    missionDescription.setText(goals);
+}
+
+bool HouseChoiceMenu::duneCityCampaignAllowed() const {
+    // City-sim missions: they need the DuneCity mod and the ten bundled maps.
+    return ModManager::instance().getActiveModName() == DuneCityCampaign::kMod && DuneCityCampaign::isAvailable();
+}
+
+bool HouseChoiceMenu::reworkedMapsAllowed() const {
+    // The reworked missions are vanilla-house maps; family editions bring their own campaigns.
+    return !reworkedHouses.empty() && !ModManager::instance().isTornieFamilyContentActive();
+}
+
+void HouseChoiceMenu::refreshHouseChoices() {
+    auto& manager = ModManager::instance();
+    houseChoices = CustomGamePlayerPolicy::selectableHouses(manager.isTornieFamilyContentActive(),
+        isHouseAvailable(HOUSE_CUSTOM), manager.getPlayableHouses());
+    if(s_duneCityCampaign) {
+        // The DuneCity campaign is an Atreides campaign.
+        CustomGamePlayerPolicy::HouseRoster atreides;
+        for(int i = 0; i < houseChoices.count; ++i)
+            if(houseChoices[i] == DuneCityCampaign::kHouse) atreides.houses[atreides.count++] = houseChoices[i];
+        houseChoices = atreides;
+    } else if(s_reworkedMaps) {
+        // Only houses whose whole campaign has been reworked can start a reworked campaign.
+        CustomGamePlayerPolicy::HouseRoster reworked;
+        for(int i = 0; i < houseChoices.count; ++i) {
+            if(std::find(reworkedHouses.begin(), reworkedHouses.end(), houseChoices[i]) != reworkedHouses.end())
+                reworked.houses[reworked.count++] = houseChoices[i];
+        }
+        houseChoices = reworked;
+    }
+    currentHouseChoiceScrollPos = std::clamp(currentHouseChoiceScrollPos, 0,
+        std::max(0, houseChoices.count - kVisibleHouseButtons));
+    updateHouseChoice();
+}
 
 void HouseChoiceMenu::onChildWindowClose(Window* pChildWindow) {
     GameOptionsWindow* pGameOptionsWindow = dynamic_cast<GameOptionsWindow*>(pChildWindow);
@@ -253,10 +364,10 @@ void HouseChoiceMenu::onPartnerChanged(bool /*interactive*/) {
 void HouseChoiceMenu::onEnemyChanged(bool /*interactive*/) {
     s_enemyClass = enemySelector.getPlayerClass();
     const std::pair<const char*, const char*> descriptions[] = {
-        {"qBotEasy",         "Small waves, one enemy house at a time.\nLong recovery breaks; supplies its power."},
-        {"qBotMedium",       "Larger waves, one enemy house at a time.\nModerate breaks; supplies its power."},
-        {"qBotHard",         "Two houses can attack together.\nFlanking, air raids and shorter breaks."},
-        {"qBotBrutal",       "All enemy houses can attack together.\nLargest waves and shortest breaks."},
+        {"qBotEasy",         "Small waves and a limited economy.\nEnemy houses can attack at the same time."},
+        {"qBotMedium",       "Larger waves than Easy.\nEnemy houses can attack at the same time."},
+        {"qBotHard",         "Stronger economy and capped waves.\nEnemy houses can attack at the same time."},
+        {"qBotBrutal",       "Ground waves have no credit cap.\nEnemy houses can attack at the same time."},
         {"qBotDefend",       "Builds and defends without main assaults."},
         {"CampaignAIPlayer", "Uses the original campaign AI behaviour."}
     };
@@ -265,10 +376,12 @@ void HouseChoiceMenu::onEnemyChanged(bool /*interactive*/) {
         if(s_enemyClass == playerClass) description = _(text);
     }
     enemyDescription.setText(description);
+    updateMissionDescription();
 }
 
 void HouseChoiceMenu::onHouseButton(int button) {
-    const int index = currentHouseChoiceScrollPos + button;
+    // A single house (the DuneCity campaign's Atreides) sits on the middle button.
+    const int index = currentHouseChoiceScrollPos + button - (houseChoices.count == 1 ? 1 : 0);
     if(index < 0 || index >= houseChoices.count) return;
     const int selectedHouse = houseChoices[index];
 
@@ -319,10 +432,13 @@ void HouseChoiceMenu::onHouseButton(int button) {
 
 void HouseChoiceMenu::populateLevels() {
     startLevelDropDown.clearAllEntries();
-    s_startLevel = std::clamp(s_startLevel, 1, s_singleMission ? 22 : 9);
-    for(int i = 1; i <= (s_singleMission ? 22 : 9); ++i)
-        startLevelDropDown.addEntry((s_singleMission ? _("Mission ") : _("Level ")) + std::to_string(i), i);
+    // The DuneCity campaign has one mission per level, ten of them.
+    const int levels = s_duneCityCampaign ? DuneCityCampaign::kMissions : s_singleMission ? 22 : 9;
+    s_startLevel = std::clamp(s_startLevel, 1, levels);
+    for(int i = 1; i <= levels; ++i)
+        startLevelDropDown.addEntry((s_singleMission || s_duneCityCampaign ? _("Mission ") : _("Level ")) + std::to_string(i), i);
     startLevelDropDown.setSelectedItem(s_startLevel - 1);
+    updateMissionDescription();
 }
 
 void HouseChoiceMenu::populateConnections() {
@@ -350,6 +466,10 @@ void HouseChoiceMenu::updateConnection() {
         onlineDescription.setText(_("New mods use a pregame lobby.\nPlayers must join before the game starts."));
     if(separate)
         onlineDescription.setText(_("Play separate allied factions.\nChoose your allies and controllers in the next screen."));
+    if(duneCityOnly)
+        onlineDescription.setText(duneCityCampaignAllowed()
+            ? _("Ten Atreides city missions, one after another.\nA lost mission is played again.")
+            : _("The DuneCity mod or its campaign maps are missing."));
     visibilityDropDown.setEnabled(s_online && !separate);
     visibilityDropDown.setVisible(s_online && !separate);
     journeyDropDown.setEnabled(!separate);
@@ -367,15 +487,16 @@ void HouseChoiceMenu::updateHouseChoice() {
     selectedHouseLabel.setText(_("Selected:") + std::string("\n") + getHouseNameByNumber(static_cast<HOUSETYPE>(s_house)));
 
     PictureButton* buttons[] = {&house1Button, &house2Button, &house3Button};
+    const int offset = houseChoices.count == 1 ? 1 : 0;
     for(int i = 0; i < kVisibleHouseButtons; ++i) {
-        const int index = currentHouseChoiceScrollPos + i;
-        buttons[i]->setVisible(index < houseChoices.count);
-        if(index < houseChoices.count)
-            buttons[i]->setTextures(pGFXManager->getUIGraphic(UI_Herald_ColoredLarge, houseChoices[index]));
+        const int index = currentHouseChoiceScrollPos + i - offset;
+        const bool shown = index >= 0 && index < houseChoices.count;
+        buttons[i]->setVisible(shown);
+        if(shown) buttons[i]->setTextures(pGFXManager->getUIGraphic(UI_Herald_ColoredLarge, houseChoices[index]));
     }
     houseLeftButton.setVisible(currentHouseChoiceScrollPos > 0);
     houseRightButton.setVisible(currentHouseChoiceScrollPos + kVisibleHouseButtons < houseChoices.count);
-    hostCoopButton.setEnabled(houseChoices.count > 0);
+    hostCoopButton.setEnabled(houseChoices.count > 0 && (!duneCityOnly || duneCityCampaignAllowed()));
 }
 
 void HouseChoiceMenu::onHouseLeft()
@@ -419,11 +540,11 @@ void HouseChoiceMenu::onModSelectionChanged(bool interactive) {
             s_currentGameOptions = effectiveGameOptions;
         }
     }
-    houseChoices = CustomGamePlayerPolicy::selectableHouses(ModManager::instance().isTornieFamilyContentActive(),
-        isHouseAvailable(HOUSE_CUSTOM), manager.getPlayableHouses());
-    currentHouseChoiceScrollPos = std::min(currentHouseChoiceScrollPos,
-        std::max(0, houseChoices.count - kVisibleHouseButtons));
-    updateHouseChoice();
+    if(!reworkedMapsAllowed()) s_reworkedMaps = false;
+    campaignMapsDropDown.setSelectedItem(s_reworkedMaps ? 1 : 0);
+    campaignMapsDropDown.setEnabled(reworkedMapsAllowed());
+    populateLevels();
+    refreshHouseChoices();
     updateModDescription();
     campaignSkinDropDown.setEnabled(manager.isCityModeActive());
     populateConnections();

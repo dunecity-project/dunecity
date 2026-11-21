@@ -442,6 +442,8 @@ public:
     }
     bool isConcrete() const noexcept { return (type == Terrain_Slab); }
     bool isExploredByHouse(int houseID) const { return houseID >= 0 && houseID < NUM_HOUSES && explored[houseID]; }
+    /// The cycle this house last had the tile in sight (0: never, or only at the first cycle).
+    Uint32 getLastAccess(int houseID) const { return houseID >= 0 && houseID < NUM_HOUSES ? lastAccess[houseID] : 0; }
     bool isExploredByTeam(int teamID) const;
 
     bool isFoggedByHouse(int houseID) const noexcept;

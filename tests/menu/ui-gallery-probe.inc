@@ -631,7 +631,7 @@ void runMenus() {
     });
     screen("menu-options", [] {
         OptionsMenu menu;
-        for(int page = 0; page < 5; ++page) {
+        for(int page = 0; page < 6; ++page) {
             menu.showPage(page);
             captureWindow(menu, "menu-options-" + std::to_string(page));
         }

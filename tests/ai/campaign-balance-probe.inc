@@ -47,6 +47,7 @@
 #include "campaign-defence-probe.inc"
 #include "campaign-pacing-probe.inc"
 #include "campaign-repair-probe.inc"
+#include "original-campaign-probe.inc"
 #include "campaign-helper-economy-probe.inc"
 #include "city-income-probe.inc"
 #include "credit-storage-probe.inc"
@@ -180,6 +181,16 @@ int runCampaignBalanceProbe() {
         init.mission=std::atoi(requestedMission); // Test-only access, provided by -fno-access-control.
         init.filename=GameInitSettings::getScenarioFilename(humanHouse, init.mission);
     }
+    // The campaign menu's Maps: Reworked (docs/reworked-campaign.md), in either campaign mode.
+    if(std::getenv("BALANCE_REWORKED")) init.useReworkedMaps();
+    // The campaign menu's Maps: DuneCity (docs/city-campaign.md): DCITY_M?? as Atreides.
+    if(std::getenv("BALANCE_CITY_CAMPAIGN")) init.useDuneCityCampaign(requestedMission ? std::atoi(requestedMission) : 1);
+    // A balance variant of that mission's map (scenario-matrix --city-strength).
+    if(const char* variant = std::getenv("BALANCE_CITY_CAMPAIGN_MAP")) {
+        std::ifstream file(variant);
+        if(!file) throw std::runtime_error("Cannot read the city campaign map variant");
+        init.setScenarioData(std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>()));
+    }
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
         std::ifstream file(customMap);
@@ -281,6 +292,8 @@ int runCampaignBalanceProbe() {
         ++rosterRow;
         init.addHouseInfo(info);
     }
+    if(const char* original = std::getenv("BALANCE_ORIGINAL_CAMPAIGN_RULES"))
+        getQuantBotConfig().originalCampaignAI = std::string(original) == "on";
     auto game = std::make_unique<Game>();
     currentGame = game.get();
     // Suppress the interactive briefing and public match analytics at setup.
@@ -292,11 +305,16 @@ int runCampaignBalanceProbe() {
         GamePerf::MeasuredQuantBots measuredQuantBots(!civWars && std::getenv("BALANCE_PERF") != nullptr);
         game->initGame(init);
     }
+    for(int h = 0; h < NUM_HOUSES; ++h) if(const auto* house = game->getHouse(h))
+        for(const auto& player : house->getPlayerList())
+            if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
+                SDL_Log("ORIGINAL_CAMPAIGN_ROSTER: house=%d original=%d", h, int(campaign->usesOriginalRules()));
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
         throw std::runtime_error("Custom diagnostic did not create the real local observer");
     if(scenario && scenarioSides.empty())
-        SDL_Log("PROBE_CONFIG: campaign_mode=%s mission=%d enemy=%s enemy_difficulty=%s",
-            campaignMode.c_str(),game->getGameInitSettings().getMission(),enemyClass.c_str(),enemy.c_str());
+        SDL_Log("PROBE_CONFIG: campaign_mode=%s mission=%d enemy=%s enemy_difficulty=%s scenario=%s reworked=%d",
+            campaignMode.c_str(),game->getGameInitSettings().getMission(),enemyClass.c_str(),enemy.c_str(),
+            game->getGameInitSettings().getFilename().c_str(),int(game->getGameInitSettings().isReworkedCampaign()));
     if(campaignAiOnly) {
         const House* candidateHouse=game->getHouse(humanHouse);
         if(!candidateHouse || candidateHouse->getPlayerList().size()!=1
@@ -484,6 +502,13 @@ int runCampaignBalanceProbe() {
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (std::getenv("BALANCE_ORIGINAL_CAMPAIGN_PROBE")) {
+        runOriginalCampaignProbe(*game);
+        runOriginalCampaignContinuation(game);
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=original-campaign outcome=passed");
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_PACING_PROBE")) {
         runCampaignPacingProbe(*game);
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
@@ -524,6 +549,18 @@ int runCampaignBalanceProbe() {
                 if (House* house = game->getHouse(h))
                     for (const auto& player : house->getPlayerList())
                         if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
+    if (const char* style = std::getenv("BALANCE_HELPER_STYLE"); style && *style) {
+        if (!scenario || !scenarioSides.empty() || loadSave || customMap || std::getenv("BALANCE_SCENARIO_STYLE"))
+            throw std::runtime_error("Helper style requires an authored campaign without a global treatment");
+        House* house = game->getHouse(humanHouse);
+        int helpers = 0;
+        if (house) for (const auto& player : house->getPlayerList())
+            if (auto* bot = dynamic_cast<QuantBot*>(player.get())) {
+                FormationDuel::applyStyle(*bot, style);
+                ++helpers;
+            }
+        if (helpers != 1) throw std::runtime_error("Helper treatment requires exactly one player-side QuantBot");
+    }
     if (std::getenv("BALANCE_POWER_CONTINUATION")) {
         runPowerContinuation(*game, minutes);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;

@@ -937,7 +937,7 @@ void House::updateBuildLists() {
 
 bool House::meetsStarportPopulation() const {
     if(!currentGame->getGameInitSettings().getGameOptions().starportPopulation
-       || isCampaignGameType(currentGame->gameType)
+       || (isCampaignGameType(currentGame->gameType) && !currentGame->getGameInitSettings().isDuneCityCampaign())
        || !currentGame->isCitySimEnabled()) return true;
     // Mission AI permissions follow each controller's hashed policy; a human-only
     // Single mission and every custom game retain their population requirement.
@@ -1807,7 +1807,9 @@ UnitBase* House::placeUnit(int itemID, int xPos, int yPos, bool byScenario) {
     if (newUnit) {
         Coord pos = Coord(xPos, yPos);
         if (newUnit->canPass(xPos, yPos)) {
-            newUnit->deploy(pos);
+            // A scenario's own unit is already there when the map starts (keeps a bloom intact).
+            if(byScenario) newUnit->deployAtMapStart(pos);
+            else newUnit->deploy(pos);
         } else {
             newUnit->setVisible(VIS_ALL, false);
             newUnit->destroy();

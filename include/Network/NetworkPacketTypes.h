@@ -378,7 +378,34 @@
 //      would desync. Private development identity and save format remain unchanged.
 // 123: QuantBot repair-capacity demand treatment and its saved/runtime pressure
 //      clock; observer runtime 9 carries the same continuation state (save 9885).
-#define NETWORK_PROTOCOL_VERSION            123
+// 124: Campaign QuantBots build Repair Yards for every helper and for Medium and
+//      harder opponents (only Easy opponents are denied), and defer Construction Yard
+//      upgrades until power, income and a cash reserve exist. Older peers queue
+//      different AI construction and would desync. Save format unchanged.
+// 125: Original Campaign AI production and authored TEAM.EMC execution, including
+//      saved team state (9886), free upgrades and script-owned attack targets.
+// 126: Original Campaign AI wakes only once the other side's sight uncovers one of its
+//      ground units (Dune II isAIActive), not at the first update. Older peers start its
+//      production and team scripts at once and would desync. In authored missions it
+//      also keeps each computer house's own MaxUnit under the default unit override and
+//      creates no mission teams (the original loader rejects every campaign team line).
+//      Save format unchanged.
+// 127: QuantBot defaults change decisions: a campaign support house attacks at its unit
+//      cap and upgrades its Construction Yard after its first Light Factory; vanilla
+//      custom/skirmish QuantBots buy concreted payback windtraps. Older peers would desync.
+//      Save format unchanged.
+// 128: A unit a map starts with on a spice bloom leaves the bloom intact instead of setting
+//      it off (UnitBase::deployAtMapStart), so older peers would desync on such a map; the
+//      reworked campaign's co-op games need the RWRK_ maps new in 1.0.873. Save format
+//      unchanged.
+// 129: A player's unit a carryall drops keeps its own attack mode (Guard after a lift) instead
+//      of Area Guard (Carryall::deployUnit), so older peers would desync. Save format
+//      unchanged.
+// 130: The DuneCity campaign (docs/city-campaign.md): a map's [OBJECTIVES] city goals end the
+//      game (population, treasury, crime, land value, pollution), [EVENTS] BreachN opens a
+//      mountain wall at its minute (BreachTrigger), and QuantBot plans for the goals of the
+//      house it serves. Older peers would end or simulate those maps differently. Save 9887.
+#define NETWORK_PROTOCOL_VERSION            130
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

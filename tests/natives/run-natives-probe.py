@@ -54,6 +54,8 @@ import tempfile
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
 from probe_profile import restore_fixture_revisions  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -73,8 +75,8 @@ subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)
 # The tree the build was configured from (the baseline's main.cpp, not this one's).
 source_root = Path(next(line.split('=', 1)[1] for line in (build / 'CMakeCache.txt').read_text().splitlines()
                         if line.startswith('CMAKE_HOME_DIRECTORY:')))
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+commands = native_build_commands(build)
 main = (source_root / 'src/main.cpp').read_text()
 needle = 'int menuResult = MainMenu().showMenu();'
 if main.count(needle) != 1:
@@ -86,7 +88,7 @@ if main.count(clamp) != 1:
 main = main.replace(clamp, '(void)displayIndex;')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
 position = main.index('int main(')
-main = main[:position] + '#include "' + str(root / 'tests/natives/natives-probe.inc') + '"\n' + main[position:]
+main = main[:position] + NATIVE_INCLUDES + '#include "' + str(root / 'tests/natives/natives-probe.inc') + '"\n' + main[position:]
 work = Path(tempfile.mkdtemp(prefix='natives-probe-build-', dir=out))
 source, obj = work / 'natives-main.cpp', work / 'natives-main.o'
 source.write_text(main)
@@ -103,10 +105,7 @@ compile_command[compile_command.index('-c') + 1] = str(source)
 compile_command.append('-fno-access-control')
 if args.baseline:
     compile_command.append('-DNATIVES_BASELINE')
-app = work / 'natives-probe.app/Contents'
-(app / 'MacOS').mkdir(parents=True)
-(app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-binary = app / 'MacOS/natives-probe'
+binary = native_probe_binary(build, work, 'natives-probe')
 link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
 link = link[link.index('&&') + 1:]
 link = link[:link.index('&&')]

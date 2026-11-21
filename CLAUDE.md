@@ -143,7 +143,8 @@ Every AI or unit-behaviour change (QuantBot, AI Player, units, combat, pathfindi
 game options) must pass
 `ctest --test-dir build -R 'quantbot_all_against_atreides|quantbot_scenario_matrix'` before merging:
 Atreides QuantBot Brutal must eliminate the four AI Player (hard) houses on the bundled vanilla
-"All against Atreides" map within 40 game minutes on all six seeds, with Stefan's game options, and
+"All against Atreides" map within 50 game minutes on all six seeds (Stefan's limit since 2026-11-07,
+replacing 40), with Stefan's game options, and
 the scenario-matrix smoke tier (Random Skirmish FFA, Construction Yard duel replayed to the same
 digest, reverse All against Atreides, Hard v Easy both sides, a 2v2 multiplayer map, campaign levels
 1/4/9) must pass every check. Never raise the limit or remove seeds to get a change through
@@ -156,15 +157,23 @@ limit. It tests the shipped default, without a forced play-style override;
 passing the original vanilla test is not a substitute.
 
 They must also pass `ctest --test-dir build -R '^quantbot_ffa_army_deploys$'`: four QuantBot Brutal
-houses in a generated 4P 160x160 DuneCity free-for-all must launch a wave of 30+ units by minute 8,
-never keep an idle reserve 80%+ inside their own base for more than 6 minutes in a row, and
-eliminate a house by minute 30 (`docs/formations.md`, "Free-for-all: the army deploys"). Never
+houses in generated 4P 160x160 DuneCity free-for-alls (seeds 9101, 9103, 9105) must launch a wave
+of 30+ units by minute 8, never keep an idle reserve 80%+ inside their own base for more than 6
+minutes in a row, and eliminate a house by minute 35 on at least one seed (minute 30 until
+2026-11-05; `docs/formations.md`, "Free-for-all: the army deploys", has the measured reason). Never
 loosen these thresholds to get a change through.
 
 The same changes, and game-loop or rendering changes, must also pass
 `ctest --test-dir build -R '^perf_regression$'`: Stefan's 4P DuneCity Brutal Random Skirmish map,
 6 game minutes headless, budgets on mean simulation CPU per cycle and per-house AI update time as
 multiples of a calibration loop. Run it on a quiet machine (`docs/game-performance.md`).
+
+The four AI gates are `headless` and registered for Linux too: run them on the AWS workers with
+`dunecity-queue ctest --rev FULL_SHA --machines aws aws-mel2 -R '<gate regex>'` inside
+`agent-workspace run --tests --wait`, not on the Mini (AGENTS.md has the exact command).
+`perf_regression` stays on the Mini: its budgets are calibrated on that machine. Every dummy-driver
+probe is `headless` and runs on AWS too; the three other Mini-only tests and their reasons are in
+`docs/ai-scenario-matrix.md`, "Where the gates run".
 
 ## AI test games: scoring and the default rule
 

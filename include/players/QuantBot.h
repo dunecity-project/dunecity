@@ -223,6 +223,15 @@ public:
     bool campaignCanAddHarvester() const;
     /// Full campaign policy, plus Single mission/co-op when its hashed switch is on.
     bool campaignPolicyApplies() const;
+    /// This bot serves the house whose [OBJECTIVES] goals decide the mission (cityObjectivePlanning).
+    bool objectivePlanningActive() const;
+    /// The goal's target when objectivePlanningActive() and the map sets it, else 0.
+    int objectiveTarget(int goal) const;
+    /// This house is hostile to the objective house and the map's FirstEnemyAttack has not passed.
+    bool objectiveGracePeriod() const;
+    /// A Custom Game (single or multiplayer), or the DuneCity campaign, whose missions are Custom
+    /// city maps: QuantBot's Custom-only policy scopes apply to both.
+    bool customRulesGame() const;
     int campaignHarvesterCeiling() const; // -1 outside policy; zero forbids new workers
     void doProduceItem(const BuilderBase* builder, Uint32 itemID) const;
 
@@ -758,6 +767,45 @@ private:
     static constexpr Uint32 kOpeningDispersalLimit = 4096;
     Coord findSquadRetreatLocation();
     void moveToOptimalSquadPosition(const UnitBase* pUnit, FixPoint squadRadius, int* orderBudget = nullptr);
+    /// CampaignHelperRockHold: the least reach, in tiles around the base centre, searched for rock.
+    static constexpr int kRockHoldReach = 6;
+    /// True while CampaignHelperRockHold governs this idle support troop: \a recall asks about
+    /// the sandworm call-back (levels 2 and 3), otherwise about the base-rock regroup (1 and 2).
+    bool campaignRockHoldApplies(const UnitBase* unit, bool recall) const;
+    /// Orders \a unit to a free rock tile around \a anchor unless it already holds one or is
+    /// walking to one. \a forced also drops its current target. Returns whether it ordered a move.
+    bool holdOnCampaignRock(const UnitBase* unit, Coord anchor, int radius, int* orderBudget, bool forced);
+    /// Campaign helper tactics switches (CampaignHelperDefenceLeash, FrontPost, FocusFire,
+    /// CounterAttack, SingleTarget; QuantBotConfig.h). Every caller tests its switch and
+    /// campaignEconomySupport() first, so none of these runs while the switch is off.
+    /// Tiles from \a at to the nearest live building this house owns (INT_MAX with none).
+    int campaignHelperStructureDistance(Coord at) const;
+    /// DefenceLeash: where a leashed troop walks back to - the front post when set, else the
+    /// assembly anchor when that is inside the leash, else the base centre.
+    Coord campaignHelperLeashAnchor() const;
+    /// DefenceLeash: drops a chase beyond the leash and sends \a unit home. Returns whether it
+    /// gave an order (one from \a orderBudget).
+    bool campaignHelperLeash(const UnitBase* unit, int radius, int& orderBudget);
+    /// FrontPost: rock or concrete beside the Repair Yard facing the enemy, or invalid.
+    /// Computed once per game cycle; the cache is not game state and is never saved.
+    Coord campaignHelperFrontPost() const;
+    mutable Uint32 helperFrontPostCycle = std::numeric_limits<Uint32>::max();
+    mutable Coord helperFrontPost = Coord::Invalid();
+    /// FocusFire: 3 Deviator, 2 Sonic Tank, 1 Launcher, 0 anything else.
+    static int campaignHelperPriorityRank(Uint32 itemID);
+    /// FocusFire: the visible hostile priority unit ranked above \a aboveRank that \a unit can
+    /// attack within its weapon range + 4 tiles: highest rank, lowest health, lowest object ID.
+    const UnitBase* campaignHelperPriorityTarget(const UnitBase* unit, int aboveRank) const;
+    /// True on the one AI pass per \a periodMs (rounded up to whole passes) on which \a unit
+    /// may be re-ordered; derived from the game cycle and the object ID only.
+    bool campaignHelperOrderSlot(const UnitBase* unit, int periodMs) const;
+    /// CounterAttack: whether a beaten wave lets the helper launch below readiness now.
+    bool campaignHelperCounterAttackReady(int militaryValue, int requiredMilitary) const;
+    /// SingleTarget: the hostile house whose visible buildings (one at least reachable by
+    /// \a unit when given) have the lowest health-weighted price total; -1 when none.
+    int campaignHelperTargetHouse(const UnitBase* unit) const;
+    /// SingleTarget: the nearest visible live building of \a house that \a unit can reach.
+    const StructureBase* campaignHelperTargetStructure(const UnitBase* unit, int house) const;
     void kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThreat, int desiredRange);
 
     // `emergencyOnBase` reports whether the reported attacker was hitting one of
@@ -1247,6 +1295,20 @@ private:
     bool openingOpenMapNative() const;
     /// FocusFireLevel in effect: native (0) where FocusFireMapScope applies (map or roster).
     int effectiveFocusFireLevel() const;
+    /// TargetPriorityLevel in effect.
+    int effectiveTargetPriorityLevel() const;
+    /// A QuantBot with the EarlyAttack skill in the DuneCity campaign (Brutal by default) attacks at
+    /// CityCampaignBrutalAttackPercent of its army ceiling (docs/city-campaign.md, "The tiers
+    /// in the campaign: the skill ladder"); 0 when it does not.
+    int cityCampaignBrutalAttackPercent() const;
+    /// Whether this house plays a skill of the DuneCity campaign skill ladder
+    /// (QuantBotCityCampaignSkills.h): its tier's skills in campaign missions, native behaviour elsewhere.
+    bool cityCampaignSkill(QuantBotCityCampaignSkills::Skill skill) const;
+    /// AI passes per decision on the campaign ladder (thinking speed); 1 everywhere else.
+    int cityCampaignThinkPasses() const;
+    /// The game is a DuneCity campaign mission; cached, the init settings never change in a game.
+    bool duneCityCampaignGame() const;
+    mutable std::optional<bool> duneCityCampaignGameCache;
     /// VanillaArmyCounterMapScope: VanillaArmyCounters stays inert on this original map or roster.
     bool armyCountersMapExcluded() const;
     bool forceVariant(int bit) const { return (forceBits() & bit) != 0 && autonomousCustomArmy(); }
@@ -1958,6 +2020,8 @@ private:
     /// Net-income buckets, a legal next technology and its bounded savings plan.
     bool simpleTechPolicyActive() const;
     void planTechSavings(BuildPass& pass);
+    /// DuneCity campaign goals: keep a treasury goal's bank (docs/city-campaign.md).
+    void planMissionObjectives(BuildPass& pass);
     bool spendingEmergency(BuildPass& pass, Uint32 item);
     bool incomeTechAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
     bool spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgrade = false);
@@ -1995,6 +2059,22 @@ private:
     bool openingWorkersNeeded(BuildPass& pass);
     int harvesterInvestmentReserve(BuildPass& pass);
     bool campaignEconomySupport() const;
+    bool campaignHelperPowerPaybackActive() const;
+    bool vanillaCustomEconomy() const;
+    int powerPaybackMinutes() const;
+    /// CampaignHelperNoConcrete (default on) applies: the switch is read first, so with it off
+    /// nothing else is evaluated. This house then orders no slab and plans no foundation.
+    bool campaignHelperNoConcrete() const;
+    /// The same for one building: false for a production building while
+    /// CampaignHelperFactoryConcrete keeps its foundation.
+    bool campaignHelperNoConcrete(Uint32 item) const;
+    /// CampaignHelperBeeline: whether the unfinished opening ladder admits this purchase (its goal,
+    /// a missing prerequisite at any depth, the first windtrap, or a harvester while fewer than two
+    /// exist). Callers test pass.campaignHelperBeeline first.
+    bool campaignHelperBeelineAdmits(const BuildPass& pass, Uint32 item) const;
+    /// CampaignHelperBeeline: a builder upgrade is admitted only when the goal or one of its missing
+    /// prerequisites needs that builder's next level. Callers test pass.campaignHelperBeeline first.
+    bool campaignHelperBeelineAdmitsUpgrade(const BuildPass& pass, const BuilderBase* builder) const;
     int campaignRefineryReplacementCost(BuildPass& pass);
     bool needsFirstTransport(BuildPass& pass);
     static int initialCityPopulation(Uint32 item);
@@ -2054,6 +2134,8 @@ private:
     bool recoverBuilderConstruction(BuildPass& pass, BuilderTurn& turn);
     /// Bulk-slab yard upgrade; true ends the turn.
     bool upgradeYardForConcrete(BuildPass& pass, BuilderTurn& turn);
+    bool campaignHelperTimedYardUpgrade(BuildPass& pass, BuilderTurn& turn);
+    bool enemyAirCapable() const;
     /// Campaign repair capacity; true ends the turn.
     bool buildCampaignRepairYard(BuildPass& pass, BuilderTurn& turn);
     /// Withholds the cash this builder must not spend.
@@ -2073,6 +2155,7 @@ private:
     /// Starport purchases.
     void buildStarPort(BuildPass& pass, BuilderTurn& turn);
     bool produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32 itemID, int sourceLine, const char* rule = "unit_mix_or_prerequisite");
+    bool campaignYardUpgradeReady(BuildPass& pass, const BuilderBase* builder);
     bool upgradeWithLogging(BuildPass& pass, BuilderTurn& turn, int sourceLine);
     bool queueFoundedStructure(BuildPass& pass, BuilderTurn& turn, Uint32 item, int sourceLine, const char* rule="campaign_rebuild");
     bool queueCampaignWindtrap(BuildPass& pass, BuilderTurn& turn, int nextDemand);
@@ -2100,6 +2183,8 @@ private:
     void chooseYardCityFoundations(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Core protection, power reserve, reactor and production recovery.
     void chooseYardCoreEconomy(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// CampaignHelperBeeline: the opening ladder's next step owns the yard, saving for it if short.
+    void chooseYardHelperBeeline(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// City opening refineries, zones, vehicle factory and first transport.
     void chooseYardCityOpening(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// Crime services, refineries and repair support.

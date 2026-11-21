@@ -425,8 +425,8 @@ python3 tests/ai/genome_search.py interactions --genes focus_fire converge \
   --output INTERACTIONS.json.gz
 python3 tests/ai/genome_search.py evolve --plan SCREEN.json.gz \
   --report REPORT/report.json.gz --payoffs REPORT/payoffs.json --generation 1 \
-  --seed-genes simple_tech_savings press_on --race-seeds 110601 110602 \
-  --seed-combinations simple_tech_savings,press_on,more_rocket_turrets \
+  --seed-genes simple_tech_savings mass_assault --race-seeds 110601 110602 \
+  --seed-combinations simple_tech_savings,mass_assault,more_rocket_turrets \
   --behaviour BEHAVIOUR/games.csv --evaluation-rev FULL_COMMIT_SHA --output ROUND1.json.gz
 python3 tests/ai/genome_search.py race --plan SCREEN.json.gz ROUND1.json.gz \
   --elites ELITE... --seeds EIGHT_HELD_OUT_SEEDS... \

@@ -61,7 +61,7 @@ protected:
         upgradeButton.setText(_("Upgrade"));
         upgradeButton.setTextColor(color);
         upgradeButton.setVisible(false);
-        upgradeButton.setTooltipText(_("Upgrade this structure (Hotkey: U)"));
+        upgradeButton.setTooltipText(_("Upgrade this structure") + UnitCommandTooltips::hotkeySuffix(Hotkeys::Action::Upgrade));
         upgradeButton.setOnClick(std::bind(&BuilderInterface::onUpgrade, this));
 
         upgradeProgressBar.setText("0 %");
@@ -173,8 +173,9 @@ protected:
                 displayedUpgradeCost = cost;
                 displayedTechnologyInstallments = installments;
                 upgradeButton.setTooltipText(_("Upgrade: ") + std::to_string(cost)
-                    + (installments ? _(" cr, paid per tick. No full balance needed. (U)")
-                                    : _(" cr balance needed to start; paid per tick. (U)")));
+                    + (installments ? _(" cr, paid per tick. No full balance needed.")
+                                    : _(" cr balance needed to start; paid per tick."))
+                    + UnitCommandTooltips::hotkeySuffix(Hotkeys::Action::Upgrade));
             }
             repairButton.setVisible(canControl && !healthy);
             repairButton.setToggleState(pBuilder->isRepairing());

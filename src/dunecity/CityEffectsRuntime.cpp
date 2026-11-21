@@ -234,15 +234,6 @@ int32_t CitySimulation::getTotalFunds() const {
     return pLocalHouse ? static_cast<int32_t>(pLocalHouse->getCredits()) : totalFunds_;
 }
 
-bool CitySimulation::spendCityFunds(int32_t amount) {
-    if (!pLocalHouse) return false;
-    if (pLocalHouse->getCredits() >= amount) {
-        pLocalHouse->takeCredits(FixPoint(amount));
-        return true;
-    }
-    return false;
-}
-
 void CitySimulation::runEffectsScans() {
     if (!currentGameMap) return;
     AITelemetry::PerformanceScope phase("city.effects.pollution",currentGame->getGameCycleCount());

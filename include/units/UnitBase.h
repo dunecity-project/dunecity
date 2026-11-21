@@ -68,6 +68,14 @@ public:
 
     virtual void checkPos() = 0;
     virtual void deploy(const Coord& newLocation);
+    /**
+        Deploys a unit the map starts with ([UNITS] in the scenario, co-op extra forces).
+        It was already standing on its tile when the mission began instead of arriving there,
+        so a spice or special bloom under it stays intact, as in Dune II, which loads its blooms
+        after the units. A unit that arrives on a bloom later (carryall drop, reinforcement,
+        factory exit, driving onto it) still sets it off.
+    */
+    void deployAtMapStart(const Coord& newLocation);
     void cancelDeployment();
 
     void destroy() override;
@@ -638,6 +646,8 @@ protected:
     // Counts belong to the original house even while a unit is deviated.
     void registerUnit();
     bool restoredFromSave = false;
+    /// True only inside deployAtMapStart()'s deploy() call; never saved.
+    bool deployingAtMapStart = false;
 
 
     void updateVisibleUnits();

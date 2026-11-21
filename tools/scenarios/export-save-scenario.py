@@ -39,9 +39,11 @@ import sys
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
 from probe_profile import discard_profile_assets, prepare_profile  # noqa: E402
 
-TARGET = 'bin/dunecity.app/Contents/MacOS/dunecity'
+TARGET = NATIVE_TARGET
 NEEDLE = 'int menuResult = MainMenu().showMenu();'
 DEFAULT_FIXTURE_MAP = root / 'data/maps/singleplayer/3P - 64x32 - Middle Man.ini'
 
@@ -145,8 +147,7 @@ def parse_arguments():
 def build_probe(build, work):
     """Compile and link the diagnostic binary from the existing Ninja build."""
     subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True)
-    commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', TARGET],
-                                       text=True).splitlines()
+    commands = native_build_commands(build)
     main = (root / 'src/main.cpp').read_text()
     if main.count(NEEDLE) != 1:
         raise RuntimeError('Main-menu injection point changed; update export-save-scenario.py.')
@@ -157,7 +158,7 @@ def build_probe(build, work):
     injection = ('#define DUNECITY_SCENARIO_FIXTURE_INC "'
                  + str(root / 'tests/scenarios/save-scenario-fixture.inc') + '"\n'
                  + '#include "' + str(root / 'tools/scenarios/save-scenario-export.inc') + '"\n')
-    main = main[:position] + injection + main[position:]
+    main = main[:position] + NATIVE_INCLUDES + injection + main[position:]
     source = work / 'scenario-export-main.cpp'
     source.write_text(main)
 
@@ -177,12 +178,7 @@ def build_probe(build, work):
     # fields without adding accessors to shipped classes.
     compile_command.append('-fno-access-control')
 
-    app = work / 'scenario-export.app/Contents'
-    (app / 'MacOS').mkdir(parents=True, exist_ok=True)
-    resources = app / 'Resources'
-    if not resources.exists():
-        resources.symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    binary = app / 'MacOS/scenario-export'
+    binary = native_probe_binary(build, work, 'scenario-export')
     link = shlex.split(next(line for line in commands if ' -o ' + TARGET + ' ' in line))
     link = link[link.index('&&') + 1:]
     link = link[:link.index('&&')]

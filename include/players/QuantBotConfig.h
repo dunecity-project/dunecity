@@ -21,7 +21,9 @@
 #include <DataTypes.h>
 #include <data.h>
 #include <players/QuantBotStrategy.h>
+#include <players/QuantBotCityCampaignSkills.h>
 
+#include <array>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -320,6 +322,20 @@ struct QuantBotConfig {
         /// three times the spice still needed, so the mission can be won on credits.
         /// Hashed; default on. OFF retains unrestricted spending.
         bool campaignHelperQuotaSaving;
+        /// DuneCity campaign goals ([OBJECTIVES], docs/city-campaign.md): the QuantBot serving the
+        /// objective house plans for them - it banks a treasury goal (silos first, then spending
+        /// only the surplus above the goal once half of it is banked, unless the base is in a
+        /// military emergency), lifts its city ceiling to a population goal, and funds police
+        /// for a crime or land value goal. 0 OFF, 1 ON (default). Only maps with goals change.
+        int cityObjectivePlanning;
+        /// Repair-yard denial is exclusive to Easy campaign enemies. Hashed OFF/ON control.
+        bool campaignRepairRoleFix;
+        /// Campaign yards upgrade only out of surplus after income and power. Hashed OFF/ON control.
+        bool campaignDeferredYardUpgrade;
+        /// Diagnostic helper-only vanilla campaign power arms: 0 unchanged, 1 one windtrap, 2 surplus-funded power.
+        int campaignPowerExperiment;
+        int campaignHouseWaveExperiment; // 0 legacy; 1 reduced; 2 gentle; 3 explicit per-base budgets.
+        int campaignHouseWaveOneValue, campaignHouseWaveTwoValue, campaignHouseWaveThreeValue;
         /// The three difficulty levers of an Easy / Medium / Hard campaign opponent (Brutal has
         /// none). Hashed. Harvesters: the most it keeps, however many refineries the mission
         /// gives it (0 = no ceiling). WaveValue: the value one ground wave may hold; Easy keeps
@@ -372,6 +388,162 @@ struct QuantBotConfig {
         /// with enough health-weighted ground strength: 0=OFF, 1=100%, 2=150%.
         /// True worker attacks only; building defence and human/repair ownership stay unchanged.
         int campaignSizedWorkerRescue;
+        /// Classic campaign support keeps its idle ground troops on the rock around its own
+        /// base, where a sandworm cannot take them: 0=OFF (regroup on the troops' own
+        /// centroid, sand included), 1=hold on base rock, 2=also call back a troop whose
+        /// Area Guard target is a sandworm, 3=only that call-back, with the centroid regroup
+        /// kept. Hunting, retreating, defending, repairing and human-ordered units are unchanged.
+        int campaignHelperRockHold;
+        /// Classic campaign support below its campaignHelper*ArmyFloor, with two refineries and
+        /// no Heavy Factory built or queued, walks to its first Heavy Factory before the Starport
+        /// ladder, a third refinery, the first Repair Yard and imports beyond six harvesters.
+        /// Independent hashed candidate, default off; inert without Heavy Factory tech.
+        bool campaignHelperFactoryFirst;
+        /// Classic campaign support never waits for more than this army value before a ground
+        /// attack: 0=OFF (the difficulty's own ceiling, 30,000 for Brutal on a 64x64 map against
+        /// 15,000 for Hard). Home defence, wave sizing and enemies are unchanged.
+        int campaignHelperReadinessCap;
+        /// Classic campaign support whose own ground army is below this value, with a Starport,
+        /// imports heavy ground combat units (Tank, Siege Tank, Launcher and the house's special
+        /// heavies when listed) at any price up to list price, as many as cash, stock and the
+        /// remaining value allow in one order, after its first six harvesters and two carryalls
+        /// and before further worker and transport imports: 0=OFF. Enemies are unchanged.
+        int campaignHelperStarportArmy;
+        /// Classic campaign support below its army target (CampaignHelperStarportArmy when set,
+        /// otherwise its campaignHelper*ArmyFloor) orders no harvester beyond six and no carryall
+        /// beyond two, owned or queued, from any producer. Replacements up to six stay allowed.
+        bool campaignHelperImportCap;
+        /// Classic campaign support with a Starport and no Heavy Factory, built, queued or lost,
+        /// orders its first Heavy Factory only after the first Repair Yard is built or queued
+        /// (when it can build one) and the Starport offers no heavy combat unit at or below list
+        /// price, or cash exceeds 2,500. Shared prerequisites and the Repair Yard are unaffected.
+        /// Hashed; default on. City campaigns are unchanged.
+        bool campaignHelperFactoryLast;
+        /// Classic campaign support with fewer than four refineries built sends a harvester that
+        /// is harvesting or idle in the field home to unload once its cargo reaches this percent
+        /// of capacity: 0=OFF. Returning, docked, carried and human-ordered harvesters are untouched.
+        int campaignHelperEarlyUnload;
+        /// Classic campaign support never orders concrete (no Slab1/Slab4, no bulk-slab yard
+        /// upgrade) and places its buildings on bare rock. Enemies are unchanged.
+        /// Default on.
+        bool campaignHelperNoConcrete;
+        /// With CampaignHelperNoConcrete on, Light and Heavy Factories, the High-Tech Factory,
+        /// WOR and Barracks still get their foundation: a building on bare rock starts at half
+        /// health and a producer builds at its health fraction. Hashed; default on.
+        bool campaignHelperFactoryConcrete;
+        /// Classic campaign support repairs a damaged building at once only when it produces
+        /// (Construction Yard and factories); refineries, windtraps and the rest wait for a
+        /// comfortable treasury (over 5,000) or the survival and engaged-defence rules. A refinery
+        /// at half health unloads at two fifths speed, so OFF keeps repairing those too.
+        /// Hashed; default off.
+        bool campaignHelperRepairFactoriesOnly;
+        /// Classic campaign support upgrades its Construction Yard on a fixed timing, outside the
+        /// deferred spare-cash rule: 0=OFF (existing rules only), 1=as soon as a level is
+        /// available and affordable, 2=after the first Light Factory, 3=after the first Heavy
+        /// Factory, 4=after the first Heavy Factory and the full opening harvester fleet.
+        /// Hashed; default 2 (528 paired campaign games: wins unchanged, the yard upgraded in
+        /// 360 games at minute 7 instead of 229 at minute 19).
+        int campaignHelperYardUpgradeTiming;
+        /// Classic campaign support upgrades its yard to the Rocket Turret level as soon as an
+        /// enemy fields aircraft (or can build Ornithopters from a standing High Tech Factory),
+        /// whatever the timing above, and the deferred-upgrade rule no longer holds that
+        /// upgrade back. Hashed; default off.
+        bool campaignHelperAirUpgrade;
+        /// Classic campaign support at the ground unit limit launches with the army it has when
+        /// that army is below its readiness (the CampaignAllyStrengthFloor can otherwise ask
+        /// for more than the unit cap can ever hold). Hashed; default on (528 paired campaign
+        /// games: 381 -> 410 wins, time-outs 77 -> 38).
+        bool campaignHelperUnitCapLaunch;
+        /// Classic campaign support buys windtraps that close its power shortage when the
+        /// shortage's running cost (repairs plus lost refinery pay) repays them within this many
+        /// game minutes; it lays their full concrete foundation and orders them only when its
+        /// yard has nothing else to build. 0=OFF. Hashed; default 0.
+        int campaignHelperPowerPayback;
+        /// Classic campaign support with CampaignHelperNoConcrete lays full foundations again once
+        /// its opening is past: 0=OFF, 1=after its first Heavy Factory stands, 2=after a yard
+        /// reaches upgrade level 1 (bulk Slab4). Buildings already standing are not affected.
+        /// Hashed; default 0.
+        int campaignHelperLateConcrete;
+        /// Classic campaign support with CampaignHelperNoConcrete still lays the one-tile
+        /// foundation under Gun and Rocket Turrets: 5 credits against starting at half health
+        /// (repairing that costs 20-39). Hashed; default off.
+        bool campaignHelperTurretConcrete;
+        /// Vanilla custom/skirmish QuantBots (no campaign, no city, vanilla power rules) buy the
+        /// windtraps that close a power shortage when its running cost (repairs plus lost refinery
+        /// pay) repays them within this many game minutes, ordering them only when the yard has
+        /// nothing else to build. 0=OFF. Hashed; default 25 (13 control maps, 338 paired games:
+        /// +0.057 placement score [+0.026, +0.089], Fortress unchanged; All against Atreides 36/36,
+        /// 1.1 min faster).
+        int vanillaPowerPayback;
+        /// Vanilla custom/skirmish QuantBots defer the bulk-slab yard upgrade: 0=OFF (at once),
+        /// 2=after the first Light Factory, 3=after the first Heavy Factory. Hashed; default 0.
+        int vanillaYardUpgradeTiming;
+        /// Vanilla custom/skirmish QuantBots place non-production buildings (not factories, not
+        /// turrets) on bare rock until their first Heavy Factory stands, then lay full
+        /// foundations again. Hashed; default off.
+        bool vanillaOpeningBare;
+        /// Vanilla custom/skirmish QuantBots upgrade the yard to the Rocket Turret level as soon
+        /// as an enemy fields aircraft or can build Ornithopters. Hashed; default off.
+        bool vanillaAirUpgrade;
+        /// Classic campaign support's Starport opening ladder orders the Starport once this many
+        /// refineries are built or queued, then the remaining opening refineries, then the
+        /// Repair Yard: 0=OFF (all opening refineries first). 1..4.
+        int campaignHelperEarlyStarport;
+        /// Classic campaign support sites its Repair Yard deep behind its own buildings, away
+        /// from the base edge facing the nearest visible enemy (map centre when none), never on
+        /// the shallowest legal site when a deeper one exists. Other placement is unchanged.
+        bool campaignHelperProtectedRepair;
+        /// Classic campaign support ground troops that are not out with a wave (not Hunt) and not
+        /// under a human order or a repair run never chase a hostile target standing more than
+        /// this many tiles from the nearest live building the house owns: the target is dropped,
+        /// any defence assignment ends and the troop walks back to its regroup anchor. Shots at
+        /// anything inside weapon range stay allowed; sandworms are never pursued. 0=OFF, 0..30.
+        /// Default 14.
+        int campaignHelperDefenceLeash;
+        /// Classic campaign support with a Repair Yard regroups its idle ground troops on rock or
+        /// concrete this many tiles from the Repair Yard towards where the enemy comes from (at
+        /// most this + 3 tiles from it), not on their own centroid. 0=OFF, 0..12.
+        int campaignHelperFrontPost;
+        /// Classic campaign support ground troops in a fight retarget a visible hostile Deviator,
+        /// then Sonic Tank, then Launcher within weapon range + 4 tiles (lowest health, then
+        /// lowest object ID), at most once per 2 game seconds per unit. Default off.
+        bool campaignHelperFocusFire;
+        /// Classic campaign support launches a ground wave below its readiness once a defence of
+        /// its base has ended (a response in the last 90 s, no hostile ground fighter within 14
+        /// tiles of its buildings, no Hunt troops out) with at least this percent of the required
+        /// army, at most once per 3 game minutes. 0=OFF, 0..100.
+        int campaignHelperCounterAttack;
+        /// Classic campaign support's wave finishes one enemy house first: the hostile house whose
+        /// visible, reachable buildings have the lowest health-weighted price total, lowest house
+        /// ID on ties. Wave objectives prefer it and hunters on another house's building are sent
+        /// to its nearest building, at most once per 5 game seconds per unit. Default off.
+        bool campaignHelperSingleTarget;
+        /// Classic campaign support with a Construction Yard follows its Starport opening ladder
+        /// and buys nothing else until the ladder is done: the remaining opening refineries, the
+        /// Starport and then the Repair Yard, each with its missing prerequisites. Until a Repair
+        /// Yard is built or finished waiting to place (or cannot be built) it orders no unit, no
+        /// turret, wall, concrete, optional structure, extra windtrap or unrelated upgrade; a
+        /// harvester only while fewer than two exist. Repairs and the army are unaffected. Default off.
+        bool campaignHelperBeeline;
+        /// Classic campaign support's Starport opening ladder orders this many refineries before
+        /// the Starport instead of four, back to back as cash allows: 0=OFF, 1..8. Still bounded
+        /// by the map's spice (mapSpiceHarvesterTarget), fleet ratios and placement.
+        /// Default 6.
+        int campaignHelperOpeningRefineries;
+        /// Classic campaign support with its Repair Yard built (or none it can build) adds
+        /// refineries up to this total ahead of optional structures and its first Heavy Factory,
+        /// and plans at least 1.75 harvesters per refinery: 0=OFF, 1..10. Same spice bound.
+        /// Default 8.
+        int campaignHelperRefineryGoal;
+        /// Classic campaign support keeps at least one harvesting carryall per this many
+        /// harvesters (rounded up), from its Starport, else a High-Tech Factory; one on order
+        /// at a time until a Repair Yard stands: 0=OFF, 1..6. Army transport is unchanged.
+        /// Default 2.
+        int campaignHelperCarryallRatio;
+        /// Classic campaign support with one Construction Yard, its Repair Yard and refinery goal
+        /// met, buys one MCV through the Starport (never if it ever received one) when a yard
+        /// site adjoins its base; the existing MCV handling deploys it. Default off.
+        bool campaignHelperSecondYard;
         /// Optional capacity MCVs retain the forecast costs of existing production plus its
         /// cash reserve. Real lost-yard and terrain-driven expansion recovery are exempt.
         /// Independent candidate, off until same-build outcome acceptance.
@@ -464,6 +636,43 @@ struct QuantBotConfig {
         /// Experimental/default off: a single yard reserves profitable growth
         /// against two completed ordinary infrastructure orders per extra zone.
         bool citySingleYardGrowth;
+        /// A funded production backlog (every heavy or light factory busy, the funded army short of its
+        /// plan by a factory's price and the cash to build one) takes a construction yard before the
+        /// dedicated city-growth yard does. Without it a house with no city ceiling (Brutal) kept
+        /// every yard zoning while its army was destroyed with 20,000 credits banked
+        /// (docs/city-campaign.md, "Brutal's yards"). Hashed when OFF.
+        bool productionBeforeCityGrowth;
+        /// Experimental/default off: Brutal's DuneCity economy step (8-12 worker opening floor, equal
+        /// army capital per worker) only while no enemy alliance has more houses than its own and it
+        /// does not estimate itself outnumbered - the rule vanilla custom games already apply. A
+        /// lone DuneCity campaign house facing two to four allied enemies opens military-first as
+        /// Hard does. Hashed when ON.
+        bool brutalCityEconomyOutnumbered;
+        /// A Brutal QuantBot in the DuneCity campaign (helper or enemy) attacks once its army holds
+        /// this percent of its army ceiling instead of the tier's 25% (0 = the native 25%). Before it,
+        /// a Brutal helper won no more often than a Hard one, so no mission could sit between the
+        /// tiers; at 15% it won 52 of 69 screen games where it had won 41 and a Hard helper 34
+        /// (docs/city-campaign.md, "The tiers in the campaign: the skill ladder"). Default 15; hashed when not 15.
+        int cityCampaignBrutalAttackPercent;
+        /// City land value (Stefan, 2026-11-19: "the AI needs to learn how to boost property prices.
+        /// for example palaces boost nearby property values which is good for tax"). A Palace or
+        /// Stadium lifts land value by 40 within 8 tiles (CityEffects.h): its site is scored by the
+        /// own residential and commercial lots that bonus reaches, and a palace is ordered as a
+        /// land-value investment once 12 such lots stand, without waiting for 5,000 spare credits
+        /// and both factories. Default ON; hashed when OFF.
+        bool cityLandValueSiting;
+        /// DuneCity campaign skill ladder (QuantBotCityCampaignSkills.h; Stefan, 2026-11-20): in campaign
+        /// missions each tier plays only the skills whose tier is at or below its own, so Easy, Medium,
+        /// Hard and Brutal differ in how they use the same income, not only in ceilings the low-spice
+        /// maps never reach. Default ON; hashed when OFF. Off, every tier keeps its native skills.
+        bool cityCampaignSkillLadder;
+        /// Lowest tier per skill (0 Easy .. 3 Brutal, 4 never), indexed by QuantBotCityCampaignSkills::Skill.
+        /// Defaults kDefaultTiers; each tier is hashed when it differs from its default.
+        std::array<int, QuantBotCityCampaignSkills::kSkillCount> cityCampaignSkillTier;
+        /// Thinking speed per tier on the campaign ladder (QuantBotCityCampaignSkills::kThinkKeys): the tier
+        /// decides on one AI pass in N. Defaults kDefaultThinkPasses (Easy 8, Medium 6, Hard 3, Brutal 1); each hashed
+        /// when it differs.
+        std::array<int, 4> cityCampaignThinkPasses;
         /// Experimental/default off: cash-constrained spice cities reserve one
         /// zone's latent growth per yard, not full maturity of every standing lot.
         bool cityPowerGrowthHorizon;
@@ -640,6 +849,11 @@ struct QuantBotConfig {
     /// Defaults off; opt-in requires two occupied opposing initial houses and Research Lab.
     /// Lane assumptions also require the map marker. Hashed and inert outside those rules.
     bool civWarsStrategy;
+    /// [General Behavior] OriginalCampaignAI. New Campaign AI games use original
+    /// Dune II rules; false retains the old approximation. Saved per controller.
+    /// Hashed for peers; does not affect QuantBot decisions. Code default only
+    /// to preserve historical campaign mod checksums.
+    bool originalCampaignAI;
     /// How a launched ground attack wave travels (docs/formations.md, QuantBot waves):
     /// kWaveFormationNone keeps engine Hunt / today's per-unit orders, kWaveFormationBlob makes
     /// a Custom Hard/Brutal wave a hunt party that gathers, marches as one blob and releases into

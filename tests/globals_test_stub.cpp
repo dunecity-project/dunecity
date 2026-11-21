@@ -26,12 +26,11 @@ class MusicPlayer {};
 class GFXManager {};
 class SFXManager {};
 class FontManager {};
-class TextManager {
-public:
-    std::string getLocalized(const std::istream&) const { return ""; }
-    std::string getLocalized(const std::string& msgid) const { return msgid; }
-    std::string postProcessString(const std::string& s) const { return s; }
-};
+// The only TextManager in the test binary: no test-build source may include
+// FileClasses/TextManager.h, whose real class would be a second, different
+// definition of the same name. Nothing in the test build calls _(), so it
+// needs no members.
+class TextManager {};
 class NetworkManager {};
 
 // Null-initialized global manager pointers (test context: no game running)

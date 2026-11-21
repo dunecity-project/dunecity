@@ -57,6 +57,13 @@ namespace QuantBotPowerInvestmentPolicy {
 
 // StructureBase::update() takes one hitpoint per fifteen game seconds.
 constexpr int hitpointsLostPerMinute = 4;
+// A refinery pays floor(5 * health / maxHealth) fifths of each delivery, so the
+// hitpoint power shortage takes every 15 s (937 cycles) costs a fifth of its pay
+// until the next build pass (~100 cycles apart, ~50 on average) and the repair
+// (~6 cycles) restore it. Used only by CampaignHelperPowerPayback.
+constexpr int refineryPayLossPercent = 20;
+constexpr int refineryUnrepairedCycles = 56;
+constexpr int powerDamageCycles = 937;
 // Used only when a mod publishes no usable output for its generator.
 constexpr int defaultGeneratorOutput = 100;
 constexpr int incomeReplacementSeconds = 30;
@@ -123,7 +130,15 @@ struct Investment {
     int netIncome = 0;               // forecast net receipts over incomeMinutes
     int incomeMinutes = 0;
     int repairMilliPerHitpoint = 0;  // summed over the buildings the policy maintains
+    int paybackMinutes = 0;          // CampaignHelperPowerPayback horizon; 0 = off
+    int refineryLossPerMinute = 0;   // refinery pay the shortage costs each minute
 };
+
+// Refinery pay lost each minute to the shortage's unrepaired hitpoints.
+inline int refineryPayLossPerMinute(int incomePerMinute) {
+    return int(int64_t(std::max(0, incomePerMinute)) * refineryPayLossPercent * refineryUnrepairedCycles
+        / (100 * powerDamageCycles));
+}
 
 inline int generatorsNeeded(int deficit, int generatorOutput) {
     if (deficit <= 0) return 0;
@@ -157,16 +172,22 @@ inline bool prosperous(const Investment& state) {
 }
 
 enum class Verdict { BuyForRepairs, BuyWhileProsperous, NoDeficit, Unaffordable,
-                     IncomeTooLow, RepairsTooCheap };
+                     IncomeTooLow, RepairsTooCheap, BuyForPayback };
 
 inline bool buys(Verdict verdict) {
-    return verdict == Verdict::BuyForRepairs || verdict == Verdict::BuyWhileProsperous;
+    return verdict == Verdict::BuyForRepairs || verdict == Verdict::BuyWhileProsperous
+        || verdict == Verdict::BuyForPayback;
 }
 
 inline Verdict evaluate(const Investment& state) {
     const int capital = packageCapital(state);
     if (capital <= 0) return Verdict::NoDeficit;
     if (state.spendable < capital) return Verdict::Unaffordable;
+    // CampaignHelperPowerPayback: the shortage's whole running cost (repairs and
+    // refinery pay) repays the package within the horizon.
+    if (state.paybackMinutes > 0
+        && int64_t(avoidedRepairPerMinute(state) + std::max(0, state.refineryLossPerMinute))
+            * state.paybackMinutes >= capital) return Verdict::BuyForPayback;
     if (!incomeReplacesCapital(state, capital)) return Verdict::IncomeTooLow;
     if (repaysThroughAvoidedRepairs(state, capital)) return Verdict::BuyForRepairs;
     if (prosperous(state)) return Verdict::BuyWhileProsperous;
@@ -212,6 +233,7 @@ inline const char* describe(Verdict verdict) {
         case Verdict::NoDeficit:          return "no_raw_power_deficit";
         case Verdict::Unaffordable:       return "package_beyond_spendable_cash";
         case Verdict::IncomeTooLow:       return "income_cannot_replace_capital";
+        case Verdict::BuyForPayback:      return "shortage_cost_repays_generation";
         case Verdict::RepairsTooCheap:    return "avoided_repairs_do_not_repay";
     }
     return "unknown";

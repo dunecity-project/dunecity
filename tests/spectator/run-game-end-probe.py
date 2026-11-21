@@ -31,9 +31,13 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
@@ -46,8 +50,8 @@ build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
 subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+commands = native_build_commands(build)
 main = (root / 'src/main.cpp').read_text()
 needle = 'int menuResult = MainMenu().showMenu();'
 if main.count(needle) != 1:
@@ -59,7 +63,7 @@ if main.count(clamp) != 1:
 main = main.replace(clamp, '(void)displayIndex;')
 main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
 position = main.index('int main(')
-main = main[:position] + '#include "' + str(root / 'tests/spectator/game-end-probe.inc') + '"\n' + main[position:]
+main = main[:position] + NATIVE_INCLUDES + '#include "' + str(root / 'tests/spectator/game-end-probe.inc') + '"\n' + main[position:]
 work = Path(tempfile.mkdtemp(prefix='game-end-probe-build-', dir=out))
 source, obj = work / 'game-end-main.cpp', work / 'game-end-main.o'
 source.write_text(main)
@@ -76,10 +80,7 @@ compile_command[compile_command.index('-c') + 1] = str(source)
 compile_command.append('-fno-access-control')
 if args.baseline:
     compile_command.append('-DGAME_END_BASELINE')
-app = work / 'game-end-probe.app/Contents'
-(app / 'MacOS').mkdir(parents=True)
-(app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-binary = app / 'MacOS/game-end-probe'
+binary = native_probe_binary(build, work, 'game-end-probe')
 link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
 link = link[link.index('&&') + 1:]
 link = link[:link.index('&&')]

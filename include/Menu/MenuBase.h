@@ -43,6 +43,8 @@ public:
     virtual void update() { };
 
     virtual void drawSpecificStuff();
+    /// Draw the REMASTERED badge of the reworked campaign (misc/ReworkedCampaign.h) on this menu.
+    virtual bool showsRemasteredWatermark() const;
 
     void draw() override;
     virtual bool doInput(SDL_Event &event);

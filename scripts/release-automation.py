@@ -598,7 +598,10 @@ def reservation_token(args):
 
 def qualification_image_version():
     if os.environ.get('RUNNER_ENVIRONMENT') == 'self-hosted':
-        return 'self-hosted:' + run('sw_vers', '-buildVersion').strip() + ':' + run('xcodebuild', '-version').strip()
+        # Name the toolchain that actually compiles: the active developer directory and
+        # its compiler. The Mini uses the Command Line Tools, which have no xcodebuild.
+        return ':'.join(('self-hosted', run('sw_vers', '-buildVersion'), run('xcode-select', '-p'),
+                         run('clang', '--version').splitlines()[0]))
     return os.environ.get('ImageVersion')
 
 
@@ -660,6 +663,18 @@ def headless_qualification(directory, decisions=None):
             or any(item.get('status', 'run') not in ('run', 'passed', 'fail') for item in cases)
             or any(child.tag == 'skipped' for item in cases for child in item.iter())):
         raise ValueError('Hosted headless qualification is failed, skipped, missing or incomplete')
+    # The Mini runs test games on the AWS workers (scripts/qualification-aws.py). Those cases
+    # name their queue job and source; every attempt, including a retry, must have passed.
+    linux = {}
+    for case in cases:
+        facts = {item.get('name'): item.get('value') for item in case.iter('property')}
+        if 'queue_job' in facts:
+            statuses = [part.rpartition(':')[2] for part in facts.get('attempts', '').split(';') if part]
+            if case.get('status', 'run') != 'fail' and (not statuses or any(s != 'Passed' for s in statuses)):
+                raise ValueError('An AWS test passed only on a retry: ' + case.get('name', ''))
+            linux[case.get('name')] = (facts['queue_job'], facts.get('source_commit'))
+    if len(set(linux.values())) > 1:
+        raise ValueError('AWS test results must come from one queue job and source')
     accepted = []
     for case in cases:
         if case.get('status') == 'fail' or any(child.tag in ('failure', 'error') for child in case.iter()):
@@ -672,6 +687,9 @@ def headless_qualification(directory, decisions=None):
                   resultsSha256=digest(directory / HEADLESS_RESULTS))
     if accepted:
         result['acceptedFailures'] = sorted(accepted, key=lambda item: item['test'])
+    if linux:
+        job, commit = next(iter(linux.values()))
+        result['linux'] = dict(queueJob=job, sourceCommit=commit, machines=['aws', 'aws-mel2'], tests=sorted(linux))
     return result
 
 
@@ -772,6 +790,8 @@ def verify_headless_qualification(paths, sha, authenticate=True):
                 raise ValueError('Qualification evidence differs from immutable producer artifact')
     if receipt['qualification'] != headless_qualification(paths[HEADLESS_RECEIPT].parent, decisions):
         raise ValueError('Hosted headless qualification receipt does not match its frozen test results')
+    if receipt['qualification'].get('linux', {}).get('sourceCommit', sha) != sha:
+        raise ValueError('AWS test games ran a different source than the candidate')
 
 
 def qualification_runs():
@@ -880,7 +900,8 @@ def record_build(args):
         result.update(qualification=headless_qualification(args.build_root, exception_policy(result['sourceCommit'])),
                       qualificationWorkflow=QUALIFY_WORKFLOW,
                       qualificationGateSha256={name: digest(ROOT / name) for name in
-                                               ('scripts/release-automation.py', 'scripts/macos-ci-lane.sh', EXCEPTIONS)},
+                                               ('scripts/release-automation.py', 'scripts/macos-ci-lane.sh',
+                                                'scripts/qualification-aws.py', EXCEPTIONS)},
                       packageBuild=os.environ.get('PACKAGE_BUILD', 'false') == 'true',
                       qualifyingRunId=os.environ.get('GITHUB_RUN_ID'),
                       qualifyingRunAttempt=os.environ.get('GITHUB_RUN_ATTEMPT'))

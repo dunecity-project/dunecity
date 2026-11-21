@@ -1,3 +1,458 @@
+## 2026-11-21 - 1.0.875 published
+
+`v1.0.875` is an annotated tag on `31135f315ba00de138ec6f40f69ee3cd6151a17f` (branch
+`integrate/feature-batch`), pushed 10:53 AEDT after the owner's "deploy" / "to production" (and "publish").
+Evidence: `~/Documents/projects/outputs/release-1.0.875/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below, plus 7cb425b3f (menu probe follows the DuneCity Campaign menu item) and
+  31135f315 (fix after the first candidate c9b6b16c6 failed 8 tests: FactoriesFirst/ProductionBeforeCityGrowth
+  campaign-ladder only; genome inventory reads the ladder's looped keys; four switches registered).
+- Tested at 31135f315: AWS Linux headless nightly suite 239/239 (job 20261121T100137-release-1.0.875-e12c51,
+  every per-test log checked, incl. the four AI gates, menu_navigation_probe and the shared-spending probe);
+  Mini perf_regression (97.9 s), unit tests and the nine previously failing tests; integration CI run 44833649801;
+  Mac qualification run 44835538345 (reuse-qualification passed).
+- Tag build run 44840078078: attempt 1 failed only at build-macos runner set-up, because the Mini gate refused
+  build.yml 96231d07... (changed since 1.0.874 by e63e52869, one Linux apt package). Reviewed and appended to
+  `allowed_workflow_sha256` in `~/.config/agent-workspace/github-runner.json`; attempt 2 (`resume build`) passed
+  every job. Lesson: a release whose build.yml differs from the last bound hash needs the rebind before the tag.
+- The Mini pointer was parked at the top screen edge (75,0); centred before the tag (packaged fullscreen pointer case).
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and defaults,
+  browser build (1.0.875/31135f315, hashes match; Chrome reached the main menu with DuneCity Campaign), website
+  links and What's New. TestFlight not part of this release; Android held. Both AWS workers stopped.
+
+## 2026-11-21 - 1.0.875 candidate: the DuneCity Campaign
+
+Stefan asked for a ten-mission DuneCity city campaign (2026-11-19), the same-tier rule (a helper loses
+at least 60% against enemies of its own tier), a skill ladder for the tiers ("Yes, build it"), then a
+DuneCity Campaign main-menu item in place of Continue with Mentat goals and the planet colouring after a
+win (2026-11-21), installed on his Air, then "deploy ... to production". Design and playtests:
+`docs/city-campaign.md`; notes `releases/desktop/1.0.875.md`.
+
+- Content since v1.0.874: mission objectives ([OBJECTIVES], objectives panel, save 9887), Shield Wall
+  breach events, ten DCITY_M missions (low spice, rock for cities, per-difficulty enemy strength),
+  QuantBot city-campaign planning and skill ladder (thinking speed 8/6/3/1 passes per decision on the
+  campaign only), DuneCity Campaign menu/briefing/planet screen (f34efa859, probe 7cb425b3f), test and
+  CI housekeeping from 19 Nov. Protocol 130, save format 9887.
+- QuantBot change outside the campaign (every DuneCity game, default on): Palace/Stadium siting and a
+  palace order for land value (CityLandValueSiting). ProductionBeforeCityGrowth (a funded production
+  backlog takes a yard before city growth) is campaign-only (FactoriesFirst, Hard and Brutal): in every
+  game it failed quantbot_shared-spending_dunecity at the first candidate c9b6b16c6, whose AWS suite also
+  caught the genome inventory missing the ladder's looped keys and four new switches.
+- Final city-campaign validation (val-final2 at 5d7ff1f84, 480 games, 8 fresh seeds): Medium v Easy 72%,
+  Hard v Medium 64%, Brutal v Hard 62%; Medium v Medium 22%, Hard v Hard 36%, Brutal v Brutal 30%.
+  Ash Quarter and Shield Wall Breach still do not separate Brutal from Hard helpers.
+- Gates at earlier commits: AWS AI gates and dunelegacy_tests at 26d1da4a8, Mini perf_regression at
+  cf2cb621b; release gates at the candidate: `~/Documents/projects/outputs/release-1.0.875/gates.md`.
+
+## 2026-11-17 - 1.0.874 published
+
+`v1.0.874` is an annotated tag on `3883134ec40e5fc0c78df43a3c7e7973594f12ac` (branch
+`integrate/feature-batch`), pushed 09:37 AEDT after the owner's "Publish. Also make sure the aws is turned off
+after". Evidence: `~/Documents/projects/outputs/release-1.0.874/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below (carryall drop fix cfbd38768, menu probe 67ba411ca, bump 3883134ec).
+- Tested at 3883134ec: integration CI run 43920821325; Mac qualification run 43923112822; AWS Linux headless
+  nightly suite 224/224 (job 20261117T044134-release-1.0.874-70c3d1, every per-test log checked, incl. the four
+  AI gates and menu_navigation_probe). Tag build: run 43971786960, all jobs passed.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and defaults,
+  browser build (1.0.874/3883134ec, hashes match; Chrome reached the main menu), website links and What's New.
+  TestFlight not part of this release; Android held. Both AWS workers stopped (EC2 describe-instances).
+
+## 2026-11-17 - 1.0.874 candidate: carryall drops keep a player's unit in its own mode
+
+Player report on 1.0.873: units sent to a factory's destination arrived in Area Guard ("Überwachen")
+and chased sandworms. Cause: `Carryall::deployUnit` set every non-harvester it dropped to Area Guard
+(legacy code; lifts are more frequent since the 1.0.812 stall rescue). The owner chose Guard, not Hold,
+as the mode a delivered unit gets ("ok send them in guard"). Notes `releases/desktop/1.0.874.md`.
+
+- Fix cfbd38768: `UnitMovementPolicy::attackModeAfterCarryallDrop`. A human house's unit keeps its own
+  mode (Carryall-requested becomes Guard); attack-move/patrol units still get Area Guard; AI houses,
+  saboteurs (Hunt) and harvesters (Harvest) unchanged. Protocol 129, save format 9886 unchanged.
+- Also in this candidate: 67ba411ca, menu_navigation_probe checks Linux updates as an AppImage and as a
+  package install (test only; removes the Linux known failure accepted for 1.0.873).
+- Gates at cfbd38768: Mini unit tests and perf_regression passed (128.9 s); AWS job
+  20261116T234653-ctest-c4e417 passed 8/8 (dunelegacy_tests, carryall_flight_probe,
+  quantbot_carryall_repair, stalled_carryall_probe with a new Guard check, scenario-matrix smoke, AAA
+  vanilla and Dune2R, FFA army deploys). menu_navigation_probe at 67ba411ca passed on AWS and the Mini.
+
+## 2026-11-16 - 1.0.873 published
+
+`v1.0.873` is an annotated tag on `af709a0fcf21eb72751fb9bc175038d4e4d212ce` (branch
+`integrate/feature-batch`), pushed 21:21 AEDT after the owner's "make sure its tested but get it into
+production". Evidence: `~/Documents/projects/outputs/release-1.0.873/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below (2d9dd9d6e) plus af709a0fc, which fixed a stale menu check: the
+  first qualification (run 43830538683) failed only in menu_navigation_probe, which still expected
+  Reworked to offer Atreides alone. Qualified: run 43840664794. Tag build: run 43848120690, all jobs passed.
+- Tested at af709a0fc/2d9dd9d6e: AWS Linux headless nightly suite incl. the four AI gates; Mac
+  qualification 221/221; menu_navigation_probe native on the Mini.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (1.0.873/af709a0fc, hashes match; Chrome reached the main menu and the
+  Campaign screen's Maps: Reworked with the REMASTERED badge), website links and What's New.
+  TestFlight not part of this release; Android held.
+- Correction to the candidate entry: menu_navigation_probe did not pass on AWS at d8b2255a9. The queue
+  report printed the fixture test's pass line for it (also at 2d9dd9d6e: "224/224" was 223). On Linux it
+  also fails at "Update confirmation did not appear on its own", already in v1.0.872 (AWS job
+  20261116T202013); a Linux-only known failure, not a 1.0.873 regression.
+
+## 2026-11-16 - 1.0.873 candidate: reworked (Remastered) campaign, spice bloom ghost fix
+
+Stefan asked for the bundled RWRK_ missions to be completed, offered on the Campaign screen as a
+reworked-maps option that plays like the campaign with a REMASTERED badge, then playtested at every
+difficulty, then "Prepare 1.0.873". Design and results: `docs/reworked-campaign.md` (including
+"Playtest, 2026-11-16"); notes `releases/desktop/1.0.873.md`.
+
+- Maps: Original/Reworked on the Campaign screen; complete for Atreides, Harkonnen and Ordos (Fatkin's
+  Atreides 1-11/21/22, Harkonnen 1-3, Ordos 1; the rest generated by
+  `tools/reworked-campaign/rework_missions.py`). Fatkin's Atreides 21/22 enemy waves were delayed to
+  the generated level 8 timing (header note; licence kept).
+- Spice bloom fix (bb85c4ba6): a unit a map starts with on a bloom no longer loads as an invisible,
+  untargetable unit. Protocol 128, save format 9886 unchanged.
+- Gates at bb85c4ba6 (all game code of this candidate; later commits are maps, docs, test harness):
+  AWS job 20261116T182657 dunelegacy_tests, bloom_placement_probe, scenario-matrix smoke, All against
+  Atreides vanilla and Dune2R, FFA army deploys 6/6; Mini perf_regression passed (PERF_BUDGET_OK,
+  build-int run 18:27 AEDT). At d8b2255a9: dunelegacy_tests, quantbot_campaign_matrix_coverage,
+  menu_probe_fixture, menu_navigation_probe 4/4 on AWS.
+- Playtest on AWS: 66 reworked missions v originals, same seeds, eight setups (QuantBot Easy to Brutal,
+  equal-tier helpers, Campaign AI), no crash. Like the originals except QuantBot Brutal (reworked
+  12/66 won v 27/66) and Easy helpers (more 80-minute time-outs).
+- Not tested: a human playing the reworked missions; Fremen/Mercenary/Sardaukar (no complete sets).
+
+## 2026-11-16 - 1.0.872 published
+
+`v1.0.872` is an annotated tag on `7ffa20b7cbb321781fd8fc1408972833bf6f5ddb` (branch
+`integrate/feature-batch`), pushed 13:58 AEDT after the owner's "release". Evidence:
+`~/Documents/projects/outputs/release-1.0.872/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below. Game code is b2ed3f128; later commits fixed the Linux probe
+  fixture test (950e924b3) and taught the opening-economy probe the payback windtrap rule
+  (ee39df68c, c0b364700, 7ffa20b7c; owner: "Yes, update test").
+- Qualified: run 43790461353 (an earlier qualification failed only in
+  `quantbot_opening-economy_vanilla`, the stale probe). Tag build: run 43795350043, all jobs passed.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (build.json at 1.0.872/7ffa20b7c, hashes match, main menu reached in
+  Chrome), website links and What's New. TestFlight not part of this release; Android held.
+- Website: at the owner's request the What's new page shows 1.0.867 to 1.0.871 as one entry. The
+  website generator reads `changelog/groups.json` (dunelegacy.com ddda999), so release rebuilds keep it.
+
+## 2026-11-16 - 1.0.872 candidate: campaign helper unit-cap launch and yard upgrade, vanilla payback windtraps
+
+Stefan's save `doesntupgrade.dls` (Atreides, tech 4, Easy QuantBot on the player's house): the yard
+never upgraded and the helper never attacked. He asked for upgrade timings tested on the two retained
+AWS workers, then for power, concrete and yard rules assessed as general switches, then "release".
+Full results: `docs/campaign-support-research.md` (two 2026-11-16 sections); models and runs in
+`~/Documents/projects/outputs/yard-upgrade-timing-20261116/`.
+
+- New defaults: `CampaignHelperUnitCapLaunch=1`, `CampaignHelperYardUpgradeTiming=2`,
+  `VanillaPowerPayback=25`. Protocol 127, save format 9886 unchanged.
+- Off, kept as switches: `CampaignHelperAirUpgrade`, `CampaignHelperPowerPayback`,
+  `CampaignHelperLateConcrete`, `CampaignHelperTurretConcrete`, `VanillaYardUpgradeTiming`,
+  `VanillaOpeningBare`, `VanillaAirUpgrade`.
+- Gates at a212b0d0c (AI code identical to this candidate): AWS dunelegacy_tests, scenario-matrix
+  smoke, All against Atreides vanilla and Dune2R, FFA army deploys 5/5; Mini perf_regression at
+  eb9c4408b; controls same-source OFF overlay v candidate 9/9 native wins kept (PASS).
+- Not tested: campaign enemies with these switches (difficulty choice), DuneCity city mode (the
+  switches do not apply there).
+
+## 2026-11-16 - 1.0.871 published
+
+`v1.0.871` is an annotated tag on `76ca46d7eb2f22c07d0521a7ef525d07bd64fb41` (branch
+`integrate/feature-batch`), pushed 03:48 AEDT after the owner's "ok once done deploy buold to
+production". Evidence: `~/Documents/projects/outputs/release-1.0.871/` (`gates.md`, `channels.md`).
+
+- Content: the classic command keys as defaults, a key for every unit panel command, W/A/S/D
+  scrolling only with the WASD camera on (entry below). No AI behaviour change.
+- Qualified: run 43735354446. Tag build: run 43737586500, 23 minutes, all jobs passed.
+- Verified live: GitHub release (Latest, 25 assets, hashes and signatures), SourceForge downloads and
+  defaults, browser build (build.json at 1.0.871/76ca46d7e, hashes match, main menu reached in
+  headless Chrome on the Mini), website links and What's New.
+- Not done: TestFlight (latest is 1.0.870), Android (held on 0.2.33). No package was installed and
+  played on Windows or Linux. Pull request 127 into `main` is still open.
+- The first live verification ran before the website deploy finished and failed on the browser
+  build; wait for the `dunelegacy.com` "Deploy to Droplet" run before `verify --live`.
+- A fresh browser profile logged "INIFile: Syntax-Error in line 5:Version =" once while the menu
+  loaded normally. Not investigated and not compared with 1.0.870.
+- The hotkey session waited 8 hours on a Linux `dunelegacy_tests` queue job that never got a
+  machine. A session waiting on a queue job needs a time limit and a report, not an open wait.
+
+## 2026-11-16 - 1.0.871 candidate: classic command keys restored, keys for every panel command
+
+The owner played 1.0.870 and asked for the classic shortcuts back with the newer commands as
+extras, and for W/A/S/D scrolling only when switched on. Commits `79fe6f432` and `b471f0485` on
+`integrate/feature-batch`. Full description and key table:
+`docs/rts-controls.md`, "Configurable hotkeys".
+
+- Defaults are the pre-1.0.870 keys again, modifier chords included: A Attack Move, S Stop,
+  M Move, Q Patrol, H Hold, C Capture, D Carryall drop, R Repair, U Upgrade, P Place, G next
+  Construction Yard, F next factory, O ornithopters, T / Ctrl+T same type, Ctrl+A combat units,
+  Ctrl+F / Ctrl+Shift+F formations, Z zone tool, Shift+R / Shift+B / Shift+C / Shift+T.
+- Commands without a classic key: E Guard, X Area Guard, B Ambush, N Hunt, K Retreat, Y Deploy
+  MCV, V movement paths, Delete self-destruct, J Sabotage and L Heal (Tornie mods). 33 commands.
+- The WASD camera was already off by default and stays so. On, W/A/S/D scroll and a command on
+  one of them needs Shift (Shift+A, Shift+S, Shift+D by default); the Hotkeys tab, the checkbox
+  and the tooltips show the key in effect.
+- A profile holding an untouched copy of the 1.0.870 defaults (Apply writes all of them) loads as
+  the new defaults. Any other saved `[Hotkeys]` section is kept key for key; in such a 1.0.870
+  profile seven of the newer commands start unbound because their letters are in use.
+- Tested at `b471f0485`: Mini `dunelegacy_tests`, `rts_controls_tests`, `hotkeys_tests`,
+  `menu_navigation_probe`, `terrain_mix_menu_probe`, `ui_gallery_probe`, `formation_movement_probe`,
+  `rts_controls_probe`, `mouse_controls_probe`, `preplace_queue_probe`, both `sidebar_grid_probe`
+  sizes and the unregistered SourceForge regressions probe passed; `native_pointer_mapping_probe`
+  skipped itself. Linux (AWS): `rts_controls_tests` and `hotkeys_tests` passed; `dunelegacy_tests`
+  in queue job `20261115T190454-classic-hotkeys-5f41a3` was never given a machine in 8 hours and
+  was cancelled, so Linux unit tests rest on the branch CI.
+- AI is unchanged by these commits and by `f24981a0f` (default-off research switch
+  `CampaignHelperRepairFactoriesOnly`, rejected: 110 and 120 of 216 against 129, income down 11%).
+  At `b471f0485` on AWS: Brutal helper v Hard missions 20-22, 216 games, 129 won, all 216 final
+  digests identical to the 1.0.870 defaults; smoke tier 11 of 11; Dune2R 7 of 7; All against
+  Atreides 6 of 6 in 31.4 to 36.4 minutes. Evidence:
+  `~/Documents/projects/outputs/brutal-support-claude-20261115/round22/`.
+- Release 1.0.871 carries only this: protocol 126 and save format 9886 are unchanged.
+- Not verified: no person has played the build; the keys were not tried on a German or French
+  keyboard; Sabotage and Heal were only checked to be inert without Tornie content.
+
+Release notes as proposed by the hotkey session (final text: `releases/desktop/1.0.871.md`):
+
+> - The classic command keys are back: A Attack, S Stop, M Move, Q Patrol, H Hold, C Capture,
+>   D Carryall, R Repair, U Upgrade, P Place, G next Construction Yard and F next factory, with
+>   Ctrl+A, T and Ctrl+T for selections as before.
+> - Every unit command now has a key: E Guard, X Area Guard, B Ambush, N Hunt, K Retreat,
+>   Y Deploy MCV, V movement paths and Delete for a Devastator's self-destruct. The buttons'
+>   tooltips name them, and all 33 commands can be changed under Options > Hotkeys.
+> - W, A, S and D scroll the map only if you switch on "WASD camera" under Options > Controls.
+>   While it is on, the commands on those keys need Shift, for example Shift+A to attack.
+> - If you never changed a key in 1.0.870 you get these keys automatically. Keys you chose
+>   yourself are kept; Defaults then Apply switches such a profile to the keys above.
+
+## 2026-11-15 - 1.0.870 published
+
+`v1.0.870` is an annotated tag on `e0eaee02f1ea11a31c1469573d8994d02319624b` (branch
+`integrate/feature-batch`), pushed 16:24 AEDT after the owner's "Yes, publish it". Evidence:
+`~/Documents/projects/outputs/release-1.0.870/` (`gates.md`, `channels.md`).
+
+- First candidate `bf9bb5974` failed the headless qualification on `quantbot_custom_attack`
+  (1 of 144): the probe pinned the campaign helper reserve regrouping on the army centroid, which
+  `CampaignHelperDefenceLeash=14` changes on purpose. `e0eaee02f` updates the probe (centroid with
+  the leash off; within the leash of own buildings with the shipped leash) and makes the leash inert
+  for a house with no building left. No game outcome changed in 480 replayed games; the only final
+  digests that differ are games lost in both runs. `bf9bb5974` was never tagged.
+- Qualified: run 43679399472. Tag build: run 43680987264, 25 minutes, all jobs passed.
+- Verified live: GitHub release (Latest, 8 packages, feeds and appcasts, hashes and signatures),
+  SourceForge (7 packages, README, SHA256SUMS, three OS defaults), browser build (build.json at
+  1.0.870/e0eaee02f, hashes match, main menu reached in Chrome on the Mini), website pages and changelog.
+- Not done: TestFlight (still engine 1.0.857). Android held on 0.2.33 (engine 1.0.858); it cannot
+  play online with protocol 126. No package was installed and played on Windows or Linux.
+- Pull request 127 into `main` is still open: the account used has push but not admin rights and
+  `main` requires a review. As with 1.0.869, `main` does not contain the released tag.
+- Lesson: before pushing a candidate that changes an AI default, run the headless nightly AI probes
+  (`^quantbot_`), not only the four mandatory gates; the qualification is where this surfaced.
+
+## 2026-11-15 - 1.0.870 candidate: campaign helper holds its ground and follows a bigger build order
+
+Classic-campaign support QuantBots (campaignEconomySupport(): campaign policy, allied with the
+human, not builder-only, city sim off) get four default changes. Evidence root:
+`~/Documents/projects/outputs/brutal-support-claude-20261115/` (`results.md`, `round10`..`round19`).
+All games vanilla, Full campaign, idle human, saved options, AWS.
+
+- `afc42bfc0` `CampaignHelperFactoryLast` on: with a Starport the first Heavy Factory waits for the
+  Repair Yard and for the Starport to run out of heavy units at or below list price (or cash above
+  2,500). Brutal helper v Hard, missions 20-22, 216 games: 74 -> 105; second seed block 88 -> 115.
+- `0518ffedd` defaults: `CampaignHelperDefenceLeash=14` (home troops do not chase or answer a
+  ground contact more than 14 tiles from the nearest own building), `CampaignHelperNoConcrete` with
+  `CampaignHelperFactoryConcrete` (concrete only under production buildings),
+  `CampaignHelperOpeningRefineries=6`, `CampaignHelperRefineryGoal=8`, `CampaignHelperCarryallRatio=2`.
+- Leash alone: 105 -> 128, second seed block 115 -> 133, all 66 maps x 4 seeds 229 -> 243
+  (missions 1-19 211 -> 221 of 228). Leash 6 is ruinous (15 of 216); 10 did not hold on fresh seeds.
+- Build order alone: 105 -> 127 on the first seed block, 115 -> 116 on the second, 229 -> 231 on all
+  maps: not confirmed as a strength gain. It is on by the owner's choice, modelled on his recorded
+  build order. With the leash: 129, 129 and 240.
+- New defaults by helper level against Hard, missions 20-22, 216 games each, against the
+  `campaign-helper-release-870-off` style in the same build: Brutal 105 -> 129, Hard 101 -> 121,
+  Medium 55 -> 81, Easy 5 -> 15. The default arm matches the tested style on 216 of 216 final
+  digests, and the off style matches the previous default on 216 of 216.
+- Against the Campaign AI opponent, all 66 maps x 2 seeds, 132 games per helper level: Easy
+  119 -> 124, Medium 123 -> 125, Hard 122 -> 124, Brutal 124 -> 125; no engine errors in 1,056 games.
+- Rejected or unproven, left default off: rock hold, factory first, readiness cap, Starport army,
+  import cap, early unload, early Starport, protected Repair Yard site, front post, focus fire
+  (69 of 216 against 105), counter-attack, single target, beeline (77), second Construction Yard
+  (103), six-then-eight refineries with concrete kept (93).
+- Gates at `0518ffedd`: AWS scenario-matrix smoke 11 of 11, All against Atreides vanilla 6 of 6
+  (31.4-36.4 min) and Dune2R 7 of 7 (31.0-34.8 min); Mini `dunelegacy_tests`,
+  `quantbot_ffa_army_deploys` and `perf_regression` pass (house_max 5.7 against 10).
+- Still weak: Atreides mission 20 (4 of 24), Harkonnen mission 21 (6 of 24), and every late mission
+  against Brutal opponents (0 of 216).
+- The mandatory AI tests are registered `macos` in CTest; on AWS they run as
+  `dunecity-queue submit --purpose verification --machines aws` jobs with the scenario-matrix harness.
+- Also in this candidate: the Campaign AI corrections below and the configurable Hotkeys tab
+  (`a7b382da6`, `98ed3adbe`). Version 1.0.870, protocol 126, save format 9886. Nothing tagged.
+
+## 2026-11-15 - Campaign AI in 1.0.869 was unwinnable from level 6: woke at the first tick (fixed locally, unreleased)
+
+Player report: with Enemy AI "Campaign AI" the campaign became much harder than 1.0.867 and
+unsolvable from level 6. Confirmed on AWS (264 games per arm, all 22 missions, three houses,
+seeds 7101/7102, idle human plus QuantBot helper): levels 6-9 with a Hard helper were won 0 of 54
+times in 1.0.869 against 49 of 54 in 1.0.867, the base falling after a median 3.9 game minutes.
+
+- Cause: `UnitBase::updateVisibleUnits` activated every house on the object visibility flag,
+  which is set for every deployed unit, so the AI was awake from the first update. Dune II wakes
+  a computer house only when the player's sight uncovers one of its ground units. The pre-9886
+  controller hid this because its waves waited for damage; the original TEAM.EMC scripts
+  recruited the whole authored army at once and had about 16 units at the player's base by minute 2.
+- `172242e1d`: an original-rules Campaign AI house wakes only when the other side has had one of
+  its ground units in sight. Other controllers unchanged. **Protocol 126**, save format unchanged.
+  Levels 6-9: 0 of 54 to 36 of 54 won.
+- `6bcf2473c`: in authored missions such a house keeps its mission's `MaxUnit` (15-25, default 39)
+  unless the unit override is a number above 0; the shipped override 0 had made it unlimited.
+  Faithful to the original, no measurable effect in these games (31 of 54). Kept as its own commit
+  so it can be dropped; this is the owner's decision.
+- `8f229669b`: opt-in `partner-<tier>-v-campaign-ai-{original,legacy,release}` cells in
+  `tests/ai/scenario-matrix.py`. `refs/research/campaign-ai-fidelity-867` (`41ccd0a97`) is the
+  1.0.867 tag plus those cells, for the comparison only.
+- Unchanged elsewhere: 264 of 264 QuantBot Easy and 264 of 264 old-controller games keep their
+  final digest across both fixes; AWS smoke tier 11 of 11, All against Atreides 6 of 6 and Dune2R 7 of 7;
+  `original_campaign_*` 3 of 3.
+- `11c54828e` (later the same day, not yet pushed): no mission teams under original rules. A
+  windowless build of Dune Dynasty's game logic (levels 4-9, 180 runs) showed the original never
+  creates a campaign team: `Scenario_Load_Team` (scenario.c, same in OpenDUNE) returns unless a
+  comma follows the fifth value, and every campaign `[TEAMS]` line ends there. So TEAM.EMC never
+  runs; only built units and reinforcements attack, one or two at a time (about 5 at the player's
+  base in the first 10 minutes, where 1.0.869 had a median of 10 at once). The earlier claim that
+  the remaining difficulty was original behaviour was wrong. With all three fixes: levels 6-9
+  51 of 54 with both Hard and Medium helpers (1.0.867: 49 and 38), every mission won at least
+  once, parity and gates unchanged. The script machine stays in the code behind a test-only switch.
+  Driver and logs: `outputs/campaign-ai-fidelity-20261115/dune-dynasty-harness/`, `dune-dynasty/`.
+- Open: native Mac build, `quantbot_ffa_army_deploys` and `perf_regression` on the Mini; a human
+  play test; a Dune Dynasty run with an active player. Still different from the original and
+  left alone: shared 102-unit pool, 75% speed of built units, credits capped at storage, mission
+  Guard units switching to Hunt when hit.
+- Evidence and audit table: `outputs/campaign-ai-fidelity-20261115/results.md`; rules in
+  `docs/original-campaign-ai.md`.
+
+## 2026-11-15 - 1.0.869 published; 1.0.868 was tagged but never published
+
+- Tag `v1.0.869` → `a6e26c57e99bf67d507c515ce7ea252b52e1306c`; tag run 43597776305; integration CI 43594620864; Mini qualifier 43595737089 (receipt reused by the tag job, no test rerun). Tag `v1.0.868` stays on `e990124666feb61ac82073324c6e6d6fb1a93d48`, unpublished: its tag run 43590160430 failed the Mac lane three times. 1.0.869 is that game code with the version changed and the Mac packaging order fixed.
+- Published 00:25:30 AEDT 15 November (13:25:30Z 14 November) and verified live by 00:40: GitHub Latest with 25 assets; `release-automation.py verify v1.0.869 --live` rc 0 (package hashes, updater signatures, `/play` artifact hashes, SourceForge downloads and defaults, website links); `/play/build.json` 1.0.869 / `a6e26c57e`; SourceForge `dunecity/1.0.869/` present and no `1.0.868` folder; website repo `270df4f` (automated bump), `14e4b9d` (browser), `9b74aaf` (description), live pages byte-identical to `9b74aaf`. Codex's independent public verifier and 12-check browser test passed. The published macOS ZIP (sha256 `23b21e13…`) was downloaded, verified as notarised Developer ID, launched with an isolated profile and captured at the main menu showing "App v1.0.869" (`outputs/release-1.0.869/published-mac/packaged-app-main-menu.png`).
+- `main` was not moved (direct push is refused; a PR is required). Staging `integrate/feature-batch` carries the release at `a6e26c57e`.
+- Contents: Original Campaign AI (save format 9886, protocol 125); campaign QuantBot Repair Yard rule limited to Easy campaign enemies (Medium QuantBots in Custom games also lose the limit); campaign Construction Yard upgrade deferred until income, power and spare credits; campaign setup screen enemy descriptions corrected and no longer clipped; `CampaignHouseWaveExperiment` (arms 1 to 3, live base count) in the binary, default 0, keys absent from the default INI.
+- Strength of the two fixes, idle human, fixes off against on. Single mission (36 games each, in the notes): Medium helper v Hard 10 to 16; Hard v Medium 31 to 32. Full campaign (72 paired games each, seeds 9901 to 9908, measured after the notes were frozen): Medium v Hard 22 to 34 with no win turned into a loss; Hard v Medium 62 to 64; Brutal v Hard on missions 20 to 22: 23 to 34 (18 losses became wins, 7 wins became losses). Harkonnen mission 21 with a Brutal helper 0 of 8 both ways; Ordos missions 21 and 22 with a Brutal helper slightly worse (5 to 4, 7 to 5 of 8). Evidence `outputs/campaign-wave-search-20261114/full-fix-control-results.md`.
+- Not in it: any change to the Hard wave value. Flat 4000 was tested and withdrawn (Single mission, Brutal helper on Harkonnen 20+21: 7 of 20 down to 2 of 20) with its save-checksum migration. The cap study (6,352 games: 2,880 exploratory, 3,456 held out on seeds 9901 to 9908, 16 on the owner's seed) rejected 6500/2000/4000, 6500/4000/4000 and flat 4000: Brutal helper mission 22 fell from 13 of 24 to 9 with all three. Record: `docs/campaign-ai-difficulty-matrix.md` "Full campaign cap confirmation"; evidence `outputs/campaign-wave-search-20261114/decision.md`.
+- Known issues: late missions against Hard opponents still lost with a QuantBot helper and an idle human (held-out baseline, Full campaign: missions 20+21 Easy 3, Medium 11, Hard 16, Brutal 21 of 48; mission 22: 0, 3, 14, 13 of 24; Harkonnen mission 21: 0 of 32; removing `CampaignAllyStrengthFloor` lost 36 of 36 there). Cause not known. Ordos mission 4 seed 9602 stall carried from 1.0.867.
+- Held: Android, TestFlight, Windows real GPU, physical iPhone/iPad.
+- Follow-ups, not part of the release: (a) the pointer fixture should restore the pointer it displaces, or the lane should centre it (lesson 14); (b) `agent-workspace run` should treat `PermissionError` from its process-group probe (`workspace.py:247`): one run ended with `[Errno 1] Operation not permitted` and no receipt after the script had finished; (c) the `perf_regression` spike of attempt 1 is unexplained; (d) `dunecity-crash.log` is a tracked file in the repository root and any app started there rewrites it.
+
+### What cost time, and what changed
+
+1. **A default-on fix was pushed without the integration tier run on the final head.** The hosted Mac caught `repair_capacity_vanilla`. Rule now followed: before any candidate push, run `outputs/release-…/native-gates.sh` (integration tier, focused, GUI lane, saved-game continuations) on `build-int` at the exact head.
+2. **A test that guards a neighbouring behaviour is evidence of scope, not a stale assertion by default.** The Repair Yard fix lifted a Custom-game Medium limit; it shipped only after the owner's words were quoted and the notes said so.
+3. **The Mini's qualification receipt code had never run on the Mini.** `qualification_image_version` called `xcodebuild`, absent under Command Line Tools; the unit test mocked the call. Fixed in `6470b576c` (macOS build + developer directory + compiler). First complete Mini qualifier: run 43577738853, 140 tests, 19 min 11 s.
+4. **Any key in `config/QuantBot Config.ini.default` is part of every mod's checksum.** Changing a shipped value refuses older checksum-only campaign saves. Behaviour changes go in code defaults with the key kept out of the default INI, or come with a proven migration.
+5. **`gui nightly` tests run nowhere automatically.** `quantbot_campaign_pressure_*` and `perf_regression` are in neither hosted CI nor the Mini qualifier; the local gate script is their only execution.
+6. **Git on the staging project is refused while the Mini qualifier holds it** ("project:dunecity is in use"). Queue merges with `--wait` or do them before the qualifier starts.
+7. **Scope moved four times after the first candidate** (Custom Medium consequence, Hard 4000 in and out, Original Campaign AI in, wave experiment). Each source change costs one integration CI (about 12 min) and one Mini qualifier (about 20 min). Qualifying a likely-final head during an experiment is cheap insurance.
+8. **Save mode must be read from the save header, not recalled.** Both owner saves were Full campaign (`game_type` 1), first recorded as Single mission.
+9. **A fit score chosen before the data can still point the wrong way.** The frozen target-fit score favoured all three cap candidates on fresh seeds while the raw late-mission tables got worse; 73% of the baseline error came from two early-mission cells. Read the per-helper, per-mission tables before any composite.
+10. **Menu text is a claim about the code.** The setup screen said Easy and Medium attack one house at a time; `Profile::houses` now only feeds telemetry. When behaviour changes, grep the menus for the old description.
+11. **A two-line size-10 label needs 28 rows.** `createLabelSurface` clips at the widget height; a 12 November capture already shows the second line's descenders cut.
+12. **Cancel a superseded qualifier at once.** Run 43582944138 was cancelled before a lane step ran; GitHub showed `in_progress` for five more minutes (runner cancellation timeout) while the project was already free.
+13. **`gui nightly` tests do run in the tag run's Mac lane** (correcting point 5: not in integration CI or the Mini qualifier, but `perf_regression` and the packaged pointer gate gate publication). Attempt 1 of 1.0.868 failed `perf_regression` on one 122 ms update (`house_max` 18.9 against a budget of 10); six same-binary repeats gave 14.0 to 15.8 ms with identical digests and the retry passed at 2.5. Cause unresolved. Evidence `outputs/release-1.0.868/perf-diagnosis/`.
+14. **The pointer fixture leaves the Mini's real pointer on the left screen edge, and the next run then fails its first check.** Attempt 2 of 1.0.868 failed "Stationary fullscreen pointer lies outside the logical viewport" with the pointer at x 0, y 907. I first blamed a Screen Sharing session; that was not shown. In the 1.0.869 lane a read-only sampler had the pointer at the centre until the fixture ran (00:20:16), then at x 0, y 907 afterwards with no session connected (`outputs/release-1.0.869/pointer-samples-tag-run.tsv`). The viewport starts one pixel in from the left, so x 0 is outside it. `desktop-before.json` claims `pointerMoved: false`. Until the fixture restores the pointer or the lane centres it, centre it once before every pointer-gate run, then only sample (a corrective move during the fixture would hide a real escape).
+15. **A Mac lane rerun after Apple accepted the app failed at stapling (exit 73).** Packaging launched the signed app before stapling; on the rerun that was already notarised code (same code hash), the bundle came under App Management and the runner's `stapler` was denied the write (TCC `kTCCServiceSystemPolicyAppBundles`, responsible binary the runner's `node`, no prompt). Kernel and TCC log lines in `outputs/release-1.0.868/staple-diagnosis/`. Fixed in `a6e26c57e` by stapling before the first launch, validated on the runner by the 1.0.869 lane (staple 00:16:57, runtime check 00:17:00). It cost a new version, one integration CI and one Mini qualifier. `man stapler` gave the meaning of exit 73 in one line, and Codex found it; read the tool's manual before blaming the service. No privacy grant on the Mini was changed.
+16. **Failed Mac packages have no automated consumer.** `release` takes only `DuneCity-macOS-DMG` from a successful lane; a signed, notarised package from a lane that failed a later gate cannot be promoted by the workflow, and the pointer consumer needs a publication manifest an unpublished build does not have. 1.0.865 was published from unchanged packages after a harness failure, but by an owner-directed manual publication; that was not used here. A late host-state failure therefore costs a full re-sign unless the owner directs otherwise.
+17. **The production reservation needs 45 GB free on the Mini** (25 GB reserve plus the 20 GB budget). It was refused at 42.8 GB; freeing regenerable test output under `build-int` fixed it. Check free space before the reservation, not at it.
+
+## 2026-11-14 - Original Campaign AI restoration (next batch, not 1.0.868)
+
+Stefan requested the selectable Campaign AI use original Dune II behaviour;
+QuantBot remains separate. Implementation follows pinned Dune Dynasty original
+branches and executes the user's `DUNE.PAK/TEAM.EMC` team script. It restores
+production choice/order, individual produced-unit Hunt, authored mission teams,
+five-slot rebuilding, free factory upgrades and original base-attack behaviour.
+See `docs/original-campaign-ai.md` for references and explicit engine adaptations.
+No extracted commercial script is committed.
+
+New games use hashed `OriginalCampaignAI=true`; OFF and pre-9886 saves retain
+the previous controller. Save format 9886 and protocol 125 are reserved for this
+feature. Shipped default INI bytes stay unchanged for old-save content identity.
+Script-owned attack targets survive autonomous target refresh without taking
+authority over explicit player orders. Other controller target selection is inert.
+
+Source-only checkout: `/Users/stefan/Documents/projects/dunecity-original-campaign`
+(`task/original-campaign-ai`) on claw.local. The separately owned 1.0.868 candidate
+`8ecc2d433ab2e9f45978bceb01a4a46afa6fcdf2` was merged here; staging and its sole
+native `build-int` remain with the release coordinator until its handoff.
+Two bounded independent OMP reviews informed fixes; Codex owns integration.
+
+Combined-source checks at `54903ac01` (docs-only `6de739e46`): 5/5 AWS CTest
+gates, including 25 mission/mod/control cases, identical three-house QuantBot
+OFF/ON digests, original repeatability, legacy stream boundaries and real
+live/checkpoint/ordinary-save continuation. Full matrix: 1665 scenarios complete,
+zero engine errors. Fresh 350-case baseline on `8ecc2d433`: every shared outcome
+and final digest identical. This is not a claim every matchup won.
+
+Release infrastructure fix `6470b576c` merged into this source-only branch;
+only release automation and its unit tests differ from the validated game inputs.
+Native build, focused tests, both All-against-Atreides gates, FFA, smoke matrix
+and GUI performance remain pending. Their four AI CTests are macOS-only
+registrations; the cloud attempt matched no tests. The release coordinator
+declined a temporary native window at 19:41 AEDT to protect its new qualifier.
+Staging source/native integration waits for its explicit handoff after release
+Mini jobs. No feature publication requested or performed. Detailed evidence and
+continuation: `/Users/stefan/Documents/projects/outputs/campaign-original-ai/validation.md`.
+
+## 2026-11-14 - 1.0.867 published; 1.0.866 was tagged but never published
+
+Tag `v1.0.867` at `cd2c86f2c91c5be77e31d385e373c87394501a1d` is published
+(Latest, 25 assets, 2026-11-14T06:28:02Z). Protocol 123, save format 9885.
+Tag run `43558741009`: hosted Mac gate 138/138 in 2,831 s after a 16 min cold
+build; Mini lane 18.5 min (integration 38/38, `native_multiplayer_join_modes`
+passed for real in 112 s, `perf_regression` 96 s, Developer ID signed,
+notarized, stapled, packaged pointer gate passed). Live checks at 17:45 AEDT:
+`release-automation.py verify v1.0.867 --live` passed; `/play/build.json`
+reports 1.0.867 at `cd2c86f2c` and all eight served files match; a real browser
+reached the main menu showing `App v1.0.867`; SourceForge `dunecity/1.0.867`
+holds seven packages, README and checksums with all three platform defaults;
+both website download pages say 1.0.867. Browser publisher `43566515010`,
+SourceForge sync `43566515051`, website deploys `43566636146`/`43566673692`.
+
+Contents since 1.0.865: campaign opponent and helper levers by difficulty
+(Brutal opponents unchanged), helper quota saving, Single mission campaign
+policy, two AI performance fixes, software renderer fallback for headless
+runs, SimCity labels renamed to Classic, bundled city map renamed.
+
+What went wrong, in order:
+
+- Mini signing keychain no longer opened with the saved password; rebuilt from
+  the encrypted identity backup. Unlock state is per security session.
+- Apple notary service returned HTTP 403 until the account holder accepted a
+  new agreement (cleared 14:33).
+- `v1.0.866` (`4288daf6d`, run `43552104028`) failed its hosted Mac gate after
+  49 minutes with no test failure: `native_multiplayer_join_modes` skipped
+  because hosted macOS has no PHP, and the gate rejects any skip. Nothing was
+  published; the tag is left in place, unmoved. `cd2c86f2c` excludes the
+  `network` label from the hosted gate and runs that test in the stable Mini
+  lane, which fails on a skip or missing PHP.
+- Tag runs cannot read the staging branch's build cache, so the hosted Mac
+  build was cold (16 to 21 min) on both tags.
+- `sign-desktop-updates` attempt 1 failed: artifacts downloaded into the
+  runner's checkout made the workspace gate see uncommitted files. Mini-only
+  workaround: `/update-input/` and `/update-feeds/` in that clone's
+  `.git/info/exclude`; attempt 2 passed from the frozen artifacts. The lasting
+  fix (downloads under `RUNNER_TEMP`) is PR 126.
+- The release job's website rewrite updated links but not the visible version
+  text, because its patterns targeted wordings the pages no longer use.
+  Corrected by hand in `dunelegacy.com` `b528c2a2b`; helper in PR 126.
+
+Tests changed before tagging: three stale probe contracts (`c2209694c`), the
+starport probe isolates the Brutal helper army floor (`d0643ccd4`), and
+`quantbot_trooper_support` was removed on the owner's instruction
+(`4288daf6d`). Known issue carried: Ordos mission 4, seed 9602, Hard opponent
+with an idle human reaches the harness's 80-minute limit; it predates the
+campaign batch.
+
+Held: Android (signer on the offline PC, phone test, explicit publish);
+TestFlight (not attempted); Windows on a real GPU and physical iPhone/iPad
+(no hardware). Full record: `~/Documents/projects/outputs/release-1.0.866/gates.md`.
+
 ## 2026-11-12 - 1.0.865 published; Mac pointer gate recovered without changing packages
 
 PR #122 merged at `ad4d1a522814ceb4f4fd492c3cf674e1d36bfa56`; tag

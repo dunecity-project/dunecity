@@ -35,6 +35,7 @@
 #include <FileClasses/LoadSavePNG.h>
 #include <GUI/dune/StructureSizePreview.h>
 #include <units/HarvesterHelpers.h>
+#include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
 
 #include <structures/BuilderBase.h>
 #include <structures/StarPort.h>
@@ -565,7 +566,7 @@ void BuilderList::drawOverlay(Point position) {
         std::string text = resolveItemName(buildItemIter->itemID);
 
         if(buildItemIter->itemID == pBuilder->getCurrentProducedItem() && pBuilder->mayPlaceByHand()) {
-            text += " (Hotkey: P)";
+            text += UnitCommandTooltips::hotkeySuffix(Hotkeys::Action::PlaceStructure);
         }
         if(pBuilder->isRepeating(buildItemIter->itemID)) {
             text += " - repeating (Alt+click: stop, right-click: cancel)";

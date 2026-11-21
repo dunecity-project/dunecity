@@ -30,6 +30,8 @@
 #include <Menu/BriefingMenu.h>
 #include <Menu/CampaignStatsMenu.h>
 #include <Menu/CustomGameStatsMenu.h>
+#include <Menu/MapChoice.h>
+#include <misc/DuneCityCampaign.h>
 
 #include <CutScenes/Meanwhile.h>
 #include <CutScenes/Finale.h>
@@ -38,6 +40,7 @@
 #include <GameInitSettings.h>
 #include <data.h>
 
+#include <misc/ReworkedCampaign.h>
 #include <misc/exceptions.h>
 
 #include <algorithm>
@@ -905,6 +908,9 @@ void startSinglePlayerGame(const GameInitSettings& init)
     while(1) {
 
         try {
+            // Reworked campaign: its briefing, debriefing, statistics and map choice show the
+            // REMASTERED badge. The game screen draws its own, so the menus' badge is off meanwhile.
+            ReworkedCampaign::WatermarkScope remastered(currentGameInitInfo.isReworkedCampaign());
 
             SDL_Log("Initializing game...");
             currentGame = new Game();
@@ -913,7 +919,9 @@ void startSinglePlayerGame(const GameInitSettings& init)
             // get init settings from game as it might have changed (through loading the game)
             currentGameInitInfo = currentGame->getGameInitSettings();
 
+            ReworkedCampaign::setWatermarkVisible(false);
             currentGame->runMainLoop();
+            ReworkedCampaign::setWatermarkVisible(currentGameInitInfo.isReworkedCampaign());
 
             bool bGetNext = true;
             while(bGetNext) {
@@ -921,7 +929,7 @@ void startSinglePlayerGame(const GameInitSettings& init)
                     case GAME_DEBRIEFING_WIN: {
                         SDL_Log("Debriefing...");
                         {
-                            BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_WIN);
+                            BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_WIN, currentGameInitInfo.getFilename());
                             briefing.showMenu();
                         }
 
@@ -933,7 +941,18 @@ void startSinglePlayerGame(const GameInitSettings& init)
 
                         const int houseID = currentGameInitInfo.getHouseID();
 
-                        if(currentGameInitInfo.getGameType() == GameType::Campaign) {
+                        if(currentGameInitInfo.isDuneCityCampaign()) {
+                            // No region map: the planet takes the house's colour, a share per win.
+                            SDL_Log("DuneCity campaign conquest...");
+                            const int mission = currentGameInitInfo.getMission();
+                            MapChoice::DuneCityConquest won;
+                            won.missionWon = mission;
+                            won.missionName = DuneCityCampaign::missionName(mission);
+                            if(mission < DuneCityCampaign::kMissions) won.nextName = DuneCityCampaign::missionName(mission + 1);
+                            MapChoice(houseID, won).showMenu();
+                        }
+
+                        if(currentGameInitInfo.getGameType() == GameType::Campaign && !currentGameInitInfo.isDuneCityCampaign()) {
                             const int level = missionNumberToLevelNumber(currentGameInitInfo.getMission());
 
                             if(level == 4 && (ModManager::instance().isTornieFamilyContentActive() || houseID == HOUSE_HARKONNEN || houseID == HOUSE_ATREIDES || houseID == HOUSE_ORDOS)) {
@@ -954,7 +973,7 @@ void startSinglePlayerGame(const GameInitSettings& init)
 
                     case GAME_DEBRIEFING_LOST: {
                         SDL_Log("Debriefing...");
-                        BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_LOST);
+                        BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_LOST, currentGameInitInfo.getFilename());
                         briefing.showMenu();
                     } break;
 

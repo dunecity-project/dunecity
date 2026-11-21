@@ -648,6 +648,18 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         }
     }
 
+    // CityLandValueSiting: a Palace or Stadium lifts land value by its park bonus (40) within 8 tiles
+    // (CityEffects.h); its site is worth the own residential and commercial lots that bonus reaches.
+    std::vector<Coord> landValueLots;
+    const bool landValueBooster = botConfig().force.cityLandValueSiting && currentGame && currentGame->isCitySimEnabled()
+        && (itemID == Structure_Palace || itemID == Structure_Stadium)
+        && cityCampaignSkill(QuantBotCityCampaignSkills::LandValueSiting);
+    if (landValueBooster)
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && (structure->getItemID() == Structure_ZoneResidential
+                    || structure->getItemID() == Structure_ZoneCommercial))
+                landValueLots.push_back(structure->getLocation());
+
     // Resolve nearest origins and full-footprint pollution separation once,
     // instead of scanning every neighbour again at every candidate. These
     // fields include the same live buildings and other yards' reservations.
@@ -872,6 +884,56 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         return true;
     };
     bool bestSpread = false;
+
+    // CampaignHelperProtectedRepair (default off): the support house's Repair Yard is re-ranked,
+    // among exactly the sites this search accepts, by depth behind its own front toward the
+    // nearest visible enemy (the map centre when none is visible). The switch is tested first.
+    const bool protectedRepair = botConfig().force.campaignHelperProtectedRepair
+        && itemID == Structure_RepairYard && campaignEconomySupport() && baseCenter.isValid();
+    struct RepairSite {
+        Coord at; bool spread; bool shielded; int64_t depth;
+        bool safe; int infill; int tier; int score; bool relaxed; SiteQuality quality;
+    };
+    std::vector<RepairSite> repairSites;
+    int threatDX = 0, threatDY = 0;
+    int64_t frontDepth = 0;
+    std::vector<uint8_t> shieldTiles;
+    // A large own building within this many tiles toward the threat shields a site.
+    constexpr int kRepairShieldReach = 12;
+    if (protectedRepair) {
+        Coord threat = Coord::Invalid();
+        int nearestThreat = std::numeric_limits<int>::max();
+        auto considerThreat = [&](Coord at) {
+            const int distance = std::max(std::abs(at.x-baseCenter.x), std::abs(at.y-baseCenter.y));
+            if (distance < nearestThreat) { nearestThreat = distance; threat = at; }
+        };
+        for (const Coord enemy : visibleEnemyBases) considerThreat(enemy);
+        if (threat.isInvalid())
+            for (const auto* unit : getUnitList())
+                if (unit->getOwner() && unit->getOwner()->getTeamID() != getHouse()->getTeamID()
+                    && unit->isActive() && unit->getHealth() > 0 && unit->getItemID() != Unit_Sandworm
+                    && unit->getLocation().isValid() && unit->isVisible(getHouse()->getTeamID()))
+                    considerThreat(unit->getLocation());
+        if (threat.isInvalid()) threat = Coord(mapW/2, mapH/2);
+        threatDX = threat.x - baseCenter.x;
+        threatDY = threat.y - baseCenter.y;
+        // The front is the own building reaching furthest toward the threat. Projections
+        // use doubled coordinates so footprint centres stay exact integers.
+        frontDepth = std::numeric_limits<int64_t>::min();
+        shieldTiles.assign(static_cast<size_t>(mapW)*mapH, 0);
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+                || structure->getItemID() == Structure_Wall) continue;
+            const Coord at = structure->getLocation(), size = structure->getStructureSize();
+            frontDepth = std::max(frontDepth, int64_t(2*at.x + size.x - 2*baseCenter.x)*threatDX
+                + int64_t(2*at.y + size.y - 2*baseCenter.y)*threatDY);
+            if (size.x*size.y < 4) continue;
+            for (int x = std::max(0, at.x); x < std::min(mapW, at.x + size.x); ++x)
+                for (int y = std::max(0, at.y); y < std::min(mapH, at.y + size.y); ++y)
+                    shieldTiles[static_cast<size_t>(y)*mapW + x] = 1;
+        }
+        if (frontDepth == std::numeric_limits<int64_t>::min()) frontDepth = 0;
+    }
 
     // Keep the fast ordinary search, but never treat its averaged base centre
     // as the limit of a spread-out city's buildable territory.
@@ -1363,6 +1425,14 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 			}
 		}
 
+                if (landValueBooster) {
+                    // The simulation stamps the bonus with a linear falloff over Chebyshev distance.
+                    const int cx = placeLocationX + newSizeX / 2, cy = placeLocationY + newSizeY / 2;
+                    const int bonus = DuneCity::getParkLandValueBonus(itemID), radius = DuneCity::getParkLandValueRadius(itemID);
+                    for (const auto& lot : landValueLots)
+                        locationScore += DuneCity::falloff(bonus, std::max(std::abs(lot.x + 1 - cx), std::abs(lot.y + 1 - cy)), radius + 1);
+                }
+
                 int siteTier = 0;
                 // Plain numbers per candidate; the telemetry record is written once, for the
                 // chosen site, after the search (it used to be built as JSON for every candidate).
@@ -1437,6 +1507,25 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 				// Pick this location if it has the best score. force.spreadVsDeathHand: a site
 				// spaced from the other critical buildings outranks every unspaced one.
                 const bool spread = spreadVsDeathHand && spreadFromDeathHandSites(placeLocationX, placeLocationY);
+                if (protectedRepair) {
+                    const int64_t depth = frontDepth
+                        - (int64_t(2*placeLocationX + newSizeX - 2*baseCenter.x)*threatDX
+                            + int64_t(2*placeLocationY + newSizeY - 2*baseCenter.y)*threatDY);
+                    bool shielded = false;
+                    const int span = std::max(std::abs(threatDX), std::abs(threatDY));
+                    const int centreX = placeLocationX + newSizeX/2, centreY = placeLocationY + newSizeY/2;
+                    for (int step = 1; span > 0 && step <= kRepairShieldReach && !shielded; ++step) {
+                        const int x = centreX + threatDX*step/span, y = centreY + threatDY*step/span;
+                        if (x < 0 || y < 0 || x >= mapW || y >= mapH) break;
+                        if (x >= placeLocationX && x < placeLocationX + newSizeX
+                            && y >= placeLocationY && y < placeLocationY + newSizeY) continue;
+                        shielded = shieldTiles[static_cast<size_t>(y)*mapW + x] != 0;
+                    }
+                    SiteQuality repairQuality = quality;
+                    repairQuality.tier = siteTier; repairQuality.score = locationScore;
+                    repairSites.push_back({Coord(placeLocationX, placeLocationY), spread, shielded, depth,
+                        lossRisk == 0, infill, siteTier, locationScore, relaxRoading, repairQuality});
+                }
 				if (spreadVsDeathHand && spread != bestSpread ? spread
                     : itemID == Structure_NuclearPlant ? reactorRank > bestReactorRank
                     : factoryPlacement ? factoryRank > bestFactoryRank
@@ -1458,7 +1547,37 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 	}
 
     } // search passes
+    // CampaignHelperProtectedRepair: never the shallowest accepted site while a deeper one
+    // exists; then a shielded site, then depth, then the ordinary preference above.
+    const RepairSite* protectedPick = nullptr;
+    if (protectedRepair && !repairSites.empty()) {
+        int64_t shallowest = repairSites.front().depth;
+        for (const auto& site : repairSites) shallowest = std::min(shallowest, site.depth);
+        const bool deeperExists = std::any_of(repairSites.begin(), repairSites.end(),
+            [&](const RepairSite& site) { return site.depth > shallowest; });
+        for (const auto& site : repairSites) {
+            if (deeperExists && site.depth == shallowest) continue;
+            if (!protectedPick) { protectedPick = &site; continue; }
+            const RepairSite& best = *protectedPick;
+            const bool better = spreadVsDeathHand && site.spread != best.spread ? site.spread
+                : site.shielded != best.shielded ? site.shielded
+                : site.depth != best.depth ? site.depth > best.depth
+                : CityPlacementPolicy::preferCitySite(site.safe, site.infill, site.tier, site.score,
+                    best.safe, best.infill, best.tier, best.score);
+            if (better) protectedPick = &site;
+        }
+        bestLocation = protectedPick->at;
+        bestSite = protectedPick->quality;
+        haveBestSite = true;
+        bestSpread = protectedPick->spread;
+        roadingRelaxed = protectedPick->relaxed;
+    }
     if (haveBestSite) bestQuality = siteQualityRecord(bestSite);
+    if (protectedPick)
+        bestQuality.set("protected_repair", 1).set("repair_shielded", protectedPick->shielded)
+            .set("repair_depth", static_cast<int64_t>(protectedPick->depth))
+            .set("repair_threat_dx", threatDX).set("repair_threat_dy", threatDY)
+            .set("repair_candidates", static_cast<int>(repairSites.size()));
     if (spreadVsDeathHand)
         bestQuality.set("death_hand_spread",bestSpread ? 1 : 0)
             .set("death_hand_sites",static_cast<int>(deathHandSites.size()));

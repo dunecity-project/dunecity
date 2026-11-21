@@ -25,6 +25,7 @@
 #include <misc/MenuPalette.h>
 #include <GUI/TextButton.h>
 #include <mod/ModManager.h>
+#include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
@@ -47,7 +48,7 @@ protected:
         repairButton.setTextures(pUIRepair, pUIRepairPressed);
         repairButton.setToggleButton(true);
         repairButton.setVisible(false);
-        repairButton.setTooltipText(_("Repair this structure (Hotkey: R)"));
+        repairButton.setTooltipText(_("Repair this structure") + UnitCommandTooltips::hotkeySuffix(Hotkeys::Action::Repair));
         repairButton.setOnClick(std::bind(&DefaultStructureInterface::OnRepair, this));
 
         topBox.addWidget(&repairButton, Point(2,2), getTextureSize(pUIRepair));

@@ -71,7 +71,10 @@ class NativeLeagueInputs(unittest.TestCase):
     def test_posix_probe_uses_platform_link_target_and_native_data_directory(self):
         for platform in ('darwin', 'linux'):
             with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory:
-                build, scratch = Path(directory) / 'build', Path(directory) / 'scratch'
+                # build_probe resolves its paths; macOS's temporary directory is behind the
+                # /var -> /private/var symlink, so compare against the resolved directory.
+                directory = Path(directory).resolve()
+                build, scratch = directory / 'build', directory / 'scratch'
                 build.mkdir()
                 mac = platform == 'darwin'
                 target = 'bin/dunecity.app/Contents/MacOS/dunecity' if mac else 'bin/dunecity'
