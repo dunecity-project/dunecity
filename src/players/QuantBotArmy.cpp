@@ -1191,9 +1191,16 @@ void QuantBot::attack(int militaryValue) {
             .set("required_military", requiredMilitary)
             .set("percent", botConfig().force.campaignHelperCounterAttack));
     }
+    // Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off): a counter-punch or a
+    // raid on the leader leaves with whatever viable wave there is, past the army threshold and the
+    // outnumbered gate; while such a window may open the next check comes in 15 s.
+    pendingDirected = directedWave();
+    pendingDirectedCycle = getGameCycleCount();
+    if (pendingDirected.watch) attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
     // JoinAllyWaves (team play): an allied QuantBot's wave that has just left is joined by
     // whatever viable wave we have, whatever our own readiness.
-    if (!exhausted && militaryValue < requiredMilitary && !allyWaveObjective() && !counterAttack) {
+    if (!exhausted && militaryValue < requiredMilitary && !allyWaveObjective() && !counterAttack
+        && !pendingDirected.bypass) {
         // Recheck readiness promptly; do not miss a short-lived strength window.
         if (campaign || (vanillaCustom && difficulty == Difficulty::Brutal))
             attackTimer = std::min(attackTimer, static_cast<int>(MILLI2CYCLES(15000)));
@@ -1242,7 +1249,7 @@ void QuantBot::attack(int militaryValue) {
         const ArmySurvey& survey = lastSurvey;
         const auto gate = offensiveDispatchGate(survey);
         const auto thresholds = postureThresholds();
-        if (gate.defer) {
+        if (gate.defer && !pendingDirected.bypass) {
             attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
             traceDecision("attack_deferred", AITelemetry::Record().set("reason", "outnumbered_front")
                 .set("gate_reason", gate.reason)
@@ -1459,6 +1466,9 @@ void QuantBot::launchGroundHunt() {
     const bool ffaSingleFront = botConfig().force.vanillaFfaSingleFront && recoveryActive()
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
     bool ffaDirected = ffaTargeting || ffaSingleFront;
+    // Directed waves (default off): attack() decided this cycle; nothing carries over.
+    const DirectedWave directed = pendingDirectedCycle == getGameCycleCount() ? pendingDirected : DirectedWave{};
+    if (directed.team >= 0) ffaDirected = true;
     // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
     const bool synchronisedTeam = wholeArmy && teamAttackCoordinator();
     const ObjectBase* allyFront = synchronisedTeam ? teamAttackObjective()
@@ -1626,7 +1636,8 @@ void QuantBot::launchGroundHunt() {
             // units and three thousand credits of value (a test-only play style may change it).
             const bool viable = exhausted ? availableUnits > 0
                 : availableUnits >= minWaveUnits() && availableValue >= minWaveValue();
-            if ((!exhausted && availableValue<requiredReady && (!allyFront || synchronisedTeam)) || !viable) {
+            if ((!exhausted && !directed.bypass && availableValue<requiredReady && (!allyFront || synchronisedTeam))
+                || !viable) {
                 // A wave that is no longer ready stops waiting for the bundle: its next
                 // readiness starts a fresh 60 s wait rather than inheriting an old one.
                 bundleGateSince=0;
@@ -1704,7 +1715,7 @@ void QuantBot::launchGroundHunt() {
             }
             // Launch from the bundle (W, on by default): a ready wave leaves once most of it
             // stands in the bundle - only while there is one and bundling owns the reserve.
-            if (!exhausted && (!allyFront || synchronisedTeam) && forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
+            if (!exhausted && !directed.bypass && (!allyFront || synchronisedTeam) && forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
                 && (bundlePoint.isValid() || bundleCentre.isValid())) {
                 std::vector<Uint32> ids;
                 ids.reserve(candidates.size());
@@ -1824,13 +1835,14 @@ void QuantBot::launchGroundHunt() {
                     || (forceVariant(kForceFinishLeading) && finishLeading())))
                 observedFront = finishObjective(lead, finishTargetTeam(lead));
         }
+        if (!observedFront && !allyFront && directed.team >= 0) observedFront=finishObjective(lead,directed.team);
         if (!observedFront)
             observedFront=allyFront ? allyFront : ffaTargeting ? finishObjective(lead,finishTargetTeam(lead))
                                                             : customWaveObjective(lead);
         if (ffaTargeting && !observedFront) observedFront=customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
         const auto gate=offensiveDispatchGate(planned);
-        if (recoveryActive() && !exhausted && gate.defer) {
+        if (recoveryActive() && !exhausted && gate.defer && !directed.bypass) {
             attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
             traceDecision("attack_deferred",AITelemetry::Record().set("reason","outnumbered_planned_front")
                 .set("own_effective_power",planned.allied.offensive())
@@ -1850,6 +1862,11 @@ void QuantBot::launchGroundHunt() {
         // one army rather than a dispatched wave plus untracked stragglers.
         customWave.members.insert(existingHunters.begin(),existingHunters.end());
         customWave.front=observedFront ? observedFront->getObjectID() : NONE_ID;
+        if (*directed.kind) traceDecision("directed_wave",AITelemetry::Record().set("kind",directed.kind)
+            .set("team",directed.team).set("bypass",directed.bypass).set("members",int(selected.size()))
+            .set("own",directed.own).set("leader",directed.leader).set("others",directed.others)
+            .set("guard",directed.guard).set("away",directed.away)
+            .set("front",observedFront ? int(observedFront->getObjectID()) : -1));
     }
     // Wave formations (docs/formations.md, QuantBot waves): who goes, when and against
     // what is decided exactly as without them; only how the ground members travel

@@ -271,6 +271,10 @@ struct QuantBotConfig {
         /// no piecemeal defence the house cannot win (the army masses at home instead).
         bool turretClusters;                   ///< While outnumbered: clustered core rocket turrets first.
         bool massHold;                         ///< An unanswerable defence sends nobody; the free army masses.
+        /// Default-OFF directed waves (docs/formations.md, "Counter-punch, leader raids and ganging up").
+        bool counterPunch;                     ///< After a defence at home ends, the army hits the attacker.
+        bool leaderRaid;                       ///< While the leader's army is away, the army hits its base.
+        bool gangUpLeader;                     ///< FFA: waves target a runaway leader.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

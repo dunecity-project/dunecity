@@ -318,6 +318,31 @@ constexpr int kClusterReachTiles = 5;
 inline int clusterTurretGoal(int64_t own, int64_t enemy) {
     return outnumbered(own, enemy) ? kClusterTurretsMax : 0;
 }
+// ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) ---------------------
+//
+// Stefan, 2026-11-21: the held mass should hit back with momentum. A weak house cannot beat the
+// leader's army head-on, so these pick the moment (a broken attack, the leader's army away) or the
+// target (a runaway leader) instead.
+
+/// CounterPunch: a ground defence at home within kCounterWindowMs, nothing hostile within
+/// kCounterClearTiles of our buildings, then the house that has the most visible ground value
+/// within kCounterAttackerTiles of our base centre is the target.
+constexpr int kCounterWindowMs = 90000;
+constexpr int kCounterClearTiles = 14;
+constexpr int kCounterAttackerTiles = 48;
+/// At most one directed launch per this long after the last wave left, and none while it hunts.
+constexpr int kDirectedRepeatMs = 180000;
+/// LeaderRaid: at least kRaidAwayBps of the leader's visible ground value stands beyond
+/// kRaidAwayTiles of its base centre, and our ground army is kRaidStrengthBps of its guard (ground
+/// units and turrets within kRaidHomeTiles of that centre).
+constexpr int kRaidAwayTiles = 32;
+constexpr int kRaidAwayBps = 6000;
+constexpr int kRaidHomeTiles = 24;
+constexpr int kRaidStrengthBps = 15000;
+/// GangUpLeader: a runaway leader has at least every other enemy's visible ground value combined
+/// and kGangUpOwnBps of ours.
+constexpr int kGangUpOwnBps = 15000;
+
 /// MassHold: our live turrets within this many tiles of an attacked building fight for it.
 constexpr int kMassTurretSupportTiles = 10;
 

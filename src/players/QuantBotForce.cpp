@@ -2157,3 +2157,133 @@ int QuantBot::gatherHeldMass(const std::vector<Uint32>& ids) {
     }
     return ordered;
 }
+
+// ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) --------------------
+//
+// docs/formations.md, "Counter-punch, leader raids and ganging up". A weak house cannot beat the
+// leader's army head-on; these choose the moment (a broken attack, the leader's army away) or the
+// target (a runaway leader). Read from live state and the saved wave/defence state only.
+
+bool QuantBot::directedWaveSwitches() const {
+    const auto& force = botConfig().force;
+    return (force.counterPunch || force.leaderRaid || force.gangUpLeader)
+        && autonomousCustomArmy() && !campaignPolicyApplies();
+}
+
+QuantBot::DirectedWave QuantBot::directedWave() const {
+    DirectedWave out;
+    if (!directedWaveSwitches()) return out;
+    const auto& force = botConfig().force;
+    const int myTeam = getHouse()->getTeamID();
+    const Uint32 now = getGameCycleCount();
+    struct Enemy { const UnitBase* unit; int64_t value; int house; };
+    std::vector<Enemy> enemies;
+    std::array<int64_t, NUM_HOUSES> army{};
+    for (const auto* unit : getUnitList()) {
+        if (!unit->getOwner() || unit->getHealth() <= 0 || !unit->isActive() || !unit->isAGroundUnit()
+            || !unit->canAttack() || !mobileCombatItem(unit->getItemID())) continue;
+        const House* owner = unit->getOwner();
+        if (owner->getTeamID() == myTeam || owner->isNatives() || !unit->isVisible(myTeam)) continue;
+        const int house = owner->getHouseID();
+        if (house < 0 || house >= NUM_HOUSES) continue;
+        const int64_t value = healthValue(unit);
+        army[house] += value;
+        enemies.push_back({unit, value, house});
+    }
+    out.own = ownGroundArmyValue();
+    int leader = -1;
+    for (int h = 0; h < NUM_HOUSES; ++h)
+        if (army[h] > 0 && (leader < 0 || army[h] > army[leader])) leader = h;
+    int otherHouses = 0;
+    for (int h = 0; h < NUM_HOUSES; ++h)
+        if (h != leader && army[h] > 0) { out.others += army[h]; ++otherHouses; }
+    if (leader >= 0) out.leader = army[leader];
+    auto teamOf = [](int house) {
+        const House* h = currentGame ? currentGame->getHouse(house) : nullptr;
+        return h ? h->getTeamID() : -1;
+    };
+    // A tracked wave still hunting, or one that left less than kDirectedRepeatMs ago, blocks a
+    // directed launch (the wave itself decides what happens next).
+    bool waveOut = false;
+    for (const Uint32 id : customWave.members)
+        if (const auto* member = dynamic_cast<const UnitBase*>(getObject(id));
+            member && member->getOwner() == getHouse() && member->getHealth() > 0 && member->getAttackMode() == HUNT) {
+            waveOut = true;
+            break;
+        }
+    const bool rested = customWave.launched == 0
+        || ArmyPosturePolicy::elapsed(now, customWave.launched) >= Uint32(MILLI2CYCLES(Force::kDirectedRepeatMs));
+    const bool free = !waveOut && rested;
+    if (force.counterPunch) {
+        bool recent = false;
+        for (const auto& [key, cycle] : defenceResponseCycles)
+            if (key % 2 == 0 && ArmyPosturePolicy::elapsed(now, cycle) <= Uint32(MILLI2CYCLES(Force::kCounterWindowMs))) {
+                recent = true;
+                break;
+            }
+        if (recent) {
+            out.watch = true;
+            bool clear = true;
+            for (const auto& enemy : enemies) {
+                for (const auto* structure : getStructureList())
+                    if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+                        && tiles(enemy.unit->getLocation(), structure->getClosestPoint(enemy.unit->getLocation()))
+                            <= Force::kCounterClearTiles) {
+                        clear = false;
+                        break;
+                    }
+                if (!clear) break;
+            }
+            if (clear && free) {
+                out.kind = "counter_punch";
+                out.bypass = true;
+                const Coord home = findBaseCentre(getHouse()->getHouseID());
+                std::array<int64_t, NUM_HOUSES> near{};
+                if (home.isValid())
+                    for (const auto& enemy : enemies)
+                        if (tiles(enemy.unit->getLocation(), home) <= Force::kCounterAttackerTiles) near[enemy.house] += enemy.value;
+                int attacker = -1;
+                for (int h = 0; h < NUM_HOUSES; ++h)
+                    if (near[h] > 0 && (attacker < 0 || near[h] > near[attacker])) attacker = h;
+                out.team = attacker >= 0 ? teamOf(attacker) : -1;
+                return out;
+            }
+        }
+    }
+    if (force.leaderRaid && leader >= 0) {
+        const Coord base = findBaseCentre(leader);
+        if (base.isValid()) {
+            int64_t away = 0, guard = 0;
+            for (const auto& enemy : enemies) {
+                if (enemy.house != leader) continue;
+                const int distance = tiles(enemy.unit->getLocation(), base);
+                if (distance > Force::kRaidAwayTiles) away += enemy.value;
+                if (distance <= Force::kRaidHomeTiles) guard += enemy.value;
+            }
+            for (const auto* structure : getStructureList()) {
+                if (!structure->getOwner() || structure->getOwner()->getHouseID() != leader || structure->getHealth() <= 0
+                    || !structure->canAttack() || !knownEnemyStructure(structure)
+                    || tiles(structure->getLocation(), base) > Force::kRaidHomeTiles) continue;
+                const int price = currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price;
+                guard += (FixPoint(price) * structure->getHealth() / structure->getMaxHealth()).lround();
+            }
+            out.away = away;
+            out.guard = guard;
+            if (away * 10000 >= army[leader] * Force::kRaidAwayBps) {
+                out.watch = true;
+                if (free && out.own * 10000 >= guard * Force::kRaidStrengthBps) {
+                    out.kind = "leader_raid";
+                    out.bypass = true;
+                    out.team = teamOf(leader);
+                    return out;
+                }
+            }
+        }
+    }
+    if (force.gangUpLeader && leader >= 0 && otherHouses >= 1 && army[leader] >= out.others
+        && army[leader] * 10000 >= out.own * Force::kGangUpOwnBps) {
+        out.kind = "gang_up";
+        out.team = teamOf(leader);
+    }
+    return out;
+}

@@ -2036,6 +2036,20 @@ private:
     /// MassHold: free troops (\a ids) not yet at the home rally walk there in Area Guard;
     /// returns how many were ordered.
     int gatherHeldMass(const std::vector<Uint32>& ids);
+    /// Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off; docs/formations.md
+    /// "Counter-punch, leader raids and ganging up"). Derived from live state and the saved wave,
+    /// defence and sighting state at each attack check; nothing new is saved.
+    struct DirectedWave {
+        int team = -1;              ///< Target team, -1 for the ordinary wave objective.
+        bool bypass = false;        ///< Skip the army threshold, wave readiness, bundle and outnumbered gates.
+        bool watch = false;         ///< A window may open soon: recheck the attack in 15 s.
+        const char* kind = "";
+        int64_t own = 0, leader = 0, others = 0, guard = 0, away = 0;
+    };
+    bool directedWaveSwitches() const;
+    DirectedWave directedWave() const;
+    DirectedWave pendingDirected;               ///< attack()'s verdict for its own launchGroundHunt()
+    Uint32 pendingDirectedCycle = std::numeric_limits<Uint32>::max();
     /// Net-income buckets, a legal next technology and its bounded savings plan.
     bool simpleTechPolicyActive() const;
     void planTechSavings(BuildPass& pass);

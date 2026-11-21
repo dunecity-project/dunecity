@@ -217,6 +217,16 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                             skirmish=skirmish_spec(128, 'fortress', 0, city=4, spice=0, sand=30, rock=40,
                                                    mountain=30, tech=5, credits=20000, symmetric=1),
                             minutes=120, full=24), opt_in=True, measured=True))
+    # Weak seat (directed waves, 2026-11-21): the candidate first seat is the weaker QuantBot - Hard
+    # against Brutal 1v1 from both starts, and one Hard house in a free-for-all of three Brutal.
+    # Only with --cells; for seat-only screens (--seat-style).
+    for mod in ('vanilla', 'dunecity'):
+        cells.append(dict(match('skirmish', 'weak-1v1-qh-v-qb-rs128', mod, ffa('QH', 'QB'),
+                                skirmish=skirmish_spec(128, 'medium', 0), minutes=75, full=8, both_sides=True),
+                          opt_in=True, measured=True))
+        cells.append(dict(match('skirmish', 'weak-4p-ffa-qh-v-3qb', mod, ffa('QH', 'QB', 'QB', 'QB'),
+                                skirmish=skirmish_spec(128, 'medium', 2), minutes=90, full=8),
+                          opt_in=True, measured=True))
     # The same lobby played to 240 minutes (its 120-minute games nearly all time out with every
     # house alive, so placement cannot separate a candidate from the control).
     cells.append(dict(match('skirmish', '4p-ffa-fortress-nospice-city40k-long', 'dunecity', ffa('QB', 'QB', 'QB', 'QB'),
