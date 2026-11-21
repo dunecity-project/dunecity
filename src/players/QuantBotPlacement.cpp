@@ -524,7 +524,7 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
     return range && !zones.empty() && zones.size() <= 4;
 }
 
-Coord QuantBot::findPalaceDistrictSite(Uint32 item) {
+Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
     AITelemetry::PerformanceScope perfScope("ai.findPalaceDistrictSite", getGameCycleCount(), getHouse()->getHouseID());
     namespace Force = ForceConcentrationPolicy;
     if (!currentGame->isCitySimEnabled()) return Coord::Invalid();
@@ -559,7 +559,7 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item) {
     for (int y = 0; y + size.y <= h; ++y)
         for (int x = 0; x + size.x <= w; ++x) {
             const int lots = lotsAround(x + 1, y + 1);
-            if (lots >= Force::kPalaceDistrictMinLots) candidates.push_back({lots, x, y});
+            if (lots >= minLots) candidates.push_back({lots, x, y});
         }
     std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.lots > b.lots; });
     constexpr size_t kChecked = 600;

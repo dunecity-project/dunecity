@@ -1091,16 +1091,22 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         const bool palaceCapped = getGameInitSettings().getGameOptions().onlyOnePalace && pass.itemCount[Structure_Palace] >= 1;
         // StadiumDistricts (default off; Stefan: "if we don't have tech 8 then yes you could look at
         // stadiums"): while no Palace can be built at all, every district gets a Stadium.
-        const bool palaceNow = !palaceCapped && buildable(Structure_Palace);
-        // ... but not while outnumbered: a weak house at tech 5 lost -0.21 paying 3,000 a Stadium before units.
-        const bool stadiumDistricts = force.stadiumDistricts && !buildable(Structure_Palace) && !outnumberedByEstimate();
+        // Liberal while the house is not outnumbered; while outnumbered the v1 limits hold (at most one
+        // Palace per 30 R+C lots, 1-4, 12 lots per site, no Stadium project).
+        const bool outnumbered = outnumberedByEstimate();
+        const bool palaceNow = !palaceCapped && buildable(Structure_Palace)
+            && (!outnumbered || pass.itemCount[Structure_Palace] < Force::outnumberedPalaceCap(lots));
+        // ... and Stadium districts not while outnumbered: a weak house at tech 5 lost -0.21 paying
+        // 3,000 a Stadium before units.
+        const bool stadiumDistricts = force.stadiumDistricts && !buildable(Structure_Palace) && !outnumbered;
         const Uint32 item = palaceNow ? Uint32(Structure_Palace)
-            : (pass.itemCount[Structure_Stadium] == 0 || stadiumDistricts) && buildable(Structure_Stadium)
+            : !outnumbered && (pass.itemCount[Structure_Stadium] == 0 || stadiumDistricts) && buildable(Structure_Stadium)
                 ? Uint32(Structure_Stadium) : Uint32(NONE_ID);
+        const int minLots = outnumbered ? Force::kPalaceOutnumberedMinLots : Force::kPalaceDistrictMinLots;
         const bool pending = pass.itemCount[Structure_Palace] != getHouse()->getNumItems(Structure_Palace)
             || pass.itemCount[Structure_Stadium] != getHouse()->getNumItems(Structure_Stadium);
-        if (item != NONE_ID && !pending && lots >= Force::kPalaceDistrictMinLots) {
-            pass.economyProjectSite = findPalaceDistrictSite(item);
+        if (item != NONE_ID && !pending && lots >= minLots) {
+            pass.economyProjectSite = findPalaceDistrictSite(item, minLots);
             if (pass.economyProjectSite.isValid()) {
                 pass.economyProject = item;
                 pass.economyProjectReserve = data[item][houseID].price;

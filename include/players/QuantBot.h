@@ -2029,7 +2029,7 @@ private:
     /// PalaceDistricts: the site for \a item (Palace or Stadium) with the most R+C lots within
     /// kPalaceReachTiles that no Palace or Stadium reaches yet (at least kPalaceDistrictMinLots), its
     /// footprint free or only own lots of low density, fewest such lots first; invalid when none.
-    Coord findPalaceDistrictSite(Uint32 item);
+    Coord findPalaceDistrictSite(Uint32 item, int minLots);
     bool turretClustersActive() const;
     int clusterTurretGoal() const;
     /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.

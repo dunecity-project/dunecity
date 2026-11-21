@@ -367,6 +367,15 @@ constexpr int kKeepWindTraps = 2;
 /// v1 (Palaces only, one per 30 R+C lots, at most 4, 12 lots per site) is recorded in
 /// docs/formations.md, "Economy: nuclear consolidation and palace districts".
 constexpr int kPalaceDistrictMinLots = 8;
+/// While outnumbered the v1 limits hold (a weak house paying 2,000 a Palace before units lost -0.19
+/// against them): one Palace per kPalaceLotsPerPalace R+C lots, at most kPalaceOutnumberedMax,
+/// kPalaceOutnumberedMinLots lots per site, and no Stadium project.
+constexpr int kPalaceLotsPerPalace = 30;
+constexpr int kPalaceOutnumberedMax = 4;
+constexpr int kPalaceOutnumberedMinLots = 12;
+inline int outnumberedPalaceCap(int residentialAndCommercialLots) {
+    return std::clamp(residentialAndCommercialLots / kPalaceLotsPerPalace, 1, kPalaceOutnumberedMax);
+}
 constexpr int kPalaceReachTiles = 8;
 constexpr int kPalaceClearDensity = 1;
 
