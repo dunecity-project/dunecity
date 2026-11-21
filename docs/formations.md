@@ -1814,6 +1814,22 @@ handmade games, above) and changed 1-7 of 48 games per vanilla set here, while S
 complaint and the package's gains are all in DuneCity city games; there it behaves exactly as
 screened (city mode follows the mod). The vanilla MassHold rows above were measured before the scope.
 
+**After the scope (staging `a1627066a`, candidate `2382b8620`).** All five gates pass:
+`quantbot_all_against_atreides` 6/6 (29.6-35.0 min), `quantbot_all_against_atreides_dune2r` 7/7
+(30.95-34.81 min), `quantbot_ffa_army_deploys` PASS (seed 9105: eliminations at 26.6, 28.3 and 33.6
+min), `quantbot_scenario_matrix` PASS (29505: Hard wins at 22.38 min), `dunelegacy_tests` PASS. Checks
+that the scope changed only vanilla: the smoke game pair with `--style economy-anchor` replays the
+baseline exactly (QH at 1342.8 s and 1431.8 s); the 96 DuneCity Fortress candidate games are
+identical to the pre-scope run; the 48 vanilla weak-seat FFA candidate games are identical to
+control. So the vanilla rows of the table above are now exactly 0 and its DuneCity rows stand.
+
+**Decision: on by default** (Stefan, "yes run them" to the default-change checks; MassHold,
+NuclearConsolidation, PalaceDistricts, StadiumDistricts and LandmarkAnchoring default to true in
+`QuantBotConfig.cpp`; the code tree is the gated candidate's). It beats control on fresh games
+(+0.100 [+0.049, +0.154], 452 games), is not worse on Fortress, Brutal or the weak seat, passes the
+four mandatory AI gates and the unit tests, and acts only in city skirmish games. The play style
+`economy-anchor` now equals the default; an off arm needs those five set to false.
+
 ### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
 
 Stefan suggested introducing parks from the original Micropolis. The Park structure (item 89, save 9888,
