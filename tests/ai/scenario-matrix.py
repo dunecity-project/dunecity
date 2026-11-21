@@ -210,6 +210,13 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
       skirmish_spec(192, 'medium', 2), minutes=80)
     s('4v4-fortress-largearmy', 'dunecity', team_slots(['QH'] * 4, ['QM'] * 4), skirmish_spec(192, 'fortress', 5),
       expect=('wins', 1), minutes=80)
+    # Stefan's no-spice city lobby (save nobuildup, 2026-11-21): four QuantBot Brutal, free-for-all
+    # on a symmetric 128x128 map, Fortress bases, no army, city 40,000, no spice, sand/rock/mountain
+    # 30/40/30, tech 5, 20,000 credits. Only with --cells; for seat-only screens (--seat-style).
+    cells.append(dict(match('skirmish', '4p-ffa-fortress-nospice-city40k', 'dunecity', ffa('QB', 'QB', 'QB', 'QB'),
+                            skirmish=skirmish_spec(128, 'fortress', 0, city=4, spice=0, sand=30, rock=40,
+                                                   mountain=30, tech=5, credits=20000, symmetric=1),
+                            minutes=120, full=24), opt_in=True, measured=True))
     # 2. Construction Yard only, default credits.
     c = lambda name, mod, slots, size, **kw: cells.append(
         match('cy', name, mod, slots, skirmish=skirmish_spec(size, 'cy', 0), **kw))

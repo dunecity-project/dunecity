@@ -446,6 +446,25 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && blockDistance(unit->getLocation(),target->getLocation())<=unit->getWeaponRange()) continue;
         candidates.push_back({unit->getObjectID(),value(unit),blockDistance(contact,unit->getLocation()).lround()});
     }
+    // MassHold (default off): the emergency answer to an attack on something we own is held
+    // like the base scramble's - nobody goes when everything in reach, the troops already
+    // fighting it and our turrets beside it cannot match the threat.
+    if (botConfig().force.massHold && assetEmergency && !sizedWorker && !clearingSpice
+        && !intruder->isAFlyingUnit() && campaignWorkerCoverage == 0) {
+        int64_t reachable=0;
+        for (const auto& candidate : candidates)
+            if (candidate.distance<=ForceConcentrationPolicy::kSizedBandTiles) reachable+=candidate.value;
+        const ObjectBase* asset=isProtectedAsset(protectedAsset) ? protectedAsset : victim;
+        const int64_t support=asset && asset->isAStructure() ? turretSupportNear(asset) : 0;
+        if (!ForceConcentrationPolicy::answerable(threatValue,int64_t(committed)+support,reachable)) {
+            ++forceStats.massHolds;
+            traceDecision("defence_declined",AITelemetry::Record().set("target",intruder->getObjectID())
+                .set("x",contact.x).set("y",contact.y).set("threat_value",threatValue)
+                .set("committed_value",committed).set("reachable_value",reachable)
+                .set("turret_support",support).set("reason","mass_hold"));
+            return;
+        }
+    }
     auto response=campaignWorkerCoverage > 0 ? std::vector<Uint32>{} : clearingSpice
         ? SimpleArmyPolicy::clearingForce(threatValue,committed,candidates,clearingRadius)
         : SimpleArmyPolicy::reinforcements(threatValue,committed,candidates);
@@ -761,6 +780,32 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
             continue;
         }
         candidates.push_back({id,value(unit),distanceToBuilding(unit->getLocation())});
+    }
+    // MassHold (default off, docs/formations.md "Turret clusters and the held mass"): a defence
+    // that the troops already there, our turrets beside the building and every free troop in
+    // reach together cannot match is not fed one unit at a time. Nobody new goes; the free
+    // troops in reach gather at the home rally instead, in Area Guard, so the army builds up
+    // until a defence can be answered or the next wave can leave.
+    if (botConfig().force.massHold) {
+        int64_t reachable=0;
+        std::vector<Uint32> inReach;
+        for (const auto& candidate : candidates)
+            if (candidate.distance<=ForceConcentrationPolicy::kSizedBandTiles) {
+                reachable+=candidate.value;
+                inReach.push_back(candidate.id);
+            }
+        const int64_t support=turretSupportNear(building);
+        if (!ForceConcentrationPolicy::answerable(threat,int64_t(committed)+support,reachable)) {
+            const int gathered=gatherHeldMass(inReach);
+            ++forceStats.massHolds;
+            traceDecision("defence_mass_hold",AITelemetry::Record()
+                .set("target",intruder->getObjectID()).set("building",building->getObjectID())
+                .set("threat_value",threat).set("committed_value",committed)
+                .set("turret_support",support).set("reachable_value",reachable)
+                .set("candidates",int(candidates.size())).set("gathered",gathered)
+                .set("already_scrambled",alreadyScrambled));
+            return;
+        }
     }
     // "Closest" is bounded: the same threat-scaled band (12-40 tiles) that
     // limits every other emergency response, so one raid cannot pull troops

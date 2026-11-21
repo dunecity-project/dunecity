@@ -299,6 +299,26 @@ inline int perimeterTurretGoal(int64_t own, int64_t enemy) {
     return int(std::min<int64_t>(kPerimeterTurretsMax, (enemy - std::max<int64_t>(0, own)) / kPerimeterCreditsPerTurret));
 }
 
+// ---- Turret clusters and the held mass (TurretClusters / MassHold, default off) -------------
+//
+// Stefan, 2026-11-21 (save nobuildup): a house that is losing should defend with rocket turret
+// clusters and build its army up, not feed one unit at a time into a defence it cannot win.
+
+/// TurretClusters: while outnumbered, one rocket turret per kClusterCreditsPerTurret of the
+/// estimate's lead over our army, at most kClusterTurretsMax, kClusterPerCore around each core
+/// building (yard, factories, refinery, port, repair yard) within kClusterReachTiles of it.
+constexpr int kClusterCreditsPerTurret = 1000;
+constexpr int kClusterTurretsMax = 16;
+constexpr int kClusterPerCore = 4;
+constexpr int kClusterReachTiles = 4;
+inline int clusterTurretGoal(int64_t own, int64_t enemy) {
+    if (!outnumbered(own, enemy)) return 0;
+    const int64_t lead = enemy - std::max<int64_t>(0, own);
+    return int(std::min<int64_t>(kClusterTurretsMax, (lead + kClusterCreditsPerTurret - 1) / kClusterCreditsPerTurret));
+}
+/// MassHold: our live turrets within this many tiles of an attacked building fight for it.
+constexpr int kMassTurretSupportTiles = 10;
+
 /// Is an offset (\a along, \a across: tiles along and across the front from the base centre) on
 /// the perimeter band of a base \a depth tiles deep?
 inline bool onPerimeterBand(int along, int across, int depth) {

@@ -2270,6 +2270,83 @@ Coord QuantBot::findPerimeterTurretLocation() {
     return best;
 }
 
+Coord QuantBot::findClusterTurretLocation() {
+    AITelemetry::PerformanceScope perfScope("ai.findClusterTurretLocation", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Force = ForceConcentrationPolicy;
+    using QuantBotInternal::clusterCoreRank;
+    using QuantBotInternal::footprintDistance;
+    struct Core { int rank; Uint32 id; Coord origin, size; };
+    std::vector<Core> cores;
+    std::vector<Coord> turrets;
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        if (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
+            turrets.push_back(structure->getLocation());
+        const int rank = clusterCoreRank(structure->getItemID());
+        if (rank >= 0) cores.push_back({rank, structure->getObjectID(), structure->getLocation(), structure->getStructureSize()});
+    }
+    for (const auto& entry : reservedStructures)
+        if (entry.first != planningBuilder
+            && (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret))
+            turrets.push_back(entry.second.location);
+    std::stable_sort(cores.begin(), cores.end(), [](const Core& a, const Core& b) {
+        return a.rank != b.rank ? a.rank < b.rank : a.id < b.id;
+    });
+    const Coord base = findBaseCentre(getHouse()->getHouseID());
+    const Coord front = base.isValid() ? observedFrontDirection(base) : Coord::Invalid();
+    const int frontScale = front.isValid() ? std::max(1, std::abs(front.x) + std::abs(front.y)) : 1;
+    const int reach = Force::kClusterReachTiles;
+    for (const auto& core : cores) {
+        int have = 0;
+        for (const Coord turret : turrets)
+            if (footprintDistance(turret, core.origin, core.size) <= reach) ++have;
+        if (have >= Force::kClusterPerCore) continue;
+        const Coord centre(core.origin.x + core.size.x / 2, core.origin.y + core.size.y / 2);
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        for (int y = std::max(0, core.origin.y - reach); y <= std::min(getMap().getSizeY() - 1, core.origin.y + core.size.y - 1 + reach); ++y) {
+            for (int x = std::max(0, core.origin.x - reach); x <= std::min(getMap().getSizeX() - 1, core.origin.x + core.size.x - 1 + reach); ++x) {
+                const Coord p(x, y);
+                const int d = footprintDistance(p, core.origin, core.size);
+                if (d < 1 || d > reach) continue;
+                if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
+                if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, p)) continue;
+                if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+                if (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
+                int passable = 0;
+                for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                    if ((!ox && !oy) || !getMap().tileExists(x + ox, y + oy)) continue;
+                    const Tile* tile = getMap().getTile(x + ox, y + oy);
+                    if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+                }
+                if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+                int nearest = -1;
+                for (const Coord turret : turrets) {
+                    const int t = std::max(std::abs(turret.x - x), std::abs(turret.y - y));
+                    if (nearest < 0 || t < nearest) nearest = t;
+                }
+                // Packed beside the cluster's turrets (mutual cover), then facing the front,
+                // then close to the core it protects.
+                const int packed = nearest < 0 ? 0 : nearest <= 2 ? 300 : nearest <= 3 ? 150 : 0;
+                const int facing = front.isValid()
+                    ? std::clamp((front.x * (x - centre.x) + front.y * (y - centre.y)) * 10 / frontScale, -60, 60) : 0;
+                const int score = packed + facing - d * 20;
+                if (score > bestScore) { bestScore = score; best = p; }
+            }
+        }
+        if (best.isValid()) {
+            traceDecision("cluster_turret_site", AITelemetry::Record().set("x", best.x).set("y", best.y)
+                .set("core", core.id).set("core_rank", core.rank).set("cluster_turrets", have)
+                .set("turrets", int(turrets.size())));
+            return best;
+        }
+    }
+    traceDecision("cluster_turret_site", AITelemetry::Record().set("valid", false).set("cores", int(cores.size()))
+        .set("turrets", int(turrets.size())));
+    return Coord::Invalid();
+}
+
 bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money, bool emergency,
                                          Uint32& selectedItem, Coord& selectedSite, bool landValueOnly, Uint32 requiredItem) {
     AITelemetry::PerformanceScope perfScope("ai.selectCityServiceInvestment", getGameCycleCount(), getHouse()->getHouseID());

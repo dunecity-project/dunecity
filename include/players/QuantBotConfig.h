@@ -266,6 +266,11 @@ struct QuantBotConfig {
         /// Independent default-OFF Custom Brutal Vanilla FFA4/6 policies (docs/ai-play-styles.md,
         /// "Vanilla FFA core defence and army counters"); neither enables boom.
         bool vanillaCoreDefence;               ///< Guards and turrets for threatened refineries/combat factories.
+        /// Default-OFF outnumbered defence (docs/formations.md, "Turret clusters and the held
+        /// mass"): rocket turrets in tight groups at the core, funded ahead of units, and
+        /// no piecemeal defence the house cannot win (the army masses at home instead).
+        bool turretClusters;                   ///< While outnumbered: clustered core rocket turrets first.
+        bool massHold;                         ///< An unanswerable defence sends nobody; the free army masses.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

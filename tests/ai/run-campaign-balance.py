@@ -517,7 +517,8 @@ parser.add_argument('--helper-style', help='Authored campaign only: apply this s
 parser.add_argument('--mission', type=int, choices=range(1, 23),
                     help='Campaign mission number instead of the --level\'s first (all real IDs 1–22)')
 parser.add_argument('--seed', type=int, default=486409243)
-parser.add_argument('--minutes', type=int, default=20)
+parser.add_argument('--minutes', type=int, default=20,
+                    help='Game minute the run ends at (absolute; a --load-save continues from its own minute)')
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
 args = parser.parse_args()
 if args.helper_style and (not args.scenario or args.scenario_sides or args.skirmish or args.custom_map
@@ -548,8 +549,10 @@ if args.civ_air_probe:
 if args.civ_ordinary_gate and (args.civ_wars or args.mod != 'dunecity' or not args.scenario
                               or not args.local_spectator or args.civ_strategy not in ('off', 'on')):
     parser.error('--civ-ordinary-gate needs an ordinary --mod dunecity --scenario observer and --civ-strategy off/on.')
-if not 1 <= args.minutes <= 120 or not 0 <= args.seed <= 0xffffffff:
-    parser.error('Use 1–120 minutes and a 32-bit unsigned seed.')
+# A continued save ends at an absolute game minute beyond its own (a long city game is past
+# minute 300), so --load-save may run to the end of a game day.
+if not 1 <= args.minutes <= (1440 if args.load_save else 120) or not 0 <= args.seed <= 0xffffffff:
+    parser.error('Use 1–120 minutes (1–1440 with --load-save) and a 32-bit unsigned seed.')
 if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:

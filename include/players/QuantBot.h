@@ -1594,7 +1594,7 @@ private:
             reserveKept = 0, sizedResponses = 0, declinedResponses = 0, fallBacks = 0, perimeterTurretOrders = 0,
             turretsBuilt = 0, turretsLost = 0, raidOrders = 0, turretTargets = 0, pressOnOrders = 0,
             finishWaves = 0, fortifiedHolds = 0, sonicRetargets = 0, surplusPeak = 0, siegeOrders = 0,
-            siegeHolds = 0, assaultHolds = 0, assaultWaves = 0;
+            siegeHolds = 0, assaultHolds = 0, assaultWaves = 0, massHolds = 0, clusterTurretOrders = 0;
     };
     ForceStats forceStats;
     /// Staged (+e): is the party strong enough against the visible enemy fighters and turrets
@@ -2017,6 +2017,25 @@ private:
     void planDefenceCoverage(BuildPass& pass);
     /// VanillaCoreDefence: this pass's transient core-threat survey (inactive when off/out of scope).
     void planVanillaCoreDefence(BuildPass& pass);
+    /// TurretClusters (default off, docs/formations.md "Turret clusters and the held mass"):
+    /// while outnumbered and short of the cluster goal, a Rocket Turret's price is protected
+    /// from every non-yard producer this pass (pass.turretClusterReserve).
+    void planTurretClusters(BuildPass& pass);
+    bool turretClustersActive() const;
+    int clusterTurretGoal() const;
+    /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.
+    int clusterTurrets() const;
+    /// A legal Rocket Turret site beside the first core (yard, factories, refinery, port,
+    /// repair yard, in that order) with fewer than kClusterPerCore turrets: packed next to
+    /// the cluster's turrets, facing the observed front. One bounded window per core.
+    Coord findClusterTurretLocation();
+    void chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// MassHold: health-weighted value of our live (Rocket Turrets: powered) turrets within
+    /// kMassTurretSupportTiles of \a building.
+    int64_t turretSupportNear(const ObjectBase* building) const;
+    /// MassHold: free troops (\a ids) not yet at the home rally walk there in Area Guard;
+    /// returns how many were ordered.
+    int gatherHeldMass(const std::vector<Uint32>& ids);
     /// Net-income buckets, a legal next technology and its bounded savings plan.
     bool simpleTechPolicyActive() const;
     void planTechSavings(BuildPass& pass);

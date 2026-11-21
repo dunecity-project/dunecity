@@ -295,6 +295,10 @@ struct QuantBot::BuildPass {
     bool campaignHelperSecondYard{};
     bool vanillaFfaStarportDeferred{};
     int vanillaFfaWaveCapitalReserve{};
+    /// TurretClusters (default off): a Rocket Turret's price while a cluster turret is wanted.
+    int turretClusterReserve{};
+    bool turretClusterOrdered{};
+    Coord turretClusterSite = Coord::Invalid();
     bool vanillaFfaLargeScope{};
     bool vanillaFfaThreatProduction{};
     bool vanillaFfaLightWorkingCash{};

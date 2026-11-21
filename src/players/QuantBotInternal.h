@@ -115,6 +115,27 @@ CityPlacementPolicy::RoadImpact cityRoadImpact(const Map& map, int x, int y, int
 // QuantBotPlacement.cpp.
 bool wouldLandlockNeighbouringZone(const Map& map, int houseID, int x, int y, int w, int h,
                                    const std::vector<Uint32>* clearedZones = nullptr);
+// TurretClusters (default off): the core buildings a turret cluster forms around, in the order
+// they are fortified (lower first); -1 for every other item.
+inline int clusterCoreRank(Uint32 item) {
+    switch (item) {
+    case Structure_ConstructionYard: return 0;
+    case Structure_HeavyFactory: return 1;
+    case Structure_LightFactory: return 2;
+    case Structure_Barracks: case Structure_WOR: return 3;
+    case Structure_Refinery: return 4;
+    case Structure_StarPort: return 5;
+    case Structure_HighTechFactory: return 6;
+    case Structure_RepairYard: return 7;
+    default: return -1;
+    }
+}
+// Chebyshev tiles from \a p to the footprint at \a origin of \a size (0 inside it).
+inline int footprintDistance(Coord p, Coord origin, Coord size) {
+    const int dx = p.x < origin.x ? origin.x - p.x : p.x >= origin.x + size.x ? p.x - (origin.x + size.x - 1) : 0;
+    const int dy = p.y < origin.y ? origin.y - p.y : p.y >= origin.y + size.y ? p.y - (origin.y + size.y - 1) : 0;
+    return std::max(dx, dy);
+}
 } // namespace QuantBotInternal
 
 #endif // QUANTBOTINTERNAL_H

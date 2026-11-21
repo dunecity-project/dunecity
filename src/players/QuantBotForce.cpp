@@ -2076,3 +2076,84 @@ void QuantBot::updateSplits() {
         ++it;
     }
 }
+
+// ---- Turret clusters and the held mass (TurretClusters / MassHold, default off) ---------------
+//
+// docs/formations.md, "Turret clusters and the held mass". Stefan, 2026-11-21 (save nobuildup):
+// a house that is losing defends with rocket turret clusters and builds its army up, instead of
+// sending each new unit into a defence it cannot win.
+
+bool QuantBot::turretClustersActive() const {
+    return botConfig().force.turretClusters && gameMode == GameMode::Custom && outnumberedByEstimate();
+}
+
+int QuantBot::clusterTurretGoal() const {
+    if (!turretClustersActive()) return 0;
+    return Force::clusterTurretGoal(teamGroundArmyValue(), enemyThreatEstimate());
+}
+
+int QuantBot::clusterTurrets() const {
+    using QuantBotInternal::clusterCoreRank;
+    using QuantBotInternal::footprintDistance;
+    std::vector<std::pair<Coord, Coord>> cores;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && clusterCoreRank(structure->getItemID()) >= 0)
+            cores.emplace_back(structure->getLocation(), structure->getStructureSize());
+    auto nearCore = [&](Coord p) {
+        for (const auto& [origin, size] : cores)
+            if (footprintDistance(p, origin, size) <= Force::kClusterReachTiles) return true;
+        return false;
+    };
+    int count = 0;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+            && (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
+            && nearCore(structure->getLocation())) ++count;
+    for (const auto& entry : reservedStructures)
+        if ((entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)
+            && nearCore(entry.second.location)) ++count;
+    return count;
+}
+
+int64_t QuantBot::turretSupportNear(const ObjectBase* building) const {
+    if (!building) return 0;
+    const bool rocketsDark = currentGame->getGameInitSettings().getGameOptions().rocketTurretsNeedPower
+        && getHouse()->getProducedPower() < getHouse()->getPowerRequirement();
+    int64_t support = 0;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        const Uint32 item = structure->getItemID();
+        if (item != Structure_GunTurret && (item != Structure_RocketTurret || rocketsDark)) continue;
+        if (tiles(structure->getLocation(), building->getClosestPoint(structure->getLocation()))
+            > Force::kMassTurretSupportTiles) continue;
+        const int price = currentGame->objectData.data[item][structure->getOriginalHouseID()].price;
+        support += (FixPoint(price) * structure->getHealth() / structure->getMaxHealth()).lround();
+    }
+    return support;
+}
+
+int QuantBot::gatherHeldMass(const std::vector<Uint32>& ids) {
+    Coord point = armyAssemblyAnchor();
+    if (point.isInvalid()) point = findBaseCentre(getHouse()->getHouseID());
+    if (point.isInvalid()) return 0;
+    const int radius = BlobWavePolicy::blobRadius(int(ids.size())) + 2;
+    std::set<int64_t> reserved;
+    int ordered = 0;
+    for (const Uint32 id : ids) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        // A hunter is on an offensive; holding a defence never recalls it.
+        if (!unit || !unit->isActive() || !unit->isRespondable() || unit->getOwner() != getHouse()
+            || unit->getAttackMode() == HUNT) continue;
+        // Already at home: it stands in Area Guard and fights what comes into reach.
+        if (tiles(unit->getLocation(), point) <= radius) continue;
+        const Coord destination = unit->getDestination();
+        if (unit->isMoving() && destination.isValid() && tiles(destination, point) <= radius) continue;
+        Coord slot = huntPartySlot(unit, point, radius, reserved);
+        if (slot.isInvalid()) slot = point;
+        doSetAttackMode(unit, AREAGUARD);
+        doMove2Pos(unit, slot.x, slot.y, false);
+        groundSquad.erase(id);
+        ++ordered;
+    }
+    return ordered;
+}

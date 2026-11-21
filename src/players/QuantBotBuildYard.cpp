@@ -348,6 +348,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardVanillaCoreDefence(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (pass.turretClusterReserve > 0) {
+        // TurretClusters (default off): clustered core turrets while outnumbered.
+        chooseYardTurretCluster(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     // Duel plans spend the opening grant differently, after real power/air
     // emergencies but before optional city growth, imports and repair support.
     const int duelPlan = duelOpeningPlan();
@@ -900,6 +905,69 @@ void QuantBot::chooseYardVanillaCoreDefence(BuildPass& pass, BuilderTurn& turn, 
             .set("ground_goal", groundGoal).set("air_goal", airGoal).set("threat_bps", Policy::level(bps)));
         return;
     }
+}
+
+void QuantBot::planTurretClusters(BuildPass& pass) {
+    // TurretClusters (default off, docs/formations.md "Turret clusters and the held mass"): while
+    // outnumbered and short of the cluster goal, with a yard able to build a Rocket Turret and a
+    // legal cluster site, every non-yard producer protects the turret's price this pass.
+    pass.turretClusterReserve = 0;
+    pass.turretClusterOrdered = false;
+    pass.turretClusterSite = Coord::Invalid();
+    const int goal = clusterTurretGoal();
+    if (goal <= 0) return;
+    const int have = clusterTurrets();
+    if (have >= goal) return;
+    bool buildable = false;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || structure->getItemID() != Structure_ConstructionYard) continue;
+        const auto* yard = static_cast<const BuilderBase*>(structure);
+        if (yard->getCurrentUpgradeLevel() >= 2 && campaignAvailableToBuild(yard, Structure_RocketTurret)) {
+            buildable = true;
+            break;
+        }
+    }
+    if (!buildable) return;
+    pass.turretClusterSite = findClusterTurretLocation();
+    if (pass.turretClusterSite.isInvalid()) return;
+    pass.turretClusterReserve = currentGame->objectData.data[Structure_RocketTurret][getHouse()->getHouseID()].price;
+}
+
+void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    // One cluster turret per pass across all yards, after power recovery and the essentials and
+    // ahead of optional growth; the yard saves for it while it cannot pay (planTurretClusters).
+    if (pass.turretClusterOrdered || pass.turretClusterReserve <= 0 || pass.turretClusterSite.isInvalid()
+        || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
+        || pass.orderedThisTick.count(Structure_RocketTurret)
+        || turn.pBuilder->getCurrentUpgradeLevel() < 2
+        || !campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)) return;
+    const auto& data = currentGame->objectData.data;
+    const int houseID = getHouse()->getHouseID();
+    if (!hasPowerBufferForTurret(pass)) {
+        if (!powerGenerationPending(pass) && campaignAvailableToBuild(turn.pBuilder, Structure_WindTrap)
+            && pass.money >= data[Structure_WindTrap][houseID].price && findPlaceLocation(Structure_WindTrap).isValid()) {
+            yardTurn.itemID = Structure_WindTrap;
+            yardTurn.structureRule = "turret_cluster_power";
+            yardTurn.skipRemainingStructureLogic = true;
+        }
+        return;
+    }
+    if (pass.money < pass.turretClusterReserve) {
+        yardTurn.skipRemainingStructureLogic = true;
+        yardTurn.serviceSavingHold = true;
+        yardTurn.structureRule = "save_turret_cluster";
+        return;
+    }
+    pass.turretClusterOrdered = true;
+    ++forceStats.clusterTurretOrders;
+    yardTurn.itemID = Structure_RocketTurret;
+    yardTurn.crimeServiceSite = pass.turretClusterSite;
+    yardTurn.structureRule = "turret_cluster";
+    yardTurn.skipRemainingStructureLogic = true;
+    traceDecision("turret_cluster", AITelemetry::Record()
+        .set("builder", turn.pBuilder->getObjectID()).set("x", pass.turretClusterSite.x).set("y", pass.turretClusterSite.y)
+        .set("goal", clusterTurretGoal()).set("cluster_turrets", clusterTurrets()).set("money", pass.money));
 }
 
 void QuantBot::chooseYardEssentials(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -2754,7 +2822,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     if (yardTurn.itemID==Structure_RocketTurret && !pass.routineRocketsAllowed
         && std::string_view(yardTurn.structureRule)!="perimeter_battery"
         && std::string_view(yardTurn.structureRule)!="ground_threat"
-        && std::string_view(yardTurn.structureRule)!="vanilla_core_defence") {
+        && std::string_view(yardTurn.structureRule)!="vanilla_core_defence"
+        && std::string_view(yardTurn.structureRule)!="turret_cluster") {
         yardTurn.itemID=NONE_ID;
         yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="core_infrastructure_before_more_rockets";
@@ -2764,6 +2833,7 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && pass.itemCount[Structure_RocketTurret]>=2 && !pass.airEngaged
         && std::string_view(yardTurn.structureRule)!="ground_threat"
         && std::string_view(yardTurn.structureRule)!="perimeter_battery"
+        && std::string_view(yardTurn.structureRule)!="turret_cluster"
         && std::string_view(yardTurn.structureRule)!="early_rocket_cover") {
         yardTurn.itemID=NONE_ID;yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="funded_standing_battery_required";
