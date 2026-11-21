@@ -304,21 +304,19 @@ inline int perimeterTurretGoal(int64_t own, int64_t enemy) {
 // Stefan, 2026-11-21 (save nobuildup): a house that is losing should defend with rocket turret
 // clusters and build its army up, not feed one unit at a time into a defence it cannot win.
 
-/// TurretClusters: while outnumbered, rocket turrets stand in tight groups around the core
-/// buildings (yard, factories, refinery, port, repair yard): one per kClusterCreditsPerTurret of
-/// the enemy estimate (its whole army, not only its lead: a Fortress start already rings every
-/// core with turrets, so a lead-sized goal is met from the first minute), at most
-/// kClusterTurretsMax, kClusterPerCore within kClusterReachTiles of each core.
-/// v1 (lead-sized, 4 per core within 4 tiles, max 16) never placed a turret in 24 games of
-/// Stefan's lobby: docs/formations.md, "Turret clusters and the held mass".
-constexpr int kClusterCreditsPerTurret = 1000;
+/// TurretClusters: while outnumbered, every core building (yard, factories, refinery, port,
+/// repair yard) is filled up to kClusterPerCore rocket turrets within kClusterReachTiles, at most
+/// kClusterTurretsMax in all, funded ahead of units (Stefan, 2026-11-21: "for defence the AI
+/// should just build more rocket turret clusters and then build up").
+/// v1 (one per 1,000 credits of the enemy lead, 4 per core within 4 tiles, max 16) and v2 (one
+/// per 1,000 credits of the enemy estimate, 8 per core within 5 tiles, max 40) never placed a
+/// turret in 24 games of Stefan's lobby: a Fortress start already rings every core with more
+/// turrets than either goal (docs/formations.md, "Turret clusters and the held mass").
 constexpr int kClusterTurretsMax = 40;
 constexpr int kClusterPerCore = 8;
 constexpr int kClusterReachTiles = 5;
 inline int clusterTurretGoal(int64_t own, int64_t enemy) {
-    if (!outnumbered(own, enemy)) return 0;
-    return int(std::min<int64_t>(kClusterTurretsMax, (std::max<int64_t>(0, enemy) + kClusterCreditsPerTurret - 1)
-        / kClusterCreditsPerTurret));
+    return outnumbered(own, enemy) ? kClusterTurretsMax : 0;
 }
 /// MassHold: our live turrets within this many tiles of an attacked building fight for it.
 constexpr int kMassTurretSupportTiles = 10;
