@@ -2851,10 +2851,22 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
                     : cash >= data[Structure_NuclearPlant][houseID].price));
         // NuclearConsolidation (default off): once a reactor stands, new capacity is a reactor too;
         // the Wind Traps it would otherwise add are exactly what consolidation retires.
-        const bool consolidated = botConfig().force.nuclearConsolidation && nuclearSite.isValid()
+        const bool consolidating = botConfig().force.nuclearConsolidation
             && getHouse()->getNumItems(Structure_NuclearPlant) > 0;
+        const bool consolidated = consolidating && nuclearSite.isValid();
+        // A yard that cannot build (or site) a reactor leaves new capacity to one that can, or to
+        // the reactor already pending, unless the house is short of power right now.
+        bool reactorElsewhere = false;
+        if (consolidating && !consolidated && getHouse()->hasPower())
+            for (const auto* structure : getStructureList())
+                if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+                    && structure->getItemID() == Structure_ConstructionYard
+                    && campaignAvailableToBuild(static_cast<const BuilderBase*>(structure), Structure_NuclearPlant)) {
+                    reactorElsewhere = true;
+                    break;
+                }
         yardTurn.itemID = nuclear || consolidated ? Structure_NuclearPlant
-            : windSite.isValid() ? Structure_WindTrap : NONE_ID;
+            : reactorElsewhere ? NONE_ID : windSite.isValid() ? Structure_WindTrap : NONE_ID;
         if (yardTurn.itemID == NONE_ID) yardTurn.skipRemainingStructureLogic = true;
         traceDecision("city_generator_choice", AITelemetry::Record().set("item",yardTurn.itemID)
             .set("need",need).set("committed_demand",pass.committedPowerDemand).set("cash",cash)
