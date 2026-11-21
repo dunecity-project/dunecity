@@ -1655,6 +1655,36 @@ pooled one, which includes the selecting screen, does not); the targeted confirm
 cleared 0 where the effect lives. A default still needs the Fortress/Brutal/`/weak` checks and the
 four mandatory AI gates (MassHold also acts outside the city simulation).
 
+### Land value, used liberally (economy v2-v4, 2026-11-21, default off)
+
+Stefan: "we should use it more liberally - we want the ai to increase its land value to get more tax.
+why would we limit when it is executed on"; then "we only need one stadium, palaces are more efficient
+otherwise" and "if we don't have tech 8 then yes you could look at stadiums". All screens seat-only on
+the same game ids as the economy controls (AWS; `economy/v2.py`, `stadiums.py`, `vN.py`); a control
+re-run on the new source matched all 72 digests.
+
+| Version (economy + MassHold) | Rule changes | all vs control | Brutal v Hard DuneCity (204) | weak seat 128 (144) | Stefan's lobby 120 / 240 min |
+|---|---|---|---|---|---|
+| v1 (`1afd9ca57`) | reactor from 10 Wind Traps; 1 Palace per 30 lots, max 4, 12 lots | screen +0.117, targeted fresh +0.086 | +0.177 | +0.250 | +0.028 / - |
+| v2 (`c4d1eddfa`) | reactor from 3 Wind Traps; Palace in every 8-lot district, no cap; one Stadium | **-0.445** (704) | **-1.005** | **-0.394** | +0.045 / - |
+| v3 (`ef6f3e84b`) | reactor from 10 again; Stadium districts before Palaces unless outnumbered | +0.030 (800) | +0.058 | -0.035 | +0.149 / **+0.189** |
+| v4 (`56324d70`) | while outnumbered the v1 Palace limits and no Stadium project | +0.041 [-0.001, +0.083] (800) | +0.085 | +0.034 | +0.149 / **+0.189** |
+
+- The v2 loss was all the reactor threshold: NuclearConsolidation from 3 Wind Traps alone lost -1.031
+  in the Brutal v Hard duels (49 wins against 154); the liberal Palace districts alone were level
+  (-0.041 [-0.139, +0.056]). A 2,000-credit reactor before any army loses the opening.
+- Stadium districts before tech 8 (StadiumDistricts) are what wins Stefan's tech-5 lobby: +0.240 at
+  120 minutes and +0.240 [+0.094, +0.405] at 240 minutes on their own; the seat won 8 of 48 240-minute
+  games where control won none (every control game a time-out). The same Stadiums cost a weak house at
+  tech 5 -0.208 [-0.389, -0.056].
+- Against v1, v4 is +0.122 in the lobby and level on handmade and duel maps, but -0.119 [-0.233, -0.010]
+  for the weak seat: a house that will fall behind spends on Palaces before it is outnumbered.
+
+**Decision.** All default off. Liberal land-value spending pays where a house is not pressed (Stefan's
+long no-spice lobby: the first change that wins games there) and costs a weaker house in fast games;
+v1's limits remain the best for the weak seat. The open design question is when to spend liberally
+(e.g. only from cash above a reserve, not ahead of units).
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
