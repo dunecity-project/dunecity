@@ -1047,7 +1047,8 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         const int traps = getHouse()->getNumItems(Structure_WindTrap);
         // Retire one Wind Trap (the one with most of our lots around it) while the rest still
         // covers demand plus the city power reserve and one more Wind Trap of margin.
-        const bool spare = produced - windOutput - required >= int64_t(pass.cityPowerReserve) + windOutput;
+        const bool spare = produced - windOutput - required
+            >= int64_t(std::max(pass.cityPowerReserve, pass.rocketPowerBuffer)) + pass.committedPowerDemand + windOutput;
         if (traps > 0 && getHouse()->getNumItems(Structure_NuclearPlant) > 0 && spare) {
             std::vector<Coord> lots;
             for (const auto* structure : getStructureList())
@@ -2847,7 +2848,12 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
                         data[Structure_WindTrap][houseID].price, data[Structure_NuclearPlant][houseID].price,
                         windSites, cash, protectedCash, !getHouse()->hasPower() && !pass.techSavings)
                     : cash >= data[Structure_NuclearPlant][houseID].price));
-        yardTurn.itemID = nuclear ? Structure_NuclearPlant : windSite.isValid() ? Structure_WindTrap : NONE_ID;
+        // NuclearConsolidation (default off): once a reactor stands, new capacity is a reactor too;
+        // the Wind Traps it would otherwise add are exactly what consolidation retires.
+        const bool consolidated = botConfig().force.nuclearConsolidation && nuclearSite.isValid()
+            && getHouse()->getNumItems(Structure_NuclearPlant) > 0;
+        yardTurn.itemID = nuclear || consolidated ? Structure_NuclearPlant
+            : windSite.isValid() ? Structure_WindTrap : NONE_ID;
         if (yardTurn.itemID == NONE_ID) yardTurn.skipRemainingStructureLogic = true;
         traceDecision("city_generator_choice", AITelemetry::Record().set("item",yardTurn.itemID)
             .set("need",need).set("committed_demand",pass.committedPowerDemand).set("cash",cash)
