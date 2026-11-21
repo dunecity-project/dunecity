@@ -217,6 +217,12 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                             skirmish=skirmish_spec(128, 'fortress', 0, city=4, spice=0, sand=30, rock=40,
                                                    mountain=30, tech=5, credits=20000, symmetric=1),
                             minutes=120, full=24), opt_in=True, measured=True))
+    # The same lobby played to 240 minutes (its 120-minute games nearly all time out with every
+    # house alive, so placement cannot separate a candidate from the control).
+    cells.append(dict(match('skirmish', '4p-ffa-fortress-nospice-city40k-long', 'dunecity', ffa('QB', 'QB', 'QB', 'QB'),
+                            skirmish=skirmish_spec(128, 'fortress', 0, city=4, spice=0, sand=30, rock=40,
+                                                   mountain=30, tech=5, credits=20000, symmetric=1),
+                            minutes=240, full=48), opt_in=True, measured=True))
     # 2. Construction Yard only, default credits.
     c = lambda name, mod, slots, size, **kw: cells.append(
         match('cy', name, mod, slots, skirmish=skirmish_spec(size, 'cy', 0), **kw))
@@ -1387,7 +1393,7 @@ parser.add_argument('--enemy-difficulty', choices=tuple(DIFFICULTY.values()), de
                     help='Campaign enemy QuantBot difficulty, explicit in commands, rosters and result IDs')
 parser.add_argument('--campaign-mode', choices=('full', 'single'), default='full',
                     help='Authored missions through the Full campaign or Single mission setup; objectives stay native')
-parser.add_argument('--minutes', type=int, choices=range(1, 121),
+parser.add_argument('--minutes', type=int, choices=range(1, 481),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--cases', help='Only scheduled game IDs matching this regular expression (diagnostic subset)')

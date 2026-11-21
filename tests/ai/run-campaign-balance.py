@@ -549,10 +549,10 @@ if args.civ_air_probe:
 if args.civ_ordinary_gate and (args.civ_wars or args.mod != 'dunecity' or not args.scenario
                               or not args.local_spectator or args.civ_strategy not in ('off', 'on')):
     parser.error('--civ-ordinary-gate needs an ordinary --mod dunecity --scenario observer and --civ-strategy off/on.')
-# A continued save ends at an absolute game minute beyond its own (a long city game is past
-# minute 300), so --load-save may run to the end of a game day.
-if not 1 <= args.minutes <= (1440 if args.load_save else 120) or not 0 <= args.seed <= 0xffffffff:
-    parser.error('Use 1–120 minutes (1–1440 with --load-save) and a 32-bit unsigned seed.')
+# A long city game is still undecided at minute 120 (Stefan's no-spice lobby: minute 319 with three
+# houses alive), and a continued save ends at an absolute game minute beyond its own.
+if not 1 <= args.minutes <= (1440 if args.load_save else 480) or not 0 <= args.seed <= 0xffffffff:
+    parser.error('Use 1–480 minutes (1–1440 with --load-save) and a 32-bit unsigned seed.')
 if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
