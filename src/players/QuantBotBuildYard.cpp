@@ -1084,12 +1084,14 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         }
     }
     if (force.palaceDistricts && pass.economyProject == NONE_ID && pass.stablePower) {
-        // Every R+C district gets a land-value landmark: a Palace where one can be built (one only
-        // with the Only One Palace option), else a Stadium; one pending at a time.
+        // Every R+C district gets a Palace where one can be built (one only with the Only One Palace
+        // option); a house that cannot build one yet gets its one Stadium (Stefan: "we only need one
+        // stadium, palaces are more efficient otherwise"). One pending at a time.
         const int lots = pass.itemCount[Structure_ZoneResidential] + pass.itemCount[Structure_ZoneCommercial];
         const bool palaceCapped = getGameInitSettings().getGameOptions().onlyOnePalace && pass.itemCount[Structure_Palace] >= 1;
         const Uint32 item = !palaceCapped && buildable(Structure_Palace) ? Uint32(Structure_Palace)
-            : buildable(Structure_Stadium) ? Uint32(Structure_Stadium) : Uint32(NONE_ID);
+            : pass.itemCount[Structure_Stadium] == 0 && buildable(Structure_Stadium) ? Uint32(Structure_Stadium)
+            : Uint32(NONE_ID);
         const bool pending = pass.itemCount[Structure_Palace] != getHouse()->getNumItems(Structure_Palace)
             || pass.itemCount[Structure_Stadium] != getHouse()->getNumItems(Structure_Stadium);
         if (item != NONE_ID && !pending && lots >= Force::kPalaceDistrictMinLots) {

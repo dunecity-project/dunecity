@@ -277,7 +277,7 @@ struct QuantBotConfig {
         bool gangUpLeader;                     ///< FFA: waves target a runaway leader.
         /// Default-OFF city economy (docs/formations.md, "Economy: nuclear consolidation and palace districts").
         bool nuclearConsolidation;             ///< Nuclear Plants replace Wind Traps; the freed land is rebuilt.
-        bool palaceDistricts;                  ///< A Palace (else a Stadium) funded first in every R/C district.
+        bool palaceDistricts;                  ///< A Palace funded first in every R/C district (else one Stadium).
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

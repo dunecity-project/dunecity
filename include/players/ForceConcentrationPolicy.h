@@ -357,8 +357,9 @@ constexpr int kConsolidateWindTraps = 3;
 /// ... and always keeps this many: a Wind Trap is the prerequisite of the Nuclear Plant (and of the
 /// refinery, radar and factories), so retiring the last one makes the next reactor unbuildable.
 constexpr int kKeepWindTraps = 2;
-/// PalaceDistricts: every R+C district gets a land-value landmark - a Palace (R+C tax and +40 land
-/// value within kPalaceReachTiles) where one can be built, else a Stadium (the same +40, tech 4) -
+/// PalaceDistricts: every R+C district gets a Palace (R+C tax and +40 land value within
+/// kPalaceReachTiles) where one can be built; a house that cannot build one yet gets one Stadium
+/// (the same +40, tech 4; only one: "palaces are more efficient otherwise") -
 /// wherever at least kPalaceDistrictMinLots R+C lots that no Palace or Stadium reaches yet stand
 /// within kPalaceReachTiles of its centre; no other cap (Stefan, 2026-11-21: "we want the ai to
 /// increase its land value to get more tax. why would we limit"). Own lots of at most
