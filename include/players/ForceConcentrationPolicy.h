@@ -367,9 +367,22 @@ constexpr int kKeepWindTraps = 2;
 /// v1 (Palaces only, one per 30 R+C lots, at most 4, 12 lots per site) is recorded in
 /// docs/formations.md, "Economy: nuclear consolidation and palace districts".
 constexpr int kPalaceDistrictMinLots = 8;
-/// While outnumbered the v1 limits hold (a weak house paying 2,000 a Palace before units lost -0.19
-/// against them): one Palace per kPalaceLotsPerPalace R+C lots, at most kPalaceOutnumberedMax,
-/// kPalaceOutnumberedMinLots lots per site, and no Stadium project.
+/// v5: core projects - a reactor from kConsolidateWindTraps Wind Traps and one Palace per
+/// kPalaceLotsPerPalace R+C lots (at most kPalaceOutnumberedMax, kPalaceOutnumberedMinLots lots per
+/// site, the v1 limits) - are funded ahead of units. Everything beyond them (more Palaces down to
+/// kPalaceDistrictMinLots lots, Stadiums, a reactor from kKeepWindTraps + 1 Wind Traps) is bought only
+/// from cash kSpareCashReserve above its price, never saved for (v2-v4 spent ahead of units and cost a
+/// weaker house its opening).
+constexpr int kSpareCashReserve = 2000;
+/// LandmarkAnchoring (default off; a human builder's 1v1, 2026-11-21: a Stadium went down at minute 6
+/// before any lot near it, 37 R/C lots then filled its reach, no industry within 8 tiles of any
+/// landmark, 72% of all lots in reach): a new R/C lot in reach of an own Palace or Stadium scores
+/// kLandmarkLotBonus more, an industrial lot that much less; a landmark site counts free buildable
+/// tiles in its reach as room, one lot per kLandmarkRoomTilesPerLot tiles (a lot plus its road), and
+/// the first landmark is planned once the house has kLandmarkFirstLots R+C lots.
+constexpr int kLandmarkLotBonus = 60;
+constexpr int kLandmarkRoomTilesPerLot = 6;
+constexpr int kLandmarkFirstLots = 4;
 constexpr int kPalaceLotsPerPalace = 30;
 constexpr int kPalaceOutnumberedMax = 4;
 constexpr int kPalaceOutnumberedMinLots = 12;

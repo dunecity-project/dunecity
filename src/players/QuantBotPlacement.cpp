@@ -549,25 +549,55 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
         if (!reached && o.x >= 0 && o.y >= 0 && o.x < w && o.y < h) at(o.x + 1, o.y + 1) += 1;
     }
     for (int y = 1; y <= h; ++y) for (int x = 1; x <= w; ++x) at(x, y) += at(x - 1, y) + at(x, y - 1) - at(x - 1, y - 1);
-    auto lotsAround = [&](int cx, int cy) {
-        const int x0 = std::max(0, cx - reach), y0 = std::max(0, cy - reach);
-        const int x1 = std::min(w - 1, cx + reach), y1 = std::min(h - 1, cy + reach);
-        return at(x1 + 1, y1 + 1) - at(x0, y1 + 1) - at(x1 + 1, y0) + at(x0, y0);
+    auto window = [&](std::vector<int>& grid, int cx, int cy, int r) {
+        auto g = [&](int x, int y) { return grid[size_t(y) * (w + 1) + x]; };
+        const int x0 = std::max(0, cx - r), y0 = std::max(0, cy - r);
+        const int x1 = std::min(w - 1, cx + r), y1 = std::min(h - 1, cy + r);
+        return g(x1 + 1, y1 + 1) - g(x0, y1 + 1) - g(x1 + 1, y0) + g(x0, y0);
     };
-    struct Candidate { int lots, x, y; };
+    auto lotsAround = [&](int cx, int cy) { return window(sum, cx, cy, reach); };
+    // LandmarkAnchoring: free buildable tiles inside build range and outside every landmark's reach
+    // are room for the district to grow into, a lot per kLandmarkRoomTilesPerLot tiles.
+    const bool anchoring = botConfig().force.landmarkAnchoring;
+    std::vector<int> room;
+    if (anchoring) {
+        auto prefix = [&](std::vector<int>& grid) {
+            for (int y = 1; y <= h; ++y) for (int x = 1; x <= w; ++x)
+                grid[size_t(y) * (w + 1) + x] += grid[size_t(y) * (w + 1) + x - 1] + grid[size_t(y - 1) * (w + 1) + x]
+                    - grid[size_t(y - 1) * (w + 1) + x - 1];
+        };
+        std::vector<int> owned(size_t(w + 1) * (h + 1), 0);
+        for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x)
+            if (DuneCity::isConstructionAnchor(getMap().getTile(x, y)->getOwner(), getHouse()->getHouseID()))
+                owned[size_t(y + 1) * (w + 1) + x + 1] = 1;
+        prefix(owned);
+        room.assign(size_t(w + 1) * (h + 1), 0);
+        for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+            const auto* tile = getMap().getTile(x, y);
+            if (tile->hasAStructure() || tile->isRoad() || !DuneCity::isCityZoneTerrain(tile->getType())
+                || window(owned, x, y, BUILDRANGE) == 0) continue;
+            bool reached = false;
+            for (const Coord c : palaces) reached = reached || std::max(std::abs(c.x - x), std::abs(c.y - y)) <= reach;
+            if (!reached) room[size_t(y + 1) * (w + 1) + x + 1] = 1;
+        }
+        prefix(room);
+    }
+    struct Candidate { int key, lots, room, x, y; };
     std::vector<Candidate> candidates;
     for (int y = 0; y + size.y <= h; ++y)
         for (int x = 0; x + size.x <= w; ++x) {
             const int lots = lotsAround(x + 1, y + 1);
-            if (lots >= minLots) candidates.push_back({lots, x, y});
+            const int roomLots = anchoring ? window(room, x + 1, y + 1, reach) / Force::kLandmarkRoomTilesPerLot : 0;
+            // Existing lots pay at once; room only once it is zoned.
+            if (lots + roomLots >= minLots) candidates.push_back({lots * 10 + roomLots * 6, lots, roomLots, x, y});
         }
-    std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.lots > b.lots; });
+    std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.key > b.key; });
     constexpr size_t kChecked = 600;
-    int bestScore = std::numeric_limits<int>::min(), bestLots = 0, bestCleared = 0;
+    int bestScore = std::numeric_limits<int>::min(), bestLots = 0, bestCleared = 0, bestRoom = 0;
     Coord best = Coord::Invalid();
     for (size_t i = 0; i < candidates.size() && i < kChecked; ++i) {
         const auto& c = candidates[i];
-        if (c.lots * 10 <= bestScore) break;   // sorted: nothing later can beat the best
+        if (c.key <= bestScore) break;   // sorted: nothing later can beat the best
         const Coord pos(c.x, c.y);
         std::vector<Uint32> cleared;
         const bool redevelop = redevelopmentZones(item, pos, cleared);
@@ -575,11 +605,11 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
         if (overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
             || dangerAt(pos, size) > 0 || !preservesGroundAccess(item, pos)
             || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, item).preservesConnections) continue;
-        const int score = c.lots * 10 - int(cleared.size()) * 30;
-        if (score > bestScore) { bestScore = score; best = pos; bestLots = c.lots; bestCleared = int(cleared.size()); }
+        const int score = c.key - int(cleared.size()) * 30;
+        if (score > bestScore) { bestScore = score; best = pos; bestLots = c.lots; bestCleared = int(cleared.size()); bestRoom = c.room; }
     }
     traceDecision("palace_district_site", AITelemetry::Record().set("item", item).set("valid", best.isValid()).set("x", best.x)
-        .set("y", best.y).set("lots", bestLots).set("cleared", bestCleared).set("candidates", int(candidates.size()))
+        .set("y", best.y).set("lots", bestLots).set("room", bestRoom).set("cleared", bestCleared).set("candidates", int(candidates.size()))
         .set("palaces", int(palaces.size())));
     return best;
 }
@@ -711,6 +741,18 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
             zoneIndex.add(location.x,location.y,zoneNeighbours.size());
             zoneNeighbours.push_back({location,structure->getItemID()});
         }
+    }
+
+    // LandmarkAnchoring (default off): R/C lots fill the reach of own (or reserved) Palaces and
+    // Stadiums, industry keeps out of it.
+    std::vector<Coord> landmarkCentres;
+    if (DuneCity::isCityZoneStructure(itemID) && botConfig().force.landmarkAnchoring && botConfig().force.palaceDistricts) {
+        auto landmark = [](Uint32 id) { return id == Structure_Palace || id == Structure_Stadium; };
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && landmark(structure->getItemID()))
+                landmarkCentres.push_back(structure->getLocation() + Coord(1, 1));
+        for (const auto& entry : reservedStructures)
+            if (landmark(entry.second.item)) landmarkCentres.push_back(entry.second.location + Coord(1, 1));
     }
 
     // CityLandValueSiting: a Palace or Stadium lifts land value by its park bonus (40) within 8 tiles
@@ -1460,6 +1502,15 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 						// Strong bonus for being between R and I
 						if (nearbyRes > 0 && nearbyInd > 0) locationScore += 15;
 					}
+				}
+
+				if (!landmarkCentres.empty()) {
+					bool reached = false;
+					for (const Coord c : landmarkCentres)
+						reached = reached || std::max(std::abs(c.x - placeLocationX), std::abs(c.y - placeLocationY))
+							<= ForceConcentrationPolicy::kPalaceReachTiles;
+					if (reached) locationScore += isIndustrial ? -ForceConcentrationPolicy::kLandmarkLotBonus
+						: ForceConcentrationPolicy::kLandmarkLotBonus;
 				}
 
 				if (isIndustrial) {

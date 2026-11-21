@@ -309,6 +309,8 @@ struct QuantBot::BuildPass {
     int economyProjectReserve{};
     Coord economyProjectSite = Coord::Invalid();
     bool economyProjectOrdered{};
+    /// Beyond the core limits: bought only from cash kSpareCashReserve above its price, never saved for.
+    bool economyProjectSpareOnly{};
     bool vanillaFfaLargeScope{};
     bool vanillaFfaThreatProduction{};
     bool vanillaFfaLightWorkingCash{};

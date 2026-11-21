@@ -1034,6 +1034,7 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
     pass.economyProjectReserve = 0;
     pass.economyProjectSite = Coord::Invalid();
     pass.economyProjectOrdered = false;
+    pass.economyProjectSpareOnly = false;
     const auto& force = botConfig().force;
     if ((!force.nuclearConsolidation && !force.palaceDistricts) || !pass.citySimEnabled
         || gameMode != GameMode::Custom) return;
@@ -1080,12 +1081,14 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
             }
         }
         // A Nuclear Plant is the project while there are Wind Traps to replace and they cannot be
-        // retired yet (and none is already queued).
-        if (traps >= Force::kConsolidateWindTraps && !spare
+        // retired yet (and none is already queued): funded first from kConsolidateWindTraps Wind
+        // Traps, from spare cash only below that.
+        if (traps > Force::kKeepWindTraps && !spare
             && pass.itemCount[Structure_NuclearPlant] == getHouse()->getNumItems(Structure_NuclearPlant)
             && buildable(Structure_NuclearPlant)) {
             pass.economyProject = Structure_NuclearPlant;
-            pass.economyProjectReserve = data[Structure_NuclearPlant][houseID].price;
+            pass.economyProjectSpareOnly = traps < Force::kConsolidateWindTraps;
+            pass.economyProjectReserve = pass.economyProjectSpareOnly ? 0 : data[Structure_NuclearPlant][houseID].price;
         }
     }
     if (force.palaceDistricts && pass.economyProject == NONE_ID && pass.stablePower) {
@@ -1096,25 +1099,32 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         const bool palaceCapped = getGameInitSettings().getGameOptions().onlyOnePalace && pass.itemCount[Structure_Palace] >= 1;
         // StadiumDistricts (default off; Stefan: "if we don't have tech 8 then yes you could look at
         // stadiums"): while no Palace can be built at all, every district gets a Stadium.
-        // Liberal while the house is not outnumbered; while outnumbered the v1 limits hold (at most one
-        // Palace per 30 R+C lots, 1-4, 12 lots per site, no Stadium project).
-        const bool outnumbered = outnumberedByEstimate();
-        const bool palaceNow = !palaceCapped && buildable(Structure_Palace)
-            && (!outnumbered || pass.itemCount[Structure_Palace] < Force::outnumberedPalaceCap(lots));
-        // ... and Stadium districts not while outnumbered: a weak house at tech 5 lost -0.21 paying
-        // 3,000 a Stadium before units.
-        const bool stadiumDistricts = force.stadiumDistricts && !buildable(Structure_Palace) && !outnumbered;
-        const Uint32 item = palaceNow ? Uint32(Structure_Palace)
-            : !outnumbered && (pass.itemCount[Structure_Stadium] == 0 || stadiumDistricts) && buildable(Structure_Stadium)
-                ? Uint32(Structure_Stadium) : Uint32(NONE_ID);
-        const int minLots = outnumbered ? Force::kPalaceOutnumberedMinLots : Force::kPalaceDistrictMinLots;
+        // v5: the core Palaces (one per 30 R+C lots, 1-4, 12 lots per site) are funded first; more
+        // Palaces (8 lots per site), the one Stadium and Stadium districts come from spare cash only.
+        const bool palaceBuildable = !palaceCapped && buildable(Structure_Palace);
         const bool pending = pass.itemCount[Structure_Palace] != getHouse()->getNumItems(Structure_Palace)
             || pass.itemCount[Structure_Stadium] != getHouse()->getNumItems(Structure_Stadium);
-        if (item != NONE_ID && !pending && lots >= minLots) {
-            pass.economyProjectSite = findPalaceDistrictSite(item, minLots);
+        // LandmarkAnchoring: the first landmark goes down as the city starts, the district grows round it.
+        const bool firstLandmark = force.landmarkAnchoring && pass.itemCount[Structure_Palace] + pass.itemCount[Structure_Stadium] == 0;
+        if (!pending && palaceBuildable && lots >= (firstLandmark ? Force::kLandmarkFirstLots : Force::kPalaceOutnumberedMinLots)
+            && pass.itemCount[Structure_Palace] < Force::outnumberedPalaceCap(lots)) {
+            pass.economyProjectSite = findPalaceDistrictSite(Structure_Palace, Force::kPalaceOutnumberedMinLots);
             if (pass.economyProjectSite.isValid()) {
-                pass.economyProject = item;
-                pass.economyProjectReserve = data[item][houseID].price;
+                pass.economyProject = Structure_Palace;
+                pass.economyProjectReserve = data[Structure_Palace][houseID].price;
+            }
+        }
+        const bool stadiumDistricts = force.stadiumDistricts && !buildable(Structure_Palace);
+        const Uint32 extra = palaceBuildable ? Uint32(Structure_Palace)
+            : (pass.itemCount[Structure_Stadium] == 0 || stadiumDistricts) && buildable(Structure_Stadium)
+                ? Uint32(Structure_Stadium) : Uint32(NONE_ID);
+        if (pass.economyProject == NONE_ID && !pending && extra != NONE_ID && lots >= Force::kPalaceDistrictMinLots
+            && pass.money >= int(data[extra][houseID].price) + std::max(Force::kSpareCashReserve, pass.cityWorkingReserve)) {
+            pass.economyProjectSite = findPalaceDistrictSite(extra, Force::kPalaceDistrictMinLots);
+            if (pass.economyProjectSite.isValid()) {
+                pass.economyProject = extra;
+                pass.economyProjectSpareOnly = true;
+                pass.economyProjectReserve = 0;
             }
         }
     }
@@ -1126,6 +1136,9 @@ void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, Yard
         || !campaignAvailableToBuild(turn.pBuilder, pass.economyProject)) return;
     const Uint32 item = pass.economyProject;
     const bool palace = item == Structure_Palace || item == Structure_Stadium;
+    // Beyond the core limits: only from spare cash, never saved for (the yard goes on as usual).
+    if (pass.economyProjectSpareOnly && pass.money < int(currentGame->objectData.data[item][getHouse()->getHouseID()].price)
+            + std::max(ForceConcentrationPolicy::kSpareCashReserve, pass.cityWorkingReserve)) return;
     if (pass.money < pass.economyProjectReserve) {
         yardTurn.skipRemainingStructureLogic = true;
         yardTurn.serviceSavingHold = true;
@@ -1140,7 +1153,8 @@ void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, Yard
     yardTurn.skipRemainingStructureLogic = true;
     traceDecision("economy_project", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
         .set("item", item).set("x", pass.economyProjectSite.x).set("y", pass.economyProjectSite.y)
-        .set("money", pass.money).set("wind_traps", getHouse()->getNumItems(Structure_WindTrap))
+        .set("money", pass.money).set("spare_only", pass.economyProjectSpareOnly)
+        .set("wind_traps", getHouse()->getNumItems(Structure_WindTrap))
         .set("palaces", pass.itemCount[Structure_Palace]));
 }
 
