@@ -2816,8 +2816,10 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     }
     // All city power branches share the same investment decision.
     // Include committed consumers, but never change vanilla policy.
+    // NuclearConsolidation (default off) chose a reactor to replace Wind Traps, not to size demand.
     if (yardTurn.isCitySim && (yardTurn.itemID == Structure_NuclearPlant || yardTurn.itemID == Structure_WindTrap)
-        && pass.itemCount[Structure_WindTrap] > 0) {
+        && pass.itemCount[Structure_WindTrap] > 0
+        && std::string_view(yardTurn.structureRule) != "nuclear_consolidation") {
         const int need = std::max(1,getHouse()->getPowerRequirement()
             + pass.cityPowerReserve - getHouse()->getProducedPower());
         const Coord windSite = campaignAvailableToBuild(turn.pBuilder,Structure_WindTrap)
@@ -3015,8 +3017,12 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     const bool fieldSite = yardTurn.structureRule
         && std::string_view(yardTurn.structureRule) == "spice_field_outpost"
         && (yardTurn.itemID == Structure_Refinery || yardTurn.itemID == Structure_GunTurret);
+    // TurretClusters / PalaceDistricts (default off) chose their sites (cluster Gun Turrets too).
+    const bool economySite = yardTurn.structureRule
+        && (std::string_view(yardTurn.structureRule) == "turret_cluster"
+            || std::string_view(yardTurn.structureRule) == "palace_district");
     if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite
-        && !coreDefenceSite && !fieldSite)
+        && !coreDefenceSite && !fieldSite && !economySite)
         yardTurn.crimeServiceSite = Coord::Invalid();
 }
 
