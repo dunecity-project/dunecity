@@ -1631,14 +1631,29 @@ The economy itself grows on fresh games (handmade DuneCity maps, 208 games, both
 population at minute 60 **+4,174 / +6,171** (+8% / +12%), tax at minute 60 **+1,664 / +2,080**
 (+14% / +18%), mean army **+1.6k / +2.0k** (+9% / +11%), all intervals above 0.
 
+**Targeted confirmation** (pre-registered: economy + MassHold against control, fresh games only, on
+the weak seat and generated DuneCity maps where the effect showed; source `c80e83a01`; the weak-seat
+cells raised to 48 seeds, new 160x160 DuneCity weak-seat cells, 30 more seeds per DuneCity ladder map;
+`economy/target.py`), 288 games per arm:
+
+| Set | fresh games | economy + MassHold | better / worse / same | seat won / eliminated (control) |
+|---|---|---|---|---|
+| weak seat, 128x128 (1v1 both starts, 4P FFA) | 96 | +0.104 [-0.018, +0.234] | 12 / 6 / 78 | 29 / 61 (23 / 67) |
+| weak seat, 160x160 | 72 | +0.132 [-0.002, +0.271] | 11 / 5 / 56 | 25 / 43 (21 / 45) |
+| Brutal v Hard ladder, DuneCity 128/160 | 120 | +0.044 [-0.023, +0.117] | 5 / 2 / 113 | 94 / 25 (91 / 27) |
+| all | 288 | **+0.086 [+0.025, +0.148]** (2,000 resamples [+0.027, +0.150]) | 28 / 13 / 247 | 148 / 129 (135 / 139) |
+
+The confirmation holds: on generated DuneCity maps, and above all for the weaker house, economy +
+MassHold places better than the native AI. On the handmade DuneCity maps it stays level.
+
 **Decision.** Both stay default off for now. The economy package is the first change in this series
 that measurably strengthens the AI: a larger city, more tax and a larger army, replicated on fresh
 games; better placement where the AI is the weaker side or on generated DuneCity maps (positive in the
 screen and in the confirmation), level on the handmade DuneCity maps. MassHold on top is slightly
 better in every set. Turret clusters undo it. The fresh-game interval alone still includes 0 (the
-pooled one, which includes the selecting screen, does not), so a default needs a confirmation where
-the effect lives (weak seat and generated DuneCity maps, more seeds), the Fortress/Brutal/`/weak`
-checks and the four mandatory AI gates.
+pooled one, which includes the selecting screen, does not); the targeted confirmation above then
+cleared 0 where the effect lives. A default still needs the Fortress/Brutal/`/weak` checks and the
+four mandatory AI gates (MassHold also acts outside the city simulation).
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
