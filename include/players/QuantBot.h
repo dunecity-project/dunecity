@@ -2052,6 +2052,9 @@ private:
     /// MassHold: free troops (\a ids) not yet at the home rally walk there in Area Guard;
     /// returns how many were ordered.
     int gatherHeldMass(const std::vector<Uint32>& ids);
+    /// MassHold applies: the switch is on and this is a city skirmish game (city simulation on,
+    /// custom game), the economy package's scope (docs/formations.md, "Default-change checks").
+    bool massHoldActive() const;
     /// Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off; docs/formations.md
     /// "Counter-punch, leader raids and ganging up"). Derived from live state and the saved wave,
     /// defence and sighting state at each attack check; nothing new is saved.

@@ -2135,6 +2135,13 @@ int64_t QuantBot::turretSupportNear(const ObjectBase* building) const {
     return support;
 }
 
+bool QuantBot::massHoldActive() const {
+    // Vanilla and campaign games are left alone: there MassHold measured level with a negative
+    // point estimate and alone lost the vanilla smoke game Hard v Easy 29505 (2026-11-22).
+    return botConfig().force.massHold && gameMode == GameMode::Custom
+        && currentGame && currentGame->isCitySimEnabled();
+}
+
 int QuantBot::gatherHeldMass(const std::vector<Uint32>& ids) {
     Coord point = armyAssemblyAnchor();
     if (point.isInvalid()) point = findBaseCentre(getHouse()->getHouseID());

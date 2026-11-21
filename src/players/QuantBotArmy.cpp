@@ -449,7 +449,7 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
     // MassHold (default off): the emergency answer to an attack on something we own is held
     // like the base scramble's - nobody goes when everything in reach, the troops already
     // fighting it and our turrets beside it cannot match the threat.
-    if (botConfig().force.massHold && assetEmergency && !sizedWorker && !clearingSpice
+    if (massHoldActive() && assetEmergency && !sizedWorker && !clearingSpice
         && !intruder->isAFlyingUnit() && campaignWorkerCoverage == 0) {
         int64_t reachable=0;
         for (const auto& candidate : candidates)
@@ -795,7 +795,7 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
     // Our turrets beside the building also fight it: with MassHold they count towards the
     // answer, and when they and the troops already there cover the sized answer nobody new goes.
     int64_t turretSupport=0;
-    if (botConfig().force.massHold) {
+    if (massHoldActive()) {
         int64_t reachable=0;
         std::vector<Uint32> inReach;
         for (const auto& candidate : candidates)

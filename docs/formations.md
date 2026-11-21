@@ -1405,7 +1405,8 @@ the two defence paths in `QuantBotArmy.cpp`; constants in `ForceConcentrationPol
   within 40 tiles cannot even match the threat, nobody new goes either, and those troops gather at
   the home rally in Area Guard (`defence_mass_hold`; hunters are never recalled). Otherwise the
   sized answer is sent with the turrets counted. The emergency response path (assets not handled
-  by the base scramble) applies the same two tests.
+  by the base scramble) applies the same two tests. Since 2026-11-22 only in city skirmish games
+  (city simulation on, custom game); see "Default-change checks" below for why.
 
 **Save continuation (30 game minutes, minute 319-349, every QuantBot on the arm's style; source
 `82572fa41`, TurretClusters v1).** One
@@ -1761,6 +1762,57 @@ strong as v1 where v1 is strongest, with the most tax, and the only version that
 lobby against control (+0.137 at 240 minutes). It stays default off. A default needs the
 Fortress/Brutal/`/weak` checks (tech-5 weak seat -0.083 [-0.264, +0.083] in the screen) and the four
 mandatory AI gates; MassHold, part of the package, also acts outside the city simulation.
+
+### Default-change checks (economy v5 + anchoring, 2026-11-22)
+
+Stefan: "yes run them". Results and scripts: `~/Documents/projects/outputs/ai-nobuildup-20261121/default-checks/`
+(`defchk.py`, `defchk.md`).
+
+**Fortress, Brutal and the weaker house** (staging `203b693d5`, AWS, 1,152 games; the candidate is the
+first QuantBot seat with `--seat-style economy-anchor`, control plays the same game ids natively;
+paired placement difference, 95% bootstrap). The Fortress duels are new opt-in scenario cells
+(`skirmish/fortress-1v1-{qh,qb}-mirror-rs{128,160,192}`, vanilla and DuneCity, both starts: the
+`formation-duel.py` Fortress duel, which cannot take a seat style). The tech-5 weak-seat cells now
+have 48 seeds; the screen's first 16 replay unchanged.
+
+| Check | games | control seat score | difference [95% CI] | better / worse / same | time-outs cand (control) |
+|---|---|---|---|---|---|
+| Fortress 1v1, Hard mirror, vanilla / DuneCity | 48 / 48 | -0.125 / +0.021 | +0.016 [+0.000, +0.047] / +0.052 [-0.104, +0.219] | 1/0/47, 6/4/38 | 1 (0), 10 (4) |
+| Fortress 1v1, Brutal mirror, vanilla / DuneCity | 48 / 48 | -0.167 / -0.078 | +0.042 [+0.000, +0.125] / -0.016 [-0.125, +0.078] | 1/0/47, 1/1/46 | 0 (0), 2 (3) |
+| **Fortress, all** | 192 | -0.087 | +0.023 [-0.026, +0.076] | 9 / 5 / 178 | 13 (7) |
+| Brutal seat v Hard, vanilla long ladder 128/160 | 96 | +0.542 | +0.042 [+0.000, +0.104] | 2 / 0 / 94 | 0 (0) |
+| **Brutal, all** (Brutal mirrors + vanilla ladder) | 192 | +0.210 | +0.027 [-0.010, +0.073] | 4 / 1 / 187 | 2 (3) |
+| weak seat, vanilla: 1v1 Hard v Brutal / Hard v three Brutal | 96 / 48 | -0.583 / -0.000 | +0.000 / -0.028 [-0.111, +0.056] | 0/0/96, 2/5/41 | 0 (0), 0 (1) |
+| weak seat tech 5, DuneCity: screen seeds / 32 fresh seeds | 48 / 96 | -0.083 / -0.229 | -0.083 [-0.264, +0.083] / +0.076 [-0.014, +0.174] | 4/6/38, 9/3/84 | 0 (0) |
+| **weak seat, all** | 288 | -0.285 | +0.007 [-0.037, +0.053] | 15 / 14 / 259 | 0 (1) |
+
+Not worse anywhere; the tech-5 dip does not replicate on fresh seeds. DuneCity screen and
+confirmation games (the strength evidence) are above.
+
+**Mandatory gates, defaults on** (gate-only commit `709a3e8ef` on branch
+`candidate/economy-anchor-default`: the five switches default to true; staging unchanged).
+`quantbot_all_against_atreides` 6/6 (29.6-35.0 min), `quantbot_all_against_atreides_dune2r` 7/7,
+`quantbot_ffa_army_deploys` PASS (seed 9105 eliminates at 26.6 min), `dunelegacy_tests` PASS;
+**`quantbot_scenario_matrix` FAIL** on both AWS workers: `ladder/QH-v-QE-rs-vanilla/vanilla/29505`,
+Easy won at 42.77 min. The same smoke test passes at staging `203b693d5` (defaults off).
+
+**Cause: MassHold in vanilla.** The failing game with `--style mass-hold` alone is identical to the
+whole package (Easy at 42.77 min); without it Hard wins at 22.4 min. The city switches never run in
+vanilla. Decision log (`--keep-traces`, Hard house): without MassHold, attacks on its buildings bring
+the whole army 67 times (`base_scramble`), 12 worker defences are declined, and it attacks at 16.9
+min (24 units) and 20.7 min (40); with it, `base_scramble` 14, `defence_mass_hold` 124 (troops in
+reach plus turrets below the threat while its army is busy elsewhere), `defence_turret_covered` 66,
+227 sized worker defences declined, and no wave after 5.7 min (army threshold 7,000, it peaks at
+6,500). Easy raids it 20 times with 2-8 units, its harvesters fall from 25 (minute 24) to 1 (36),
+and it never rebuilds. One seed, not a ladder shift: Hard v Easy on the 90 vanilla ladder games
+with every QuantBot on the package wins 89 (88 without, 2 time-outs).
+
+**MassHold is now scoped to city skirmish games** (`QuantBot::massHoldActive()`: switch on, city
+simulation on, custom game - the economy package's scope). Vanilla, Dune2R and campaign games no
+longer hold. Evidence for the scope: in vanilla MassHold measured -0.014 [-0.051, +0.023] (260
+handmade games, above) and changed 1-7 of 48 games per vanilla set here, while Stefan's trickle
+complaint and the package's gains are all in DuneCity city games; there it behaves exactly as
+screened (city mode follows the mod). The vanilla MassHold rows above were measured before the scope.
 
 ### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
 
