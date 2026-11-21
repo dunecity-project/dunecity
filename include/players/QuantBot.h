@@ -2026,10 +2026,10 @@ private:
     /// economy project (a Nuclear Plant, else a Palace with its district site).
     void planCityEconomyProjects(BuildPass& pass);
     void chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
-    /// PalaceDistricts: the Palace site with the most R+C lots within kPalaceReachTiles that no
-    /// palace reaches yet (at least kPalaceDistrictMinLots), its footprint free or only own lots of
-    /// low density, fewest such lots first; invalid when none.
-    Coord findPalaceDistrictSite();
+    /// PalaceDistricts: the site for \a item (Palace or Stadium) with the most R+C lots within
+    /// kPalaceReachTiles that no Palace or Stadium reaches yet (at least kPalaceDistrictMinLots), its
+    /// footprint free or only own lots of low density, fewest such lots first; invalid when none.
+    Coord findPalaceDistrictSite(Uint32 item);
     bool turretClustersActive() const;
     int clusterTurretGoal() const;
     /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.

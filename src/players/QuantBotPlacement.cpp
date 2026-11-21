@@ -502,8 +502,8 @@ bool QuantBot::preservesGroundAccess(Uint32 item, Coord pos, const std::vector<U
 bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& zones) const {
     zones.clear();
     auto* sim = currentGame->isCitySimEnabled() ? currentGame->getCitySimulation() : nullptr;
-    // PalaceDistricts (default off): a palace may displace own low-density lots of any land value.
-    const bool palace = item == Structure_Palace && botConfig().force.palaceDistricts;
+    // PalaceDistricts (default off): a Palace or Stadium may displace own low-density lots of any land value.
+    const bool palace = (item == Structure_Palace || item == Structure_Stadium) && botConfig().force.palaceDistricts;
     if (!sim || (!palace && item != Structure_HeavyFactory && item != Structure_NuclearPlant && item != Structure_WindTrap)) return false;
     const Coord size = getStructureSize(item);
     bool range = false;
@@ -524,18 +524,19 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
     return range && !zones.empty() && zones.size() <= 4;
 }
 
-Coord QuantBot::findPalaceDistrictSite() {
+Coord QuantBot::findPalaceDistrictSite(Uint32 item) {
     AITelemetry::PerformanceScope perfScope("ai.findPalaceDistrictSite", getGameCycleCount(), getHouse()->getHouseID());
     namespace Force = ForceConcentrationPolicy;
     if (!currentGame->isCitySimEnabled()) return Coord::Invalid();
     const int w = getMap().getSizeX(), h = getMap().getSizeY(), reach = Force::kPalaceReachTiles;
-    const Coord size = getStructureSize(Structure_Palace);
+    const Coord size = getStructureSize(item);
+    auto landmark = [](Uint32 id) { return id == Structure_Palace || id == Structure_Stadium; };
     std::vector<Coord> palaces;
     for (const auto* structure : getStructureList())
-        if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && structure->getItemID() == Structure_Palace)
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && landmark(structure->getItemID()))
             palaces.push_back(structure->getLocation() + Coord(1, 1));
     for (const auto& entry : reservedStructures)
-        if (entry.second.item == Structure_Palace) palaces.push_back(entry.second.location + Coord(1, 1));
+        if (landmark(entry.second.item)) palaces.push_back(entry.second.location + Coord(1, 1));
     // R/C lot origins no palace reaches yet, as a prefix-sum grid.
     std::vector<int> sum(size_t(w + 1) * (h + 1), 0);
     auto at = [&](int x, int y) -> int& { return sum[size_t(y) * (w + 1) + x]; };
@@ -569,15 +570,15 @@ Coord QuantBot::findPalaceDistrictSite() {
         if (c.lots * 10 <= bestScore) break;   // sorted: nothing later can beat the best
         const Coord pos(c.x, c.y);
         std::vector<Uint32> cleared;
-        const bool redevelop = redevelopmentZones(Structure_Palace, pos, cleared);
-        if (!redevelop && !placeableAmongOwnUnits(c.x, c.y, size.x, size.y, Structure_Palace)) continue;
+        const bool redevelop = redevelopmentZones(item, pos, cleared);
+        if (!redevelop && !placeableAmongOwnUnits(c.x, c.y, size.x, size.y, item)) continue;
         if (overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
-            || dangerAt(pos, size) > 0 || !preservesGroundAccess(Structure_Palace, pos)
-            || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, Structure_Palace).preservesConnections) continue;
+            || dangerAt(pos, size) > 0 || !preservesGroundAccess(item, pos)
+            || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, item).preservesConnections) continue;
         const int score = c.lots * 10 - int(cleared.size()) * 30;
         if (score > bestScore) { bestScore = score; best = pos; bestLots = c.lots; bestCleared = int(cleared.size()); }
     }
-    traceDecision("palace_district_site", AITelemetry::Record().set("valid", best.isValid()).set("x", best.x)
+    traceDecision("palace_district_site", AITelemetry::Record().set("item", item).set("valid", best.isValid()).set("x", best.x)
         .set("y", best.y).set("lots", bestLots).set("cleared", bestCleared).set("candidates", int(candidates.size()))
         .set("palaces", int(palaces.size())));
     return best;

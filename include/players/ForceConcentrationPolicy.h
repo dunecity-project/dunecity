@@ -350,25 +350,24 @@ constexpr int kGangUpOwnBps = 15000;
 // nuclear to free up space." A Nuclear Plant (3x3, 2,000 power) replaces 20 Wind Traps (2x2 each);
 // a Palace pays R+C tax and adds +40 land value within 8 tiles (tax scales with land value).
 
-/// NuclearConsolidation: from this many Wind Traps a Nuclear Plant is funded ahead of units while
+/// NuclearConsolidation: from this many Wind Traps (v1: 10) a Nuclear Plant is funded ahead of units while
 /// the Wind Traps cannot yet be retired, and Wind Traps are demolished (nearest the city first)
 /// while produced power minus their output still covers demand plus the city power reserve.
-constexpr int kConsolidateWindTraps = 10;
+constexpr int kConsolidateWindTraps = 3;
 /// ... and always keeps this many: a Wind Trap is the prerequisite of the Nuclear Plant (and of the
 /// refinery, radar and factories), so retiring the last one makes the next reactor unbuildable.
 constexpr int kKeepWindTraps = 2;
-/// PalaceDistricts: one Palace per this many R+C lots, at most kPalaceDistrictsMax, each sited
-/// where at least kPalaceDistrictMinLots R+C lots not yet in a palace's reach stand within
-/// kPalaceReachTiles of its centre; own lots of at most kPalaceClearDensity in its footprint are
-/// demolished (at most 4), nothing else.
-constexpr int kPalaceLotsPerPalace = 30;
-constexpr int kPalaceDistrictsMax = 4;
-constexpr int kPalaceDistrictMinLots = 12;
+/// PalaceDistricts: every R+C district gets a land-value landmark - a Palace (R+C tax and +40 land
+/// value within kPalaceReachTiles) where one can be built, else a Stadium (the same +40, tech 4) -
+/// wherever at least kPalaceDistrictMinLots R+C lots that no Palace or Stadium reaches yet stand
+/// within kPalaceReachTiles of its centre; no other cap (Stefan, 2026-11-21: "we want the ai to
+/// increase its land value to get more tax. why would we limit"). Own lots of at most
+/// kPalaceClearDensity in its footprint are demolished (at most 4), nothing else.
+/// v1 (Palaces only, one per 30 R+C lots, at most 4, 12 lots per site) is recorded in
+/// docs/formations.md, "Economy: nuclear consolidation and palace districts".
+constexpr int kPalaceDistrictMinLots = 8;
 constexpr int kPalaceReachTiles = 8;
 constexpr int kPalaceClearDensity = 1;
-inline int palaceDistrictGoal(int residentialAndCommercialLots) {
-    return std::clamp(residentialAndCommercialLots / kPalaceLotsPerPalace, 1, kPalaceDistrictsMax);
-}
 
 /// MassHold: our live turrets within this many tiles of an attacked building fight for it.
 constexpr int kMassTurretSupportTiles = 10;

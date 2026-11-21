@@ -1084,15 +1084,19 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         }
     }
     if (force.palaceDistricts && pass.economyProject == NONE_ID && pass.stablePower) {
+        // Every R+C district gets a land-value landmark: a Palace where one can be built (one only
+        // with the Only One Palace option), else a Stadium; one pending at a time.
         const int lots = pass.itemCount[Structure_ZoneResidential] + pass.itemCount[Structure_ZoneCommercial];
-        int goal = Force::palaceDistrictGoal(lots);
-        if (getGameInitSettings().getGameOptions().onlyOnePalace) goal = 1;
-        if (lots >= Force::kPalaceDistrictMinLots && pass.itemCount[Structure_Palace] < goal
-            && buildable(Structure_Palace)) {
-            pass.economyProjectSite = findPalaceDistrictSite();
+        const bool palaceCapped = getGameInitSettings().getGameOptions().onlyOnePalace && pass.itemCount[Structure_Palace] >= 1;
+        const Uint32 item = !palaceCapped && buildable(Structure_Palace) ? Uint32(Structure_Palace)
+            : buildable(Structure_Stadium) ? Uint32(Structure_Stadium) : Uint32(NONE_ID);
+        const bool pending = pass.itemCount[Structure_Palace] != getHouse()->getNumItems(Structure_Palace)
+            || pass.itemCount[Structure_Stadium] != getHouse()->getNumItems(Structure_Stadium);
+        if (item != NONE_ID && !pending && lots >= Force::kPalaceDistrictMinLots) {
+            pass.economyProjectSite = findPalaceDistrictSite(item);
             if (pass.economyProjectSite.isValid()) {
-                pass.economyProject = Structure_Palace;
-                pass.economyProjectReserve = data[Structure_Palace][houseID].price;
+                pass.economyProject = item;
+                pass.economyProjectReserve = data[item][houseID].price;
             }
         }
     }
@@ -1103,7 +1107,7 @@ void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, Yard
         || yardTurn.skipRemainingStructureLogic || pass.orderedThisTick.count(pass.economyProject)
         || !campaignAvailableToBuild(turn.pBuilder, pass.economyProject)) return;
     const Uint32 item = pass.economyProject;
-    const bool palace = item == Structure_Palace;
+    const bool palace = item == Structure_Palace || item == Structure_Stadium;
     if (pass.money < pass.economyProjectReserve) {
         yardTurn.skipRemainingStructureLogic = true;
         yardTurn.serviceSavingHold = true;
