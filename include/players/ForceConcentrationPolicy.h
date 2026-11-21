@@ -354,6 +354,9 @@ constexpr int kGangUpOwnBps = 15000;
 /// the Wind Traps cannot yet be retired, and Wind Traps are demolished (nearest the city first)
 /// while produced power minus their output still covers demand plus the city power reserve.
 constexpr int kConsolidateWindTraps = 10;
+/// ... and always keeps this many: a Wind Trap is the prerequisite of the Nuclear Plant (and of the
+/// refinery, radar and factories), so retiring the last one makes the next reactor unbuildable.
+constexpr int kKeepWindTraps = 2;
 /// PalaceDistricts: one Palace per this many R+C lots, at most kPalaceDistrictsMax, each sited
 /// where at least kPalaceDistrictMinLots R+C lots not yet in a palace's reach stand within
 /// kPalaceReachTiles of its centre; own lots of at most kPalaceClearDensity in its footprint are
