@@ -1455,11 +1455,29 @@ buildings its units no longer feed piecemeal are left to the turrets.
 (off 87k); Harkonnen keeps 551 buildings (off 594). TurretClusters placed 10-11 Rocket Turrets for
 Neutral; Harkonnen's cores were already full (`goal_met`).
 
-**Decision.** Both stay default off. Neither clears the default rule on this lobby: 120-minute
-games time out, so placement cannot show a difference. MassHold does what was asked (no piecemeal
-defence; the army builds up and attacks as a body) and in the save it cut the leader's kills by
-40%; TurretClusters buys survival with army. The evidence a default change needs is a long-game
-screen (decided games, 240+ minutes) plus the four mandatory AI gates.
+**240 minutes** (opt-in cell `4p-ffa-fortress-nospice-city40k-long`, 48 seeds, source `02841808d`,
+results `~/Documents/projects/outputs/ai-nobuildup-20261121/long/`, `END_MINUTE=240 python3 long/analyse.py`).
+These games do not finish either: 1 of 192 decided, 6 of 192 houses eliminated in control (3 of them
+the seat), 5 / 2 / 1 with MassHold / TurretClusters / both.
+
+| Metric (candidate seat, 48 games) | control | MassHold | TurretClusters | both |
+|---|---|---|---|---|
+| placement score | -0.28 | +0.02 [-0.03, +0.08] | +0.01 [-0.03, +0.06] | +0.01 [-0.03, +0.06] |
+| seat eliminated | 3 | 2 | 1 | 1 |
+| mean army | 9.8k | **-0.7k [-1.2, -0.2]** | **-2.7k [-3.6, -1.8]** | **-2.9k [-3.7, -2.0]** |
+| share of all armies at 240 | 25.3% | -1.2 [-3.3, +0.9] | **-4.0 [-6.5, -0.9]** | **-4.4 [-6.5, -2.0]** |
+| structures at the end | 262 | +2.2 [-6.4, +14.7] | **+85.5 [+71.2, +102.5]** | **+85.9 [+70.0, +105.0]** |
+| kill - loss | -4.6k | -0.4k [-11.1, +10.0] | +12.8k [-0.8, +25.9] | **+15.8k [+4.4, +26.9]** |
+| seat weakest in control (9 games): placement score | -0.50 | +0.19 [+0.00, +0.46] | +0.17 [+0.00, +0.42] | +0.17 [+0.00, +0.42] |
+| seat weakest: kill - loss | -13.3k | -1.3k [-17.3, +14.4] | **+27.7k [+1.7, +54.0]** | **+23.3k [+5.8, +41.6]** |
+
+**Decision.** Both stay default off: no placement interval is above 0, because even 240-minute games
+of this lobby are time-outs. When the seat is the weakest, every arm only ever improves its place
+(lower bound +0.00) and the turret arms trade clearly better, which is the case Stefan reported;
+overall the turret arms turtle (85 more buildings, a smaller army, a better trade, fewer
+eliminations) and MassHold is neutral. In the save, MassHold is what stops the trickle and cut the
+leader's kills by 40%. A default needs a positive placement interval on lobbies that finish, not
+worse on Fortress, Brutal and `/weak`, and the four mandatory AI gates.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
