@@ -1494,15 +1494,29 @@ Most of these games are decided (136 of 176 in control), so placement now separa
 | all (176) | +0.295 | +0.030 [-0.029, +0.093] | **-0.180 [-0.295, -0.067]** | **-0.193 [-0.313, -0.077]** |
 | seat won / eliminated / time-outs | 81 / 60 / 40 | 87 / 57 / 38 | 61 / 76 / 46 | 61 / 77 / 51 |
 
+**MassHold, four times the games** (same source `b5ab5a018` and result folders; 20 control seeds
+`10801 + 1009 i` on each handmade set and 18 ladder seeds per cell, the games already played
+skipped): 688 games per arm, 509 decided in control.
+
+| Set (games) | control seat score | MassHold |
+|---|---|---|
+| `cv` handmade, vanilla (260) | +0.139 | -0.014 [-0.051, +0.023] |
+| `cd` handmade, DuneCity (260) | +0.273 | +0.014 [-0.034, +0.062] |
+| `mx` ladder, skirmish, CY (168) | +0.493 | +0.049 [-0.027, +0.127] |
+| all (688) | +0.276 | +0.012 [-0.017, +0.042] |
+| all without the 4P DuneCity map's duplicate games (668) | | +0.009 [-0.021, +0.040]; 2,000 resamples [-0.023, +0.041] |
+
+Seat won / eliminated / time-outs: control 315 / 225 / 179, MassHold 323 / 224 / 168. 552 of the 668
+games end with the same place, 58 better and 58 worse.
+
 **Decision.** TurretClusters is rejected: where games are decided it loses (-0.18 placement over 176
 games, 20 fewer wins, 16 more eliminations; worst in the DuneCity mod and on the long ladder maps).
 Turtling keeps a house alive in a game nobody finishes, and costs it the games that do finish. It
-stays a default-off switch, kept as negative evidence. MassHold is never worse in any set and
-slightly ahead overall (+0.03 [-0.03, +0.09], 6 more wins, 3 fewer eliminations), it is what stops
-the trickle in the save, and when the seat is the weakest in the 240-minute lobby it only ever
-improved its place (+0.19 [+0.00, +0.46]); but no interval is above 0 yet, so it also stays default
-off. Its default needs a larger screen of the same map set (roughly four times the games for a
-+0.03 effect), the Fortress/Brutal/`/weak` checks and the four mandatory AI gates.
+stays a default-off switch, kept as negative evidence. MassHold is level (section 7.2): it removes
+the trickle seen in the save and does not change how often the AI wins or loses, on any of the three
+map sets. It stays default off; a default change for the behaviour alone would be a choice the
+placement rule does not make, and would still need the Fortress/Brutal/`/weak` checks and the four
+mandatory AI gates.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
