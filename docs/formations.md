@@ -1361,6 +1361,106 @@ including the permanent positive/negative siting regression. Keep the site guard
 construction-correctness fix, **not a claimed FFA draw-rate cure**. `FinishWhenLeading`
 stays on; the unaccepted zone experiments remain excluded.
 
+### Turret clusters and the held mass (`TurretClusters`, `MassHold`, 2026-11-21, default off)
+
+**Trigger.** Stefan's MacBook Air save `nobuildup` (1.0.874, game minute 319, a 4P no-spice city
+free-for-all on a symmetric 128x128 Random Skirmish map, Fortress bases, City 40,000, all four
+houses QuantBot Brutal; his own house was already out). "The two weaker AIs are sending one unit in
+at a time and killing them instead of building a big mass for a counter offensive with momentum."
+Then: "for defence the AI should just build more rocket turret clusters and then build up, test it out."
+
+**What the save shows (10-minute headless continuation, AI decision log).** Sardaukar has a 38,000
+army and sends waves of 44-124 units. Harkonnen (2,800 army, ~270 credits) and Neutral (1,500,
+~400 credits) launch no wave at all (`attack_deferred: outnumbered_front`, correctly), but every
+Trooper they can afford goes straight into the base defence: `base_scramble` sends exactly one unit
+60 (Harkonnen) and 47 (Neutral) times in ten minutes, against threats of 1,000-5,000 credits;
+1-member musters are released after their 15 s timeout 30 and 31 times; an emergency response sent
+one unit against a 6,529-credit threat. The sized defence (X) refuses an unwinnable answer for a
+worker raid, not for an attacked building, and `SimpleArmyPolicy::reinforcements` / `sizedPool` send
+whatever is in reach when it falls short. Turrets are not what is missing: at minute 349 Harkonnen
+owns 313 rocket turrets, Sardaukar 211, Neutral 70 (city protection builds them; Harkonnen builds
+~30 and loses 22-33 every 30 minutes). The perimeter-turret rule (U) never fired: it needs the
+turret's price plus 750 credits, and every credit became a Trooper first.
+
+**The switches** (`[Force Concentration]`, hashed only when on; code in `QuantBotForce.cpp`,
+`QuantBotPlacement.cpp::findClusterTurretLocation`, `QuantBotBuildYard.cpp::chooseYardTurretCluster`,
+the two defence paths in `QuantBotArmy.cpp`; constants in `ForceConcentrationPolicy.h`):
+
+- `TurretClusters`: while outnumbered by the enemy estimate (125%), every core building (yard,
+  heavy/light factory, barracks/WOR, refinery, port, high-tech, repair yard, in that order) is filled
+  up to 8 turrets within 5 tiles, at most 40 in all. Each pass with a turret wanted and a legal site,
+  every non-yard producer protects the turret's price (units wait) and the yard saves for it ahead
+  of optional growth (`save_turret_cluster`, `turret_cluster`; power first for a Rocket Turret).
+  Rocket Turrets when a yard can build them; while none can, the yard upgrade that unlocks them if
+  the yard is allowed it now, else Gun Turrets. Sites: next to the cluster's turrets first, then
+  facing the observed front, then close to the core. `turret_cluster_plan` traces the goal, the
+  count and why nothing was ordered. History: v1 (one turret per 1,000 credits of the enemy lead,
+  4 per core within 4 tiles, max 16) and v2 (per 1,000 credits of the whole estimate, 8 per core,
+  max 40) never placed a turret in fresh games - a Fortress start rings each core with 12 Gun
+  Turrets, and Rocket Turrets need a level-2 yard that the tech level does not allow in the first
+  hour of this lobby (in a 60-minute trace the weak seat built no rocket turret by any rule).
+- `MassHold`: our live turrets within 10 tiles of an attacked building (Rocket Turrets while powered)
+  count towards its defence. When they and the troops already fighting cover the sized answer
+  (1.5x the threat) nobody new goes (`defence_turret_covered`); when they plus every free troop
+  within 40 tiles cannot even match the threat, nobody new goes either, and those troops gather at
+  the home rally in Area Guard (`defence_mass_hold`; hunters are never recalled). Otherwise the
+  sized answer is sent with the turrets counted. The emergency response path (assets not handled
+  by the base scramble) applies the same two tests.
+
+**Save continuation (30 game minutes, minute 319-349, every QuantBot on the arm's style; source
+`82572fa41`, TurretClusters v1).** One
+deterministic replay per arm, so a demonstration, not a statistic:
+
+| Arm | Single-unit sends Harkonnen / Neutral | Harkonnen army 349 (units) / killed / lost | Neutral army 349 | Sardaukar army 349 / killed | Harkonnen waves |
+|---|---|---|---|---|---|
+| off | 139 / 144 | 2,500 (12) / 150,810 / 59,810 | 1,900 | 32,650 / 87,250 | none |
+| TurretClusters (v1) | 118 / 155 | 2,350 (12) / 170,120 / 57,540 | 1,550 | 28,800 / 87,220 | none |
+| MassHold | 1 / 29 | 3,650 (24) / 191,750 / 50,790 | 6,600 (33) | 32,950 / 56,660 | 9 (16-39 units) |
+| both (v1 clusters) | 7 / 30 | 2,550 (18) / 209,200 / 53,280 | 690 | 28,150 / 50,410 | 5 (22-38 units) |
+
+MassHold ends the trickle; the held Troopers become waves of 16-39 units (Harkonnen) and Neutral
+ends with 33 units instead of 8. TurretClusters v1 found Harkonnen's cores already covered (313
+turrets) and Neutral's core built up too densely for a legal site most of the time (770 of 903
+searches found none); it ordered one turret.
+
+**Fresh games: seat-only screen** (`tests/ai/scenario-matrix.py --cells 4p-ffa-fortress-nospice-city40k
+--seat-style STYLE`, Stefan's lobby, 24 seeds, 120 minutes, AWS, source `14096ba62`; the candidate
+is the first seat, rotated over Harkonnen/Atreides/Ordos/Sardaukar; results and `analyse.py` in
+`~/Documents/projects/outputs/ai-nobuildup-20261121/v3/{control,turret-clusters,mass-hold,turret-mass}`).
+Control replays to the same 24 digests at `82572fa41`, `c56b636f8` and `14096ba62` (the switches
+are inert when off). 23 of 24 games time out at 120 minutes, so placement barely moves (seat score
++0.03 [+0.00, +0.09] for every arm: the one game in which the seat was eliminated in control); the
+comparison is on the seat's own state, paired by game (95% bootstrap; bold = interval excludes 0):
+
+| Metric (candidate seat) | control | TurretClusters | MassHold | both |
+|---|---|---|---|---|
+| mean army over the game | 9.8k | **-2.7k [-3.8, -1.7]** | -0.0k [-0.8, +0.7] | **-3.0k [-4.0, -2.0]** |
+| share of all armies at 120 | 24.7% | -4.9 [-9.5, +0.3] | +1.9 [-2.6, +6.5] | **-7.0 [-10.2, -3.5]** |
+| structures at the end | 270 | **+89.5 [+63.6, +120.8]** | **-8.4 [-16.5, -0.7]** | **+85.5 [+61.0, +117.5]** |
+| enemy value killed | 212k | **-39.7k [-55.7, -24.4]** | -2.4k [-8.5, +3.3] | **-39.8k [-55.4, -25.4]** |
+| own value lost | 212k | **-43.0k [-56.1, -29.1]** | -1.4k [-8.0, +4.1] | **-42.7k [-55.8, -28.8]** |
+| kill - loss | +0.1k | +3.3k [-5.6, +12.6] | -1.0k [-8.0, +5.6] | +2.9k [-5.7, +11.6] |
+| seat eliminated (of 24) | 1 | 0 | 1 | 0 |
+| seat weakest in control (6 games): army share at 120 | 15.3% | +3.2 [-4.9, +13.4] | +5.5 [-1.1, +13.4] | +1.2 [-3.7, +7.5] |
+| seat weakest in control: structures at the end | 224 | **+121 [+52, +215]** | -15.5 [-38.0, +5.8] | **+122 [+52, +217]** |
+
+TurretClusters turns the seat into a turtle: about 90 more structures (the turrets), never
+eliminated, a 28% smaller army and much less fighting either way - it does not build the army up.
+MassHold keeps the army (a weak seat ends with a larger share, its sorties are slightly larger,
++1.6 [-0.2, +3.5] units at the peak away from base) but loses 8 more buildings a game: the
+buildings its units no longer feed piecemeal are left to the turrets.
+
+**Save continuation with the final code** (`14096ba62`, both switches): Harkonnen launches 7 waves of
+29-51 units, Neutral kills 93k (off 76k) and keeps 312 buildings (off 286), Sardaukar kills 51k
+(off 87k); Harkonnen keeps 551 buildings (off 594). TurretClusters placed 10-11 Rocket Turrets for
+Neutral; Harkonnen's cores were already full (`goal_met`).
+
+**Decision.** Both stay default off. Neither clears the default rule on this lobby: 120-minute
+games time out, so placement cannot show a difference. MassHold does what was asked (no piecemeal
+defence; the army builds up and attacks as a body) and in the save it cut the leader's kills by
+40%; TurretClusters buys survival with army. The evidence a default change needs is a long-game
+screen (decided games, 240+ minutes) plus the four mandatory AI gates.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
