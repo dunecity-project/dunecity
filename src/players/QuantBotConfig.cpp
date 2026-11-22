@@ -371,7 +371,7 @@ QuantBotConfig::QuantBotConfig() {
     force.stadiumDistricts = true;
     force.parkDistricts = false;
     force.landmarkAnchoring = true;
-    force.palaceDenseClearing = false;
+    force.palaceDenseClearing = true;
     force.palaceTurrets = false;
     force.vanillaCoreDefenceThreatBps = 5000;
     force.vanillaArmyCounters = true;  // counters50-S5, default since protocol 119

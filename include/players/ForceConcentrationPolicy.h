@@ -322,9 +322,10 @@ inline int clusterTurretGoal(int64_t own, int64_t enemy) {
 /// turrets", save notdefendpalace; then "you want to protect from ornithopts, so one or more is
 /// fine"): every own Palace keeps kPalaceGuardTurrets Rocket Turrets within kClusterReachTiles -
 /// anti-air, so Gun Turrets neither count nor stand in - bought whenever cash covers the price plus
-/// the city working reserve, never saved for (the TurretClusters lesson: turrets funded ahead of
-/// units lose games). Spare cash only (2,000 above the price) bought 2 turrets in 36 minutes of
-/// notdefendpalace: the houses hold ~400 credits and a Rocket Turret costs 250.
+/// the city working reserve and any Palace or reactor savings, never saved for (the TurretClusters
+/// lesson: turrets funded ahead of units lose games; a guard bought from Palace savings cost 0.4
+/// Palaces a game in the 2026-11-22 screen). Spare cash only (2,000 above the price) bought 2
+/// turrets in 36 minutes of notdefendpalace: the houses hold ~400 credits, a Rocket Turret costs 250.
 constexpr int kPalaceGuardTurrets = 1;
 // ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) ---------------------
 //
@@ -400,7 +401,7 @@ inline int outnumberedPalaceCap(int residentialAndCommercialLots) {
 constexpr int kPalaceReachTiles = 8;
 constexpr int kPalaceClearDensity = 1;
 /// A landmark site scores 10 per R+C lot it reaches (a lot gaining the landmark's +40 land value)
-/// and pays kPalaceClearLotCost per own lot it demolishes. PalaceDenseClearing (default off; Stefan,
+/// and pays kPalaceClearLotCost per own lot it demolishes. PalaceDenseClearing (on since 2026-11-22; Stefan,
 /// 2026-11-22, a mature city in his nobuildup save had no lot at density 1 or below, so no Palace
 /// site): denser lots may go too, each costing its whole tax in the same unit - density times land
 /// value over the landmark's +40 - and a site that clears one must still net kPalaceDistrictMinLots.

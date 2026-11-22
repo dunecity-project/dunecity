@@ -3772,24 +3772,24 @@ TEST_CASE("Campaign helper repair factories only persists OFF and ON with distin
     std::filesystem::remove(path);
 }
 
-TEST_CASE("PalaceDenseClearing defaults off, round trips, hashes and prices a lot by its tax",
+TEST_CASE("PalaceDenseClearing defaults on, round trips, hashes and prices a lot by its tax",
           "[ai][palace][config]") {
     namespace Force = ForceConcentrationPolicy;
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.palaceDenseClearing);
+    REQUIRE(defaults.force.palaceDenseClearing);   // on since 2026-11-22 (docs/formations.md)
     const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-dense-test.ini";
     {
         std::ofstream ini(path);
-        ini << "[Force Concentration]\nPalaceDenseClearing=true\n";
+        ini << "[Force Concentration]\nPalaceDenseClearing=false\n";
     }
     QuantBotConfig loaded;
     REQUIRE(loaded.applyOverrides(path.string()));
-    REQUIRE(loaded.force.palaceDenseClearing);
+    REQUIRE_FALSE(loaded.force.palaceDenseClearing);
     REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
     REQUIRE(loaded.save(path.string()));
     QuantBotConfig restored;
     REQUIRE(restored.applyOverrides(path.string()));
-    REQUIRE(restored.force.palaceDenseClearing);
+    REQUIRE_FALSE(restored.force.palaceDenseClearing);
     REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     std::filesystem::remove(path);
 
@@ -3810,7 +3810,7 @@ TEST_CASE("PalaceTurrets defaults off, round trips and hashes independently", "[
     REQUIRE(ForceConcentrationPolicy::kPalaceGuardTurrets == 1);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-turrets-test.ini";
     std::set<std::string> hashes{defaults.getConfigHash()};
-    for (const char* ini : {"PalaceTurrets=true\n", "PalaceDenseClearing=true\nPalaceTurrets=true\n"}) {
+    for (const char* ini : {"PalaceTurrets=true\n", "PalaceDenseClearing=false\nPalaceTurrets=true\n"}) {
         {
             std::ofstream file(path);
             file << "[Force Concentration]\n" << ini;

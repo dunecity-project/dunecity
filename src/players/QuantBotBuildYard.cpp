@@ -928,7 +928,7 @@ void QuantBot::planTurretClusters(BuildPass& pass) {
     pass.turretClusterUpgradeYard = NONE_ID;
     pass.turretClusterItem = NONE_ID;
     pass.turretClusterPalace = false;
-    if (!botConfig().force.turretClusters) { planPalaceTurrets(pass); return; }
+    if (!botConfig().force.turretClusters) return;
     const int goal = clusterTurretGoal();
     const int have = goal > 0 ? clusterTurrets() : 0;
     const char* reason = goal <= 0 ? "not_outnumbered" : have >= goal ? "goal_met" : nullptr;
@@ -969,12 +969,12 @@ void QuantBot::planTurretClusters(BuildPass& pass) {
     traceDecision("turret_cluster_plan", AITelemetry::Record().set("reason", reason).set("goal", goal)
         .set("cluster_turrets", have).set("reserve", pass.turretClusterReserve)
         .set("own_estimate", int(teamGroundArmyValue())).set("enemy_estimate", int(enemyThreatEstimate())));
-    if (pass.turretClusterReserve <= 0) planPalaceTurrets(pass);
 }
 
 void QuantBot::planPalaceTurrets(BuildPass& pass) {
     // PalaceTurrets (default off, ForceConcentrationPolicy::kPalaceGuardTurrets): city skirmish games,
-    // the economy package's scope; bought when cash covers it, never saved for.
+    // the economy package's scope; bought when cash covers it on top of what the house is saving for
+    // a Palace or reactor (planned after planCityEconomyProjects), never saved for itself.
     namespace Force = ForceConcentrationPolicy;
     if (!botConfig().force.palaceTurrets || gameMode != GameMode::Custom || !currentGame->isCitySimEnabled()
         || pass.turretClusterReserve > 0 || pass.turretClusterUpgradeYard != NONE_ID) return;
@@ -1014,7 +1014,7 @@ void QuantBot::planPalaceTurrets(BuildPass& pass) {
     int price = 0;
     if (!reason) {
         price = currentGame->objectData.data[item][getHouse()->getHouseID()].price;
-        if (pass.money < price + pass.cityWorkingReserve) reason = "cash";
+        if (pass.money < price + pass.cityWorkingReserve + pass.economyProjectReserve) reason = "cash";
     }
     Coord site = Coord::Invalid();
     if (!reason) {
