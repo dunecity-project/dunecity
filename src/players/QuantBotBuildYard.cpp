@@ -985,13 +985,12 @@ void QuantBot::planPalaceTurrets(BuildPass& pass) {
         if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
         if (structure->getItemID() == Structure_Palace)
             palaces.emplace_back(structure->getLocation(), structure->getStructureSize());
-        else if (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
+        else if (structure->getItemID() == Structure_RocketTurret)   // anti-air: Gun Turrets do not count
             turrets.push_back(structure->getLocation());
     }
     if (palaces.empty()) return;
     for (const auto& entry : reservedStructures)
-        if (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)
-            turrets.push_back(entry.second.location);
+        if (entry.second.item == Structure_RocketTurret) turrets.push_back(entry.second.location);
     int unguarded = 0;
     for (const auto& [origin, size] : palaces) {
         int have = 0;
@@ -1009,9 +1008,8 @@ void QuantBot::planPalaceTurrets(BuildPass& pass) {
                 item = Structure_RocketTurret;
                 break;
             }
-            if (item == NONE_ID && campaignAvailableToBuild(yard, Structure_GunTurret)) item = Structure_GunTurret;
         }
-        if (item == NONE_ID) reason = "no_turret_yard";
+        if (item == NONE_ID) reason = "no_rocket_yard";
     }
     int price = 0;
     if (!reason) {
@@ -1028,7 +1026,7 @@ void QuantBot::planPalaceTurrets(BuildPass& pass) {
         pass.turretClusterSite = site;
         pass.turretClusterReserve = price;
         pass.turretClusterPalace = true;
-        reason = item == Structure_RocketTurret ? "rocket_turret" : "gun_turret";
+        reason = "rocket_turret";
     }
     traceDecision("palace_turret_plan", AITelemetry::Record().set("reason", reason)
         .set("palaces", int(palaces.size())).set("unguarded", unguarded).set("money", pass.money)

@@ -2044,7 +2044,7 @@ private:
     /// A legal Rocket Turret site beside the first core (yard, factories, refinery, port,
     /// repair yard, in that order) with fewer than kClusterPerCore turrets: packed next to
     /// the cluster's turrets, facing the observed front. One bounded window per core.
-    /// With \a palaces, the cores are our Palaces and each takes kPalaceGuardTurrets (PalaceTurrets).
+    /// With \a palaces, the cores are our Palaces and each takes kPalaceGuardTurrets Rocket Turrets (PalaceTurrets).
     Coord findClusterTurretLocation(bool palaces = false);
     void chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// PalaceTurrets (default off): plan one Palace guard turret from spare cash into the

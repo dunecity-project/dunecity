@@ -282,7 +282,7 @@ struct QuantBotConfig {
         bool parkDistricts;                    ///< Micropolis parks where they raise our R/C land value (ParkDistrictPolicy).
         bool landmarkAnchoring;                ///< R/C lots fill a landmark's reach, industry stays out; sites count room.
         bool palaceDenseClearing;              ///< A Palace/Stadium site may demolish own R/C lots of any density.
-        bool palaceTurrets;                    ///< Every Palace keeps 4 turrets within 5 tiles, never saved for.
+        bool palaceTurrets;                    ///< Every Palace keeps a Rocket Turret (anti-air) within 5 tiles, never saved for.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

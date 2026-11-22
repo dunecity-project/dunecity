@@ -2410,19 +2410,22 @@ Coord QuantBot::findClusterTurretLocation(bool palaces) {
     using QuantBotInternal::footprintDistance;
     struct Core { int rank; Uint32 id; Coord origin, size; };
     std::vector<Core> cores;
-    std::vector<Coord> turrets;
+    std::vector<Coord> turrets, rockets;   // rockets: the anti-air guard a Palace counts (PalaceTurrets)
     for (const StructureBase* structure : getStructureList()) {
         if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
         if (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
             turrets.push_back(structure->getLocation());
+        if (structure->getItemID() == Structure_RocketTurret) rockets.push_back(structure->getLocation());
         const int rank = palaces ? (structure->getItemID() == Structure_Palace ? 0 : -1)
             : clusterCoreRank(structure->getItemID());
         if (rank >= 0) cores.push_back({rank, structure->getObjectID(), structure->getLocation(), structure->getStructureSize()});
     }
     for (const auto& entry : reservedStructures)
         if (entry.first != planningBuilder
-            && (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret))
+            && (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)) {
             turrets.push_back(entry.second.location);
+            if (entry.second.item == Structure_RocketTurret) rockets.push_back(entry.second.location);
+        }
     std::stable_sort(cores.begin(), cores.end(), [](const Core& a, const Core& b) {
         return a.rank != b.rank ? a.rank < b.rank : a.id < b.id;
     });
@@ -2432,7 +2435,7 @@ Coord QuantBot::findClusterTurretLocation(bool palaces) {
     const int reach = Force::kClusterReachTiles;
     for (const auto& core : cores) {
         int have = 0;
-        for (const Coord turret : turrets)
+        for (const Coord turret : palaces ? rockets : turrets)
             if (footprintDistance(turret, core.origin, core.size) <= reach) ++have;
         if (have >= (palaces ? Force::kPalaceGuardTurrets : Force::kClusterPerCore)) continue;
         const Coord centre(core.origin.x + core.size.x / 2, core.origin.y + core.size.y / 2);

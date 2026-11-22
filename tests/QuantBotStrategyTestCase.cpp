@@ -3807,7 +3807,7 @@ TEST_CASE("PalaceDenseClearing defaults off, round trips, hashes and prices a lo
 TEST_CASE("PalaceTurrets defaults off, round trips and hashes independently", "[ai][palace][config]") {
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.palaceTurrets);
-    REQUIRE(ForceConcentrationPolicy::kPalaceGuardTurrets == 4);
+    REQUIRE(ForceConcentrationPolicy::kPalaceGuardTurrets == 1);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-turrets-test.ini";
     std::set<std::string> hashes{defaults.getConfigHash()};
     for (const char* ini : {"PalaceTurrets=true\n", "PalaceDenseClearing=true\nPalaceTurrets=true\n"}) {

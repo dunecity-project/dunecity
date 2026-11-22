@@ -319,13 +319,13 @@ inline int clusterTurretGoal(int64_t own, int64_t enemy) {
     return outnumbered(own, enemy) ? kClusterTurretsMax : 0;
 }
 /// PalaceTurrets (default off; Stefan, 2026-11-22: "the ai isn't defending palaces with rocket
-/// turrets", save notdefendpalace): every own Palace keeps kPalaceGuardTurrets turrets (any
-/// turret counts) within kClusterReachTiles - Rocket Turrets where a yard can build them, else Gun
-/// Turrets - bought whenever cash covers the price plus the city working reserve, never saved for
-/// (the TurretClusters lesson: turrets funded ahead of units lose games). Spare cash only (2,000
-/// above the price) bought 2 turrets in 36 minutes of notdefendpalace: the houses hold ~400 credits
-/// and a Rocket Turret costs 250.
-constexpr int kPalaceGuardTurrets = 4;
+/// turrets", save notdefendpalace; then "you want to protect from ornithopts, so one or more is
+/// fine"): every own Palace keeps kPalaceGuardTurrets Rocket Turrets within kClusterReachTiles -
+/// anti-air, so Gun Turrets neither count nor stand in - bought whenever cash covers the price plus
+/// the city working reserve, never saved for (the TurretClusters lesson: turrets funded ahead of
+/// units lose games). Spare cash only (2,000 above the price) bought 2 turrets in 36 minutes of
+/// notdefendpalace: the houses hold ~400 credits and a Rocket Turret costs 250.
+constexpr int kPalaceGuardTurrets = 1;
 // ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) ---------------------
 //
 // Stefan, 2026-11-21: the held mass should hit back with momentum. A weak house cannot beat the
