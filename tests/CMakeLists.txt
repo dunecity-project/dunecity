@@ -1158,14 +1158,14 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-body-angle-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/body-angle-probe)
         set_tests_properties(body_angle_probe PROPERTIES TIMEOUT 120 PROCESSORS 2)
-        # A Palace-released Saboteur, human or QuantBot owned, destroys the nearest enemy vehicle and
-        # passes nearer structures and infantry; with no vehicle on the map it takes a structure.
+        # A Palace-released Saboteur, human or QuantBot owned, destroys the nearest enemy building or
+        # vehicle, takes a vehicle that turns up beside it on the way, and keeps an explicit order.
         dunecity_add_test(headless nightly NAME saboteur_target_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-saboteur-target-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/saboteur-target-probe)
         set_tests_properties(saboteur_target_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
-        # The Saboteur vehicle hunt off against on in one binary: 96 seeded Palace releases per arm and
-        # mod against turreted bases; more Saboteurs must destroy a vehicle with the rule on.
+        # The Saboteur hunt off against on in one binary: 96 seeded Palace releases per arm and
+        # mod against turreted bases; more Saboteurs must destroy something with the rule on.
         dunecity_add_test(headless nightly NAME saboteur_effect_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-saboteur-effect-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/saboteur-effect-probe)

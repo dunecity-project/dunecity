@@ -55,7 +55,7 @@ public:
     void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                       const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
 
-    /// The match rule that gives Saboteurs their own hunt (GameOptionsClass::saboteurVehicleHunt).
+    /// The match rule that gives Saboteurs their own hunt (GameOptionsClass::saboteurHunt).
     static bool keepsOwnHunt();
 
     /**

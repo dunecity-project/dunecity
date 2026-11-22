@@ -513,7 +513,7 @@ bool Palace::spawnSaboteur() {
     // Palace (Saboteur::findTarget()). A human owner can still order it somewhere else. With
     // the match rule off (the rule up to 1.0.876) only an AI house's Saboteur hunts.
     const bool hunts = getOwner()->isAI()
-        || currentGame->getGameInitSettings().getGameOptions().saboteurVehicleHunt;
+        || currentGame->getGameInitSettings().getGameOptions().saboteurHunt;
     if(hunts) saboteur->doSetAttackMode(HUNT);
     saboteur->markReleased();
     SDL_Log("SABOTEUR_RELEASED: house=%d object=%u ai=%d cycle=%u", getOwner()->getHouseID(),

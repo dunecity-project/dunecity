@@ -1695,25 +1695,25 @@ TEST_CASE("MOD20 Custom Game tech level defaults to the map's, and is hashed, sa
     }
 }
 
-TEST_CASE("The Saboteur vehicle hunt defaults on and its off state is hashed and carried in the MOD20 byte",
+TEST_CASE("The Saboteur hunt defaults on and its off state is hashed and carried in the MOD20 byte",
           "[saboteur][network][save]") {
     SettingsClass::GameOptionsClass defaults;
-    REQUIRE(defaults.saboteurVehicleHunt);
+    REQUIRE(defaults.saboteurHunt);
     auto off = defaults;
-    off.saboteurVehicleHunt = false;
+    off.saboteurHunt = false;
     REQUIRE(off != defaults);
     REQUIRE(off.getHash() != defaults.getHash());
 
     auto original = makeCoop(false, true);
     auto options = original.getGameOptions();
     options.startTechLevel = GENERATE(0, 5, 9);
-    options.saboteurVehicleHunt = GENERATE(true, false);
+    options.saboteurHunt = GENERATE(true, false);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
     // Bit 7 is the off state; a setup that plays the default rule writes the byte MOD20 always wrote.
     REQUIRE(static_cast<Uint8>(encoded.back())
-            == static_cast<Uint8>(options.startTechLevel | (options.saboteurVehicleHunt ? 0 : 0x80)));
+            == static_cast<Uint8>(options.startTechLevel | (options.saboteurHunt ? 0 : 0x80)));
 
     SECTION("both states round-trip with every tech level") {
         saved.writeUint32(0xabcdef01u);
@@ -1730,7 +1730,7 @@ TEST_CASE("The Saboteur vehicle hunt defaults on and its off state is hashed and
         bytes.resize(bytes.size() - Mod20Bytes);
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
-        REQUIRE(restored.getGameOptions().saboteurVehicleHunt);
+        REQUIRE(restored.getGameOptions().saboteurHunt);
     }
     SECTION("the off bit does not admit a tech level above 9") {
         auto bytes = encoded;

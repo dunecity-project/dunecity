@@ -1,4 +1,4 @@
-// How much does the Saboteur vehicle hunt (GameOptionsClass::saboteurVehicleHunt) change what a
+// How much does the Saboteur hunt (GameOptionsClass::saboteurHunt) change what a
 // Palace-released Saboteur achieves? One binary plays every trial twice, rule off and rule on.
 //
 // A trial is one release from the real Palace special weapon against a seeded enemy position: a
@@ -67,7 +67,7 @@ inline void trial(const std::string& mod, bool ruleOn, const std::string& ownerC
     map << "[Player1]\nCredits=0\nBrain=Team1\n[Player2]\nCredits=0\nBrain=Team2\n";
     settings.general.playerName = humanOwner ? "Owner" : "Enemy";
     auto options = settings.gameOptions;
-    options.saboteurVehicleHunt = ruleOn;
+    options.saboteurHunt = ruleOn;
     auto game = std::make_unique<Game>();
     currentGame = game.get();
     GameInitSettings init("saboteur-effect.ini", map.str(), false, options);
@@ -80,7 +80,7 @@ inline void trial(const std::string& mod, bool ruleOn, const std::string& ownerC
     init.addHouseInfo(foe);
     game->initGame(init);
     game->initializeGameLoop();
-    require(game->getGameInitSettings().getGameOptions().saboteurVehicleHunt == ruleOn, label + ": the rule did not reach the match");
+    require(game->getGameInitSettings().getGameOptions().saboteurHunt == ruleOn, label + ": the rule did not reach the match");
     auto* owner = game->getHouse(HOUSE_ORDOS);
     auto* enemy = game->getHouse(HOUSE_HARKONNEN);
     require(owner != nullptr && enemy != nullptr, label + ": fixture houses missing");

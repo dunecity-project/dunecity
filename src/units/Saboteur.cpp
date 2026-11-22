@@ -71,7 +71,7 @@ int ageSeconds(Uint32 releasedCycle) {
 } // namespace
 
 bool Saboteur::keepsOwnHunt() {
-    return currentGame->getGameInitSettings().getGameOptions().saboteurVehicleHunt;
+    return currentGame->getGameInitSettings().getGameOptions().saboteurHunt;
 }
 
 void Saboteur::markReleased() {

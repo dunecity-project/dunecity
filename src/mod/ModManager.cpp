@@ -1060,7 +1060,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "City Plane Defence") result.cityPlaneDefence = parseBool(value);
             else if (key == "City Plane Bombing") result.cityPlaneBombing = parseBool(value);
             else if (key == "Airport Ornithopter Patrol") result.airportOrnithopterPatrol = parseBool(value);
-            else if (key == "Saboteur Vehicle Hunt") result.saboteurVehicleHunt = parseBool(value);
+            else if (key == "Saboteur Hunt") result.saboteurHunt = parseBool(value);
             else if (key == "Starport Population") result.starportPopulation = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);

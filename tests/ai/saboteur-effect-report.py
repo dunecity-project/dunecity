@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Report what Saboteurs achieved in AI matches, Saboteur vehicle hunt off against on.
+"""Report what Saboteurs achieved in AI matches, Saboteur hunt off against on.
 
 Reads the tables vanilla-match.py writes (games.csv, houses.csv, saboteurs.csv) for two tags
 played on the same maps, seeds and sides, one with tests/ai/game-options/
-saboteur-vehicle-hunt-off.ini and one with saboteur-vehicle-hunt-on.ini:
+saboteur-hunt-off.ini and one with saboteur-hunt-on.ini:
 
-  python3 tests/ai/vanilla-match.py --tag sab-off --game-options tests/ai/game-options/saboteur-vehicle-hunt-off.ini ...
-  python3 tests/ai/vanilla-match.py --tag sab-on  --game-options tests/ai/game-options/saboteur-vehicle-hunt-on.ini  ...
+  python3 tests/ai/vanilla-match.py --tag sab-off --game-options tests/ai/game-options/saboteur-hunt-off.ini ...
+  python3 tests/ai/vanilla-match.py --tag sab-on  --game-options tests/ai/game-options/saboteur-hunt-on.ini  ...
   python3 tests/ai/saboteur-effect-report.py --results DIR [DIR ...] --off sab-off --on sab-on
 
 Per arm: Saboteurs released, vehicles and structures they destroyed, credit value destroyed,
@@ -88,7 +88,7 @@ def game_stats(tag, pair):
 
 
 stats = {tag: {pair: game_stats(tag, pair) for pair in pairs} for tag in (args.off, args.on)}
-lines = [f'Saboteur vehicle hunt in AI matches: {len(pairs)} games played in both arms '
+lines = [f'Saboteur hunt in AI matches: {len(pairs)} games played in both arms '
          f'({args.off} = rule off, {args.on} = rule on)',
          f'maps: {", ".join(sorted({pair[1] for pair in pairs}))}; sides: {", ".join(sorted({pair[3] for pair in pairs}))}',
          f'seeds: {", ".join(sorted({pair[2] for pair in pairs}, key=int))}', '']

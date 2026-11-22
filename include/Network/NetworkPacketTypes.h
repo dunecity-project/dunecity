@@ -417,14 +417,12 @@
 //      Easiest wave is half of Easy's with one unit fewer.
 // 133: MOD20 carries the hashed Custom Game starting tech level (save 9889): the host's choice of
 //      1-9 replaces the map's [BASIC] TechLevel, 0 keeps it. Older peers cannot read the block.
-//      Also in 133, Saboteurs: a Palace releases one in Hunt for a human house too (as it always
-//      did for an AI house), and a Saboteur's own search takes the nearest enemy vehicle before
-//      any structure (Saboteur::findTarget()). An older peer would desync. Save format unchanged.
-//      A hunting Saboteur also takes the nearest thing it can blow up once an enemy has seen
-//      it, goes off as soon as it is in reach, and refuses an AI player's army orders.
-//      Together they form the match rule GameOptionsClass::saboteurVehicleHunt (default on, INI key
-//      "Saboteur Vehicle Hunt"). Its off state is hashed and is bit 7 of the MOD20 byte, so a
-//      default setup's stream and hash are unchanged; no new marker or number.
+//      Also in 133, Saboteurs (match rule GameOptionsClass::saboteurHunt, default on, INI key
+//      "Saboteur Hunt"): a Palace releases one in Hunt for a human house too, a hunting Saboteur
+//      goes off as soon as it is in reach, picks again at once when its target vanishes or
+//      something nearer turns up beside it, and refuses an AI player's army orders. An older
+//      peer would desync. The rule's off state is hashed and is bit 7 of the MOD20 byte, so a
+//      default setup's stream and hash are unchanged; no new marker, number or save format.
 //      Also in 133, Trooper Anti-Air (DuneCity content): a rocket Trooper's own search takes an
 //      Ornithopter anywhere in weapon range without sight of the ground below it
 //      (Trooper::targetsWithoutGroundSight()). An older peer would desync. Save format unchanged.

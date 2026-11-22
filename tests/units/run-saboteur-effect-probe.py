@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Measure what the Saboteur vehicle hunt changes, rule off against rule on in one binary.
+"""Measure what the Saboteur hunt changes, rule off against rule on in one binary.
 
 Every trial is one Saboteur released by the real Palace weapon against a seeded enemy position
 (four layouts of a turreted base, three Troopers and five vehicles; tests/units/
 saboteur-effect-probe.inc), for a human owner and a QuantBot owner. The same (owner, layout,
-seed) is played with the match rule "Saboteur Vehicle Hunt" off (the unit up to 1.0.876) and on.
+seed) is played with the match rule "Saboteur Hunt" off (the unit up to 1.0.876) and on.
 
 Reported per arm: the share of Saboteurs that destroy a vehicle, the share that destroy
 anything, the credit value destroyed per Saboteur, and how many die or idle with nothing

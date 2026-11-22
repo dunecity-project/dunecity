@@ -127,6 +127,41 @@ Stefan: "troopers should be shooting down ornithopters with their range missile 
   QuantBot Ornithopter raids on a field army; the nightly tier beyond the tests named above. Not pushed, no
   version bump.
 
+## 2026-11-23 - Saboteurs take the nearest building or vehicle; rule renamed Saboteur Hunt (unreleased, after 1.0.876)
+
+Stefan, on the vehicle-first rule of the entry below: "it should go for buildings or vehicles, whatever is
+close." Commit `da6feac43` (search), and this commit (rename, comments). Evidence:
+`~/Documents/projects/outputs/saboteur-effect-20261122/round4/`.
+
+- Rule now: a Saboteur's own search is the general one again - the nearest thing `canAttack()` accepts, enemy
+  building or vehicle alike, walls and parks last; no vehicle preference (`Saboteur::findTarget`). Everything
+  else of the entry below stays: release in Hunt for every owner, blow up as soon as in reach, a new target
+  at once when the old one vanishes, something nearer that turns up beside it taken instead (only its own
+  pick is replaced), AI army orders refused while it hunts, the ten-second re-hunt for an AI house.
+- The match rule is now `GameOptionsClass::saboteurHunt`, INI key `Saboteur Hunt`, option files
+  `tests/ai/game-options/saboteur-hunt-{off,on}.ini` (was `saboteurVehicleHunt` / `Saboteur Vehicle Hunt` /
+  `saboteur-vehicle-hunt-*` in the two entries below; nothing released carried the old name). Same MOD20 bit 7,
+  default on, no menu entry.
+- Off against on. Controlled (`saboteur_effect_probe`, 192 paired releases): AI owner destroys something 82.3%
+  -> 94.8%, a vehicle 37.5% -> 50.0% (+12.5, 95% interval +6.2 to +19.8), credits per Saboteur 291 -> 326,
+  died unused 17 -> 5 of 96; human owner 0% -> 94.8%, 326 credits, idle 96 -> 0; all releases anything +53.6
+  points (+46.4 to +60.9), credits +181 (+154 to +209). Matches (48 games per arm, same setup and seeds
+  9101-9124, AWS jobs `20261123T001124-sab4-off-030eec`, `20261123T001131-sab4-on-79584d`, none failed):
+  released 1099 / 1083; destroyed something 60.2% -> 74.5% (vehicles 575 -> 686, structures 87 -> 121); lost
+  unused 373 (33.9%) -> 218 (20.1%); credits per Saboteur 203.7 -> 243.3. Paired per game: credits per
+  Saboteur +44.2 (+21.4 to +68.1), lost per Saboteur -0.153 (-0.213 to -0.098), vehicles per Saboteur +0.146
+  (+0.089 to +0.209); placement score of Ordos and Mercenary -0.010 (-0.060 to +0.035) and time-outs 29.2% ->
+  31.2% (+0.021, -0.104 to +0.146): no difference shown. No army order reached a Saboteur in either arm.
+  Against the vehicle-first rule of the entry below (73.3% / 22.0% lost / 247.6 credits in matches) this is
+  level; in the controlled probe it destroys something more often (94.8% against 91.7%).
+- Tests: `saboteur_target_probe` 14 cases (nearest is a building; nearest is a vehicle; a Quad that turns up
+  beside it on the way is taken; explicit order kept past a nearer building; Area Guard takes what is in its
+  explored guard range). `saboteur_effect_probe` requires more Saboteurs to destroy something with the rule
+  on, per owner, and no fewer credits. Gates for `da6feac43`: AWS job `20261123T001136-ctest-d4687b` 9/9
+  passed; on the Mini at `2aee7c5ab` `perf_regression`, both probes and `dunelegacy_tests` passed.
+- Engine rule worth knowing: outside Hunt every unit only auto-targets what stands on ground its team has
+  explored, so a human's Saboteur on Area Guard ignores what it has not seen.
+
 ## 2026-11-22 - Saboteurs actually destroy something: own hunt, blow up on reach (unreleased, after 1.0.876)
 
 Stefan, after the off/on numbers of the entry below: "they can destroy anything but they need to actually do
