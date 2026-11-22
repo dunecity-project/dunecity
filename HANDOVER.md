@@ -4,7 +4,8 @@ Stefan: "i cant find the tech level selector in custom games" - there was none; 
 and a custom game took the map's `[BASIC] TechLevel` (else 8, 9 for Tornie content).
 
 - New match rule `GameOptionsClass::startTechLevel` (0 = the map's level, 1-9 replaces it). Chosen in the
-  Custom Game setup, in a **Tech level** row under the map properties (`CustomGamePlayers`); a lobby client and
+  Custom Game setup, at the right of the hint line under the Game Rules button (`CustomGamePlayers`; a row of
+  its own under the map properties did not fit the 640x480 Tornie-family lobby); a lobby client and
   Civilization Wars see the level as text. `Game::initGame` sets `techLevel` before `INIMapLoader`, which only
   reads the map's value while it is still 0. Campaign missions (mission != 0) ignore the rule.
 - Wire and save: GameInitSettings MOD20 (`MODK`) appends one byte; a level above 9 is refused. Network

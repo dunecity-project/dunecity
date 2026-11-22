@@ -330,7 +330,8 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     readinessLabel.setTextFontSize(12);
     if(!isCoopGameType(gameInitSettings.getGameType()))
         readinessLabel.setText(_("Spice income: multiplies credits from harvester deliveries. 2x = double."));
-    mainVBox.addWidget(&readinessLabel, 22);
+    readinessHBox.addWidget(&readinessLabel, 1.0);
+    mainVBox.addWidget(&readinessHBox, 22);
 
     mainVBox.addWidget(Spacer::create(), 0.04);
 
@@ -452,13 +453,14 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     mapPropertyValuesVBox.addWidget(&mapPropertyCity);
     // A new custom game may start at another tech level than its map's. Campaign co-op takes
     // its level from the mission, a saved game from the save, and Civilization Wars always
-    // starts at its own level 1, so those show no row or only the level.
+    // starts at its own level 1, so those show nothing or only the level. It sits on the hint
+    // line: a row of its own under the map properties does not fit the 640x480 family lobby.
     const GameType setupGameType = gameInitSettings.getGameType();
     if((setupGameType == GameType::CustomGame || setupGameType == GameType::CustomMultiplayer)
        && !gameInitSettings.getCoopCampaignContext()) {
         const int chosenTechLevel = std::clamp(gameInitSettings.getGameOptions().startTechLevel, 0, 9);
         techLevelLabel.setText(_("Tech level") + ":");
-        techLevelHBox.addWidget(&techLevelLabel, 75);
+        readinessHBox.addWidget(&techLevelLabel, 80);
         if(setup && bServer && !gameInitSettings.isCivilizationWars()) {
             setupTechLevel.addEntry(_("Map") + " (" + std::to_string(mapTechLevel) + ")", 0);
             for(int level = 1; level <= 9; ++level) setupTechLevel.addEntry(std::to_string(level), level);
@@ -469,13 +471,11 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
                 setup->rules.startTechLevel = setupTechLevel.getSelectedEntryIntData();
                 rebuildSetup(true);
             });
-            techLevelHBox.addWidget(&setupTechLevel, 105);
+            readinessHBox.addWidget(&setupTechLevel, 90);
         } else {
             mapPropertyTech.setText(std::to_string(chosenTechLevel != 0 ? chosenTechLevel : mapTechLevel));
-            techLevelHBox.addWidget(&mapPropertyTech, 105);
+            readinessHBox.addWidget(&mapPropertyTech, 90);
         }
-        rightVBox.addWidget(VSpacer::create(2));
-        rightVBox.addWidget(&techLevelHBox, 20);
     }
     rightVBox.addWidget(Spacer::create());
 

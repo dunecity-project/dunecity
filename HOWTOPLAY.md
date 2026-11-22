@@ -138,7 +138,7 @@ press **Research level** to raise only your house's technology. Each study
 unlocks the next level, up to level 9. **Research Pace** changes the total
 price and study time; the sidebar shows both before you start.
 
-In a **Custom Game**, **Tech level** under the map preview sets the level
+In a **Custom Game**, **Tech level** below **Game Rules** sets the level
 every house starts at: **Map** keeps the level the map was made for, 1 to 9
 replaces it. With Research Lab on, research continues from that level.
 

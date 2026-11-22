@@ -1910,7 +1910,7 @@ int runMenuProbe() {
             menu.update();
             menuRequire(menu.setupTechLevel.getSelectedEntryIntData() == chosen, "The rebuilt custom setup lost the chosen tech level");
             menuRequire(menu.mainVBox.getMinimumSize().x<=menu.mainVBox.getSize().x
-                        && menu.mainVBox.getMinimumSize().y<=menu.mainVBox.getSize().y, "The tech level row does not fit the custom setup");
+                        && menu.mainVBox.getMinimumSize().y<=menu.mainVBox.getSize().y, "The tech level selector does not fit the custom setup");
             menuCapture(menu,"custom-tech-level");
         }
         {
