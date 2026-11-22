@@ -58,9 +58,9 @@ constexpr int kRangeEdge = -1;   // exactly the Trooper's weapon range
 constexpr int kBeyondRange = -2; // one tile further
 
 enum class Expect {
-    Engages,        // both switch states: the target is shot and damaged
-    EngagesWithRule,// Trooper Anti-Air on in DuneCity content: shot and damaged; otherwise untouched
-    Untouched,      // both switch states: no shot, no damage
+    Engages,        // every switch state: the target is shot at
+    EngagesWithRule,// only with Trooper Anti-Air and its Ornithopter reach on, in DuneCity content
+    Untouched,      // every switch state: no shot, no damage
 };
 
 struct Case {
@@ -92,9 +92,11 @@ struct Outcome {
     int ticks = 0;
 };
 
-Outcome run(const std::string& mod, const std::string& mapData, const Case& spec, bool enabled, std::ofstream& csv) {
+Outcome run(const std::string& mod, const std::string& mapData, const Case& spec, bool antiAir, bool reach,
+            std::ofstream& csv) {
     auto options = settings.gameOptions;
-    options.trooperAntiAir = enabled;
+    options.trooperAntiAir = antiAir;
+    options.trooperOrnithopterReach = reach;
     options.researchLab = false;
     options.fogOfWar = false;
     options.immortalHumanPlayer = false;
@@ -113,9 +115,12 @@ Outcome run(const std::string& mod, const std::string& mapData, const Case& spec
     game->initGame(init);
     game->bReplay = false;
     game->initializeGameLoop();
-    require(game->getGameInitSettings().getGameOptions().trooperAntiAir == enabled,
-            "The game did not keep its Trooper Anti-Air option");
-    const bool ruleActive = enabled && ModManager::instance().isDuneCityContentActive();
+    require(game->getGameInitSettings().getGameOptions().trooperAntiAir == antiAir
+            && game->getGameInitSettings().getGameOptions().trooperOrnithopterReach == reach,
+            "The game did not keep its Trooper options");
+    // Trooper Anti-Air makes the rocket track; its Ornithopter reach is the part this probe is about.
+    const bool tracks = antiAir && ModManager::instance().isDuneCityContentActive();
+    const bool ruleActive = tracks && reach;
     auto* owner = game->getHouse(HOUSE_ATREIDES);
     auto* enemy = game->getHouse(HOUSE_HARKONNEN);
     require(owner && enemy && owner->isAlive() && enemy->isAlive(), "Fixture houses missing");
@@ -187,7 +192,7 @@ Outcome run(const std::string& mod, const std::string& mapData, const Case& spec
                     outcome.firstShot = tick;
                     outcome.firstShotDistance = shotDistance;
                 }
-                csv << mod << ',' << enabled << ',' << spec.name << ',' << tick << ',' << i << ',' << weapon << ','
+                csv << mod << ',' << antiAir << ',' << reach << ',' << spec.name << ',' << tick << ',' << i << ',' << weapon << ','
                     << shotDistance << ',' << outcome.endHP << '\n';
                 if(air) {
                     require(weapon == Bullet_SmallRocket,
@@ -223,24 +228,25 @@ Outcome run(const std::string& mod, const std::string& mapData, const Case& spec
         if(outcome.endHP == 0 || outcome.troopersLeft == 0) break;
     }
 
-    SDL_Log("TROOPER_AIR_WEAPON_CASE: mod=%s rule=%d case=%s distance=%d shots=%d first_shot_tick=%d "
+    SDL_Log("TROOPER_AIR_WEAPON_CASE: mod=%s tracks=%d reach=%d case=%s distance=%d shots=%d first_shot_tick=%d "
             "first_shot_distance=%d start_hp=%d end_hp=%d troopers_left=%d ticks=%d",
-            mod.c_str(), ruleActive, spec.name, distance, static_cast<int>(outcome.shots.size()), outcome.firstShot,
+            mod.c_str(), tracks, ruleActive, spec.name, distance, static_cast<int>(outcome.shots.size()), outcome.firstShot,
             outcome.firstShotDistance, outcome.startHP, outcome.endHP, outcome.troopersLeft, outcome.ticks);
     csv.flush();
 
-    const std::string label = std::string(spec.name) + (enabled ? " (rule on)" : " (rule off)");
+    const std::string label = std::string(spec.name) + (!antiAir ? " (Trooper Anti-Air off)"
+                                                         : reach ? " (reach on)" : " (reach off)");
     const bool engages = spec.expect == Expect::Engages || (spec.expect == Expect::EngagesWithRule && ruleActive);
     if(spec.raid) {
         require(!outcome.shots.empty(), label + ": the squad never fired at the attacking Ornithopter");
-        if(ruleActive) require(outcome.endHP < outcome.startHP, label + ": the squad's rockets never hurt the Ornithopter");
+        if(tracks) require(outcome.endHP < outcome.startHP, label + ": the squad's rockets never hurt the Ornithopter");
     } else if(engages) {
         require(!outcome.shots.empty(), label + ": the Troopers never fired at a target in weapon range");
-        // Without the rule a Trooper rocket does not track: whether it hurts an aircraft is the
-        // old delivery, which this probe leaves alone (trooper_anti_air_probe measures it).
-        if(!air || ruleActive)
+        // Without Trooper Anti-Air a Trooper rocket does not track: whether it hurts an aircraft is
+        // the old delivery, which this probe leaves alone (trooper_anti_air_probe measures it).
+        if(!air || tracks)
             require(outcome.endHP < outcome.startHP, label + ": the Troopers' fire did not damage the target");
-        if(ruleActive && isOrnithopterUnit(spec.targetItem))
+        if(tracks && isOrnithopterUnit(spec.targetItem))
             require(outcome.endHP == 0, label + ": the held Ornithopter survived a full engagement");
     } else {
         require(outcome.shots.empty() && outcome.endHP == outcome.startHP,
@@ -265,7 +271,7 @@ int runTrooperAirWeaponProbe() {
     const std::string mapData = fixtureMap();
     std::ofstream csv(outDir + "/shots.csv");
     require(csv.good(), "Could not open Trooper air weapon telemetry");
-    csv << "mod,trooper_anti_air,case,tick,trooper,weapon,distance_world,target_hp\n";
+    csv << "mod,trooper_anti_air,ornithopter_reach,case,tick,trooper,weapon,distance_world,target_hp\n";
 
     const Case cases[] = {
         // The engine's own target search, Trooper on Guard.
@@ -292,19 +298,22 @@ int runTrooperAirWeaponProbe() {
     };
     int count = 0;
     for(const auto& spec : cases) {
-        const auto off = run(mod, mapData, spec, false, csv);
-        const auto on = run(mod, mapData, spec, true, csv);
-        // In DuneCity content the rule also makes the rocket track, so any aircraft that is
-        // shot at plays differently; ground targets and untouched aircraft must not.
-        const bool ruleChangesCase = cityContent && isFlyingUnit(spec.targetItem)
-            && spec.expect != Expect::Untouched;
-        if(!ruleChangesCase)
-            require(off.shots == on.shots && off.endHP == on.endHP && off.ticks == on.ticks,
-                    std::string(spec.name) + ": the Trooper Anti-Air switch changed a case it must not touch");
-        if(spec.raid && cityContent)
-            require(on.firstShot >= 0 && on.firstShot <= off.firstShot,
-                    "orni_raid: with the rule on the squad opened fire later than without it");
+        // Trooper Anti-Air on in both: reach off is the rule up to 1.0.876, reach on the current one.
+        const auto old = run(mod, mapData, spec, true, false, csv);
+        const auto now = run(mod, mapData, spec, true, true, csv);
         count += 2;
+        const bool reachChangesCase = cityContent && (spec.expect == Expect::EngagesWithRule || spec.raid);
+        if(!reachChangesCase)
+            require(old.shots == now.shots && old.endHP == now.endHP && old.ticks == now.ticks,
+                    std::string(spec.name) + ": the Ornithopter reach switch changed a case it must not touch");
+        if(spec.raid && cityContent)
+            require(now.firstShot >= 0 && now.firstShot <= old.firstShot,
+                    "orni_raid: with the reach on the squad opened fire later than without it");
+        if(spec.expect == Expect::EngagesWithRule) {
+            // The reach is part of Trooper Anti-Air: with that rule off it does nothing.
+            run(mod, mapData, spec, false, true, csv);
+            ++count;
+        }
     }
     // A units probe owns its own marker, never the menu runner's result marker.
     SDL_Log("TROOPER_AIR_WEAPON_PROBE_PASS: mod=%s dunecity_content=%d runs=%d", mod.c_str(), cityContent, count);

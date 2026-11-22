@@ -1102,6 +1102,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-air-weapon-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-air-weapon-probe)
         set_tests_properties(trooper_air_weapon_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+        # Off/on comparison of the Trooper Ornithopter reach in one build: raided Trooper groups must
+        # shoot down more Ornithopters with it (95% interval above 0) and lose no more Troopers.
+        dunecity_add_test(headless nightly NAME trooper_ornithopter_effect COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-ornithopter-effect.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-ornithopter-effect)
+        set_tests_properties(trooper_ornithopter_effect PROPERTIES TIMEOUT 1800 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)

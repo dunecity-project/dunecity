@@ -917,6 +917,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setIntValue("Game Options", "Research Pace", static_cast<int>(settings.gameOptions.researchPace));
     myINIFile.setBoolValue("Game Options", "Technology Installments", settings.gameOptions.technologyInstallments);
     myINIFile.setBoolValue("Game Options", "Trooper Anti-Air", settings.gameOptions.trooperAntiAir);
+    myINIFile.setBoolValue("Game Options", "Trooper Ornithopter Reach", settings.gameOptions.trooperOrnithopterReach);
     myINIFile.setBoolValue("Game Options", "Saboteur Vehicle Hunt", settings.gameOptions.saboteurVehicleHunt);
     myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);

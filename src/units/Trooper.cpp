@@ -106,7 +106,9 @@ bool Trooper::targetsWithoutGroundSight(const ObjectBase& candidate) const {
     // turret (RocketTurret::findTarget), it is a target anywhere in weapon range. Other
     // aircraft and every ground target keep the sight rule.
     return isOrnithopterUnit(candidate.getItemID()) && bulletType == Bullet_SmallRocket
-        && antiAirRuleActive() && isInWeaponRange(&candidate);
+        && antiAirRuleActive()
+        && currentGame->getGameInitSettings().getGameOptions().trooperOrnithopterReach
+        && isInWeaponRange(&candidate);
 }
 
 

@@ -336,6 +336,7 @@ public:
                     && (startTechLevel == goc.startTechLevel)
                     && (saboteurVehicleHunt == goc.saboteurVehicleHunt)
                     && (trooperAntiAir == goc.trooperAntiAir)
+                    && (trooperOrnithopterReach == goc.trooperOrnithopterReach)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -385,6 +386,8 @@ public:
             optStr += "/technologyInstallments=" + std::to_string(technologyInstallments);
             optStr += "/startTechLevel=" + std::to_string(startTechLevel);
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
+            // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
+            if(!trooperOrnithopterReach) optStr += "/trooperOrnithopterReach=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -476,6 +479,11 @@ public:
         bool        saboteurVehicleHunt = true;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
+        /// Part of Trooper Anti-Air (so DuneCity content only): a rocket Trooper's own search takes
+        /// an Ornithopter anywhere in weapon range without sight of the ground below it. Off is the
+        /// rule up to 1.0.876 (only over ground the team sees), kept so the two can be compared in
+        /// one build (tests/units/run-trooper-ornithopter-effect.py). INI key only.
+        bool        trooperOrnithopterReach = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

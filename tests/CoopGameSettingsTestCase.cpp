@@ -1266,6 +1266,68 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
     }
 }
 
+TEST_CASE("The Trooper Ornithopter reach defaults on and its off state is hashed and carried in the MOD15 Trooper byte",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.trooperOrnithopterReach);
+    auto off = defaults;
+    off.trooperOrnithopterReach = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeSeparateFactionCoop(false);
+    auto options = original.getGameOptions();
+    options.trooperAntiAir = GENERATE(false, true);
+    options.trooperOrnithopterReach = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // The same setup playing the default rule: the stream every build since MOD15 has written.
+    auto plainOptions = options;
+    plainOptions.trooperOrnithopterReach = true;
+    auto plainSetup = original;
+    plainSetup.setGameOptions(plainOptions);
+    OMemoryStream plainSaved; plainSaved.open(); plainSetup.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+    REQUIRE(plain.size() == encoded.size());
+    std::vector<std::size_t> changed;
+    for(std::size_t i = 0; i < plain.size(); ++i) if(plain[i] != encoded[i]) changed.push_back(i);
+
+    SECTION("only the off state changes the stream, and only bit 1 of the Trooper byte") {
+        if(options.trooperOrnithopterReach) {
+            REQUIRE(changed.empty());
+        } else {
+            REQUIRE(changed.size() == 1);
+            REQUIRE(static_cast<Uint8>(plain[changed.front()]) == static_cast<Uint8>(options.trooperAntiAir ? 1 : 0));
+            REQUIRE(static_cast<Uint8>(encoded[changed.front()]) == static_cast<Uint8>(plain[changed.front()] | 2));
+        }
+    }
+    SECTION("all four states round-trip without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a stream older than MOD15 plays the current rule") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'E';
+        bytes.resize(bytes.size() - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions().trooperOrnithopterReach);
+    }
+    SECTION("an unknown Trooper rule bit is refused") {
+        if(!options.trooperOrnithopterReach) {
+            auto bytes = encoded;
+            bytes[changed.front()] = static_cast<char>(4 | 1);
+            IMemoryStream input(bytes.data(), bytes.size());
+            REQUIRE_THROWS(GameInitSettings(input));
+        }
+    }
+}
+
 TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams read off",
           "[citybudget][network][save]") {
     SettingsClass::GameOptionsClass defaults;

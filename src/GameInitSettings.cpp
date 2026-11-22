@@ -350,6 +350,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.startTechLevel = 0;
     // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
     gameOptions.saboteurVehicleHunt = true;
+    // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
+    gameOptions.trooperOrnithopterReach = true;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -463,7 +465,13 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
             if(hasResearchOptions) {
                 gameOptions.researchLab = stream.readBool();
-                gameOptions.trooperAntiAir = stream.readBool();
+                // MOD15 wrote a bool (0/1) here. Bit 1 is set when the Trooper Ornithopter
+                // reach is off, so a stream that plays the default rule is the byte it always was.
+                const Uint8 trooperRules = stream.readUint8();
+                if(trooperRules & ~Uint8(3))
+                    throw std::runtime_error("Invalid Trooper rules.");
+                gameOptions.trooperAntiAir = (trooperRules & 1) != 0;
+                gameOptions.trooperOrnithopterReach = (trooperRules & 2) == 0;
             }
             if(hasStarportPopulation) {
                 gameOptions.starportPopulation = stream.readBool();
@@ -684,7 +692,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.micropolisLandValue);
     // MOD15: old saves keep both mechanics off.
     stream.writeBool(gameOptions.researchLab);
-    stream.writeBool(gameOptions.trooperAntiAir);
+    // Bit 1: the Trooper Ornithopter reach is off (the default, on, leaves the byte as it was).
+    stream.writeUint8(static_cast<Uint8>((gameOptions.trooperAntiAir ? 1 : 0)
+        | (gameOptions.trooperOrnithopterReach ? 0 : 2)));
     // MOD16: older streams keep the Starport without a population requirement.
     stream.writeBool(gameOptions.starportPopulation);
     // MOD18: pace4 + damage1 + city rules1 (bit0 scenery, bit1 vacancy).

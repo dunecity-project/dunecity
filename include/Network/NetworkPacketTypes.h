@@ -426,6 +426,9 @@
 //      Also in 133, Trooper Anti-Air (DuneCity content): a rocket Trooper's own search takes an
 //      Ornithopter anywhere in weapon range without sight of the ground below it
 //      (Trooper::targetsWithoutGroundSight()). An older peer would desync. Save format unchanged.
+//      It is the match rule GameOptionsClass::trooperOrnithopterReach (default on, INI key
+//      "Trooper Ornithopter Reach"). Its off state is hashed and is bit 1 of the MOD15 Trooper
+//      Anti-Air byte, so a default setup's stream and hash are unchanged; no new marker or number.
 #define NETWORK_PROTOCOL_VERSION            133
 
 // Mod transfer limits

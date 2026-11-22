@@ -171,6 +171,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setIntValue(section, "Research Pace", static_cast<int>(options.researchPace));
     config.setBoolValue(section, "Technology Installments", options.technologyInstallments);
     config.setBoolValue(section, "Trooper Anti-Air", options.trooperAntiAir);
+    config.setBoolValue(section, "Trooper Ornithopter Reach", options.trooperOrnithopterReach);
     config.setBoolValue(section, "Saboteur Vehicle Hunt", options.saboteurVehicleHunt);
     config.setBoolValue(section, "Starport Population", options.starportPopulation);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
@@ -221,6 +222,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
         options.researchPace = TechResearch::sanitize(config.getIntValue(section, "Research Pace", static_cast<int>(options.researchPace)));
     readBool("Technology Installments", options.technologyInstallments);
     readBool("Trooper Anti-Air", options.trooperAntiAir);
+    readBool("Trooper Ornithopter Reach", options.trooperOrnithopterReach);
     readBool("Saboteur Vehicle Hunt", options.saboteurVehicleHunt);
     readBool("Starport Population", options.starportPopulation);
     readBool("Allied Control", options.alliedControl);

@@ -1439,6 +1439,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.researchPace = TechResearch::sanitize(myINIFile.getIntValue("Game Options", "Research Pace", 1));
             settings.gameOptions.technologyInstallments = myINIFile.getBoolValue("Game Options", "Technology Installments", false);
             settings.gameOptions.trooperAntiAir = myINIFile.getBoolValue("Game Options", "Trooper Anti-Air", true);
+            settings.gameOptions.trooperOrnithopterReach = myINIFile.getBoolValue("Game Options", "Trooper Ornithopter Reach", true);
             settings.gameOptions.saboteurVehicleHunt = myINIFile.getBoolValue("Game Options", "Saboteur Vehicle Hunt", true);
             settings.gameOptions.starportPopulation = myINIFile.getBoolValue("Game Options", "Starport Population", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
