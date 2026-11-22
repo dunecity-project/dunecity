@@ -60,6 +60,16 @@ bool QuantBot::isAlliedWithHuman() const {
     return false;
 }
 
+bool QuantBot::opposesHuman() const {
+    if (!getHouse()) return false;
+    for (int h=0; h<NUM_HOUSES; ++h) if (const auto* house=getHouse(h)) {
+        if (house->getTeamID()==getHouse()->getTeamID() || !house->isAlive()) continue;
+        for (const auto& player : house->getPlayerList())
+            if (dynamic_cast<const HumanPlayer*>(player.get())) return true;
+    }
+    return false;
+}
+
 // Original permissions and budget are independent of later construction or spice loss.
 bool QuantBot::campaignCityEconomy() const {
     return isCampaignEnemy() && currentGame->isCitySimEnabled()

@@ -181,10 +181,11 @@ public:
     /// Effective planning budget for this build pass. Equals militaryValueLimit unless
     /// overridesMilitaryValueCap(), which never mutates the serialized field.
     int planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const;
-    /// EasyRelief (default off, EasyReliefPolicy.h): this house is an Easy campaign opponent on
-    /// level 8 or 9 / an Easy opponent in a custom game without the city simulation.
-    bool easyReliefCampaign() const;
+    /// EasyRelief (default off, EasyReliefPolicy.h): this house is an Easy opponent in a custom
+    /// game without the city simulation - at level 1 only with a human among its enemies.
     bool easyReliefCustom() const;
+    /// A human player controls (or shares) a living house on another team.
+    bool opposesHuman() const;
     /// The army value a relieved Easy opponent builds up to; 0 when EasyRelief does not apply.
     /// Never changes the serialized militaryValueLimit.
     int easyReliefArmyCeiling() const;

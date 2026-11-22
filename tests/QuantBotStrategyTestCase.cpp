@@ -15,7 +15,6 @@
 #include <players/QuantBotMapScopePolicy.h>
 #include <players/QuantBotSpiceBloomPolicy.h>
 #include <players/EasyReliefPolicy.h>
-#include <misc/CampaignControls.h>
 
 #include <array>
 #include <cstdio>
@@ -2738,76 +2737,66 @@ TEST_CASE("Campaign helper counter-attack persists OFF and percent values with d
 }
 
 TEST_CASE("EasyRelief is off by default, persists, and is hashed only while on",
-          "[ai][campaign][difficulty][config]") {
+          "[ai][difficulty][config]") {
     const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.easyRelief);
-    REQUIRE(defaults.force.easyReliefCampaignArmyPercent == 100);
+    REQUIRE(defaults.force.easyRelief == EasyReliefPolicy::kOff);
     REQUIRE(defaults.force.easyReliefCustomArmyPercent == 60);
     REQUIRE(defaults.force.easyReliefCustomHarvesterPercent == 50);
     REQUIRE(defaults.force.easyReliefCustomFirstAttackMin == 10);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-easy-relief-test.ini";
-    std::map<std::string, bool> hashes;
-    for (const bool enabled : {false, true}) {
+    std::map<std::string, int> hashes;
+    for (const int scope : {EasyReliefPolicy::kOff, EasyReliefPolicy::kAgainstHumans, EasyReliefPolicy::kEveryOpponent}) {
         {
             std::ofstream ini(path);
-            ini << "[Force Concentration]\nEasyRelief=" << (enabled ? "true" : "false") << '\n';
+            ini << "[Force Concentration]\nEasyRelief=" << scope << '\n';
         }
         QuantBotConfig loaded;
         REQUIRE(loaded.applyOverrides(path.string()));
-        REQUIRE(loaded.force.easyRelief == enabled);
+        REQUIRE(loaded.force.easyRelief == scope);
         QuantBotConfig expected = defaults;
-        expected.force.easyRelief = enabled;
+        expected.force.easyRelief = scope;
         REQUIRE(loaded.getConfigHash() == expected.getConfigHash());
-        REQUIRE(hashes.emplace(loaded.getConfigHash(), enabled).second);
+        REQUIRE(hashes.emplace(loaded.getConfigHash(), scope).second);
         REQUIRE(loaded.save(path.string()));
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));
-        REQUIRE(restored.force.easyRelief == enabled);
+        REQUIRE(restored.force.easyRelief == scope);
     }
-    REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
+    REQUIRE(hashes.at(defaults.getConfigHash()) == EasyReliefPolicy::kOff);
 
     // While off, its values change nothing a peer could disagree on; while on, each is hashed.
     QuantBotConfig offTuned = defaults;
     offTuned.force.easyReliefCustomArmyPercent = 80;
     REQUIRE(offTuned.getConfigHash() == defaults.getConfigHash());
     QuantBotConfig on = defaults, onTuned = defaults;
-    on.force.easyRelief = onTuned.force.easyRelief = true;
+    on.force.easyRelief = onTuned.force.easyRelief = EasyReliefPolicy::kAgainstHumans;
     onTuned.force.easyReliefCustomArmyPercent = 80;
     REQUIRE(on.getConfigHash() != onTuned.getConfigHash());
 
     // Out-of-range values are clamped on load.
     {
         std::ofstream ini(path);
-        ini << "[Force Concentration]\nEasyRelief=true\nEasyReliefCampaignArmyPercent=10\n"
-               "EasyReliefCustomArmyPercent=5\n"
+        ini << "[Force Concentration]\nEasyRelief=7\nEasyReliefCustomArmyPercent=5\n"
                "EasyReliefCustomHarvesterPercent=0\nEasyReliefCustomFirstAttackMin=999\n";
     }
     QuantBotConfig clamped;
     REQUIRE(clamped.applyOverrides(path.string()));
-    REQUIRE(clamped.force.easyReliefCampaignArmyPercent == 50);
+    REQUIRE(clamped.force.easyRelief == EasyReliefPolicy::kEveryOpponent);
     REQUIRE(clamped.force.easyReliefCustomArmyPercent == 50);
     REQUIRE(clamped.force.easyReliefCustomHarvesterPercent == 25);
     REQUIRE(clamped.force.easyReliefCustomFirstAttackMin == 60);
     std::filesystem::remove(path);
 }
 
-TEST_CASE("EasyRelief policy: levels 8-9 only, lower ceilings that can still attack",
-          "[ai][campaign][difficulty]") {
+TEST_CASE("EasyRelief policy: lower custom ceilings that can still attack",
+          "[ai][difficulty]") {
     using namespace EasyReliefPolicy;
-    // Level 8 is missions 20 and 21, level 9 is mission 22; level 7 ends at mission 19.
-    REQUIRE(CampaignControls::firstMission(8) == kFirstCampaignMission);
-    REQUIRE_FALSE(campaignMission(19));
-    REQUIRE(campaignMission(20));
-    REQUIRE(campaignMission(22));
-
-    // Campaign: the starting army instead of twice it, never above the native limit and never
-    // below the late-mission floor Easy already has.
-    REQUIRE(campaignArmyCeiling(4000, 8000, 100) == 4000);
-    REQUIRE(campaignArmyCeiling(4000, 8000, 150) == 6000);
-    REQUIRE(campaignArmyCeiling(4000, 8000, 200) == 8000);
-    REQUIRE(campaignArmyCeiling(900, 2000, 100) == 2000);
-    REQUIRE(campaignArmyCeiling(600, 1200, 100) == 1200);
-    REQUIRE(campaignArmyCeiling(-1, 0, 100) == 0);
+    // Level 1 needs a human among the house's enemies; level 2 is every Easy opponent.
+    REQUIRE_FALSE(applies(kOff, true));
+    REQUIRE_FALSE(applies(kAgainstHumans, false));
+    REQUIRE(applies(kAgainstHumans, true));
+    REQUIRE(applies(kEveryOpponent, false));
+    REQUIRE(applies(kEveryOpponent, true));
 
     // Custom: 60% of the limit for the map size (Easy: 3,000 / 8,000 / 15,000 / 25,000).
     REQUIRE(customArmyCeiling(15000, 60) == 9000);
@@ -2815,8 +2804,7 @@ TEST_CASE("EasyRelief policy: levels 8-9 only, lower ceilings that can still att
     REQUIRE(customArmyCeiling(15000, 100) == 15000);
 
     // A wave never waits for more than four fifths of the ceiling; no ceiling, no change.
-    REQUIRE(readiness(3400, 4000) == 3200);
-    REQUIRE(readiness(2000, 4000) == 2000);
+    REQUIRE(readiness(8000, 9000) == 7200);
     REQUIRE(readiness(4500, 9000) == 4500);
     REQUIRE(readiness(3400, 0) == 3400);
 

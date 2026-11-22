@@ -232,29 +232,20 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     return openingCombatBudgetActive() ? std::min(configured, 4) : configured;
 }
 
-bool QuantBot::easyReliefCampaign() const {
-    return botConfig().force.easyRelief && difficulty == Difficulty::Easy && currentGame && isCampaignEnemy()
-        && EasyReliefPolicy::campaignMission(currentGame->getGameInitSettings().getMission());
-}
-
 bool QuantBot::easyReliefCustom() const {
     // The DuneCity campaign and every city game keep their own calibrated Easy; a human's
     // Easy ally and a support controller are not opponents.
-    return botConfig().force.easyRelief && difficulty == Difficulty::Easy && currentGame
+    const int scope = botConfig().force.easyRelief;
+    return scope != EasyReliefPolicy::kOff && difficulty == Difficulty::Easy && currentGame
         && gameMode == GameMode::Custom && !builderOnly() && !campaignPolicyApplies()
         && !currentGame->getGameInitSettings().isDuneCityCampaign() && !currentGame->isCitySimEnabled()
-        && !isAlliedWithHuman();
+        && !isAlliedWithHuman()
+        && EasyReliefPolicy::applies(scope, scope == EasyReliefPolicy::kAgainstHumans && opposesHuman());
 }
 
 int QuantBot::easyReliefArmyCeiling() const {
-    if (militaryValueLimit <= 0 || initialMilitaryValue < 0) return 0;
-    const auto& force = botConfig().force;
-    if (easyReliefCampaign())
-        return EasyReliefPolicy::campaignArmyCeiling(initialMilitaryValue, militaryValueLimit,
-                                                     force.easyReliefCampaignArmyPercent);
-    if (easyReliefCustom())
-        return EasyReliefPolicy::customArmyCeiling(militaryValueLimit, force.easyReliefCustomArmyPercent);
-    return 0;
+    if (militaryValueLimit <= 0 || !easyReliefCustom()) return 0;
+    return EasyReliefPolicy::customArmyCeiling(militaryValueLimit, botConfig().force.easyReliefCustomArmyPercent);
 }
 
 bool QuantBot::openingCombatBudgetActive() const {

@@ -1057,8 +1057,6 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     // army reaches this value, whatever the enemy alliance holds.
     if (const int cap = botConfig().force.campaignHelperReadinessCap; cap > 0 && campaignEconomySupport())
         required = std::min(required, cap);
-    // EasyRelief: the lower army ceiling must still be able to launch a wave.
-    if (easyReliefCampaign()) required = EasyReliefPolicy::readiness(required, easyReliefArmyCeiling());
     return required;
 }
 

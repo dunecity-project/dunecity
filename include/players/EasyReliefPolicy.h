@@ -4,26 +4,18 @@
 #include <algorithm>
 #include <cstdint>
 
-// EasyRelief ([Force Concentration], default off): a gentler Easy opponent in the two places
-// live results show ordinary players stuck - campaign levels 8 and 9, and custom games without
-// the city simulation. Medium, Hard and Brutal, campaign levels 1-7, helpers and city games
-// never read these rules (docs/campaign-ai-difficulty-matrix.md, "Easy relief"). Its waves and
-// their timing stay native: later and smaller campaign waves were tested and removed.
+// EasyRelief ([Force Concentration], default 0 = off): a gentler Easy opponent in custom games
+// without the city simulation, where live results show ordinary players stuck. Medium, Hard and
+// Brutal, every campaign, helpers and city games never read these rules. Three campaign rules
+// for levels 8-9 were tested and removed (docs/campaign-ai-difficulty-matrix.md, "Easy relief").
 namespace EasyReliefPolicy {
 
-/// Campaign missions 20 and 21 are level 8, mission 22 is level 9.
-constexpr int kFirstCampaignMission = 20;
-/// The late-mission army floor Easy already has (QuantBot.cpp, "Mission 21+ override").
-constexpr int kCampaignArmyFloor = 2000;
-
-inline bool campaignMission(int mission) { return mission >= kFirstCampaignMission; }
-
-/// The army value an Easy campaign opponent replaces its losses up to: \a percent of the army
-/// the mission started it with, at least the late-mission floor, never above its native limit
-/// (twice the starting army).
-inline int campaignArmyCeiling(int startingArmy, int nativeLimit, int percent) {
-    const int scaled = int(int64_t(std::max(0, startingArmy)) * percent / 100);
-    return std::min(std::max(0, nativeLimit), std::max(kCampaignArmyFloor, scaled));
+/// The switch's three levels. The shipped candidate is kAgainstHumans: games without a human
+/// (the AI regression gates, the difficulty ladder) play exactly as with the switch off.
+/// kEveryOpponent lets AI test games measure the same rules with an AI as the player.
+constexpr int kOff = 0, kAgainstHumans = 1, kEveryOpponent = 2;
+inline bool applies(int scope, bool opposesHuman) {
+    return scope == kEveryOpponent || (scope == kAgainstHumans && opposesHuman);
 }
 
 /// The army value an Easy custom opponent builds up to: \a percent of its limit for the map size.

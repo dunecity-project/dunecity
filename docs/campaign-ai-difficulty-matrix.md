@@ -29,66 +29,99 @@ The dated implementation/audit sections below remain historical evidence for
 their named source revisions, not proof that the current engine or either menu
 mode passes every proposed target.
 
-## Easy relief (2026-11-22, `EasyRelief`, default off)
+## Easy relief (2026-11-22, `EasyRelief`, default 0 = off)
 
-`[Force Concentration] EasyRelief` makes the Easy opponent gentler in two places and nowhere
-else. Medium, Hard and Brutal, campaign levels 1-7, helpers, the DuneCity campaign and every
-game with the city simulation never read it. It is hashed only while on. Rules:
+`[Force Concentration] EasyRelief` makes the Easy opponent gentler in custom games without the
+city simulation and nowhere else. Medium, Hard and Brutal, every campaign, helpers, the
+DuneCity campaign and every city game never read it. It is hashed only while on. Rules:
 `include/players/EasyReliefPolicy.h`.
 
-| Where | Rule while on | Key (default) | Native |
-|---|---|---|---|
-| Campaign levels 8-9 (missions 20-22), Easy enemy | Rebuilds its army to the size the mission started it with, at least 2,000 | `EasyReliefCampaignArmyPercent` (100) | 200% |
-| Custom game without city simulation, Easy opponent | Builds its army to 60% of its limit for the map size | `EasyReliefCustomArmyPercent` (60) | 100% |
-| | Keeps half its harvesters, at least two (maps above 64x64) | `EasyReliefCustomHarvesterPercent` (50) | 100% |
-| | No attack leaves its base before minute 10; it still defends | `EasyReliefCustomFirstAttackMin` (10) | 0 |
+| `EasyRelief` | Which Easy houses | Use |
+|---|---|---|
+| 0 | none | default |
+| 1 | an Easy house with a human player among its enemies | the candidate default: games without a human play exactly as with 0 |
+| 2 | every Easy opponent | AI test games, where an AI stands in for the player (`--style easy-relief-on`) |
+
+Level 2 must not become the default: with it the mandatory smoke tier fails its fixed 4-player
+free-for-all seed 90866 (Easy and Hard are eliminated by minute 34, then Brutal and Medium run
+out of spice and sit to the 60-minute limit). Level 1 leaves every game without a human
+unchanged (`--style easy-relief-humans`).
+
+| Rule while on (Easy opponent, custom game, no city simulation) | Key (default) | Native |
+|---|---|---|
+| Builds its army to 60% of its limit for the map size | `EasyReliefCustomArmyPercent` (60) | 100% |
+| Keeps half its harvesters, at least two (maps above 64x64) | `EasyReliefCustomHarvesterPercent` (50) | 100% |
+| No attack leaves its base before minute 10; it still defends | `EasyReliefCustomFirstAttackMin` (10) | 0 |
 
 The saved army limit is unchanged; only what the house buys up to is lower, and a wave never
-waits for more than four fifths of that ceiling. Campaign waves keep their native size and
-timing. A human's Easy ally is not an opponent and is not relieved.
+waits for more than four fifths of that ceiling. A human's Easy ally is not an opponent and is
+not relieved.
 
-Why, from the live results database (vanilla rules, one human, every opponent Easy, games of
-five minutes or more):
+### Why: the live results (vanilla rules, one human, every opponent Easy, games of 5+ minutes)
 
+- **Custom games are the real problem.** 16 of 39 players ever beat one Easy QuantBot 1v1
+  (407 tries, 1.0.865 and later). In the games they left at minute 10-20 they had built 15
+  units and harvested 14,000 spice; Easy had built 47 units and harvested 24,000.
 - **Counting tries overstates the campaign wall.** A reloaded save is recorded as a new game with
   the totals so far, so one long mission played over several sessions is several "quits" and one
-  win. On missions 20-22 the players who won made 372 of the 424 recorded tries (1.0.865 and
-  later). Counted per player, 26 of 41 ever won mission 20, 19 of 24 mission 21 and 28 of 35
-  mission 22 (63%, 79%, 80%), against 80-100% on missions 14-19.
+  win. On missions 20-22 the players who won made 372 of the 424 recorded tries. Counted per
+  player, 26 of 41 ever won mission 20, 19 of 24 mission 21 and 28 of 35 mission 22 (63%, 79%,
+  80%), against 80-100% on missions 14-19. In 1.0.874 and later: 9 of 17, 9 of 11, 11 of 13.
 - Players who never won missions 21-22 stopped either at minute 10-18, with 0-4 units built and
   their starting army against three Easy houses that had already built 25-34 units, or at minute
-  33-51 with 12,000-30,000 army against 39,000-41,000: the enemy total starts near 13,000 and
-  triples during the mission.
-- **Custom games are the larger problem.** 16 of 39 players ever beat one Easy QuantBot 1v1
-  (407 tries). In the games they left at minute 10-20 they had built 15 units and harvested
-  14,000 spice; Easy had built 47 units and harvested 24,000.
+  33-51 with 12,000-30,000 army against 39,000-41,000.
 
-Test cells: `skirmish/easy-1v1-{ae,am,ah}-v-qe-{habbanya-penny,rs128}/vanilla` (the AI Player
-as the player, 60 minutes, both starts) and `campaign/partner-easy-v-quantbot-easy/vanilla`
-missions 20-22 (idle human with an Easy helper), each with and without `--style easy-relief-on`.
+### Custom games: switch off against on
 
-Screen (source `918c3e32a`, all arms in one build, AWS, results
-`~/Documents/projects/outputs/easy-relief-20261122/`). Campaign missions 20-22, Easy helper,
-3 houses x seeds 9811-9814, wins of 36 (helper defeats / time limits):
+Cells `skirmish/easy-1v1-{ae,am,ah}-v-qe-{habbanya-penny,rs128}/vanilla`: the AI Player (Easy,
+Medium, Hard) as the player against QuantBot Easy, even starts, the most-played 1v1 map and a
+generated 128x128 map, 12 seeds from both starts, 60 minutes, with and without
+`--style easy-relief-on`. Source `19381e6cf`, both arms in one build, AWS; results
+`~/Documents/projects/outputs/easy-relief-20261122/final/`. Player wins / player eliminated /
+time limit, of 24:
 
-| Arm | Wins | Defeats | Time limits |
-|---|---:|---:|---:|
-| Off | 27 | 6 | 3 |
-| Army ceiling only | 31 | 2 | 3 |
-| Opening +180 s and waves 70% only | 27 | 6 | 3 |
-| All three | 28 | 1 | 7 |
-| All three, stronger (+360 s, waves 50%) | 24 | 5 | 7 |
+| Player proxy and map | Off | On |
+|---|---|---|
+| AI Player Hard, generated map | 18 / 0 / 6 | 23 / 0 / 1 |
+| AI Player Hard, Habbanya-Penny | 12 / 0 / 12 | 14 / 0 / 10 |
+| AI Player Medium, generated map | 0 / 19 / 5 | 2 / 11 / 11 |
+| AI Player Medium, Habbanya-Penny | 0 / 0 / 24 | 2 / 0 / 22 |
+| AI Player Easy, generated map | 0 / 11 / 13 | 2 / 5 / 17 |
+| AI Player Easy, Habbanya-Penny | 0 / 0 / 24 | 0 / 0 / 24 |
+| All 144 | 30 / 30 / 84 | 43 / 16 / 85 |
 
-Tried and removed: the later opening and the smaller waves. On eight seeds all three rules
-together won 53 of 72 against 58 with the switch off (time limits 14 against 5): an enemy that
-sends less keeps more at home, and the helper's attacks stall on it. Halving the Easy helper's
-harvesters as a weaker player proxy (`CampaignHelperEasyHarvesters=2`) won 1 of 24 on mission
-22 with the switch off and was not used. Atreides mission 20 was won in 2 of 28 games across
-the five arms, both in the stronger arm (16 enemy rocket turrets, "Still open" below); the
-army ceiling does not change that.
+- Paired over the 144 games: 18 losses or draws became wins and 5 went the other way; win share
+  +9 points (bootstrap 95% interval +3 to +15). The time-out rate is 58% off and 59% on: the
+  AI Player Easy and Medium rarely finish a base in 60 minutes at either setting.
+- QuantBot Easy ends with a mean army of 5,200 instead of 10,700 and 17 structures instead of
+  31; the proxy keeps 25 structures instead of 21.
+- An Easy mirror with the switch on the first seat only (`--seat-style easy-relief-on`, 48
+  games) ended at the time limit in all 48: a relieved Easy still holds its base.
+- Smoke tier at level 2 (11 games): Hard and Brutal still beat Easy in every ladder and
+  Construction Yard game; the free-for-all seed above reaches the time limit.
 
-Missions 1-19 with the switch on replayed all 57 gate games to the same final state digest as
-with it off.
+### Campaign levels 8-9: three rules tried and removed
+
+Cell `campaign/partner-easy-v-quantbot-easy/vanilla`, missions 20-22, idle human with an Easy
+helper, 3 houses, 80 minutes. Each rule applied to Easy enemies on missions 20-22 only.
+
+| Rule (seeds) | Off wins | On wins | Off time limits | On time limits |
+|---|---:|---:|---:|---:|
+| Army rebuilt to its starting size, not twice it (9811-9822, 108 games) | 89 | 88 | 6 | 10 |
+| First wave 180 s later and waves of 1,190, not 1,700 (9811-9814, 36) | 27 | 27 | 3 | 3 |
+| All three (9811-9818, 72) | 58 | 53 | 5 | 14 |
+| All three, 360 s and waves of 850 (9811-9814, 36) | 27 | 24 | 3 | 7 |
+
+- The army ceiling won 31 of 36 against 27 on the first four seeds and 57 of 72 against 62 on
+  the next eight: no effect. By mission over 12 seeds, off to on: mission 20 23 to 25, mission
+  21 33 to 34, mission 22 33 to 29 of 36.
+- An enemy that sends less keeps more at home, and the helper's attacks stall on it: fewer
+  helper defeats, more time limits.
+- The Easy helper already wins 92% on missions 21 and 22, so it cannot show a gain there. A
+  weaker proxy (`CampaignHelperEasyHarvesters=2`) won 1 of 24 on mission 22 and was not used.
+- Atreides mission 20 is the one map the Easy helper does not win: 0 of 12 with the switch off
+  (16 enemy rocket turrets, "Still open" below). None of the three rules changes that.
+- Missions 1-19 with the switch on replayed all 57 gate games to the same final state digest.
 
 ## Full campaign cap confirmation (2026-11-14, 1.0.868 game code)
 

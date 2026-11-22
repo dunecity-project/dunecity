@@ -535,11 +535,11 @@ struct QuantBotConfig {
         /// ID on ties. Wave objectives prefer it and hunters on another house's building are sent
         /// to its nearest building, at most once per 5 game seconds per unit. Default off.
         bool campaignHelperSingleTarget;
-        /// EasyRelief (default off; EasyReliefPolicy.h): a gentler Easy opponent on campaign
-        /// levels 8-9 and in custom games without the city simulation. The four values below are
-        /// read only while it is on.
-        bool easyRelief;
-        int easyReliefCampaignArmyPercent;     ///< Army it rebuilds to, % of its starting army (native 200).
+        /// EasyRelief (default 0 = off; EasyReliefPolicy.h): a gentler Easy opponent in custom
+        /// games without the city simulation. 1 = only an Easy house with a human player among
+        /// its enemies; 2 = every Easy opponent (AI test games). The three values below are read
+        /// only while it is on.
+        int easyRelief;
         int easyReliefCustomArmyPercent;       ///< Army it builds up to, % of its limit for the map size.
         int easyReliefCustomHarvesterPercent;  ///< Harvesters it keeps, % of its ceiling (maps above 64x64).
         int easyReliefCustomFirstAttackMin;    ///< No attack leaves its base before this game minute.
