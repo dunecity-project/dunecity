@@ -1,3 +1,38 @@
+## 2026-11-22 - Saboteurs go for the nearest vehicle (unreleased, after 1.0.876)
+
+Stefan: "saboteurs seem to have been broken by the ai, they should be destorying nearest vehicle".
+
+- Cause, from the history: no commit changed the rule. `Saboteur::canAttack`, the Hunt search and
+  `Palace::spawnSaboteur` behave as in the initial commit `92785605c` (`git log -L` on both functions; the
+  later commits only add telemetry, achievements, unit limits and the default-off `PalaceValueTarget`
+  route). The rule itself was the fault: a Saboteur's search was the general one, "nearest thing it may
+  attack", and it may attack structures as well as vehicles, so a hunting Saboteur blew up whatever
+  building stood nearest and reached a vehicle only when one happened to be closer. A human's Palace
+  released its Saboteur in Guard with weapon range 0, so it never moved without an order. QuantBot does
+  not override Saboteur orders (1.0.690, still true: every army path skips `Unit_Saboteur`).
+- Measured on the pre-fix build (`build-int` at `eec4240d5`, open 64x64 map, real Palace weapon): the AI
+  Saboteur destroyed a Wind Trap 5 tiles off and left tanks at 13 and 22 tiles; the human one stood on
+  its release tile for 90 game seconds.
+- Now: `Saboteur::findTarget()` takes the nearest enemy vehicle inside the attack mode's search range
+  (whole map in Hunt, 10 tiles in Area Guard), lower object ID on a tie. Vehicle means what `canAttack`
+  always admitted: a ground unit that is neither infantry nor a sandworm, so harvesters and MCVs count
+  and aircraft do not. With no such vehicle it falls back to the old search, which leaves the nearest
+  structure (walls and parks last); with nothing to attack it returns to Guard like any hunter.
+  `Palace::spawnSaboteur` sets Hunt for every owner, as it always did for an AI house; an explicit order still
+  sends it at anything `canAttack` accepts. Applies to all content, Tornie-family mods included.
+- No on/off switch: this is the owner's stated rule for the unit, not an experiment to compare, and a
+  match rule would need a GameInitSettings field, a save and protocol number and a menu entry. The
+  before/after comparison is the probe below on the pre-fix and the fixed build.
+- Wire: sim behaviour differs, so it is noted under the unreleased network protocol 133
+  (`NetworkPacketTypes.h`); no new number, no save format change.
+- Not handled: a Saboteur keeps the vehicle it picked (its attack is forced, as before) and does not
+  switch to a nearer one that appears later; a vehicle sealed inside walls is still picked.
+- Test: `saboteur_target_probe` (`tests/units/run-saboteur-target-probe.py`, headless nightly), vanilla and
+  dunecity, human and qBotHard owners: nearest of three vehicles with a nearer Wind Trap, Soldier and
+  Carryall ignored; Harvester before MCV and Tank; no vehicle -> nearest structure; nothing -> Guard;
+  explicit order onto a Refinery kept; Area Guard takes a Tank at 8 tiles before a Wind Trap at 3.
+  It fails on the pre-fix build ("the released Saboteur is not hunting").
+
 ## 2026-11-22 - Custom Game tech level selector (unreleased, after 1.0.876)
 
 Stefan: "i cant find the tech level selector in custom games" - there was none; only Random Skirmish had one,

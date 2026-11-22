@@ -161,6 +161,48 @@ bool Saboteur::canAttack(const ObjectBase* object) const {
 
 }
 
+const ObjectBase* Saboteur::findTarget() const {
+    // The search range of each attack mode, as in ObjectBase::findTarget().
+    int range = 0;
+    bool wholeMap = false;
+    switch(attackMode) {
+        case GUARD:
+        case HOLD:      range = getWeaponRange();   break;
+        case AREAGUARD: range = 10;                 break;
+        case AMBUSH:    range = getViewRange();     break;
+        case HUNT:      wholeMap = true;            break;
+        default:        return InfantryBase::findTarget();
+    }
+
+    if(currentGameMap->tileExists(location)) {
+        const UnitBase* nearest = nullptr;
+        FixPoint nearestDistance = FixPt_MAX;
+        for(const UnitBase* unit : unitList) {
+            // canAttack() admits ground units that are neither infantry nor a sandworm, and structures.
+            if(!unit->isActive() || !currentGameMap->tileExists(unit->getLocation()) || !canAttack(unit)) {
+                continue;
+            }
+            const FixPoint distance = blockDistance(location, unit->getLocation());
+            if(!wholeMap && distance > FixPoint(range)) {
+                continue;
+            }
+            if(distance < nearestDistance
+               || (distance == nearestDistance && nearest != nullptr
+                   && unit->getObjectID() < nearest->getObjectID())) {
+                nearest = unit;
+                nearestDistance = distance;
+            }
+        }
+        if(nearest != nullptr) {
+            ++targetSearchStats.searches;
+            return nearest;
+        }
+    }
+
+    // No vehicle to go for: the general search, which leaves the nearest enemy structure.
+    return InfantryBase::findTarget();
+}
+
 void Saboteur::destroy()
 {
     Coord realPos(lround(realX), lround(realY));

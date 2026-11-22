@@ -39,6 +39,16 @@ public:
     void deploy(const Coord& newLocation) override;
     bool canAttack(const ObjectBase* object) const override;
 
+    /**
+        A Saboteur's own search goes for the nearest enemy vehicle first: any ground unit
+        that is neither infantry nor a sandworm, so harvesters and MCVs count and aircraft
+        do not. Only when no such vehicle is inside the attack mode's search range (the
+        whole map in Hunt) does it fall back to the general rule, which leaves the nearest
+        enemy structure. An explicit order still sends it at anything canAttack() accepts.
+        \return the target to sabotage, or nullptr
+    */
+    const ObjectBase* findTarget() const override;
+
     void destroy() override;
 };
 
