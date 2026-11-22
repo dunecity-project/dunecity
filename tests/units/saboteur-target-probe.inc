@@ -209,7 +209,9 @@ inline void nothingToSabotage(const std::string& ownerClass) {
     const Uint32 saboteurID = saboteur->getObjectID();
     f.runUntilGone(saboteurID, 20);
     require(f.alive(saboteurID), f.label + ": the Saboteur blew up with nothing to sabotage");
-    require(saboteur->getAttackMode() == GUARD && saboteur->getTarget() == nullptr,
+    // An AI house's Saboteur looks again every ten seconds, so it may be caught mid-search.
+    require(saboteur->getTarget() == nullptr && (saboteur->getAttackMode() == GUARD
+                || (f.owner->isAI() && saboteur->getAttackMode() == HUNT)),
             f.label + ": a Saboteur with nothing to sabotage did not return to Guard");
     for(const auto& entry : f.watched) require(f.alive(entry.objectID), f.label + ": " + entry.name + " was destroyed");
     SDL_Log("SABOTEUR_TARGET_CASE: %s had nothing to sabotage and waits in Guard", f.label.c_str());

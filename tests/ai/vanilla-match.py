@@ -101,8 +101,14 @@ ARMY_FIELDS = ('minute', 'roles_measured', 'army_value', 'inside_value', 'outsid
 ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
 # One row per Saboteur event the engine logs: its Palace release, the object it blew up, or its
 # loss with nothing sabotaged (tests/ai/saboteur-effect-report.py).
-SABOTEUR_EVENTS = (('SABOTEUR_RELEASED:', 'released'), ('SABOTEUR_HIT:', 'hit'), ('SABOTEUR_LOST:', 'lost'))
-SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehicle', 'price', 'cycle')
+# 'order' rows are an AI player's army orders addressed to a Saboteur (the first six of each, with
+# the function that gave them; refused=1 when the Saboteur kept its own hunt) and 'mode' rows its
+# attack-mode changes. hit and lost rows carry its totals (orders, overwrites, refused).
+SABOTEUR_EVENTS = (('SABOTEUR_RELEASED:', 'released'), ('SABOTEUR_HIT:', 'hit'), ('SABOTEUR_LOST:', 'lost'),
+                   ('SABOTEUR_ORDER:', 'order'), ('SABOTEUR_MODE:', 'mode'))
+SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehicle', 'price', 'cycle', 'age_s',
+                   'orders', 'overwrites', 'refused', 'killer', 'killer_item', 'killer_house', 'target_dist', 'mode',
+                   'order', 'caller', 'busy', 'from', 'to')
 SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()

@@ -62,6 +62,52 @@ void Saboteur::init()
 
 Saboteur::~Saboteur() = default;
 
+namespace {
+/// Game seconds since the Palace released it, or -1 for a Saboteur that was not released here.
+int ageSeconds(Uint32 releasedCycle) {
+    if(releasedCycle == 0) return -1;
+    return static_cast<int>((currentGame->getGameCycleCount() - releasedCycle) * GAMESPEED_DEFAULT / 1000);
+}
+} // namespace
+
+bool Saboteur::keepsOwnHunt() {
+    return currentGame->getGameInitSettings().getGameOptions().saboteurVehicleHunt;
+}
+
+void Saboteur::markReleased() {
+    releasedCycle = std::max<Uint32>(1, currentGame->getGameCycleCount());
+    loggedMode = attackMode;
+}
+
+bool Saboteur::armyOrder(const char* order, const char* caller) {
+    // Its own hunt is what the rule protects. A Saboteur a scenario placed on guard, or one whose
+    // hunt found nothing left to blow up, still takes its house's orders.
+    const bool refused = keepsOwnHunt() && attackMode == HUNT;
+    const bool busy = target || moving;
+    ++armyOrders;
+    if(refused) ++armyRefused;
+    else if(busy) ++armyOverwrites;
+    if(armyOrders <= 6) {
+        // Enough to name the army code; the totals are in this Saboteur's HIT or LOST line.
+        SDL_Log("SABOTEUR_ORDER: house=%d object=%u order=%s caller=%s refused=%d busy=%d mode=%d cycle=%u",
+                getOwner()->getHouseID(), getObjectID(), order, caller, refused ? 1 : 0, busy ? 1 : 0,
+                attackMode, currentGame->getGameCycleCount());
+    }
+    return refused;
+}
+
+void Saboteur::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                            const DeviationReward::Provenance& provenance) {
+    if(damage > 0) {
+        const ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
+        lastDamagerHouse = damagerOwner != nullptr ? damagerOwner->getHouseID() : -1;
+        lastDamagerItem = pDamager != nullptr ? pDamager->getItemID() : -1;
+        lastDamagerKind = pDamager == nullptr ? "unknown" : pDamager->isAStructure() ? "turret"
+            : pDamager->isAFlyingUnit() ? "aircraft" : pDamager->isInfantry() ? "infantry" : "vehicle";
+    }
+    InfantryBase::handleDamage(damage, damagerID, damagerOwner, provenance);
+}
+
 
 void Saboteur::checkPos()
 {
@@ -91,6 +137,24 @@ void Saboteur::checkPos()
 }
 
 bool Saboteur::update() {
+    if(active && keepsOwnHunt()) {
+        if(attackMode == HUNT) {
+            takeNearerTargetWhenSeen();
+        } else if(attackMode == GUARD && releasedCycle != 0 && getOwner()->isAI() && !target && !moving
+                  && (currentGame->getGameCycleCount() + getObjectID()) % MILLI2CYCLES(10*1000) == 0) {
+            // An AI house's released Saboteur that dropped out of its hunt (a carryall that never
+            // came, nothing left to blow up at the time) looks again every ten seconds.
+            doSetAttackMode(HUNT);
+        }
+    }
+    if(active && releasedCycle != 0 && attackMode != loggedMode) {
+        if(modeChanges++ < 6) {
+            SDL_Log("SABOTEUR_MODE: house=%d object=%u from=%d to=%d age_s=%d cycle=%u", getOwner()->getHouseID(),
+                    getObjectID(), loggedMode, attackMode, ageSeconds(releasedCycle), currentGame->getGameCycleCount());
+        }
+        loggedMode = attackMode;
+    }
+
     if(active && target.getObjPointer() != nullptr) {
         Coord closestPoint = target.getObjPointer()->getClosestPoint(location);
         FixPoint dist = blockDistance(location, closestPoint);
@@ -103,7 +167,10 @@ bool Saboteur::update() {
                 dist.toDouble(), attackMode, destination.x, destination.y);
         }
         
-        if(!moving) {
+        // Up to 1.0.876 it blew up only once it had stopped next to its target, and most lost
+        // Saboteurs were shot by that target during the last step. With the rule on it goes off
+        // as soon as it is in reach.
+        if(!moving || keepsOwnHunt()) {
             //check to see if close enough to blow up target
             if(getOwner()->getTeamID() != target.getObjPointer()->getOwner()->getTeamID()) {
                 if(blockDistance(location, closestPoint) <= 1.5_fix) {
@@ -113,11 +180,13 @@ bool Saboteur::update() {
 
                     ObjectBase* pObject = target.getObjPointer();
                     // One line per Saboteur for the match harnesses (tests/ai/vanilla-match.py).
-                    SDL_Log("SABOTEUR_HIT: house=%d object=%u target_house=%d target_item=%d vehicle=%d price=%d cycle=%u",
+                    SDL_Log("SABOTEUR_HIT: house=%d object=%u target_house=%d target_item=%d vehicle=%d price=%d cycle=%u "
+                            "age_s=%d orders=%d overwrites=%d refused=%d",
                             getOwner()->getHouseID(), getObjectID(), pObject->getOwner()->getHouseID(),
                             pObject->getItemID(), pObject->isAUnit() ? 1 : 0,
                             currentGame->objectData.data[pObject->getItemID()][pObject->getProductionHouseID()].price,
-                            currentGame->getGameCycleCount());
+                            currentGame->getGameCycleCount(), ageSeconds(releasedCycle),
+                            armyOrders, armyOverwrites, armyRefused);
                     detonated = true;
                     // Sabotage destroys directly, bypassing CombatReward's damage path.
                     if (AITelemetry::log().enabled()) {
@@ -167,7 +236,38 @@ bool Saboteur::canAttack(const ObjectBase* object) const {
 }
 
 const ObjectBase* Saboteur::findTarget() const {
-    if(!currentGame->getGameInitSettings().getGameOptions().saboteurVehicleHunt) {
+    const ObjectBase* pick = findOwnTarget();
+    ownPick = pick != nullptr ? pick->getObjectID() : NONE_ID;
+    return pick;
+}
+
+void Saboteur::takeNearerTargetWhenSeen() {
+    // A Saboteur is invisible until an enemy object is within two tiles; from then on it is shot
+    // at. It does not walk on past that object to a vehicle further off: it blows up the nearest
+    // thing it can. Only its own pick is replaced, never a target its owner ordered.
+    const ObjectBase* current = target.getObjPointer();
+    if(current == nullptr || target.getObjectID() != ownPick
+       || (currentGame->getGameCycleCount() + getObjectID()) % 8 != 0) {
+        return;
+    }
+    bool seen = false;
+    for(int team = 0; team < NUM_TEAM_SLOTS; ++team) {
+        seen = seen || (team != getOwner()->getTeamID() && isVisible(team));
+    }
+    if(!seen) {
+        return;
+    }
+    const ObjectBase* nearest = InfantryBase::findTarget();    // the nearest structure or vehicle
+    if(nearest != nullptr && nearest != current
+       && blockDistance(location, nearest->getClosestPoint(location))
+          < blockDistance(location, current->getClosestPoint(location))) {
+        doAttackObject(nearest, true);
+        ownPick = nearest->getObjectID();
+    }
+}
+
+const ObjectBase* Saboteur::findOwnTarget() const {
+    if(!keepsOwnHunt()) {
         // The rule up to 1.0.876: the nearest thing it may attack, structure or vehicle.
         return InfantryBase::findTarget();
     }
@@ -216,9 +316,22 @@ const ObjectBase* Saboteur::findTarget() const {
 void Saboteur::destroy()
 {
     if(!detonated) {
-        // Shot, squashed or otherwise gone without having sabotaged anything.
-        SDL_Log("SABOTEUR_LOST: house=%d object=%u cycle=%u", getOwner()->getHouseID(), getObjectID(),
-                currentGame->getGameCycleCount());
+        // Shot, squashed or otherwise gone without having sabotaged anything. What killed it and
+        // how far it still had to go tell an interrupted hunt from a walk through enemy fire.
+        const ObjectBase* pTarget = target.getObjPointer();
+        const bool onMap = currentGameMap->tileExists(location);
+        const char* killer = lastDamagerKind;
+        if(onMap && currentGameMap->getTile(location)->hasANonInfantryGroundObject()
+           && currentGameMap->getTile(location)->getNonInfantryGroundObject()->isAUnit()) {
+            killer = "squashed";
+        }
+        SDL_Log("SABOTEUR_LOST: house=%d object=%u cycle=%u age_s=%d mode=%d killer=%s killer_item=%d killer_house=%d "
+                "target_item=%d target_dist=%d orders=%d overwrites=%d refused=%d",
+                getOwner()->getHouseID(), getObjectID(), currentGame->getGameCycleCount(), ageSeconds(releasedCycle),
+                attackMode, killer, lastDamagerItem, lastDamagerHouse,
+                pTarget != nullptr ? pTarget->getItemID() : -1,
+                pTarget != nullptr && onMap ? blockDistance(location, pTarget->getClosestPoint(location)).lround() : -1,
+                armyOrders, armyOverwrites, armyRefused);
     }
 
     Coord realPos(lround(realX), lround(realY));

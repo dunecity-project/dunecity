@@ -420,7 +420,9 @@
 //      Also in 133, Saboteurs: a Palace releases one in Hunt for a human house too (as it always
 //      did for an AI house), and a Saboteur's own search takes the nearest enemy vehicle before
 //      any structure (Saboteur::findTarget()). An older peer would desync. Save format unchanged.
-//      The two form the match rule GameOptionsClass::saboteurVehicleHunt (default on, INI key
+//      A hunting Saboteur also takes the nearest thing it can blow up once an enemy has seen
+//      it, goes off as soon as it is in reach, and refuses an AI player's army orders.
+//      Together they form the match rule GameOptionsClass::saboteurVehicleHunt (default on, INI key
 //      "Saboteur Vehicle Hunt"). Its off state is hashed and is bit 7 of the MOD20 byte, so a
 //      default setup's stream and hash are unchanged; no new marker or number.
 //      Also in 133, Trooper Anti-Air (DuneCity content): a rocket Trooper's own search takes an

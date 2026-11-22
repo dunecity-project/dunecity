@@ -515,6 +515,7 @@ bool Palace::spawnSaboteur() {
     const bool hunts = getOwner()->isAI()
         || currentGame->getGameInitSettings().getGameOptions().saboteurVehicleHunt;
     if(hunts) saboteur->doSetAttackMode(HUNT);
+    saboteur->markReleased();
     SDL_Log("SABOTEUR_RELEASED: house=%d object=%u ai=%d cycle=%u", getOwner()->getHouseID(),
             saboteur->getObjectID(), getOwner()->isAI() ? 1 : 0, currentGame->getGameCycleCount());
     if(getOwner()->isAI()) {

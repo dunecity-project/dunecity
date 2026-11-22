@@ -31,6 +31,7 @@
 #include <structures/Palace.h>
 #include <structures/TurretBase.h>
 #include <structures/Scoutpost.h>
+#include <units/Saboteur.h>
 #include <units/UnitBase.h>
 #include <FormationOrders.h>
 #include <units/GroundUnit.h>
@@ -124,8 +125,18 @@ const House* Player::getHouse(int houseID) const {
     return currentGame->getHouse(houseID);
 }
 
-void Player::doRepair(const ObjectBase* pObject) const {
+namespace {
+/// An AI player's army order addressed to a Saboteur. True when it must not be applied: with
+/// the match rule on, a released Saboteur keeps its own hunt until it has blown something up.
+bool saboteurRefuses(const ObjectBase* pObject, const char* order, const char* caller) {
+    if(pObject == nullptr || pObject->getItemID() != Unit_Saboteur) return false;
+    return const_cast<Saboteur*>(static_cast<const Saboteur*>(pObject))->armyOrder(order, caller);
+}
+} // namespace
+
+void Player::doRepair(const ObjectBase* pObject, const char* caller) const {
     if(pObject->getOwner() == getHouse() && pObject->isActive()) {
+        if(saboteurRefuses(pObject, "repair", caller)) return;
         if(pObject->isAUnit()) const_cast<UnitBase*>(static_cast<const UnitBase*>(pObject))->leaveFormation();
         const_cast<ObjectBase*>(pObject)->doRepair();
     } else {
@@ -403,8 +414,9 @@ void Player::doAttackObject(const TurretBase* pTurret, const ObjectBase* pTarget
 
 
 
-void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced) const {
+void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(saboteurRefuses(pUnit, "move", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Pos(x, y, bForced);
     } else {
@@ -413,8 +425,9 @@ void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced) const
     }
 }
 
-void Player::doHuntToward(const UnitBase* pUnit, int x, int y) const {
+void Player::doHuntToward(const UnitBase* pUnit, int x, int y, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(saboteurRefuses(pUnit, "hunt_toward", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doHuntToward(x, y);
     } else {
@@ -434,11 +447,19 @@ Uint32 Player::allocateFormationGroup() const {
 
 namespace {
 
-/// The caller's own active units, in the given order.
-std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& units, const House* house) {
+/// The caller's own active units, in the given order, without any Saboteur that keeps its own
+/// hunt: it gets neither the group's order nor a place in the formation.
+/// A unit that takes the order is not counted here when the group order goes on to give it its
+/// own move (countApplied false): that move counts it.
+std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& units, const House* house,
+                                            const char* order, const char* caller, bool countApplied) {
     std::vector<const UnitBase*> own;
-    for(const UnitBase* unit : units)
-        if(unit != nullptr && unit->getOwner() == house && unit->isActive()) own.push_back(unit);
+    for(const UnitBase* unit : units) {
+        if(unit == nullptr || unit->getOwner() != house || !unit->isActive()) continue;
+        if(unit->getItemID() == Unit_Saboteur && (countApplied || Saboteur::keepsOwnHunt())
+           && saboteurRefuses(unit, order, caller)) continue;
+        own.push_back(unit);
+    }
     return own;
 }
 
@@ -449,20 +470,21 @@ int Player::aiFormationShape() {
     return QuantBotConfig::formationShapeOf(getQuantBotConfig().waveFormation);
 }
 
-void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced, int shape) const {
-    const auto own = ownActiveUnits(units, getHouse());
+void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced, int shape,
+                             const char* caller) const {
+    const auto own = ownActiveUnits(units, getHouse(), "formation_move", caller, false);
     const auto plan = shape == QuantBotConfig::kWaveFormationNone ? FormationPlanner::Plan()
         : FormationOrders::planGroup(own, Coord(x, y), FormationPlanner::shapeFromId(shape));
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
-        for(const UnitBase* unit : own) doMove2Pos(unit, x, y, bForced);
+        for(const UnitBase* unit : own) doMove2Pos(unit, x, y, bForced, caller);
         return;
     }
     std::vector<UnitBase*> members;
     std::vector<Coord> slots;
     for(const UnitBase* unit : own) {
         const Coord slot = plan.slotFor(unit->getObjectID());
-        if(slot.isInvalid()) { doMove2Pos(unit, x, y, bForced); continue; }
-        doMove2Pos(unit, slot.x, slot.y, bForced);
+        if(slot.isInvalid()) { doMove2Pos(unit, x, y, bForced, caller); continue; }
+        doMove2Pos(unit, slot.x, slot.y, bForced, caller);
         members.push_back(const_cast<UnitBase*>(unit));
         slots.push_back(slot);
     }
@@ -470,20 +492,21 @@ void Player::doFormationMove(const std::vector<const UnitBase*>& units, int x, i
                           bForced ? FormationOrders::Resume::ForcedMove : FormationOrders::Resume::Move);
 }
 
-void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y, int shape) const {
-    const auto own = ownActiveUnits(units, getHouse());
+void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y, int shape,
+                                   const char* caller) const {
+    const auto own = ownActiveUnits(units, getHouse(), "formation_hunt", caller, false);
     const auto plan = shape == QuantBotConfig::kWaveFormationNone ? FormationPlanner::Plan()
         : FormationOrders::planGroup(own, Coord(x, y), FormationPlanner::shapeFromId(shape));
     if(!plan.formation || static_cast<int>(plan.slots.size()) < FormationOrders::kMinAIGroup) {
-        for(const UnitBase* unit : own) doHuntToward(unit, x, y);
+        for(const UnitBase* unit : own) doHuntToward(unit, x, y, caller);
         return;
     }
     std::vector<UnitBase*> members;
     std::vector<Coord> slots;
     for(const UnitBase* unit : own) {
         const Coord slot = plan.slotFor(unit->getObjectID());
-        if(slot.isInvalid()) { doHuntToward(unit, x, y); continue; }
-        doHuntToward(unit, slot.x, slot.y);
+        if(slot.isInvalid()) { doHuntToward(unit, x, y, caller); continue; }
+        doHuntToward(unit, slot.x, slot.y, caller);
         members.push_back(const_cast<UnitBase*>(unit));
         slots.push_back(slot);
     }
@@ -492,16 +515,17 @@ void Player::doFormationHuntToward(const std::vector<const UnitBase*>& units, in
                           FormationOrders::Resume::HuntToward);
 }
 
-void Player::doFormUp(const std::vector<const UnitBase*>& units) const {
+void Player::doFormUp(const std::vector<const UnitBase*>& units, const char* caller) const {
     std::vector<UnitBase*> members;
-    for(const UnitBase* unit : ownActiveUnits(units, getHouse()))
+    for(const UnitBase* unit : ownActiveUnits(units, getHouse(), "form_up", caller, true))
         if(FormationOrders::eligible(unit)) members.push_back(const_cast<UnitBase*>(unit));
     if(static_cast<int>(members.size()) < FormationOrders::kMinAIGroup) return;
     FormationOrders::join(members, allocateFormationGroup(), std::vector<Coord>(members.size(), Coord::Invalid()));
 }
 
-void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject) const {
+void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(saboteurRefuses(pUnit, "move_to_object", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Object(pTargetObject);
     } else {
@@ -510,8 +534,9 @@ void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObjec
     }
 }
 
-void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced) const {
+void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(saboteurRefuses(pUnit, "attack_position", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackPos(x, y, bForced);
     } else {
@@ -520,8 +545,9 @@ void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced) cons
     }
 }
 
-void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObject, bool bForced) const {
+void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObject, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(saboteurRefuses(pUnit, "attack_object", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackObject(pTargetObject, bForced);
     } else {
@@ -530,8 +556,9 @@ void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObje
     }
 }
 
-void Player::doSetAttackMode(const UnitBase* pUnit, ATTACKMODE attackMode) const {
+void Player::doSetAttackMode(const UnitBase* pUnit, ATTACKMODE attackMode, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(saboteurRefuses(pUnit, "attack_mode", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doSetAttackMode(attackMode);
     } else {
@@ -579,8 +606,9 @@ bool Player::doDeploy(const MCV* pMCV) const {
 }
 
 
-bool Player::doRequestCarryallDrop(const GroundUnit* pGroundUnit) const {
+bool Player::doRequestCarryallDrop(const GroundUnit* pGroundUnit, const char* caller) const {
     if(pGroundUnit->getOwner() == getHouse() && pGroundUnit->isActive()) {
+        if(saboteurRefuses(pGroundUnit, "carryall", caller)) return false;
         const_cast<GroundUnit*>(pGroundUnit)->leaveFormation();
         return const_cast<GroundUnit*>(pGroundUnit)->requestCarryall();
     } else {

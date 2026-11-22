@@ -472,10 +472,13 @@ public:
         /// Custom Game "Tech level": 1-9 replaces the map's [BASIC] TechLevel for the match;
         /// 0 keeps the map's level. A per-match choice: never written to the saved defaults.
         int         startTechLevel = 0;
-        /// A Saboteur's own search takes the nearest enemy vehicle before any structure, and a
-        /// Palace releases it hunting for a human house too. Off is the rule up to 1.0.876 (the
-        /// nearest structure or vehicle; a human's Saboteur waits in Guard), kept so the two can
-        /// be compared in one build (tests/units/run-saboteur-effect-probe.py). INI key only.
+        /// The Saboteur's own hunt. A Palace releases it hunting for a human house too; it goes for
+        /// the nearest enemy vehicle, takes the nearest thing it can blow up once an enemy has seen
+        /// it, and goes off as soon as it is in reach; an AI player's army orders do not reach it
+        /// while it hunts. Off is the unit up to 1.0.876 (nearest structure or vehicle, a stop next
+        /// to the target before it blows up, a human's Saboteur waiting in Guard, army orders
+        /// applied), kept so the two can be compared in one build
+        /// (tests/units/run-saboteur-effect-probe.py). INI key only.
         bool        saboteurVehicleHunt = true;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
