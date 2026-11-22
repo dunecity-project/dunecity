@@ -236,8 +236,11 @@ Outcome run(const std::string& mod, const std::string& mapData, const Case& spec
         if(ruleActive) require(outcome.endHP < outcome.startHP, label + ": the squad's rockets never hurt the Ornithopter");
     } else if(engages) {
         require(!outcome.shots.empty(), label + ": the Troopers never fired at a target in weapon range");
-        require(outcome.endHP < outcome.startHP, label + ": the Troopers' fire did not damage the target");
-        if(isOrnithopterUnit(spec.targetItem))
+        // Without the rule a Trooper rocket does not track: whether it hurts an aircraft is the
+        // old delivery, which this probe leaves alone (trooper_anti_air_probe measures it).
+        if(!air || ruleActive)
+            require(outcome.endHP < outcome.startHP, label + ": the Troopers' fire did not damage the target");
+        if(ruleActive && isOrnithopterUnit(spec.targetItem))
             require(outcome.endHP == 0, label + ": the held Ornithopter survived a full engagement");
     } else {
         require(outcome.shots.empty() && outcome.endHP == outcome.startHP,
@@ -291,7 +294,10 @@ int runTrooperAirWeaponProbe() {
     for(const auto& spec : cases) {
         const auto off = run(mod, mapData, spec, false, csv);
         const auto on = run(mod, mapData, spec, true, csv);
-        const bool ruleChangesCase = cityContent && (spec.expect == Expect::EngagesWithRule || spec.raid);
+        // In DuneCity content the rule also makes the rocket track, so any aircraft that is
+        // shot at plays differently; ground targets and untouched aircraft must not.
+        const bool ruleChangesCase = cityContent && isFlyingUnit(spec.targetItem)
+            && spec.expect != Expect::Untouched;
         if(!ruleChangesCase)
             require(off.shots == on.shots && off.endHP == on.endHP && off.ticks == on.ticks,
                     std::string(spec.name) + ": the Trooper Anti-Air switch changed a case it must not touch");
