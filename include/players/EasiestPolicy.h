@@ -16,9 +16,10 @@ constexpr int kCustomHarvesterPercent = 50;  ///< Harvesters it keeps, % of Easy
 constexpr int kCustomFirstAttackMin = 10;    ///< No attack leaves its base before this game minute.
 
 // Campaign opponents.
-constexpr int kCampaignArmyPercent = 100;    ///< Army it rebuilds to, % of its starting army (Easy: 200).
+constexpr int kCampaignArmyPercent = 100;    ///< Army it rebuilds to, % of its starting army (Easy: 150).
 constexpr int kCampaignArmyFloor = 2000;     ///< Never rebuilds to less than this.
-constexpr int kCampaignWavePercent = 70;     ///< One ground wave, % of Easy's (1,190 of 1,700 late).
+constexpr int kCampaignWavePercent = 50;     ///< One ground wave, % of Easy's (850 of 1,700 late).
+constexpr int kCampaignWaveFewerUnits = 1;   ///< Units in one wave: this many fewer than Easy's 3 / 4 / 5.
 constexpr int kCampaignOpeningDelaySec = 180;///< Extra wait before its first wave (triggered missions).
 
 /// The army value a custom Easiest house builds up to.
@@ -27,7 +28,7 @@ inline int customArmyCeiling(int easyLimit) {
 }
 
 /// The army value a campaign Easiest opponent replaces its losses up to: the army the mission
-/// started it with, at least the floor, never above Easy's limit (twice the starting army).
+/// started it with, at least the floor, never above Easy's limit (1.5 times the starting army).
 inline int campaignArmyCeiling(int startingArmy, int easyLimit) {
     const int scaled = int(int64_t(std::max(0, startingArmy)) * kCampaignArmyPercent / 100);
     return std::min(std::max(0, easyLimit), std::max(kCampaignArmyFloor, scaled));
@@ -41,6 +42,11 @@ inline int readiness(int required, int ceiling) {
 /// One campaign ground wave, never below one cheap unit.
 inline int waveValue(int easyValue) {
     return std::max(300, int(int64_t(easyValue) * kCampaignWavePercent / 100));
+}
+
+/// Units in one campaign ground wave: fewer than Easy's, never below two.
+inline int waveUnits(int easyUnits) {
+    return std::max(2, easyUnits - kCampaignWaveFewerUnits);
 }
 
 /// Harvesters a custom Easiest house keeps: half Easy's ceiling, rounded up, at least two.

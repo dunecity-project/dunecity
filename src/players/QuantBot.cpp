@@ -409,6 +409,11 @@ void QuantBot::update() {
 		// Use config values for campaign mode
         harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialRefineryBays();
 		militaryValueLimit = lround(initialMilitaryValue * diffSettings.militaryValueMultiplier);
+		// An Easy campaign opponent rebuilds to 1.5 times its starting army (CampaignEasyArmyPercent),
+		// whatever multiplier a saved configuration still holds.
+		if (difficulty == Difficulty::Easy)
+			militaryValueLimit = CampaignDifficultyPolicy::easyArmyCeiling(initialMilitaryValue,
+				config.force.campaignEasyArmyPercent, militaryValueLimit);
 
 		logDebug("  Difficulty: %s", 
 			difficulty == Difficulty::Defend ? "Defend" :

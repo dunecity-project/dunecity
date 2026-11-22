@@ -67,7 +67,7 @@ QuantBotConfig::QuantBotConfig() {
     easy.ornithopterAttackThreshold = 999;                  // Disabled
     easy.attackForceMilitaryValueRatio = 0.25f;             // 25% of military value per attack
     easy.harvesterLimitPerRefineryMultiplier = 1;           // Campaign: 1 harvester per refinery
-    easy.militaryValueMultiplier = 2.0f;                    // Campaign: 2.0x initial (min 2000 at mission 21+)
+    easy.militaryValueMultiplier = 2.0f;                    // Campaign: superseded by CampaignEasyArmyPercent (1.5x initial, min 2000 at mission 21+)
     easy.refineryMinimum = 0;                               // Campaign: No guaranteed refineries
     easy.harvesterLimitCustomSmallMap = 2;
     easy.harvesterLimitCustomMediumMap = 2;
@@ -413,6 +413,9 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignEasyOpeningDelaySec = 0;
     force.campaignMediumOpeningDelaySec = 0;
     force.campaignHardOpeningDelaySec = 60;
+    force.campaignEasyArmyPercent = 150;
+    force.campaignMediumAirRaids = true;
+    force.campaignHardSilos = true;
     force.campaignHelperEasyHarvesters = 4;
     force.campaignHelperMediumHarvesters = 6;
     force.campaignHelperHardHarvesters = 8;
@@ -922,6 +925,12 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "CampaignEasyOpeningDelaySec", force.campaignEasyOpeningDelaySec);
         iniFile.setIntValue("Force Concentration", "CampaignMediumOpeningDelaySec", force.campaignMediumOpeningDelaySec);
         iniFile.setIntValue("Force Concentration", "CampaignHardOpeningDelaySec", force.campaignHardOpeningDelaySec);
+        if (force.campaignEasyArmyPercent != 150)
+            iniFile.setIntValue("Force Concentration", "CampaignEasyArmyPercent", force.campaignEasyArmyPercent);
+        if (!force.campaignMediumAirRaids)
+            iniFile.setBoolValue("Force Concentration", "CampaignMediumAirRaids", force.campaignMediumAirRaids);
+        if (!force.campaignHardSilos)
+            iniFile.setBoolValue("Force Concentration", "CampaignHardSilos", force.campaignHardSilos);
         iniFile.setIntValue("Force Concentration", "CampaignHelperEasyHarvesters", force.campaignHelperEasyHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignHelperMediumHarvesters", force.campaignHelperMediumHarvesters);
         iniFile.setIntValue("Force Concentration", "CampaignHelperHardHarvesters", force.campaignHelperHardHarvesters);
@@ -1272,6 +1281,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignEasyOpeningDelaySec = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyOpeningDelaySec", force.campaignEasyOpeningDelaySec), 0, 1800);
     force.campaignMediumOpeningDelaySec = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignMediumOpeningDelaySec", force.campaignMediumOpeningDelaySec), 0, 1800);
     force.campaignHardOpeningDelaySec = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHardOpeningDelaySec", force.campaignHardOpeningDelaySec), 0, 1800);
+    force.campaignEasyArmyPercent = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignEasyArmyPercent", force.campaignEasyArmyPercent), 0, 400);
+    force.campaignMediumAirRaids = iniFile.getBoolValue("Force Concentration", "CampaignMediumAirRaids", force.campaignMediumAirRaids);
+    force.campaignHardSilos = iniFile.getBoolValue("Force Concentration", "CampaignHardSilos", force.campaignHardSilos);
     force.campaignHelperEasyHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHelperEasyHarvesters", force.campaignHelperEasyHarvesters), 0, 100);
     force.campaignHelperMediumHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHelperMediumHarvesters", force.campaignHelperMediumHarvesters), 0, 100);
     force.campaignHelperHardHarvesters = std::clamp(iniFile.getIntValue("Force Concentration", "CampaignHelperHardHarvesters", force.campaignHelperHardHarvesters), 0, 100);
@@ -1997,6 +2009,10 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignEasyOpeningDelaySec", force.campaignEasyOpeningDelaySec);
     addNamed("campaignMediumOpeningDelaySec", force.campaignMediumOpeningDelaySec);
     addNamed("campaignHardOpeningDelaySec", force.campaignHardOpeningDelaySec);
+    // Hashed only when they differ from the defaults, so configurations without them keep their identity.
+    if (force.campaignEasyArmyPercent != 150) addNamed("campaignEasyArmyPercent", force.campaignEasyArmyPercent);
+    if (!force.campaignMediumAirRaids) addNamed("campaignMediumAirRaids", force.campaignMediumAirRaids);
+    if (!force.campaignHardSilos) addNamed("campaignHardSilos", force.campaignHardSilos);
     addNamed("campaignHelperEasyHarvesters", force.campaignHelperEasyHarvesters);
     addNamed("campaignHelperMediumHarvesters", force.campaignHelperMediumHarvesters);
     addNamed("campaignHelperHardHarvesters", force.campaignHelperHardHarvesters);

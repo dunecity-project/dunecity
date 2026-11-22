@@ -278,7 +278,10 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
     const auto& force=botConfig().force;
     if (difficulty==Difficulty::Easy) {
         profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
-        if (easiestCampaign()) profile.value=EasiestPolicy::waveValue(profile.value);
+        if (easiestCampaign()) {
+            profile.value=EasiestPolicy::waveValue(profile.value);
+            profile.units=EasiestPolicy::waveUnits(profile.units);
+        }
     }
     else if (difficulty==Difficulty::Medium) profile.value=force.campaignMediumWaveValue;
     else if (difficulty==Difficulty::Hard) {

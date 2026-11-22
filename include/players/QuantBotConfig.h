@@ -362,6 +362,15 @@ struct QuantBotConfig {
         int campaignEasyHarvesters, campaignMediumHarvesters, campaignHardHarvesters;
         int campaignEasyWaveValue, campaignMediumWaveValue, campaignHardWaveValue;
         int campaignEasyOpeningDelaySec, campaignMediumOpeningDelaySec, campaignHardOpeningDelaySec;
+        /// Campaign opponent tiers, Stefan 2026-11-22 (CampaignDifficultyPolicy.h). Each is hashed
+        /// and saved only when it differs from its default.
+        /// EasyArmyPercent: an Easy opponent rebuilds to this % of its starting army (150; 0 =
+        /// Easy_MilitaryValueMultiplier, the former 2.0x). MediumAirRaids: a Medium opponent
+        /// raids with its ornithopters as Hard and Brutal do (on). HardSilos: Hard and Brutal
+        /// opponents add a Silo at 90% full storage as Medium does (on).
+        int campaignEasyArmyPercent;
+        bool campaignMediumAirRaids;
+        bool campaignHardSilos;
         /// The levers of a campaign helper (a QuantBot on the human's side under campaign
         /// policy), by its difficulty. Hashed. Harvesters: the most it keeps (0 = the spice
         /// budget alone). ArmyFloor: until its ground army holds this value, and once it has

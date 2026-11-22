@@ -29,6 +29,35 @@ The dated implementation/audit sections below remain historical evidence for
 their named source revisions, not proof that the current engine or either menu
 mode passes every proposed target.
 
+## Campaign opponent tiers changed on 2026-11-22 (after the measurements below)
+
+Stefan, 2026-11-22, on the matrix of every campaign setting by difficulty: "easy should be 1.5x
+the army ceiling not x2 / attack wave should be smaller on easiest / ornithopter attacks on for
+medium / add silos should be on for harder difficulties".
+
+| Change | Before | Now | Lever (`[Force Concentration]`, default) |
+|---|---|---|---|
+| Easy: army it rebuilds to, x its starting army | 2.0 | 1.5 | `CampaignEasyArmyPercent` (150; 0 = `Easy_MilitaryValueMultiplier`) |
+| Easiest: value of one ground wave | 70% of Easy's (630 / 840 / 1,190) | 50% (450 / 600 / 850) | fixed, `EasiestPolicy.h` |
+| Easiest: units in one ground wave | 3 / 4 / 5 as Easy | 2 / 3 / 4 | fixed, `EasiestPolicy.h` |
+| Medium: offensive ornithopter raids | no | yes, as Hard and Brutal | `CampaignMediumAirRaids` (on) |
+| Hard and Brutal: add a Silo at 90% full storage | no (Medium only) | yes | `CampaignHardSilos` (on) |
+
+- They apply to campaign opponents only (`isCampaignEnemy()`: Dune Legacy and DuneCity campaigns,
+  Single mission under campaign policy). Custom, skirmish and multiplayer games and campaign
+  helpers are unchanged; a Medium house outside a campaign still does not raid with aircraft.
+- They are rules in `CampaignDifficultyPolicy.h` with levers, not new `[Difficulty Settings]`
+  defaults, because every player's saved `QuantBot Config.ini` and every shipped mod
+  configuration stores `Easy_MilitaryValueMultiplier=2.0` and
+  `Medium_OrnithopterAttackEnabled=0`; a changed default would reach new installations only
+  and would give them a different configuration hash from existing ones. The levers are saved
+  and hashed only when changed. The Easy mission 21+ floor of 2,000 is unchanged.
+- Workers are still never an aircraft target; that rule sits ahead of the raid gate.
+- Old behaviour for a paired test in the same build: `--style campaign-tiers-1122-off`
+  (`tests/ai/play-styles/campaign-tiers-1122-off.ini`; the Easiest wave has no lever).
+- The Easiest and Easy results below were measured before these changes (source `097d07dc3`).
+  Not re-measured: see the gates recorded with the commit.
+
 ## QuantBot Easiest (2026-11-22, class `qBotEasiest`, protocol 132)
 
 Stefan, 2026-11-22: "can we just make an 'easiest' difficulty which is easier than easy". It
@@ -46,8 +75,9 @@ QuantBot Easiest is QuantBot Easy (same skills, same `[Difficulty Settings] Easy
 | Custom games: army it builds up to | 60% of Easy's limit for the map size | 100% |
 | Custom games: harvesters (maps above 64x64) | half Easy's ceiling, at least two | 8 / 15 |
 | Custom games: first attack | not before minute 10; it still defends | no hold |
-| Campaign opponent: army it rebuilds to | the army the mission starts it with, at least 2,000 | twice it |
-| Campaign opponent: one ground wave | 70% (630 / 840 / 1,190) | 900 / 1,200 / 1,700 |
+| Campaign opponent: army it rebuilds to | the army the mission starts it with, at least 2,000 | 1.5 times it |
+| Campaign opponent: one ground wave | 50% (450 / 600 / 850) | 900 / 1,200 / 1,700 |
+| Campaign opponent: units in one wave | 2 / 3 / 4 | 3 / 4 / 5 |
 | Campaign opponent: first wave (triggered missions) | 180 s later | on the trigger |
 
 The class is an Easy QuantBot with a mark set by `PlayerFactory` on create and on load; the

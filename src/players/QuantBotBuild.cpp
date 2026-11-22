@@ -4353,9 +4353,11 @@ Uint32 QuantBot::storageExpansionItem(BuildPass& pass, const BuilderBase* builde
             && pass.itemCount[Structure_Silo]==getHouse()->getNumItems(Structure_Silo)
             && campaignAvailableToBuild(builder,Structure_Silo) ? Uint32(Structure_Silo) : Uint32(NONE_ID);
     }
-    // A Medium campaign opponent adds a Silo once its storage is 90% full, as SiloFillPercent does.
+    // A Medium, Hard or Brutal campaign opponent adds a Silo once its storage is 90% full, as
+    // SiloFillPercent does (Hard and Brutal: CampaignHardSilos).
     const int fill = botConfig().force.siloFillPercent>0 ? botConfig().force.siloFillPercent
-        : isCampaignEnemy() && difficulty==Difficulty::Medium ? 90 : 0;
+        : CampaignDifficultyPolicy::siloFillPercent(static_cast<int>(difficulty), isCampaignEnemy(),
+                                                    botConfig().force.campaignHardSilos);
     if (builder->isUpgrading() || builder->getProductionQueueSize()!=0
         || !getHouse()->hasPower()
         || (pass.forecastNetIncome<=0 && fill==0)) return NONE_ID;

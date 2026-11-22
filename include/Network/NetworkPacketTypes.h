@@ -411,7 +411,10 @@
 // 132: QuantBot Easiest (player class qBotEasiest, appended to the lobby's class list): QuantBot
 //      Easy with a lower army ceiling, half the harvesters and no attack before minute 10 in
 //      custom games, and smaller, later waves as a campaign opponent (EasiestPolicy.h). Older
-//      peers do not know the class. Save format unchanged.
+//      peers do not know the class. Save format unchanged. Also in 132, campaign opponents
+//      (CampaignDifficultyPolicy.h): Easy rebuilds to 1.5 times its starting army (was twice),
+//      Medium raids with ornithopters, Hard and Brutal add a Silo at 90% full storage; an
+//      Easiest wave is half of Easy's with one unit fewer.
 #define NETWORK_PROTOCOL_VERSION            132
 
 // Mod transfer limits

@@ -35,6 +35,23 @@ inline Profile profile(int difficulty, int tech) {
         default:return {8, 16+stage*4, (16+stage*4)*700, 40000-stage*10000, 0, 300000, 5, 100, false};
     }
 }
+// Tier rules of a campaign opponent (Stefan, 2026-11-22). Difficulty: 0 Easy .. 3 Brutal.
+// An Easy opponent rebuilds its army to this share of the army the mission starts it with
+// (150%, was the 2.0x of [Difficulty Settings] Easy_MilitaryValueMultiplier, which saved
+// configurations still hold). 0 keeps the configured multiplier.
+inline int easyArmyCeiling(int startingArmy, int percent, int configured) {
+    return percent <= 0 ? configured : int(int64_t(std::max(0, startingArmy)) * percent / 100);
+}
+// Offensive aircraft raids: Hard and Brutal everywhere; a Medium campaign opponent too.
+inline bool raidsWithAircraft(int difficulty, bool campaignEnemy, bool mediumRaids) {
+    return difficulty == 2 || difficulty == 3 || (difficulty == 1 && campaignEnemy && mediumRaids);
+}
+// A campaign opponent adds a Silo once its storage is this full: Medium always did, Hard and
+// Brutal do with hardSilos. 0 = no fill rule (Easy, and every house that is not a campaign enemy).
+inline int siloFillPercent(int difficulty, bool campaignEnemy, bool hardSilos) {
+    if (!campaignEnemy) return 0;
+    return difficulty == 1 || (hardSilos && (difficulty == 2 || difficulty == 3)) ? 90 : 0;
+}
 // Seeded offsets keep each house independent and deterministic across peers.
 inline uint32_t staggerMs(uint32_t seed, uint32_t cycle, uint32_t house, uint32_t spanMs) {
     uint32_t value=seed ^ (house+1)*0x9e3779b9u ^ cycle*0x85ebca6bu;

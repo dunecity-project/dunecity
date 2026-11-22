@@ -14,6 +14,7 @@
 #include <players/TacticalSafetyPolicy.h>
 #include <players/QuantBotMapScopePolicy.h>
 #include <players/QuantBotSpiceBloomPolicy.h>
+#include <players/CampaignDifficultyPolicy.h>
 #include <players/EasiestPolicy.h>
 
 #include <array>
@@ -2736,6 +2737,73 @@ TEST_CASE("Campaign helper counter-attack persists OFF and percent values with d
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Campaign opponent tiers: Easy 1.5x army, Medium air raids, Hard and Brutal silos",
+          "[ai][campaign][difficulty][config]") {
+    using namespace CampaignDifficultyPolicy;
+    // Easy rebuilds to 1.5 times its starting army, whatever a saved Easy multiplier says;
+    // 0 keeps the configured value (the former twice).
+    REQUIRE(easyArmyCeiling(4000, 150, 8000) == 6000);
+    REQUIRE(easyArmyCeiling(1001, 150, 2002) == 1501);
+    REQUIRE(easyArmyCeiling(4000, 200, 8000) == 8000);
+    REQUIRE(easyArmyCeiling(4000, 0, 8000) == 8000);
+    REQUIRE(easyArmyCeiling(-1, 150, 0) == 0);
+    // Easiest stays at or below the lower Easy ceiling.
+    REQUIRE(EasiestPolicy::campaignArmyCeiling(4000, easyArmyCeiling(4000, 150, 8000)) == 4000);
+    REQUIRE(EasiestPolicy::campaignArmyCeiling(1000, easyArmyCeiling(1000, 150, 2000)) == 1500);
+
+    // Aircraft raids: Hard and Brutal everywhere; Medium only as a campaign opponent with the lever.
+    for (const bool campaign : {false, true}) {
+        for (const bool lever : {false, true}) {
+            REQUIRE_FALSE(raidsWithAircraft(0, campaign, lever));
+            REQUIRE(raidsWithAircraft(1, campaign, lever) == (campaign && lever));
+            REQUIRE(raidsWithAircraft(2, campaign, lever));
+            REQUIRE(raidsWithAircraft(3, campaign, lever));
+            REQUIRE_FALSE(raidsWithAircraft(4, campaign, lever));   // Defend never raids
+        }
+    }
+
+    // Silo at 90% full: Medium as before, Hard and Brutal with the lever, never Easy or Defend,
+    // and never a house that is not a campaign opponent.
+    REQUIRE(siloFillPercent(0, true, true) == 0);
+    REQUIRE(siloFillPercent(1, true, false) == 90);
+    REQUIRE(siloFillPercent(2, true, true) == 90);
+    REQUIRE(siloFillPercent(3, true, true) == 90);
+    REQUIRE(siloFillPercent(2, true, false) == 0);
+    REQUIRE(siloFillPercent(3, true, false) == 0);
+    REQUIRE(siloFillPercent(4, true, true) == 0);
+    for (const int difficulty : {0, 1, 2, 3, 4}) REQUIRE(siloFillPercent(difficulty, false, true) == 0);
+
+    // The levers: new defaults, saved and hashed only when changed, restored from a file.
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.campaignEasyArmyPercent == 150);
+    REQUIRE(defaults.force.campaignMediumAirRaids);
+    REQUIRE(defaults.force.campaignHardSilos);
+    // The saved [Difficulty Settings] value is untouched, so existing configurations keep their hash.
+    REQUIRE(defaults.easy.militaryValueMultiplier == 2.0f);
+    REQUIRE_FALSE(defaults.medium.ornithopterAttackEnabled);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-campaign-tiers-test.ini";
+    QuantBotConfig former = defaults;
+    former.force.campaignEasyArmyPercent = 200;
+    former.force.campaignMediumAirRaids = false;
+    former.force.campaignHardSilos = false;
+    REQUIRE(former.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(former.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.campaignEasyArmyPercent == 200);
+    REQUIRE_FALSE(restored.force.campaignMediumAirRaids);
+    REQUIRE_FALSE(restored.force.campaignHardSilos);
+    REQUIRE(restored.getConfigHash() == former.getConfigHash());
+    for (const auto change : {0, 1, 2}) {
+        QuantBotConfig one = defaults;
+        if (change == 0) one.force.campaignEasyArmyPercent = 200;
+        if (change == 1) one.force.campaignMediumAirRaids = false;
+        if (change == 2) one.force.campaignHardSilos = false;
+        REQUIRE(one.getConfigHash() != defaults.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("QuantBot Easiest: lower ceilings than Easy that can still attack",
           "[ai][campaign][difficulty]") {
     using namespace EasiestPolicy;
@@ -2757,11 +2825,16 @@ TEST_CASE("QuantBot Easiest: lower ceilings than Easy that can still attack",
     REQUIRE(readiness(3400, 4000) == 3200);
     REQUIRE(readiness(3400, 0) == 3400);
 
-    // Campaign waves: 70% of Easy's 900 / 1,200 / 1,700, never below one cheap unit.
-    REQUIRE(waveValue(1700) == 1190);
-    REQUIRE(waveValue(1200) == 840);
-    REQUIRE(waveValue(900) == 630);
+    // Campaign waves: half of Easy's 900 / 1,200 / 1,700, never below one cheap unit, and one
+    // unit fewer than Easy's 3 / 4 / 5, never below two.
+    REQUIRE(waveValue(1700) == 850);
+    REQUIRE(waveValue(1200) == 600);
+    REQUIRE(waveValue(900) == 450);
     REQUIRE(waveValue(300) == 300);
+    REQUIRE(waveUnits(5) == 4);
+    REQUIRE(waveUnits(4) == 3);
+    REQUIRE(waveUnits(3) == 2);
+    REQUIRE(waveUnits(2) == 2);
 
     // Harvesters: half Easy's ceiling, rounded up, at least two; no ceiling stays none.
     REQUIRE(harvesterCeiling(8) == 4);
