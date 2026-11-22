@@ -1200,6 +1200,12 @@ void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, Yard
     if (pass.economyProjectOrdered || pass.economyProject == NONE_ID || yardTurn.itemID != NONE_ID
         || yardTurn.skipRemainingStructureLogic || pass.orderedThisTick.count(pass.economyProject)
         || !campaignAvailableToBuild(turn.pBuilder, pass.economyProject)) return;
+    // A required civic (a missing Stadium or Airport, or the prerequisite or yard upgrade that
+    // unlocks it) and urgent protection outrank the economy project, as they outrank planned
+    // reactor capacity: while the civic is missing the valve for the zones we already own is
+    // pinned at 0, so saving for a Palace or a reactor first buys growth that cannot happen
+    // (quantbot_growth_installments case 0). The yard goes on to those rules instead.
+    if (yardTurn.civicClaimsYard || yardTurn.urgentProtection) return;
     const Uint32 item = pass.economyProject;
     const bool palace = item == Structure_Palace || item == Structure_Stadium;
     // Beyond the core limits: only from spare cash, never saved for (the yard goes on as usual).

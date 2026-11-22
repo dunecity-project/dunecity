@@ -311,11 +311,44 @@ void runWholeArmyDispatchProbe(Game& game) {
             bot->doAttackObject(engaged,distraction,false);
             require(currentGame->getObjectManager().getObject(engaged->target.getObjectID())==distraction,"Fixture could not engage a hunter elsewhere");
 
-            bot->defenceAssignments.clear();
-            bot->defenceResponseCycles.clear();
-            bot->dangerUpdated=std::numeric_limits<Uint32>::max();
-            bot->refreshTacticalDanger();
-            bot->scrambleUnitsAndDefend(assault.front(),false,asset);
+            auto scramble=[&] {
+                bot->defenceAssignments.clear();
+                bot->defenceResponseCycles.clear();
+                bot->dangerUpdated=std::numeric_limits<Uint32>::max();
+                bot->refreshTacticalDanger();
+                bot->scrambleUnitsAndDefend(assault.front(),false,asset);
+            };
+            // MassHold (on by default in DuneCity custom games since 2026-11-22,
+            // docs/formations.md "MassHold"): when everything in reach, the troops
+            // already fighting and our turrets beside the building cannot match the
+            // raid, nobody new goes, and a hold never recalls a hunter from its
+            // offensive. That is checked first; the sized answer below is the rule
+            // without MassHold, measured with MassHold switched off for this bot.
+            const auto previousOverride=bot->configOverride;
+            if(bot->massHoldActive()) {
+                const auto holdsBefore=bot->forceStats.massHolds;
+                int huntingBefore=0;
+                for(auto* unit:eligible) if(unit->getAttackMode()==HUNT) ++huntingBefore;
+                scramble();
+                int assigned=0, huntingAfter=0;
+                for(auto* unit:eligible) {
+                    if(bot->defenceAssignments.count(unit->getObjectID())) ++assigned;
+                    if(unit->getAttackMode()==HUNT) ++huntingAfter;
+                }
+                SDL_Log("WHOLE_ARMY_DIAG: mass hold assigned=%d of %zu holds=%d hunting=%d/%d",
+                    assigned,eligible.size(),int(bot->forceStats.massHolds-holdsBefore),
+                    huntingAfter,huntingBefore);
+                require(bot->forceStats.massHolds>holdsBefore,
+                    "MassHold did not hold an attack that nothing in reach can match");
+                require(assigned==0,
+                    "MassHold sent troops piecemeal into an attack that nothing in reach can match");
+                require(huntingAfter==huntingBefore,"MassHold recalled a hunter from its offensive");
+                auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+                config->force.massHold=false;
+                bot->configOverride=config;
+                require(!bot->massHoldActive(),"Could not switch MassHold off for the sized answer");
+            }
+            scramble();
 
             auto value=[&](const ObjectBase* object) {
                 const int price=currentGame->objectData.data[object->getItemID()][object->getOriginalHouseID()].price;
@@ -364,6 +397,7 @@ void runWholeArmyDispatchProbe(Game& game) {
             retire(distraction);
             asset->setHealth(0);
             bot->defenceAssignments.clear();
+            bot->configOverride=previousOverride;
 
             // A worker under fire is the other asset the player watches die.
             // The ordinary scan rechecks it, not only the damage callback.

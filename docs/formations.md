@@ -1908,6 +1908,17 @@ the turrets also take tiles in the districts that lots and the next Palace's foo
 **`PalaceTurrets` stays off**, kept as the switch for games where ornithopters do hunt Palaces
 (Stefan's `notdefendpalace`, where it kept a Palace alive).
 
+**Release 1.0.876 probes (2026-11-22).** Two nightly probes failed once the package went on by
+default. `quantbot_growth_installments` case 0: a city over the Stadium threshold with the Stadium's
+prerequisite (a Radar) missing saved for its first Palace (`save_palace_district`, LandmarkAnchoring)
+instead of ordering the Radar, so its residential valve stayed pinned at 0. The economy project now
+gives up the yard whenever a required civic (the Stadium or Airport, its prerequisite or the yard
+upgrade that unlocks it) or urgent protection claims it, the same rank the civic already had over
+planned reactor capacity. `quantbot_whole_army_dispatch` built a raid (14 Siege Tanks on a Wind
+Trap) that the 13 troops in reach cannot match, which MassHold holds by design (nobody new goes,
+hunters keep hunting); the probe now checks that hold with MassHold on and the sized answer with
+MassHold switched off for the bot.
+
 ### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
 
 Stefan suggested introducing parks from the original Micropolis. The Park structure (item 89, save 9888,
