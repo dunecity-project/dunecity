@@ -87,6 +87,32 @@ Stefan: "saboteurs seem to have been broken by the ai, they should be destorying
   `quantbot_custom_attack`, `quantbot_baseline_807_check`, `dunelegacy_tests`, `saboteur_target_probe`).
   On the Mini in `build-int` at `f3d496874` (this commit plus the Trooper one): `saboteur_target_probe`,
   `dunelegacy_tests` and `perf_regression` passed. The nightly tier was not run. Not pushed, no version bump.
+- Measured, rule off against on in one build (`7e3738dfe`; Stefan: "test that these fixes improve performance of
+  these units"). Evidence: `~/Documents/projects/outputs/saboteur-effect-20261122/`.
+  - Controlled releases (`saboteur_effect_probe`, `tests/units/run-saboteur-effect-probe.py`): 192 paired
+    releases (4 layouts x 12 seeds x human/qBotHard owner x vanilla/dunecity) against a turreted base, three
+    Troopers and five vehicles. Share destroying a vehicle 18.8% -> 57.3%, on - off +38.5 points (95% interval
+    +31.8 to +45.3); destroying anything 41.1% -> 57.3% (+16.1, +6.8 to +24.5); credits destroyed per Saboteur
+    145 -> 188 (+42, +6 to +76); died with nothing destroyed 17 -> 82, idle 96 -> 0.
+    Human owner: 0% -> 57.3% and 0 -> 188 credits (off, all 96 stand idle). QuantBot owner: vehicle 37.5% ->
+    57.3% (+19.8, +12.5 to +28.1), but anything 82.3% -> 57.3% (-25.0, -35.4 to -14.6) and credits 291 -> 188
+    (-103, -146 to -63), deaths 17 -> 41. The loss is the layout with the base in front of the vehicles:
+    42 of 48 die crossing it (12.5% succeed; off 47.9% took a building at its edge). Same numbers on AWS Linux.
+  - AI matches (`vanilla-match.py` `--ffa default --houses harkonnen atreides ordos mercenary`, Brutal, 45 min,
+    `rs160-dunecity` and `rs160-vanilla`, seeds 9101-9124, `tests/ai/game-options/saboteur-vehicle-hunt-{off,on}.ini`;
+    AWS jobs `20261122T224745-sab-off-40f7e5`, `20261122T224751-sab-on-c88359`; 48 games per arm, none failed;
+    `tests/ai/saboteur-effect-report.py`). Off: 1103 Saboteurs released, 588 vehicles and 111 structures
+    destroyed, 350 lost unused, 209.1 credits per Saboteur. On: 1207 released, 687 vehicles, 0 structures, 455
+    lost, 206.6 credits. Paired per game, on - off: vehicles per Saboteur +0.046 (+0.016 to +0.082); credits per
+    Saboteur +10.4 (-2.5 to +24.6); lost per Saboteur +0.023 (-0.001 to +0.048); placement score of Ordos and
+    Mercenary -0.005 (-0.044 to +0.030); time-outs 31.2% off, 37.5% on (+0.062, -0.021 to +0.146).
+  - Reading: the rule does what was asked (vehicles, and a human's Saboteur now acts at all). For an AI house it
+    does not raise the value a Saboteur destroys - level in matches, lower against a base that screens its
+    vehicles - and it does not move match results. Default stays on (the owner's rule; no match measure is worse).
+    Open improvement: a Saboteur walks the shortest path through turret cover; 38% are lost unused in matches.
+  - Gates for `7e3738dfe`: AWS job `20261122T224814-ctest-5330af` 9/9 passed (the four AI gates,
+    `saboteur_target_probe`, `saboteur_effect_probe`, `dunelegacy_tests`, `quantbot_custom_attack`,
+    `quantbot_baseline_807_check`). `perf_regression` was not re-run for the switch commit.
 
 ## 2026-11-22 - Custom Game tech level selector (unreleased, after 1.0.876)
 
