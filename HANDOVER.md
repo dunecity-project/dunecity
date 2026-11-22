@@ -159,6 +159,9 @@ close." Commit `da6feac43` (search), and this commit (rename, comments). Evidenc
   explored guard range). `saboteur_effect_probe` requires more Saboteurs to destroy something with the rule
   on, per owner, and no fewer credits. Gates for `da6feac43`: AWS job `20261123T001136-ctest-d4687b` 9/9
   passed; on the Mini at `2aee7c5ab` `perf_regression`, both probes and `dunelegacy_tests` passed.
+  For the rename commit `9b578cb01`: AWS job `20261123T002137-ctest-a67964` 9/9 passed, the Mini run passed at
+  `013546d0c`, and six games per arm with the renamed option files reproduce both arms of the vanilla-map
+  games exactly (the DuneCity-map games differ because the city-plane commits landed in between).
 - Engine rule worth knowing: outside Hunt every unit only auto-targets what stands on ground its team has
   explored, so a human's Saboteur on Area Guard ignores what it has not seen.
 
