@@ -11,23 +11,25 @@ This is the long-form guide. For a quick web version, see
 
 ## 1. Turn on city-sim mode
 
-On first launch Dune City offers a one-click **Enable now** prompt for
-the bundled `dunecity` mod. If you skip it, you can enable it later:
+City-sim play is the bundled **Dune City** mod (`dunecity`). You choose a
+mod when you start a game: **Campaign**, **Custom Game** and **Random
+Skirmish** on the main menu each have a **Mod** list. Pick **Dune City**
+there. Other mods, such as **Tornie** and **Dune2R**, are chosen the same
+way. The **DuneCity Campaign** always plays Dune City.
 
-1. Main Menu → **Mods**
-2. Select **Dune City**
-3. Click **Activate**
+On first launch a one-time message explains this. It has a single **OK**
+button and does not change your mod.
 
-The bottom-left watermark on the main menu shows the active mod. When
-"Dune City" appears there, the city-sim build menu entries become
-available in-game.
+The banner above the main menu buttons shows the active mod. When it reads
+**MOD: DUNE CITY**, the city-sim build menu entries become available
+in-game.
 
 ## 2. Start a skirmish on a city-sized map
 
 City-sim play wants room. The bundled map **`2P - 192x192 - City`**
 is designed for it.
 
-1. Main Menu → **Single Player** → **Custom Game**
+1. Main Menu → **Custom Game**, and choose **Dune City** in the **Mod** list
 2. Pick **`2P - 192x192 - City`** from the map list
 3. Set up players and start the game
 

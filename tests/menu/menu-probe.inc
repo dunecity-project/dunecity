@@ -1256,6 +1256,53 @@ int runMenuProbe() {
         menuRequire(selections==2 && doubleClicks==1,"Same-row double click stopped activating the row");
     }
     {
+        // First launch on a non-city mod shows an OK-only tip, once per install. Stefan,
+        // 2026-11-22: no Enable button; say how to choose Dune City and other mods such as
+        // Tornie and Dune2R. Closing it records it as seen and never switches the mod.
+        auto& mods = ModManager::instance();
+        const std::string previousMod = mods.getActiveModName();
+        char markerPath[FILENAME_MAX];
+        menuRequire(fnkdat("dunecity-first-launch.done", markerPath, FILENAME_MAX, FNKDAT_USER | FNKDAT_CREAT) >= 0,
+                    "Cannot locate the first-launch marker");
+        const std::filesystem::path marker(markerPath);
+        std::error_code ignored;
+        const bool hadMarker = std::filesystem::exists(marker, ignored);
+        std::filesystem::remove(marker, ignored);
+        if(previousMod != "vanilla") menuRequire(mods.setActiveMod("vanilla"), "Cannot select Vanilla for the first-launch tip");
+        {
+            MainMenu first;
+            first.showFirstLaunchCityPromptIfNeeded();
+            auto* tip = dynamic_cast<MsgBox*>(first.pChildWindow);
+            menuRequire(tip && !dynamic_cast<QstBox*>(first.pChildWindow) && first.bFirstLaunchPromptOpen,
+                        "First launch did not show the OK-only mod tip");
+            const std::string text = tip->getText();
+            for(const char* bundled : {"dunecity", "Tornie", "Dune2R"}) {
+                menuRequire(mods.modExists(bundled), "A mod named in the first-launch tip is not bundled");
+                menuRequire(text.find(mods.getModInfo(bundled).displayName) != std::string::npos,
+                            "First-launch tip does not name a bundled mod as the Mod list shows it");
+            }
+            for(const char* place : {"Campaign", "Custom Game", "Random Skirmish", "Mod list"})
+                menuRequire(text.find(place) != std::string::npos, "First-launch tip lost where mods are chosen");
+            menuRequire(text.find("Enable") == std::string::npos && text.find("MODS") == std::string::npos,
+                        "First-launch tip still offers to enable a mod or names the removed MODS screen");
+            menuCapture(first,"first-launch-mod-tip");
+            tip->onOK();
+            first.processChildWindowOpenCloses();
+            menuRequire(!first.pChildWindow && !first.bFirstLaunchPromptOpen, "OK did not close the first-launch tip");
+            menuRequire(std::filesystem::is_regular_file(marker), "Closing the first-launch tip did not record it as seen");
+            menuRequire(mods.getActiveModName() == "vanilla", "Closing the first-launch tip changed the active mod");
+            MainMenu again;
+            again.showFirstLaunchCityPromptIfNeeded();
+            menuRequire(!again.pChildWindow && !again.bFirstLaunchPromptOpen, "First-launch tip appeared a second time");
+        }
+        if(!hadMarker) std::filesystem::remove(marker, ignored);
+        if(previousMod != "vanilla") {
+            menuRequire(mods.setActiveMod(previousMod), "Cannot restore the mod after the first-launch tip");
+            effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+        }
+        SDL_Log("MENU_FIRST_LAUNCH_TIP_PASS: OK-only, names Dune City, Tornie and Dune2R, shown once");
+    }
+    {
         MainMenu menu;
         menuRequire(menu.modVersionLabel.getText() == std::string("App v") + DUNECITY_DISPLAY_VERSION,
                     "Home does not display the configured release/development version");

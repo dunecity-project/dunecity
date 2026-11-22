@@ -58,7 +58,7 @@
 
 namespace {
 // Marker file under the user config dir. Once written, the first-launch
-// "Enable city-sim mod?" prompt is suppressed forever.
+// mod tip ("how to choose Dune City and other mods") is suppressed forever.
 std::string firstLaunchMarkerPath() {
     char tmp[FILENAME_MAX];
     if (fnkdat("dunecity-first-launch.done", tmp, FILENAME_MAX,
@@ -391,31 +391,23 @@ void MainMenu::update()
     showUpdatePromptIfAvailable();
 #endif
 
-    // First-launch "Enable city-sim mod?" prompt. Runs after the update
-    // dialog so we don't stack two QstBoxes on top of each other.
+    // First-launch mod tip. Runs after the update dialog so we don't stack
+    // two dialogs on top of each other.
     showFirstLaunchCityPromptIfNeeded();
 }
 
 void MainMenu::onChildWindowClose(Window* pChildWindow)
 {
-    QstBox* pQstBox = dynamic_cast<QstBox*>(pChildWindow);
-    if (pQstBox == nullptr) return;
-
-    if (bFirstLaunchPromptOpen) {
-        // This QstBox was the first-launch "Enable city-sim mod?" prompt.
+    if (bFirstLaunchPromptOpen && dynamic_cast<MsgBox*>(pChildWindow) != nullptr) {
+        // The first-launch mod tip was closed: it only informs, so there is
+        // no choice to act on. Record that it was seen so it shows once.
         bFirstLaunchPromptOpen = false;
-        writeFirstLaunchMarker(); // record the user's decision either way
-
-        if (pQstBox->getPressedButtonID() == QSTBOX_BUTTON1) {
-            ModManager& mm = ModManager::instance();
-            if (mm.setActiveMod("dunecity")) {
-                // Reinitialize so all subsystems pick up the new mod's
-                // ObjectData.ini, QuantBot Config.ini, and game options.
-                quit(MENU_QUIT_REINITIALIZE);
-            }
-        }
+        writeFirstLaunchMarker();
         return;
     }
+
+    QstBox* pQstBox = dynamic_cast<QstBox*>(pChildWindow);
+    if (pQstBox == nullptr) return;
 
     if (updatePromptOpen) {
         updatePromptOpen = false;
@@ -572,14 +564,17 @@ void MainMenu::showFirstLaunchCityPromptIfNeeded()
 
     bFirstLaunchPromptOpen = true;
 
+    // Stefan, 2026-11-22: no Enable button. Say where mods are chosen instead:
+    // Campaign, Custom Game and Random Skirmish all list every installed mod.
     std::string message = _("Welcome to Dune City!");
     message += "\n\n";
-    message += _("Build a city on Arrakis with districts, roads,\npower and public services.");
+    message += _("The Dune City mod adds cities to Arrakis:\ndistricts, roads, power and public services.");
     message += "\n\n";
-    message += _("Enable Dune City now?\nYou can change this later in MODS.");
+    message += _("To play it, start a Campaign, Custom Game or\nRandom Skirmish and choose Dune City in the Mod list.");
+    message += "\n\n";
+    message += _("Other mods, such as Tornie and Dune2R,\nare chosen the same way.");
 
-    auto* prompt = QstBox::create(message, _("Enable now"), _("Later"), QSTBOX_BUTTON1);
-    openWindow(prompt);
+    openWindow(MsgBox::create(message));
 }
 
 
