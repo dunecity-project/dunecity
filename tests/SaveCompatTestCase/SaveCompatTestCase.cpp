@@ -94,6 +94,8 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9884/MOD19 adds technology installments and captured per-house research payment state.
     // 9885 first persists the repair-demand anchor and pressure clock; this boundary stays frozen.
     // 9888 appends the Park structure (item 89); an older save's Park row comes from ObjectData.ini.
+    REQUIRE(SAVEGAMEVERSION_START_TECH_LEVEL == 9889);
+    REQUIRE(SAVEGAMEVERSION >= SAVEGAMEVERSION_START_TECH_LEVEL);
     REQUIRE(SAVEGAMEVERSION_PARK == 9888);
     REQUIRE(SAVEGAMEVERSION >= SAVEGAMEVERSION_PARK);
     REQUIRE(SAVEGAMEVERSION_REPAIR_CAPACITY == 9885);

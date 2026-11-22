@@ -59,6 +59,7 @@ constexpr Uint32 GAMEINIT_MOD16_MARKER = 0x4D4F4447; // MODG: Starport city popu
 constexpr Uint32 GAMEINIT_MOD17_MARKER = 0x4D4F4448; // MODH: research pace/map area and damage land value
 constexpr Uint32 GAMEINIT_MOD18_MARKER = 0x4D4F4449; // MODI: fixed research pace and mountain scenery
 constexpr Uint32 GAMEINIT_MOD19_MARKER = 0x4D4F444A; // MODJ: technology installments
+constexpr Uint32 GAMEINIT_MOD20_MARKER = 0x4D4F444B; // MODK: Custom Game starting tech level
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -346,6 +347,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.researchLab = false;
     gameOptions.researchPace = TechResearch::Pace::Normal;
     gameOptions.technologyInstallments = false;
+    gameOptions.startTechLevel = 0;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -357,13 +359,14 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
-        const bool hasTechnologyInstallments = modMarker == GAMEINIT_MOD19_MARKER;
+        const bool hasStartTechLevel = modMarker == GAMEINIT_MOD20_MARKER;
+        const bool hasTechnologyInstallments = modMarker == GAMEINIT_MOD19_MARKER || hasStartTechLevel;
         const bool hasMountainScenery = modMarker == GAMEINIT_MOD18_MARKER || hasTechnologyInstallments;
         const bool hasLegacyResearchArea = modMarker == GAMEINIT_MOD17_MARKER;
         const bool hasResearchPace = hasLegacyResearchArea || hasMountainScenery;
         const bool hasStarportPopulation = modMarker == GAMEINIT_MOD16_MARKER || hasResearchPace;
         const bool hasResearchOptions = modMarker == GAMEINIT_MOD15_MARKER || hasStarportPopulation;
-        // MOD15..19 share the complete MOD14 prefix.
+        // MOD15..20 share the complete MOD14 prefix.
         if(hasResearchOptions) modMarker = GAMEINIT_MOD14_MARKER;
         if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
@@ -483,6 +486,13 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
             if(hasTechnologyInstallments) {
                 gameOptions.technologyInstallments = stream.readBool();
+            }
+            if(hasStartTechLevel) {
+                // Refused, not clamped: both peers must play the level the host chose.
+                const Uint8 level = stream.readUint8();
+                if(level > 9)
+                    throw std::runtime_error("Invalid starting tech level.");
+                gameOptions.startTechLevel = level;
             }
         }
     } catch (InputStream::eof&) {
@@ -612,7 +622,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD19_MARKER);
+    stream.writeUint32(GAMEINIT_MOD20_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -678,6 +688,8 @@ void GameInitSettings::save(OutputStream& stream) const {
         | (gameOptions.unpoweredZonesVacate ? 2 : 0));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
     stream.writeBool(gameOptions.technologyInstallments);
+    // MOD20: 0 keeps the map's tech level, which is what every older stream means.
+    stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)));
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

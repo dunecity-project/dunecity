@@ -138,6 +138,10 @@ press **Research level** to raise only your house's technology. Each study
 unlocks the next level, up to level 9. **Research Pace** changes the total
 price and study time; the sidebar shows both before you start.
 
+In a **Custom Game**, **Tech level** under the map preview sets the level
+every house starts at: **Map** keeps the level the map was made for, 1 to 9
+replaces it. With Research Lab on, research continues from that level.
+
 **Technology Installments** is an optional rule in **Game Rules** (off by
 default) and applies to humans and AI alike, for both research and
 Construction Yard/factory upgrades. When it is on, you do not need the full

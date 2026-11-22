@@ -333,6 +333,7 @@ public:
                     && (researchLab == goc.researchLab)
                     && (researchPace == goc.researchPace)
                     && (technologyInstallments == goc.technologyInstallments)
+                    && (startTechLevel == goc.startTechLevel)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
@@ -381,6 +382,7 @@ public:
             optStr += "/researchLab=" + std::to_string(researchLab);
             optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
             optStr += "/technologyInstallments=" + std::to_string(technologyInstallments);
+            optStr += "/startTechLevel=" + std::to_string(startTechLevel);
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
@@ -461,6 +463,9 @@ public:
         TechResearch::Pace researchPace = TechResearch::Pace::Normal;
         /// Opt-in: start research and builder upgrades without their full price; pay while they run.
         bool        technologyInstallments = false;
+        /// Custom Game "Tech level": 1-9 replaces the map's [BASIC] TechLevel for the match;
+        /// 0 keeps the map's level. A per-match choice: never written to the saved defaults.
+        int         startTechLevel = 0;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation

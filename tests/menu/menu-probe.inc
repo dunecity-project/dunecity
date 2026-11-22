@@ -12,6 +12,7 @@
 #include <MapEditor/MapEditor.h>
 #include <MapEditor/MapSettingsWindow.h>
 #include <Menu/CustomGamePlayers.h>
+#include <INIMap/INIMapLoader.h>
 #include <Menu/CustomGameMenu.h>
 #include <Menu/Dune2RReadinessMenu.h>
 #include <mod/Dune2RAssetManager.h>
@@ -1883,6 +1884,54 @@ int runMenuProbe() {
         menu.onCancel();
         menuRequire(menu.retVal == MENU_SETUP_MAP,"Back did not return to map browser");
         menuRequire(!setup.players.changeEventList.empty(),"Custom setup lost roster");
+    }
+    {
+        // Tech level: the setup offers the map's own level and 1-9; a pick becomes a match rule
+        // that the rebuilt screen, the started game's settings and a joined client all show.
+        auto techSetup = setup;
+        menuRequire(techSetup.rules.startTechLevel == 0, "A new custom game does not start at the map's tech level");
+        int mapLevel = 0;
+        {
+            CustomGamePlayers menu(init,true,false,&techSetup);
+            mapLevel = menu.mapTechLevel;
+            menuRequire(mapLevel == INIMapLoader::authoredTechLevel(INIFile(map)), "Custom setup read another tech level than the map's");
+            menuRequire(menu.setupTechLevel.getNumEntries() == 10 && menu.setupTechLevel.getSelectedEntryIntData() == 0
+                        && menu.setupTechLevel.getEntry(0) == _("Map") + " (" + std::to_string(mapLevel) + ")",
+                        "Custom setup does not offer the map's tech level and 1-9");
+            const int other = mapLevel == 5 ? 4 : 5;
+            menu.setupTechLevel.setSelectedItem(other, true);
+            menuRequire(techSetup.rules.startTechLevel == other && menu.retVal == MENU_SETUP_CHANGED,
+                        "Picking a tech level did not rebuild the custom setup with it");
+        }
+        const int chosen = techSetup.rules.startTechLevel;
+        GameInitSettings techInit(getBasename(map,true),readCompleteFile(map),false,techSetup.rules);
+        {
+            CustomGamePlayers menu(techInit,true,false,&techSetup);
+            menu.update();
+            menuRequire(menu.setupTechLevel.getSelectedEntryIntData() == chosen, "The rebuilt custom setup lost the chosen tech level");
+            menuRequire(menu.mainVBox.getMinimumSize().x<=menu.mainVBox.getSize().x
+                        && menu.mainVBox.getMinimumSize().y<=menu.mainVBox.getSize().y, "The tech level row does not fit the custom setup");
+            menuCapture(menu,"custom-tech-level");
+        }
+        {
+            auto clientSetup = techSetup;
+            clientSetup.players = ChangeEventList{};
+            CustomGamePlayers menu(techInit,false,false,&clientSetup);
+            menuRequire(menu.setupTechLevel.getNumEntries() == 0 && menu.mapPropertyTech.getText() == std::to_string(chosen),
+                        "A client cannot see, or can change, the host's tech level");
+        }
+        OMemoryStream wire; wire.open(); techInit.save(wire);
+        IMemoryStream received(wire.getData(), wire.getDataLength());
+        menuRequire(GameInitSettings(received).getGameOptions().startTechLevel == chosen, "The chosen tech level is not sent with the match settings");
+        // Remembering rules as defaults never keeps one match's tech level.
+        const auto before = settings.gameOptions;
+        auto remembered = effectiveGameOptions;
+        remembered.startTechLevel = chosen;
+        saveGameOptionsAsDefaults(remembered);
+        menuRequire(settings.gameOptions.startTechLevel == 0
+                    && ModManager::instance().loadEffectiveGameOptions(settings.gameOptions).startTechLevel == 0,
+                    "A custom game's tech level became a saved default");
+        settings.gameOptions = before;
     }
     {
         auto roundTrip = setup;

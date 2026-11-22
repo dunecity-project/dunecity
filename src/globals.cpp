@@ -228,7 +228,11 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Selling Buildings", options.sellingBuildings);
 }
 
-void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {
+void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& chosen) {
+    // The Custom Game tech level belongs to one match setup. As a default it would also replace
+    // the level a Random Skirmish map is generated for.
+    auto options = chosen;
+    options.startTechLevel = 0;
     INIFile config(getConfigFilepath());
     const std::string section = userGameOptionsSection();
     if(section.empty()) {

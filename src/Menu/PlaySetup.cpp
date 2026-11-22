@@ -211,7 +211,12 @@ void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizat
         auto& mods = ModManager::instance();
         const auto oldMod = mods.getActiveModName();
         if(!setup.mods.empty() && setup.mods[setup.mod].name != oldMod) {
-            if(mods.setActiveMod(setup.mods[setup.mod].name)) setup.rules = effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+            if(mods.setActiveMod(setup.mods[setup.mod].name)) {
+                // The new mod brings its own rule defaults; the tech level chosen for this match stays.
+                const int chosenTechLevel = setup.rules.startTechLevel;
+                setup.rules = effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+                setup.rules.startTechLevel = chosenTechLevel;
+            }
             else for(size_t i = 0; i < setup.mods.size(); ++i) if(setup.mods[i].name == oldMod) setup.mod = static_cast<int>(i);
         }
         // The canonical Dune2R artwork is completed and verified here, before this game

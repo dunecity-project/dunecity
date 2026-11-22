@@ -1,3 +1,20 @@
+## 2026-11-22 - Custom Game tech level selector (unreleased, after 1.0.876)
+
+Stefan: "i cant find the tech level selector in custom games" - there was none; only Random Skirmish had one,
+and a custom game took the map's `[BASIC] TechLevel` (else 8, 9 for Tornie content).
+
+- New match rule `GameOptionsClass::startTechLevel` (0 = the map's level, 1-9 replaces it). Chosen in the
+  Custom Game setup, in a **Tech level** row under the map properties (`CustomGamePlayers`); a lobby client and
+  Civilization Wars see the level as text. `Game::initGame` sets `techLevel` before `INIMapLoader`, which only
+  reads the map's value while it is still 0. Campaign missions (mission != 0) ignore the rule.
+- Wire and save: GameInitSettings MOD20 (`MODK`) appends one byte; a level above 9 is refused. Network
+  protocol 133, save format 9889 (`SAVEGAMEVERSION_START_TECH_LEVEL`). The rule is in the options hash.
+- It is a per-match choice: `saveGameOptionsAsDefaults` strips it, it has no INI key, Random Skirmish and
+  Civilization Wars rules reset it to 0, and a mod switch in the setup keeps it.
+- Tests: `CoopGameSettingsTestCase` (MOD20 round trip, MOD19 stream reads 0, truncation, level 10 refused);
+  `menu_navigation_probe` (entries, pick rebuilds the setup, client view, wire, not a default; capture
+  `custom-tech-level`); `research-lab-probe.inc` legacy fixtures strip the extra byte.
+
 ## 2026-11-22 - 1.0.876 published
 
 `v1.0.876` is an annotated tag on `18efc0e8fe8800949e856f17b2f16189d86c55f8` (branch

@@ -492,18 +492,18 @@ void researchWriteLegacyLayout(Game& game, Uint32 version, const std::string& fi
     OMemoryStream setup; setup.open(); game.getGameInitSettings().save(setup);
     const std::string encoded(setup.getData(), setup.getDataLength());
     auto legacy = encoded;
-    const auto marker = legacy.rfind("JDOM");
+    const auto marker = legacy.rfind("KDOM");
     researchRequire(marker != std::string::npos, "Synthetic legacy fixture has no current setup marker");
     if(version == 9882) {
         legacy[marker] = 'H';
-        legacy.resize(legacy.size() - 3);
+        legacy.resize(legacy.size() - 4);   // damage, city rules, installments (MOD19), tech level (MOD20)
         constexpr Uint32 frozenArea = 12384;
         for(int shift = 0; shift < 32; shift += 8) legacy.push_back(static_cast<char>(frozenArea >> shift));
         legacy.push_back(static_cast<char>(game.getGameInitSettings().getGameOptions().damageLowersLandValue));
     } else {
         researchRequire(version == 9883, "Unsupported synthetic legacy format");
         legacy[marker] = 'I';
-        legacy.pop_back();
+        legacy.resize(legacy.size() - 2);   // installments (MOD19), tech level (MOD20)
     }
     const auto offset = bytes.find(encoded);
     researchRequire(offset != std::string::npos && bytes.find(encoded, offset + 1) == std::string::npos,

@@ -46,6 +46,7 @@
 #include <misc/string_util.h>
 #include <misc/IMemoryStream.h>
 
+#include <INIMap/INIMapLoader.h>
 #include <INIMap/INIMapPreviewCreator.h>
 #include <INIMap/MapPlayerSectionUtils.h>
 
@@ -449,6 +450,33 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
 #endif
     mapPropertyNamesVBox.addWidget(Label::create(_("City sim") + ":"));
     mapPropertyValuesVBox.addWidget(&mapPropertyCity);
+    // A new custom game may start at another tech level than its map's. Campaign co-op takes
+    // its level from the mission, a saved game from the save, and Civilization Wars always
+    // starts at its own level 1, so those show no row or only the level.
+    const GameType setupGameType = gameInitSettings.getGameType();
+    if((setupGameType == GameType::CustomGame || setupGameType == GameType::CustomMultiplayer)
+       && !gameInitSettings.getCoopCampaignContext()) {
+        const int chosenTechLevel = std::clamp(gameInitSettings.getGameOptions().startTechLevel, 0, 9);
+        techLevelLabel.setText(_("Tech level") + ":");
+        techLevelHBox.addWidget(&techLevelLabel, 75);
+        if(setup && bServer && !gameInitSettings.isCivilizationWars()) {
+            setupTechLevel.addEntry(_("Map") + " (" + std::to_string(mapTechLevel) + ")", 0);
+            for(int level = 1; level <= 9; ++level) setupTechLevel.addEntry(std::to_string(level), level);
+            setupTechLevel.setSelectedItem(chosenTechLevel);
+            setupTechLevel.setTooltipText(_("The tech level every house starts at. Map uses the level the map was made for."));
+            setupTechLevel.setOnSelectionChange([this](bool interactive) {
+                if(!interactive) return;
+                setup->rules.startTechLevel = setupTechLevel.getSelectedEntryIntData();
+                rebuildSetup(true);
+            });
+            techLevelHBox.addWidget(&setupTechLevel, 105);
+        } else {
+            mapPropertyTech.setText(std::to_string(chosenTechLevel != 0 ? chosenTechLevel : mapTechLevel));
+            techLevelHBox.addWidget(&mapPropertyTech, 105);
+        }
+        rightVBox.addWidget(VSpacer::create(2));
+        rightVBox.addWidget(&techLevelHBox, 20);
+    }
     rightVBox.addWidget(Spacer::create());
 
     mainVBox.addWidget(Spacer::create(), 0.04);
@@ -2603,6 +2631,7 @@ void CustomGamePlayers::extractMapInfo(INIFile* pMap)
 
 
     mapPropertyLicense.setText(pMap->getStringValue("BASIC","License", "-"));
+    mapTechLevel = INIMapLoader::authoredTechLevel(*pMap);
 
     // find Brain=Human
     int currentIndex = 0;

@@ -38,6 +38,10 @@ public:
     INIMapLoader(Game* pGame, const std::string& mapname, const std::string& mapdata = "");
     ~INIMapLoader();
 
+    /// The tech level a match on this map starts at unless the Custom Game "Tech level" rule
+    /// replaces it: [BASIC] TechLevel, else 8 (9 for Tornie content).
+    static int authoredTechLevel(const INIFile& map);
+
 private:
     void load();
     void loadMap();

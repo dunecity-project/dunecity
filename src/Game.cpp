@@ -987,6 +987,11 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             // DuneCity campaign missions keep their authored TechLevel (misc/DuneCityCampaign.h).
             if(gameInitSettings.getMission() != 0 && !gameInitSettings.isDuneCityCampaign()) {
                 techLevel = ((gameInitSettings.getMission() + 1)/3) + 1 ;
+            } else if(gameInitSettings.getMission() == 0
+                      && gameInitSettings.getGameOptions().startTechLevel != 0) {
+                // Custom Game "Tech level": the chosen level replaces the map's [BASIC] TechLevel,
+                // which INIMapLoader only reads while techLevel is still 0.
+                techLevel = std::clamp(gameInitSettings.getGameOptions().startTechLevel, 1, 9);
             }
 
             try {

@@ -216,7 +216,11 @@
 // 9888: The Park structure (Structure_Park, item 89): the ObjectData table and every per-item
 //       house table hold 90 items, and a Park object may follow. No field changes: an older save
 //       stores 89 rows and its Park row takes the active ObjectData.ini (Game::loadSaveGame).
-#define SAVEGAMEVERSION     9888
+// 9889: GameInitSettings MOD20 appends the Custom Game starting tech level (0 = the map's level).
+//       No other field changes; the bump keeps older builds from misreading the longer block.
+#define SAVEGAMEVERSION     9889
+/// First save whose GameInitSettings carries the Custom Game starting tech level (MOD20).
+#define SAVEGAMEVERSION_START_TECH_LEVEL 9889
 /// First save that may hold Park objects (item 89; Num_ItemID 90).
 #define SAVEGAMEVERSION_PARK 9888
 /// First save with MissionObjectives and BreachTrigger.

@@ -228,6 +228,12 @@ void INIMapLoader::load() {
     loadObjectivesAndEvents();
 }
 
+int INIMapLoader::authoredTechLevel(const INIFile& map) {
+    const int defaultTechLevel = (ModManager::instance().isInitialized()
+                                  && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Tornie") ? 9 : 8;
+    return map.getIntValue("BASIC","TechLevel", defaultTechLevel);
+}
+
 /**
     This method loads the game map. This is based on the [MAP] section in the INI file.
 */
@@ -239,9 +245,7 @@ void INIMapLoader::loadMap() {
     pGame->loseFlags = inifile->getIntValue("BASIC","LoseFlags",1);
 
     if(pGame->techLevel == 0) {
-        const int defaultTechLevel = (ModManager::instance().isInitialized()
-                                      && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Tornie") ? 9 : 8;
-        pGame->techLevel = inifile->getIntValue("BASIC","TechLevel", defaultTechLevel);
+        pGame->techLevel = authoredTechLevel(*inifile.get());
     }
 
     int timeout = inifile->getIntValue("BASIC","TIMEOUT",0);

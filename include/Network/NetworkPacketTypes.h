@@ -415,7 +415,9 @@
 //      (CampaignDifficultyPolicy.h): Easy rebuilds to 1.5 times its starting army (was twice),
 //      Medium raids with ornithopters, Hard and Brutal add a Silo at 90% full storage; an
 //      Easiest wave is half of Easy's with one unit fewer.
-#define NETWORK_PROTOCOL_VERSION            132
+// 133: MOD20 carries the hashed Custom Game starting tech level (save 9889): the host's choice of
+//      1-9 replaces the map's [BASIC] TechLevel, 0 keeps it. Older peers cannot read the block.
+#define NETWORK_PROTOCOL_VERSION            133
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
