@@ -318,6 +318,12 @@ constexpr int kClusterReachTiles = 5;
 inline int clusterTurretGoal(int64_t own, int64_t enemy) {
     return outnumbered(own, enemy) ? kClusterTurretsMax : 0;
 }
+/// PalaceTurrets (default off; Stefan, 2026-11-22: "the ai isn't defending palaces with rocket
+/// turrets", save notdefendpalace): every own Palace keeps kPalaceGuardTurrets turrets (any
+/// turret counts) within kClusterReachTiles - Rocket Turrets where a yard can build them, else Gun
+/// Turrets - bought only from cash kSpareCashReserve above the price, never saved for (the
+/// TurretClusters lesson: turrets funded ahead of units lose games).
+constexpr int kPalaceGuardTurrets = 4;
 // ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) ---------------------
 //
 // Stefan, 2026-11-21: the held mass should hit back with momentum. A weak house cannot beat the

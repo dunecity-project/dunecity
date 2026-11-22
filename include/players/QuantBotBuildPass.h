@@ -303,6 +303,8 @@ struct QuantBot::BuildPass {
     Uint32 turretClusterUpgradeYard = NONE_ID;
     /// Rocket Turret, or Gun Turret while no yard can build (or be upgraded to build) a Rocket Turret.
     Uint32 turretClusterItem = NONE_ID;
+    /// PalaceTurrets (default off): the turret guards a Palace and is bought from spare cash only.
+    bool turretClusterPalace{};
     /// NuclearConsolidation / PalaceDistricts (default off): the planned economy project, its price
     /// protected from every non-yard producer this pass, and its site (palace).
     Uint32 economyProject = NONE_ID;

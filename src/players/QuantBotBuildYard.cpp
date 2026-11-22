@@ -927,7 +927,8 @@ void QuantBot::planTurretClusters(BuildPass& pass) {
     pass.turretClusterSite = Coord::Invalid();
     pass.turretClusterUpgradeYard = NONE_ID;
     pass.turretClusterItem = NONE_ID;
-    if (!botConfig().force.turretClusters) return;
+    pass.turretClusterPalace = false;
+    if (!botConfig().force.turretClusters) { planPalaceTurrets(pass); return; }
     const int goal = clusterTurretGoal();
     const int have = goal > 0 ? clusterTurrets() : 0;
     const char* reason = goal <= 0 ? "not_outnumbered" : have >= goal ? "goal_met" : nullptr;
@@ -968,6 +969,70 @@ void QuantBot::planTurretClusters(BuildPass& pass) {
     traceDecision("turret_cluster_plan", AITelemetry::Record().set("reason", reason).set("goal", goal)
         .set("cluster_turrets", have).set("reserve", pass.turretClusterReserve)
         .set("own_estimate", int(teamGroundArmyValue())).set("enemy_estimate", int(enemyThreatEstimate())));
+    if (pass.turretClusterReserve <= 0) planPalaceTurrets(pass);
+}
+
+void QuantBot::planPalaceTurrets(BuildPass& pass) {
+    // PalaceTurrets (default off, ForceConcentrationPolicy::kPalaceGuardTurrets): city skirmish games,
+    // the economy package's scope; spare cash only, so nothing saves or waits for it.
+    namespace Force = ForceConcentrationPolicy;
+    if (!botConfig().force.palaceTurrets || gameMode != GameMode::Custom || !currentGame->isCitySimEnabled()
+        || pass.turretClusterReserve > 0 || pass.turretClusterUpgradeYard != NONE_ID) return;
+    using QuantBotInternal::footprintDistance;
+    std::vector<std::pair<Coord, Coord>> palaces;
+    std::vector<Coord> turrets;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        if (structure->getItemID() == Structure_Palace)
+            palaces.emplace_back(structure->getLocation(), structure->getStructureSize());
+        else if (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
+            turrets.push_back(structure->getLocation());
+    }
+    if (palaces.empty()) return;
+    for (const auto& entry : reservedStructures)
+        if (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)
+            turrets.push_back(entry.second.location);
+    int unguarded = 0;
+    for (const auto& [origin, size] : palaces) {
+        int have = 0;
+        for (const Coord turret : turrets) have += int(footprintDistance(turret, origin, size) <= Force::kClusterReachTiles);
+        unguarded += int(have < Force::kPalaceGuardTurrets);
+    }
+    const char* reason = unguarded == 0 ? "goal_met" : nullptr;
+    Uint32 item = NONE_ID;
+    if (!reason) {
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+                || structure->getItemID() != Structure_ConstructionYard) continue;
+            const auto* yard = static_cast<const BuilderBase*>(structure);
+            if (yard->getCurrentUpgradeLevel() >= 2 && campaignAvailableToBuild(yard, Structure_RocketTurret)) {
+                item = Structure_RocketTurret;
+                break;
+            }
+            if (item == NONE_ID && campaignAvailableToBuild(yard, Structure_GunTurret)) item = Structure_GunTurret;
+        }
+        if (item == NONE_ID) reason = "no_turret_yard";
+    }
+    int price = 0;
+    if (!reason) {
+        price = currentGame->objectData.data[item][getHouse()->getHouseID()].price;
+        if (pass.money < price + std::max(Force::kSpareCashReserve, pass.cityWorkingReserve)) reason = "spare_cash";
+    }
+    Coord site = Coord::Invalid();
+    if (!reason) {
+        site = findClusterTurretLocation(true);
+        if (site.isInvalid()) reason = "no_site";
+    }
+    if (!reason) {
+        pass.turretClusterItem = item;
+        pass.turretClusterSite = site;
+        pass.turretClusterReserve = price;
+        pass.turretClusterPalace = true;
+        reason = item == Structure_RocketTurret ? "rocket_turret" : "gun_turret";
+    }
+    traceDecision("palace_turret_plan", AITelemetry::Record().set("reason", reason)
+        .set("palaces", int(palaces.size())).set("unguarded", unguarded).set("money", pass.money)
+        .set("x", site.x).set("y", site.y));
 }
 
 void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -1000,6 +1065,8 @@ void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardT
     const auto& data = currentGame->objectData.data;
     const int houseID = getHouse()->getHouseID();
     if (rocket && !hasPowerBufferForTurret(pass)) {
+        // A Palace guard never builds its own Wind Trap (NuclearConsolidation would retire it again).
+        if (pass.turretClusterPalace) return;
         if (!powerGenerationPending(pass) && campaignAvailableToBuild(turn.pBuilder, Structure_WindTrap)
             && pass.money >= data[Structure_WindTrap][houseID].price && findPlaceLocation(Structure_WindTrap).isValid()) {
             yardTurn.itemID = Structure_WindTrap;
@@ -1009,6 +1076,7 @@ void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardT
         return;
     }
     if (pass.money < pass.turretClusterReserve) {
+        if (pass.turretClusterPalace) return;   // spare cash only: never saved for
         yardTurn.skipRemainingStructureLogic = true;
         yardTurn.serviceSavingHold = true;
         yardTurn.structureRule = "save_turret_cluster";
@@ -1018,7 +1086,7 @@ void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardT
     ++forceStats.clusterTurretOrders;
     yardTurn.itemID = item;
     yardTurn.crimeServiceSite = pass.turretClusterSite;
-    yardTurn.structureRule = "turret_cluster";
+    yardTurn.structureRule = pass.turretClusterPalace ? "palace_turret" : "turret_cluster";
     yardTurn.skipRemainingStructureLogic = true;
     traceDecision("turret_cluster", AITelemetry::Record()
         .set("builder", turn.pBuilder->getObjectID()).set("item", item)

@@ -3803,3 +3803,28 @@ TEST_CASE("PalaceDenseClearing defaults off, round trips, hashes and prices a lo
     REQUIRE(Force::landmarkClearCost(3, 120) > Force::landmarkClearCost(2, 120));
     REQUIRE(Force::landmarkClearCost(2, 160) > Force::landmarkClearCost(2, 80));
 }
+
+TEST_CASE("PalaceTurrets defaults off, round trips and hashes independently", "[ai][palace][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.palaceTurrets);
+    REQUIRE(ForceConcentrationPolicy::kPalaceGuardTurrets == 4);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-turrets-test.ini";
+    std::set<std::string> hashes{defaults.getConfigHash()};
+    for (const char* ini : {"PalaceTurrets=true\n", "PalaceDenseClearing=true\nPalaceTurrets=true\n"}) {
+        {
+            std::ofstream file(path);
+            file << "[Force Concentration]\n" << ini;
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.palaceTurrets);
+        REQUIRE(hashes.insert(loaded.getConfigHash()).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.palaceTurrets);
+        REQUIRE(restored.force.palaceDenseClearing == loaded.force.palaceDenseClearing);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}

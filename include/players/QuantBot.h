@@ -2044,8 +2044,12 @@ private:
     /// A legal Rocket Turret site beside the first core (yard, factories, refinery, port,
     /// repair yard, in that order) with fewer than kClusterPerCore turrets: packed next to
     /// the cluster's turrets, facing the observed front. One bounded window per core.
-    Coord findClusterTurretLocation();
+    /// With \a palaces, the cores are our Palaces and each takes kPalaceGuardTurrets (PalaceTurrets).
+    Coord findClusterTurretLocation(bool palaces = false);
     void chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// PalaceTurrets (default off): plan one Palace guard turret from spare cash into the
+    /// TurretClusters pass fields when no cluster turret is planned.
+    void planPalaceTurrets(BuildPass& pass);
     /// MassHold: health-weighted value of our live (Rocket Turrets: powered) turrets within
     /// kMassTurretSupportTiles of \a building.
     int64_t turretSupportNear(const ObjectBase* building) const;

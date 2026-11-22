@@ -2403,7 +2403,7 @@ Coord QuantBot::findPerimeterTurretLocation() {
     return best;
 }
 
-Coord QuantBot::findClusterTurretLocation() {
+Coord QuantBot::findClusterTurretLocation(bool palaces) {
     AITelemetry::PerformanceScope perfScope("ai.findClusterTurretLocation", getGameCycleCount(), getHouse()->getHouseID());
     namespace Force = ForceConcentrationPolicy;
     using QuantBotInternal::clusterCoreRank;
@@ -2415,7 +2415,8 @@ Coord QuantBot::findClusterTurretLocation() {
         if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
         if (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
             turrets.push_back(structure->getLocation());
-        const int rank = clusterCoreRank(structure->getItemID());
+        const int rank = palaces ? (structure->getItemID() == Structure_Palace ? 0 : -1)
+            : clusterCoreRank(structure->getItemID());
         if (rank >= 0) cores.push_back({rank, structure->getObjectID(), structure->getLocation(), structure->getStructureSize()});
     }
     for (const auto& entry : reservedStructures)
@@ -2433,7 +2434,7 @@ Coord QuantBot::findClusterTurretLocation() {
         int have = 0;
         for (const Coord turret : turrets)
             if (footprintDistance(turret, core.origin, core.size) <= reach) ++have;
-        if (have >= Force::kClusterPerCore) continue;
+        if (have >= (palaces ? Force::kPalaceGuardTurrets : Force::kClusterPerCore)) continue;
         const Coord centre(core.origin.x + core.size.x / 2, core.origin.y + core.size.y / 2);
         int bestScore = std::numeric_limits<int>::min();
         Coord best = Coord::Invalid();
@@ -2471,12 +2472,12 @@ Coord QuantBot::findClusterTurretLocation() {
         if (best.isValid()) {
             traceDecision("cluster_turret_site", AITelemetry::Record().set("x", best.x).set("y", best.y)
                 .set("core", core.id).set("core_rank", core.rank).set("cluster_turrets", have)
-                .set("turrets", int(turrets.size())));
+                .set("turrets", int(turrets.size())).set("palace", palaces));
             return best;
         }
     }
     traceDecision("cluster_turret_site", AITelemetry::Record().set("valid", false).set("cores", int(cores.size()))
-        .set("turrets", int(turrets.size())));
+        .set("turrets", int(turrets.size())).set("palace", palaces));
     return Coord::Invalid();
 }
 
