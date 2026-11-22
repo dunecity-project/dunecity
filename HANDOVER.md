@@ -67,9 +67,12 @@ Stefan: "saboteurs seem to have been broken by the ai, they should be destorying
   structure (walls and parks last); with nothing to attack it returns to Guard like any hunter.
   `Palace::spawnSaboteur` sets Hunt for every owner, as it always did for an AI house; an explicit order still
   sends it at anything `canAttack` accepts. Applies to all content, Tornie-family mods included.
-- No on/off switch: this is the owner's stated rule for the unit, not an experiment to compare, and a
-  match rule would need a GameInitSettings field, a save and protocol number and a menu entry. The
-  before/after comparison is the probe below on the pre-fix and the fixed build.
+- Switch (added after the first commit, when Stefan asked for the fix to be measured): match rule
+  `GameOptionsClass::saboteurVehicleHunt`, default on, INI key `Saboteur Vehicle Hunt` (no menu entry).
+  It covers both changes: off is the unit up to 1.0.876 (general search; only an AI house's Saboteur
+  is released hunting). Its off state is hashed and travels as bit 7 of the MOD20 tech-level byte, so a
+  default setup's stream and options hash are unchanged and no marker, protocol or save number was added.
+  A stream older than MOD20 plays the current rule: a 1.0.876 save gets the fix.
 - Wire: sim behaviour differs, so it is noted under the unreleased network protocol 133
   (`NetworkPacketTypes.h`); no new number, no save format change.
 - Not handled: a Saboteur keeps the vehicle it picked (its attack is forced, as before) and does not

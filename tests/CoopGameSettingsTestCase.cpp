@@ -1587,6 +1587,51 @@ TEST_CASE("MOD20 Custom Game tech level defaults to the map's, and is hashed, sa
     }
 }
 
+TEST_CASE("The Saboteur vehicle hunt defaults on and its off state is hashed and carried in the MOD20 byte",
+          "[saboteur][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.saboteurVehicleHunt);
+    auto off = defaults;
+    off.saboteurVehicleHunt = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.startTechLevel = GENERATE(0, 5, 9);
+    options.saboteurVehicleHunt = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // Bit 7 is the off state; a setup that plays the default rule writes the byte MOD20 always wrote.
+    REQUIRE(static_cast<Uint8>(encoded.back())
+            == static_cast<Uint8>(options.startTechLevel | (options.saboteurVehicleHunt ? 0 : 0x80)));
+
+    SECTION("both states round-trip with every tech level") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+        REQUIRE(input.getRemainingLength() == 0);
+    }
+    SECTION("a stream older than MOD20 plays the current rule") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions().saboteurVehicleHunt);
+    }
+    SECTION("the off bit does not admit a tech level above 9") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(0x80 | 10);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
 TEST_CASE("Tornie-only player limits apply to writers and received direct lobby settings",
           "[tornie][network][playerlimit]") {
     GameInitSettings init("twelve.ini", "[BASIC]\n", "Twelve", false, SettingsClass::GameOptionsClass{});

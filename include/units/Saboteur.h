@@ -50,6 +50,9 @@ public:
     const ObjectBase* findTarget() const override;
 
     void destroy() override;
+
+private:
+    bool detonated = false;     ///< Set as it blows up its target; never saved, it is gone that cycle.
 };
 
 #endif // SABOTEUR_H

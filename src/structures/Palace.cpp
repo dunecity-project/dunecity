@@ -510,10 +510,14 @@ bool Palace::spawnSaboteur() {
     saboteur->deploy(spot);
 
     // A released Saboteur goes for the nearest enemy vehicle on its own, whoever owns the
-    // Palace (Saboteur::findTarget()). A human owner can still order it somewhere else.
-    saboteur->doSetAttackMode(HUNT);
+    // Palace (Saboteur::findTarget()). A human owner can still order it somewhere else. With
+    // the match rule off (the rule up to 1.0.876) only an AI house's Saboteur hunts.
+    const bool hunts = getOwner()->isAI()
+        || currentGame->getGameInitSettings().getGameOptions().saboteurVehicleHunt;
+    if(hunts) saboteur->doSetAttackMode(HUNT);
+    SDL_Log("SABOTEUR_RELEASED: house=%d object=%u ai=%d cycle=%u", getOwner()->getHouseID(),
+            saboteur->getObjectID(), getOwner()->isAI() ? 1 : 0, currentGame->getGameCycleCount());
     if(getOwner()->isAI()) {
-        SDL_Log("PALACE: Spawned AI saboteur at (%d,%d) in HUNT mode", spot.x, spot.y);
         currentGame->addToNewsTicker(_("@DUNE.ENG|79#Saboteur is approaching"));
         soundPlayer->playVoice(SaboteurApproaching, currentGame->getInterfaceHouseID());
     }

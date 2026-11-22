@@ -41,7 +41,8 @@ army, harvesters, structures, factories, kill and loss value) to samples.csv, wh
 army stands each minute (FFA_ARMY_SAMPLE: inside or outside its base, per QuantBot role, at the
 bundle or perimeter, the outnumbered verdict) to army.csv, its waves to waves.csv and the
 composition per unit-mix slot every 10 game minutes and at the end (value built, lost and
-standing, combat reward; docs/ai-play-styles.md, section 8) to mix.csv; the run directory is
+standing, combat reward; docs/ai-play-styles.md, section 8) to mix.csv and every Saboteur's release,
+sabotage or loss to saboteurs.csv; the run directory is
 deleted straight away and games already in games.csv are skipped. --report prints the tables
 used in docs/formations.md, scored by tests/ai/match_score.py (placement score, time-outs
 negative, verdict on the paired difference; --scoring legacy for the old rule).
@@ -98,6 +99,11 @@ ARMY_FIELDS = ('minute', 'roles_measured', 'army_value', 'inside_value', 'outsid
                'free_value', 'free_inside_value', 'at_bundle_value', 'at_perimeter_value', 'stuck_value', 'outnumbered',
                'garrisoned', 'own_estimate', 'enemy_sum', 'enemy_strongest', 'bundle_base_tiles', 'perimeter_base_tiles')
 ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
+# One row per Saboteur event the engine logs: its Palace release, the object it blew up, or its
+# loss with nothing sabotaged (tests/ai/saboteur-effect-report.py).
+SABOTEUR_EVENTS = (('SABOTEUR_RELEASED:', 'released'), ('SABOTEUR_HIT:', 'hit'), ('SABOTEUR_LOST:', 'lost'))
+SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehicle', 'price', 'cycle')
+SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
 
@@ -343,6 +349,14 @@ def play(args, scratch, binary, key):
         if number in numbers:
             mixes.append({**dict(zip(KEY, key)), 'house': numbers[number], 'label': label_of[number],
                           **{f: sample.get(f, '') for f in MIX_FIELDS}})
+    saboteurs = []
+    for l in lines:
+        for marker, event in SABOTEUR_EVENTS:
+            if marker in l:
+                data = parse(l, marker)
+                saboteurs.append({**dict(zip(KEY, key)), 'event': event,
+                                  **{f: data.get(f, '') for f in SABOTEUR_FIELDS}})
+    append(results / 'saboteurs.csv', SABOTEUR_ROW_FIELDS, saboteurs)
     append(results / 'houses.csv', HOUSE_ROW_FIELDS, house_rows)
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)

@@ -1143,6 +1143,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-saboteur-target-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/saboteur-target-probe)
         set_tests_properties(saboteur_target_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+        # The Saboteur vehicle hunt off against on in one binary: 96 seeded Palace releases per arm and
+        # mod against turreted bases; more Saboteurs must destroy a vehicle with the rule on.
+        dunecity_add_test(headless nightly NAME saboteur_effect_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-saboteur-effect-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/saboteur-effect-probe)
+        set_tests_properties(saboteur_effect_probe PROPERTIES TIMEOUT 900 PROCESSORS 2)
         # A unit the map starts with on a spice or special bloom loads alive and visible with the
         # bloom intact (no untargetable ghost); a unit arriving on a bloom still sets it off.
         dunecity_add_test(headless nightly NAME bloom_placement_probe COMMAND ${Python3_EXECUTABLE}

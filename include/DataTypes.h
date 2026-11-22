@@ -334,6 +334,7 @@ public:
                     && (researchPace == goc.researchPace)
                     && (technologyInstallments == goc.technologyInstallments)
                     && (startTechLevel == goc.startTechLevel)
+                    && (saboteurVehicleHunt == goc.saboteurVehicleHunt)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
@@ -390,6 +391,8 @@ public:
             optStr += "/easyMode=" + std::to_string(easyMode);
             optStr += "/chaosMode=" + std::to_string(chaosMode);
             optStr += "/sellingBuildings=" + std::to_string(sellingBuildings);
+            // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
+            if(!saboteurVehicleHunt) optStr += "/saboteurVehicleHunt=0";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -466,6 +469,11 @@ public:
         /// Custom Game "Tech level": 1-9 replaces the map's [BASIC] TechLevel for the match;
         /// 0 keeps the map's level. A per-match choice: never written to the saved defaults.
         int         startTechLevel = 0;
+        /// A Saboteur's own search takes the nearest enemy vehicle before any structure, and a
+        /// Palace releases it hunting for a human house too. Off is the rule up to 1.0.876 (the
+        /// nearest structure or vehicle; a human's Saboteur waits in Guard), kept so the two can
+        /// be compared in one build (tests/units/run-saboteur-effect-probe.py). INI key only.
+        bool        saboteurVehicleHunt = true;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation

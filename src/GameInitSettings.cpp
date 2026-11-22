@@ -348,6 +348,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.researchPace = TechResearch::Pace::Normal;
     gameOptions.technologyInstallments = false;
     gameOptions.startTechLevel = 0;
+    // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
+    gameOptions.saboteurVehicleHunt = true;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -489,10 +491,14 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
             if(hasStartTechLevel) {
                 // Refused, not clamped: both peers must play the level the host chose.
-                const Uint8 level = stream.readUint8();
+                // Bit 7 of the same byte is set when the Saboteur vehicle hunt is off, so a
+                // stream that plays the default rule is the byte MOD20 always was.
+                const Uint8 packed = stream.readUint8();
+                const Uint8 level = packed & 0x7F;
                 if(level > 9)
                     throw std::runtime_error("Invalid starting tech level.");
                 gameOptions.startTechLevel = level;
+                gameOptions.saboteurVehicleHunt = (packed & 0x80) == 0;
             }
         }
     } catch (InputStream::eof&) {
@@ -689,7 +695,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
     stream.writeBool(gameOptions.technologyInstallments);
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.
-    stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)));
+    // Bit 7: the Saboteur vehicle hunt is off (the default, on, leaves the byte as it was).
+    stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)
+        | (gameOptions.saboteurVehicleHunt ? 0 : 0x80)));
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

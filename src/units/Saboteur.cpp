@@ -107,13 +107,18 @@ bool Saboteur::update() {
             //check to see if close enough to blow up target
             if(getOwner()->getTeamID() != target.getObjPointer()->getOwner()->getTeamID()) {
                 if(blockDistance(location, closestPoint) <= 1.5_fix) {
-                    SDL_Log("SABOTEUR DETONATING! dist=%.2f", dist.toDouble());
-                    
                     if(isVisible(getOwner()->getTeamID())) {
                         screenborder->shakeScreen(18);
                     }
 
                     ObjectBase* pObject = target.getObjPointer();
+                    // One line per Saboteur for the match harnesses (tests/ai/vanilla-match.py).
+                    SDL_Log("SABOTEUR_HIT: house=%d object=%u target_house=%d target_item=%d vehicle=%d price=%d cycle=%u",
+                            getOwner()->getHouseID(), getObjectID(), pObject->getOwner()->getHouseID(),
+                            pObject->getItemID(), pObject->isAUnit() ? 1 : 0,
+                            currentGame->objectData.data[pObject->getItemID()][pObject->getProductionHouseID()].price,
+                            currentGame->getGameCycleCount());
+                    detonated = true;
                     // Sabotage destroys directly, bypassing CombatReward's damage path.
                     if (AITelemetry::log().enabled()) {
                         const int price = currentGame->objectData.data[pObject->getItemID()][pObject->getProductionHouseID()].price;
@@ -162,6 +167,11 @@ bool Saboteur::canAttack(const ObjectBase* object) const {
 }
 
 const ObjectBase* Saboteur::findTarget() const {
+    if(!currentGame->getGameInitSettings().getGameOptions().saboteurVehicleHunt) {
+        // The rule up to 1.0.876: the nearest thing it may attack, structure or vehicle.
+        return InfantryBase::findTarget();
+    }
+
     // The search range of each attack mode, as in ObjectBase::findTarget().
     int range = 0;
     bool wholeMap = false;
@@ -205,6 +215,12 @@ const ObjectBase* Saboteur::findTarget() const {
 
 void Saboteur::destroy()
 {
+    if(!detonated) {
+        // Shot, squashed or otherwise gone without having sabotaged anything.
+        SDL_Log("SABOTEUR_LOST: house=%d object=%u cycle=%u", getOwner()->getHouseID(), getObjectID(),
+                currentGame->getGameCycleCount());
+    }
+
     Coord realPos(lround(realX), lround(realY));
     Uint32 explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1, Explosion_Medium2});
     currentGame->getExplosionList().push_back(new Explosion(explosionID, realPos, owner->getHouseID()));
