@@ -124,6 +124,36 @@ defeated / time limit:
 - Atreides mission 20 is the one late map the Easy helper does not win: 0 of 12 against Easy,
   1 of 12 against Easiest (16 enemy rocket turrets, "Still open" below).
 
+### Where the level 8 wall is: the Atreides campaign (2026-11-22)
+
+Live results, Easy opponents, players who ever won a mission they tried (1.0.865 and later):
+
+| Level | Atreides | Harkonnen | Ordos |
+|---|---|---|---|
+| 1-7 | 324 of 354 (92%) | 156 of 167 (93%) | 66 of 72 (92%) |
+| 8 (missions 20, 21) | 15 of 29 (52%) | 14 of 18 (78%) | 7 of 8 (88%) |
+| 9 | 10 of 11 | 7 of 9 | 4 of 6 |
+
+- Mission 20 is not the wall by itself: 9 of 18 Atreides players ever won mission 20 and 6 of
+  11 mission 21 (Harkonnen 10 of 14 and 4 of 4, Ordos 3 of 4 and 4 of 4). Both Atreides level 8
+  maps set the player against Ordos and Mercenary.
+- The Easy helper agrees (12 seeds per map, Easy enemies): Atreides mission 20 0 of 12 and
+  mission 21 9 of 12; Harkonnen 11 and 12 of 12; Ordos 12 and 12 of 12.
+- It is not spice. Atreides mission 20 starts with 109,000 spice on the map, Harkonnen mission
+  20 (the same terrain and the same player start) 93,000, Atreides mission 21 68,000; the
+  helper earns 27,000 by minute 30 on both mission 20 maps.
+- On Atreides mission 20 the helper's attacks achieve about half as much: by minute 30-35 it
+  has destroyed 14,000-17,000 for 17,000-21,000 lost, against 25,000-31,000 for 14,000-21,000
+  as Harkonnen on the same terrain, and in the first 45 minutes it answers 36-37 attacks on its
+  own base against 10 (two seeds each).
+- Tried on mission 20 (36 games per arm, source `c9090809f`, results
+  `.../easy-relief-20261122/m20/`): `CampaignHelperSingleTarget` and
+  `campaign-helper-tactics-all` on the Easy helper. Atreides stays 0 of 12 with both; Harkonnen
+  falls from 11 to 3 and to 1 of 12, Ordos from 12 to 11 and to 0. Neither is a fix.
+- Open: which part of the Ordos and Mercenary setup (the Devastator dropped on the player's
+  base at minute 14 on both maps, 12-16 rocket turrets, the Deviators) costs Atreides players
+  the mission. It needs scenario variants to test; nothing was changed for it.
+
 **Not measured:** Easiest in city games and in the DuneCity campaign (the custom rules apply
 there too), and any game with a human playing.
 
