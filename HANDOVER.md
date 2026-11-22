@@ -32,6 +32,11 @@ Stefan: "saboteurs seem to have been broken by the ai, they should be destorying
   Carryall ignored; Harvester before MCV and Tank; no vehicle -> nearest structure; nothing -> Guard;
   explicit order onto a Refinery kept; Area Guard takes a Tank at 8 tiles before a Wind Trap at 3.
   It fails on the pre-fix build ("the released Saboteur is not hunting").
+- Results for `2ddcdbab6`: AWS job `20261122T221324-ctest-a7215a` 8/8 passed (`quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+  `quantbot_custom_attack`, `quantbot_baseline_807_check`, `dunelegacy_tests`, `saboteur_target_probe`).
+  On the Mini in `build-int` at `f3d496874` (this commit plus the Trooper one): `saboteur_target_probe`,
+  `dunelegacy_tests` and `perf_regression` passed. The nightly tier was not run. Not pushed, no version bump.
 
 ## 2026-11-22 - Custom Game tech level selector (unreleased, after 1.0.876)
 
