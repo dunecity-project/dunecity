@@ -39,6 +39,7 @@ AmbientAirplane::AmbientAirplane(House* newOwner) : AirUnit(newOwner)
     remainingTicks = CA::kAirplaneMaxTicks;
     bombs = CA::kBombLoad;
     bombTimer = 0;
+    bombSightTile = Coord::Invalid();
 }
 
 AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
@@ -59,10 +60,13 @@ AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
     if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_BOMBS) {
         bombs = std::clamp(stream.readSint32(), 0, CA::kBombLoad);
         bombTimer = std::clamp(stream.readSint32(), 0, CA::kBombRearmTicks - 1);
+        bombSightTile.x = stream.readSint32();
+        bombSightTile.y = stream.readSint32();
     } else {
         // A plane from an older save was unarmed; it continues with a full load.
         bombs = CA::kBombLoad;
         bombTimer = 0;
+        bombSightTile = Coord::Invalid();
     }
     // init() sets the cruise row; a save may be between take-off frames.
     if(takeoffFrame >= CA::kAirplaneLastTakeoffFrame && takeoffFrame <= CA::kAirplaneFirstTakeoffFrame) {
@@ -106,6 +110,8 @@ void AmbientAirplane::save(OutputStream& stream) const
     stream.writeSint32(remainingTicks);
     stream.writeSint32(bombs);
     stream.writeSint32(bombTimer);
+    stream.writeSint32(bombSightTile.x);
+    stream.writeSint32(bombSightTile.y);
 }
 
 bool AmbientAirplane::canPass(int xPos, int yPos) const
@@ -440,24 +446,25 @@ CA::Intercept AmbientAirplane::turretRocketIntercept(const Coord& missile) const
 }
 
 /**
-    City Plane Bombing: on every second sprite tick the plane looks
-    CA::kBombSightDistance ahead on its course. If a building of another team
-    stands there and a bomb is on board, the bomb is released towards that
-    point; it lands about a quarter of a second later (Bullet_Bomb) and damages
+    City Plane Bombing: the bomb sight is the point CA::kBombSightDistance
+    ahead on the plane's course. Each time it enters a tile on which a building
+    of another team stands, and a bomb is on board, the bomb is released towards
+    that point; it lands about a quarter of a second later (Bullet_Bomb) and damages
     the building it lands on, and by the ordinary splash rule units within half
     a tile. The plane's own and allied buildings are never aimed at, and a bomb
     only damages a building its impact point lies on, so they are never hit.
 */
 void AmbientAirplane::dropBomb(Uint32 gameCycle)
 {
-    if(bombs <= 0 || (CA::spriteCycle(gameCycle) + objectID) % CA::kBombDropInterval != 0) return;
-
     const FixPoint angleRad = (angle * (FixPt_PI << 1)) / 8;
     const int sight = CA::toWorld(CA::kBombSightDistance, TILESIZE);
     Coord from = getCenterPoint();
     Coord aim(from.x + lround(FixPoint::cos(angleRad) * sight), from.y - lround(FixPoint::sin(angleRad) * sight));
-    if(aim.x < 0 || aim.y < 0 || !currentGameMap->tileExists(aim.x / TILESIZE, aim.y / TILESIZE)) return;
-    const Tile* tile = currentGameMap->getTile(aim.x / TILESIZE, aim.y / TILESIZE);
+    const Coord sightTile = (aim.x < 0 || aim.y < 0) ? Coord::Invalid() : Coord(aim.x / TILESIZE, aim.y / TILESIZE);
+    if(sightTile == bombSightTile) return;
+    bombSightTile = sightTile;
+    if(bombs <= 0 || sightTile.isInvalid() || !currentGameMap->tileExists(sightTile)) return;
+    const Tile* tile = currentGameMap->getTile(sightTile);
     if(!tile->hasAGroundObject()) return;
     const ObjectBase* building = tile->getGroundObject();
     if(building == nullptr || !building->isAStructure() || building->getHealth() <= 0
@@ -488,16 +495,16 @@ bool AmbientAirplane::update()
     }
 
     const Uint32 gameCycle = currentGame->getGameCycleCount();
+    // The bomb sight is followed every cycle, so no tile it crosses is missed.
+    const bool bombing = currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing;
+    if(bombing && takeoffFrame == 0) dropBomb(gameCycle);
     if(!CA::isSpriteTick(gameCycle)) {
         return true;
     }
 
     if(remainingTicks > 0) --remainingTicks;
 
-    if(currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing) {
-        bombs = CA::rearmBombs(bombs, bombTimer);
-        if(takeoffFrame == 0) dropBomb(gameCycle);
-    }
+    if(bombing) bombs = CA::rearmBombs(bombs, bombTimer);
 
     if(takeoffFrame == 0) {
         if(remainingTicks > 0) {

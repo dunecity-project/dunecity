@@ -436,10 +436,11 @@ inline FixPoint airplaneHeadingSpeed(FixPoint axisSpeed, int headingFrame) {
 // fly over enemy buildings strong enough bombs to destroy some buildings").
 // Match rule GameOptionsClass::cityPlaneBombing. Not Micropolis behaviour.
 //
-// The plane keeps its course: it bombs only what lies under it. On every second
-// sprite tick (6.25 cycles, the time it needs for one tile on an axis heading) it
-// looks kBombSightDistance ahead; if an enemy building stands there and it has a
-// bomb, it drops one (none for a building the bombs already falling will destroy).
+// The plane keeps its course: it bombs only what lies under it. Its bomb sight is
+// the point kBombSightDistance ahead; each time that point enters a tile on which
+// an enemy building stands, and a bomb is on board, it drops one (none for a
+// building the bombs already falling will destroy). So a building gets one bomb
+// per tile of it that the course crosses.
 // The numbers come from the Dune City mod's ObjectData.ini:
 // a bomb does kBombDamage = 100, so two bombs take a Wind Trap, a zone, a turret
 // or a Heavy Factory (200) and a Spice Silo (150), while a Construction Yard (400)
@@ -454,8 +455,6 @@ inline FixPoint airplaneHeadingSpeed(FixPoint axisSpeed, int headingFrame) {
 inline constexpr int kBombLoad = 6;
 /// Damage of one bomb to the building it lands on (units next to it take splash).
 inline constexpr int kBombDamage = 100;
-/// Sprite ticks between two drops: one tile of flight on an axis heading.
-inline constexpr int kBombDropInterval = 2;
 /// Sprite ticks to regain one bomb (8 s of game time at 50 ms a tick).
 inline constexpr int kBombRearmTicks = 160;
 /// How far ahead of the plane the bomb lands, in Micropolis units (1.5 tiles).

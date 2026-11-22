@@ -108,13 +108,14 @@ private:
     /// True when the crash blast anywhere between `from` and `to` world units
     /// ahead on the plane's course would reach an object of team `teamID`.
     bool crashWouldHit(int teamID, FixPoint from, FixPoint to) const;
-    /// City Plane Bombing: one bomb on the enemy building under the bomb sight, if any.
+    /// City Plane Bombing: one bomb when the bomb sight enters a tile of an enemy building.
     void dropBomb(Uint32 gameCycle);
 
     Sint32 takeoffFrame;    ///< Micropolis frames 11..9, 0 once cruising
     Sint32 remainingTicks;  ///< Cruise budget; zero means an outward departure
     Sint32 bombs;           ///< Bombs on board (saved from 9890)
     Sint32 bombTimer;       ///< Sprite ticks towards the next bomb, 0 while full (saved from 9890)
+    Coord  bombSightTile;   ///< Tile the bomb sight was over last cycle (saved from 9890)
 };
 
 #endif // AMBIENTAIRPLANE_H

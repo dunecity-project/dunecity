@@ -461,12 +461,9 @@ void checkBombTargets(const std::string& mapData) {
             } else if(item == Structure_WindTrap) {
                 require(dropped == 2 && health[0] == 0, "One run over a Wind Trap did not destroy it with two bombs");
             } else if(item == Structure_ConstructionYard) {
-                // Two tiles of course: two bombs, or three when the first lands right at its edge.
-                require((dropped == 2 || dropped == 3) && health[0] == 400 - 100 * dropped,
-                        "One run over a Construction Yard did not leave it at 100 or 200 of 400");
+                require(dropped == 2 && health[0] == 200, "One run over a Construction Yard did not leave it at 200 of 400");
             } else {
-                require((dropped == 3 || dropped == 4) && health[0] == 1000 - 100 * dropped,
-                        "One run over a Palace did not leave it at 600 or 700 of 1000");
+                require(dropped == 3 && health[0] == 700, "One run over a Palace did not leave it at 700 of 1000");
             }
         }
     }
@@ -530,6 +527,7 @@ void checkSavedBombLoad(const std::string& mapData) {
     auto* loaded = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
     require(loaded != nullptr, "The saved plane did not come back");
     require(loaded->bombs == bombs && loaded->bombTimer == timer, "The plane lost its bomb load in the save");
+    require(loaded->bombSightTile.isValid(), "The plane lost its bomb sight tile in the save");
     require(AmbientAirplane::all().size() == 1 && AmbientAirplane::all().front() == loaded,
             "The loaded plane is not the one city airplane the game knows");
     const auto& options = game->getGameInitSettings().getGameOptions();
