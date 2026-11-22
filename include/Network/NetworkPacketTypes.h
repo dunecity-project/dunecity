@@ -429,6 +429,8 @@
 //      It is the match rule GameOptionsClass::trooperOrnithopterReach (default on, INI key
 //      "Trooper Ornithopter Reach"). Its off state is hashed and is bit 1 of the MOD15 Trooper
 //      Anti-Air byte, so a default setup's stream and hash are unchanged; no new marker or number.
+//      Under the same rule an idle Trooper takes an Ornithopter the cycle it comes into range
+//      (Trooper::targeting()) and fires before its turn is finished (firesAtAircraftUnfaced()).
 #define NETWORK_PROTOCOL_VERSION            133
 
 // Mod transfer limits

@@ -302,13 +302,17 @@ int runTrooperAirWeaponProbe() {
         const auto old = run(mod, mapData, spec, true, false, csv);
         const auto now = run(mod, mapData, spec, true, true, csv);
         count += 2;
-        const bool reachChangesCase = cityContent && (spec.expect == Expect::EngagesWithRule || spec.raid);
+        // The reach is about Ornithopters a Trooper finds itself: it needs no seen ground, no
+        // wait for the next search and no finished turn. A player's order was never held up by
+        // the search or by sight, but it does gain the unfaced shot.
+        const bool reachChangesCase = cityContent && isOrnithopterUnit(spec.targetItem)
+            && spec.expect != Expect::Untouched;
         if(!reachChangesCase)
             require(old.shots == now.shots && old.endHP == now.endHP && old.ticks == now.ticks,
                     std::string(spec.name) + ": the Ornithopter reach switch changed a case it must not touch");
-        if(spec.raid && cityContent)
+        else if(!old.shots.empty())
             require(now.firstShot >= 0 && now.firstShot <= old.firstShot,
-                    "orni_raid: with the reach on the squad opened fire later than without it");
+                    std::string(spec.name) + ": with the reach on the Troopers opened fire later than without it");
         if(spec.expect == Expect::EngagesWithRule) {
             // The reach is part of Trooper Anti-Air: with that rule off it does nothing.
             run(mod, mapData, spec, false, true, csv);

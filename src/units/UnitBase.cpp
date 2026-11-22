@@ -967,6 +967,10 @@ void UnitBase::engageTarget() {
         const bool airMissile = (itemID == Unit_Launcher || itemID == Unit_Deviator)
             && target.getObjPointer()->isAFlyingUnit();
         const bool bodyTurnComplete = targetAngle == INVALID || angle == FixPoint(targetAngle);
+        // An Ornithopter is in a Trooper's range for a fraction of a second per pass, less than
+        // the turn takes: the Trooper keeps turning towards it but fires without waiting.
+        const bool unfacedShot = !airMissile && target.getObjPointer()->isAFlyingUnit()
+            && firesAtAircraftUnfaced(*target.getObjPointer());
 
         if(targetFriendly && !forced) {
             // the target is friendly and we only attack these if were forced to do so
@@ -994,7 +998,8 @@ void UnitBase::engageTarget() {
             else if(bodyTurnComplete) targetAngle = INVALID;
         }
 
-        if(airMissile ? !moving && bodyTurnComplete : getCurrentAttackAngle() == newTargetAngle) {
+        if(airMissile ? !moving && bodyTurnComplete
+                      : (getCurrentAttackAngle() == newTargetAngle || (unfacedShot && !moving))) {
             attack();
         }
 

@@ -1108,6 +1108,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-ornithopter-effect.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-ornithopter-effect)
         set_tests_properties(trooper_ornithopter_effect PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        # The Dune City mod's own options (explored map, no fog): Troopers in every stance against an
+        # Ornithopter that attacks them, attacks nearby or flies past, reach off and on, with a
+        # Launcher and a Rocket Turret as yardsticks. No gun shots at aircraft; Guard must gain.
+        dunecity_add_test(headless nightly NAME trooper_stance_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-stance-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-stance-probe)
+        set_tests_properties(trooper_stance_probe PROPERTIES TIMEOUT 900 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)

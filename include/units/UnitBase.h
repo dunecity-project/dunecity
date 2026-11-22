@@ -690,6 +690,10 @@ protected:
     FixPoint getTerrainAdjustedSpeed(int cargoPercent = 0) const;
 
     virtual void targeting();
+    /// May this unit fire at this aircraft before it has turned to face it? Only a Trooper under
+    /// the Ornithopter reach rule. (Dynasty Launchers and Deviators never face aircraft at all;
+    /// engageTarget() handles them itself.)
+    virtual bool firesAtAircraftUnfaced(const ObjectBase& aircraft) const { return false; }
     void enqueueTargetRequest(TargetRequestKind kind);
     void enqueuePathRequest();
 

@@ -30,6 +30,7 @@ public:
 
     bool canAttack(const ObjectBase* object) const override;
     bool targetsWithoutGroundSight(const ObjectBase& candidate) const override;
+    bool firesAtAircraftUnfaced(const ObjectBase& aircraft) const override;
     /// The Trooper Anti-Air match rule, which only DuneCity content obeys.
     static bool antiAirRuleActive();
     void setProductionHouseID(int houseID) override;
@@ -39,7 +40,13 @@ public:
     bool hasBumpyMovementOnRock() const override { return true; }
 
     void playAttackSound() override;
+protected:
+    void targeting() override;
 private:
+    /// Trooper Anti-Air with its Ornithopter reach, for a Trooper that fires rockets.
+    bool ornithopterReachActive() const;
+    /// The nearest enemy Ornithopter this Trooper may shoot at from where it stands, or nullptr.
+    const ObjectBase* ornithopterInRange() const;
     Uint8 flameDamageRemainder = 0;
 };
 

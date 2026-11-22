@@ -479,10 +479,11 @@ public:
         bool        saboteurVehicleHunt = true;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
-        /// Part of Trooper Anti-Air (so DuneCity content only): a rocket Trooper's own search takes
-        /// an Ornithopter anywhere in weapon range without sight of the ground below it. Off is the
-        /// rule up to 1.0.876 (only over ground the team sees), kept so the two can be compared in
-        /// one build (tests/units/run-trooper-ornithopter-effect.py). INI key only.
+        /// Part of Trooper Anti-Air (so DuneCity content only): a rocket Trooper answers an
+        /// Ornithopter anywhere in its weapon range - without sight of the ground below it, the
+        /// moment it comes into range and without first turning to face it (Trooper.cpp). Off is
+        /// the rule up to 1.0.876, kept so the two can be compared in one build
+        /// (tests/units/run-trooper-ornithopter-effect.py, run-trooper-stance-probe.py). INI key only.
         bool        trooperOrnithopterReach = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").

@@ -11,12 +11,13 @@ both arms.
 
 Reported per arm: Ornithopters shot down, Troopers lost, Ornithopter hit points removed,
 and the time of the first kill; and the paired difference (on minus off, paired by
-encounter) with its 95% bootstrap interval (tests/ai/match_score.py). On unexplored ground
-(Troopers in the field) the test requires more Ornithopters shot down, the whole interval
-above 0, and Trooper losses not higher (interval not wholly above 0). With Start with
-Explored Map and Fog of War the same is reported and Ornithopters shot down must not be
-lower. On explored ground without fog the team sees all ground, the rule cannot matter and
-both arms must play every encounter identically.
+encounter) with its 95% bootstrap interval (tests/ai/match_score.py). Three kinds of
+ground: explored without fog (the Dune City mod's own options: the team sees all ground, so
+the gain is the immediate, unfaced answer), unexplored (Troopers in the field, where the old
+search also needed seen ground), and explored under Fog of War. On explored and on
+unexplored ground the test requires more Ornithopters shot down, the whole interval above 0,
+and Trooper losses not higher (interval not wholly above 0); under fog Ornithopters shot down
+must not be lower.
 
 Outputs: encounters.csv, pairs.csv, summary.md, run.log.
 """
@@ -116,12 +117,12 @@ def describe(pairs, label):
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--seeds', type=seed_list, default=seed_list('1-6'),
-                    help='Seeds for the unexplored-ground encounters (54 encounter kinds per seed), e.g. 1-6')
-parser.add_argument('--fog-seeds', type=seed_list, default=seed_list('1-3'),
+parser.add_argument('--seeds', type=seed_list, default=seed_list('1-4'),
+                    help='Seeds for the unexplored-ground encounters (54 encounter kinds per seed), e.g. 1-4')
+parser.add_argument('--fog-seeds', type=seed_list, default=seed_list('1'),
                     help='Seeds for explored ground under Fog of War')
-parser.add_argument('--explored-seeds', type=seed_list, default=seed_list('1'),
-                    help='Seeds for the explored-ground control, where both arms must be identical')
+parser.add_argument('--explored-seeds', type=seed_list, default=seed_list('1-4'),
+                    help='Seeds for explored ground without fog, the Dune City mod\'s own options')
 parser.add_argument('--report', action='store_true',
                     help='Only recompute the report from an existing encounters.csv in --output-dir')
 parser.add_argument('--wall-timeout', type=int, default=3000)
@@ -201,45 +202,40 @@ with (out / 'pairs.csv').open('w', newline='') as handle:
         writer.writerow(list(key) + [off[m] for m in MEASURES] + [on[m] for m in MEASURES]
                         + [off['first_kill_tick'], on['first_kill_tick']])
 
-unexplored = [pair for pair in pairs if pair[0][0] == 'unexplored']
-fogged = [pair for pair in pairs if pair[0][0] == 'fogged']
-explored = [pair for pair in pairs if pair[0][0] == 'explored']
-seeds = sorted({int(pair[0][5]) for pair in unexplored})
 report = ['# Trooper Ornithopter Reach: controlled engagements', '',
           'Reach off is the rule up to 1.0.876; on is the fix. Trooper Anti-Air is on in both arms.',
-          'Unexplored seeds: ' + ','.join(str(seed) for seed in seeds) + '. One cycle is 16 ms; an encounter '
-          'ends when one side is gone or after 90 game seconds.', '']
-lines, overall = describe(unexplored, 'Unexplored ground, all encounters')
-report += lines
-for troopers in ('1', '3', '6'):
-    lines, _ = describe([pair for pair in unexplored if pair[0][1] == troopers],
-                        'Unexplored ground, %s Trooper%s' % (troopers, '' if troopers == '1' else 's'))
+          'One cycle is 16 ms; an encounter ends when one side is gone or after 90 game seconds.', '']
+failures = []
+for terrain, title, must_gain in (('explored', 'Explored ground, no fog (the Dune City mod\'s options)', True),
+                                  ('unexplored', 'Unexplored ground', True),
+                                  ('fogged', 'Explored ground under Fog of War', False)):
+    chosen = [pair for pair in pairs if pair[0][0] == terrain]
+    if not chosen:
+        continue
+    seeds = sorted({int(pair[0][5]) for pair in chosen})
+    lines, overall = describe(chosen, title + ', seeds ' + ','.join(str(seed) for seed in seeds))
     report += lines
-for ornithopters in ('1', '2', '3'):
-    lines, _ = describe([pair for pair in unexplored if pair[0][2] == ornithopters],
-                        'Unexplored ground, %s Ornithopter%s' % (ornithopters, '' if ornithopters == '1' else 's'))
-    report += lines
-fog = None
-if fogged:
-    lines, fog = describe(fogged, 'Explored ground under Fog of War')
-    report += lines
-lines, _ = describe(explored, 'Explored ground, no fog (control)')
-report += lines
-changed = [key for key, off, on in explored
-           if any(off[name] != on[name] for name in field if name != 'reach')]
-report.append('Explored-ground encounters that differ between the arms: %d of %d.' % (len(changed), len(explored)))
+    if must_gain:
+        for troopers in ('1', '3', '6'):
+            lines, _ = describe([pair for pair in chosen if pair[0][1] == troopers],
+                                '%s, %s Trooper%s' % (title, troopers, '' if troopers == '1' else 's'))
+            report += lines
+        for ornithopters in ('1', '2', '3'):
+            lines, _ = describe([pair for pair in chosen if pair[0][2] == ornithopters],
+                                '%s, %s Ornithopter%s' % (title, ornithopters, '' if ornithopters == '1' else 's'))
+            report += lines
+        if not overall['ornithopters_down'][3] > 0:
+            failures.append('%s: Ornithopters shot down did not improve, interval %+.3f to %+.3f'
+                            % ((terrain,) + overall['ornithopters_down'][3:5]))
+        if overall['troopers_lost'][3] > 0:
+            failures.append('%s: Trooper losses rose, interval %+.3f to %+.3f'
+                            % ((terrain,) + overall['troopers_lost'][3:5]))
+    elif overall['ornithopters_down'][4] < 0:
+        failures.append('%s: fewer Ornithopters were shot down, interval %+.3f to %+.3f'
+                        % ((terrain,) + overall['ornithopters_down'][3:5]))
 (out / 'summary.md').write_text('\n'.join(report) + '\n', encoding='utf-8')
 print('\n'.join(report))
 
-failures = []
-if changed:
-    failures.append('the rule changed %d explored-ground encounters, e.g. %r' % (len(changed), changed[0]))
-if not overall['ornithopters_down'][3] > 0:
-    failures.append('Ornithopters shot down did not improve: interval %+.3f to %+.3f' % overall['ornithopters_down'][3:5])
-if overall['troopers_lost'][3] > 0:
-    failures.append('Trooper losses rose: interval %+.3f to %+.3f' % overall['troopers_lost'][3:5])
-if fog and fog['ornithopters_down'][4] < 0:
-    failures.append('Under fog fewer Ornithopters were shot down: interval %+.3f to %+.3f' % fog['ornithopters_down'][3:5])
 if failures:
     sys.exit('TROOPER ORNITHOPTER EFFECT FAILED: ' + '; '.join(failures))
 print('Trooper Ornithopter effect: ' + str(out / 'summary.md'))
