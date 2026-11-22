@@ -93,32 +93,66 @@ other shooters, the disabled option and unrelated content keep their old rules.
 Stefan, 2026-11-22: "troopers should be shooting down ornithopters with their range
 missile weapon not close range weapon". The weapon was never wrong: `UnitBase::attack()`
 only swaps a Trooper to its gun (`Bullet_ShellSmall`, inside two tiles) for a ground
-target, and an aircraft always got the full-damage air rocket. The reach was wrong.
-The engine's target search (`findTargetViaGrid`, `findTargetLegacy` in
-`src/ObjectBase.cpp`) only takes what stands on ground the seeker's team has explored
-and, with Fog of War, currently sees. A Trooper sees **one** tile and its rocket
-reaches **five**, so Troopers away from other sight (an army in the field, a squad
-on unexplored sand) answered an Ornithopter only when it was overhead or adjacent:
-gun distance.
+target, and an aircraft always got the full-damage air rocket (no gun shot at an
+Ornithopter in any measured encounter). The reach was wrong. An Ornithopter flies about
+eight tiles a second, a Trooper's rocket reaches five tiles, and three engine rules kept
+the Trooper's answer to moments when the Ornithopter was nearly overhead:
 
-With the same rule (**Trooper Anti-Air** on, DuneCity content) a rocket Trooper now
-takes an Ornithopter anywhere inside its weapon range without needing the ground
-below it unveiled (`Trooper::targetsWithoutGroundSight`, the `ObjectBase` hook the two
-searches ask). The rocket turret already has this exception for Ornithopters
-(`RocketTurret::findTarget`). Unchanged: Carryalls, Frigates and city aircraft keep the
-sight rule, as do all ground targets; nobody is acquired beyond weapon range; a
-flame-armed Trooper is not included; a player's attack order never depended on sight.
-The switch needs no new option, wire field or save field: target choice is derived
-state and the rule is already a hashed match option.
+1. **Search cadence.** A Trooper without a target searches once a second, and on Guard
+   (the stance a factory leaves it in) only inside its weapon range. An Ornithopter
+   strafing something three tiles away is inside that range for about a fifth of a second
+   per pass, so the search usually missed it: a Guard Trooper had no target for 70% of
+   the time the Ornithopter was in range. Hunt and Area Guard search wider, re-find the
+   aircraft every cycle and did better.
+2. **Facing.** The Trooper had to finish turning (0.09 of a direction per cycle, up to
+   0.7 s for a half turn) before it fired; Launchers and Deviators never face aircraft.
+   On a fly-past a Trooper spent 44-77% of the in-range time turning.
+3. **Sight.** The target search (`findTargetViaGrid`, `findTargetLegacy` in
+   `src/ObjectBase.cpp`) only takes what stands on ground the seeker's team has explored
+   and, with Fog of War, currently sees. A Trooper sees one tile, so on unexplored ground
+   it answered an Ornithopter only when it was overhead or adjacent. In the Dune City
+   mod's own options (map starts explored, no fog) this rule never bites.
 
-`trooper_air_weapon_probe` (`tests/units/run-trooper-air-weapon-probe.py`) measures it
-on an unexplored map with real Troopers on Guard, alone and as the three a Troopers
-order deploys, against a held Ornithopter overhead, adjacent, two and three tiles
-away, at the edge of range and one tile beyond, plus a real attack run, a Carryall
-and ground targets, each with the switch off and on. Every shot at an aircraft must
-be the full-damage air rocket and must kill the held Ornithopter; the gun stays the
-weapon on an adjacent ground unit; cases the rule does not cover, and all cases in
-vanilla and Dune2R, must play both switch states identically.
+The match rule **Trooper Ornithopter Reach** (`GameOptionsClass::trooperOrnithopterReach`,
+default on, INI key `Trooper Ornithopter Reach`, no menu entry) is part of Trooper
+Anti-Air, so it applies to DuneCity content with Trooper Anti-Air on, and to Troopers that
+fire rockets. With it:
+
+- an idle Trooper on Guard, Area Guard, Hunt or Hold, or on an attack-move, takes an
+  enemy Ornithopter the cycle it comes into weapon range (`Trooper::targeting`,
+  `ornithopterInRange`); the check does nothing while no enemy house owns an Ornithopter;
+- it keeps turning towards the Ornithopter but fires without waiting for the turn
+  (`UnitBase::engageTarget` asks `firesAtAircraftUnfaced`);
+- the ground below the Ornithopter need not be seen (`targetsWithoutGroundSight`, the
+  hook the two searches ask), as for the rocket turret (`RocketTurret::findTarget`).
+
+Unchanged: a Trooper that already has a target or a ground-fire order keeps it; a Trooper
+walking on a plain move order does not fight, and one waiting in Ambush wakes as before;
+Carryalls, Frigates and city aircraft, all ground targets, flame-armed Troopers and
+vanilla, Dune2R and Tornie-family content keep the old rules; nobody is acquired beyond
+weapon range. Off is the rule up to 1.0.876. The off state is hashed and is bit 1 of the
+MOD15 Trooper Anti-Air byte, so a default setup's stream and hash are unchanged.
+
+Tests, all in the one staging build with the switch off and on:
+
+- `trooper_air_weapon_probe` (`tests/units/run-trooper-air-weapon-probe.py`): a held
+  Ornithopter overhead, adjacent, two and three tiles away, at the range edge and one tile
+  beyond on unexplored ground; every shot at an aircraft is the full-damage air rocket and
+  kills it; an adjacent Quad still gets the gun; Carryalls, ground targets and all cases in
+  vanilla and Dune2R play both states identically.
+- `trooper_stance_probe` (`tests/units/run-trooper-stance-probe.py`): the Dune City mod's
+  options, a Trooper and a squad of three in every stance against an Ornithopter that
+  attacks them, attacks a Harvester three tiles away or flies past, with a Launcher and a
+  Rocket Turret as yardsticks. Writes the per-case table (`summary.md`).
+- `trooper_ornithopter_effect` (`tests/units/run-trooper-ornithopter-effect.py`): raids of
+  1-3 Ornithopters on groups of 1, 3 and 6 Troopers on Guard, three approach paths, two
+  distances, on explored, unexplored and fogged ground; paired differences with 95%
+  bootstrap intervals. It fails unless more Ornithopters are shot down and no more
+  Troopers are lost.
+- `tests/ai/trooper-reach-report.py`: the same comparison over `dunecity-audit.py`
+  matches played with `tests/ai/game-options/trooper-ornithopter-reach-*.ini`.
+
+Measured results are in `HANDOVER.md` (2026-11-22).
 
 ### Real-engine one-pass consumer fixture
 
