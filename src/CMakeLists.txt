@@ -227,6 +227,7 @@ target_sources(dunecity
         GUI/dune/GameOptionsWindow.cpp
         GUI/dune/LoadSaveWindow.cpp
         GUI/dune/SaveMapWindow.cpp
+        GUI/dune/RestartDifficultyWindow.cpp
         GUI/dune/InGameMenu.cpp
         GUI/dune/InGameSettingsMenu.cpp
         GUI/dune/NewsTicker.cpp

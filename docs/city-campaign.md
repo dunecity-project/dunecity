@@ -118,7 +118,9 @@ difficulty (the campaign menu's enemy AI; QuantBot labels). When the mission sta
 house's starting credits are multiplied by the value of its AI's difficulty (rounded to 100) and
 the `FirstEnemyAttack` grace period is divided by the strongest enemy's value
 (`MissionObjectivePolicy::enemyStrengthPermille`, `INIMapLoader`). A missing key or an AI without a
-difficulty label plays the map as authored (1.0). The generator writes each mission's values
+difficulty label plays the map as authored (1.0). QuantBot Easiest, the menus' default enemy since
+2026-11-22, has no key: it plays 1.0, or Easy's value where that is lower (mission 6, 0.85), so it
+never starts stronger than Easy. The generator writes each mission's values
 (`Mission.difficulty` in `scripts/gen_city_campaign.py`).
 
 ## Low spice

@@ -33,6 +33,7 @@
 #include <SoundPlayer.h>
 #include <misc/ReworkedCampaign.h>
 #include <misc/DuneCityCampaign.h>
+#include <players/EnemyDifficultyPolicy.h>
 #include <misc/format.h>
 #include <FileClasses/FileManager.h>
 #include <FileClasses/INIFile.h>
@@ -53,7 +54,7 @@ bool HouseChoiceMenu::s_singleMission = false;
 bool HouseChoiceMenu::s_publicGame = true;
 int HouseChoiceMenu::s_startLevel = 1;
 std::string HouseChoiceMenu::s_partnerClass;
-std::string HouseChoiceMenu::s_enemyClass = "qBotEasy";
+std::string HouseChoiceMenu::s_enemyClass = EnemyDifficultyPolicy::kDefaultEnemy;
 int HouseChoiceMenu::s_campaignSkin = 0;
 bool HouseChoiceMenu::s_reworkedMaps = false;
 bool HouseChoiceMenu::s_duneCityCampaign = false;
@@ -242,7 +243,7 @@ HouseChoiceMenu::HouseChoiceMenu(bool online, bool keepRules, bool showLobby, bo
     label("Enemy AI", 336, 387);
     enemySelector.setFamilies({"QuantBot", "Campaign AI"});
     enemySelector.setShowRole(false);
-    if(!enemySelector.selectPlayerClass(s_enemyClass)) enemySelector.selectPlayerClass("qBotEasy");
+    if(!enemySelector.selectPlayerClass(s_enemyClass)) enemySelector.selectPlayerClass(EnemyDifficultyPolicy::kDefaultEnemy);
     enemySelector.setOnChange(std::bind(&HouseChoiceMenu::onEnemyChanged, this, std::placeholders::_1));
     windowWidget.addWidget(&enemySelector.aiBox, Point(336, 405), Point(124, 22));
     windowWidget.addWidget(&enemySelector.difficultyBox, Point(464, 405), Point(128, 22));

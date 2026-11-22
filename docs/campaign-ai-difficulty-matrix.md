@@ -63,7 +63,8 @@ medium / add silos should be on for harder difficulties".
 Stefan, 2026-11-22: "can we just make an 'easiest' difficulty which is easier than easy". It
 is a selectable difficulty below Easy in every AI selector (lobby, skirmish, campaign enemy;
 listed last, after Defend, so the default stays Easy)
-and the step below Easy in Restart with Easier AI. QuantBot Easy and every other difficulty
+and, since later the same day, the default enemy of the campaign, Skirmish and Custom Game menus
+and a choice in Restart on New Difficulty (`docs/easier-enemy-restart.md`). QuantBot Easy and every other difficulty
 are unchanged: nothing reads these rules unless the class is `qBotEasiest`. It replaces the
 `EasyRelief` config switch tried earlier the same day.
 

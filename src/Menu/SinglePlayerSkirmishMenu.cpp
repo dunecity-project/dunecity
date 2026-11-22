@@ -36,6 +36,7 @@
 #include <misc/fnkdat.h>
 #include <GUI/dune/LoadSaveWindow.h>
 #include <GUI/MsgBox.h>
+#include <players/EnemyDifficultyPolicy.h>
 
 namespace {
 
@@ -115,7 +116,7 @@ SinglePlayerSkirmishMenu::SinglePlayerSkirmishMenu(bool campaignCoop) : MenuBase
     // Opponents own their houses, so they always build and fight.
     enemySelector.setShowRole(false);
     enemySelector.setFamilies({"QuantBot", "Campaign AI"});
-    enemySelector.selectPlayerClass("qBotEasy");
+    enemySelector.selectPlayerClass(EnemyDifficultyPolicy::kDefaultEnemy);
     // "Campaign AI" is the longest AI name; its difficulty is only "-".
     enemyRow.addWidget(&enemySelector.aiBox, 3.0);
     enemyRow.addWidget(&enemySelector.difficultyBox, 2.0);
@@ -272,7 +273,7 @@ void SinglePlayerSkirmishMenu::onStart()
     const auto* partner = PlayerFactory::getByPlayerClass(partnerSelector.getPlayerClass());
     std::string enemyAIClass = enemySelector.getPlayerClass();
     if(enemyAIClass.empty()) {
-        enemyAIClass = "qBotEasy";
+        enemyAIClass = EnemyDifficultyPolicy::kDefaultEnemy;
     }
 
     GameInitSettings init(houseChoice, mission, currentGameOptions);

@@ -146,7 +146,7 @@ target_sources(dunelegacy_tests
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
         CoopGameSettingsTestCase.cpp
         CustomGamePlayerPolicyTestCase.cpp
-        EasierEnemyPolicyTestCase.cpp
+        EnemyDifficultyPolicyTestCase.cpp
         CampaignPlanTestCase.cpp
         ReworkedCampaignTestCase.cpp
         MissionObjectivesTestCase.cpp

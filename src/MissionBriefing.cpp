@@ -53,6 +53,10 @@ std::string briefingGoal(Goal goal, int target) {
 } // namespace
 
 int MissionObjectivePolicy::enemyStrengthPermille(const INIFile& inifile, const std::string& difficulty) {
+    // The maps name Easy .. Brutal. QuantBot Easiest plays a mission as authored (1.0) unless
+    // Easy's value is lower still, so it never starts stronger than Easy.
+    if(difficulty == "Easiest" && !inifile.hasKey("DIFFICULTY", difficulty) && inifile.hasKey("DIFFICULTY", "Easy"))
+        return std::min(1000, strengthPermille(inifile.getDoubleValue("DIFFICULTY", "Easy", 1.0)));
     if(difficulty.empty() || !inifile.hasKey("DIFFICULTY", difficulty)) return 1000;
     return strengthPermille(inifile.getDoubleValue("DIFFICULTY", difficulty, 1.0));
 }

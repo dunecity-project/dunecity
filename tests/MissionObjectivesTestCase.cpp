@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <algorithm>
 #include <catch2/catch_all.hpp>
 
 #include <FileClasses/INIFile.h>
@@ -178,6 +179,26 @@ TEST_CASE("DuneCity campaign: enemy strength by difficulty", "[DuneCityCampaign]
     CHECK(strengthPermille(2.5) == 2500);
     CHECK(strengthPermille(0.1) == 250);
     CHECK(strengthPermille(40.0) == 10000);
+}
+
+TEST_CASE("DuneCity campaign: QuantBot Easiest never starts stronger than Easy", "[DuneCityCampaign]") {
+    using namespace MissionObjectivePolicy;
+    for(int mission = 1; mission <= DuneCityCampaign::kMissions; mission++) {
+        const std::string name = DuneCityCampaign::scenarioFilename(mission);
+        INFO(name);
+        INIFile ini(mapDirectory() + name);
+        const int easy = enemyStrengthPermille(ini, "Easy");
+        const int easiest = enemyStrengthPermille(ini, "Easiest");
+        // As authored (1.0), or Easy's value where that is lower still (mission 6: 0.85).
+        CHECK(easiest == std::min(1000, easy));
+        CHECK(easiest <= easy);
+    }
+    // Other labels without a value still play the map as authored.
+    INIFile ini(mapDirectory() + DuneCityCampaign::scenarioFilename(6));
+    CHECK(enemyStrengthPermille(ini, "Easy") == 850);
+    CHECK(enemyStrengthPermille(ini, "Easiest") == 850);
+    CHECK(enemyStrengthPermille(ini, "Defend") == 1000);
+    CHECK(enemyStrengthPermille(ini, "") == 1000);
 }
 
 TEST_CASE("DuneCity campaign filenames", "[DuneCityCampaign]") {

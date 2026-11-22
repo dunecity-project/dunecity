@@ -57,6 +57,7 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <players/EnemyDifficultyPolicy.h>
 
 
 #define PLAYER_HUMAN        0
@@ -903,7 +904,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     }
 
     if(setup && setup->players.changeEventList.empty() && !setup->online) {
-        const int ai = PlayerFactory::getIndexByPlayerClass("qBotEasy");
+        const int ai = PlayerFactory::getIndexByPlayerClass(EnemyDifficultyPolicy::kDefaultEnemy);
         for(int row = 0; row < numHouses; ++row) {
             if(getSeatPlayer(2*row) == PLAYER_OPEN) selectSeatPlayer(2*row, ai);
         }
