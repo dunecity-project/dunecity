@@ -33,7 +33,8 @@ void researchRequire(bool value, const char* why) {
 
 std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 64,
                                  TechResearch::Pace pace = TechResearch::Pace::Normal,
-                                 std::optional<bool> installments = std::nullopt, int techLevel = 1) {
+                                 std::optional<bool> installments = std::nullopt, int techLevel = 1,
+                                 int startTechLevel = 0) {
     using namespace SkirmishGenerator;
     Params params;
     params.house = HOUSE_ATREIDES;
@@ -61,6 +62,7 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 
     if(installments) options.technologyInstallments = *installments;
     options.trooperAntiAir = false;
     options.concreteRequired = false;
+    options.startTechLevel = startTechLevel;   // Custom Game "Tech level"; 0 keeps the map's
     GameInitSettings init(map.name, map.ini, false, options);
     init.randomSeed = params.seed;
     for(const auto& entry : map.houses) {
@@ -90,7 +92,9 @@ std::unique_ptr<Game> researchGame(bool enabled, bool ai = false, int mapSize = 
     if(!ai) game->getHouse(HOUSE_ATREIDES)->addUnstoredCredits(80000);
     if(ai && enabled)
         SDL_Log("RESEARCH_QUANTBOT_POLICY: installed_reference=3710464d no_experimental_overlay=1");
-    researchRequire(game->techLevel == techLevel, "Fixture did not retain its authored match technology");
+    researchRequire(game->techLevel == (startTechLevel != 0 ? startTechLevel : techLevel),
+                    startTechLevel != 0 ? "The chosen Custom Game tech level did not replace the map's"
+                                        : "Fixture did not retain its authored match technology");
     return game;
 }
 
@@ -99,6 +103,27 @@ void researchEnd(std::unique_ptr<Game>& game) {
     currentGame = nullptr;
     pLocalHouse = nullptr;
     pLocalPlayer = nullptr;
+}
+
+// Custom Game "Tech level" (GameOptionsClass::startTechLevel): a map authored for level 1 starts
+// every house at the chosen level, with or without research, and research continues from there.
+void researchChosenStartLevel() {
+    for(const bool research : {false, true}) {
+        auto game = researchGame(research, false, 64, TechResearch::Pace::Normal, false, 1, 6);
+        researchRequire(game->getGameInitSettings().getFiledata().find("TechLevel=1") != std::string::npos,
+                        "Chosen-level fixture map is not authored for level 1");
+        int houses = 0;
+        for(int id = 0; id < NUM_HOUSES; ++id) if(const auto* owner = game->getHouse(id)) {
+            researchRequire(owner->getTechLevel() == 6, "A house did not start at the chosen Custom Game tech level");
+            ++houses;
+        }
+        researchRequire(houses >= 2, "Chosen-level fixture has fewer than two houses");
+        if(research) researchRequire(game->getHouse(HOUSE_ATREIDES)->getTechResearchCost()
+                                         == TechResearch::cost(7, TechResearch::Pace::Normal),
+                                     "Research does not continue from the chosen Custom Game tech level");
+        SDL_Log("RESEARCH_CHOSEN_START_LEVEL: research=%d level=%d houses=%d", research ? 1 : 0, game->techLevel, houses);
+        researchEnd(game);
+    }
 }
 
 ResearchLab* researchPlaceLab(House* owner) {
@@ -986,6 +1011,7 @@ int runResearchLabProbe() {
         researchRequire(RandomSkirmish::activateMod("dunecity"), "DuneCity reactivation after user save failed");
     }
 
+    researchChosenStartLevel();
     researchInstallmentTotals(results);
     researchPrepaidRuleChange(results);
     researchInstallmentContinuation(out, results);

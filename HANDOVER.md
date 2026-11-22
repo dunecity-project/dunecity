@@ -14,7 +14,8 @@ and a custom game took the map's `[BASIC] TechLevel` (else 8, 9 for Tornie conte
   Civilization Wars rules reset it to 0, and a mod switch in the setup keeps it.
 - Tests: `CoopGameSettingsTestCase` (MOD20 round trip, MOD19 stream reads 0, truncation, level 10 refused);
   `menu_navigation_probe` (entries, pick rebuilds the setup, client view, wire, not a default; capture
-  `custom-tech-level`); `research-lab-probe.inc` legacy fixtures strip the extra byte.
+  `custom-tech-level`); `research_lab_probe` starts a level-1 map at a chosen level 6, with and
+  without research (`researchChosenStartLevel`), and its legacy fixtures strip the extra byte.
 
 ## 2026-11-22 - 1.0.876 published
 
