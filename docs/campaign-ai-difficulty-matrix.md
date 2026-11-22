@@ -39,15 +39,13 @@ game with the city simulation never read it. It is hashed only while on. Rules:
 | Where | Rule while on | Key (default) | Native |
 |---|---|---|---|
 | Campaign levels 8-9 (missions 20-22), Easy enemy | Rebuilds its army to the size the mission started it with, at least 2,000 | `EasyReliefCampaignArmyPercent` (100) | 200% |
-| | First wave leaves later | `EasyReliefCampaignOpeningDelaySec` (180) | 0 |
-| | One ground wave is smaller | `EasyReliefCampaignWavePercent` (70 = 1,190) | 1,700 |
 | Custom game without city simulation, Easy opponent | Builds its army to 60% of its limit for the map size | `EasyReliefCustomArmyPercent` (60) | 100% |
 | | Keeps half its harvesters, at least two (maps above 64x64) | `EasyReliefCustomHarvesterPercent` (50) | 100% |
 | | No attack leaves its base before minute 10; it still defends | `EasyReliefCustomFirstAttackMin` (10) | 0 |
 
 The saved army limit is unchanged; only what the house buys up to is lower, and a wave never
-waits for more than four fifths of that ceiling. A human's Easy ally is not an opponent and is
-not relieved.
+waits for more than four fifths of that ceiling. Campaign waves keep their native size and
+timing. A human's Easy ally is not an opponent and is not relieved.
 
 Why, from the live results database (vanilla rules, one human, every opponent Easy, games of
 five minutes or more):
@@ -66,9 +64,31 @@ five minutes or more):
   14,000 spice; Easy had built 47 units and harvested 24,000.
 
 Test cells: `skirmish/easy-1v1-{ae,am,ah}-v-qe-{habbanya-penny,rs128}/vanilla` (the AI Player
-as the player) and `campaign/partner-easy-v-quantbot-easy/vanilla` missions 20-22, each with
-and without `--style easy-relief-on`. `weak-helper` halves the Easy helper's harvesters for a
-weaker player proxy.
+as the player, 60 minutes, both starts) and `campaign/partner-easy-v-quantbot-easy/vanilla`
+missions 20-22 (idle human with an Easy helper), each with and without `--style easy-relief-on`.
+
+Screen (source `918c3e32a`, all arms in one build, AWS, results
+`~/Documents/projects/outputs/easy-relief-20261122/`). Campaign missions 20-22, Easy helper,
+3 houses x seeds 9811-9814, wins of 36 (helper defeats / time limits):
+
+| Arm | Wins | Defeats | Time limits |
+|---|---:|---:|---:|
+| Off | 27 | 6 | 3 |
+| Army ceiling only | 31 | 2 | 3 |
+| Opening +180 s and waves 70% only | 27 | 6 | 3 |
+| All three | 28 | 1 | 7 |
+| All three, stronger (+360 s, waves 50%) | 24 | 5 | 7 |
+
+Tried and removed: the later opening and the smaller waves. On eight seeds all three rules
+together won 53 of 72 against 58 with the switch off (time limits 14 against 5): an enemy that
+sends less keeps more at home, and the helper's attacks stall on it. Halving the Easy helper's
+harvesters as a weaker player proxy (`CampaignHelperEasyHarvesters=2`) won 1 of 24 on mission
+22 with the switch off and was not used. Atreides mission 20 was won in 2 of 28 games across
+the five arms, both in the stronger arm (16 enemy rocket turrets, "Still open" below); the
+army ceiling does not change that.
+
+Missions 1-19 with the switch on replayed all 57 gate games to the same final state digest as
+with it off.
 
 ## Full campaign cap confirmation (2026-11-14, 1.0.868 game code)
 

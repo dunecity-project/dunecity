@@ -2742,8 +2742,6 @@ TEST_CASE("EasyRelief is off by default, persists, and is hashed only while on",
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.easyRelief);
     REQUIRE(defaults.force.easyReliefCampaignArmyPercent == 100);
-    REQUIRE(defaults.force.easyReliefCampaignOpeningDelaySec == 180);
-    REQUIRE(defaults.force.easyReliefCampaignWavePercent == 70);
     REQUIRE(defaults.force.easyReliefCustomArmyPercent == 60);
     REQUIRE(defaults.force.easyReliefCustomHarvesterPercent == 50);
     REQUIRE(defaults.force.easyReliefCustomFirstAttackMin == 10);
@@ -2781,18 +2779,15 @@ TEST_CASE("EasyRelief is off by default, persists, and is hashed only while on",
     {
         std::ofstream ini(path);
         ini << "[Force Concentration]\nEasyRelief=true\nEasyReliefCampaignArmyPercent=10\n"
-               "EasyReliefCampaignWavePercent=500\nEasyReliefCustomArmyPercent=5\n"
-               "EasyReliefCustomHarvesterPercent=0\nEasyReliefCustomFirstAttackMin=999\n"
-               "EasyReliefCampaignOpeningDelaySec=-5\n";
+               "EasyReliefCustomArmyPercent=5\n"
+               "EasyReliefCustomHarvesterPercent=0\nEasyReliefCustomFirstAttackMin=999\n";
     }
     QuantBotConfig clamped;
     REQUIRE(clamped.applyOverrides(path.string()));
     REQUIRE(clamped.force.easyReliefCampaignArmyPercent == 50);
-    REQUIRE(clamped.force.easyReliefCampaignWavePercent == 100);
     REQUIRE(clamped.force.easyReliefCustomArmyPercent == 50);
     REQUIRE(clamped.force.easyReliefCustomHarvesterPercent == 25);
     REQUIRE(clamped.force.easyReliefCustomFirstAttackMin == 60);
-    REQUIRE(clamped.force.easyReliefCampaignOpeningDelaySec == 0);
     std::filesystem::remove(path);
 }
 
@@ -2821,13 +2816,9 @@ TEST_CASE("EasyRelief policy: levels 8-9 only, lower ceilings that can still att
 
     // A wave never waits for more than four fifths of the ceiling; no ceiling, no change.
     REQUIRE(readiness(3400, 4000) == 3200);
-    REQUIRE(readiness(2380, 4000) == 2380);
+    REQUIRE(readiness(2000, 4000) == 2000);
     REQUIRE(readiness(4500, 9000) == 4500);
     REQUIRE(readiness(3400, 0) == 3400);
-
-    REQUIRE(waveValue(1700, 70) == 1190);
-    REQUIRE(waveValue(1700, 100) == 1700);
-    REQUIRE(waveValue(400, 25) == 300);
 
     // Harvesters: half the configured ceiling, rounded up, at least two; no ceiling stays none.
     REQUIRE(harvesterCeiling(8, 50) == 4);

@@ -7,7 +7,6 @@
 #include <misc/CampaignControls.h>
 #include <dunecity/CitySimulation.h>
 #include <players/QuantBotConfig.h>
-#include <players/EasyReliefPolicy.h>
 #include <units/Harvester.h>
 #include <sand.h>
 #include <structures/StructureBase.h>
@@ -277,11 +276,7 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
     // The second difficulty lever: the value one ground wave may hold. Easy keeps its smaller
     // early-mission waves in proportion (900 / 1,200 of 1,700 at the defaults).
     const auto& force=botConfig().force;
-    if (difficulty==Difficulty::Easy) {
-        profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
-        // EasyRelief (default off): smaller waves on levels 8-9.
-        if (easyReliefCampaign()) profile.value=EasyReliefPolicy::waveValue(profile.value,force.easyReliefCampaignWavePercent);
-    }
+    if (difficulty==Difficulty::Easy) profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
     else if (difficulty==Difficulty::Medium) profile.value=force.campaignMediumWaveValue;
     else if (difficulty==Difficulty::Hard) {
         profile.value=force.campaignHardWaveValue;
@@ -456,7 +451,6 @@ void QuantBot::updateCampaignWave() {
         const auto& force=botConfig().force;
         const int waitSeconds=earlySignal ? 0
             : difficulty==Difficulty::Easy ? force.campaignEasyOpeningDelaySec
-                + (easyReliefCampaign() ? force.easyReliefCampaignOpeningDelaySec : 0)
             : difficulty==Difficulty::Medium ? force.campaignMediumOpeningDelaySec
             : difficulty==Difficulty::Hard ? force.campaignHardOpeningDelaySec : 0;
         const auto delay=CampaignDifficultyPolicy::openingDelayMs(static_cast<int>(difficulty),

@@ -7,7 +7,8 @@
 // EasyRelief ([Force Concentration], default off): a gentler Easy opponent in the two places
 // live results show ordinary players stuck - campaign levels 8 and 9, and custom games without
 // the city simulation. Medium, Hard and Brutal, campaign levels 1-7, helpers and city games
-// never read these rules (docs/campaign-ai-difficulty-matrix.md, "Easy relief").
+// never read these rules (docs/campaign-ai-difficulty-matrix.md, "Easy relief"). Its waves and
+// their timing stay native: later and smaller campaign waves were tested and removed.
 namespace EasyReliefPolicy {
 
 /// Campaign missions 20 and 21 are level 8, mission 22 is level 9.
@@ -33,11 +34,6 @@ inline int customArmyCeiling(int nativeLimit, int percent) {
 /// A wave must stay launchable under the lower ceiling: never wait for more than four fifths of it.
 inline int readiness(int required, int ceiling) {
     return ceiling > 0 ? std::min(required, ceiling * 4 / 5) : required;
-}
-
-/// One Easy campaign ground wave: \a percent of its native value, never below one cheap unit.
-inline int waveValue(int nativeValue, int percent) {
-    return std::max(300, int(int64_t(nativeValue) * percent / 100));
 }
 
 /// Harvesters an Easy custom opponent keeps: \a percent of the configured ceiling, rounded up,
