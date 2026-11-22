@@ -29,6 +29,47 @@ The dated implementation/audit sections below remain historical evidence for
 their named source revisions, not proof that the current engine or either menu
 mode passes every proposed target.
 
+## Easy relief (2026-11-22, `EasyRelief`, default off)
+
+`[Force Concentration] EasyRelief` makes the Easy opponent gentler in two places and nowhere
+else. Medium, Hard and Brutal, campaign levels 1-7, helpers, the DuneCity campaign and every
+game with the city simulation never read it. It is hashed only while on. Rules:
+`include/players/EasyReliefPolicy.h`.
+
+| Where | Rule while on | Key (default) | Native |
+|---|---|---|---|
+| Campaign levels 8-9 (missions 20-22), Easy enemy | Rebuilds its army to the size the mission started it with, at least 2,000 | `EasyReliefCampaignArmyPercent` (100) | 200% |
+| | First wave leaves later | `EasyReliefCampaignOpeningDelaySec` (180) | 0 |
+| | One ground wave is smaller | `EasyReliefCampaignWavePercent` (70 = 1,190) | 1,700 |
+| Custom game without city simulation, Easy opponent | Builds its army to 60% of its limit for the map size | `EasyReliefCustomArmyPercent` (60) | 100% |
+| | Keeps half its harvesters, at least two (maps above 64x64) | `EasyReliefCustomHarvesterPercent` (50) | 100% |
+| | No attack leaves its base before minute 10; it still defends | `EasyReliefCustomFirstAttackMin` (10) | 0 |
+
+The saved army limit is unchanged; only what the house buys up to is lower, and a wave never
+waits for more than four fifths of that ceiling. A human's Easy ally is not an opponent and is
+not relieved.
+
+Why, from the live results database (vanilla rules, one human, every opponent Easy, games of
+five minutes or more):
+
+- **Counting tries overstates the campaign wall.** A reloaded save is recorded as a new game with
+  the totals so far, so one long mission played over several sessions is several "quits" and one
+  win. On missions 20-22 the players who won made 372 of the 424 recorded tries (1.0.865 and
+  later). Counted per player, 26 of 41 ever won mission 20, 19 of 24 mission 21 and 28 of 35
+  mission 22 (63%, 79%, 80%), against 80-100% on missions 14-19.
+- Players who never won missions 21-22 stopped either at minute 10-18, with 0-4 units built and
+  their starting army against three Easy houses that had already built 25-34 units, or at minute
+  33-51 with 12,000-30,000 army against 39,000-41,000: the enemy total starts near 13,000 and
+  triples during the mission.
+- **Custom games are the larger problem.** 16 of 39 players ever beat one Easy QuantBot 1v1
+  (407 tries). In the games they left at minute 10-20 they had built 15 units and harvested
+  14,000 spice; Easy had built 47 units and harvested 24,000.
+
+Test cells: `skirmish/easy-1v1-{ae,am,ah}-v-qe-{habbanya-penny,rs128}/vanilla` (the AI Player
+as the player) and `campaign/partner-easy-v-quantbot-easy/vanilla` missions 20-22, each with
+and without `--style easy-relief-on`. `weak-helper` halves the Easy helper's harvesters for a
+weaker player proxy.
+
 ## Full campaign cap confirmation (2026-11-14, 1.0.868 game code)
 
 The repair-role and deferred-upgrade fixes are enabled. House-count wave scaling

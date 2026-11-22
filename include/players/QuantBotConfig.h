@@ -535,6 +535,16 @@ struct QuantBotConfig {
         /// ID on ties. Wave objectives prefer it and hunters on another house's building are sent
         /// to its nearest building, at most once per 5 game seconds per unit. Default off.
         bool campaignHelperSingleTarget;
+        /// EasyRelief (default off; EasyReliefPolicy.h): a gentler Easy opponent on campaign
+        /// levels 8-9 and in custom games without the city simulation. The six values below are
+        /// read only while it is on.
+        bool easyRelief;
+        int easyReliefCampaignArmyPercent;     ///< Army it rebuilds to, % of its starting army (native 200).
+        int easyReliefCampaignOpeningDelaySec; ///< Extra seconds before its first wave.
+        int easyReliefCampaignWavePercent;     ///< One ground wave, % of the native value (1,700).
+        int easyReliefCustomArmyPercent;       ///< Army it builds up to, % of its limit for the map size.
+        int easyReliefCustomHarvesterPercent;  ///< Harvesters it keeps, % of its ceiling (maps above 64x64).
+        int easyReliefCustomFirstAttackMin;    ///< No attack leaves its base before this game minute.
         /// Classic campaign support with a Construction Yard follows its Starport opening ladder
         /// and buys nothing else until the ladder is done: the remaining opening refineries, the
         /// Starport and then the Repair Yard, each with its missing prerequisites. Until a Repair

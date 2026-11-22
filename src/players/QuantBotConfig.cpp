@@ -459,6 +459,13 @@ QuantBotConfig::QuantBotConfig() {
     force.campaignHelperFocusFire = false;
     force.campaignHelperCounterAttack = 0;
     force.campaignHelperSingleTarget = false;
+    force.easyRelief = false;
+    force.easyReliefCampaignArmyPercent = 100;
+    force.easyReliefCampaignOpeningDelaySec = 180;
+    force.easyReliefCampaignWavePercent = 70;
+    force.easyReliefCustomArmyPercent = 60;
+    force.easyReliefCustomHarvesterPercent = 50;
+    force.easyReliefCustomFirstAttackMin = 10;
     force.campaignHelperBeeline = false;
     force.campaignHelperOpeningRefineries = 6;
     force.campaignHelperRefineryGoal = 8;
@@ -968,6 +975,13 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CampaignHelperFocusFire", force.campaignHelperFocusFire);
         iniFile.setIntValue("Force Concentration", "CampaignHelperCounterAttack", force.campaignHelperCounterAttack);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperSingleTarget", force.campaignHelperSingleTarget);
+        iniFile.setBoolValue("Force Concentration", "EasyRelief", force.easyRelief);
+        iniFile.setIntValue("Force Concentration", "EasyReliefCampaignArmyPercent", force.easyReliefCampaignArmyPercent);
+        iniFile.setIntValue("Force Concentration", "EasyReliefCampaignOpeningDelaySec", force.easyReliefCampaignOpeningDelaySec);
+        iniFile.setIntValue("Force Concentration", "EasyReliefCampaignWavePercent", force.easyReliefCampaignWavePercent);
+        iniFile.setIntValue("Force Concentration", "EasyReliefCustomArmyPercent", force.easyReliefCustomArmyPercent);
+        iniFile.setIntValue("Force Concentration", "EasyReliefCustomHarvesterPercent", force.easyReliefCustomHarvesterPercent);
+        iniFile.setIntValue("Force Concentration", "EasyReliefCustomFirstAttackMin", force.easyReliefCustomFirstAttackMin);
         iniFile.setBoolValue("Force Concentration", "CampaignHelperBeeline", force.campaignHelperBeeline);
         iniFile.setIntValue("Force Concentration", "CampaignHelperOpeningRefineries", force.campaignHelperOpeningRefineries);
         iniFile.setIntValue("Force Concentration", "CampaignHelperRefineryGoal", force.campaignHelperRefineryGoal);
@@ -1334,6 +1348,13 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.campaignHelperCounterAttack = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperCounterAttack", force.campaignHelperCounterAttack), 0, 100);
     force.campaignHelperSingleTarget = iniFile.getBoolValue("Force Concentration", "CampaignHelperSingleTarget", force.campaignHelperSingleTarget);
+    force.easyRelief = iniFile.getBoolValue("Force Concentration", "EasyRelief", force.easyRelief);
+    force.easyReliefCampaignArmyPercent = std::clamp(iniFile.getIntValue("Force Concentration", "EasyReliefCampaignArmyPercent", force.easyReliefCampaignArmyPercent), 50, 200);
+    force.easyReliefCampaignOpeningDelaySec = std::clamp(iniFile.getIntValue("Force Concentration", "EasyReliefCampaignOpeningDelaySec", force.easyReliefCampaignOpeningDelaySec), 0, 1800);
+    force.easyReliefCampaignWavePercent = std::clamp(iniFile.getIntValue("Force Concentration", "EasyReliefCampaignWavePercent", force.easyReliefCampaignWavePercent), 25, 100);
+    force.easyReliefCustomArmyPercent = std::clamp(iniFile.getIntValue("Force Concentration", "EasyReliefCustomArmyPercent", force.easyReliefCustomArmyPercent), 50, 100);
+    force.easyReliefCustomHarvesterPercent = std::clamp(iniFile.getIntValue("Force Concentration", "EasyReliefCustomHarvesterPercent", force.easyReliefCustomHarvesterPercent), 25, 100);
+    force.easyReliefCustomFirstAttackMin = std::clamp(iniFile.getIntValue("Force Concentration", "EasyReliefCustomFirstAttackMin", force.easyReliefCustomFirstAttackMin), 0, 60);
     force.campaignHelperBeeline = iniFile.getBoolValue("Force Concentration", "CampaignHelperBeeline", force.campaignHelperBeeline);
     force.campaignHelperOpeningRefineries = std::clamp(
         iniFile.getIntValue("Force Concentration", "CampaignHelperOpeningRefineries", force.campaignHelperOpeningRefineries), 0, 8);
@@ -2043,6 +2064,16 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("campaignHelperFocusFire", force.campaignHelperFocusFire);
     addNamed("campaignHelperCounterAttack", force.campaignHelperCounterAttack);
     addNamed("campaignHelperSingleTarget", force.campaignHelperSingleTarget);
+    // Hashed only while on: the default configuration's hash is unchanged.
+    if (force.easyRelief) {
+        addNamed("easyRelief", force.easyRelief);
+        addNamed("easyReliefCampaignArmyPercent", force.easyReliefCampaignArmyPercent);
+        addNamed("easyReliefCampaignOpeningDelaySec", force.easyReliefCampaignOpeningDelaySec);
+        addNamed("easyReliefCampaignWavePercent", force.easyReliefCampaignWavePercent);
+        addNamed("easyReliefCustomArmyPercent", force.easyReliefCustomArmyPercent);
+        addNamed("easyReliefCustomHarvesterPercent", force.easyReliefCustomHarvesterPercent);
+        addNamed("easyReliefCustomFirstAttackMin", force.easyReliefCustomFirstAttackMin);
+    }
     addNamed("campaignHelperBeeline", force.campaignHelperBeeline);
     addNamed("campaignHelperOpeningRefineries", force.campaignHelperOpeningRefineries);
     addNamed("campaignHelperRefineryGoal", force.campaignHelperRefineryGoal);

@@ -33,6 +33,7 @@ class Harvester;
 #include <players/QuantBotConfig.h>
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
+#include <players/EasyReliefPolicy.h>
 #include <players/ArmyPosturePolicy.h>
 #include <players/BlobWavePolicy.h>
 #include <players/ForceConcentrationPolicy.h>
@@ -180,6 +181,13 @@ public:
     /// Effective planning budget for this build pass. Equals militaryValueLimit unless
     /// overridesMilitaryValueCap(), which never mutates the serialized field.
     int planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const;
+    /// EasyRelief (default off, EasyReliefPolicy.h): this house is an Easy campaign opponent on
+    /// level 8 or 9 / an Easy opponent in a custom game without the city simulation.
+    bool easyReliefCampaign() const;
+    bool easyReliefCustom() const;
+    /// The army value a relieved Easy opponent builds up to; 0 when EasyRelief does not apply.
+    /// Never changes the serialized militaryValueLimit.
+    int easyReliefArmyCeiling() const;
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
     /// The difficulty's configured harvester limit for this map's size class (HarvesterLimit*Map)

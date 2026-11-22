@@ -1057,6 +1057,8 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     // army reaches this value, whatever the enemy alliance holds.
     if (const int cap = botConfig().force.campaignHelperReadinessCap; cap > 0 && campaignEconomySupport())
         required = std::min(required, cap);
+    // EasyRelief: the lower army ceiling must still be able to launch a wave.
+    if (easyReliefCampaign()) required = EasyReliefPolicy::readiness(required, easyReliefArmyCeiling());
     return required;
 }
 
@@ -1073,6 +1075,8 @@ int QuantBot::houseAttackThreshold() const {
         ? DuneCity::vanillaAttackThreshold((militaryValueLimit * threshold).lround(), static_cast<int>(difficulty))
         : (militaryValueLimit * threshold).lround());
     const auto boom = cityBoomSpiceKind();
+    // EasyRelief: the lower army ceiling must still be able to launch a wave (never a city game).
+    if (easyReliefCustom()) return EasyReliefPolicy::readiness(required, easyReliefArmyCeiling());
     return lastCalculatedSpice > 0 && customWave.launched == 0 && boom != CityBoomKind::Native && boom != CityBoomKind::ShortTax
         ? std::max(12000, required) : required;
 }
@@ -1129,6 +1133,14 @@ void QuantBot::attack(int militaryValue) {
 		return;
 	}
     if (isCampaignEnemy() && !campaignCanLaunch()) return;
+    // EasyRelief (default off): no attack leaves a relieved Easy custom base in the first minutes.
+    // Base defence is a separate path and is not held.
+    if (easyReliefCustom() && EasyReliefPolicy::attackHeld(getGameCycleCount(),
+            MILLI2CYCLES(botConfig().force.easyReliefCustomFirstAttackMin * 60000))) {
+        attackTimer = MILLI2CYCLES(15000);
+        traceDecision("attack_deferred", AITelemetry::Record().set("reason", "easy_relief_opening"));
+        return;
+    }
 
     // Get config for this difficulty
     const QuantBotConfig& config = botConfig();

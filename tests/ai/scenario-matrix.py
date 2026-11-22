@@ -259,6 +259,18 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                 cells.append(dict(match('skirmish', f'fortress-1v1-{code.lower()}-mirror-rs{size}', mod, ffa(code, code),
                                         skirmish=skirmish_spec(size, 'fortress', 5), minutes=45, full=8,
                                         both_sides=True), opt_in=True, measured=True))
+    # Easy relief (EasyRelief, 2026-11-22; docs/campaign-ai-difficulty-matrix.md): the weakest
+    # opponents we have as player proxies - the AI Player at each difficulty - against QuantBot Easy
+    # from even starts, on the most-played 1v1 map and a generated one, both starts; and an Easy
+    # mirror whose first seat can take the switch alone (--seat-style). Only with --cells.
+    for proxy in ('AE', 'AM', 'AH', 'QE'):
+        label = 'qe-mirror' if proxy == 'QE' else f'{proxy.lower()}-v-qe'
+        cells.append(dict(match('skirmish', f'easy-1v1-{label}-habbanya-penny', 'vanilla', ffa(proxy, 'QE'),
+                                path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'), minutes=60, full=12,
+                                both_sides=True), opt_in=True, measured=True))
+        cells.append(dict(match('skirmish', f'easy-1v1-{label}-rs128', 'vanilla', ffa(proxy, 'QE'),
+                                skirmish=skirmish_spec(128, 'medium', 0), minutes=60, full=12, both_sides=True),
+                          opt_in=True, measured=True))
     # 2. Construction Yard only, default credits.
     c = lambda name, mod, slots, size, **kw: cells.append(
         match('cy', name, mod, slots, skirmish=skirmish_spec(size, 'cy', 0), **kw))
