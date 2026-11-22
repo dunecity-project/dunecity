@@ -1122,7 +1122,8 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         dunecity_add_test(headless nightly NAME city_plane_effect COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-city-plane-effect.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-plane-effect)
-        set_tests_properties(city_plane_effect PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        # 7 minutes on the Mini, 17 on the AWS Linux workers.
+        set_tests_properties(city_plane_effect PROPERTIES TIMEOUT 3000 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)

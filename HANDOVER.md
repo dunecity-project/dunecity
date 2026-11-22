@@ -1,3 +1,148 @@
+## 2026-11-23 - City planes: Rocket Turrets shoot them down, planes bomb, Airports launch no Ornithopters (unreleased, after 1.0.876)
+
+Stefan: "next planes. rocket turrets aren't shooting at enemy planes it is broken. fix it. also make planes drop
+bombs as they fly over enemy buildings strong enough bombs to destroy some buildings. also remove ornithopter spawn
+from airports. and tell me how a plane respawns after being shot down". Commits 2aee7c5ab, c6d2e2e4e, 013546d0c,
+7a143d236 and 6f9f67e1c on `integrate/feature-batch`; not pushed, no version bump.
+
+- **What a plane is.** The City Airplane, `AmbientAirplane` (`Unit_AmbientAirplane`), launched by an `Airport`,
+  which also launches the traffic helicopter `AmbientHelicopter`. Neither can be selected or ordered.
+- **How a plane comes back** (`Airport::updateCityAircraft`, unchanged): every 5 game seconds each alive Airport of
+  a powered house in a city game rolls 1 in 6 for a plane and, failing that, 1 in 13 for the helicopter. The roll
+  does nothing while the house has a plane, so a new one follows a mean 30 s after the old one was shot down or left
+  (one Airport; more Airports only shorten the wait). It costs nothing, appears three tiles east of the Airport's
+  centre and takes off east (already westbound within 20 tiles of the east edge). One plane and one helicopter per
+  house, not counted as fighting units. Human and AI owners are the same. A flight is straight legs to random points
+  over the whole map for five minutes (`kAirplaneMaxTicks`), then out over the nearest edge. Shot down, it crashes
+  as a Death Hand credited to the shooter (2026-10-22 entry).
+- **Rocket Turrets, reproduced first** in the Dune City mod's options (explored map, no fog, turrets need power;
+  a scratch probe at b2065778e, 480 passes of an enemy plane over 1-6 turrets, alone or around a base): no plane
+  shot down, 0.0-0.2 of its 100 hit points lost per pass, a rocket fired in 16-32% of passes. Per turret-cycle
+  with the plane inside weapon range: 55-64% held (`AmbientAirplane::crashEndangers`: the crash could land on
+  the turret's own side anywhere along the lead), 26-27% no target yet (seen only inside 8 tiles, searched once
+  a second, and the plane flies 10 tiles a second), 8-13% turning. And the rockets that were fired missed: a
+  turret rocket flies 11.52 world units a cycle against the plane's 10.24 and aimed at where the plane was.
+- **City Plane Defence** (`GameOptionsClass::cityPlaneDefence`, default on, INI key `City Plane Defence`):
+  a Rocket Turret sees the plane at triple range like an Ornithopter (`RocketTurret::findTarget`,
+  `ObjectBase::targetInWeaponRange`), takes it the cycle it comes into reach when it has no target
+  (`cityPlaneInReach` over `AmbientAirplane::all()`, nothing looked at while no plane exists), always fires the
+  rocket, never the close cannon, and the rocket flies to the point where the two meet, solved again at every
+  movement step in integers (`CityAircraft::intercept`, `Bullet::updateDynastyProjectile`). Anti-air (turrets,
+  Launchers, Troopers, Scoutposts) holds only the shot that, with the shots already on their way, could take
+  the plane's last hit points while the crash would land on its own side; for a turret that is judged from one
+  tile short of the meeting point to four tiles beyond it. Off is 1.0.876.
+- **City Plane Bombing** (`cityPlaneBombing`, default on, INI key `City Plane Bombing`): a cruising plane follows
+  the point 1.5 tiles ahead on its course and drops a bomb each time that point enters a tile of an enemy
+  building (`AmbientAirplane::dropBomb`), none for a building the bombs already falling will destroy. The bomb
+  is the new `Bullet_Bomb` (16): the large shell's picture falling behind the plane for about a quarter of a
+  second, a medium explosion with its sound, smoke on a building below half health. It does 100 to the building
+  it lands on and the ordinary half-tile splash to units there. Load 6, one bomb back per 8 s
+  (`CityAircraft::kBomb*`). Chosen from the mod's hit points: two bombs take a Wind Trap, zone, turret or Heavy
+  Factory (200) and a Spice Silo (150); a Construction Yard (400) needs four, a Refinery (450) or Radar (500)
+  five, a Palace (1000) ten; a full load is 600. The plane never leaves its course for a target, never aims at
+  own or allied buildings (and a bomb only damages a building its impact point lies on), and human and AI planes
+  are the same: an AI uses it by owning an Airport. Off is the unarmed plane.
+- **Airport Ornithopter Patrol** (`airportOrnithopterPatrol`, default off, INI key `Airport Ornithopter Patrol`):
+  the Airport's pair of Ornithopters on the Palace timer (`Airport::updateStructureSpecificStuff`) only runs
+  with the rule on. That was the only path: an Airport has no build list, QuantBot orders Airports as a city
+  requirement and never for Ornithopters, and no map or mod data spawns them. The timer and pair counter stay
+  in the save and stand still. Ornithopters an Airport sent out in an older save stay ordinary units. The
+  Airport panel shows the city airplane's state instead. High-Tech Factory Ornithopters are unchanged.
+- **Stream and saves.** The three rules are INI keys without a menu entry, hashed only in their non-default state
+  and carried as bits 2-4 of the MOD15 Trooper byte, so a default setup's stream and hash are unchanged; noted
+  under protocol 133, no new number. Save format 9890: the plane saves its bomb load, rearm timer and bomb
+  sight tile, and a save may hold a `Bullet_Bomb`.
+- **Controlled encounters, off against on in one build** (`city_plane_effect`,
+  `tests/units/run-city-plane-effect.py`, Mini, the mod's options; paired by encounter, 95% bootstrap interval of
+  on - off). 480 passes of an enemy plane over 1, 2, 4 or 6 Rocket Turrets, alone or around a base, three
+  headings, five offsets, seeds 1-4, bombing off in both arms:
+
+  | Per pass | Off | On | On - off (95% interval) |
+  |---|---:|---:|---|
+  | Passes with a rocket fired at the plane | 38.5% | 100% | +61.5 points (+57.1 to +65.8) |
+  | Rockets fired | 0.55 | 5.04 | +4.49 (+4.28 to +4.70) |
+  | Plane hit points removed (of 100) | 0.0 | 67.6 | +67.5 (+65.0 to +70.1) |
+  | Planes shot down, all | 0.00 | 0.29 | +0.29 (+0.25 to +0.33) |
+  | Planes shot down, 1 or 2 turrets | 0.00 | 0.00 | 0 (28.5 and 55.8 hit points removed) |
+  | Planes shot down, 4 turrets | 0.00 | 0.40 | +0.40 (+0.32 to +0.49) |
+  | Planes shot down, 6 turrets | 0.00 | 0.75 | +0.75 (+0.68 to +0.82) |
+  | Defender hit points lost to own rockets and crashes | 0.0 | 0.8 | +0.8 (+0.4 to +1.1) |
+  | Defender buildings lost that way | 0 | 0 | 0 |
+
+  Turret-cycles with the plane inside weapon range, off -> on: held 58% -> 28%, no target yet 25% -> 1%,
+  turning 12% -> 46%, reloading 4% -> 24%. About one rocket per turret hits per pass (the reload allows two
+  shots; the second is a tail chase that the 64-tile fixture often ends at the map edge), so one or two turrets
+  never bring a fresh plane down in one pass; damage stays on the plane. Planes came down a mean 15.5 tiles from
+  the middle of the site, never nearer than 6. The defender's 0.8 hit points are rockets that met the plane over
+  an own building and did their 30 there (the Dynasty blast rule, as under an Ornithopter). With the killing
+  shot judged only two tiles past the meeting point (013546d0c) one of 160 crashes took a turret; with four
+  (7a143d236) none did, at 0.33 -> 0.29 planes shot down per pass.
+  117 bombing runs over an undefended base of 22 buildings (three headings, offsets -6..6, seeds 1-3): bombs
+  per run 0 -> 3.79, building hit points removed 0 -> 359, buildings destroyed 0 -> 1.03 (+0.85 to +1.21),
+  credits destroyed 0 -> 225 (+179 to +273). 100 runs dropped a bomb, 75 destroyed a building, 3 at most (950
+  credits); no Construction Yard or Palace fell in a run. Destroyed: Wind Trap 39, Wall 30, Spice Silo 15,
+  zones 26, Heavy Factory 10.
+  Fixed cases: one run takes a Wind Trap (two bombs), leaves a Construction Yard at 200 of 400 and a Palace at
+  700 of 1000; own and allied Wind Traps and walls beside a bombed enemy Wind Trap are untouched; twelve enemy
+  walls in a row cost six bombs and six stand; the saved plane keeps bombs, timer and sight tile; an Airport in
+  eleven game minutes launches 13 planes and no Ornithopter (rule on: its pair, timer running); off, a turret
+  holds every shot at a plane over its own wall, on, only the killing one.
+- **AI matches** (AWS, `vanilla-match.py --ffa default --houses harkonnen atreides ordos mercenary`, Brutal, 45
+  min, `rs160-dunecity`, seeds 9101-9148, 7a143d236; 48 games per arm, none failed;
+  `tests/ai/city-plane-report.py`; arms `tests/ai/game-options/city-plane-rules-{off,on}.ini`, off = all three
+  rules as in 1.0.876; paired per game):
+
+  | Per game | Off | On | On - off (95% interval) |
+  |---|---:|---:|---|
+  | City planes launched | 77.3 | 180.3 | +102.9 (+88.0 to +118.5) |
+  | City planes shot down | 0.23 | 153.6 | +153.4 (+137.0 to +170.8) |
+  | Bombs dropped | 0 | 608 | +608 (+540 to +679) |
+  | Buildings destroyed by bombs | 0 | 68.4 | +68.4 (+63.3 to +73.5) |
+  | Credits destroyed by bombs | 0 | 6327 | +6327 (+5695 to +6982) |
+  | Ornithopters sent out by Airports | 23.3 | 0 | -23.3 (-25.2 to -21.3) |
+  | Time-outs | 56% | 54% | -2 points (-23 to +19) |
+  | Houses eliminated before the end | 1.77 | 1.88 | +0.10 (-0.31 to +0.52) |
+  | Game length, minutes | 41.8 | 41.5 | -0.3 (-2.2 to +1.7) |
+
+  7352 of 7372 planes shot down fell to Rocket Turrets (17 to Launchers). Bombs destroyed 3285 buildings: Wall
+  2257, zones 766, Spice Silo 168, Heavy Factory 23, Repair Yard 21, Refinery 12, Police Station 11, Construction
+  Yard 5, Palace 1. A plane now lasts under a minute on average instead of its five. Time-outs, eliminations and
+  game length do not move. Placement score by house (`match_score.py`; every house plays the same rules, so
+  this only shows whether a seat is favoured): Ordos -0.436 -> -0.116, +0.319 (+0.132 to +0.524); Atreides
+  +0.010 -> -0.104 (-0.115, -0.299 to +0.057); Harkonnen -0.045 -> -0.108 (-0.062, -0.257 to +0.116);
+  Mercenary +0.023 -> -0.089 (-0.111, -0.288 to +0.069). Ordos, clearly last before, ends level with the
+  others. Two more arms place the cause: with only the patrol removed Ordos is +0.071 (-0.010 to +0.158) and
+  Harkonnen -0.073 (-0.153 to -0.007), time-outs 65%; with only the plane and turret rules (patrol kept)
+  Ordos is +0.278 (+0.094 to +0.465). So it is the bombing and shooting down, not the missing Ornithopters. Why
+  it helps Ordos in particular was not investigated.
+- **Found in the matches and fixed (6f9f67e1c, presentation only):** every crash is a Death Hand impact and shook
+  every screen wherever it was; at 154 crashes a game that is one every 16 s. A crash now only shakes a screen
+  that shows it or is within eight tiles of it (`Bullet::detonateDeathHand(..., shake)`); the Palace missile is
+  unchanged. The bomb's explosion sound was placed with world instead of tile coordinates.
+- **Tests and gates.** Final source 6f9f67e1c: Mini `city_plane_effect` (CSVs byte-identical to 7a143d236's),
+  `dunelegacy_tests` (new MOD15 city plane byte case; the unknown-bit case now uses bit 5), `city_aircraft_probe`
+  (it pins the two plane rules off and still checks the 1.0.876 hold-fire) and `perf_regression`
+  (121.9 s) passed; AWS job `20261123T005609-ctest-771cd7` passed the same six tests as below
+  (`city_plane_effect` 1003 s). On 7a143d236 (same simulation) AWS job
+  `20261123T003716-ctest-444475` passed `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`,
+  `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`, `city_aircraft_probe` and `city_plane_effect` (1061 s
+  on Linux against 7 min on the Mini; its CTest limit is raised from 1800 to 3000 s), and the Mini passed
+  `perf_regression` (121.6 s). Match jobs: `20261123T003705-planes-off-a766b0`,
+  `20261123T003711-planes-on-9cea20`, `20261123T004907-planes-nopatrol-fcc272`,
+  `20261123T004911-planes-armed-patrol-e9b91d`. Tables, CSVs and the two extra option files:
+  `~/Documents/projects/outputs/city-planes-20261123/` (`effect-5/summary.md`, `matches/report*.md`).
+- **Switching a rule back** (hosts decide in multiplayer): `[Game Options]` in `Dune City.ini`,
+  `City Plane Defence = false`, `City Plane Bombing = false`, `Airport Ornithopter Patrol = true`.
+- **Not measured or not done:** a human watching the build (the bomb's look and sound, the Airport panel text
+  `City airplane / In flight / Next flight soon / Needs power`, the shake limit) - nothing here was checked on a
+  screen; which match Stefan's complaint came from (the reproduction is the mod's options on an open 64-tile
+  fixture, not his map); Launchers and Troopers against planes beyond the shared hold-fire rule (their rockets
+  still aim at where the plane was; 17 and 1 of 7372 kills); maps other than the generated 160 map, difficulties
+  other than Brutal, team games and human opponents in the match tier; why the plane rules lift Ordos; a network
+  game between two builds; loading a 9889 save that holds a plane beyond the version gate in the code (the
+  fixture saves and loads 9890); the nightly tier beyond the tests named. A plane shot down still comes back
+  free about half a minute later, so in AI matches a house loses and relaunches a plane about once a minute.
+
 ## 2026-11-22 - Trooper Ornithopter Reach: cause in the owner's settings, fix, off/on measurements (unreleased, after 1.0.876)
 
 Stefan: "test that these fixes improve performance of these units", and, after the first measurement showed the
