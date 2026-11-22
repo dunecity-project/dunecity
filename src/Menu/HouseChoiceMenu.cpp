@@ -364,6 +364,7 @@ void HouseChoiceMenu::onPartnerChanged(bool /*interactive*/) {
 void HouseChoiceMenu::onEnemyChanged(bool /*interactive*/) {
     s_enemyClass = enemySelector.getPlayerClass();
     const std::pair<const char*, const char*> descriptions[] = {
+        {"qBotEasiest",      "Easy with smaller, later waves.\nEnemies only replace the army they start with."},
         {"qBotEasy",         "Small waves and a limited economy.\nEnemy houses can attack at the same time."},
         {"qBotMedium",       "Larger waves than Easy.\nEnemy houses can attack at the same time."},
         {"qBotHard",         "Stronger economy and capped waves.\nEnemy houses can attack at the same time."},

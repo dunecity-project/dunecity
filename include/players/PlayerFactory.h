@@ -146,6 +146,7 @@ public:
     }
 
     /// The difficulty labels of one family in registration order; a single "" if it has none.
+    /// "Easiest" was registered last (its lobby index is appended) but is listed first.
     static std::vector<std::string> getDifficulties(const std::string& family) {
         std::vector<std::string> difficulties;
         for(const auto& data : getList()) {
@@ -154,6 +155,8 @@ public:
                 difficulties.push_back(data.getDifficulty());
             }
         }
+        const auto easiest = std::find(difficulties.begin(), difficulties.end(), "Easiest");
+        if(easiest != difficulties.end()) std::rotate(difficulties.begin(), easiest, easiest + 1);
         return difficulties;
     }
 

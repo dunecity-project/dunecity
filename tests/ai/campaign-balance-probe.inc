@@ -100,7 +100,7 @@ int runCampaignBalanceProbe() {
         : partner == "brutal" ? "qBotBrutal" : "qBotEasy";
     const std::string enemy = std::getenv("BALANCE_ENEMY") ? std::getenv("BALANCE_ENEMY") : "easy";
     std::string enemyClass = enemy == "hard" ? "qBotHard" : enemy == "medium" ? "qBotMedium"
-        : enemy == "brutal" ? "qBotBrutal" : "qBotEasy";
+        : enemy == "brutal" ? "qBotBrutal" : enemy == "easiest" ? "qBotEasiest" : "qBotEasy";
     if(std::getenv("BALANCE_ENEMY_AI") && std::string(std::getenv("BALANCE_ENEMY_AI")) == "ai-player")
         enemyClass = enemy == "hard" ? "AIPlayerHard" : enemy == "medium" ? "AIPlayerMedium" : "AIPlayerEasy";
     // The campaign menu's "scenario settings" enemy (HouseChoiceMenu kEnemyAIClasses).

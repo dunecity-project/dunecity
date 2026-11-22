@@ -22,11 +22,12 @@ std::vector<std::string> classesOf(const GameInitSettings::HouseInfoList& houses
 }
 } // namespace
 
-TEST_CASE("QuantBot enemies step one difficulty down and stop at Easy outside a campaign", "[menu][difficulty][policy]") {
+TEST_CASE("QuantBot enemies step one difficulty down and stop at Easiest outside a campaign", "[menu][difficulty][policy]") {
     REQUIRE(easierClass("qBotBrutal", false) == "qBotHard");
     REQUIRE(easierClass("qBotHard", false) == "qBotMedium");
     REQUIRE(easierClass("qBotMedium", false) == "qBotEasy");
-    REQUIRE(easierClass("qBotEasy", false).empty());
+    REQUIRE(easierClass("qBotEasy", false) == "qBotEasiest");
+    REQUIRE(easierClass("qBotEasiest", false).empty());
     // Everything else has no easier step.
     for(const char* playerClass : {"qBotDefend", "CampaignAIPlayer", "SmartBot", "AIPlayerHard", "qBotFighterHard",
                                    "qBotSupportHard", HUMANPLAYERCLASS, ""}) {
@@ -35,11 +36,14 @@ TEST_CASE("QuantBot enemies step one difficulty down and stop at Easy outside a 
     }
 }
 
-TEST_CASE("In a campaign the step below QuantBot Easy is the Campaign AI", "[menu][difficulty][policy][campaign]") {
-    REQUIRE(easierClass("qBotEasy", true) == "CampaignAIPlayer");
+TEST_CASE("In a campaign the step below QuantBot Easiest is the Campaign AI", "[menu][difficulty][policy][campaign]") {
+    REQUIRE(easierClass("qBotEasy", true) == "qBotEasiest");
+    REQUIRE(easierClass("qBotEasiest", true) == "CampaignAIPlayer");
     REQUIRE(easierClass("qBotMedium", true) == "qBotEasy");
     REQUIRE(easierClass("CampaignAIPlayer", true).empty());
     REQUIRE(label("qBotEasy") == "QuantBot Easy");
+    REQUIRE(label("qBotEasiest") == "QuantBot Easiest");
+    REQUIRE(rank("qBotEasiest") < rank("qBotEasy"));
     REQUIRE(label("CampaignAIPlayer") == "Campaign AI");
     // Each step lands on a lower rank, so repeating the button always ends.
     for(std::string current = "qBotBrutal"; !easierClass(current, true).empty(); current = easierClass(current, true)) {
@@ -64,10 +68,14 @@ TEST_CASE("Only enemies of the human get easier; partners and allies keep their 
     REQUIRE(apply(houses, false));
     REQUIRE(classesOf(houses) == std::vector<std::string>{HUMANPLAYERCLASS, "qBotSupportHard", "qBotBrutal",
                                                           "qBotMedium", "qBotEasy", "SmartBot"});
-    REQUIRE(apply(houses, false));      // Medium -> Easy; the Easy house has nowhere to go
+    REQUIRE(apply(houses, false));      // Medium -> Easy, Easy -> Easiest
+    REQUIRE(classesOf(houses)[3] == "qBotEasy");
+    REQUIRE(classesOf(houses)[4] == "qBotEasiest");
+    REQUIRE(apply(houses, false));      // Easy -> Easiest; the Easiest house has nowhere to go
     REQUIRE_FALSE(nextStep(houses, false).available());
     REQUIRE_FALSE(apply(houses, false));
-    REQUIRE(classesOf(houses)[3] == "qBotEasy");
+    REQUIRE(classesOf(houses)[3] == "qBotEasiest");
+    REQUIRE(classesOf(houses)[4] == "qBotEasiest");
 }
 
 TEST_CASE("A campaign restart carries the easier enemies in its settings", "[menu][difficulty][policy][campaign]") {
@@ -78,10 +86,15 @@ TEST_CASE("A campaign restart carries the easier enemies in its settings", "[men
 
     const Step step = nextStep(current.getHouseInfoList(), true);
     REQUIRE(step.from == "qBotEasy");
-    REQUIRE(step.to == "CampaignAIPlayer");
-    REQUIRE_FALSE(nextStep(current.getHouseInfoList(), false).available());
+    REQUIRE(step.to == "qBotEasiest");
+    REQUIRE(nextStep(current.getHouseInfoList(), false).to == "qBotEasiest");
 
-    const GameInitSettings next = easierSettings(current, true);
+    const GameInitSettings easiest = easierSettings(current, true);
+    REQUIRE(classesOf(easiest.getHouseInfoList()) == std::vector<std::string>{HUMANPLAYERCLASS, "qBotEasiest", "qBotEasiest"});
+    REQUIRE(nextStep(easiest.getHouseInfoList(), true).to == "CampaignAIPlayer");
+    REQUIRE_FALSE(nextStep(easiest.getHouseInfoList(), false).available());
+
+    const GameInitSettings next = easierSettings(easiest, true);
     REQUIRE(classesOf(next.getHouseInfoList()) == std::vector<std::string>{HUMANPLAYERCLASS, "CampaignAIPlayer", "CampaignAIPlayer"});
     REQUIRE(next.getHouseInfoList()[1].houseID == HOUSE_HARKONNEN);
     REQUIRE(next.getHouseInfoList()[1].team == 2);

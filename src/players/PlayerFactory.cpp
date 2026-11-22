@@ -113,4 +113,20 @@ void PlayerFactory::registerAllPlayers() {
         "Campaign AI");
 
     for(const auto& level : kQuantBotDifficulties) addQuantBot("qBotFighter", AIRole::Fighter, level);
+
+    // QuantBot Easiest (protocol 132): QuantBot Easy plus the lower ceilings of EasiestPolicy.h.
+    // Appended, so every earlier lobby index is unchanged. The mark is set here on create and on
+    // load: the save stores the class string and an Easy QuantBot stream, nothing new.
+    playerDataList.emplace_back("qBotEasiest", "QuantBot Easiest",
+        [](House* house, const std::string& playername) {
+            auto bot = std::make_unique<QuantBot>(house, playername, QuantBot::Difficulty::Easy, AIRole::Both);
+            bot->setEasiest();
+            return bot;
+        },
+        [](InputStream& inputStream, House* house) {
+            auto bot = std::make_unique<QuantBot>(inputStream, house);
+            bot->setEasiest();
+            return bot;
+        },
+        "QuantBot", "Easiest", AIRole::Both);
 }

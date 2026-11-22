@@ -74,11 +74,12 @@ HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardau
                  'neutral': 6, 'rebels': 7}
 # Houses for N players, in this order (the 7th and 8th custom-game houses last).
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary', 'rebels', 'neutral')
-CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBrutal',
+CLASSES = {'QX': 'qBotEasiest', 'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBrutal',
            'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard',
            'CA': 'CampaignAIPlayer'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
-DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
+DIFFICULTY = {'QX': 'easiest', 'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
+QUANTBOT_CODE = {name: code for code, name in DIFFICULTY.items()}
 CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'citycampaign', 'ladder', 'mp', 'team', 'controls')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
@@ -259,18 +260,21 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                 cells.append(dict(match('skirmish', f'fortress-1v1-{code.lower()}-mirror-rs{size}', mod, ffa(code, code),
                                         skirmish=skirmish_spec(size, 'fortress', 5), minutes=45, full=8,
                                         both_sides=True), opt_in=True, measured=True))
-    # Easy relief (EasyRelief, 2026-11-22; docs/campaign-ai-difficulty-matrix.md): the weakest
-    # opponents we have as player proxies - the AI Player at each difficulty - against QuantBot Easy
-    # from even starts, on the most-played 1v1 map and a generated one, both starts; and an Easy
-    # mirror whose first seat can take the switch alone (--seat-style). Only with --cells.
+    # QuantBot Easiest (2026-11-22; docs/campaign-ai-difficulty-matrix.md): the weakest opponents
+    # we have as player proxies - the AI Player at each difficulty - against QuantBot Easy and
+    # against QuantBot Easiest from even starts, on the most-played 1v1 map and a generated one,
+    # both starts; and Easy against Easiest. Only with --cells.
     for proxy in ('AE', 'AM', 'AH', 'QE'):
-        label = 'qe-mirror' if proxy == 'QE' else f'{proxy.lower()}-v-qe'
-        cells.append(dict(match('skirmish', f'easy-1v1-{label}-habbanya-penny', 'vanilla', ffa(proxy, 'QE'),
-                                path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'), minutes=60, full=12,
-                                both_sides=True), opt_in=True, measured=True))
-        cells.append(dict(match('skirmish', f'easy-1v1-{label}-rs128', 'vanilla', ffa(proxy, 'QE'),
-                                skirmish=skirmish_spec(128, 'medium', 0), minutes=60, full=12, both_sides=True),
-                          opt_in=True, measured=True))
+        for enemy in ('QE', 'QX'):
+            if proxy == enemy:
+                continue
+            label = f'{proxy.lower()}-v-{enemy.lower()}'
+            cells.append(dict(match('skirmish', f'easy-1v1-{label}-habbanya-penny', 'vanilla', ffa(proxy, enemy),
+                                    path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'), minutes=60, full=12,
+                                    both_sides=True), opt_in=True, measured=True))
+            cells.append(dict(match('skirmish', f'easy-1v1-{label}-rs128', 'vanilla', ffa(proxy, enemy),
+                                    skirmish=skirmish_spec(128, 'medium', 0), minutes=60, full=12, both_sides=True),
+                              opt_in=True, measured=True))
     # 2. Construction Yard only, default credits.
     c = lambda name, mod, slots, size, **kw: cells.append(
         match('cy', name, mod, slots, skirmish=skirmish_spec(size, 'cy', 0), **kw))
@@ -566,7 +570,7 @@ def match_game(cell, index, seed, suffix=''):
 
 
 def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
-    enemy = 'CA' if cell['enemy_ai'] == 'campaign' else 'Q' + cell['enemy_difficulty'][0].upper()
+    enemy = 'CA' if cell['enemy_ai'] == 'campaign' else QUANTBOT_CODE[cell['enemy_difficulty']]
     mode = '#single-mission' if campaign_mode == 'single' else '#full-campaign'
     rules = {'original_rules': cell['original_rules']} if cell.get('original_rules') else {}
     if cell.get('reworked'):
@@ -736,7 +740,7 @@ def campaign_roster_error(game, houses):
         expected_player.add('HumanPlayer')
     if player is None or set(player['players'].split('+')) != expected_player:
         return 'campaign player roster does not match the requested human/support setup'
-    expected_enemy = CLASSES['CA' if game['enemy_ai'] == 'campaign' else 'Q' + game['enemy_difficulty'][0].upper()]
+    expected_enemy = CLASSES['CA' if game['enemy_ai'] == 'campaign' else QUANTBOT_CODE[game['enemy_difficulty']]]
     enemies = [row for row in houses if row['team'] != player['team']]
     if not enemies or any(row['players'] != expected_enemy for row in enemies):
         return f'campaign enemies are not all {expected_enemy}'

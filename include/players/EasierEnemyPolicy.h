@@ -29,9 +29,11 @@
     "Restart with Easier AI" (in-game menu): every enemy AI of the human player steps one
     difficulty down and the game starts again.
 
-    QuantBot Brutal > Hard > Medium > Easy. In a campaign the step below QuantBot Easy is the
-    original Campaign AI (Stefan, 2026-11-22). Every other class has no easier step: QuantBot
-    Defend, the Campaign AI itself, role-limited QuantBots and the other AI families.
+    QuantBot Brutal > Hard > Medium > Easy > Easiest. In a campaign the step below QuantBot
+    Easiest is the original Campaign AI (Stefan, 2026-11-22: the Campaign AI is the last step;
+    Easiest was added the same day as the difficulty below Easy). Every other class has no
+    easier step: QuantBot Defend, the Campaign AI itself, role-limited QuantBots and the other
+    AI families.
 
     An enemy is an AI in a house without a human player whose team no human plays on, so a
     partner sharing the human's house and an allied AI house keep their strength. The class
@@ -46,17 +48,20 @@ inline std::string easierClass(const std::string& playerClass, bool campaign) {
     if(playerClass == "qBotBrutal") return "qBotHard";
     if(playerClass == "qBotHard") return "qBotMedium";
     if(playerClass == "qBotMedium") return "qBotEasy";
-    if(playerClass == "qBotEasy" && campaign) return kCampaignAI;
+    if(playerClass == "qBotEasy") return "qBotEasiest";
+    if(playerClass == "qBotEasiest" && campaign) return kCampaignAI;
     return "";
 }
 
-/// How hard a class on the ladder is: Campaign AI 0, QuantBot Easy 1 ... Brutal 4; -1 off the ladder.
+/// How hard a class on the ladder is: Campaign AI 0, QuantBot Easiest 1, Easy 2 ... Brutal 5;
+/// -1 off the ladder.
 inline int rank(const std::string& playerClass) {
     if(playerClass == kCampaignAI) return 0;
-    if(playerClass == "qBotEasy") return 1;
-    if(playerClass == "qBotMedium") return 2;
-    if(playerClass == "qBotHard") return 3;
-    if(playerClass == "qBotBrutal") return 4;
+    if(playerClass == "qBotEasiest") return 1;
+    if(playerClass == "qBotEasy") return 2;
+    if(playerClass == "qBotMedium") return 3;
+    if(playerClass == "qBotHard") return 4;
+    if(playerClass == "qBotBrutal") return 5;
     return -1;
 }
 
@@ -64,10 +69,11 @@ inline int rank(const std::string& playerClass) {
 inline std::string label(const std::string& playerClass) {
     switch(rank(playerClass)) {
         case 0: return "Campaign AI";
-        case 1: return "QuantBot Easy";
-        case 2: return "QuantBot Medium";
-        case 3: return "QuantBot Hard";
-        case 4: return "QuantBot Brutal";
+        case 1: return "QuantBot Easiest";
+        case 2: return "QuantBot Easy";
+        case 3: return "QuantBot Medium";
+        case 4: return "QuantBot Hard";
+        case 5: return "QuantBot Brutal";
         default: return playerClass;
     }
 }

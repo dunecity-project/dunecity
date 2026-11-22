@@ -174,8 +174,8 @@ std::string analyticsAIType(const std::string& playerClass) {
 }
 
 std::string analyticsAIDifficulty(const std::string& playerClass) {
-    static constexpr std::array<std::pair<const char*, const char*>, 5> suffixes = {{
-        {"Defend", "defend"}, {"Easy", "easy"}, {"Medium", "medium"},
+    static constexpr std::array<std::pair<const char*, const char*>, 6> suffixes = {{
+        {"Defend", "defend"}, {"Easiest", "easiest"}, {"Easy", "easy"}, {"Medium", "medium"},
         {"Hard", "hard"}, {"Brutal", "brutal"},
     }};
     for (const auto& [suffix, name] : suffixes) {

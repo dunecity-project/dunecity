@@ -33,7 +33,7 @@ class Harvester;
 #include <players/QuantBotConfig.h>
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
-#include <players/EasyReliefPolicy.h>
+#include <players/EasiestPolicy.h>
 #include <players/ArmyPosturePolicy.h>
 #include <players/BlobWavePolicy.h>
 #include <players/ForceConcentrationPolicy.h>
@@ -76,6 +76,10 @@ public:
     };
 
     QuantBot(House* associatedHouse, const std::string& playername, Difficulty difficulty, AIRole role = AIRole::Both);
+    /// The Easiest class is Difficulty::Easy plus this mark (EasiestPolicy.h). PlayerFactory sets
+    /// it for qBotEasiest when the player is created or loaded; the save keeps the class string.
+    void setEasiest() { easiest = true; }
+    bool isEasiest() const { return easiest; }
     QuantBot(InputStream& stream, House* associatedHouse);
     /// Tag: the stream holds a player saved by the retired Mentat AI (PlayerFactory's legacy table).
     struct RetiredMentatSave {};
@@ -181,14 +185,13 @@ public:
     /// Effective planning budget for this build pass. Equals militaryValueLimit unless
     /// overridesMilitaryValueCap(), which never mutates the serialized field.
     int planningMilitaryBudget(int committedValue, int productionCash, int largestUnitValue) const;
-    /// EasyRelief (default off, EasyReliefPolicy.h): this house is an Easy opponent in a custom
-    /// game without the city simulation - at level 1 only with a human among its enemies.
-    bool easyReliefCustom() const;
-    /// A human player controls (or shares) a living house on another team.
-    bool opposesHuman() const;
-    /// The army value a relieved Easy opponent builds up to; 0 when EasyRelief does not apply.
-    /// Never changes the serialized militaryValueLimit.
-    int easyReliefArmyCeiling() const;
+    /// QuantBot Easiest (EasiestPolicy.h): this house plays a custom game / is a campaign
+    /// opponent as the Easiest class. Always false for every other class.
+    bool easiestCustom() const;
+    bool easiestCampaign() const;
+    /// The army value an Easiest house builds up to; 0 for every other class. Never changes the
+    /// serialized militaryValueLimit.
+    int easiestArmyCeiling() const;
     bool isAlliedWithHuman() const;
     int harvesterCountCeiling() const;
     /// The difficulty's configured harvester limit for this map's size class (HarvesterLimit*Map)
@@ -279,6 +282,7 @@ private:
     };
 
     Difficulty difficulty;  ///< difficulty level
+    bool easiest = false;   ///< the Easiest class: Difficulty::Easy plus EasiestPolicy.h (not serialized)
     GameMode  gameMode;     ///< game mode (custom or campaign)
     Sint32  buildTimer;     ///< When to build the next structure/unit
     Sint32  attackTimer;    ///< When to build the next structure/unit

@@ -60,16 +60,6 @@ bool QuantBot::isAlliedWithHuman() const {
     return false;
 }
 
-bool QuantBot::opposesHuman() const {
-    if (!getHouse()) return false;
-    for (int h=0; h<NUM_HOUSES; ++h) if (const auto* house=getHouse(h)) {
-        if (house->getTeamID()==getHouse()->getTeamID() || !house->isAlive()) continue;
-        for (const auto& player : house->getPlayerList())
-            if (dynamic_cast<const HumanPlayer*>(player.get())) return true;
-    }
-    return false;
-}
-
 // Original permissions and budget are independent of later construction or spice loss.
 bool QuantBot::campaignCityEconomy() const {
     return isCampaignEnemy() && currentGame->isCitySimEnabled()
@@ -286,7 +276,10 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
     // The second difficulty lever: the value one ground wave may hold. Easy keeps its smaller
     // early-mission waves in proportion (900 / 1,200 of 1,700 at the defaults).
     const auto& force=botConfig().force;
-    if (difficulty==Difficulty::Easy) profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
+    if (difficulty==Difficulty::Easy) {
+        profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
+        if (easiestCampaign()) profile.value=EasiestPolicy::waveValue(profile.value);
+    }
     else if (difficulty==Difficulty::Medium) profile.value=force.campaignMediumWaveValue;
     else if (difficulty==Difficulty::Hard) {
         profile.value=force.campaignHardWaveValue;
@@ -461,6 +454,7 @@ void QuantBot::updateCampaignWave() {
         const auto& force=botConfig().force;
         const int waitSeconds=earlySignal ? 0
             : difficulty==Difficulty::Easy ? force.campaignEasyOpeningDelaySec
+                + (easiestCampaign() ? EasiestPolicy::kCampaignOpeningDelaySec : 0)
             : difficulty==Difficulty::Medium ? force.campaignMediumOpeningDelaySec
             : difficulty==Difficulty::Hard ? force.campaignHardOpeningDelaySec : 0;
         const auto delay=CampaignDifficultyPolicy::openingDelayMs(static_cast<int>(difficulty),

@@ -327,7 +327,7 @@ parser.add_argument('--partner-difficulty', choices=('easy','medium','hard','bru
 parser.add_argument('--enemy-ai', choices=('quantbot','ai-player','campaign'), default='quantbot',
                     help='Enemy controller family; AI Player has Easy/Medium/Hard; campaign = CampaignAIPlayer '
                          '(the campaign menu\'s "scenario settings" enemy, any --enemy-difficulty)')
-parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
+parser.add_argument('--enemy-difficulty', choices=('easiest','easy','medium','hard','brutal'), default='easy')
 parser.add_argument('--civ-wars', type=int, choices=range(1, 4), metavar='TEAMSIZE',
                     help='Real generated Civilization Wars 1v1/2v2/3v3; needs --mod CivWars --local-spectator')
 parser.add_argument('--civ-size', type=int, choices=range(4), default=0, metavar='INDEX',

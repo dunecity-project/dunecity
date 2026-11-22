@@ -29,33 +29,30 @@ The dated implementation/audit sections below remain historical evidence for
 their named source revisions, not proof that the current engine or either menu
 mode passes every proposed target.
 
-## Easy relief (2026-11-22, `EasyRelief`, default 0 = off)
+## QuantBot Easiest (2026-11-22, class `qBotEasiest`, protocol 132)
 
-`[Force Concentration] EasyRelief` makes the Easy opponent gentler in custom games without the
-city simulation and nowhere else. Medium, Hard and Brutal, every campaign, helpers, the
-DuneCity campaign and every city game never read it. It is hashed only while on. Rules:
-`include/players/EasyReliefPolicy.h`.
+Stefan, 2026-11-22: "can we just make an 'easiest' difficulty which is easier than easy". It
+is a selectable difficulty below Easy in every AI selector (lobby, skirmish, campaign enemy)
+and the step below Easy in Restart with Easier AI. QuantBot Easy and every other difficulty
+are unchanged: nothing reads these rules unless the class is `qBotEasiest`. It replaces the
+`EasyRelief` config switch tried earlier the same day.
 
-| `EasyRelief` | Which Easy houses | Use |
+QuantBot Easiest is QuantBot Easy (same skills, same `[Difficulty Settings] Easy_*` values and
+`CampaignEasy*` levers) plus the fixed rules of `include/players/EasiestPolicy.h`:
+
+| Where | Easiest | Easy |
 |---|---|---|
-| 0 | none | default |
-| 1 | an Easy house with a human player among its enemies | the candidate default: games without a human play exactly as with 0 |
-| 2 | every Easy opponent | AI test games, where an AI stands in for the player (`--style easy-relief-on`) |
+| Custom games: army it builds up to | 60% of Easy's limit for the map size | 100% |
+| Custom games: harvesters (maps above 64x64) | half Easy's ceiling, at least two | 8 / 15 |
+| Custom games: first attack | not before minute 10; it still defends | no hold |
+| Campaign opponent: army it rebuilds to | the army the mission starts it with, at least 2,000 | twice it |
+| Campaign opponent: one ground wave | 70% (630 / 840 / 1,190) | 900 / 1,200 / 1,700 |
+| Campaign opponent: first wave (triggered missions) | 180 s later | on the trigger |
 
-Level 2 must not become the default: with it the mandatory smoke tier fails its fixed 4-player
-free-for-all seed 90866 (Easy and Hard are eliminated by minute 34, then Brutal and Medium run
-out of spice and sit to the 60-minute limit). Level 1 leaves every game without a human
-unchanged (`--style easy-relief-humans`).
-
-| Rule while on (Easy opponent, custom game, no city simulation) | Key (default) | Native |
-|---|---|---|
-| Builds its army to 60% of its limit for the map size | `EasyReliefCustomArmyPercent` (60) | 100% |
-| Keeps half its harvesters, at least two (maps above 64x64) | `EasyReliefCustomHarvesterPercent` (50) | 100% |
-| No attack leaves its base before minute 10; it still defends | `EasyReliefCustomFirstAttackMin` (10) | 0 |
-
-The saved army limit is unchanged; only what the house buys up to is lower, and a wave never
-waits for more than four fifths of that ceiling. A human's Easy ally is not an opponent and is
-not relieved.
+The class is an Easy QuantBot with a mark set by `PlayerFactory` on create and on load; the
+save stores the class string and an ordinary Easy stream, so the save format is unchanged.
+Its analytics difficulty is `easiest`. A wave never waits for more than four fifths of the
+lower army ceiling.
 
 ### Why: the live results (vanilla rules, one human, every opponent Easy, games of 5+ minutes)
 
@@ -71,7 +68,7 @@ not relieved.
   their starting army against three Easy houses that had already built 25-34 units, or at minute
   33-51 with 12,000-30,000 army against 39,000-41,000.
 
-### Custom games: switch off against on
+### Custom games: the same rules measured as a config switch, off against on
 
 Cells `skirmish/easy-1v1-{ae,am,ah}-v-qe-{habbanya-penny,rs128}/vanilla`: the AI Player (Easy,
 Medium, Hard) as the player against QuantBot Easy, even starts, the most-played 1v1 map and a
@@ -100,7 +97,7 @@ time limit, of 24:
 - Smoke tier at level 2 (11 games): Hard and Brutal still beat Easy in every ladder and
   Construction Yard game; the free-for-all seed above reaches the time limit.
 
-### Campaign levels 8-9: three rules tried and removed
+### Campaign levels 8-9: the three campaign rules measured as a switch on Easy
 
 Cell `campaign/partner-easy-v-quantbot-easy/vanilla`, missions 20-22, idle human with an Easy
 helper, 3 houses, 80 minutes. Each rule applied to Easy enemies on missions 20-22 only.

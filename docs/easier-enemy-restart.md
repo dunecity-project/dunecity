@@ -7,9 +7,10 @@ to QuantBot Medium.").
 
 ## The ladder
 
-QuantBot Brutal → Hard → Medium → Easy. In a campaign (Dune Legacy or DuneCity)
-the step below QuantBot Easy is the original Campaign AI (Stefan, 2026-11-22).
-Outside a campaign QuantBot Easy is the bottom. QuantBot Defend, the Campaign AI
+QuantBot Brutal → Hard → Medium → Easy → Easiest (QuantBot Easiest, protocol 132,
+`docs/campaign-ai-difficulty-matrix.md`). In a campaign (Dune Legacy or DuneCity)
+the step below QuantBot Easiest is the original Campaign AI (Stefan, 2026-11-22).
+Outside a campaign QuantBot Easiest is the bottom. QuantBot Defend, the Campaign AI
 itself, role-limited QuantBots and the other AI families have no easier step.
 
 The button is absent when no enemy can step down, in network games (co-op

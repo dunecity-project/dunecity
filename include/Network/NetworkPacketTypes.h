@@ -408,7 +408,11 @@
 // 131: The Park structure (item 89; Num_ItemID 90, so the ObjectData hash changes): a 1x1
 //      city-mode park that adds park land-value terrain. Older peers cannot build, place or
 //      load it. Save 9888.
-#define NETWORK_PROTOCOL_VERSION            131
+// 132: QuantBot Easiest (player class qBotEasiest, appended to the lobby's class list): QuantBot
+//      Easy with a lower army ceiling, half the harvesters and no attack before minute 10 in
+//      custom games, and smaller, later waves as a campaign opponent (EasiestPolicy.h). Older
+//      peers do not know the class. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            132
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
