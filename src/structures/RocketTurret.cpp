@@ -69,6 +69,13 @@ void RocketTurret::updateStructureSpecificStuff() {
         || ( ((isCampaignGameType(currentGame->gameType)) || ((currentGame->gameType == GameType::Skirmish || currentGame->gameType == GameType::SkirmishCoop))) && getOwner()->isAI() && getOwner()->isPowerRequired()
              // The DuneCity campaign plays its Custom city maps' rules: every turret needs power.
              && !currentGame->getGameInitSettings().isDuneCityCampaign()) ) {
+        // City Plane Defence: a turret without a target takes an enemy city airplane the cycle
+        // it comes into reach, instead of at its next search up to a second later; the plane
+        // flies ten tiles in that second. Nothing is looked at while no city airplane exists.
+        if(attackMode != STOP && !target && !AmbientAirplane::all().empty()
+           && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence) {
+            if(const ObjectBase* plane = cityPlaneInReach()) setTarget(plane);
+        }
         TurretBase::updateStructureSpecificStuff();
     }
 }
@@ -91,8 +98,11 @@ const ObjectBase* RocketTurret::findTarget() const {
     int bestDistance = best ? DynastyProjectile::distance(center*4, best->getCenterPoint()*4) : 0x7fffffff;
     // Script_Structure_FindTarget explicitly sees ornithopters at triple range,
     // even outside unveiled terrain. Other aircraft retain the normal range.
+    // City Plane Defence: the city airplane is seen as far as an Ornithopter is.
+    const bool cityPlanes = currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence;
     for(const auto* unit : unitList) {
-        if(!isOrnithopterUnit(unit->getItemID()) || unit->getHealth() <= 0 || !canAttack(unit)) continue;
+        if(!(isOrnithopterUnit(unit->getItemID()) || (cityPlanes && unit->getItemID() == Unit_AmbientAirplane))
+           || unit->getHealth() <= 0 || !unit->isActive() || !canAttack(unit)) continue;
         const int distance = DynastyProjectile::distance(center*4, unit->getCenterPoint()*4);
         if(distance <= getWeaponRange()*3*TILESIZE*4 && distance < bestDistance) {
             best = unit;
@@ -100,6 +110,28 @@ const ObjectBase* RocketTurret::findTarget() const {
         }
     }
     return best;
+}
+
+const ObjectBase* RocketTurret::cityPlaneInReach() const {
+    const Coord center = getCenterPoint();
+    const AmbientAirplane* best = nullptr;
+    int bestDistance = getWeaponRange()*3*TILESIZE*4 + 1;
+    for(const AmbientAirplane* plane : AmbientAirplane::all()) {
+        if(plane->getHealth() <= 0 || !plane->isActive()) continue;
+        const int distance = DynastyProjectile::distance(center*4, plane->getCenterPoint()*4);
+        // The registry has no fixed order: equal distances go to the lower object ID.
+        if(distance > bestDistance || (distance == bestDistance && best != nullptr
+                                       && plane->getObjectID() > best->getObjectID())) continue;
+        if(!canAttack(plane)) continue;
+        best = plane;
+        bestDistance = distance;
+    }
+    return best;
+}
+
+int RocketTurret::rocketDamage() const {
+    const int baseDamage = currentGame->objectData.data[itemID][getTechnologyHouseID()].weapondamage;
+    return ModManager::instance().isTornieFamilyContentActive() ? owner->radarAttackDamage(itemID, baseDamage) : baseDamage;
 }
 
 int RocketTurret::closeCannonReloadTime() const {
@@ -117,7 +149,11 @@ void RocketTurret::attack() {
         ObjectBase* pObject = target.getObjPointer();
         Coord targetCenterPoint = pObject->getClosestCenterPoint(location);
         const int technology = getTechnologyHouseID();
-        const bool closeRange = distanceFrom(centerPoint, targetCenterPoint) < 3 * TILESIZE;
+        // City Plane Defence: the cannon shell flies to where the plane was; the plane always
+        // gets the rocket, which flies to where it will be.
+        const bool rocketOnly = pObject->getItemID() == Unit_AmbientAirplane
+            && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence;
+        const bool closeRange = !rocketOnly && distanceFrom(centerPoint, targetCenterPoint) < 3 * TILESIZE;
         const int baseDamage = currentGame->objectData.data[
             closeRange ? Structure_GunTurret : itemID][technology].weapondamage;
         const int damage = ModManager::instance().isTornieFamilyContentActive()

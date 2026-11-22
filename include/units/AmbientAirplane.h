@@ -2,6 +2,9 @@
 #define AMBIENTAIRPLANE_H
 
 #include <units/AirUnit.h>
+#include <dunecity/CityAircraftPolicy.h>
+
+#include <vector>
 
 /**
  * The original Micropolis airplane.
@@ -15,8 +18,10 @@
  * never returns to its airport.  Unlike the original it flies straight legs
  * (CityAircraft::airplaneSteer) and is drawn from sixteen headings.
  *
- * It is a civilian unit: no weapon, not selectable or commandable, never
- * attacks.  It is an ordinary air unit in every other respect, so hostile
+ * It is not selectable or commandable and never chooses a target.  With the
+ * match rule City Plane Bombing (default on) it drops bombs on enemy buildings
+ * that lie under its course (dropBomb, CityAircraft::kBomb*); it never leaves
+ * its course for one.  It is an ordinary air unit in every other respect, so hostile
  * anti-air can see it, shoot it and destroy it - and a plane brought down by
  * damage crashes with the effect of a Death Hand impact (crash()).  Anti-air
  * holds its fire while that blast would land on its own side
@@ -51,6 +56,12 @@ public:
         where it will be by the time a missile fired now reaches it. Natives
         objects (worms, crime troopers) are nobody's own team, not even the
         Natives' own: a blast over them never holds anyone's fire.
+
+        With the match rule City Plane Defence (default on) only the shot that
+        could bring the plane down is held: one that, with the shots already on
+        their way to it, could take its last hit points. A Rocket Turret, whose
+        rocket flies to the meeting point, is then only held while the crash at
+        that point would land on its own side.
     */
     static bool crashEndangers(const ObjectBase& attacker, const ObjectBase& target);
 
@@ -66,6 +77,16 @@ public:
     Sint32 getRemainingTicks() const { return remainingTicks; }
     /// True once the flight budget is spent and the plane is heading off the map.
     bool isDeparting() const { return remainingTicks <= 0; }
+
+    /// Every city airplane of the running game, in no particular order. Not saved: a
+    /// plane enters in its constructor and leaves in its destructor.
+    static const std::vector<AmbientAirplane*>& all();
+    /// Flight per game cycle in quarter world units times 16 (CityAircraft::intercept).
+    Coord velocity16() const;
+    /// Where a turret rocket leaving `missile` (quarter world units) now meets this plane.
+    DuneCity::CityAircraft::Intercept turretRocketIntercept(const Coord& missile) const;
+    /// Bombs on board (CityAircraft::kBombLoad when full).
+    Sint32 getBombs() const { return bombs; }
 
 private:
     Coord micropolisPosition() const;
@@ -84,12 +105,16 @@ private:
     void showHeading();
     /// Shot down: a Death Hand impact at the plane, credited to `shooterOwner`.
     void crash(Uint32 shooterID, House* shooterOwner, const DeviationReward::Provenance& provenance);
-    /// True when the crash blast along the plane's next `lead` world units of
-    /// flight would reach an object of team `teamID`.
-    bool crashWouldHit(int teamID, FixPoint lead) const;
+    /// True when the crash blast anywhere between `from` and `to` world units
+    /// ahead on the plane's course would reach an object of team `teamID`.
+    bool crashWouldHit(int teamID, FixPoint from, FixPoint to) const;
+    /// City Plane Bombing: one bomb on the enemy building under the bomb sight, if any.
+    void dropBomb(Uint32 gameCycle);
 
     Sint32 takeoffFrame;    ///< Micropolis frames 11..9, 0 once cruising
     Sint32 remainingTicks;  ///< Cruise budget; zero means an outward departure
+    Sint32 bombs;           ///< Bombs on board (saved from 9890)
+    Sint32 bombTimer;       ///< Sprite ticks towards the next bomb, 0 while full (saved from 9890)
 };
 
 #endif // AMBIENTAIRPLANE_H

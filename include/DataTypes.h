@@ -337,6 +337,9 @@ public:
                     && (saboteurVehicleHunt == goc.saboteurVehicleHunt)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (trooperOrnithopterReach == goc.trooperOrnithopterReach)
+                    && (cityPlaneDefence == goc.cityPlaneDefence)
+                    && (cityPlaneBombing == goc.cityPlaneBombing)
+                    && (airportOrnithopterPatrol == goc.airportOrnithopterPatrol)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -388,6 +391,10 @@ public:
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
             // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
             if(!trooperOrnithopterReach) optStr += "/trooperOrnithopterReach=0";
+            // The city plane rules likewise: only a state other than the default is spelled out.
+            if(!cityPlaneDefence) optStr += "/cityPlaneDefence=0";
+            if(!cityPlaneBombing) optStr += "/cityPlaneBombing=0";
+            if(airportOrnithopterPatrol) optStr += "/airportOrnithopterPatrol=1";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -488,6 +495,20 @@ public:
         /// the rule up to 1.0.876, kept so the two can be compared in one build
         /// (tests/units/run-trooper-ornithopter-effect.py, run-trooper-stance-probe.py). INI key only.
         bool        trooperOrnithopterReach = true;
+        /// Rocket Turrets fight the city airplane (Unit_AmbientAirplane) as they fight an
+        /// Ornithopter: seen at triple range, taken the cycle it comes into reach, and shot at with
+        /// a rocket that flies to where the plane will be. Anti-air only holds the shot that could
+        /// bring the plane down while its crash would land on the shooter's own side. Off is the
+        /// rule up to 1.0.876 (AmbientAirplane::crashEndangers holds every shot, the plane is an
+        /// ordinary target and the rocket aims at where it was). INI key only.
+        bool        cityPlaneDefence = true;
+        /// A cruising city airplane drops bombs on enemy buildings under its course
+        /// (AmbientAirplane::dropBombs, CityAircraft::kBomb*). Off is the unarmed plane up to
+        /// 1.0.876. INI key only.
+        bool        cityPlaneBombing = true;
+        /// An Airport sends out pairs of Ornithopters on the Palace timer, as up to 1.0.876.
+        /// Off (the default) it launches the city airplane and helicopter only. INI key only.
+        bool        airportOrnithopterPatrol = false;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

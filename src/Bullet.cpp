@@ -19,6 +19,8 @@
 #include <DynastyProjectile.h>
 #include <units/UnitBase.h>
 #include <units/Trooper.h>
+#include <units/AmbientAirplane.h>
+#include <dunecity/CityAircraftPolicy.h>
 #include <Achievements/AchievementEvents.h>
 #include <mod/ModManager.h>
 
@@ -286,6 +288,17 @@ case Bullet_LargeRocket: {
             graphic = pGFXManager->getObjPic(ObjPic_Bullet_Medium, houseID);
         } break;
 
+        case Bullet_Bomb: {
+            // The city airplane's bomb (AmbientAirplane::dropBomb): the large shell's picture,
+            // falling slower than the plane flies and only going off where it was aimed.
+            damageRadius = TILESIZE/2;
+            explodesAtGroundObjects = false;
+            speed = DuneCity::CityAircraft::bombSpeed();
+            detonationTimer = -1;
+            numFrames = 1;
+            graphic = pGFXManager->getObjPic(ObjPic_Bullet_Large, houseID);
+        } break;
+
         case Bullet_SmallRocket: {
             numFrames = 16;
             graphic = pGFXManager->getObjPic(ObjPic_Bullet_SmallRocket, houseID);
@@ -441,6 +454,8 @@ void Bullet::updateDynastyProjectile()
         trooperAntiAir = item == Unit_Trooper || item == Unit_Troopers
             || item == Unit_Troopers5 || item == Unit_FlameTrooper;
     }
+    const bool tracksCityPlane = bulletID == Bullet_TurretRocket
+        && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence;
     for(int elapsed=0; elapsed<48; ++elapsed) {
         if(projectileClock % 150 == 0) {
             const Coord previous(lround(realX*4), lround(realY*4));
@@ -448,7 +463,23 @@ void Bullet::updateDynastyProjectile()
             const bool tracksTrooperTarget = liveTarget
                 && liveTarget->getHealth() > 0 && liveTarget->isAFlyingUnit();
             if(tracksTrooperTarget) destination = liveTarget->getCenterPoint();
-            const Coord goal = destination*4;
+            // City Plane Defence: a turret rocket flies to where it and the city airplane meet,
+            // solved again at every movement step, and does not go off before it gets there.
+            bool tracksPlane = false;
+            Coord meetingPoint;
+            if(tracksCityPlane) {
+                const auto* object = target.getObjPointer();
+                if(object && object->getItemID() == Unit_AmbientAirplane && object->getHealth() > 0) {
+                    const auto meet = static_cast<const AmbientAirplane*>(object)->turretRocketIntercept(previous);
+                    if(meet.possible) {
+                        tracksPlane = true;
+                        meetingPoint = meet.point;
+                        destination = meet.point/4;
+                    }
+                }
+            }
+            const bool tracks = tracksTrooperTarget || tracksPlane;
+            const Coord goal = tracksPlane ? meetingPoint : destination*4;
             const auto step = std::min(parameters.step, DynastyProjectile::distance(previous, goal)+16);
             const auto position = DynastyProjectile::move(previous, projectileHeading, step);
             xSpeed = FixPoint(position.x-previous.x)*0.08_fix;
@@ -489,7 +520,7 @@ void Bullet::updateDynastyProjectile()
                 }
             }
             const int distance = DynastyProjectile::distance(position, goal);
-            if(!tracksTrooperTarget && (distance < 16 || distance > projectileDistance)
+            if(!tracks && (distance < 16 || distance > projectileDistance)
                && (detonationTimer == 0 || bulletID == Bullet_TurretRocket)) {
                 if(bulletID == Bullet_TurretRocket && target.getObjPointer()
                    && isOrnithopterUnit(target.getObjPointer()->getItemID()))
@@ -501,10 +532,10 @@ void Bullet::updateDynastyProjectile()
             projectileDistance = distance;
             // Precise/armed trooper rockets must keep steering after the old
             // detonation counter reaches zero, rather than flying at a stale point.
-            if(detonationTimer > 0 || tracksTrooperTarget) {
+            if(detonationTimer > 0 || tracks) {
                 Coord aim = goal;
                 const auto* object = target.getObjPointer();
-                if(object && object->getHealth() > 0 && object->isAFlyingUnit())
+                if(!tracksPlane && object && object->getHealth() > 0 && object->isAFlyingUnit())
                     aim = object->getCenterPoint()*4;
                 projectileAim = DynastyProjectile::direction(position, aim) & 255;
                 // Signed orientation arithmetic matches Unit_SetOrientation,
@@ -805,6 +836,13 @@ case Bullet_LargeRocket: {
         case Bullet_ShellTurret: {
             currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, airAttack, true, NONE_ID, provenance);
             currentGame->getExplosionList().push_back(new Explosion(Explosion_ShellMedium,position,houseID));
+        } break;
+
+        case Bullet_Bomb: {
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
+            soundPlayer->playSoundAt(Sound_ExplosionMedium, position);
+            const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1,Explosion_Medium2});
+            currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
         } break;
 
         case Bullet_Sonic:

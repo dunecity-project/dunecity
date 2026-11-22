@@ -75,9 +75,9 @@ void Airport::save(OutputStream& stream) const {
  * their own pair and a second airport cannot double the fleet. Only an
  * operational airport launches: alive, powered, and in city-simulation mode.
  *
- * Cadence is DuneCity's, not the original's: the roll runs on the same
- * five-second structure tick as the ornithopter patrol below, rather than on
- * Micropolis's own simulation pass, which has no counterpart here.
+ * Cadence is DuneCity's, not the original's: the roll runs on a five-second
+ * structure tick, rather than on Micropolis's own simulation pass, which has
+ * no counterpart here.
  */
 void Airport::updateCityAircraft() {
     if (!owner->hasPower()) return;
@@ -132,6 +132,10 @@ void Airport::updateStructureSpecificStuff() {
         DuneCity::CitySprites::poweredFrame(currentGame->getGameCycleCount(), owner->hasPower());
     if (!currentGame->isCitySimEnabled() || getHealth() <= 0) return;
     if (currentGame->getGameCycleCount() % MILLI2CYCLES(5000) == 0) updateCityAircraft();
+    // Stefan, 2026-11-22: "remove ornithopter spawn from airports". The patrol only runs under
+    // the match rule Airport Ornithopter Patrol (default off; on is the Airport up to 1.0.876).
+    // Its timer and pair counter stay in the save and stand still while the rule is off.
+    if (!currentGame->getGameInitSettings().getGameOptions().airportOrnithopterPatrol) return;
     patrol.tick();
     if (!patrol.ready() || !owner->hasPower()
         || currentGame->getGameCycleCount() % MILLI2CYCLES(5000) != 0) return;

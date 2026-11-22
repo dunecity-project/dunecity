@@ -433,6 +433,14 @@
 //      Anti-Air byte, so a default setup's stream and hash are unchanged; no new marker or number.
 //      Under the same rule an idle Trooper takes an Ornithopter the cycle it comes into range
 //      (Trooper::targeting()) and fires before its turn is finished (firesAtAircraftUnfaced()).
+//      Also in 133, three city plane match rules (INI keys only, hashed and carried only in their
+//      non-default state as bits 2-4 of the same MOD15 byte): City Plane Defence (default on:
+//      Rocket Turrets see the city airplane at triple range, take it the cycle it comes into
+//      reach, their rocket flies to the meeting point, and anti-air only holds the shot that
+//      could bring it down onto its own side), City Plane Bombing (default on: the airplane
+//      drops Bullet_Bomb on enemy buildings under its course; its bomb load is saved, save
+//      format 9890) and Airport Ornithopter Patrol (default off: an Airport no longer sends out
+//      Ornithopters). An older peer would desync on all three.
 #define NETWORK_PROTOCOL_VERSION            133
 
 // Mod transfer limits

@@ -1688,6 +1688,11 @@ int runCityAircraftProbe() {
     gCityAircraftOut = std::getenv("CITY_AIRCRAFT_PROBE_OUT");
     cityRequire(ModManager::instance().setActiveMod(gCityAircraftMod), "missing city-aircraft mod");
     settings.general.playerName = "City tester";
+    // This probe keeps checking the airplane as it is with the newer match rules off: unarmed,
+    // and with anti-air holding every shot whose crash would land on its own side. The rules
+    // themselves are checked off against on in city_plane_effect.
+    settings.gameOptions.cityPlaneDefence = false;
+    settings.gameOptions.cityPlaneBombing = false;
     std::ifstream map(PROBE_MAP_PATH);
     gMapData.assign((std::istreambuf_iterator<char>(map)), std::istreambuf_iterator<char>());
     cityRequire(!gMapData.empty(), "fixture map is empty");

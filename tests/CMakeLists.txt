@@ -1115,6 +1115,14 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-stance-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-stance-probe)
         set_tests_properties(trooper_stance_probe PROPERTIES TIMEOUT 900 PROCESSORS 2)
+        # The three city plane rules off against on in one build, in the Dune City mod's options:
+        # Rocket Turrets must engage and shoot down more crossing city airplanes without losing
+        # more to their crash, a bombing run destroys some buildings but never a Construction
+        # Yard or Palace, and an Airport launches no Ornithopter.
+        dunecity_add_test(headless nightly NAME city_plane_effect COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-city-plane-effect.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-plane-effect)
+        set_tests_properties(city_plane_effect PROPERTIES TIMEOUT 1800 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)

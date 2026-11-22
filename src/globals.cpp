@@ -172,6 +172,9 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Technology Installments", options.technologyInstallments);
     config.setBoolValue(section, "Trooper Anti-Air", options.trooperAntiAir);
     config.setBoolValue(section, "Trooper Ornithopter Reach", options.trooperOrnithopterReach);
+    config.setBoolValue(section, "City Plane Defence", options.cityPlaneDefence);
+    config.setBoolValue(section, "City Plane Bombing", options.cityPlaneBombing);
+    config.setBoolValue(section, "Airport Ornithopter Patrol", options.airportOrnithopterPatrol);
     config.setBoolValue(section, "Saboteur Vehicle Hunt", options.saboteurVehicleHunt);
     config.setBoolValue(section, "Starport Population", options.starportPopulation);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
@@ -223,6 +226,9 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Technology Installments", options.technologyInstallments);
     readBool("Trooper Anti-Air", options.trooperAntiAir);
     readBool("Trooper Ornithopter Reach", options.trooperOrnithopterReach);
+    readBool("City Plane Defence", options.cityPlaneDefence);
+    readBool("City Plane Bombing", options.cityPlaneBombing);
+    readBool("Airport Ornithopter Patrol", options.airportOrnithopterPatrol);
     readBool("Saboteur Vehicle Hunt", options.saboteurVehicleHunt);
     readBool("Starport Population", options.starportPopulation);
     readBool("Allied Control", options.alliedControl);

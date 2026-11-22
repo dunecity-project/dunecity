@@ -27,6 +27,15 @@ protected:
     bool update() override {
         auto* airport=dynamic_cast<Airport*>(currentGame->getObjectManager().getObject(objectID));
         if (!airport) return false;
+        if (!currentGame->getGameInitSettings().getGameOptions().airportOrnithopterPatrol) {
+            // No Ornithopter patrol (the default): the panel says what the Airport does launch.
+            const House* owner=airport->getOwner();
+            patrolLabel.setText(_("City airplane")+std::string("\n")
+                +(!owner->hasPower() ? _("Needs power")
+                  : owner->getNumItems(Unit_AmbientAirplane)>0 ? _("In flight") : _("Next flight soon")));
+            cityStats.update(airport);
+            return DefaultStructureInterface::update();
+        }
         const int seconds=(airport->getSpawnTimer()*GAMESPEED_DEFAULT+999)/1000;
         std::string status;
         if (seconds>0) status=std::to_string(seconds/60)+":"+(seconds%60<10?"0":"")+std::to_string(seconds%60);

@@ -1321,11 +1321,57 @@ TEST_CASE("The Trooper Ornithopter reach defaults on and its off state is hashed
     SECTION("an unknown Trooper rule bit is refused") {
         if(!options.trooperOrnithopterReach) {
             auto bytes = encoded;
-            bytes[changed.front()] = static_cast<char>(4 | 1);
+            bytes[changed.front()] = static_cast<char>(0x20 | 1);
             IMemoryStream input(bytes.data(), bytes.size());
             REQUIRE_THROWS(GameInitSettings(input));
         }
     }
+}
+
+TEST_CASE("The city plane rules keep their defaults out of the stream and round-trip in the MOD15 Trooper byte",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.cityPlaneDefence);
+    REQUIRE(defaults.cityPlaneBombing);
+    REQUIRE_FALSE(defaults.airportOrnithopterPatrol);
+
+    auto original = makeSeparateFactionCoop(false);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.cityPlaneDefence);
+    REQUIRE(plainOptions.cityPlaneBombing);
+    REQUIRE_FALSE(plainOptions.airportOrnithopterPatrol);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.cityPlaneDefence = GENERATE(true, false);
+    options.cityPlaneBombing = GENERATE(true, false);
+    options.airportOrnithopterPatrol = GENERATE(false, true);
+    const Uint8 bits = static_cast<Uint8>((options.cityPlaneDefence ? 0 : 4) | (options.cityPlaneBombing ? 0 : 8)
+                                          | (options.airportOrnithopterPatrol ? 16 : 0));
+    REQUIRE((options == plainOptions) == (bits == 0));
+    REQUIRE((options.getHash() == plainOptions.getHash()) == (bits == 0));
+
+    auto setup = original;
+    setup.setGameOptions(options);
+    OMemoryStream saved; saved.open(); setup.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    REQUIRE(plain.size() == encoded.size());
+    std::vector<std::size_t> changed;
+    for(std::size_t i = 0; i < plain.size(); ++i) if(plain[i] != encoded[i]) changed.push_back(i);
+    if(bits == 0) {
+        REQUIRE(changed.empty());
+    } else {
+        REQUIRE(changed.size() == 1);
+        REQUIRE(static_cast<Uint8>(encoded[changed.front()]) == static_cast<Uint8>(plain[changed.front()] | bits));
+    }
+
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+    REQUIRE(input.readUint32() == 0xabcdef01u);
 }
 
 TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams read off",

@@ -352,6 +352,10 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.saboteurVehicleHunt = true;
     // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
     gameOptions.trooperOrnithopterReach = true;
+    // The city plane rules are the units' current rules too: a stream without their bits plays them.
+    gameOptions.cityPlaneDefence = true;
+    gameOptions.cityPlaneBombing = true;
+    gameOptions.airportOrnithopterPatrol = false;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -468,10 +472,14 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 // MOD15 wrote a bool (0/1) here. Bit 1 is set when the Trooper Ornithopter
                 // reach is off, so a stream that plays the default rule is the byte it always was.
                 const Uint8 trooperRules = stream.readUint8();
-                if(trooperRules & ~Uint8(3))
+                // Bits 2-4 are the city plane rules, each set only in its non-default state.
+                if(trooperRules & ~Uint8(0x1F))
                     throw std::runtime_error("Invalid Trooper rules.");
                 gameOptions.trooperAntiAir = (trooperRules & 1) != 0;
                 gameOptions.trooperOrnithopterReach = (trooperRules & 2) == 0;
+                gameOptions.cityPlaneDefence = (trooperRules & 4) == 0;
+                gameOptions.cityPlaneBombing = (trooperRules & 8) == 0;
+                gameOptions.airportOrnithopterPatrol = (trooperRules & 16) != 0;
             }
             if(hasStarportPopulation) {
                 gameOptions.starportPopulation = stream.readBool();
@@ -694,7 +702,10 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.researchLab);
     // Bit 1: the Trooper Ornithopter reach is off (the default, on, leaves the byte as it was).
     stream.writeUint8(static_cast<Uint8>((gameOptions.trooperAntiAir ? 1 : 0)
-        | (gameOptions.trooperOrnithopterReach ? 0 : 2)));
+        | (gameOptions.trooperOrnithopterReach ? 0 : 2)
+        // Bits 2-4: City Plane Defence off, City Plane Bombing off, Airport Ornithopter Patrol on.
+        | (gameOptions.cityPlaneDefence ? 0 : 4) | (gameOptions.cityPlaneBombing ? 0 : 8)
+        | (gameOptions.airportOrnithopterPatrol ? 16 : 0)));
     // MOD16: older streams keep the Starport without a population requirement.
     stream.writeBool(gameOptions.starportPopulation);
     // MOD18: pace4 + damage1 + city rules1 (bit0 scenery, bit1 vacancy).

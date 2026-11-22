@@ -1315,7 +1315,11 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
 bool ObjectBase::targetInWeaponRange() const {
     const auto* object = target.getObjPointer();
     if(!object) return false;
-    if(itemID == Structure_RocketTurret && isOrnithopterUnit(object->getItemID()))
+    // City Plane Defence gives the city airplane the Ornithopter's triple range.
+    if(itemID == Structure_RocketTurret
+       && (isOrnithopterUnit(object->getItemID())
+           || (object->getItemID() == Unit_AmbientAirplane
+               && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence)))
         return DynastyProjectile::distance(getCenterPoint()*4, object->getCenterPoint()*4)
             <= getWeaponRange()*3*TILESIZE*4;
     Coord coord = (target.getObjPointer())->getClosestPoint(location);

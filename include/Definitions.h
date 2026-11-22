@@ -218,7 +218,14 @@
 //       stores 89 rows and its Park row takes the active ObjectData.ini (Game::loadSaveGame).
 // 9889: GameInitSettings MOD20 appends the Custom Game starting tech level (0 = the map's level).
 //       No other field changes; the bump keeps older builds from misreading the longer block.
-#define SAVEGAMEVERSION     9889
+// 9890: The city airplane (AmbientAirplane) saves its bomb load and rearm timer after its flight
+//       budget; a plane from an older save gets a full load. A Bullet may be the new Bullet_Bomb
+//       (16). The Airport still saves its Ornithopter patrol timer and pair counter, which stand
+//       still unless the match rule Airport Ornithopter Patrol is on. The three city plane rules
+//       are bits 2-4 of the MOD15 Trooper byte, set only in their non-default state.
+#define SAVEGAMEVERSION     9890
+/// First save whose city airplanes carry a bomb load and that may hold a Bullet_Bomb.
+#define SAVEGAMEVERSION_CITY_PLANE_BOMBS 9890
 /// First save whose GameInitSettings carries the Custom Game starting tech level (MOD20).
 #define SAVEGAMEVERSION_START_TECH_LEVEL 9889
 /// First save that may hold Park objects (item 89; Num_ItemID 90).

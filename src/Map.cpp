@@ -427,7 +427,7 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                     if(bulletID != Bullet_DRocket && realPos.x >= topLeftCorner.x && realPos.y >= topLeftCorner.y && realPos.x < bottomRightCorner.x && realPos.y < bottomRightCorner.y) {
                         pStructure->handleDamage(lround(damage), damagerID, damagerOwner, provenance);
 
-                        if( (bulletID == Bullet_LargeRocket || bulletID == Bullet_Rocket || bulletID == Bullet_TurretRocket || bulletID == Bullet_SmallRocket || bulletID == Bullet_Flame)
+                        if( (bulletID == Bullet_LargeRocket || bulletID == Bullet_Rocket || bulletID == Bullet_TurretRocket || bulletID == Bullet_SmallRocket || bulletID == Bullet_Flame || bulletID == Bullet_Bomb)
                             && (pStructure->getHealth() < pStructure->getMaxHealth()/2)) {
                             if(pStructure->getNumSmoke() < 5) {
                                 pStructure->addSmoke(realPos, currentGame->getGameCycleCount());
@@ -497,7 +497,7 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
             const auto pTile = currentGameMap->getTile_internal(location.x, location.y);
 
             if(affectTerrain && pTile
-                && ((bulletID == Bullet_Rocket) || (bulletID == Bullet_TurretRocket) || (bulletID == Bullet_SmallRocket) || (bulletID == Bullet_LargeRocket) || (bulletID == Bullet_Flame))
+                && ((bulletID == Bullet_Rocket) || (bulletID == Bullet_TurretRocket) || (bulletID == Bullet_SmallRocket) || (bulletID == Bullet_LargeRocket) || (bulletID == Bullet_Flame) || (bulletID == Bullet_Bomb))
                 && (!pTile->hasAGroundObject() || !pTile->getGroundObject()->isAStructure()) )
             {
                 const auto type = pTile->getType();

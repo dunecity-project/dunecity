@@ -431,6 +431,91 @@ inline FixPoint airplaneHeadingSpeed(FixPoint axisSpeed, int headingFrame) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// DuneCity airplane bombing (Stefan, 2026-11-22: "make planes drop bombs as they
+// fly over enemy buildings strong enough bombs to destroy some buildings").
+// Match rule GameOptionsClass::cityPlaneBombing. Not Micropolis behaviour.
+//
+// The plane keeps its course: it bombs only what lies under it. On every second
+// sprite tick (6.25 cycles, the time it needs for one tile on an axis heading) it
+// looks kBombSightDistance ahead; if an enemy building stands there and it has a
+// bomb, it drops one. The numbers come from the Dune City mod's ObjectData.ini:
+// a bomb does kBombDamage = 100, so two bombs take a Wind Trap, a zone, a turret
+// or a Heavy Factory (200) and a Spice Silo (150), while a Construction Yard (400)
+// needs four, a Refinery (450) or Radar (500) five and a Palace (1000) ten. A full
+// load of kBombLoad = 6 is 600 damage: a run can take up to three 200-point
+// buildings and never a Construction Yard or anything stronger on its own. The
+// load comes back one bomb per kBombRearmTicks (8 s), a full load in 48 s, so a
+// five-minute flight carries at most 6 + 37 bombs.
+// ---------------------------------------------------------------------------
+
+/// Bombs a plane carries; it launches with a full load.
+inline constexpr int kBombLoad = 6;
+/// Damage of one bomb to the building it lands on (units next to it take splash).
+inline constexpr int kBombDamage = 100;
+/// Sprite ticks between two drops: one tile of flight on an axis heading.
+inline constexpr int kBombDropInterval = 2;
+/// Sprite ticks to regain one bomb (8 s of game time at 50 ms a tick).
+inline constexpr int kBombRearmTicks = 160;
+/// How far ahead of the plane the bomb lands, in Micropolis units (1.5 tiles).
+inline constexpr int kBombSightDistance = 24;
+/// Bomb speed in world units per game cycle at TILESIZE 64: slower than the plane
+/// (10.24), so the bomb is seen falling behind it for about a quarter of a second.
+inline FixPoint bombSpeed() { return FixPoint(64) / 10; }
+
+/// One sprite tick of the bomb rack: returns the load after rearming. `timer`
+/// counts ticks towards the next bomb and rests at 0 while the rack is full.
+inline int rearmBombs(int bombs, int& timer) {
+    if(bombs >= kBombLoad) { timer = 0; return kBombLoad; }
+    if(++timer < kBombRearmTicks) return bombs;
+    timer = 0;
+    return bombs + 1;
+}
+
+// ---------------------------------------------------------------------------
+// Anti-air against the airplane (match rule GameOptionsClass::cityPlaneDefence).
+//
+// A turret rocket flies 11.52 world units a cycle, the plane 10.24. Aimed at where
+// the plane is, as up to 1.0.876, the rocket arrives where the plane was: over 480
+// measured passes no plane was shot down (HANDOVER.md, 2026-11-23). With the rule
+// the rocket flies to the point where the two meet, solved here in integers so
+// every peer gets the same point. Positions are quarter world units, speeds are
+// quarter world units per game cycle times 16.
+// ---------------------------------------------------------------------------
+
+inline int64_t integerSqrt(int64_t value) {
+    if(value <= 0) return 0;
+    int64_t root = 0;
+    for(int64_t bit = int64_t(1) << 62; bit != 0; bit >>= 2) {
+        if(value >= root + bit) { value -= root + bit; root = (root >> 1) + bit; }
+        else root >>= 1;
+    }
+    return root;
+}
+
+struct Intercept {
+    bool possible = false;  ///< false when the target is as fast as the missile
+    int cycles16 = 0;       ///< flight time in sixteenths of a game cycle
+    Coord point;            ///< meeting point, quarter world units
+};
+
+/// Solve |target + v t - missile| = s t for the smallest t > 0.
+inline Intercept intercept(const Coord& missile, const Coord& target, int targetVX16, int targetVY16, int missileSpeed16) {
+    Intercept result;
+    const int64_t rx = int64_t(target.x) - missile.x, ry = int64_t(target.y) - missile.y;
+    const int64_t a = int64_t(targetVX16) * targetVX16 + int64_t(targetVY16) * targetVY16
+                    - int64_t(missileSpeed16) * missileSpeed16;
+    if(a >= 0) return result;
+    const int64_t b = 16 * (rx * targetVX16 + ry * targetVY16);
+    const int64_t c = 256 * (rx * rx + ry * ry);
+    const int64_t time16 = (16 * (-b - integerSqrt(b * b - a * c))) / a;
+    result.possible = true;
+    result.cycles16 = static_cast<int>(std::min<int64_t>(time16, 1 << 24));
+    result.point = Coord(static_cast<int>(target.x + targetVX16 * int64_t(result.cycles16) / 256),
+                         static_cast<int>(target.y + targetVY16 * int64_t(result.cycles16) / 256));
+    return result;
+}
+
 } // namespace DuneCity::CityAircraft
 
 #endif // DUNECITY_CITYAIRCRAFTPOLICY_H

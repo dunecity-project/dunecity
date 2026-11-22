@@ -66,6 +66,9 @@ public:
                                   const DeviationReward::Provenance& provenance);
 
     inline int getBulletID() const { return bulletID; }
+    /// The object this shot was fired at, if it still exists.
+    inline const ObjectBase* getTarget() const { return target.getObjPointer(); }
+    inline int getDamage() const { return damage; }
     inline FixPoint getRealX() const { return realX; }
     inline FixPoint getRealY() const { return realY; }
 

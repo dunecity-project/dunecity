@@ -35,7 +35,8 @@ typedef enum {
     Bullet_SonicTrike = 12,        ///< Tornie: shorter and weaker Sonic Trike wave
     Bullet_Heal = 13,             ///< Tornie: Deviator-style healing missile with direct flight
     Bullet_Slow = 14,             ///< Tornie 546: timed slowing, no conventional damage
-    Bullet_Napalm = 15            ///< Tornie 546: Palace missile with persistent impact-area fire
+    Bullet_Napalm = 15,           ///< Tornie 546: Palace missile with persistent impact-area fire
+    Bullet_Bomb = 16              ///< DuneCity: bomb dropped by the city airplane (save 9890)
 } BulletID_enum;
 
 typedef enum {

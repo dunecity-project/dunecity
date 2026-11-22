@@ -9,6 +9,7 @@
 #include <Map.h>
 #include <Game.h>
 #include <Tile.h>
+#include <structures/RocketTurret.h>
 #include <structures/StructureBase.h>
 #include <dunecity/CityAircraftPolicy.h>
 
@@ -17,6 +18,12 @@
 #include <set>
 
 namespace CA = DuneCity::CityAircraft;
+
+namespace {
+std::vector<AmbientAirplane*> cityAirplanes;
+}
+
+const std::vector<AmbientAirplane*>& AmbientAirplane::all() { return cityAirplanes; }
 
 AmbientAirplane::AmbientAirplane(House* newOwner) : AirUnit(newOwner)
 {
@@ -30,6 +37,8 @@ AmbientAirplane::AmbientAirplane(House* newOwner) : AirUnit(newOwner)
 
     takeoffFrame = 0;
     remainingTicks = CA::kAirplaneMaxTicks;
+    bombs = CA::kBombLoad;
+    bombTimer = 0;
 }
 
 AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
@@ -46,6 +55,14 @@ AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
         stream.readBool();
         takeoffFrame = 0;
         remainingTicks = CA::kAirplaneMaxTicks;
+    }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_BOMBS) {
+        bombs = std::clamp(stream.readSint32(), 0, CA::kBombLoad);
+        bombTimer = std::clamp(stream.readSint32(), 0, CA::kBombRearmTicks - 1);
+    } else {
+        // A plane from an older save was unarmed; it continues with a full load.
+        bombs = CA::kBombLoad;
+        bombTimer = 0;
     }
     // init() sets the cruise row; a save may be between take-off frames.
     if(takeoffFrame >= CA::kAirplaneLastTakeoffFrame && takeoffFrame <= CA::kAirplaneFirstTakeoffFrame) {
@@ -73,9 +90,13 @@ void AmbientAirplane::init()
 
     numImagesX = NUM_ANGLES;
     numImagesY = CA::kAirplaneSheetRows;
+
+    cityAirplanes.push_back(this);
 }
 
-AmbientAirplane::~AmbientAirplane() = default;
+AmbientAirplane::~AmbientAirplane() {
+    cityAirplanes.erase(std::remove(cityAirplanes.begin(), cityAirplanes.end(), this), cityAirplanes.end());
+}
 
 void AmbientAirplane::save(OutputStream& stream) const
 {
@@ -83,6 +104,8 @@ void AmbientAirplane::save(OutputStream& stream) const
 
     stream.writeSint32(takeoffFrame);
     stream.writeSint32(remainingTicks);
+    stream.writeSint32(bombs);
+    stream.writeSint32(bombTimer);
 }
 
 bool AmbientAirplane::canPass(int xPos, int yPos) const
@@ -294,13 +317,14 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     Bullet::detonateDeathHand(shooterID, credited, at, DynastyProjectile::deathHandDamage, false, provenance);
 }
 
-bool AmbientAirplane::crashWouldHit(int teamID, FixPoint lead) const
+bool AmbientAirplane::crashWouldHit(int teamID, FixPoint near, FixPoint far) const
 {
-    // The crash points: the plane now, then every half tile along its course
-    // up to `lead` world units ahead.
-    const Coord from = getCenterPoint();
+    // The crash points: every half tile along the plane's course from `near`
+    // to `far` world units ahead (near 0 is the plane now).
+    const Coord centre = getCenterPoint();
     const FixPoint angleRad = (angle * (FixPt_PI << 1)) / 8;
-    const Coord to(from.x + lround(FixPoint::cos(angleRad) * lead), from.y - lround(FixPoint::sin(angleRad) * lead));
+    const Coord from(centre.x + lround(FixPoint::cos(angleRad) * near), centre.y - lround(FixPoint::sin(angleRad) * near));
+    const Coord to(centre.x + lround(FixPoint::cos(angleRad) * far), centre.y - lround(FixPoint::sin(angleRad) * far));
     const int steps = std::max(std::abs(to.x - from.x), std::abs(to.y - from.y)) / (TILESIZE / 2) + 1;
 
     // Every own-side object a blast centre could reach: the farthest centre is
@@ -370,7 +394,73 @@ bool AmbientAirplane::crashEndangers(const ObjectBase& attacker, const ObjectBas
     static const FixPoint slowestMissile = FixPoint(DynastyProjectile::parameters(Bullet_TurretRocket).step) * 0.08_fix;
     const FixPoint lead = distanceFrom(attacker.getCenterPoint(), plane.getCenterPoint()) * plane.getMaxSpeed()
                         / slowestMissile;
-    return plane.crashWouldHit(attacker.getOwner()->getTeamID(), lead);
+    const int teamID = attacker.getOwner()->getTeamID();
+    if(currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence) {
+        // Only the shot that could bring the plane down is held. Shots already on their way
+        // count; a turret's rocket damage is exact, any other weapon's is doubled for safety.
+        int pending = 0;
+        for(const Bullet* bullet : bulletList) {
+            if(bullet->getTarget() == &plane) pending += bullet->getDamage();
+        }
+        const bool turret = attacker.getItemID() == Structure_RocketTurret;
+        const int shot = turret
+            ? static_cast<const RocketTurret&>(attacker).rocketDamage()
+            : 2 * currentGame->objectData.data[attacker.getItemID()][attacker.getOriginalHouseID()].weapondamage;
+        if(plane.getHealth() - pending > shot) return false;
+        if(turret) {
+            // Its rocket flies to the meeting point: only a crash around there matters.
+            const auto meet = plane.turretRocketIntercept(attacker.getCenterPoint() * 4);
+            if(meet.possible) {
+                const FixPoint along = plane.getMaxSpeed() * meet.cycles16 / 16;
+                return plane.crashWouldHit(teamID, std::max(FixPoint(0), along - TILESIZE), along + 2 * TILESIZE);
+            }
+        }
+    }
+    return plane.crashWouldHit(teamID, 0, lead);
+}
+
+Coord AmbientAirplane::velocity16() const
+{
+    const FixPoint angleRad = (angle * (FixPt_PI << 1)) / 8;
+    const FixPoint speed = getMaxSpeed() * getMovementSpeedFactor() * 64;
+    return Coord(lround(FixPoint::cos(angleRad) * speed), -lround(FixPoint::sin(angleRad) * speed));
+}
+
+CA::Intercept AmbientAirplane::turretRocketIntercept(const Coord& missile) const
+{
+    // Bullet::updateDynastyProjectile moves the rocket `step` quarter units every 150 ticks of
+    // a clock that advances 48 a cycle.
+    static const int rocketSpeed16 = DynastyProjectile::parameters(Bullet_TurretRocket).step * 48 * 16 / 150;
+    const Coord velocity = velocity16();
+    return CA::intercept(missile, Coord(lround(realX * 4), lround(realY * 4)), velocity.x, velocity.y, rocketSpeed16);
+}
+
+/**
+    City Plane Bombing: on every second sprite tick the plane looks
+    CA::kBombSightDistance ahead on its course. If a building of another team
+    stands there and a bomb is on board, the bomb is released towards that
+    point; it lands about a quarter of a second later (Bullet_Bomb) and damages
+    the building it lands on, and by the ordinary splash rule units within half
+    a tile. The plane's own and allied buildings are never aimed at, and a bomb
+    only damages a building its impact point lies on, so they are never hit.
+*/
+void AmbientAirplane::dropBomb(Uint32 gameCycle)
+{
+    if(bombs <= 0 || (CA::spriteCycle(gameCycle) + objectID) % CA::kBombDropInterval != 0) return;
+
+    const FixPoint angleRad = (angle * (FixPt_PI << 1)) / 8;
+    const int sight = CA::toWorld(CA::kBombSightDistance, TILESIZE);
+    Coord from = getCenterPoint();
+    Coord aim(from.x + lround(FixPoint::cos(angleRad) * sight), from.y - lround(FixPoint::sin(angleRad) * sight));
+    if(aim.x < 0 || aim.y < 0 || !currentGameMap->tileExists(aim.x / TILESIZE, aim.y / TILESIZE)) return;
+    const Tile* tile = currentGameMap->getTile(aim.x / TILESIZE, aim.y / TILESIZE);
+    if(!tile->hasAGroundObject()) return;
+    const ObjectBase* building = tile->getGroundObject();
+    if(building == nullptr || !building->isAStructure() || building->getHealth() <= 0
+       || building->getOwner()->getTeamID() == owner->getTeamID()) return;
+
+    bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kBombDamage, false, building));
+    --bombs;
 }
 
 bool AmbientAirplane::update()
@@ -391,6 +481,11 @@ bool AmbientAirplane::update()
     }
 
     if(remainingTicks > 0) --remainingTicks;
+
+    if(currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing) {
+        bombs = CA::rearmBombs(bombs, bombTimer);
+        if(takeoffFrame == 0) dropBomb(gameCycle);
+    }
 
     if(takeoffFrame == 0) {
         if(remainingTicks > 0) {
