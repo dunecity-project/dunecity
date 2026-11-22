@@ -418,11 +418,12 @@ bool AmbientAirplane::crashEndangers(const ObjectBase& attacker, const ObjectBas
             : 2 * currentGame->objectData.data[attacker.getItemID()][attacker.getOriginalHouseID()].weapondamage;
         if(plane.getHealth() - pending > shot) return false;
         if(turret) {
-            // Its rocket flies to the meeting point: only a crash around there matters.
+            // Its rocket flies to the meeting point: only a crash from there on matters, one
+            // tile short of it to four tiles beyond for a rocket that needs a second approach.
             const auto meet = plane.turretRocketIntercept(attacker.getCenterPoint() * 4);
             if(meet.possible) {
                 const FixPoint along = plane.getMaxSpeed() * meet.cycles16 / 16;
-                return plane.crashWouldHit(teamID, std::max(FixPoint(0), along - TILESIZE), along + 2 * TILESIZE);
+                return plane.crashWouldHit(teamID, std::max(FixPoint(0), along - TILESIZE), along + 4 * TILESIZE);
             }
         }
     }

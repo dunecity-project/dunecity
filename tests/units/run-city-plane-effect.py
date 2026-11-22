@@ -18,8 +18,9 @@ Dune City mod's own options (explored map, no fog, Rocket Turrets need power):
 
 Differences are on minus off, paired by encounter, with a 95% bootstrap interval
 (tests/ai/match_score.py). The test requires: with the defence rule more passes engaged, more
-damage to the plane and more planes shot down (each whole interval above 0), and the
-defender's crash losses not higher (interval not wholly above 0); with bombing off no bomb and
+damage to the plane and more planes shot down (each whole interval above 0), and the defender
+losing under 5 hit points and under 0.02 buildings a pass to its own fire (a rocket that meets
+the plane over an own building does its 30 there too) and to crashes; with bombing off no bomb and
 no damage, with it on buildings destroyed in some runs but never a Construction Yard or a
 Palace in a single run.
 
@@ -192,15 +193,15 @@ def defence_block(chosen, label):
              line('Rockets fired per pass', shots),
              line('Hit points taken off the plane per pass (of 100)', damage, 1),
              line('Planes shot down per pass', killed),
-             line('Defender hit points lost to the crash per pass', own, 1),
-             line('Defender buildings lost to the crash per pass', lost, 3), '',
+             line('Defender hit points lost to own rockets and crashes per pass', own, 1),
+             line('Defender buildings lost to own rockets and crashes per pass', lost, 3), '',
              'Turret-cycles with the plane inside weapon range, off -> on: held %.0f%% -> %.0f%%, no target yet '
              '%.0f%% -> %.0f%%, turning %.0f%% -> %.0f%%, reloading %.0f%% -> %.0f%%.'
              % (share(off, 'hold'), share(on, 'hold'), share(off, 'no_target'), share(on, 'no_target'),
                 share(off, 'turning'), share(on, 'turning'), share(off, 'reloading'), share(on, 'reloading')),
              'Planes shot down with the rule on came down a mean %.1f tiles from the middle of the site (nearest %.1f).'
              % (sum(crashes) / len(crashes), min(crashes)) if crashes else 'No plane was shot down with the rule on.', '']
-    return lines, {'engaged': engaged, 'damage': damage, 'killed': killed, 'own': own}
+    return lines, {'engaged': engaged, 'damage': damage, 'killed': killed, 'own': own, 'lost': lost}
 
 
 lines, overall = defence_block(passes, 'City Plane Defence, all passes')
@@ -215,8 +216,9 @@ for turrets in ('1', '2', '4', '6'):
 for name, text in (('engaged', 'passes engaged'), ('damage', 'damage to the plane'), ('killed', 'planes shot down')):
     if not overall[name][3] > 0:
         failures.append('defence: %s did not improve, interval %+.3f to %+.3f' % ((text,) + overall[name][3:5]))
-if overall['own'][3] > 0:
-    failures.append('defence: the defender lost more to the crash, interval %+.3f to %+.3f' % overall['own'][3:5])
+if overall['own'][1] >= 5 or overall['lost'][1] >= 0.02:
+    failures.append('defence: the defender lost %.1f hit points and %.3f buildings a pass to its own fire and crashes'
+                    % (overall['own'][1], overall['lost'][1]))
 
 bombs = paired(runs, lambda row: float(row['bombs']))
 damage = paired(runs, lambda row: float(row['damage']))
