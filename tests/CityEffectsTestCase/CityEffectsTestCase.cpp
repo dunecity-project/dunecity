@@ -325,16 +325,16 @@ TEST_CASE("Annual tax uses Micropolis easy weighting and rate", "[city-effects][
     CHECK(computeAnnualTaxRevenue(100,7,250) == 255);
 }
 
-TEST_CASE("Palace contributes both R and C at every occupied tier", "[city-effects][tax]") {
+TEST_CASE("Palace pays one unboosted residential zone at every occupied tier", "[city-effects][tax]") {
+    // Stefan, 2026-11-22: "nerf palaces slightly, make it only have 1 residential not residential
+    // and commercial". Without the 2x private-zone boost that halves a top-density Palace's own tax.
     CHECK(isTaxableCityStructure(Structure_Palace));
     for (int level=0;level<=3;++level) {
         const int residential=getZonePopulation(Structure_ZoneResidential,level);
-        const int commercial=getZonePopulation(Structure_ZoneCommercial,level);
-        const int base=taxablePopulationEighths(Structure_Palace,residential,level);
-        CHECK(base == residential+8*commercial);
+        CHECK(taxablePopulationEighths(Structure_Palace,residential,level) == residential);
     }
     // Aggregate100 buildings to verify rates without per-building truncation.
-    CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_Palace,40,3),7,128) == 10453);
+    CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_Palace,40,3),7,128) == 5226);
     CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_ZoneResidential,40,3),7,128) == 10453);
     CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_ZoneCommercial,5,3),7,128) == 10453);
     CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_ZoneIndustrial,4,3),7,128) == 8362);
@@ -738,7 +738,7 @@ TEST_CASE("getTaxTableEntry: low tax is positive, high tax is strongly negative"
 
 // --- Palace role and population ----------------------------------------------
 
-TEST_CASE("Palace hosts one residential and one commercial zone",
+TEST_CASE("Palace hosts one residential zone and no commercial zone",
           "[city-effects][role][palace]") {
     REQUIRE(getStructureCityRole(Structure_Palace) == CityRole::Residential);
     REQUIRE(getStructureMaxLevel(Structure_Palace) == 3);
@@ -746,10 +746,10 @@ TEST_CASE("Palace hosts one residential and one commercial zone",
     REQUIRE(getZonePopulation(Structure_Palace, 1) == 16);
     REQUIRE(getZonePopulation(Structure_Palace, 2) == 24);
     REQUIRE(getZonePopulation(Structure_Palace, 3) == 40);
-    // Palace commercial portion = one zone: 1/3/5
-    REQUIRE(getPalaceCommercialPopulation(1) == 1);
-    REQUIRE(getPalaceCommercialPopulation(2) == 3);
-    REQUIRE(getPalaceCommercialPopulation(3) == 5);
+    // No commercial portion since 2026-11-22 (was one zone: 1/3/5)
+    REQUIRE(getPalaceCommercialPopulation(1) == 0);
+    REQUIRE(getPalaceCommercialPopulation(2) == 0);
+    REQUIRE(getPalaceCommercialPopulation(3) == 0);
     REQUIRE(getPalaceCommercialPopulation(0) == 0);
 }
 
@@ -904,13 +904,13 @@ TEST_CASE("Regression: Only a stadium raises the residential cap",
     CHECK(withCivic.resValve >= noCivic.resValve);
 }
 
-TEST_CASE("Regression: Palace provides dual R+C population per spec",
+TEST_CASE("Regression: Palace provides one residential zone's population",
           "[city-effects][regression][scenario]") {
-    // Palace is residential-role with one R and one C contribution.
+    // Palace is residential-role with one R contribution and no C (2026-11-22).
     REQUIRE(getStructureCityRole(Structure_Palace) == CityRole::Residential);
     REQUIRE(getZonePopulation(Structure_Palace, 1) == 16);   // One R L1
     REQUIRE(getZonePopulation(Structure_Palace, 3) == 40);   // One R L3
-    REQUIRE(getPalaceCommercialPopulation(3) == 5);          // One C L3
+    REQUIRE(getPalaceCommercialPopulation(3) == 0);          // No C half
     // Palace provides a stadium-level land-value bonus.
     REQUIRE(getParkLandValueBonus(Structure_Palace) == kStadiumLandValueBonus);
 }
@@ -992,12 +992,12 @@ TEST_CASE("Rocket coverage and upkeep are fifteen percent of a police station", 
     REQUIRE(getPoliceAnnualCost(Structure_RocketTurret) * 100 == getPoliceAnnualCost(Structure_PoliceStation) * 15);
 }
 
-TEST_CASE("Palace population and local supply match one R and C zone through level three", "[city-effects][palace]") {
+TEST_CASE("Palace population and local supply match one R zone and no C through level three", "[city-effects][palace]") {
     for (int level = 0; level <= 4; ++level) {
         REQUIRE(getZonePopulation(Structure_Palace, level) == getZonePopulation(Structure_ZoneResidential, level));
-        REQUIRE(getPalaceCommercialPopulation(level) == getZonePopulation(Structure_ZoneCommercial, level));
+        REQUIRE(getPalaceCommercialPopulation(level) == 0);
         REQUIRE(getResidentialSupply(Structure_Palace, level) == getResidentialSupply(Structure_ZoneResidential, level));
-        REQUIRE(getCommercialSupply(Structure_Palace, level) == getCommercialSupply(Structure_ZoneCommercial, level));
+        REQUIRE(getCommercialSupply(Structure_Palace, level) == 0);
     }
     REQUIRE(getStructureMaxLevel(Structure_Palace) == 3);
 }

@@ -7,15 +7,17 @@ The fixed tax/spice hedge gate and alternating investment windows are removed.
 ## Active tax formula
 
 Stefan authorized the Micropolis easy restructuring, with Palace as an explicit
-R+C exception to the government tax exemption. Only actual R/C/I zones and the
+exception to the government tax exemption (R+C until 2026-11-22, residential only since). Only actual R/C/I zones and the
 Palace generate direct city tax. Other government buildings retain their jobs,
 demand and pollution roles, but generate no tax.
 
-Annual gross tax = `[2*(zoneR/8 + zoneC + zoneI) + palaceR/8 + palaceC] * averageLandValue/120 * taxPercent * 1.4`.
-Use taxable populations only; Palace contributes both its R and C portions.
+Annual gross tax = `[2*(zoneR/8 + zoneC + zoneI) + palaceR/8] * averageLandValue/120 * taxPercent * 1.4`.
+Use taxable populations only. Since 2026-11-22 a Palace is one residential zone: Stefan, "nerf
+palaces slightly, make it only have 1 residential not residential and commercial". It lost its
+commercial population and commercial supply; its +40 land value within 8 tiles is unchanged.
 Stefan chose a 2x private-zone boost because tax is easier and less exposed
 than spice harvesting. Palace is excluded from this boost.
-The census stores weighted eighths (`2*(zoneR + 8*zoneC + 8*zoneI) + palaceR + 8*palaceC`) to retain partial residential houses.
+The census stores weighted eighths (`2*(zoneR + 8*zoneC + 8*zoneI) + palaceR`) to retain partial residential houses.
 Annual totals are rounded once per house and paid fractionally each simulation
 cycle. This follows Micropolis easy's weights/rate while avoiding its intermediate
 integer truncation of tiny cities. Explicit zero land value earns zero; AI
@@ -164,7 +166,7 @@ At 7% tax and house-average land value 128, gross credits per simulated minute:
 | Residential zone | 41.81 | 62.72 | 104.53 |
 | Commercial zone | 20.91 | 62.72 | 104.53 |
 | Industrial zone | 20.91 | 62.72 | 83.63 |
-| Palace (R+C) | 31.36 | 62.72 | 104.53 |
+| Palace (R only, since 2026-11-22; was R+C 31.36 / 62.72 / 104.53) | 20.91 | 31.36 | 52.27 |
 
 Approximate contributions before city-total rounding and upkeep. Empty zones
 pay zero. A single developed house within an R lot adds population 2, about 5.23
@@ -187,7 +189,7 @@ pay tax (rather than the old pre-634 mismatch between R-only payout and R+C UI).
 | Construction Yard | Existing high I | 0 |
 | Radar, Airport | Existing medium/high C respectively | 0 |
 | Barracks, WOR | Existing high R garrison | 0 |
-| Palace | R+C, up to high density | See income table |
+| Palace | R, up to high density (R+C until 2026-11-22) | See income table |
 
 All remaining non-zone structures also have zero direct tax. Silo, WindTrap,
 IX, Starport and Construction Yard stay clean. Light Factory emissions cap 10;

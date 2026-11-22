@@ -47,7 +47,7 @@ namespace DuneCity {
 //   Radar              -> Commercial medium
 //   House IX           -> Commercial high
 //   Starport           -> Shipyard / Industrial high (jobs, economic role)
-//   Palace             -> Civic dual: 1x Residential + 1x Commercial pop, land-value boost
+//   Palace             -> Civic: 1x Residential pop (no commercial half since 2026-11-22), land-value boost
 //   Stadium            -> Civic amenity (large land-value boost)
 //   Airport            -> Commercial high (transport/trade boost)
 //   Barracks           -> Residential high (infantry garrison = population)
@@ -145,8 +145,8 @@ enum class CityRole {
 };
 
 /// What SC-Classic role this Dune structure plays in the city sim, if any.
-/// Palace → civic dual (contributes to BOTH R and C pop — handled specially).
-///   For growth purposes Palace uses Residential role.
+/// Palace → civic residential: one residential zone's population (Stefan, 2026-11-22: "nerf
+///   palaces slightly, make it only have 1 residential not residential and commercial").
 /// StarPort → shipyard / industrial high (jobs + economic role).
 /// Airport → commercial high (transport/trade boost).
 /// Barracks/WOR → residential high (infantry garrisons = population).
@@ -184,7 +184,7 @@ inline int getStructureMaxLevel(int itemID) {
         case Structure_ZoneResidential:
         case Structure_ZoneCommercial:
         case Structure_ZoneIndustrial:
-        case Structure_Palace:          // civic dual — grows to max density
+        case Structure_Palace:          // civic residential — grows to max density
             return 3;
         case Structure_WindTrap:        // government power, no industry
             return 0;
@@ -261,7 +261,7 @@ inline int supplyForLevel(int level) {
 }
 
 inline int getCommercialSupply(int itemID, int level) {
-    return (getStructureCityRole(itemID) == CityRole::Commercial || itemID == Structure_Palace)
+    return (getStructureCityRole(itemID) == CityRole::Commercial)
         ? detail::supplyForLevel(effectiveCityLevel(itemID, level)) : 0;
 }
 
@@ -574,9 +574,8 @@ inline int getZoneValueTier(int landValue, int numTiers) {
 /// DuneCity maps levels 1/2/3 to SC's low/mid/high density tiers.
 /// Fewer zones on Dune maps means smaller absolute populations — by design.
 ///
-/// Palace is a civic dual structure that contributes to BOTH R and C.
-/// getZonePopulation returns the residential portion; use
-/// getPalaceCommercialPopulation() for the commercial half.
+/// Palace contributes one residential zone's population (getZonePopulation); its former
+/// commercial half is gone (getPalaceCommercialPopulation() is 0 since 2026-11-22).
 inline int getZonePopulation(int itemID, int level) {
     level = effectiveCityLevel(itemID, level);
     if (level <= 0) return 0;
@@ -595,24 +594,24 @@ inline int getZonePopulation(int itemID, int level) {
     }
 }
 
-/// Palace commercial population contribution (one commercial zone).
-/// Separate from getZonePopulation so the main loop can add this to comPop.
-inline int getPalaceCommercialPopulation(int level) {
-    return getZonePopulation(Structure_ZoneCommercial, level);
+/// Palace commercial population contribution: none since 2026-11-22 (was one commercial zone).
+inline int getPalaceCommercialPopulation(int /*level*/) {
+    // Residential only since 2026-11-22 (Stefan); callers still add it, so the rule lives here.
+    return 0;
 }
 
 /// Weighted tax population in eighths. Private R/C/I income receives a 2x
-/// balance multiplier; Palace retains its unboosted R+C contribution. Preserve
+/// balance multiplier; Palace pays its unboosted residential population. Preserve
 /// fractional houses until the city-wide annual total is rounded.
 constexpr int kZoneTaxMultiplier = 2;
-inline int taxablePopulationEighths(int itemID, int population, int level) {
+inline int taxablePopulationEighths(int itemID, int population, [[maybe_unused]] int level) {
     population = std::max(0, population);
     switch (itemID) {
         case Structure_ZoneResidential: return population * kZoneTaxMultiplier;
         case Structure_ZoneCommercial:
         case Structure_ZoneIndustrial: return population * 8 * kZoneTaxMultiplier;
         case Structure_Palace:
-            return population + getPalaceCommercialPopulation(effectiveCityLevel(itemID,level)) * 8;
+            return population;
         default: return 0;
     }
 }
