@@ -518,6 +518,7 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
         const Coord z = zone->getLocation();
         if (zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None) return false;
         if (palace ? getMap().getTile(z.x,z.y)->getCityZoneDensity() > ForceConcentrationPolicy::kPalaceClearDensity
+                         && !botConfig().force.palaceDenseClearing
                    : sim->getLandValueMap().worldGet(z.x,z.y) > 64) return false;
         if (std::find(zones.begin(),zones.end(),zone->getObjectID()) == zones.end()) zones.push_back(zone->getObjectID());
     }
@@ -593,7 +594,7 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
         }
     std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.key > b.key; });
     constexpr size_t kChecked = 600;
-    int bestScore = std::numeric_limits<int>::min(), bestLots = 0, bestCleared = 0, bestRoom = 0;
+    int bestScore = std::numeric_limits<int>::min(), bestLots = 0, bestCleared = 0, bestRoom = 0, bestDense = 0, bestClearCost = 0;
     Coord best = Coord::Invalid();
     for (size_t i = 0; i < candidates.size() && i < kChecked; ++i) {
         const auto& c = candidates[i];
@@ -605,11 +606,27 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
         if (overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
             || dangerAt(pos, size) > 0 || !preservesGroundAccess(item, pos)
             || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, item).preservesConnections) continue;
-        const int score = c.key - int(cleared.size()) * 30;
-        if (score > bestScore) { bestScore = score; best = pos; bestLots = c.lots; bestCleared = int(cleared.size()); bestRoom = c.room; }
+        // Each demolished lot costs kPalaceClearLotCost; with PalaceDenseClearing a denser lot costs its
+        // whole tax (density x land value over the landmark's +40), and such a site must still net
+        // the district minimum.
+        int clearCost = 0, dense = 0;
+        if (auto* sim = currentGame->getCitySimulation()) for (const Uint32 id : cleared) {
+            const auto* zone = currentGame->getObjectManager().getObject(id);
+            if (!zone) continue;
+            const Coord z = zone->getLocation();
+            const int density = getMap().getTile(z.x, z.y)->getCityZoneDensity();
+            dense += int(density > Force::kPalaceClearDensity);
+            clearCost += Force::landmarkClearCost(density, sim->getLandValueMap().worldGet(z.x, z.y));
+        }
+        const int score = c.key - clearCost;
+        if (dense > 0 && score < minLots * 10) continue;
+        if (score > bestScore) {
+            bestScore = score; best = pos; bestLots = c.lots; bestCleared = int(cleared.size()); bestRoom = c.room;
+            bestDense = dense; bestClearCost = clearCost;
+        }
     }
     traceDecision("palace_district_site", AITelemetry::Record().set("item", item).set("valid", best.isValid()).set("x", best.x)
-        .set("y", best.y).set("lots", bestLots).set("room", bestRoom).set("cleared", bestCleared).set("candidates", int(candidates.size()))
+        .set("y", best.y).set("lots", bestLots).set("room", bestRoom).set("cleared", bestCleared).set("dense_cleared", bestDense).set("clear_cost", bestClearCost).set("candidates", int(candidates.size()))
         .set("palaces", int(palaces.size())));
     return best;
 }

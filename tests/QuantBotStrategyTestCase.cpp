@@ -3771,3 +3771,35 @@ TEST_CASE("Campaign helper repair factories only persists OFF and ON with distin
     REQUIRE(hashes.count(defaults.getConfigHash()) == 1);
     std::filesystem::remove(path);
 }
+
+TEST_CASE("PalaceDenseClearing defaults off, round trips, hashes and prices a lot by its tax",
+          "[ai][palace][config]") {
+    namespace Force = ForceConcentrationPolicy;
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.palaceDenseClearing);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-dense-test.ini";
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nPalaceDenseClearing=true\n";
+    }
+    QuantBotConfig loaded;
+    REQUIRE(loaded.applyOverrides(path.string()));
+    REQUIRE(loaded.force.palaceDenseClearing);
+    REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(loaded.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.palaceDenseClearing);
+    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    std::filesystem::remove(path);
+
+    // Empty and low-density lots keep the flat price, whatever their land value.
+    REQUIRE(Force::landmarkClearCost(0, 200) == Force::kPalaceClearLotCost);
+    REQUIRE(Force::landmarkClearCost(1, 200) == Force::kPalaceClearLotCost);
+    // A denser lot costs its whole tax in "+40 land value on one reached lot" units (10 each).
+    REQUIRE(Force::landmarkClearCost(2, 80) == Force::kPalaceClearLotCost + 40);
+    REQUIRE(Force::landmarkClearCost(3, 120) == Force::kPalaceClearLotCost + 90);
+    REQUIRE(Force::landmarkClearCost(3, -5) == Force::kPalaceClearLotCost);
+    REQUIRE(Force::landmarkClearCost(3, 120) > Force::landmarkClearCost(2, 120));
+    REQUIRE(Force::landmarkClearCost(2, 160) > Force::landmarkClearCost(2, 80));
+}

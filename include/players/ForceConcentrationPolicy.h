@@ -391,6 +391,17 @@ inline int outnumberedPalaceCap(int residentialAndCommercialLots) {
 }
 constexpr int kPalaceReachTiles = 8;
 constexpr int kPalaceClearDensity = 1;
+/// A landmark site scores 10 per R+C lot it reaches (a lot gaining the landmark's +40 land value)
+/// and pays kPalaceClearLotCost per own lot it demolishes. PalaceDenseClearing (default off; Stefan,
+/// 2026-11-22, a mature city in his nobuildup save had no lot at density 1 or below, so no Palace
+/// site): denser lots may go too, each costing its whole tax in the same unit - density times land
+/// value over the landmark's +40 - and a site that clears one must still net kPalaceDistrictMinLots.
+constexpr int kPalaceClearLotCost = 30;
+constexpr int kLandmarkLandValueBonus = 40;
+inline int landmarkClearCost(int density, int landValue) {
+    if (density <= kPalaceClearDensity) return kPalaceClearLotCost;
+    return kPalaceClearLotCost + 10 * density * std::max(0, landValue) / kLandmarkLandValueBonus;
+}
 
 /// MassHold: our live turrets within this many tiles of an attacked building fight for it.
 constexpr int kMassTurretSupportTiles = 10;

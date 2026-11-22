@@ -96,7 +96,9 @@ SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', '
                  'spice', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
                  'police_funding', 'army_target', 'spent_total', 'power_spent', 'police_charged', 'storage_lost',
                  'ledger_enabled', 'refineries', 'power_required', 'storage_full_cycles', 'storage_overflow_cycles',
-                 'storage_income_lost', 'power_deficit_cycles', 'required_power_deficit_cycles') + FLEET_VALUES
+                 'storage_income_lost', 'power_deficit_cycles', 'required_power_deficit_cycles',
+                 'palace', 'palace_built', 'stadium', 'stadium_built', 'nuclear', 'nuclear_built', 'windtrap',
+                 'windtrap_built') + FLEET_VALUES
 REFINERY_FIELDS = ('id', 'category', 'cell', 'seed') + REFINERY_VALUES
 WAVE_FIELDS = ('id', 'category', 'cell', 'seed', 'house', 'event', 'cycle', 'members', 'value')
 # The engine's CAMPAIGN_AI game-log lines (trigger, openings, waves with caps, deferrals), verbatim.
@@ -881,7 +883,7 @@ def play(args, scratch, binary, game):
                            'crush_kills': h.get('crush_kills', '')})
     samples = {}
     for line in lines:
-        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:'):
+        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_LANDMARKS:'):
             if marker in line:
                 sample = parse(line, marker)
                 sample.update(json.loads(sample.pop('economy', '{}')))

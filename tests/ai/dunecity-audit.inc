@@ -915,6 +915,14 @@ inline void sample(Game& game) {
                 static_cast<long long>(observation.leaderEconomy), observation.armyRatioBps, observation.economyRatioBps,
                 static_cast<long long>(observation.reachableSpiceShare), static_cast<long long>(observation.refineryCap),
                 static_cast<long long>(observation.harvesterCap), observation.currentWorkers);
+        // City landmarks and power plants standing / ever built (economy package checks, 2026-11-22).
+        SDL_Log("DUNECITY_LANDMARKS: minute=%d cycle=%u house=%d palace=%d palace_built=%d stadium=%d "
+                "stadium_built=%d nuclear=%d nuclear_built=%d windtrap=%d windtrap_built=%d",
+                minute, game.getGameCycleCount(), house->getHouseID(),
+                house->getNumItems(Structure_Palace), house->getNumBuiltItems(Structure_Palace),
+                house->getNumItems(Structure_Stadium), house->getNumBuiltItems(Structure_Stadium),
+                house->getNumItems(Structure_NuclearPlant), house->getNumBuiltItems(Structure_NuclearPlant),
+                house->getNumItems(Structure_WindTrap), house->getNumBuiltItems(Structure_WindTrap));
         // BuilderBase expands a squad into 3 (or 5) Unit_Trooper objects before
         // informWasBuilt is called for each single. Never multiply that ledger
         // again. Queue entries still describe products, so expand only those.

@@ -371,6 +371,7 @@ QuantBotConfig::QuantBotConfig() {
     force.stadiumDistricts = true;
     force.parkDistricts = false;
     force.landmarkAnchoring = true;
+    force.palaceDenseClearing = false;
     force.vanillaCoreDefenceThreatBps = 5000;
     force.vanillaArmyCounters = true;  // counters50-S5, default since protocol 119
     force.vanillaArmyCounterBlendBps = 5000;
@@ -880,6 +881,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "StadiumDistricts", force.stadiumDistricts);
         iniFile.setBoolValue("Force Concentration", "ParkDistricts", force.parkDistricts);
         iniFile.setBoolValue("Force Concentration", "LandmarkAnchoring", force.landmarkAnchoring);
+        iniFile.setBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
         iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
         iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
         iniFile.setIntValue("Force Concentration", "VanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
@@ -1216,6 +1218,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.stadiumDistricts = iniFile.getBoolValue("Force Concentration", "StadiumDistricts", force.stadiumDistricts);
     force.parkDistricts = iniFile.getBoolValue("Force Concentration", "ParkDistricts", force.parkDistricts);
     force.landmarkAnchoring = iniFile.getBoolValue("Force Concentration", "LandmarkAnchoring", force.landmarkAnchoring);
+    force.palaceDenseClearing = iniFile.getBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
     // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
     force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
         "Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps));
@@ -1950,6 +1953,7 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.stadiumDistricts) addNamed("stadiumDistricts", force.stadiumDistricts);
     if (force.parkDistricts) addNamed("parkDistricts", force.parkDistricts);
     if (force.landmarkAnchoring) addNamed("landmarkAnchoring", force.landmarkAnchoring);
+    if (force.palaceDenseClearing) addNamed("palaceDenseClearing", force.palaceDenseClearing);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
     addNamed("vanillaArmyCounters", force.vanillaArmyCounters);
     addNamed("vanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
