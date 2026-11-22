@@ -25,6 +25,8 @@
 #include <GUI/Spacer.h>
 #include <GUI/Label.h>
 
+#include <string>
+
 class InGameMenuButton : public TextButton {
 public:
     Point getMinimumSize() const override;
@@ -63,6 +65,7 @@ public:
     void onSave();
     void onSaveMap();
     void onRestart();
+    void onRestartEasier();
     void onQuit();
     void onSkipMission();
 
@@ -71,6 +74,7 @@ private:
 
     bool bMultiplayer;
     int color;
+    std::string easierQuestion;     ///< the confirmation text of "Restart with Easier AI"; empty when not offered
 
     HBox    mainHBox;
     VBox    mainVBox;
@@ -83,6 +87,7 @@ private:
     InGameMenuButton  resumeButton;
     InGameMenuButton  gameSettingsButton;
     InGameMenuButton  restartGameButton;
+    InGameMenuButton  restartEasierButton;
     InGameMenuButton  saveGameButton;
     InGameMenuButton  saveMapButton;
     InGameMenuButton  loadGameButton;
