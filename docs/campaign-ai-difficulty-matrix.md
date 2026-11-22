@@ -32,7 +32,8 @@ mode passes every proposed target.
 ## QuantBot Easiest (2026-11-22, class `qBotEasiest`, protocol 132)
 
 Stefan, 2026-11-22: "can we just make an 'easiest' difficulty which is easier than easy". It
-is a selectable difficulty below Easy in every AI selector (lobby, skirmish, campaign enemy)
+is a selectable difficulty below Easy in every AI selector (lobby, skirmish, campaign enemy;
+listed last, after Defend, so the default stays Easy)
 and the step below Easy in Restart with Easier AI. QuantBot Easy and every other difficulty
 are unchanged: nothing reads these rules unless the class is `qBotEasiest`. It replaces the
 `EasyRelief` config switch tried earlier the same day.

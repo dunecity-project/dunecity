@@ -761,12 +761,31 @@ void verifyEasierRestart(const GameInitSettings& randomInit) {
                     "Restart with Easier AI does not offer Medium to Easy after one step");
     }
     {
-        // Outside a campaign QuantBot Easy is the bottom: no button, and the menu keeps its other controls.
+        // QuantBot Easy steps down to QuantBot Easiest.
         Match match(withEnemy("qBotEasy"));
         match.advance(16);
         InGameMenu pause(false, pauseColor(*match.game));
+        click(pause.restartEasierButton);
+        auto* question = dynamic_cast<QstBox*>(pause.pChildWindow);
+        menuRequire(question && question->getText().find("QuantBot Easiest") != std::string::npos,
+                    "Restart with Easier AI does not offer Easy to Easiest");
+    }
+    {
+        // Outside a campaign QuantBot Easiest is the bottom: no button, and the menu keeps its other
+        // controls. The game is a real one against the Easiest class.
+        Match match(withEnemy("qBotEasiest"));
+        match.advance(16);
+        bool easiest = false;
+        for(int i = 0; i < NUM_HOUSES; ++i) {
+            House* house = match.game->getHouse(i);
+            if(house == nullptr || house == pLocalHouse) continue;
+            for(const auto& player : house->getPlayerList())
+                easiest = easiest || player->getPlayerclass() == "qBotEasiest";
+        }
+        menuRequire(easiest, "The game does not play against QuantBot Easiest");
+        InGameMenu pause(false, pauseColor(*match.game));
         menuRequire(!pause.restartEasierButton.isVisible() && pause.restartGameButton.isVisible(),
-                    "Pause menu offers an easier AI below QuantBot Easy outside a campaign");
+                    "Pause menu offers an easier AI below QuantBot Easiest outside a campaign");
         requirePauseFit(pause);
     }
 }

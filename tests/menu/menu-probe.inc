@@ -1128,6 +1128,12 @@ int runMenuProbe() {
             menu.enemySelector.difficultyBox.setSelectedItem(d);
             menuRequire(HouseChoiceMenu::getEnemyClass()==std::string("qBot")+difficulties[d],"Enemy AI choice mapping changed");
         }
+        // QuantBot Easiest is the sixth and last difficulty, with its own description.
+        menuRequire(menu.enemySelector.difficultyBox.getNumEntries()==6,"Enemy AI does not offer six QuantBot difficulties");
+        menu.enemySelector.difficultyBox.setSelectedItem(5);
+        menuRequire(HouseChoiceMenu::getEnemyClass()=="qBotEasiest","Enemy AI does not offer QuantBot Easiest last");
+        menuRequire(menu.enemySelector.selectPlayerClass("qBotEasiest") && HouseChoiceMenu::getEnemyClass()=="qBotEasiest",
+                    "Enemy cannot select QuantBot Easiest by class");
         menuRequire(menu.partnerSelector.selectPlayerClass("qBotSupportHard"),"Partner cannot select Builder Hard");
         menuRequire(menu.enemySelector.selectPlayerClass("qBotHard"),"Enemy cannot select QuantBot Hard");
         menu.startLevelDropDown.setSelectedItem(6);
