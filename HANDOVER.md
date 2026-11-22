@@ -1,3 +1,50 @@
+## 2026-11-22 - Troopers answer an Ornithopter anywhere in rocket range (unreleased, after 1.0.876)
+
+Stefan: "troopers should be shooting down ornithopters with their range missile weapon not close range weapon".
+
+- Before, measured on `build-int` at `eec4240d5` (unexplored 64x32 map, real Troopers on Guard, held
+  Ornithopter): the weapon was already right and the reach was wrong. `UnitBase::attack()` swaps a Trooper to
+  its gun (`Bullet_ShellSmall`, inside two tiles) only for a ground target (`!bAirBullet`, unchanged since the
+  initial commit); every shot at an aircraft was the full-damage air rocket, overhead and adjacent included.
+  But Troopers shot an Ornithopter only when it was overhead or one tile away and ignored it at 2, 3 and 5
+  tiles, although a player's attack order hit it at 5. Cause: the target search (`findTargetViaGrid`,
+  `findTargetLegacy`, `src/ObjectBase.cpp`) only takes what stands on ground the seeker's team has explored
+  and, with Fog of War, currently sees. A Trooper sees 1 tile and its rocket reaches 5, so Troopers away from
+  other sight answered aircraft only at gun distance. Troopers did pick Ornithopters; just never beyond their
+  own sight.
+- Now (`f3d496874`): under the existing **Trooper Anti-Air** match rule (default on, DuneCity content only) a
+  rocket Trooper takes an Ornithopter anywhere inside its weapon range without needing the ground below it
+  unveiled (`Trooper::targetsWithoutGroundSight`, a new `ObjectBase` hook both searches ask). The rocket
+  turret already has this exception (`RocketTurret::findTarget`). `Trooper::antiAirRuleActive()` is the one
+  place that states the rule; the rocket tracking in `Bullet.cpp` uses it too (same condition as before).
+- Decided: Ornithopters only. Carryalls and Frigates have the same sight limit (a Carryall is shot when
+  adjacent, ignored at 5 tiles) and keep it: the request names Ornithopters, the turret exception is
+  Ornithopter-only, and shooting transports more would change harvesting. Ground targets, flame Troopers and
+  out-of-range aircraft are unchanged. Vanilla, Dune2R and Tornie-family content keep the old behaviour, as
+  for the rest of the Trooper Anti-Air rule.
+- Switch: the workspace policy wants game behaviour changes behind an on/off switch so one build compares
+  both states. This one uses the existing Trooper Anti-Air rule instead of a new option: it is already
+  hashed, sent and saved, so no GameInitSettings field, save format or protocol number. Noted under the
+  unreleased protocol 133 (`NetworkPacketTypes.h`) because an older peer would desync.
+- Test: `trooper_air_weapon_probe` (`tests/units/run-trooper-air-weapon-probe.py`, headless nightly; dunecity,
+  vanilla, Dune2R; rule off and on): Ornithopter overhead, adjacent, 2 and 3 tiles, at the range edge and one
+  tile beyond; single Trooper and the three a Troopers order deploys; a real attack run; Carryall and Quad
+  controls. Rule on in DuneCity: the held Ornithopter is killed at every distance in range (5 rockets), not
+  touched one tile beyond; on the attack run the squad opens fire at tick 66 instead of 413 and kills the
+  Ornithopter (untouched in 2500 ticks with the rule off). Every shot at an aircraft is the air rocket; an
+  adjacent Quad still gets the gun and one at 4 tiles the reduced rocket; cases the rule does not cover, and
+  every case in vanilla and Dune2R, play both switch states identically.
+- Results at `ab50b8b03`: Mini `trooper_air_weapon_probe`, `trooper_anti_air_probe`, `dunelegacy_tests`,
+  `saboteur_target_probe` and `perf_regression` (106.0 s) passed; AWS job `20261122T221533-ctest-d0bfee`
+  passed `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`,
+  `quantbot_ffa_army_deploys` and both Trooper probes on Linux.
+- Seen, not changed: with the rule off, and in vanilla and Dune2R, a Trooper's untracked rocket never hurt a
+  held Ornithopter overhead or adjacent (7 shots, 0 damage) while it killed one at 5 tiles. That is the old
+  delivery the Trooper Anti-Air rule exists to replace in DuneCity content.
+- Not verified: Fog of War on with explored ground (same code path, not a separate case); a real match with
+  QuantBot Ornithopter raids on a field army; the nightly tier beyond the tests named above. Not pushed, no
+  version bump.
+
 ## 2026-11-22 - Saboteurs go for the nearest vehicle (unreleased, after 1.0.876)
 
 Stefan: "saboteurs seem to have been broken by the ai, they should be destorying nearest vehicle".

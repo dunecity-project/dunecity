@@ -420,6 +420,9 @@
 //      Also in 133, Saboteurs: a Palace releases one in Hunt for a human house too (as it always
 //      did for an AI house), and a Saboteur's own search takes the nearest enemy vehicle before
 //      any structure (Saboteur::findTarget()). An older peer would desync. Save format unchanged.
+//      Also in 133, Trooper Anti-Air (DuneCity content): a rocket Trooper's own search takes an
+//      Ornithopter anywhere in weapon range without sight of the ground below it
+//      (Trooper::targetsWithoutGroundSight()). An older peer would desync. Save format unchanged.
 #define NETWORK_PROTOCOL_VERSION            133
 
 // Mod transfer limits
