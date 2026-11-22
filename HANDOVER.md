@@ -127,6 +127,57 @@ Stefan: "troopers should be shooting down ornithopters with their range missile 
   QuantBot Ornithopter raids on a field army; the nightly tier beyond the tests named above. Not pushed, no
   version bump.
 
+## 2026-11-22 - Saboteurs actually destroy something: own hunt, blow up on reach (unreleased, after 1.0.876)
+
+Stefan, after the off/on numbers of the entry below: "they can destroy anything but they need to actually do
+it. quantbot was interfering with them and moving them with other army orders", and "they can destroy buildings
+as well as units". Commits `b0845990c`, `b2065778e`. Evidence: `~/Documents/projects/outputs/saboteur-effect-20261122/round3/`
+(`round2/` is the same batch one commit earlier).
+
+- Interference, measured. Every AI unit order (`Player::do*`, formation orders) now carries its caller's name
+  (`__builtin_FUNCTION()` default argument) and one addressed to a Saboteur is counted and logged
+  (`SABOTEUR_ORDER`). In 48 QuantBot Brutal free-for-alls with the rule off, none of 1035 Saboteurs that
+  ended received a single army order; 6 dropped Hunt -> Guard and 2 waited for a carryall. A code audit
+  agrees: QuantBot's army code skips Saboteurs everywhere (1.0.690). What can reach one: plot and MCV
+  footprint clearing (`ConstructionYard::moveUnitsOffPlot`, `QuantBotColonisation.cpp` `clearMcvFootprint`),
+  the engine's automatic carryall request (failure leaves Guard), and unguarded wave/retaliation orders in
+  AI Player (`AIPlayer.cpp:141-144`), SmartBot (`:154-157`, `:834`, `:893`) and Campaign AI (`:399`, `:1072-1079`),
+  which these matches do not play.
+- What the lost ones died of (rule off, 373 of 1099 lost unused): shot by a vehicle 83.1%, a turret 7.5%,
+  infantry 4.8%, aircraft 3.8%. 27.6% were within two tiles of their target, 38.3% further away, 34.0% had
+  no target left. In the controlled probe most died one tile from the target, during the last step: the
+  unit only blew up after it had stopped.
+- Rule now (`GameOptionsClass::saboteurVehicleHunt` on, the default; off is still the unit up to 1.0.876):
+  nearest enemy vehicle first; once an enemy has seen it (any enemy object within two tiles, the unit's
+  existing visibility rule) it takes the nearest thing it can blow up, building or vehicle, if that is
+  nearer than its pick; it goes off as soon as it is in reach, moving or not; a target that vanishes is
+  replaced at once; while it hunts it refuses an AI player's army orders, and an AI house's released
+  Saboteur that dropped to Guard looks again every ten seconds. Only its own pick is replaced: a target or
+  forced move its owner gave stays (`ownPick`, not saved). Chosen from the controlled probe on one build,
+  share destroying anything / credits per Saboteur for an AI owner: old rule 79.2% / 285; vehicle only
+  52.1% / 180; nearest anything with blow-up on reach 93.8% / 323 (vehicles 50.0%); vehicle first, nearest
+  once seen, blow-up on reach 89.6% / 289 (vehicles 68.8%). The last keeps Stefan's first choice and beats the old rule.
+- Off against on, final commit. Controlled (`saboteur_effect_probe`, 192 paired releases): AI owner vehicle
+  37.5% -> 63.5% (+26.0, 95% interval +17.7 to +35.4), anything 82.3% -> 91.7% (+9.4, +2.1 to +17.7),
+  credits 291 -> 301 (+10, -20 to +43), died unused 17 -> 8 of 96. Human owner 0% -> 63.5% / 91.7% / 301,
+  idle 96 -> 0, died 8. Matches (48 games per arm, Brutal FFA, `rs160-dunecity` and `rs160-vanilla`, seeds
+  9101-9124, AWS jobs `20261122T234822-sab3-off-e0d7ee`, `20261122T234829-sab3-on-52fde2`, none failed):
+  released 1099 / 1068; destroyed something 60.2% -> 73.3%; vehicles 575 -> 710, structures 87 -> 73; lost
+  unused 373 (33.9%) -> 235 (22.0%); credits per Saboteur 203.7 -> 247.6. Paired per game: credits per
+  Saboteur +49.6 (+27.5 to +72.6), vehicles per Saboteur +0.166 (+0.107 to +0.233), lost per Saboteur -0.148
+  (-0.210 to -0.091); placement score of Ordos and Mercenary -0.025 (-0.077 to +0.021) and time-outs 29.2% ->
+  31.2% (+0.021, -0.083 to +0.125): no difference shown. No army order reached a Saboteur in either arm.
+- Still lost with the rule on (235): 81.3% shot by a vehicle, 8.5% by a turret; 37.0% had no target at the time.
+- Tests: `saboteur_target_probe` now has 12 cases (a building that sees it on the way is taken; an explicit
+  order is kept past such a building); `saboteur_effect_probe` also fails when the rule lowers the share
+  destroying anything or the credits, for either owner. Gates for `b2065778e`: AWS job
+  `20261122T234833-ctest-f236c2` 9/9 passed (four AI gates, both Saboteur probes, `dunelegacy_tests`,
+  `quantbot_custom_attack`, `quantbot_baseline_807_check`); on the Mini `perf_regression`, both probes and
+  `dunelegacy_tests` passed in `build-int`.
+- Not measured: AI Player, SmartBot or Campaign AI owners in matches; human-played games; a Saboteur's
+  order log after a save and load (its counters and `ownPick` are not saved); the nightly tier.
+  The lines `SABOTEUR_RELEASED/HIT/LOST/ORDER/MODE` stay in the engine log for `vanilla-match.py`.
+
 ## 2026-11-22 - Saboteurs go for the nearest vehicle (unreleased, after 1.0.876)
 
 Stefan: "saboteurs seem to have been broken by the ai, they should be destorying nearest vehicle".
