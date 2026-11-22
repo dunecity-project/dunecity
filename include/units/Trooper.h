@@ -29,6 +29,9 @@ public:
     virtual ~Trooper();
 
     bool canAttack(const ObjectBase* object) const override;
+    bool targetsWithoutGroundSight(const ObjectBase& candidate) const override;
+    /// The Trooper Anti-Air match rule, which only DuneCity content obeys.
+    static bool antiAirRuleActive();
     void setProductionHouseID(int houseID) override;
     void save(OutputStream& stream) const override;
     Sint32 flameWeaponDamage(Sint32 base);

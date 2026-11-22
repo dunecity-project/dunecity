@@ -88,6 +88,38 @@ This is a hit-delivery change, **not a stat increase**: the stock anti-air Troop
 payload remains **5**, and the stock Ornithopter remains **25 HP**. Ground fire,
 other shooters, the disabled option and unrelated content keep their old rules.
 
+### Reach: an Ornithopter anywhere in rocket range
+
+Stefan, 2026-11-22: "troopers should be shooting down ornithopters with their range
+missile weapon not close range weapon". The weapon was never wrong: `UnitBase::attack()`
+only swaps a Trooper to its gun (`Bullet_ShellSmall`, inside two tiles) for a ground
+target, and an aircraft always got the full-damage air rocket. The reach was wrong.
+The engine's target search (`findTargetViaGrid`, `findTargetLegacy` in
+`src/ObjectBase.cpp`) only takes what stands on ground the seeker's team has explored
+and, with Fog of War, currently sees. A Trooper sees **one** tile and its rocket
+reaches **five**, so Troopers away from other sight (an army in the field, a squad
+on unexplored sand) answered an Ornithopter only when it was overhead or adjacent:
+gun distance.
+
+With the same rule (**Trooper Anti-Air** on, DuneCity content) a rocket Trooper now
+takes an Ornithopter anywhere inside its weapon range without needing the ground
+below it unveiled (`Trooper::targetsWithoutGroundSight`, the `ObjectBase` hook the two
+searches ask). The rocket turret already has this exception for Ornithopters
+(`RocketTurret::findTarget`). Unchanged: Carryalls, Frigates and city aircraft keep the
+sight rule, as do all ground targets; nobody is acquired beyond weapon range; a
+flame-armed Trooper is not included; a player's attack order never depended on sight.
+The switch needs no new option, wire field or save field: target choice is derived
+state and the rule is already a hashed match option.
+
+`trooper_air_weapon_probe` (`tests/units/run-trooper-air-weapon-probe.py`) measures it
+on an unexplored map with real Troopers on Guard, alone and as the three a Troopers
+order deploys, against a held Ornithopter overhead, adjacent, two and three tiles
+away, at the edge of range and one tile beyond, plus a real attack run, a Carryall
+and ground targets, each with the switch off and on. Every shot at an aircraft must
+be the full-damage air rocket and must kill the held Ornithopter; the gun stays the
+weapon on an adjacent ground unit; cases the rule does not cover, and all cases in
+vanilla and Dune2R, must play both switch states identically.
+
 ### Real-engine one-pass consumer fixture
 
 After the integrator's combined native build, run through the managed probe

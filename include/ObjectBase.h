@@ -89,6 +89,13 @@ public:
 
     virtual bool canAttack(const ObjectBase* object) const;
 
+    /**
+        May the autonomous target search pick this candidate although this object's team
+        does not currently see the ground tile below it? Nobody may, except a Trooper under
+        the Trooper Anti-Air rule for an Ornithopter in rocket range.
+    */
+    virtual bool targetsWithoutGroundSight(const ObjectBase& candidate) const { return false; }
+
     virtual Coord getCenterPoint() const;
 
     /**

@@ -760,12 +760,12 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
                 return;
             }
 
-            if(!isTileVisibleToSeeker(seeker, checkCoord)) {
+            ObjectBase* candidate = tile->getObject();
+            if(candidate == nullptr) {
                 return;
             }
 
-            ObjectBase* candidate = tile->getObject();
-            if(candidate == nullptr) {
+            if(!isTileVisibleToSeeker(seeker, checkCoord) && !seeker.targetsWithoutGroundSight(*candidate)) {
                 return;
             }
 
@@ -871,7 +871,7 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
                     && !rocketHunt->isInWeaponRange(candidate)) continue;
 
                 const Coord candidatePoint = candidate->getClosestPoint(seekerLocation);
-                if(!isTileVisibleToSeeker(seeker, candidatePoint)) {
+                if(!isTileVisibleToSeeker(seeker, candidatePoint) && !seeker.targetsWithoutGroundSight(*candidate)) {
                     continue;
                 }
 

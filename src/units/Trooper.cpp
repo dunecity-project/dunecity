@@ -93,6 +93,22 @@ bool Trooper::canAttack(const ObjectBase* object) const {
         return false;
 }
 
+bool Trooper::antiAirRuleActive() {
+    return currentGame->getGameInitSettings().getGameOptions().trooperAntiAir
+        && ModManager::instance().isDuneCityContentActive();
+}
+
+bool Trooper::targetsWithoutGroundSight(const ObjectBase& candidate) const {
+    // A Trooper sees one tile and its rocket reaches five. The target search only takes
+    // what stands on ground the team sees, so a Trooper away from other sight answered an
+    // Ornithopter only when it was overhead or adjacent - gun distance - and never used the
+    // rocket's reach. An Ornithopter in the sky needs no unveiled ground: as for the rocket
+    // turret (RocketTurret::findTarget), it is a target anywhere in weapon range. Other
+    // aircraft and every ground target keep the sight rule.
+    return isOrnithopterUnit(candidate.getItemID()) && bulletType == Bullet_SmallRocket
+        && antiAirRuleActive() && isInWeaponRange(&candidate);
+}
+
 
 void Trooper::playAttackSound() {
     soundPlayer->playSoundAt(

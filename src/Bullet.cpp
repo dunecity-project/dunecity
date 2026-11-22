@@ -18,6 +18,7 @@
 #include <Bullet.h>
 #include <DynastyProjectile.h>
 #include <units/UnitBase.h>
+#include <units/Trooper.h>
 #include <Achievements/AchievementEvents.h>
 #include <mod/ModManager.h>
 
@@ -429,9 +430,7 @@ void Bullet::updateDynastyProjectile()
 {
     const auto parameters = DynastyProjectile::parameters(bulletID);
     bool trooperAntiAir = false;
-    if(bulletID == Bullet_SmallRocket && airAttack
-       && currentGame->getGameInitSettings().getGameOptions().trooperAntiAir
-       && ModManager::instance().isDuneCityContentActive()) {
+    if(bulletID == Bullet_SmallRocket && airAttack && Trooper::antiAirRuleActive()) {
         // Firing-time attribution survives shooter death and ownership changes.
         // Older shots can still identify their source while that object is alive.
         Uint32 item = provenance.sourceItemID;

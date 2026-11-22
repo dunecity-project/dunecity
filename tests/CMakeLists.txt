@@ -1096,6 +1096,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-aa-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-aa-probe)
         set_tests_properties(trooper_anti_air_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        # Troopers on unexplored ground must answer an Ornithopter with the rocket anywhere in
+        # weapon range (Trooper Anti-Air rule off and on), not only when it is overhead or adjacent.
+        dunecity_add_test(headless nightly NAME trooper_air_weapon_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-air-weapon-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-air-weapon-probe)
+        set_tests_properties(trooper_air_weapon_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)
