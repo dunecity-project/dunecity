@@ -321,8 +321,10 @@ inline int clusterTurretGoal(int64_t own, int64_t enemy) {
 /// PalaceTurrets (default off; Stefan, 2026-11-22: "the ai isn't defending palaces with rocket
 /// turrets", save notdefendpalace): every own Palace keeps kPalaceGuardTurrets turrets (any
 /// turret counts) within kClusterReachTiles - Rocket Turrets where a yard can build them, else Gun
-/// Turrets - bought only from cash kSpareCashReserve above the price, never saved for (the
-/// TurretClusters lesson: turrets funded ahead of units lose games).
+/// Turrets - bought whenever cash covers the price plus the city working reserve, never saved for
+/// (the TurretClusters lesson: turrets funded ahead of units lose games). Spare cash only (2,000
+/// above the price) bought 2 turrets in 36 minutes of notdefendpalace: the houses hold ~400 credits
+/// and a Rocket Turret costs 250.
 constexpr int kPalaceGuardTurrets = 4;
 // ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) ---------------------
 //

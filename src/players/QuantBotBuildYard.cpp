@@ -974,7 +974,7 @@ void QuantBot::planTurretClusters(BuildPass& pass) {
 
 void QuantBot::planPalaceTurrets(BuildPass& pass) {
     // PalaceTurrets (default off, ForceConcentrationPolicy::kPalaceGuardTurrets): city skirmish games,
-    // the economy package's scope; spare cash only, so nothing saves or waits for it.
+    // the economy package's scope; bought when cash covers it, never saved for.
     namespace Force = ForceConcentrationPolicy;
     if (!botConfig().force.palaceTurrets || gameMode != GameMode::Custom || !currentGame->isCitySimEnabled()
         || pass.turretClusterReserve > 0 || pass.turretClusterUpgradeYard != NONE_ID) return;
@@ -1016,7 +1016,7 @@ void QuantBot::planPalaceTurrets(BuildPass& pass) {
     int price = 0;
     if (!reason) {
         price = currentGame->objectData.data[item][getHouse()->getHouseID()].price;
-        if (pass.money < price + std::max(Force::kSpareCashReserve, pass.cityWorkingReserve)) reason = "spare_cash";
+        if (pass.money < price + pass.cityWorkingReserve) reason = "cash";
     }
     Coord site = Coord::Invalid();
     if (!reason) {
@@ -1076,7 +1076,7 @@ void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardT
         return;
     }
     if (pass.money < pass.turretClusterReserve) {
-        if (pass.turretClusterPalace) return;   // spare cash only: never saved for
+        if (pass.turretClusterPalace) return;   // never saved for
         yardTurn.skipRemainingStructureLogic = true;
         yardTurn.serviceSavingHold = true;
         yardTurn.structureRule = "save_turret_cluster";
