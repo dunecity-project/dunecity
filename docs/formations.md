@@ -1833,6 +1833,70 @@ four mandatory AI gates and the unit tests, and acts only in city skirmish games
 0.044/1.000, house max 2.678/10.000, eight-house CPU p99 1.182/1.600, frame CPU p99 4.100/5.500,
 main-loop frame p99 4.815/8.000, menu other 0.001/0.300).
 
+### Palaces in mature cities, Palace guards and the residential-only Palace (2026-11-22)
+
+Stefan, testing the default on his MacBook Air with the `nobuildup` save: "i can see the ai destroying
+windtraps but not residential to place palaces"; then "i think the reason the palace district change
+didn't have much impact is because it isn't actually being done", "the ai isn't defending palaces wit
+rocket turrets" (save `notdefendpalace`, a 4P 160x160 DuneCity 1v3 FFA at tech 9, minute 4), "you
+want to protect from ornithopts, so one or more is fine", and "nerf palaces slightly make it only have
+1 redisential not residential and commercial". Results and scripts:
+`~/Documents/projects/outputs/ai-nobuildup-20261121/palaces/` (`screen.py`, `screen.md`, `replay.py`).
+
+- **Why no Palace in a mature city.** A Palace or Stadium site may only demolish own R/C lots of
+  density 0-1 (`kPalaceClearDensity`), at most 4, no civic overlay; a city at minute 300+ has no such
+  footprint, so no site is legal.
+- **`PalaceDenseClearing`** (hashed, **on by default since `ea8d768e0`**): denser own lots may go too.
+  Each demolished lot costs its whole tax in the site score's unit (10 per reached lot gaining the
+  landmark's +40): `landmarkClearCost` = 30 at density 0-1 as before, else 30 + 10 x density x land
+  value / 40; a site that clears a dense lot must still net the district minimum.
+- **`PalaceTurrets`** (hashed, default off): every own Palace keeps `kPalaceGuardTurrets` = 1 Rocket
+  Turret (anti-air; Gun Turrets neither count nor stand in) within 5 tiles, planned after the economy
+  projects and bought only from cash above the city working reserve and any Palace or reactor savings,
+  never saved for.
+- **Residential-only Palace** (city rule, `53829fe83`, docs/city-economy-balance.md): one residential
+  zone's population and supply, no commercial half; its own tax halves at top density (it never had
+  the 2x zone boost); its +40 land value is unchanged. The next release bumps the network protocol.
+- **Measurement:** `DUNECITY_LANDMARKS` per sample minute (Palaces, Stadiums, Nuclear Plants, Wind
+  Traps standing and built) as scenario-matrix `samples.csv` columns. The probe emits these samples only
+  in `--control-diagnostics` games (the handmade maps), not in ladder, weak-seat or lobby cells.
+
+**Save replays** (Mini; one deterministic run per arm, a demonstration): `nobuildup` minute 319-349 -
+off, the leader checks Palace sites 909 times and finds none; with dense clearing all 364 checks find
+a site and it builds 2 Palaces (first at minute 328). `notdefendpalace` minute 4-40 - dense clearing
+changes nothing (young cities have legal sites); the first PalaceTurrets (4 turrets, from cash 2,000
+above the price) ordered 2 turrets in 36 minutes (the houses hold ~400 credits; a Rocket Turret costs
+250) and a house still lost its Palace; bought when cash covers it (4, then 1 Rocket Turret) the house
+that lost its Palace kept it.
+
+**Screen** (staging `67225b6bc` for control and dense, `ee021b131` for turrets and both - the
+control's 72 weak-seat-160 games replayed there with identical digests; seat-only against the
+economy-package default, 716 games per arm, AWS, paired placement, 95% bootstrap):
+
+| Set (games) | control seat score | dense | turrets (1 Rocket Turret) | both |
+|---|---|---|---|---|
+| handmade DuneCity (260) | +0.241 | -0.007 [-0.016, +0.000] | -0.006 [-0.025, +0.013] | -0.008 [-0.027, +0.012] |
+| Brutal v Hard ladder 128/160 (192) | +0.467 | +0.003 [-0.012, +0.020] | -0.005 [-0.036, +0.022] | -0.001 [-0.031, +0.026] |
+| weak seat 128 (144) | -0.419 | +0.005 [+0.000, +0.014] | +0.005 [+0.000, +0.014] | +0.013 [+0.000, +0.035] |
+| weak seat 160 (72) | -0.378 | +0.003 [-0.003, +0.014] | **+0.051 [+0.001, +0.125]** | +0.050 [+0.000, +0.125] |
+| Stefan's lobby 240 min (48) | -0.266 | +0.023 [+0.000, +0.068] | +0.000 | +0.023 [+0.000, +0.068] |
+| all (716) | | +0.001 [-0.005, +0.007] | +0.002 [-0.010, +0.015] | +0.006 [-0.007, +0.019] |
+
+**Are Palaces built?** On the handmade DuneCity maps the seat house (control) builds at least one
+Palace in 58% of games (about 7 per such game), a Stadium in 62%, a reactor in 70%; it loses 6% of
+the Palaces it builds. So Palace districts do happen on generated cities of these lengths; they fail in
+mature cities. Paired against control on those maps: dense +0.2 Palaces built [-0.0, +0.4], tax +125
+[-37, +305]; turrets -0.4 Palaces built [-0.8, -0.1], Palaces lost -0.05 [-0.12, +0.02], tax -151
+[-672, +393] - the guard was paid from Palace savings.
+
+**Decision.** `PalaceDenseClearing` goes on by default: level everywhere and never worse, slightly
+positive on Palaces and tax, and it is the behaviour fix for the mature-city failure Stefan saw (the
+FinishWhenLeading precedent: a level behaviour fix, not a looser threshold). `perf_regression` passes
+on the Mini at `ea8d768e0` (CPU mean 0.032/0.250, house p99 0.044/1.000, house max 2.264/10.000,
+eight-house CPU p99 1.235/1.600, frame CPU p99 4.070/5.500, main-loop frame p99 4.710/8.000).
+`PalaceTurrets` stays off; it now waits for Palace and reactor savings (`ea8d768e0`) and is being
+re-screened.
+
 ### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
 
 Stefan suggested introducing parks from the original Micropolis. The Park structure (item 89, save 9888,
