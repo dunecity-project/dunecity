@@ -67,11 +67,11 @@ TEST_CASE("Only enemies of the human get easier; partners and allies keep their 
 
     REQUIRE(apply(houses, false));
     REQUIRE(classesOf(houses) == std::vector<std::string>{HUMANPLAYERCLASS, "qBotSupportHard", "qBotBrutal",
-                                                          "qBotMedium", "qBotEasy", "SmartBot"});
-    REQUIRE(apply(houses, false));      // Medium -> Easy, Easy -> Easiest
+                                                          "qBotMedium", "qBotEasiest", "SmartBot"});
+    REQUIRE(apply(houses, false));      // Medium -> Easy; the Easiest house has nowhere to go
     REQUIRE(classesOf(houses)[3] == "qBotEasy");
     REQUIRE(classesOf(houses)[4] == "qBotEasiest");
-    REQUIRE(apply(houses, false));      // Easy -> Easiest; the Easiest house has nowhere to go
+    REQUIRE(apply(houses, false));      // Easy -> Easiest
     REQUIRE_FALSE(nextStep(houses, false).available());
     REQUIRE_FALSE(apply(houses, false));
     REQUIRE(classesOf(houses)[3] == "qBotEasiest");
