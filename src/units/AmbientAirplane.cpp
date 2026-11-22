@@ -7,6 +7,7 @@
 #include <DynastyProjectile.h>
 #include <House.h>
 #include <Map.h>
+#include <ScreenBorder.h>
 #include <Game.h>
 #include <Tile.h>
 #include <structures/RocketTurret.h>
@@ -324,7 +325,10 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     SDL_Log("CITY_PLANE_DOWN: house=%d object=%u killer_house=%d killer_item=%d bombs=%d cycle=%u",
             getOwner()->getHouseID(), objectID, credited->getHouseID(), shooter ? shooter->getItemID() : -1, bombs,
             currentGame->getGameCycleCount());
-    Bullet::detonateDeathHand(shooterID, credited, at, DynastyProjectile::deathHandDamage, false, provenance);
+    // With City Plane Defence planes are shot down all over the map, about one a minute per
+    // house in AI matches: only a crash on or near the screen shakes it. Presentation only.
+    const bool shake = screenborder->isInsideScreen(at, Coord(TILESIZE * 8, TILESIZE * 8));
+    Bullet::detonateDeathHand(shooterID, credited, at, DynastyProjectile::deathHandDamage, false, provenance, shake);
 }
 
 bool AmbientAirplane::crashWouldHit(int teamID, FixPoint near, FixPoint far) const

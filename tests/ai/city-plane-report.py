@@ -19,6 +19,7 @@ diverges from its pair after the first changed shot, so pairing removes the map 
 """
 import argparse
 import csv
+import gzip
 import statistics
 import sys
 from collections import defaultdict
@@ -44,6 +45,9 @@ def read(name):
         path = folder / name
         if path.exists():
             with path.open(newline='') as handle:
+                rows.extend(csv.DictReader(handle))
+        elif (folder / (name + '.gz')).exists():  # the queue compresses a large collected table
+            with gzip.open(folder / (name + '.gz'), 'rt', newline='') as handle:
                 rows.extend(csv.DictReader(handle))
     return rows
 

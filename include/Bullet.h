@@ -60,10 +60,11 @@ public:
         deathHandBlastRadius around it on behalf of `shooterID`/`owner`, with the large
         explosions, sound and screen shake. The Palace's missile lands through here
         (Bullet_LargeRocket), and so does a city airplane that is shot down
-        (AmbientAirplane::crash), so the two cannot drift apart.
+        (AmbientAirplane::crash), so the two cannot drift apart. `shake` is presentation
+        only: the Palace missile shakes every screen, a crashed airplane only one that shows it.
     */
     static void detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impact, int damage, bool air,
-                                  const DeviationReward::Provenance& provenance);
+                                  const DeviationReward::Provenance& provenance, bool shake = true);
 
     inline int getBulletID() const { return bulletID; }
     /// The object this shot was fired at, if it still exists.

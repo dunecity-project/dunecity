@@ -858,7 +858,7 @@ case Bullet_LargeRocket: {
                         currentGame->objectData.data[building->getItemID()][building->getOriginalHouseID()].price,
                         currentGame->getGameCycleCount());
             }
-            soundPlayer->playSoundAt(Sound_ExplosionMedium, position);
+            soundPlayer->playSoundAt(Sound_ExplosionMedium, position/TILESIZE);
             const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1,Explosion_Medium2});
             currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
         } break;
@@ -876,7 +876,7 @@ case Bullet_LargeRocket: {
 }
 
 void Bullet::detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impact, int damage, bool air,
-                               const DeviationReward::Provenance& provenance)
+                               const DeviationReward::Provenance& provenance, bool shake)
 {
     soundPlayer->playSoundAt(Sound_ExplosionLarge, impact);
 
@@ -890,6 +890,6 @@ void Bullet::detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impa
                                air, true, NONE_ID, provenance);
         const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Large1,Explosion_Large2});
         currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
-        screenborder->shakeScreen(22);
+        if(shake) screenborder->shakeScreen(22);
     }
 }
