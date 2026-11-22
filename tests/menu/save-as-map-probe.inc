@@ -3,6 +3,7 @@
 #include <GUI/dune/InGameMenu.h>
 #include <GUI/dune/SaveMapWindow.h>
 #include <INIMap/MatchMapExport.h>
+#include <players/EasierEnemyPolicy.h>
 #include <House.h>
 #include <Map.h>
 #include <Tile.h>
@@ -129,7 +130,7 @@ void requireFit(Window& window, std::initializer_list<Widget*> controls) {
 
 void requirePauseFit(InGameMenu& menu) {
     requireFit(menu, {&menu.title, &menu.onlineNotice, &menu.resumeButton, &menu.saveGameButton,
-        &menu.saveMapButton, &menu.loadGameButton, &menu.restartGameButton, &menu.gameSettingsButton,
+        &menu.saveMapButton, &menu.loadGameButton, &menu.restartGameButton, &menu.restartEasierButton, &menu.gameSettingsButton,
         &menu.quitButton, &menu.skipMissionButton, &menu.pauseGameButton, &menu.joinRequestsButton, &menu.requestPlayButton});
 }
 
@@ -679,6 +680,97 @@ void verifyAvailability(const GameInitSettings& randomInit) {
     }
 }
 
+// "Restart with Easier AI" in the real pause menu of a generated skirmish: the button is offered
+// against a QuantBot above Easy, names the step, leaves the game alone when declined, and on Yes
+// queues a restart of the same map against the easier enemy. Rule: EasierEnemyPolicy.h.
+void verifyEasierRestart(const GameInitSettings& randomInit) {
+    const auto withEnemy = [&](const std::string& playerClass) {
+        GameInitSettings init = randomInit;
+        bool enemy = false;
+        for(auto& house : init.houseInfoList) {
+            if(EasierEnemyPolicy::detail::hasHuman(house)) continue;
+            for(auto& player : house.playerInfoList) { player.playerClass = playerClass; enemy = true; }
+        }
+        menuRequire(enemy, "Easier AI fixture has no enemy house");
+        return init;
+    };
+    const auto enemyClasses = [](const GameInitSettings& init) {
+        std::vector<std::string> classes;
+        for(const auto& house : init.getHouseInfoList()) {
+            if(EasierEnemyPolicy::detail::hasHuman(house)) continue;
+            for(const auto& player : house.playerInfoList) classes.push_back(player.playerClass);
+        }
+        return classes;
+    };
+    const auto pauseColor = [](Game& game) { return getHouseColorRGB(getHouseVisualHouse(game.getInterfaceHouseID()), 3); };
+
+    GameInitSettings easier;
+    {
+        const auto hard = withEnemy("qBotHard");
+        Match match(hard);
+        match.advance(16);
+        InGameMenu pause(false, pauseColor(*match.game));
+        menuRequire(pause.restartEasierButton.isVisible() && pause.restartEasierButton.isEnabled()
+                    && pause.restartEasierButton.getText() == _("Restart with Easier AI"),
+                    "Pause menu does not offer Restart with Easier AI against QuantBot Hard");
+        requirePauseFit(pause);
+        menuCapture(pause, "restart-easier-pause");
+        click(pause.restartEasierButton);
+        auto* question = dynamic_cast<QstBox*>(pause.pChildWindow);
+        menuRequire(question && question->getText().find("QuantBot Hard") != std::string::npos
+                    && question->getText().find("QuantBot Medium") != std::string::npos,
+                    "Restart with Easier AI does not name the difficulty change before restarting");
+        menuCapture(pause, "restart-easier-question");
+        const auto before = match.game->computeStateDigest();
+        question->onButton(QSTBOX_BUTTON2);
+        pause.processChildWindowOpenCloses();
+        menuRequire(!pause.hasChildWindow() && !match.game->bQuitGame
+                    && match.game->nextGameInitSettings.getGameType() == GameType::Invalid
+                    && match.game->computeStateDigest() == before
+                    && enemyClasses(match.game->getGameInitSettings()) == enemyClasses(hard),
+                    "Declining Restart with Easier AI changed the running game");
+        click(pause.restartEasierButton);
+        question = dynamic_cast<QstBox*>(pause.pChildWindow);
+        menuRequire(question != nullptr, "Restart with Easier AI lost its confirmation");
+        question->onButton(QSTBOX_BUTTON1);
+        pause.processChildWindowOpenCloses();
+        easier = match.game->nextGameInitSettings;
+        menuRequire(match.game->bQuitGame && easier.getGameType() == hard.getGameType()
+                    && easier.getFiledata() == hard.getFiledata() && !enemyClasses(easier).empty(),
+                    "Confirmed Restart with Easier AI did not queue a restart of the same map");
+        for(const auto& playerClass : enemyClasses(easier))
+            menuRequire(playerClass == "qBotMedium", "Restart with Easier AI did not step QuantBot Hard down to Medium");
+        menuRequire(match.game->whatNext() == GAME_LOAD, "Restart with Easier AI is not carried out as a restart");
+    }
+    {
+        // The queued settings start a real game against the easier enemy, which can step down once more.
+        Match match(easier);
+        match.advance(16);
+        bool medium = false;
+        for(int i = 0; i < NUM_HOUSES; ++i) {
+            House* house = match.game->getHouse(i);
+            if(house == nullptr || house == pLocalHouse) continue;
+            for(const auto& player : house->getPlayerList())
+                medium = medium || player->getPlayerclass() == "qBotMedium";
+        }
+        menuRequire(medium, "The restarted game does not play against QuantBot Medium");
+        InGameMenu pause(false, pauseColor(*match.game));
+        click(pause.restartEasierButton);
+        auto* question = dynamic_cast<QstBox*>(pause.pChildWindow);
+        menuRequire(question && question->getText().find("QuantBot Easy") != std::string::npos,
+                    "Restart with Easier AI does not offer Medium to Easy after one step");
+    }
+    {
+        // Outside a campaign QuantBot Easy is the bottom: no button, and the menu keeps its other controls.
+        Match match(withEnemy("qBotEasy"));
+        match.advance(16);
+        InGameMenu pause(false, pauseColor(*match.game));
+        menuRequire(!pause.restartEasierButton.isVisible() && pause.restartGameButton.isVisible(),
+                    "Pause menu offers an easier AI below QuantBot Easy outside a campaign");
+        requirePauseFit(pause);
+    }
+}
+
 } // namespace SaveAsMapProbe
 
 void verifySaveAsMap() {
@@ -759,6 +851,7 @@ void verifySaveAsMap() {
                 "Map export destination does not distinguish SP and MP user maps");
     requiresRuntimeError([] { MatchMapExport::playerCount(""); }, "Map export accepted empty map data");
     verifyAvailability(randomInit);
+    verifyEasierRestart(randomInit);
     verifyListsAndStarts(exported);
     menuRequire(previousConfig.saveChangesTo(getConfigFilepath()), "Cannot restore the Save as Map fixture profile choices");
     settings.general.customGameMod = previousCustomMod;
@@ -768,5 +861,5 @@ void verifySaveAsMap() {
     // The navigation runner accepts exactly one final MENU_PROBE_PASS line.
     SDL_Log("SAVE_AS_MAP_OK: Random Skirmish and Civilization Wars start/current exact files, live mutations,"
             " editor and Custom Game lists, four playable starts, independent worms, spectator/campaign policy, safe names,"
-            " confirmed/cancelled overwrites, real dialog clicks and 640x480 crest-safe controls");
+            " confirmed/cancelled overwrites, real dialog clicks, 640x480 crest-safe controls and Restart with Easier AI");
 }
