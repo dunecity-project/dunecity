@@ -1,3 +1,85 @@
+## 2026-11-22 - Trooper Ornithopter Reach: cause in the owner's settings, fix, off/on measurements (unreleased, after 1.0.876)
+
+Stefan: "test that these fixes improve performance of these units", and, after the first measurement showed the
+sight fix (entry below) changes nothing on explored ground without fog: reproduce what he saw in his own settings.
+This entry supersedes the entry below where they differ.
+
+- His settings: a Custom Game with the Dune City mod (1.002) plays `loadEffectiveGameOptions`, the INI overlaid
+  by the mod's GameOptions.ini: Start with Explored Map = true, Fog of War = false. Every team sees all ground,
+  so the sight rule of f3d496874 never bites there. The mod's Trooper is the stock one (range 5, sight 1,
+  damage 5, reload 150 cycles, turn 0.09); the Ornithopter has 25 HP, range 5 and flies about 8 tiles a second.
+- What a player saw, measured at 12d148f88 (`trooper-stance-probe`, 228 encounters): never the gun (0 gun shots
+  at an Ornithopter in any case), and trooper rockets that are fired mostly hit. But a Trooper on **Guard**, the
+  stance a factory leaves it in, fired only when the Ornithopter was nearly on top of it: first shot at a mean
+  1.5 tiles when the Ornithopter strafed a Harvester three tiles away, no shot at all on a fly-past two tiles
+  off, and a Guard squad of three that was attacked lost all three and shot down nothing, while the same squad
+  on Hunt shot the Ornithopter down every time without loss. Causes, from a per-cycle trace:
+  1. a Trooper without a target searches once a second and on Guard only inside weapon range; the strafing
+     Ornithopter is inside that range for about 10 cycles (0.16 s) per 5.5 s pass. The Guard Trooper had no
+     target for 70% of the in-range time (Area Guard 22-45%, Hunt 3-7%: they search wider and re-find it);
+  2. it had to finish turning before firing (one direction per ~11 cycles): 13-22% of the in-range time when
+     attacked, 44-77% on a fly-past;
+  3. on a plain move order a Trooper never fights (nor does a Launcher): unchanged, that is the move order;
+     in Ambush it waits until it is hit or the enemy is within its one-tile sight: unchanged.
+  Yardsticks in the same spot: a Rocket Turret picks at 8-10 tiles, fires 3.5-8 rockets, 0.2-1.2 hit; a
+  Launcher fires 2-3 rockets, at most one hits. A single Trooper cannot win alone in either arm: an
+  Ornithopter rocket does 45 and a Trooper has 45 HP.
+- Fix (4c49c15ff), under the same switch: an idle rocket Trooper on Guard, Area Guard, Hunt or Hold, or on an
+  attack-move, takes an enemy Ornithopter the cycle it comes into weapon range (`Trooper::targeting`,
+  `ornithopterInRange`: a grid lookup that does nothing while no enemy house owns an Ornithopter) and fires
+  without waiting for its turn (`UnitBase::engageTarget` asks `firesAtAircraftUnfaced`). A Trooper with a
+  target or a ground-fire order keeps it. Other aircraft, ground targets, flame Troopers and other content are
+  unchanged.
+- Switch (7c1fb855d): `GameOptionsClass::trooperOrnithopterReach`, default on, INI key `Trooper Ornithopter
+  Reach`, no menu entry. It covers all three parts (sight, cadence, facing); off is 1.0.876. Hashed only when
+  off, and carried as bit 1 of the MOD15 Trooper Anti-Air byte, so a default setup's stream, save and hash are
+  unchanged: no new marker, protocol or save number (noted under protocol 133). Trooper Anti-Air stays on in
+  both arms of every comparison, so the rocket tracks in both.
+- Controlled engagements, off against on in one build (`trooper_ornithopter_effect`, Mini, 4c49c15ff; raids of
+  1-3 Ornithopters on 1, 3 and 6 Guard Troopers, three approach paths, two distances; paired by encounter, 95%
+  bootstrap interval of on - off):
+
+  | Ground (seeds) | Pairs | Ornithopters shot down | Troopers lost | First shot at | First kill, both arms |
+  |---|---:|---|---|---|---|
+  | Explored, no fog: his options (1-4) | 216 | 0.47 -> 0.90, +0.43 (+0.34 to +0.53) | 2.30 -> 1.45, -0.84 (-1.03 to -0.67) | 2.8 -> 4.4 tiles | 3.9 s sooner (-4.5 to -3.4) |
+  | Unexplored (1-4) | 216 | 0.24 -> 0.90, +0.66 (+0.55 to +0.77) | 2.91 -> 1.45, -1.45 (-1.74 to -1.19) | 2.7 -> 4.4 tiles | 6.6 s sooner (-8.3 to -5.1) |
+  | Explored, Fog of War (1) | 54 | 0.52 -> 0.94, +0.43 (+0.26 to +0.61) | 2.20 -> 1.41, -0.80 (-1.17 to -0.46) | 2.9 -> 4.4 tiles | 3.1 s sooner (-4.0 to -2.2) |
+
+  Raids with a kill, his options: 74 -> 124 of 216. By group: 1 Trooper 0 -> 0 kills, lost every time in both
+  arms; 3 Troopers 0.17 -> 0.72; 6 Troopers 1.24 -> 1.97 with losses 3.21 -> 1.36. `trooper_stance_probe`, all
+  Trooper cases together: Ornithopters shot down 27 -> 48, Troopers lost 69 -> 40; on Guard 2 -> 11 and 16 -> 4.
+  The sight fix alone (12d148f88, before the cadence and facing parts): unexplored 0.27 -> 0.49 (+0.16 to
+  +0.28), 324 pairs; explored without fog identical in all 54 pairs.
+- AI matches, off against on (AWS, `dunecity-audit.py --mode matrix --attack-events`, four QuantBot Brutal
+  houses' worth of formats 1v1, 2v2 and ffa4, 128 map, medium spice, tech 9, 60-minute cap, seeds 9101-9124:
+  72 pairs per setup, 4c49c15ff; `tests/ai/trooper-reach-report.py`; per game, paired by map, seed and sides):
+
+  | Options | Ornithopters killed by Troopers | Trooper rockets that hit | Troopers killed by Ornithopters | Time-outs |
+  |---|---|---|---|---|
+  | His (explored, no fog) | 4.43 -> 5.96, +1.53 (+0.29 to +2.94) | 34.1 -> 45.5, +11.4 (+3.3 to +20.7) | 11.92 -> 12.86, +0.94 (-2.68 to +5.26) | 13/72 both |
+  | Unexplored start | 4.85 -> 5.38, +0.53 (-0.22 to +1.32) | 35.3 -> 39.3, +4.0 (-0.3 to +8.9) | 10.49 -> 8.35, -2.14 (-4.12 to -0.11) | 12/72 both |
+
+  In his options Troopers' share of all Ornithopter losses rose from 7.6% (319 of 4220) to 10.2% (429 of 4206):
+  a real gain in kills. Trooper losses to Ornithopters did not fall there (the interval spans 0). With an
+  unexplored start the gain in kills is not significant and the losses fell. 9 and 7 of the 72 pairs ended in
+  the same state. Every house plays the same arm, so there is no placement score to compare. A match diverges
+  after the first changed shot, so the pairing removes map and start only. The sight-only fix at 12d148f88 was
+  piloted on one ffa4 match with an unexplored start: both arms ended in the same digest.
+- Tests and gates at 4c49c15ff: Mini `dunelegacy_tests` (new MOD15 Trooper byte case), `trooper_air_weapon_probe`,
+  `trooper_anti_air_probe`, `trooper_stance_probe`, `trooper_ornithopter_effect` and `perf_regression` (122.6 s)
+  passed; AWS job `20261122T232445-ctest-b4a228` passed `quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys` and the four
+  Trooper probes on Linux. Game jobs: `20261122T232457-trooper-reach-explored-off-e1f266`,
+  `20261122T232509-trooper-reach-explored-on-20d3e6`, `20261122T232513-trooper-reach-unexplored-off-10e748`,
+  `20261122T232517-trooper-reach-unexplored-on-3316be`; pilots `20261122T225949-trooper-reach-pilot-off-3ca06e`
+  and `20261122T225956-trooper-reach-pilot-on-d86f44`. Tables and CSVs:
+  `~/Documents/projects/outputs/trooper-reach-20261122/`.
+- Not measured or not done: which match Stefan's observation came from (no replay of it was used; the
+  reproduction is the mod's options on an open test map, not his 192x192 City map); a human watching the
+  fixed build; maps other than 128 and difficulties other than Brutal in the match tier; the nightly tier
+  beyond the tests named; Dune2R and vanilla, where the rule does not apply and Troopers' untracked rockets
+  still miss a close Ornithopter. Troopers on a plain move order still do not fire. Not pushed, no version bump.
+
 ## 2026-11-22 - Troopers answer an Ornithopter anywhere in rocket range (unreleased, after 1.0.876)
 
 Stefan: "troopers should be shooting down ornithopters with their range missile weapon not close range weapon".
