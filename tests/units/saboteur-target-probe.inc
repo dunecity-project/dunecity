@@ -1,11 +1,10 @@
-// A Palace-released Saboteur goes for the nearest enemy vehicle, whoever owns the Palace, and takes
-// the nearest thing it can blow up once an enemy has seen it on the way.
+// A Palace-released Saboteur goes for the nearest thing it may blow up, enemy building or vehicle
+// alike, whoever owns the Palace.
 //
-// Before this probe existed the Saboteur's search was the general one: the nearest thing it
-// may attack, structure or vehicle alike, so a Wind Trap five tiles away was blown up while
-// tanks stood further off, and a human-owned Saboteur was released in Guard with a weapon
-// range of 0 and never moved. Each case below runs the real Palace special weapon and
-// Game::updateGameState until the Saboteur is gone, then checks what was destroyed.
+// Up to 1.0.876 a human-owned Saboteur was released in Guard with a weapon range of 0 and never
+// moved, and a hunting one only blew up after it had stopped next to its target. Each case below
+// runs the real Palace special weapon and Game::updateGameState until the Saboteur is gone, then
+// checks what was destroyed.
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -144,44 +143,75 @@ inline const UnitBase* nearestVehicle(const House* enemy, const Coord& from) {
     return best;
 }
 
-/// A nearer structure and a nearer infantry unit that are not on its way are passed by for the
-/// nearest of several vehicles: nothing sees the Saboteur before it reaches that vehicle.
-inline void vehicleBeforeStructure(const std::string& ownerClass) {
-    Fixture f(ownerClass, "vehicle-before-structure");
-    f.enemyStructure("Wind Trap 7 tiles north", Structure_WindTrap, 30, 22);
+/// A building is as good as a vehicle: the nearest thing it may blow up is taken, here a Wind
+/// Trap, while a nearer Soldier (infantry is no target) and three vehicles further off are left.
+inline void nearestIsABuilding(const std::string& ownerClass) {
+    Fixture f(ownerClass, "nearest-is-a-building");
+    const auto* trap = f.enemyStructure("Wind Trap 7 tiles north", Structure_WindTrap, 30, 22);
     f.enemyUnit("Soldier 6 tiles north", Unit_Soldier, 27, 24);
-    const auto* near = f.enemyUnit("Tank 13 tiles east", Unit_Tank, 45, 31);
+    f.enemyUnit("Tank 13 tiles east", Unit_Tank, 45, 31);
+    f.enemyUnit("Quad 20 tiles south", Unit_Quad, 31, 52);
+    f.enemyUnit("Tank 22 tiles west", Unit_Tank, 8, 31);
+    auto* saboteur = f.release();
+    const Uint32 saboteurID = saboteur->getObjectID();
+    const Uint32 victimID = trap->getObjectID();
+    f.game->updateGameState();
+    require(saboteur->getTarget() == trap, f.label + ": the released Saboteur did not pick the nearest building");
+    const int seconds = f.runUntilGone(saboteurID, 120);
+    f.requireOnlyVictim(saboteurID, victimID);
+    SDL_Log("SABOTEUR_TARGET_CASE: %s destroyed the nearest building after %d s; the nearer Soldier and the farther vehicles untouched",
+            f.label.c_str(), seconds);
+}
+
+/// The nearest of several vehicles is taken when it is nearer than every building.
+inline void nearestIsAVehicle(const std::string& ownerClass) {
+    Fixture f(ownerClass, "nearest-is-a-vehicle");
+    f.enemyStructure("Wind Trap 14 tiles north", Structure_WindTrap, 30, 14);
+    f.enemyStructure("Refinery 24 tiles south-west", Structure_Refinery, 10, 50);
+    f.enemyUnit("Soldier 6 tiles north", Unit_Soldier, 27, 24);
+    const auto* near = f.enemyUnit("Tank 8 tiles east", Unit_Tank, 40, 31);
     f.enemyUnit("Quad 20 tiles south", Unit_Quad, 31, 52);
     f.enemyUnit("Tank 22 tiles west", Unit_Tank, 8, 31);
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
     const auto* expected = nearestVehicle(f.enemy, saboteur->getLocation());
-    require(expected == near, f.label + ": the fixture's nearest vehicle is not the 13-tile tank");
+    require(expected == near, f.label + ": the fixture's nearest vehicle is not the 8-tile tank");
     const Uint32 victimID = expected->getObjectID();
     f.game->updateGameState();
-    require(saboteur->getTarget() == expected,
-            f.label + ": the released Saboteur did not pick the nearest vehicle");
+    require(saboteur->getTarget() == expected, f.label + ": the released Saboteur did not pick the nearest vehicle");
     const int seconds = f.runUntilGone(saboteurID, 120);
     f.requireOnlyVictim(saboteurID, victimID);
-    SDL_Log("SABOTEUR_TARGET_CASE: %s destroyed the nearest vehicle after %d s; the nearer Wind Trap and Soldier and the farther vehicles untouched",
+    SDL_Log("SABOTEUR_TARGET_CASE: %s destroyed the nearest vehicle after %d s; the farther buildings and vehicles untouched",
             f.label.c_str(), seconds);
 }
 
-/// On the way to its vehicle the Saboteur comes within sight of an enemy building: it does not
-/// walk on under fire, it blows up the nearest thing it can, here that building.
-inline void seenTakesNearest(const std::string& ownerClass) {
-    Fixture f(ownerClass, "seen-on-the-way");
-    const auto* trap = f.enemyStructure("Wind Trap on the way", Structure_WindTrap, 30, 38);
+/// Something nearer turns up beside it on the way: a vehicle within two tiles sees the Saboteur,
+/// and it blows that up instead of walking on under fire to the one it had picked.
+inline void nearerThingTurnsUp(const std::string& ownerClass) {
+    Fixture f(ownerClass, "nearer-thing-turns-up");
     f.enemyUnit("Tank 13 tiles south", Unit_Tank, 31, 46);
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
-    f.game->updateGameState();
-    require(saboteur->getTarget() != nullptr && saboteur->getTarget()->getItemID() == Unit_Tank,
-            f.label + ": the released Saboteur did not start for the Tank");
-    const Uint32 victimID = trap->getObjectID();
+    const Coord released = saboteur->getLocation();
+    for(int cycle = 0; cycle < 2000 && f.alive(saboteurID)
+        && (blockDistance(released, saboteur->getLocation()) < 4 || saboteur->moving); ++cycle) {
+        f.game->updateGameState();
+    }
+    require(f.alive(saboteurID) && saboteur->getTarget() != nullptr && saboteur->getTarget()->getItemID() == Unit_Tank,
+            f.label + ": the Saboteur was not on its way to the Tank");
+    Coord beside = Coord::Invalid();
+    for(const Coord& offset : {Coord(2, 0), Coord(-2, 0), Coord(2, -1), Coord(-2, -1)}) {
+        const Coord tile = saboteur->getLocation() + offset;
+        if(beside.isInvalid() && currentGameMap->tileExists(tile) && !currentGameMap->getTile(tile)->hasAGroundObject()) {
+            beside = tile;
+        }
+    }
+    require(beside.isValid(), f.label + ": no free tile beside the Saboteur");
+    const auto* quad = f.enemyUnit("Quad that drove up beside it", Unit_Quad, beside.x, beside.y);
+    const Uint32 victimID = quad->getObjectID();
     const int seconds = f.runUntilGone(saboteurID, 120);
     f.requireOnlyVictim(saboteurID, victimID);
-    SDL_Log("SABOTEUR_TARGET_CASE: %s was seen beside the Wind Trap on its way and destroyed it after %d s; the Tank is untouched",
+    SDL_Log("SABOTEUR_TARGET_CASE: %s met a Quad beside it on the way and destroyed it %d s later; the Tank it had picked is untouched",
             f.label.c_str(), seconds);
 }
 
@@ -235,8 +265,8 @@ inline void nothingToSabotage(const std::string& ownerClass) {
     SDL_Log("SABOTEUR_TARGET_CASE: %s had nothing to sabotage and waits in Guard", f.label.c_str());
 }
 
-/// The owner's explicit order still wins: sent at a structure, the Saboteur leaves the vehicles,
-/// and it walks past a building that sees it on the way instead of taking that.
+/// The owner's explicit order still wins: sent at the far Refinery, the Saboteur walks past the
+/// nearer Wind Trap it had picked itself, although that building sees it on the way.
 inline void explicitOrderKept() {
     Fixture f("HumanPlayer", "explicit-order");
     const auto* refinery = f.enemyStructure("Refinery 12 tiles east", Structure_Refinery, 45, 30);
@@ -245,8 +275,8 @@ inline void explicitOrderKept() {
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
     f.game->updateGameState();
-    require(saboteur->getTarget() != nullptr && saboteur->getTarget()->getItemID() == Unit_Tank,
-            f.label + ": the released Saboteur did not start for the Tank");
+    require(saboteur->getTarget() != nullptr && saboteur->getTarget() != refinery,
+            f.label + ": the released Saboteur did not start for something nearer than the Refinery");
     saboteur->doAttackObject(refinery, true);
     const Uint32 victimID = refinery->getObjectID();
     const int seconds = f.runUntilGone(saboteurID, 120);
@@ -255,11 +285,15 @@ inline void explicitOrderKept() {
             f.label.c_str(), seconds);
 }
 
-/// Area Guard (a Saboteur its owner set to it): a vehicle inside the 10-tile guard range is
-/// taken before a nearer structure.
-inline void areaGuardPrefersVehicle() {
+/// Area Guard (a Saboteur its owner set to it): the nearest thing inside the 10-tile guard range
+/// is taken, and what stands beyond the range is left. Outside Hunt every unit only picks what
+/// stands on ground its team has explored, so the owner has seen the map here.
+inline void areaGuardTakesNearest() {
     Fixture f("HumanPlayer", "area-guard");
-    f.enemyStructure("Wind Trap 3 tiles off", Structure_WindTrap, 20, 13);
+    for(int y = 0; y < currentGameMap->getSizeY(); ++y)
+        for(int x = 0; x < currentGameMap->getSizeX(); ++x)
+            currentGameMap->getTile(x, y)->setExplored(f.owner->getHouseID(), f.game->getGameCycleCount());
+    f.enemyStructure("Wind Trap 14 tiles off", Structure_WindTrap, 20, 24);
     const auto* tank = f.enemyUnit("Tank 8 tiles off", Unit_Tank, 28, 10);
     auto* saboteur = f.owner->createUnit(Unit_Saboteur, false);
     require(saboteur != nullptr, f.label + ": cannot create the Saboteur");
@@ -269,7 +303,7 @@ inline void areaGuardPrefersVehicle() {
     const Uint32 victimID = tank->getObjectID();
     const int seconds = f.runUntilGone(saboteurID, 120);
     f.requireOnlyVictim(saboteurID, victimID);
-    SDL_Log("SABOTEUR_TARGET_CASE: %s took the Tank inside its guard range after %d s; the nearer Wind Trap is untouched",
+    SDL_Log("SABOTEUR_TARGET_CASE: %s took the Tank inside its guard range after %d s; the Wind Trap beyond it is untouched",
             f.label.c_str(), seconds);
 }
 
@@ -280,14 +314,15 @@ int runSaboteurTargetProbe() {
     const std::string mod = std::getenv("SABOTEUR_TARGET_PROBE_MOD");
     require(ModManager::instance().setActiveMod(mod), "missing fixture mod " + mod);
     for(const char* ownerClass : {"HumanPlayer", "qBotHard"}) {
-        vehicleBeforeStructure(ownerClass);
-        seenTakesNearest(ownerClass);
+        nearestIsABuilding(ownerClass);
+        nearestIsAVehicle(ownerClass);
+        nearerThingTurnsUp(ownerClass);
         workersAreVehicles(ownerClass);
         structureWithoutVehicles(ownerClass);
         nothingToSabotage(ownerClass);
     }
     explicitOrderKept();
-    areaGuardPrefersVehicle();
-    SDL_Log("SABOTEUR_TARGET_PROBE_PASS: mod=%s human and QuantBot owners, 12 cases", mod.c_str());
+    areaGuardTakesNearest();
+    SDL_Log("SABOTEUR_TARGET_PROBE_PASS: mod=%s human and QuantBot owners, 14 cases", mod.c_str());
     return -1;
 }

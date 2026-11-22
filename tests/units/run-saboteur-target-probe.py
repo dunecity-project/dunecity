@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Check on real units that a Saboteur goes for the nearest enemy vehicle.
+"""Check on real units that a Saboteur goes for the nearest enemy building or vehicle.
 
 A Palace releases a Saboteur for a human house and for a QuantBot house. It must walk to
-the nearest enemy vehicle (harvesters and MCVs included, aircraft and infantry not) and
-blow it up, passing a nearer structure and a nearer soldier that are not on its way; a
-building that sees it on the way is blown up instead; with no vehicle on the map it takes
-the nearest structure, and with nothing to sabotage it waits in Guard. An explicit order
-(kept even past a building that sees it) and Area Guard are covered too
+the nearest thing it may blow up, building or vehicle alike (harvesters and MCVs included,
+aircraft and infantry not), and blow it up; a vehicle that turns up beside it on the way is
+taken instead of the one further off; with nothing to sabotage it waits in Guard. An explicit
+order (kept even past a nearer building that sees it) and Area Guard are covered too
 (tests/units/saboteur-target-probe.inc).
 
 Requires the existing Ninja Release build and bundled game assets. Uses an isolated

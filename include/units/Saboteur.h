@@ -40,14 +40,12 @@ public:
     bool canAttack(const ObjectBase* object) const override;
 
     /**
-        A Saboteur's own search goes for the nearest enemy vehicle first: any ground unit
-        that is neither infantry nor a sandworm, so harvesters and MCVs count and aircraft
-        do not. Only when no such vehicle is inside the attack mode's search range (the
-        whole map in Hunt) does it fall back to the general rule, which leaves the nearest
-        enemy structure. On the way, once an enemy has seen it, it takes whatever it can
-        blow up nearest instead (takeNearerTargetWhenSeen). An explicit order still sends it
-        at anything canAttack() accepts. With GameOptionsClass::saboteurVehicleHunt off this
-        is the general search of every unit.
+        A Saboteur's own search takes the nearest thing it may blow up, enemy building or
+        vehicle alike (a vehicle is a ground unit that is neither infantry nor a sandworm, so
+        harvesters and MCVs count and aircraft do not; walls and parks come last). It is the
+        general search of every unit; the pick is remembered so that only it is replaced when
+        something nearer turns up on the way. An explicit order still sends it at anything
+        canAttack() accepts.
         \return the target to sabotage, or nullptr
     */
     const ObjectBase* findTarget() const override;
@@ -75,7 +73,6 @@ public:
     void markReleased();
 
 private:
-    const ObjectBase* findOwnTarget() const;
     void takeNearerTargetWhenSeen();
 
     bool detonated = false;     ///< Set as it blows up its target; never saved, it is gone that cycle.

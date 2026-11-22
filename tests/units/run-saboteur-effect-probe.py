@@ -10,9 +10,9 @@ Reported per arm: the share of Saboteurs that destroy a vehicle, the share that 
 anything, the credit value destroyed per Saboteur, and how many die or idle with nothing
 destroyed. The paired difference on - off has a 95% bootstrap interval (tests/ai/match_score.py).
 
-The test fails unless, for each owner, the rule raises the share of Saboteurs that destroy a
-vehicle with the whole interval above 0, and neither the share that destroy anything nor the
-credits destroyed per Saboteur is lower with the rule on.
+The test fails unless, for each owner, the rule raises the share of Saboteurs that destroy
+something (building or vehicle) with the whole interval above 0, and the credits destroyed
+per Saboteur are not lower with the rule on. The share destroying a vehicle is reported only.
 
 Requires the existing Ninja Release build and bundled game assets. Uses an isolated profile and
 dummy SDL drivers. trials.csv, summary.txt, logs and the executable are kept in --output-dir.
@@ -139,9 +139,9 @@ def report():
             values = [scale * (measures(pair['on'])[name] - measures(pair['off'])[name]) for pair in pairs.values()]
             low, high = match_score.bootstrap(values, 20261122)
             lines.append(f'  on - off, {text}: {statistics.mean(values):+.1f} (95% interval {low:+.1f} to {high:+.1f})')
-            if check and name == 'vehicle' and low <= 0:
-                failures.append(f'{title}: the rule does not raise the share destroying a vehicle ({low:+.1f} to {high:+.1f})')
-            if check and name != 'vehicle' and statistics.mean(values) < 0:
+            if check and name == 'any' and low <= 0:
+                failures.append(f'{title}: the rule does not raise the share destroying anything ({low:+.1f} to {high:+.1f})')
+            if check and name == 'value' and statistics.mean(values) < 0:
                 failures.append(f'{title}: with the rule on, {text} is lower ({statistics.mean(values):+.1f})')
         lines.append('')
 
@@ -157,8 +157,8 @@ def report():
     print(text)
     if failures:
         raise RuntimeError('; '.join(failures))
-    print('Saboteur vehicle hunt: for every owner more Saboteurs destroy a vehicle with the rule on, and neither '
-          'the share destroying anything nor the credits destroyed fall. '
+    print('Saboteur hunt: for every owner more Saboteurs destroy something with the rule on, and the credits '
+          'destroyed do not fall. '
           'Results: ' + str(out))
 
 

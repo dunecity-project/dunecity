@@ -236,15 +236,19 @@ bool Saboteur::canAttack(const ObjectBase* object) const {
 }
 
 const ObjectBase* Saboteur::findTarget() const {
-    const ObjectBase* pick = findOwnTarget();
+    // Buildings and vehicles alike, whichever is nearest (walls and parks last): the general
+    // search over what canAttack() accepts. The pick is remembered so that only it, never a
+    // target the owner ordered, is replaced on the way (takeNearerTargetWhenSeen).
+    const ObjectBase* pick = InfantryBase::findTarget();
     ownPick = pick != nullptr ? pick->getObjectID() : NONE_ID;
     return pick;
 }
 
 void Saboteur::takeNearerTargetWhenSeen() {
     // A Saboteur is invisible until an enemy object is within two tiles; from then on it is shot
-    // at. It does not walk on past that object to a vehicle further off: it blows up the nearest
-    // thing it can. Only its own pick is replaced, never a target its owner ordered.
+    // at. If something it can blow up is by then nearer than its pick (a vehicle that drove up,
+    // a building put down since), it takes that instead of walking on under fire. Only its own
+    // pick is replaced, never a target its owner ordered.
     if((currentGame->getGameCycleCount() + getObjectID()) % 8 != 0) {
         return;
     }
@@ -278,53 +282,6 @@ void Saboteur::takeNearerTargetWhenSeen() {
         doAttackObject(nearest, true);
         ownPick = nearest->getObjectID();
     }
-}
-
-const ObjectBase* Saboteur::findOwnTarget() const {
-    if(!keepsOwnHunt()) {
-        // The rule up to 1.0.876: the nearest thing it may attack, structure or vehicle.
-        return InfantryBase::findTarget();
-    }
-
-    // The search range of each attack mode, as in ObjectBase::findTarget().
-    int range = 0;
-    bool wholeMap = false;
-    switch(attackMode) {
-        case GUARD:
-        case HOLD:      range = getWeaponRange();   break;
-        case AREAGUARD: range = 10;                 break;
-        case AMBUSH:    range = getViewRange();     break;
-        case HUNT:      wholeMap = true;            break;
-        default:        return InfantryBase::findTarget();
-    }
-
-    if(currentGameMap->tileExists(location)) {
-        const UnitBase* nearest = nullptr;
-        FixPoint nearestDistance = FixPt_MAX;
-        for(const UnitBase* unit : unitList) {
-            // canAttack() admits ground units that are neither infantry nor a sandworm, and structures.
-            if(!unit->isActive() || !currentGameMap->tileExists(unit->getLocation()) || !canAttack(unit)) {
-                continue;
-            }
-            const FixPoint distance = blockDistance(location, unit->getLocation());
-            if(!wholeMap && distance > FixPoint(range)) {
-                continue;
-            }
-            if(distance < nearestDistance
-               || (distance == nearestDistance && nearest != nullptr
-                   && unit->getObjectID() < nearest->getObjectID())) {
-                nearest = unit;
-                nearestDistance = distance;
-            }
-        }
-        if(nearest != nullptr) {
-            ++targetSearchStats.searches;
-            return nearest;
-        }
-    }
-
-    // No vehicle to go for: the general search, which leaves the nearest enemy structure.
-    return InfantryBase::findTarget();
 }
 
 void Saboteur::destroy()
