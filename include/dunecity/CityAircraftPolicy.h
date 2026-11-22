@@ -439,7 +439,8 @@ inline FixPoint airplaneHeadingSpeed(FixPoint axisSpeed, int headingFrame) {
 // The plane keeps its course: it bombs only what lies under it. On every second
 // sprite tick (6.25 cycles, the time it needs for one tile on an axis heading) it
 // looks kBombSightDistance ahead; if an enemy building stands there and it has a
-// bomb, it drops one. The numbers come from the Dune City mod's ObjectData.ini:
+// bomb, it drops one (none for a building the bombs already falling will destroy).
+// The numbers come from the Dune City mod's ObjectData.ini:
 // a bomb does kBombDamage = 100, so two bombs take a Wind Trap, a zone, a turret
 // or a Heavy Factory (200) and a Spice Silo (150), while a Construction Yard (400)
 // needs four, a Refinery (450) or Radar (500) five and a Palace (1000) ten. A full

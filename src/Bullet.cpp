@@ -20,6 +20,7 @@
 #include <units/UnitBase.h>
 #include <units/Trooper.h>
 #include <units/AmbientAirplane.h>
+#include <sand.h>
 #include <dunecity/CityAircraftPolicy.h>
 #include <Achievements/AchievementEvents.h>
 #include <mod/ModManager.h>
@@ -839,7 +840,24 @@ case Bullet_LargeRocket: {
         } break;
 
         case Bullet_Bomb: {
+            const ObjectBase* building = nullptr;
+            if(const Tile* tile = currentGameMap->tileExists(position.x/TILESIZE, position.y/TILESIZE)
+                   ? currentGameMap->getTile(position.x/TILESIZE, position.y/TILESIZE) : nullptr;
+               tile != nullptr && tile->hasAGroundObject() && tile->getGroundObject()->isAStructure()
+               && tile->getGroundObject()->getHealth() > 0) {
+                building = tile->getGroundObject();
+            }
             currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
+            if(building != nullptr && building->getHealth() <= 0) {
+                // One line per building a bomb destroys, for the match tables (tests/ai/city-plane-report.py).
+                std::string name = getItemNameByID(building->getItemID());
+                std::replace(name.begin(), name.end(), ' ', '_');
+                SDL_Log("CITY_PLANE_KILL: house=%d target_house=%d target_item=%d target_name=%s price=%d cycle=%u",
+                        houseID, building->getOwner()->getHouseID(), building->getItemID(),
+                        name.c_str(),
+                        currentGame->objectData.data[building->getItemID()][building->getOriginalHouseID()].price,
+                        currentGame->getGameCycleCount());
+            }
             soundPlayer->playSoundAt(Sound_ExplosionMedium, position);
             const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1,Explosion_Medium2});
             currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));

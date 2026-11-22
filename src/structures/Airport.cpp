@@ -104,6 +104,9 @@ void Airport::updateCityAircraft() {
         // the plane already westbound instead of running the take-off east.
         if (start.x > currentGameMap->getSizeX() - 20) unit->beginWestboundCruise();
         else                                           unit->beginTakeoff();
+        // One line per event for the match tables (tests/ai/city-plane-report.py).
+        SDL_Log("CITY_PLANE_LAUNCHED: house=%d object=%u cycle=%u", owner->getHouseID(), unit->getObjectID(),
+                currentGame->getGameCycleCount());
         AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1,
             "city_aircraft_spawned", AITelemetry::Record().set("airport", objectID)
                 .set("object", unit->getObjectID()).set("item", Unit_AmbientAirplane)
@@ -159,6 +162,8 @@ void Airport::updateStructureSpecificStuff() {
         unit->doSetAttackMode(owner->isAI() ? STOP : GUARD);
         patrol.deployed(getMaxSpawnTimer());
         ++spawned;
+        SDL_Log("CITY_PLANE_PATROL: house=%d object=%u cycle=%u", owner->getHouseID(), unit->getObjectID(),
+                currentGame->getGameCycleCount());
         AITelemetry::log().write(currentGame->getGameCycleCount(),owner->getHouseID(),-1,
             "airport_unit_spawned",AITelemetry::Record().set("airport",objectID)
                 .set("object",unit->getObjectID()).set("item",Unit_Ornithopter).set("x",spot.x).set("y",spot.y));

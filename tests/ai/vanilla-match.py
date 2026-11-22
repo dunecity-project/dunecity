@@ -110,6 +110,14 @@ SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehi
                    'orders', 'overwrites', 'refused', 'killer', 'killer_item', 'killer_house', 'target_dist', 'mode',
                    'order', 'caller', 'busy', 'from', 'to')
 SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
+# One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
+# building a bomb destroyed, a plane shot down, and an Ornithopter an Airport sent out on
+# patrol (tests/ai/city-plane-report.py).
+PLANE_EVENTS = (('CITY_PLANE_LAUNCHED:', 'launched'), ('CITY_PLANE_BOMB:', 'bomb'), ('CITY_PLANE_KILL:', 'kill'),
+                ('CITY_PLANE_DOWN:', 'down'), ('CITY_PLANE_PATROL:', 'patrol'))
+PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name', 'price', 'killer_house',
+                'killer_item', 'bombs', 'cycle')
+PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
 
@@ -363,6 +371,14 @@ def play(args, scratch, binary, key):
                 saboteurs.append({**dict(zip(KEY, key)), 'event': event,
                                   **{f: data.get(f, '') for f in SABOTEUR_FIELDS}})
     append(results / 'saboteurs.csv', SABOTEUR_ROW_FIELDS, saboteurs)
+    planes = []
+    for l in lines:
+        for marker, event in PLANE_EVENTS:
+            if marker in l:
+                data = parse(l, marker)
+                planes.append({**dict(zip(KEY, key)), 'event': event,
+                               **{f: data.get(f, '') for f in PLANE_FIELDS}})
+    append(results / 'planes.csv', PLANE_ROW_FIELDS, planes)
     append(results / 'houses.csv', HOUSE_ROW_FIELDS, house_rows)
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)

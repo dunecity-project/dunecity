@@ -314,6 +314,10 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     SDL_Log("City airplane of house %d shot down at %d,%d by house %d (cycle %u): Death Hand impact",
             getOwner()->getHouseID(), at.x / TILESIZE, at.y / TILESIZE, credited->getHouseID(),
             currentGame->getGameCycleCount());
+    const ObjectBase* shooter = currentGame->getObjectManager().getObject(shooterID);
+    SDL_Log("CITY_PLANE_DOWN: house=%d object=%u killer_house=%d killer_item=%d bombs=%d cycle=%u",
+            getOwner()->getHouseID(), objectID, credited->getHouseID(), shooter ? shooter->getItemID() : -1, bombs,
+            currentGame->getGameCycleCount());
     Bullet::detonateDeathHand(shooterID, credited, at, DynastyProjectile::deathHandDamage, false, provenance);
 }
 
@@ -458,9 +462,17 @@ void AmbientAirplane::dropBomb(Uint32 gameCycle)
     const ObjectBase* building = tile->getGroundObject();
     if(building == nullptr || !building->isAStructure() || building->getHealth() <= 0
        || building->getOwner()->getTeamID() == owner->getTeamID()) return;
+    // No bomb for a building the bombs already falling on it will destroy.
+    int falling = 0;
+    for(const Bullet* bullet : bulletList) {
+        if(bullet->getBulletID() == Bullet_Bomb && bullet->getTarget() == building) falling += bullet->getDamage();
+    }
+    if(building->getHealth() <= falling) return;
 
     bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kBombDamage, false, building));
     --bombs;
+    SDL_Log("CITY_PLANE_BOMB: house=%d object=%u target_house=%d target_item=%d cycle=%u", owner->getHouseID(),
+            objectID, building->getOwner()->getHouseID(), building->getItemID(), gameCycle);
 }
 
 bool AmbientAirplane::update()
