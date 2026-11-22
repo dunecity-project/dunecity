@@ -245,9 +245,23 @@ void Saboteur::takeNearerTargetWhenSeen() {
     // A Saboteur is invisible until an enemy object is within two tiles; from then on it is shot
     // at. It does not walk on past that object to a vehicle further off: it blows up the nearest
     // thing it can. Only its own pick is replaced, never a target its owner ordered.
+    if((currentGame->getGameCycleCount() + getObjectID()) % 8 != 0) {
+        return;
+    }
     const ObjectBase* current = target.getObjPointer();
-    if(current == nullptr || target.getObjectID() != ownPick
-       || (currentGame->getGameCycleCount() + getObjectID()) % 8 != 0) {
+    if(current == nullptr) {
+        // Its target is gone (destroyed by someone else, lifted by a carryall, driven into a
+        // refinery). The general rule only looks for the next one after the walk to where the
+        // old one stood, usually among its escorts. A Saboteur on its own hunt looks at once;
+        // one walking where its owner sent it (a forced move, a hunt-toward goal) does not.
+        if(!target && !attackPos && !forced && moving && !isHuntingToward()) {
+            if(const ObjectBase* next = findTarget()) {
+                doAttackObject(next, true);
+            }
+        }
+        return;
+    }
+    if(target.getObjectID() != ownPick) {
         return;
     }
     bool seen = false;

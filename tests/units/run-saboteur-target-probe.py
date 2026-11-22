@@ -3,9 +3,11 @@
 
 A Palace releases a Saboteur for a human house and for a QuantBot house. It must walk to
 the nearest enemy vehicle (harvesters and MCVs included, aircraft and infantry not) and
-blow it up, passing a nearer structure and a nearer soldier; with no vehicle on the map it
-takes the nearest structure, and with nothing to sabotage it waits in Guard. An explicit
-order and Area Guard are covered too (tests/units/saboteur-target-probe.inc).
+blow it up, passing a nearer structure and a nearer soldier that are not on its way; a
+building that sees it on the way is blown up instead; with no vehicle on the map it takes
+the nearest structure, and with nothing to sabotage it waits in Guard. An explicit order
+(kept even past a building that sees it) and Area Guard are covered too
+(tests/units/saboteur-target-probe.inc).
 
 Requires the existing Ninja Release build and bundled game assets. Uses an isolated
 profile and dummy SDL drivers. Logs and the test executable are retained in --output-dir.
