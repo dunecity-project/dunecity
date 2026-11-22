@@ -1,3 +1,35 @@
+## 2026-11-22 - 1.0.876 published
+
+`v1.0.876` is an annotated tag on `18efc0e8fe8800949e856f17b2f16189d86c55f8` (branch
+`integrate/feature-batch`), pushed 18:01 AEDT after the owner's "set easiest as the default ... then publish".
+Evidence: `~/Documents/projects/outputs/release-1.0.876/` (`gates.md`, `channels.md`). Notes:
+`releases/desktop/1.0.876.md`. Network protocol 132, save format 9888.
+
+- Content since 1.0.875: QuantBot Easiest (`qBotEasiest`, `EasiestPolicy.h`) and Easiest as the default enemy of
+  the campaign, Skirmish and Custom Game menus; Restart on New Difficulty in the in-game menu
+  (`EnemyDifficultyPolicy.h`, `docs/easier-enemy-restart.md`); campaign opponent tiers (Easy 1.5x army, Medium
+  air raids, Hard/Brutal silos, smaller Easiest waves; `docs/campaign-ai-difficulty-matrix.md`); Parks; the
+  residential-only Palace; the city economy package and PalaceDenseClearing on by default; the first-launch mod
+  tip; the anonymous installation id in match analytics.
+- Three things failed in staging before the candidate and were fixed first: twelve city-economy/defence
+  switches missing from `tests/ai/genome-registry.json` (seven integration tests; 7b951371a); and two nightly
+  probes broken by the economy defaults, `quantbot_growth_installments` (a growth-capped yard saved for a Palace
+  instead of buying the Stadium's prerequisite) and `quantbot_whole_army_dispatch` (stale for MassHold), fixed by
+  the owning session in 18efc0e8f. Lesson: a default flip needs the nightly tier, not only the four AI gates.
+- Tested at 18efc0e8f: AWS Linux headless nightly suite 240/240 (job 20261122T170551-release-1.0.876-4e4375);
+  the four AI gates and the two probes (job 20261122T170323-ctest-9815f8); Mini perf_regression (102.2 s; one
+  earlier run failed by 1-2% while another session was encoding video); integration CI run 44992221315; Mac
+  qualification run 44993182336 (reuse-qualification passed).
+- Tag build run 44996347179 passed every job on attempt 1; build.yml was unchanged since 1.0.875, so its hash
+  was already bound on the Mini. The Mini pointer was parked at the bottom screen edge (456,1079); centred before
+  the tag.
+- Verified live: GitHub release (Latest, 25 assets, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (1.0.876/18efc0e8f, hashes match; Chrome reached the main menu), website links and
+  What's New. TestFlight not part of this release; Android held. Both AWS workers stopped.
+- Website: the usage page has "How often players win" and counts `ai_difficulty` "easiest" as its own row
+  (VR48/dunelegacy.com PR 30). With Easiest the default, watch that row and the custom 1v1 win share.
+- Not measured: the effect of the tier changes and of the Easiest default on real players' win rates.
+
 ## 2026-11-21 - Next batch: anonymous installation id in match analytics
 
 Stefan asked for daily player counts and unique players on the usage page. Browser ("Player") and
