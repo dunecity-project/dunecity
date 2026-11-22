@@ -1894,8 +1894,19 @@ positive on Palaces and tax, and it is the behaviour fix for the mature-city fai
 FinishWhenLeading precedent: a level behaviour fix, not a looser threshold). `perf_regression` passes
 on the Mini at `ea8d768e0` (CPU mean 0.032/0.250, house p99 0.044/1.000, house max 2.264/10.000,
 eight-house CPU p99 1.235/1.600, frame CPU p99 4.070/5.500, main-loop frame p99 4.710/8.000).
-`PalaceTurrets` stays off; it now waits for Palace and reactor savings (`ea8d768e0`) and is being
-re-screened.
+The five gates pass at `ea8d768e0` (`quantbot_all_against_atreides` 6/6,
+`quantbot_all_against_atreides_dune2r`, `quantbot_ffa_army_deploys`, `quantbot_scenario_matrix`,
+`dunelegacy_tests`), as they did at `67225b6bc` with the residential-only Palace.
+
+**PalaceTurrets re-screen** (waiting for Palace and reactor savings; `ea8d768e0`, against the new
+default with dense clearing on, 668 games per arm): placement +0.003 [-0.008, +0.013] (handmade
++0.003, Brutal v Hard -0.004, weak seat 128 +0.009, 160 +0.006, all level). On the handmade maps it
+still builds 0.63 fewer Palaces [-1.18, -0.15] (control 4.47 a game), 0.61 fewer standing at the end
+[-1.16, -0.13], loses 0.02 fewer [-0.10, +0.05] (control 0.22), tax -494 [-1,155, +114]. The guard
+does not pay for itself where Palaces are rarely lost (in these games 5% of them, from any cause);
+the turrets also take tiles in the districts that lots and the next Palace's footprint would use.
+**`PalaceTurrets` stays off**, kept as the switch for games where ornithopters do hunt Palaces
+(Stefan's `notdefendpalace`, where it kept a Palace alive).
 
 ### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
 
