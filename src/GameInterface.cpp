@@ -416,7 +416,9 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
         const int itemID = kBuilderShortcutTypes[i];
         TextButton& button = builderButtons[i];
         button.setText(builderShortcutLabel(itemID));
-        button.setTooltipText(fmt::sprintf(_("Open the build menu of your least busy %s"), resolveItemName(itemID)));
+        button.setTooltipText(itemID == Structure_Airport
+            ? _("Select your Airport: buy city airplanes there")
+            : fmt::sprintf(_("Open the build menu of your least busy %s"), resolveItemName(itemID)));
         button.setOnClick([itemID]() { currentGame->selectBuilderOfType(itemID); });
         button.setVisible(false);
         windowWidget.addWidget(&button, Point(getRendererWidth() - sideBar.getSize().x + 24, builderRowsTop),

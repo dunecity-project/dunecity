@@ -6059,13 +6059,25 @@ void Game::selectBuilderOfType(int itemID)
 {
     // The sidebar shortcut opens the build menu of the local house's least busy builder of
     // this type (fewest queued orders, then the oldest). The view stays where it is.
-    const BuilderBase* best = nullptr;
-    for(const StructureBase* pStructure : structureList) {
-        if(pStructure->getOwner() != pLocalHouse || pStructure->getItemID() != itemID) continue;
-        const auto* pBuilder = dynamic_cast<const BuilderBase*>(pStructure);
-        if(pBuilder != nullptr && (best == nullptr || pBuilder->getProductionQueueSize() < best->getProductionQueueSize())) {
-            best = pBuilder;
+    // The Airport is no builder: its shortcut selects the local house's first Airport that can
+    // sell a city airplane now, else its first Airport, so the Buy button is one click away.
+    const StructureBase* best = nullptr;
+    if(itemID == Structure_Airport) {
+        for(const StructureBase* pStructure : structureList) {
+            if(pStructure->getOwner() != pLocalHouse || pStructure->getItemID() != itemID) continue;
+            const bool sells = static_cast<const Airport*>(pStructure)->canBuyAirplane();
+            if(best == nullptr || (sells && !static_cast<const Airport*>(best)->canBuyAirplane())) best = pStructure;
         }
+    } else {
+        const BuilderBase* builder = nullptr;
+        for(const StructureBase* pStructure : structureList) {
+            if(pStructure->getOwner() != pLocalHouse || pStructure->getItemID() != itemID) continue;
+            const auto* pBuilder = dynamic_cast<const BuilderBase*>(pStructure);
+            if(pBuilder != nullptr && (builder == nullptr || pBuilder->getProductionQueueSize() < builder->getProductionQueueSize())) {
+                builder = pBuilder;
+            }
+        }
+        best = builder;
     }
     if(best == nullptr) {
         return;
