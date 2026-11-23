@@ -577,18 +577,23 @@ inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
 // A raid (Stefan, 2026-11-23: "if the ai has heaps and heaps of money then spawning 10 could be
 // useful to break up the enemy base"). Against turrets that fire, single planes stop paying and
 // purchasePays() ends the buying; ten at once saturate the turrets under them. A computer player
-// with a surplus (credits beyond its reserves and cash floor) of twice a full wave starts one
-// while it has no bought plane in the air, and keeps buying, one per Airport and build pass,
-// while its last purchase is no older than kRaidContinueMs and its surplus is still above one
-// wave's price: about ten planes, 15,000 credits, a wave. The next wave waits until the last
-// bought plane is gone and the surplus is back.
+// with a surplus (credits beyond its reserves and cash floor) of twice a full wave's price starts
+// a wave when it has no bought plane in the air and its last raid purchase is kRaidPauseMs old.
+// The wave is kMaxPlanesPerHouse planes, bought one per Airport and build pass while the last
+// purchase is no older than kRaidContinueMs, and then it is over: 15,000 credits every two
+// minutes at most. The count and the clock are kept with the House and saved. (The first form
+// stopped on the surplus alone; a house with a million credits bought 819 planes in six minutes.)
 inline constexpr int kRaidStartSurplus = 2 * kMaxPlanesPerHouse * kPlanePrice;   // 30,000
-inline constexpr int kRaidStopSurplus = kMaxPlanesPerHouse * kPlanePrice;        // 15,000
 inline constexpr int kRaidContinueMs = 15000;
-/// `surplus`: credits beyond reserves and floor; `boughtInAir`: the house has a bought plane
-/// flying; `boughtJustNow`: its last purchase was within kRaidContinueMs.
-inline constexpr bool raidBuys(int64_t surplus, bool boughtInAir, bool boughtJustNow) {
-    return boughtJustNow ? surplus >= kRaidStopSurplus : (!boughtInAir && surplus >= kRaidStartSurplus);
+inline constexpr int kRaidPauseMs = 120000;
+/// A wave may start: `surplus` credits beyond reserves and floor, no bought plane flying, and
+/// `sinceLastMs` since the last raid purchase (a house that never raided: a large number).
+inline constexpr bool raidStarts(int64_t surplus, bool boughtInAir, int64_t sinceLastMs) {
+    return !boughtInAir && sinceLastMs >= kRaidPauseMs && surplus >= kRaidStartSurplus;
+}
+/// The wave under way goes on: `bought` planes so far, the last `sinceLastMs` ago.
+inline constexpr bool raidContinues(int bought, int64_t sinceLastMs) {
+    return bought > 0 && bought < kMaxPlanesPerHouse && sinceLastMs <= kRaidContinueMs;
 }
 
 // ---------------------------------------------------------------------------

@@ -40,9 +40,9 @@ Airport::Airport(InputStream& stream) : StructureBase(stream) {
     // a 3x3 claim. init() ran before this was known, so the footprint is set again here.
     compact = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRPORT_4X4 ? stream.readBool() : true;
     structureSize = compact ? Coord(3, 3) : Coord(4, 4);
-    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRPORT_FREE_PLANE_CLOCK) {
-        freePlaneTimer = std::max(0, stream.readSint32());
-    }
+    // An older save's Airport starts with a full clock, whatever init() made of the cycle count.
+    freePlaneTimer = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRPORT_FREE_PLANE_CLOCK
+        ? std::max(0, stream.readSint32()) : freePlaneCharge();
 }
 
 int Airport::freePlaneCharge() {
@@ -57,7 +57,11 @@ void Airport::init() {
     // and draws the same sprite cell scaled into its tiles (StructureBase::blitToScreen).
     structureSize = compact ? Coord(3, 3) : Coord(4, 4);
     graphicID = ObjPic_Airport;
-    freePlaneTimer = freePlaneCharge();   // charges from the day it is built, as a Palace does
+    // An Airport built during the game has its free plane ready at once (Stefan, 2026-11-23:
+    // "when you build an airport you should get one"). One that stands when the game begins, on
+    // a scenario map or in a generated city, charges first, so that no house bombs in the
+    // first five minutes.
+    freePlaneTimer = currentGame->getGameCycleCount() > 0 ? 0 : freePlaneCharge();
     graphic   = pGFXManager->getObjPic(graphicID, getOwner()->getHouseID());
     numImagesX = DuneCity::CitySprites::specialFrames;
     numImagesY = 1;

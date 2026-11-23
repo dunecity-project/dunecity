@@ -383,6 +383,9 @@ void House::save(OutputStream& stream) const {
 // RaidRecord): QuantBot's AirRaidTurrets rule reads it, so a loaded game must answer a raid
 // exactly as the saved one would have. At most 10 + 8 x 8 bytes.
 void House::saveAirRaid(OutputStream& stream) const {
+    stream.writeUint8(planeRaidBought);
+    stream.writeUint32(planeRaidLastCycle);
+    stream.writeBool(planeRaidEver);
     stream.writeUint32(airRaid.lastHitCycle);
     stream.writeUint32(airRaid.lastTurretCycle);
     stream.writeUint8(airRaid.turretsOrdered);
@@ -396,6 +399,9 @@ void House::saveAirRaid(OutputStream& stream) const {
 
 void House::loadAirRaid(InputStream& stream) {
     airRaid = QuantBotAirDefencePolicy::RaidRecord();
+    planeRaidBought = stream.readUint8();
+    planeRaidLastCycle = stream.readUint32();
+    planeRaidEver = stream.readBool();
     airRaid.lastHitCycle = stream.readUint32();
     airRaid.lastTurretCycle = stream.readUint32();
     airRaid.turretsOrdered = stream.readUint8();

@@ -121,7 +121,8 @@ SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on
 # patrol, and a plane an Airport sold (tests/ai/city-plane-report.py).
 PLANE_EVENTS = (('CITY_PLANE_LAUNCHED:', 'launched'), ('CITY_PLANE_BOMB:', 'bomb'), ('CITY_PLANE_KILL:', 'kill'),
-                ('CITY_PLANE_DOWN:', 'down'), ('CITY_PLANE_PATROL:', 'patrol'), ('CITY_PLANE_BOUGHT:', 'bought'))
+                ('CITY_PLANE_DOWN:', 'down'), ('CITY_PLANE_PATROL:', 'patrol'), ('CITY_PLANE_BOUGHT:', 'bought'),
+                ('CITY_AIR_DEFENCE:', 'air_defence'))
 PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name', 'price', 'killer_house',
                 'killer_item', 'bombs', 'released', 'bought', 'cycle')
 PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS

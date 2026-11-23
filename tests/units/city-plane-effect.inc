@@ -622,6 +622,29 @@ void checkAirport(const std::string& mapData) {
 // checks: the stick (City Plane Carpet Bombing)
 // ---------------------------------------------------------------------------------------------
 
+// Stefan, 2026-11-23: "when you build an airport you should get one". An Airport that stands when
+// the game begins charges for five minutes first (checkAirport: launches at 5:00 and 10:00); one
+// placed during the game has its free plane ready and launches it at its next five-second tick.
+void checkAirportBuiltPlane(const std::string& mapData) {
+    auto game = newGame(mapData, 19, Rules{true, true, false, true, true});
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
+    for(int i = 0; i < 10; ++i) game->updateGameState();
+    auto* airport = dynamic_cast<Airport*>(place(owner, Structure_Airport, Coord(30, 30)));
+    require(airport != nullptr && airport->getFreePlaneTimer() == 0, "An Airport built during the game has no free plane ready");
+    int launchedAfter = -1;
+    for(int cycle = 0; cycle < MILLI2CYCLES(10000) && launchedAfter < 0; ++cycle) {
+        game->updateGameState();
+        if(owner->getNumItems(Unit_AmbientAirplane) > 0) launchedAfter = cycle;
+    }
+    record("airport_built", "free plane launched " + std::to_string(launchedAfter) + " cycles after the Airport was placed; next in "
+                                + std::to_string(airport->getFreePlaneTimer()) + " cycles");
+    require(launchedAfter >= 0, "An Airport built during the game did not launch its free plane within ten seconds");
+    require(airport->getFreePlaneTimer() > MILLI2CYCLES(4 * 60 * 1000), "The launch did not restart the five-minute clock");
+    game.reset();
+    currentGame = nullptr;
+}
+
 void checkStick(const std::string& mapData) {
     std::vector<int> health;
     // One run each over a Wind Trap (200), a Rocket Turret (200, one tile), a Construction Yard
@@ -1261,6 +1284,7 @@ int runCityPlaneEffect() {
     checkSavedBombLoad(mapData, false);
     checkSavedBombLoad(mapData, true);
     checkAirport(mapData);
+    checkAirportBuiltPlane(mapData);
     checkHoldFire(mapData);
     checkRocketChase(mapData);
     checkStick(mapData);

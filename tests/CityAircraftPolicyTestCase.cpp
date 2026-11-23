@@ -473,13 +473,16 @@ TEST_CASE("A computer player buys planes only when its own planes have paid", "[
 
 TEST_CASE("A computer player with heaps of money sends a wave of ten", "[city][aircraft]") {
     using namespace DuneCity::CityAircraft;
-    // A wave starts only on twice its price in surplus and with no bought plane in the air.
-    CHECK_FALSE(raidBuys(kRaidStartSurplus - 1, false, false));
-    CHECK(raidBuys(kRaidStartSurplus, false, false));
-    CHECK_FALSE(raidBuys(1000000, true, false));
-    // Once begun it goes on while the last purchase is fresh and one wave's price is left.
-    CHECK(raidBuys(kRaidStopSurplus, true, true));
-    CHECK_FALSE(raidBuys(kRaidStopSurplus - 1, true, true));
-    CHECK(kRaidStartSurplus - kRaidStopSurplus == kMaxPlanesPerHouse * kPlanePrice);
+    // A wave starts on twice its price in surplus, with no bought plane in the air, two minutes
+    // after the last raid purchase.
+    CHECK_FALSE(raidStarts(kRaidStartSurplus - 1, false, kRaidPauseMs));
+    CHECK(raidStarts(kRaidStartSurplus, false, kRaidPauseMs));
+    CHECK_FALSE(raidStarts(1000000, true, kRaidPauseMs));
+    CHECK_FALSE(raidStarts(1000000, false, kRaidPauseMs - 1));
+    // It is ten planes, each within fifteen seconds of the one before, however rich the house.
+    CHECK_FALSE(raidContinues(0, 0));
+    CHECK(raidContinues(1, kRaidContinueMs));
+    CHECK(raidContinues(kMaxPlanesPerHouse - 1, 0));
+    CHECK_FALSE(raidContinues(kMaxPlanesPerHouse, 0));
+    CHECK_FALSE(raidContinues(5, kRaidContinueMs + 1));
 }
-
