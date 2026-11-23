@@ -495,10 +495,21 @@ void researchWriteLegacyLayout(Game& game, Uint32 version, const std::string& fi
         OMemoryStream house; house.open(); owner->save(house);
         const std::string encoded(house.getData(), house.getDataLength());
         const auto offset = bytes.find(encoded);
-        researchRequire(encoded.size() > 17 && offset != std::string::npos
+        // Everything a House has gained since these formats, last field first: the air raid
+        // record (9898) at its very end, before it the 17 bytes of research payment terms, and
+        // the Repair Yard "Return units" flag (9893) right after the auto-repair flag, the
+        // fourth byte of the record (house, team, auto repair, return units).
+        static_assert(SAVEGAMEVERSION_AIR_RAID_RECORD > 9883 && SAVEGAMEVERSION_REPAIR_RETURN > 9883,
+                      "Synthetic legacy layouts predate the air raid record and the Return units flag");
+        OMemoryStream raid; raid.open(); owner->saveAirRaid(raid);
+        const std::size_t tail = 17 + raid.getDataLength();
+        researchRequire(encoded.size() > tail + 4 && offset != std::string::npos
             && bytes.find(encoded, offset + 1) == std::string::npos,
             "Synthetic legacy fixture could not identify exactly one serialized House");
-        bytes.erase(offset + encoded.size() - 17, 17);
+        researchRequire(Uint8(encoded[0]) == Uint8(owner->getHouseID()) && Uint8(encoded[3]) == Uint8(owner->isRepairReturnEnabled()),
+                        "Synthetic legacy fixture did not find the Return units flag where a House saves it");
+        bytes.erase(offset + encoded.size() - tail, tail);
+        bytes.erase(offset + 3, 1);
     }
     // 9887 added the mission objectives between the win/lose flags and the map; 9882 and 9883
     // have none, so their loader would read these bytes as map data. The objectives followed
@@ -564,6 +575,11 @@ void researchLegacyLayouts(const std::string& out, std::ostream& results) {
             && owner->getTechResearchTotalCycles() == remaining && owner->getTechResearchTotalCost() == cost
             && owner->getTechResearchPaid() == cost && !owner->isTechResearchPaused() && researchBalance(owner) == 0,
             "Synthetic 9882/9883 full save changed old rules or an already-paid longer timer");
+        // Formats before 9893 have no "Return units" flag and before 9898 no air raid record:
+        // every house flies repaired units back, as Repair Yards always did, and has not been bombed.
+        for(int id = 0; id < NUM_HOUSES; ++id) if(const auto* house = game->getHouse(id))
+            researchRequire(house->isRepairReturnEnabled() && house->airRaid.lastHitCycle == 0 && house->airRaid.hitCount == 0,
+                            "A synthetic 9882/9883 house did not load with Return units on and no air raid record");
         const auto state = researchSnapshot(owner);
         researchRequire(game->saveGame(prefix + "-resaved.dls"), "Legacy timer could not resave as the current format");
         researchEnd(game);
