@@ -27,6 +27,7 @@
 #include <mod/ModManager.h>
 #include <Menu/CustomGameMenu.h>
 #include <Menu/CustomGamePlayers.h>
+#include <Menu/PlaySetup.h>
 #include <players/PlayerFactory.h>
 #include <misc/FileSystem.h>
 #include <sand.h>
@@ -96,41 +97,51 @@ int runCityPlaneFlights() {
 
     const std::string seats = env("CITY_PLANE_FLIGHTS_SEATS");   // "human": the local player and AIs; "spectate": AIs only
     const std::string mapPath = env("CITY_PLANE_FLIGHTS_MAP");
-    GameInitSettings init;
+    // playCustomGame() (src/Menu/PlaySetup.cpp), the main menu's Custom Game: the saved mod
+    // (Custom Game Mod = dunecity) is activated and its effective options become the rules.
+    CustomPlaySetup setup;
+    setup.rules = initialCustomGameRules();
+    require(ModManager::instance().getActiveModName() == "dunecity", "Custom Game did not activate the saved dunecity mod");
+    setup.maps = {mapPath};
+    setup.map = 0;
+    setup.mods = ModManager::instance().listModChoices();
+    for(size_t i = 0; i < setup.mods.size(); ++i)
+        if(setup.mods[i].matchesSelectionName(ModManager::instance().getActiveModName())) setup.mod = static_cast<int>(i);
+    setup.online = false;
+    setup.sharedHouse = false;
+    setup.spectate = seats == "spectate";
     {
-        // The Custom Game screen: it restores the profile's mod (Custom Game Mod = dunecity) and
-        // that mod's effective options, exactly what a player who opens it gets.
-        CustomGameMenu browser(false);
-        require(ModManager::instance().getActiveModName() == "dunecity", "The Custom Game screen did not select the dunecity mod");
-        auto& options = browser.currentGameOptions;
+        // The map and rules screen as the player opens it.
+        CustomGameMenu browser(false, false, &setup);
+        const auto& options = browser.currentGameOptions;
+        require(options == setup.rules, "The Custom Game screen does not show the setup's rules");
         require(options.cityPlaneDefence && options.cityPlaneBombing && !options.airportOrnithopterPatrol
                     && options.cityPlaneCarpetBombing && options.cityPlaneBombingRuns && options.cityPlanePurchase,
                 "The Custom Game screen does not offer the default city plane rules");
         require(options.startWithExploredMap && !options.fogOfWar, "The mod's options are not explored and fog-free");
-        // The Game Rules window's result for this arm.
-        options.cityPlaneCarpetBombing = rules[0] == '1';
-        options.cityPlaneBombingRuns = rules[1] == '1';
-        options.cityPlanePurchase = rules[2] == '1';
-        // CustomGameMenu::onNext().
-        init = GameInitSettings(getBasename(mapPath, true), readCompleteFile(mapPath),
-                                browser.multiplePlayersPerHouseCheckbox.isChecked(), options);
     }
+    // The Game Rules window's result for this arm.
+    setup.rules.cityPlaneCarpetBombing = rules[0] == '1';
+    setup.rules.cityPlaneBombingRuns = rules[1] == '1';
+    setup.rules.cityPlanePurchase = rules[2] == '1';
+    GameInitSettings init(getBasename(mapPath, true), readCompleteFile(mapPath), setup.multiplePlayersPerHouse(), setup.rules);
     {
-        CustomGamePlayers lobby(init, true, false);
+        CustomGamePlayers lobby(init, true, false, &setup);
         lobby.update();
         require(lobby.numHouses == players, "The lobby does not seat the map's houses");
+        require(lobby.spectating == setup.spectate, "The lobby did not take the Spectate choice");
         const int ai = PlayerFactory::getIndexByPlayerClass("qBotBrutal");
         require(ai >= 0, "Missing QuantBot Brutal");
-        lobby.spectating = seats == "spectate";
         int humans = 0;
         for(int row = 0; row < lobby.numHouses; ++row) {
-            if(lobby.getSeatPlayer(2 * row) == 0 && !lobby.spectating) { ++humans; continue; }   // PLAYER_HUMAN
+            if(lobby.getSeatPlayer(2 * row) == 0) { ++humans; continue; }   // PLAYER_HUMAN keeps its seat
             require(lobby.selectSeatPlayer(2 * row, ai), "The lobby cannot seat QuantBot Brutal");
             lobby.onChangePlayerDropDownBoxes(true, 2 * row);
         }
-        require(humans == (lobby.spectating ? 0 : 1), "The lobby did not seat exactly the local human");
+        require(humans == (setup.spectate ? 0 : 1), "The lobby did not seat exactly the local human");
         lobby.addAllPlayersToGameInitSettings();   // the Start button's last step before the game
         init = lobby.gameInitSettings;
+        require(init.isLocalSpectator() == setup.spectate, "The started game lost the Spectate choice");
     }
     init.randomSeed = static_cast<Uint32>(std::atoi(env("CITY_PLANE_FLIGHTS_SEED").c_str()));
     // The settings travel through their stream as they do into a save or to a peer.
