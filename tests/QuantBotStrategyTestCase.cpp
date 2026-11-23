@@ -4150,23 +4150,23 @@ TEST_CASE("AirThreatTurrets: a baseline before the first bomb, one a minute up t
     REQUIRE(std::string_view(Air::holdName(Air::Hold::ThreatCap)) == "threat_cap");
 }
 
-TEST_CASE("AirThreatTurrets defaults on, round trips and hashes only when off", "[ai][air-raid][config]") {
+TEST_CASE("AirThreatTurrets defaults off, round trips and hashes only when on", "[ai][air-raid][config]") {
     const QuantBotConfig defaults;
-    REQUIRE(defaults.force.airThreatTurrets);
+    REQUIRE_FALSE(defaults.force.airThreatTurrets);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-air-threat-turrets-test.ini";
     {
         std::ofstream file(path);
-        file << "[Force Concentration]\nAirThreatTurrets=false\n";
+        file << "[Force Concentration]\nAirThreatTurrets=true\n";
     }
     QuantBotConfig loaded;
     REQUIRE(loaded.applyOverrides(path.string()));
-    REQUIRE_FALSE(loaded.force.airThreatTurrets);
+    REQUIRE(loaded.force.airThreatTurrets);
     REQUIRE(loaded.force.airRaidTurrets);
     REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
     REQUIRE(loaded.save(path.string()));
     QuantBotConfig restored;
     REQUIRE(restored.applyOverrides(path.string()));
-    REQUIRE_FALSE(restored.force.airThreatTurrets);
+    REQUIRE(restored.force.airThreatTurrets);
     REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     std::filesystem::remove(path);
 }

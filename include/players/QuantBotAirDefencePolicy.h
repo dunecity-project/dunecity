@@ -196,7 +196,18 @@ constexpr const char* holdName(Hold hold) {
 // reserve: in 48 matches that came to 2.35 turrets a game for all four houses together, while
 // bombs took 179 buildings a game in the first ten minutes.
 //
-// With AirThreatTurrets ([Force Concentration], on by default) a house that can be bombed
+// Measured and left off (2026-11-24, 48 paired fully built four-house matches on 45549eced, five
+// minute free plane): with it on the houses ordered 21 anti-air turrets a game (9.2 against the
+// threat, 11.9 against raids) instead of 1.6, and bombs and crashes took the same buildings: 56,
+// 116 and 254 a game by minutes 10, 20 and 45 against 56, 117 and 254; +4 buildings bombed a
+// game (-14 to +23); 86% of flights shot down against 87%. A plane over a city is shot down
+// about three seconds after it arrives whether eleven Rocket Turrets stand there or sixteen, and
+// it has dropped its stick by then, so a handful more do not protect a city. The Rocket Turrets
+// a house had when its first bomb landed were 11 (median) in both arms: the yard was busy and
+// the baseline came to 2.3 turrets a house over a whole game. What lowers the bombing is on the
+// plane's side (how often it comes, how long it lives).
+//
+// With AirThreatTurrets ([Force Concentration], off by default) a house that can be bombed
 // (another team has an Airport or has flown a city airplane, and bombing is on) spreads Rocket
 // Turrets by the same coverage rule before the first bomb lands: one a game minute, until it
 // has kThreatRocketTurrets standing and queued. It pays for these, and for the turrets against

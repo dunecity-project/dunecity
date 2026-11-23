@@ -1054,7 +1054,7 @@ void QuantBot::planAirRaidDefence(BuildPass& pass) {
     airRaidPlan = AirRaidPlan();
     if (!pass.citySimEnabled) return;
     const bool raidSwitch = botConfig().force.airRaidTurrets;
-    // AirThreatTurrets (on by default). Stefan, 2026-11-24: "on skirmish with fully built base the
+    // AirThreatTurrets (off by default, measured: QuantBotAirDefencePolicy.h). Stefan, 2026-11-24: "on skirmish with fully built base the
     // ai doesn't build rocket turret defenes and everyones base gets steamrolled by a plane".
     // DUNECITY_TEST_AIR_THREAT_TURRETS (0 or 1) is an experiment-only override for match arms,
     // read once per process and never a match rule.

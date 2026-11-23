@@ -307,7 +307,7 @@ struct QuantBotConfig {
         bool palaceDenseClearing;              ///< A Palace/Stadium site may demolish own R/C lots of any density.
         bool palaceTurrets;                    ///< Every Palace keeps a Rocket Turret (anti-air) within 5 tiles, never saved for.
         bool airRaidTurrets;                   ///< Default on: while city airplanes bomb its buildings, Rocket Turrets spread through the city (QuantBotAirDefencePolicy.h).
-        bool airThreatTurrets;                 ///< Default on: the same turrets before the first bomb, once another team can bomb it; paid ahead of strategic and civic savings.
+        bool airThreatTurrets;                 ///< Default off (no fewer buildings bombed in 48 paired matches): the same turrets before the first bomb, once another team can bomb it; paid ahead of strategic and civic savings.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

@@ -392,7 +392,7 @@ QuantBotConfig::QuantBotConfig() {
     force.palaceDenseClearing = true;
     force.palaceTurrets = false;
     force.airRaidTurrets = true;   // Stefan, 2026-11-23: "also make the ai respond when being bombed by planes by having more turrets dispersed"
-    force.airThreatTurrets = true; // Stefan, 2026-11-24: "the ai doesn't build rocket turret defenes and everyones base gets steamrolled by a plane"
+    force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
     force.vanillaCoreDefenceThreatBps = 5000;
     force.vanillaArmyCounters = true;  // counters50-S5, default since protocol 119
     force.vanillaArmyCounterBlendBps = 5000;
@@ -2050,7 +2050,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.palaceTurrets) addNamed("palaceTurrets", force.palaceTurrets);
     // On is the default and leaves every existing hash as it was; off is hashed.
     if (!force.airRaidTurrets) addNamed("airRaidTurrets", force.airRaidTurrets);
-    if (!force.airThreatTurrets) addNamed("airThreatTurrets", force.airThreatTurrets);
+    // Off is the default and leaves every existing hash as it was; on is hashed.
+    if (force.airThreatTurrets) addNamed("airThreatTurrets", force.airThreatTurrets);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
     addNamed("vanillaArmyCounters", force.vanillaArmyCounters);
     addNamed("vanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);

@@ -668,7 +668,9 @@ AirRaidTurrets=1
 # AirRaidTurrets coverage rule before the first bomb lands: one a minute, until it has 16 Rocket
 # Turrets. With this on, these turrets and the ones against a raid are paid ahead of strategic and
 # civic savings; only the economy's reserve must remain. 0 = off (AirRaidTurrets as it was).
-AirThreatTurrets=1
+# Default off: in 48 paired matches the houses ordered 21 such turrets a game instead of 1.6 and
+# lost the same buildings to bombs (+4 a game, -14 to +23).
+AirThreatTurrets=0
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.
