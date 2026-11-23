@@ -1,3 +1,79 @@
+## 2026-11-23 - Carryalls, second set: the harvester raid is a default in vanilla Construction Yard starts; more Carryalls, reserve, squad retreat, perimeter raid and flown-in defence stay off (unreleased, after 1.0.876)
+
+Stefan: "try building more carryalls, try defining when a squad is outnumbers and should retreat and retreat
+them, they can either retreat using their own movement or get a carryall if available. also try doing targetted
+carryall drops onto enemy harvesters or to undefended parts of the base permimeter of an enemy. also use them to
+rush to the defence of a base under attack or to the defence of harvesters under attack", then "also try different
+maps. try vanilla maps as well, custom games, etc." Commits 167f740d1 to 73c3d93a2 on `integrate/feature-batch`;
+not pushed, no version bump. Save format 9896 (the raid part of QuantBot's Carryall state); protocol stays 133.
+Full tables and every switch: `docs/formations.md`, "Carryall manoeuvres, second set".
+
+- **Built**, each behind its own `[Force Concentration]` key: `AirliftCarryalls` up to 12, `AirliftReserve`
+  (the newest Carryalls take no harvester or repair work), `SquadRetreat` (an outmatched wave falls back on the
+  ground: 1.3x for 9 s or 2.0x at once, the ratio is `[Army Recovery] LocalWithdrawBps`), `SquadRetreatAirlift`
+  (a withdrawing unit 20 tiles or more from the rally takes a free Carryall), `AirliftHarvesterDrop` and
+  `AirliftPerimeterDrop` (free units at home flown beside an enemy harvester or building that no enemy weapon
+  covers), `AirliftBaseDefence` and `AirliftHarvesterDefence` (a distant defender flown to the attacker).
+- **Measured** on five kinds of game, about 9,900 games on AWS in rounds 4 to 10: his 4-player DuneCity
+  free-for-all; the same in the vanilla mod; other sizes (128, 192) and Dune2R; vanilla 1v1 from Construction
+  Yard starts on four bundled maps as the Custom Game lobby starts them (Hard and Brutal); vanilla 4-player
+  free-for-all from Construction Yard starts on two bundled maps. The first set (rear and flank drops, retreat
+  lift, rescue, ferry) was also played on the vanilla settings.
+- **The harvester raid by Carryall is now a default** (c2f25d3fc), scoped to where it won: Custom games, Hard
+  and Brutal, no city simulation, a house that started without a Refinery (a Construction Yard or MCV start), not
+  allied with a human (`QuantBot::airliftHarvesterDropActive`). With no extra fleet and no reserve:
+
+  | Setting | Games | Score difference (95%) |
+  |---|---|---|
+  | vanilla 1v1, Hard, fresh seeds (replication) | 192 | +0.542 (+0.27..+0.81) |
+  | vanilla 1v1, Brutal, fresh seeds (replication) | 192 | +0.458 (+0.19..+0.73) |
+  | vanilla 1v1, Hard / Brutal, the round before | 96 / 48 | +0.208 (-0.17..+0.62) / +0.667 (+0.17..+1.17) |
+  | vanilla 4-player free-for-all, Hard | 192 / 96 | +0.035 (-0.08..+0.16) / +0.006 (-0.17..+0.18) |
+  | Fortress 1v1 duel, Hard / Brutal | 144 / 144 | -0.194 (-0.47..+0.10) / -0.181 (-0.50..+0.12) |
+  | Fortress `/weak` (paired with default `/weak`, v none) | 108 | +0.312 (+0.19..+0.44) |
+  | vanilla Fortress free-for-all / his DuneCity free-for-all | 48 / 96 | -0.076 (-0.31..+0.17) / -0.063 (-0.22..+0.10) |
+
+  The default rule is met (interval above 0, replicated; not worse on Brutal, Fortress or `/weak`). Because every
+  Fortress estimate is negative, Fortress starts do not get it; city games from a Construction Yard were not
+  played and do not get it; Easy and Medium were not played and do not get it. **His own DuneCity free-for-alls
+  are unchanged.** A raiding house flies 18 to 19 raids and about 65 units a game and loses about 10 of them
+  waiting for a Carryall.
+  The shipped default against an explicit off (round 10, source c2f25d3fc, seeds 8401 to 8412): Hard +0.479
+  (+0.10..+0.88) and Brutal +0.625 (+0.25..+1.00), 96 games each, 19.3 and 19.8 raids a house-game against 0; and
+  0 raids in 24 DuneCity and 24 vanilla Fortress free-for-alls, where the default is out of scope.
+- **Everything else stays off, with the reason:**
+  - *More Carryalls.* As first built (added to the transport target) 3, 6 and 10 extra scored -0.54, -1.33 and
+    -1.75 in vanilla 1v1, the largest effect in the study: the transport target outranks army and economy spending.
+    Fixed in 9e03f4262 to a leftover purchase at the High-Tech Factory; that version is level in all five settings
+    (+0.13, +0.04, +0.05, -0.03, -0.03). A house already builds 13 to 28 Carryalls a game on these maps.
+  - *Carryall reserve.* Harvesters lose their transport: every arm with a reserve of four loses on the vanilla
+    Construction Yard maps (retreat by air -0.52 and -1.08, flown-in defence -0.81 and -1.00).
+  - *Squad retreat on the ground.* 17 of 23 estimates are positive, none conclusive; the best are +0.153
+    (-0.02..+0.32) and +0.091 (-0.04..+0.21) on the vanilla 4-player maps, 96 and 192 games.
+  - *Retreat by Carryall, defenders flown in.* Level to negative without the reserve (defence loses the vanilla
+    4-player free-for-all at -0.28), losing with it.
+  - *Perimeter raid.* Loses in four of five settings (-0.23 to -0.57).
+  - *First set on vanilla maps.* Level or losing, as in the DuneCity free-for-all.
+- **Mistakes of mine in this round, both corrected:** the first vanilla submissions named two 1v1 maps and both
+  4-player maps by file name instead of the harness's short name and were refused for those maps (rerun complete
+  as `v1v1` and `vffa`, the only ones quoted); and the first `AirliftCarryalls` design above cost every arm that
+  used it, so round 4's vanilla numbers for the retreat-by-air and defence arms mix that cost in (round 7 separates
+  it).
+- **Evidence:** `~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`r4` to `r10`, `tables-*.md`,
+  `matrix-*.md`, the submit scripts and the two table scripts).
+
+- **Gates and checks.** AWS, source 73c3d93a2 (the last commit that touches source: three comment dates on top
+  of c2f25d3fc), job `20261123T212709-ctest-df2ee8`: 11 of 11 passed - `quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+  `repair_return_probe`, `quantbot_carryall_repair`, `stalled_carryall_probe`, `carryall_flight_probe`,
+  `menu_probe_fixture`, `save_roundtrip_probe`, `dunelegacy_tests`. The same eleven passed at c2f25d3fc
+  (`20261123T211027-ctest-397a98`). On the Mini at 73c3d93a2, built in `build-int`: `perf_regression` passed in
+  126.2 s and `dunelegacy_tests` passed, in a validated staging batch. This entry is a documentation-only commit
+  on top.
+- **Not done:** no fixture probe for the manoeuvres (their evidence is the match counts, the config unit test
+  and the gates); no human-against-AI play of the raid; Easy, Medium and city games from a Construction Yard start
+  were not measured, which is why they are outside the default's scope.
+
 ## 2026-11-23 - City planes, third round: anti-air that fires, the AI's buying and turret response, balance (unreleased, after 1.0.876)
 
 Stefan kept playing on the MacBook Air and reported. Commits `f99b9c40b` to `a43a63c30`, not pushed, no version
