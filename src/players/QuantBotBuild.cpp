@@ -536,8 +536,12 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
     // Do this house's planes pay? Every removal of a plane counts as a loss with the house,
     // shot down or flown off the map alike, so the losses are the flights that have ended.
     const int flightsEnded = getHouse()->getNumLostItems(Unit_AmbientAirplane);
-    const int64_t destroyedCredits = getHouse()->getCombatReward(Unit_AmbientAirplane).damageMilli / 1000;
-    const bool pays = CA::purchasePays(destroyedCredits, flightsEnded);
+    const int64_t rewardMilli = getHouse()->getCombatReward(Unit_AmbientAirplane).total();
+    const int64_t destroyedCredits = rewardMilli / 1000;
+    // The plane is scored as the army's unit types are and bought while it does at least what a
+    // credit does in the army (CityAircraft::planeWorthBuying).
+    cityPlaneBuyScore = CA::planeBuyScore(pass.armyPerformanceScore);
+    const bool pays = CA::planeWorthBuying(rewardMilli, flightsEnded, pass.armyPerformanceScore);
     // Or heaps of money: it buys although single planes do not pay, to break up a massively
     // built city (CityAircraft::richBuys). Checked again at each Airport as the money goes.
     if (!pays && !CA::richBuys(int64_t(pass.money) - reserve)) return;
@@ -562,7 +566,8 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
         traceDecision("city_airplane_bought", AITelemetry::Record().set("airport", airport->getObjectID())
             .set("price", CA::kPlanePrice).set("spendable_after", pass.money).set("reserve", reserve)
             .set("flights_ended", flightsEnded).set("destroyed_credits", destroyedCredits)
-            .set("pays", pays ? 1 : 0)
+            .set("pays", pays ? 1 : 0).set("plane_score", CA::planePerformanceScore(rewardMilli, flightsEnded))
+            .set("buy_score", cityPlaneBuyScore)
             .set("planes", getHouse()->getNumItems(Unit_AmbientAirplane)));
     }
 }
@@ -3063,6 +3068,7 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     }
     const auto allocationWeights = UnitMixPolicy::sharpenScores(scores);
     const auto rawMix = UnitMixPolicy::normalize(allocationWeights);
+    pass.armyPerformanceScore = UnitMixPolicy::performanceScore(totalRewardMilli, totalLostValue * 1000, 1);
     const int performanceConfidenceBps = UnitMixPolicy::evidenceConfidenceBps(totalLostValue, pass.militaryValue);
     // The strategy's hold scales the fielded army the evidence is weighed against (100 = as is).
     const int64_t priorArmyValue = pass.strategyMixProfile

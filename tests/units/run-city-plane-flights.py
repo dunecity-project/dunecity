@@ -335,7 +335,9 @@ if least and min(least) < 3000:
 # still there after paying.
 for r in purchases:
     ended, destroyed = int(r['flights_ended']), int(r['destroyed_credits'])
-    pays = ended >= 1 and destroyed >= PRICE * (ended - 1)
+    # x0.5 is the lowest score a plane is bought at (CityAircraft::kPlaneBuyScoreFloor): value destroyed over
+    # the price of the ended flights plus one. The table has bomb kills only, so allow the crash's share.
+    pays = ended >= 1 and destroyed * 2 >= PRICE * (ended - 1)
     if not pays and int(r['credits_after']) < 30000 + 3000 - PRICE:
         failures.append('purchase: house %s on %s seed %s bought a plane that did not pay with %s credits left'
                         % (r['house'], r['map'], r['seed'], r['credits_after']))

@@ -174,6 +174,9 @@ public:
         int infantryQuotaBps = 0;
     };
     const AllocationSnapshot& getAllocationSnapshot() const { return allocationSnapshot; }
+    /// The score a city airplane must reach to be bought, from the last build pass (0: no pass
+    /// yet). Not saved: the next pass sets it again. The Stats window shows it.
+    int64_t getCityPlaneBuyScore() const { return cityPlaneBuyScore; }
     std::string getDifficultyName() const;
     bool permitsPoliceReinforcement(int unitValue) const;
     /// True when the lobby selected an explicit "Maximum Number of Units Override"
@@ -405,6 +408,7 @@ private:
     /// Written once per production pass beside lastUnitMixBps, read only by the
     /// observational Stats UI and the supplemental observer runtime.
     AllocationSnapshot allocationSnapshot{};
+    int64_t cityPlaneBuyScore = 0;
     // Diagnostic de-duplication only. These must never affect a game decision,
     // save, or lockstep state.
     std::map<Uint32, uint64_t> lastKiteTrace;

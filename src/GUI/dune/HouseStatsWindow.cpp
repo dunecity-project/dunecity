@@ -15,6 +15,7 @@
  *  along with Dune Legacy.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <dunecity/CityAircraftPolicy.h>
 #include <GUI/dune/HouseStatsWindow.h>
 #include <GUI/dune/ObservedHouseSelector.h>
 
@@ -421,14 +422,27 @@ void HouseStatsWindow::refreshAllocation(const House* house) {
 
     // Short notes, so the meaning is stated without a paragraph of text in a
     // narrow column. Kept free of per-cent signs: the numbers above carry those.
-    std::string note = std::string(_("Performance: production score as a multiplier."))
-        + "\n" + _("Goal %: intended share of total army value.")
+    // The city airplane is no army slot, but it is scored the same way (the value its bombs and
+    // crashes destroyed per credit of planes lost), so it can be read against the rows above
+    // (Stefan, 2026-11-23: "include planes in the performance scores so we know how cost effective
+    // it is compared to other units"). Shown once the house has an Airport or has flown a plane.
+    const int flights = house->getNumLostItems(Unit_AmbientAirplane);
+    const bool planes = currentGame->isCitySimEnabled()
+        && (flights > 0 || house->getNumItems(Structure_Airport) > 0 || house->getNumItems(Unit_AmbientAirplane) > 0);
+    std::string note = std::string(_("Performance x: score. Goal %: share of army value."))
         + fmt::sprintf("\n%s %d.%02d%%", _("Infantry cap (separate):"),
                        snapshot.infantryQuotaBps / 100, snapshot.infantryQuotaBps % 100);
     if(snapshot.antiAirFloorBps > 0)
         note += fmt::sprintf("\n%s %d.%02d%%", _("Anti-air floor:"),
                              snapshot.antiAirFloorBps / 100, snapshot.antiAirFloorBps % 100);
     else note += "\n" + std::string(_("- = not allocated in this pass."));
+    if(planes) {
+        namespace CA = DuneCity::CityAircraft;
+        const double score = static_cast<double>(CA::planePerformanceScore(
+            house->getCombatReward(Unit_AmbientAirplane).total(), flights)) / 1000000.0;
+        const double buy = static_cast<double>(bot->getCityPlaneBuyScore()) / 1000000.0;
+        note += "\n" + fmt::sprintf(_("City Airplane: x%.1f, bought at x%.1f or above"), score, buy);
+    }
     allocationNoteLabel.setText(note);
 }
 

@@ -610,6 +610,32 @@ inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
     return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(kPlanePrice) * flightsEnded;
 }
 
+// The plane's performance score (Stefan, 2026-11-23: "also include planes in the performance
+// scores so we know how cost effective it is compared to other units. think about how we could
+// include it in the ratio for when to buy them as well"). It is scored as the army's unit types
+// are (UnitMixPolicy::performanceScore): the credit value its bombs and its crash have destroyed
+// (the house's combat record of the type, in milli credits) over the price of every flight that
+// has ended plus one price of prior, times a million. x1.0 is a plane that destroys what it
+// costs. A computer player buys while the plane's score is at least its army's own (all its
+// unit types' value destroyed per credit of units lost), held between kPlaneBuyScoreFloor (x0.5)
+// and kPlaneBuyScoreCeiling (x1.0): a credit goes to planes when it does at least what it does
+// in the army, never asking more of a plane than paying for itself and never accepting less
+// than half. The Stats window shows both numbers.
+inline constexpr int64_t kPlaneBuyScoreFloor = 500000;
+inline constexpr int64_t kPlaneBuyScoreCeiling = 1000000;
+inline constexpr int64_t planePerformanceScore(int64_t rewardMilli, int flightsEnded) {
+    return (rewardMilli < 0 ? 0 : rewardMilli) * 1000000
+        / ((int64_t(flightsEnded < 0 ? 0 : flightsEnded) + 1) * kPlanePrice * 1000);
+}
+inline constexpr int64_t planeBuyScore(int64_t armyScore) {
+    return armyScore <= 0 || armyScore > kPlaneBuyScoreCeiling ? kPlaneBuyScoreCeiling
+         : armyScore < kPlaneBuyScoreFloor ? kPlaneBuyScoreFloor : armyScore;
+}
+inline constexpr bool planeWorthBuying(int64_t rewardMilli, int flightsEnded, int64_t armyScore) {
+    return flightsEnded >= kPurchaseEvidenceFlights
+        && planePerformanceScore(rewardMilli, flightsEnded) >= planeBuyScore(armyScore);
+}
+
 // Heaps of money (Stefan, 2026-11-23: "if the ai has heaps and heaps of money then spawning 10
 // could be useful to break up the enemy base"; "no don't cap the planes. I want planes to act as
 // a counter to a massively built city where the game becomes a stalemate"). Against turrets that

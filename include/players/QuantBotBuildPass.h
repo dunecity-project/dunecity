@@ -73,6 +73,10 @@ struct QuantBot::BuildPass {
 
     // build(): the queue-inclusive army value; producers add what they order.
     int militaryValue;
+    /// The army's performance this pass: value destroyed by all unit-mix types per credit of
+    /// them lost, times a million (0 until the unit mix has been scored). Planes are bought
+    /// against it (CityAircraft::planeBuyScore).
+    int64_t armyPerformanceScore = 0;
 
     // planBuildInventory()
     // Family economy projects the two original slots as worker/unload-bay

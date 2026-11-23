@@ -479,3 +479,20 @@ TEST_CASE("A computer player with heaps of money buys planes that do not pay", "
     CHECK(richBuys(kRichSurplus));
     CHECK(richBuys(1000000));
 }
+
+TEST_CASE("The city airplane is scored like a unit and bought against the army's score", "[city][aircraft]") {
+    using namespace DuneCity::CityAircraft;
+    // Value destroyed (milli credits) per price of the flights that ended, plus one price of prior.
+    CHECK(planePerformanceScore(0, 0) == 0);
+    CHECK(planePerformanceScore(int64_t(kPlanePrice) * 1000 * 2, 1) == 1000000);      // 3000 destroyed, one flight: x1.0
+    CHECK(planePerformanceScore(int64_t(606) * 1000 * 10, 10) == 367272);            // an ordinary AI city: x0.37
+    // Bought at the army's own score, between x0.5 and x1.0.
+    CHECK(planeBuyScore(0) == kPlaneBuyScoreCeiling);
+    CHECK(planeBuyScore(300000) == kPlaneBuyScoreFloor);
+    CHECK(planeBuyScore(700000) == 700000);
+    CHECK(planeBuyScore(2500000) == kPlaneBuyScoreCeiling);
+    CHECK_FALSE(planeWorthBuying(int64_t(100000) * 1000, 0, 700000));                // no flight has ended
+    CHECK_FALSE(planeWorthBuying(int64_t(606) * 1000 * 10, 10, 700000));             // x0.37 against x0.7
+    CHECK(planeWorthBuying(int64_t(5746) * 1000 * 10, 10, 700000));                  // a thin city: x3.5
+}
+
