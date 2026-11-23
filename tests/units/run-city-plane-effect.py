@@ -26,7 +26,7 @@ Dune City mod's own options (explored map, no fog, Rocket Turrets need power):
 Differences are on minus off, paired by encounter, with a 95% bootstrap interval
 (tests/ai/match_score.py). The test requires: with the defence rule more passes engaged, more
 damage to the plane and more planes shot down (each whole interval above 0), and the defender
-losing under 5 hit points and under 0.02 buildings a pass to its own fire (a rocket that meets
+losing under 100 hit points and under 0.3 buildings a pass to its own fire (a rocket that meets
 the plane over an own building does its 30 there too) and to crashes; with bombing off no bomb and
 no damage, with it on buildings destroyed in some runs but never a Construction Yard or a
 Palace in a single run, in both bombing arms; and the stick destroying more buildings a run
@@ -249,7 +249,11 @@ for turrets in ('1', '2', '4', '6'):
 for name, text in (('engaged', 'passes engaged'), ('damage', 'damage to the plane'), ('killed', 'planes shot down')):
     if not overall[name][3] > 0:
         failures.append('defence: %s did not improve, interval %+.3f to %+.3f' % ((text,) + overall[name][3:5]))
-if overall['own'][1] >= 5 or overall['lost'][1] >= 0.02:
+# Since 2026-11-23 nothing holds its fire for the crash (Stefan: "yes they can crash it in their own
+# city"), so a plane shot down over the base costs the defender a Death Hand's blast there. The
+# bound is no longer "next to nothing" (under 5 hit points and 0.02 buildings a pass) but "less
+# than the bombing it stops": one stick over the same base destroys 1.76 buildings a run.
+if overall['own'][1] >= 100 or overall['lost'][1] >= 0.3:
     failures.append('defence: the defender lost %.1f hit points and %.3f buildings a pass to its own fire and crashes'
                     % (overall['own'][1], overall['lost'][1]))
 

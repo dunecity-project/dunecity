@@ -59,6 +59,11 @@
 
 namespace {
 
+// The free plane takes five minutes in the game (the time a Palace takes to make a Saboteur). This
+// probe is about the aircraft themselves, the launch, the singleton slot and its reuse over eight
+// minutes, so every Airport it places charges in the earlier half-minute instead.
+static const int kProbeFreePlaneClock = (Airport::testFreePlaneCycles = MILLI2CYCLES(30000));
+
 namespace CA = DuneCity::CityAircraft;
 
 std::string gCityAircraftMod;
