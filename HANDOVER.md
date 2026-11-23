@@ -1,3 +1,84 @@
+## 2026-11-23 - City planes, third round: anti-air that fires, the AI's buying and turret response, balance (unreleased, after 1.0.876)
+
+Stefan kept playing on the MacBook Air and reported. Commits `f99b9c40b` to `a43a63c30`, not pushed, no version
+bump, protocol 133, save format 9898. Installed on the Air: `3339071a8` (07:55 UTC; backups there: the 1.0.876
+release app and the `3e368c611` build; package `../outputs/install-mba-20261123-3339071a8/`).
+
+**The bug** ("check the save on my mba nothittingplanes - rocket turrets are no longer attacking planes, neither
+are launchers. the planes seem to die when they turn from their own bombs"; "rockets fired at them seem to go
+right through them"). His save, with its Workshop mod and revision copied to scratch, replayed for one game
+minute by `run-city-plane-effect.py --replay-save` (a new diagnosis mode; `--replay-mod`,
+`--replay-workshop-revision`): of 62,559 turret-plane pairs in reach 3% might fire, 59% were held by
+`AmbientAirplane::crashEndangers` (the shot that would bring the plane down onto the shooter's own side; with
+rockets already in flight counted, every shot over a city was the killing one) and 38% by the hold for planes
+the rocket cannot catch in 24 tiles; Launchers 99% held. Damaged planes bombed on until they flew clear and died
+there. Bombs never hurt them. A Launcher's rocket had no test against aircraft at all.
+- With City Plane Defence on nothing holds its fire for the crash (Stefan: "yes they can crash it in their own
+  city"). Off keeps the rule up to 1.0.876.
+- A Launcher's rocket flies to the meeting point and goes off on touching the plane; any rocket fired at a city
+  airplane goes off on another enemy plane it touches (`AmbientAirplane::touchedBy`, `Bullet.cpp`).
+- Same save, same minute, before and after: buildings lost 926 and 92; rockets fired by turrets 417 and 623;
+  planes flying at the end 22 and 0.
+
+**Rules changed on his word.**
+- "AI buys freely too", "ai should figure out when it makes sense to buy", "if the ai has heaps and heaps of
+  money then spawning 10 could be useful to break up the enemy base", "no don't cap the planes. I want plans to
+  act as a counter to a massively built city where the game becomes a stalemate": QuantBot has no wait between
+  purchases. It buys when its own planes have destroyed at least 1500 credits per ended flight
+  (`CityAircraft::purchasePays`, from the house's combat record, one flight of evidence) or when it has 30,000
+  credits beyond its reserves and cash floor (`richBuys`), for as long as that holds; ten in the air is the only
+  limit. A wave of ten every two minutes was built (`db2a480bf`) and removed (`3339071a8`) at his word.
+- "delay the time you get a free plane to be the time it takes to get a saboteur": `Airport::freePlaneTimer`
+  (saved from 9897), five minutes, the Ordos Palace's charge; the panel shows it; a launch restarts every Airport
+  of the house. "when you build an airport you should get one": an Airport placed after cycle 0 has its free
+  plane ready; one standing at the start charges first.
+- "also make the ai respond when being bombed by planes by having more turrets dispersed": a bomb on a building
+  notes it with the owner (`House::noteBombHit`, saved from 9898). While bombed in the last three game minutes
+  QuantBot wants every building within eight tiles of a Rocket Turret of its own: one order at a time, two a
+  minute, eight a raid, none at 24 Rocket Turrets, each at least six tiles from its others, near the hits first,
+  only from money beyond its reserves plus 500 and with power (`QuantBotAirDefencePolicy.h`,
+  `planAirRaidDefence`, `findAirRaidTurretSite`). Switch `[Force Concentration] AirRaidTurrets`, default on.
+  In the 48 final matches it fired in 35 games, 1.35 turrets a game. The 24-turret cap means a house on
+  Metropolis (150 to 290 turrets) never uses it.
+
+**His last game** (8-player random FFA, 94 minutes, build `4ead1dc0c`): bombs destroyed 1,160 buildings
+(187,775 credits), 387 of them in the first four minutes from 38 free flights; 2 planes bought. "the planes
+basically won the game - too strong". Then: "we need a balance with these planes, don't nerf them too much".
+
+**Balance, measured on `3339071a8`** (credits of buildings one flight destroys; a plane costs 1500):
+- 2P City, 16 Rocket Turrets for 1,342 buildings: 3,572 (32 buildings, plane lasts 27 s, 70% of flights earn
+  their price).
+- Ordinary AI city, 48 AWS matches (`../outputs/city-planes-20261123e/matches/report-off-on.md`): 224 (1.6
+  buildings). 92% of 1,231 flights shot down, half within 10 s of take-off, 97% within 20 s; 35% dropped no
+  bomb; 90% of kills by Rocket Turrets. Bombs destroyed 40 buildings a game (545 before the fix and the
+  five-minute clock); time-outs 50% (60% with the 4cf0fd5c4 rules, difference not separable); 2.46 planes
+  bought a game at a median minute 34. Stefan: "224 credits per flight seems a bit low unless thees a lot of
+  defence", then "why are turrets reaching 24 tiles?? thatv sounds insane". The reach is the Ornithopter rule
+  (three times WeaponRange 8) that the first plane change extended to planes, because at ten tiles a second an
+  8-tile reach gives a turret under one reload of time.
+- Metropolis, 928 Rocket Turrets: 49 (plane lasts 9 s). With a million credits a house the rich rule bought 838
+  planes in six minutes for 500 buildings.
+- Experiment-only overrides, read once per process and never part of the match rules:
+  `DUNECITY_TEST_FREE_PLANE_SECONDS`, `DUNECITY_TEST_PLANE_REACH_FACTOR` (turret reach against planes as a
+  multiple of WeaponRange, 1 to 3). Four arms were queued on `a43a63c30` over the same 48 games: free plane
+  every 60 and 120 seconds, reach 16 tiles, and reach 16 with 120 seconds. **If no later entry reports them, the
+  results are in `../outputs/city-planes-20261123e/matches/` (`free60`, `free120`, `reach2`, `reach2free120`,
+  against `on`) and the reach and clock are still 24 tiles and five minutes.**
+
+**Tests and gates.** `city_plane_effect`: rocket cut-off, a rocket taking the near of two planes in line, a
+Launcher's rocket hitting (75), the killing shot fired over an own wall, free plane at 5:00 and 10:00, a plane
+302 cycles after an Airport is built. `city_plane_flights`: coverage per building, the purchase evidence, and
+the half-the-map bound on bombing without purchases; it keeps a half-minute clock (`Airport::testFreePlaneCycles`).
+`CityAircraftPolicyTestCase`: `purchasePays`, `richBuys`. AWS `20261123T185552-ctest-3eef37` on `3339071a8`:
+all seven passed. Mini: `dunelegacy_tests`, `city_aircraft_probe`, `perf_regression` (127 s) passed.
+`genome_registry_contract` was already failing at HEAD for twelve Airlift and SquadRetreat keys of another
+session; the `AirRaidTurrets` key is registered.
+
+**Not verified.** Nothing on a real screen by an agent. The turret response was not seen in a whole-game probe
+(the bombed AI on 2P City had 960 credits), only counted in match logs. No game against a human. The AI's
+purchases with the rich rule in ordinary matches are rare (2.46 a game), so that rule is measured mainly on
+Metropolis.
+
 ## 2026-11-23 - Carryalls: manual drops on by default reach old profiles, a Return units switch on Repair Yards, QuantBot's mass Carryall manoeuvres (unreleased, after 1.0.876)
 
 Stefan: "make manual carryall drop on by default on dune city. make a button for setting repairyards to return
