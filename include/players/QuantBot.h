@@ -2146,7 +2146,8 @@ private:
     /// visibleGroundTurretThreats; what a save must keep is the house's own record
     /// (House::getAirRaid), which House saves.
     struct AirRaidPlan {
-        bool active = false;     ///< bombed lately and the pace and caps allow an order this pass
+        bool active = false;     ///< bombed lately (or under threat) and the pace and caps allow an order this pass
+        bool threat = false;     ///< not bombed lately: the order answers the threat alone (AirThreatTurrets)
         bool searched = false;   ///< the site search has run this pass
         bool ordered = false;    ///< a yard took the turret (or its Wind Trap) this pass
         int reserve = 0;         ///< cash that must remain after paying (QuantBotAirDefencePolicy::cashReserve)
@@ -2157,6 +2158,9 @@ private:
     /// Opens this pass's plan when the house was bombed lately and may order: the cheap checks
     /// only (switch, record, pace, caps) and the cash that has to remain.
     void planAirRaidDefence(BuildPass& pass);
+    /// AirThreatTurrets: another team can bomb this house (it has an Airport or has flown a city
+    /// airplane, and City Plane Bombing is on).
+    bool cityPlaneThreat() const;
     /// One Rocket Turret per pass across all yards at the plan's dispersed site, or the Wind Trap
     /// that powers it; from spare cash only, the yard never saves for it.
     void chooseYardAirRaidDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);

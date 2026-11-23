@@ -4124,6 +4124,53 @@ TEST_CASE("AirRaidTurrets: cover, spacing and where the next turret goes", "[ai]
     REQUIRE(Air::siteScore(Air::kNoTurret, Air::kNoHit, 1) == Air::siteScore(2 * Air::kCoverTiles, Air::kNoHit, 1));
 }
 
+TEST_CASE("AirThreatTurrets: a baseline before the first bomb, one a minute up to sixteen", "[ai][air-raid][policy]") {
+    namespace Air = QuantBotAirDefencePolicy;
+    Air::RaidRecord raid;   // never bombed, no turret ordered
+    REQUIRE(Air::threatHold(false, raid, 5000, 0) == Air::Hold::NoThreat);
+    REQUIRE(Air::threatHold(true, raid, 5000, 8) == Air::Hold::None);
+    REQUIRE(Air::kThreatRocketTurrets == 16);
+    REQUIRE(Air::threatHold(true, raid, 5000, Air::kThreatRocketTurrets - 1) == Air::Hold::None);
+    REQUIRE(Air::threatHold(true, raid, 5000, Air::kThreatRocketTurrets) == Air::Hold::ThreatCap);
+    // One a game minute: half the pace of the answer to a raid.
+    REQUIRE(Air::kThreatOrderIntervalCycles == 2 * Air::kOrderIntervalCycles);
+    raid.noteTurretOrdered(5000);
+    REQUIRE(Air::threatHold(true, raid, 5000 + Air::kThreatOrderIntervalCycles - 1, 9) == Air::Hold::Pace);
+    REQUIRE(Air::threatHold(true, raid, 5000 + Air::kThreatOrderIntervalCycles, 9) == Air::Hold::None);
+    // The first bomb opens a raid with its own allowance: the baseline's orders do not use it up.
+    REQUIRE(raid.turretsOrdered == 1);
+    raid.noteHit(10, 10, 9000);
+    REQUIRE(raid.turretsOrdered == 0);
+    REQUIRE(Air::orderHold(raid, 9000 + Air::kOrderIntervalCycles, 9) == Air::Hold::None);
+    // Paid ahead of the strategic and civic savings: only the economy's reserve must remain.
+    REQUIRE(Air::threatReserve(100) == 100);
+    REQUIRE(Air::threatReserve(-5) == 0);
+    REQUIRE(Air::threatReserve(100) < Air::cashReserve(100, 900, 300, 0));
+    REQUIRE(std::string_view(Air::holdName(Air::Hold::NoThreat)) == "no_threat");
+    REQUIRE(std::string_view(Air::holdName(Air::Hold::ThreatCap)) == "threat_cap");
+}
+
+TEST_CASE("AirThreatTurrets defaults on, round trips and hashes only when off", "[ai][air-raid][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.airThreatTurrets);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-air-threat-turrets-test.ini";
+    {
+        std::ofstream file(path);
+        file << "[Force Concentration]\nAirThreatTurrets=false\n";
+    }
+    QuantBotConfig loaded;
+    REQUIRE(loaded.applyOverrides(path.string()));
+    REQUIRE_FALSE(loaded.force.airThreatTurrets);
+    REQUIRE(loaded.force.airRaidTurrets);
+    REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(loaded.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.force.airThreatTurrets);
+    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("AirRaidTurrets defaults on, round trips and hashes only when off", "[ai][air-raid][config]") {
     const QuantBotConfig defaults;
     REQUIRE(defaults.force.airRaidTurrets);

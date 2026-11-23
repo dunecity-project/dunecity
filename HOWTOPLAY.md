@@ -155,16 +155,16 @@ not order them, but you can buy more planes.
   and a city needs one for its commercial zones to keep growing. It pollutes twice as much as a
   fully built industrial zone, so keep it away from housing.
 
-- **The free plane.** Each powered Airport makes a free plane every two minutes; the Airport's panel
-  shows the countdown. It takes off when the clock
-  has run out and your house has no free plane in the air, and that restarts the clock of all your
-  Airports, so a second Airport does not shorten the wait. An Airport you build during the game
-  has its free plane ready at once; Airports that stand when the game begins charge first.
-  Planes you have bought do not hold the free one back. It takes off from the runway two tiles
-  east of the Airport. A flight ends when the plane
-  is shot down or crosses the edge of the map, which a run towards a building near the edge soon
-  makes it do: a plane that is not shot down is usually gone within half a minute to a minute.
-  Human and computer players get the same plane.
+- **The free plane.** Each powered Airport makes a free plane every five minutes; the Airport's panel
+  shows the countdown. It takes off when the clock has run out and your house has no free plane
+  in the air, and that restarts the clock of all your Airports, so a second Airport does not
+  shorten the wait. Nobody bombs in the first five minutes of a game: Airports that stand when
+  the game begins charge first, and one you build in those minutes is ready when they are up. An
+  Airport you build later has its free plane ready at once. Planes you have bought do not hold
+  the free one back. It takes off from the runway two tiles east of the Airport. A flight ends
+  when the plane is shot down or crosses the edge of the map, which a run towards a building
+  near the edge soon makes it do: a plane that is not shot down is usually gone within half a
+  minute to a minute. Human and computer players get the same plane.
 - **Buying a plane.** Select a powered Airport and press **Buy airplane 1500**: a plane takes off at
   once. You can buy as fast as you can pay, until your house has ten planes in the air (the panel
   shows the count).
@@ -209,10 +209,13 @@ not order them, but you can buy more planes.
   Nothing holds its fire for that: a plane shot down over your city crashes into your city, which
   costs far less than letting it bomb on. What the crash destroys counts as the plane's damage
   and goes to the score of the house that sent it, not to whoever shot it down.
-- **Computer players under bombs.** While its buildings are being bombed a computer player adds
-  Rocket Turrets spread through its city, near the hits first and at least six tiles apart, until
-  every building has one within eight tiles: at most two a minute, eight a raid, and only from
-  spare money and with power for them.
+- **Computer players and anti-air.** As soon as another team has an Airport or has flown a plane, a
+  computer player spreads Rocket Turrets through its city before the first bomb lands: beside
+  buildings that have none within eight tiles, at least six tiles apart, one a minute until it
+  has sixteen. While its buildings are being bombed it adds more, near the hits first: at most
+  two a minute, eight a raid and twenty-four in all. It pays for these ahead of its savings for
+  a Palace or civic buildings, never from the reserve its economy needs, and only with power for
+  them.
 - **Stats and picture.** The Stats window lists the City Airplane with your other units: how many
   are flying, the units it destroyed, the planes you lost (every flight that has ended) and the
   hit points its bombs and crashes removed. For a computer player's house the Army allocation

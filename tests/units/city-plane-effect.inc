@@ -604,9 +604,9 @@ void checkAirport(const std::string& mapData) {
         record("airport", "patrol=" + std::to_string(patrol) + " ornithopters=" + std::to_string(ornithopters)
                               + " city_planes_launched=" + std::to_string(planes) + " patrol_timer="
                               + std::to_string(timerAtStart) + "->" + std::to_string(airport->getSpawnTimer()));
-        // One free plane every two minutes, as long as the last one is gone: two to five in these
-        // eleven minutes (a plane nobody shoots at flies until it crosses the map's edge).
-        require(planes >= 2 && planes <= 5, "The Airport did not launch its free plane every two minutes");
+        // One free plane every five minutes, as long as the last one is gone: at 5:00 and 10:00 of
+        // these eleven minutes.
+        require(planes == 2, "The Airport did not launch its free plane every five minutes");
         if(patrol) {
             require(ornithopters == 2, "With the patrol rule on the Airport did not send out its pair of Ornithopters");
         } else {
@@ -623,15 +623,26 @@ void checkAirport(const std::string& mapData) {
 // ---------------------------------------------------------------------------------------------
 
 // Stefan, 2026-11-23: "when you build an airport you should get one". An Airport that stands when
-// the game begins charges for two minutes first (checkAirport); one
-// placed during the game has its free plane ready and launches it at its next five-second tick.
+// the game begins charges for five minutes first (checkAirport); one placed after the first five
+// minutes has its free plane ready and launches it at its next five-second tick; one placed
+// before that is ready when the five minutes are up (2026-11-24: nobody bombs in the opening).
 void checkAirportBuiltPlane(const std::string& mapData) {
     auto game = newGame(mapData, 19, Rules{true, true, false, true, true});
     auto* owner = game->getHouse(HOUSE_ATREIDES);
     for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
+    for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(6, 2 + 3 * i));
     for(int i = 0; i < 10; ++i) game->updateGameState();
+    const Sint32 charge = MILLI2CYCLES(DuneCity::CityAircraft::kFreePlaneMs);
+    {
+        auto* early = dynamic_cast<Airport*>(place(owner, Structure_Airport, Coord(40, 40)));
+        require(early != nullptr && early->getFreePlaneTimer() == charge - static_cast<Sint32>(game->getGameCycleCount()),
+                "An Airport built in the opening is not ready exactly when the first five minutes are up");
+        record("airport_built", "built at cycle " + std::to_string(game->getGameCycleCount()) + " of the opening: free plane in "
+                                    + std::to_string(early->getFreePlaneTimer()) + " cycles");
+    }
+    game->gameCycleCount = static_cast<Uint32>(charge) + 10;   // test-only access: past the opening
     auto* airport = dynamic_cast<Airport*>(place(owner, Structure_Airport, Coord(30, 30)));
-    require(airport != nullptr && airport->getFreePlaneTimer() == 0, "An Airport built during the game has no free plane ready");
+    require(airport != nullptr && airport->getFreePlaneTimer() == 0, "An Airport built after the opening has no free plane ready");
     int launchedAfter = -1;
     for(int cycle = 0; cycle < MILLI2CYCLES(10000) && launchedAfter < 0; ++cycle) {
         game->updateGameState();
@@ -640,7 +651,7 @@ void checkAirportBuiltPlane(const std::string& mapData) {
     record("airport_built", "free plane launched " + std::to_string(launchedAfter) + " cycles after the Airport was placed; next in "
                                 + std::to_string(airport->getFreePlaneTimer()) + " cycles");
     require(launchedAfter >= 0, "An Airport built during the game did not launch its free plane within ten seconds");
-    require(airport->getFreePlaneTimer() > MILLI2CYCLES(100 * 1000), "The launch did not restart the two-minute clock");
+    require(airport->getFreePlaneTimer() > MILLI2CYCLES(280 * 1000), "The launch did not restart the five-minute clock");
     game.reset();
     currentGame = nullptr;
 }

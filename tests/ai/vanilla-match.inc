@@ -103,6 +103,11 @@ inline void recordEliminations(Game& game, State& state) {
         state.eliminated[side.house] = now;
         SDL_Log("VANILLA_MATCH_ELIMINATED: house=%d label=%s cycle=%u end_s=%.1f", side.house, side.label.c_str(), now,
                 FormationWaveMeasure::seconds(now));
+        // Every building the house lost, to set beside the ones city airplanes destroyed
+        // (CITY_PLANE_KILL, CITY_PLANE_CRASH_KILL): was a plane the main cause?
+        int structuresLost = 0;
+        for (int item = Structure_FirstID; item <= Structure_LastID; ++item) structuresLost += house->getNumLostItems(item);
+        SDL_Log("CITY_HOUSE_OUT: house=%d structures_lost=%d cycle=%u", side.house, structuresLost, now);
     }
 }
 

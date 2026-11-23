@@ -169,7 +169,7 @@ struct RaidRecord {
 };
 
 /// Why no turret may be ordered now; None when one may.
-enum class Hold { None, NotBombed, HouseCap, RaidCap, Pace };
+enum class Hold { None, NotBombed, HouseCap, RaidCap, Pace, NoThreat, ThreatCap };
 
 /// \a rocketTurrets counts the house's Rocket Turrets, standing and queued.
 constexpr Hold orderHold(const RaidRecord& raid, uint32_t now, int rocketTurrets) {
@@ -183,8 +183,43 @@ constexpr Hold orderHold(const RaidRecord& raid, uint32_t now, int rocketTurrets
 
 constexpr const char* holdName(Hold hold) {
     return hold == Hold::NotBombed ? "not_bombed" : hold == Hold::HouseCap ? "house_cap"
-        : hold == Hold::RaidCap ? "raid_cap" : hold == Hold::Pace ? "pace" : "none";
+        : hold == Hold::RaidCap ? "raid_cap" : hold == Hold::Pace ? "pace"
+        : hold == Hold::NoThreat ? "no_threat" : hold == Hold::ThreatCap ? "threat_cap" : "none";
 }
+
+// --- AirThreatTurrets: before the first bomb ---------------------------------------------
+//
+// Stefan, 2026-11-24, after playing 5d2e19fca: "on skirmish with fully built base the ai doesn't
+// build rocket turret defenes and everyones base gets steamrolled by a plane". A fully built
+// start gives a house 8 Rocket Turrets around its base and a city of some ninety zones beyond
+// them. AirRaidTurrets answers only once bombs have fallen, and only from cash beyond every
+// reserve: in 48 matches that came to 2.35 turrets a game for all four houses together, while
+// bombs took 179 buildings a game in the first ten minutes.
+//
+// With AirThreatTurrets ([Force Concentration], on by default) a house that can be bombed
+// (another team has an Airport or has flown a city airplane, and bombing is on) spreads Rocket
+// Turrets by the same coverage rule before the first bomb lands: one a game minute, until it
+// has kThreatRocketTurrets standing and queued. It pays for these, and for the turrets against
+// a raid, ahead of its strategic and civic savings: only the economy's own reserve must remain
+// (threatReserve). The opening economy is therefore never spent on them, a Palace fund is.
+
+/// The house stops adding turrets against the mere threat at sixteen Rocket Turrets, standing
+/// and queued: the eight of a fully built start and eight more through the city. Against a raid
+/// it goes on to kMaxRocketTurrets.
+constexpr int kThreatRocketTurrets = 16;
+/// One turret a game minute against the threat (two a minute against a raid).
+constexpr uint32_t kThreatOrderIntervalCycles = kCyclesPerMinute;
+
+/// \a threat: another team can bomb this house. \a rocketTurrets counts standing and queued.
+constexpr Hold threatHold(bool threat, const RaidRecord& raid, uint32_t now, int rocketTurrets) {
+    if (!threat) return Hold::NoThreat;
+    if (rocketTurrets >= kThreatRocketTurrets) return Hold::ThreatCap;
+    if (raid.lastTurretCycle != 0 && now >= raid.lastTurretCycle
+        && now - raid.lastTurretCycle < kThreatOrderIntervalCycles) return Hold::Pace;
+    return Hold::None;
+}
+/// What must remain after paying with AirThreatTurrets on: the economy's reserve alone.
+constexpr int threatReserve(int economyReserve) { return std::max(economyReserve, 0); }
 
 } // namespace QuantBotAirDefencePolicy
 

@@ -901,8 +901,13 @@ case Bullet_LargeRocket: {
                 // The bombed house notes where and when (House::noteBombHit); its QuantBot answers
                 // with Rocket Turrets spread through the city (AirRaidTurrets). Noted here, because
                 // the plane may be gone before its bomb lands and the damager cannot be asked then.
-                currentGame->getHouse(building->getOwner()->getHouseID())
-                    ->noteBombHit(position.x/TILESIZE, position.y/TILESIZE, currentGame->getGameCycleCount());
+                House* bombed = currentGame->getHouse(building->getOwner()->getHouseID());
+                // For the match tables: what the house had to shoot with when its first bomb landed.
+                if(bombed->getAirRaid().lastHitCycle == 0)
+                    SDL_Log("CITY_FIRST_BOMB: house=%d rocket_turrets=%d gun_turrets=%d cycle=%u", bombed->getHouseID(),
+                            bombed->getNumItems(Structure_RocketTurret), bombed->getNumItems(Structure_GunTurret),
+                            currentGame->getGameCycleCount());
+                bombed->noteBombHit(position.x/TILESIZE, position.y/TILESIZE, currentGame->getGameCycleCount());
             }
             // The buildings of other teams the blast can reach, a direct hit or the heavy bomb's
             // splash: one line for each it destroys, for the match tables

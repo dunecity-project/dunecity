@@ -662,6 +662,13 @@ MoreRocketTurrets=0
 # Turrets. At most 2 a minute, 8 a raid and 24 Rocket Turrets in all; bought only from cash above
 # the build pass's largest reserve plus 500, and only when the house can power it. 0 = off.
 AirRaidTurrets=1
+# Stefan, 2026-11-24: "on skirmish with fully built base the ai doesn't build rocket turret defenes
+# and everyones base gets steamrolled by a plane". As soon as another team has an Airport or has
+# flown a city airplane (and bombing is on), a house spreads Rocket Turrets through its city by the
+# AirRaidTurrets coverage rule before the first bomb lands: one a minute, until it has 16 Rocket
+# Turrets. With this on, these turrets and the ones against a raid are paid ahead of strategic and
+# civic savings; only the economy's reserve must remain. 0 = off (AirRaidTurrets as it was).
+AirThreatTurrets=1
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.

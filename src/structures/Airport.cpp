@@ -69,9 +69,14 @@ void Airport::init() {
     graphicID = ObjPic_Airport;
     // An Airport built during the game has its free plane ready at once (Stefan, 2026-11-23:
     // "when you build an airport you should get one"). One that stands when the game begins, on
-    // a scenario map or in a generated city, charges first, so that no house bombs in the
-    // first two minutes.
-    freePlaneTimer = currentGame->getGameCycleCount() > 0 ? 0 : freePlaneCharge();
+    // a scenario map or in a generated city, charges first, and one built before the first
+    // charge time has passed is ready at that time, so that no house bombs in the first five
+    // minutes of a game (2026-11-24: "early game balance").
+    {
+        const Sint32 charge = freePlaneCharge();
+        const Sint32 played = static_cast<Sint32>(std::min<Uint32>(currentGame->getGameCycleCount(), static_cast<Uint32>(charge)));
+        freePlaneTimer = charge - played;
+    }
     graphic   = pGFXManager->getObjPic(graphicID, getOwner()->getHouseID());
     numImagesX = DuneCity::CitySprites::specialFrames;
     numImagesY = 1;

@@ -603,10 +603,17 @@ inline constexpr int kRunOvershootTiles = 12;
 inline constexpr int kPlanePrice = 1500;
 inline constexpr int kMaxPlanesPerHouse = 10;
 inline constexpr int kPurchaseCooldownMs = 60000;
-/// The free plane's clock: two minutes (Stefan, 2026-11-23: "reduce the free plane from 5 mins
-/// to 2 mins"). It was the Ordos Palace's five (the time to make a Saboteur), and before that a
-/// one-in-six roll every five seconds, about half a minute.
-inline constexpr int kFreePlaneMs = 120000;
+/// The free plane's clock: five minutes (Stefan, 2026-11-24, after playing the two-minute clock:
+/// "the planes seem overpowered ... so early game balance. maybe you get one free plane every 5
+/// mins"). With two minutes, bombs and crashes took 179 buildings a game in the first ten minutes
+/// of 48 fully built four-house matches. It was two minutes for one day (2026-11-23), the Ordos
+/// Palace's five before that (the time to make a Saboteur), and first a one-in-six roll every
+/// five seconds, about half a minute.
+/// No house bombs in the first kFreePlaneMs of a game: an Airport that stands at the start
+/// charges first, and one built before that time has its plane ready at that time, not at once
+/// (Airport's constructor). Built later it has its plane ready at once, as Stefan asked on
+/// 2026-11-23 ("when you build an airport you should get one").
+inline constexpr int kFreePlaneMs = 300000;
 /// Flights of its own that must have ended before a computer player judges whether planes pay.
 inline constexpr int kPurchaseEvidenceFlights = 1;
 /// True when a house's planes have so far destroyed at least their price per ended flight.

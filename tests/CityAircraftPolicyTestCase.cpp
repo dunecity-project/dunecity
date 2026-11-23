@@ -475,6 +475,8 @@ TEST_CASE("A computer player with heaps of money buys planes that do not pay", "
     using namespace DuneCity::CityAircraft;
     // Twice a full ten planes' price beyond its reserves, and for as long as that lasts.
     CHECK(kRichSurplus == 30000);
+    // Stefan, 2026-11-24: "maybe you get one free plane every 5 mins".
+    CHECK(kFreePlaneMs == 300000);
     CHECK_FALSE(richBuys(kRichSurplus - 1));
     CHECK(richBuys(kRichSurplus));
     CHECK(richBuys(1000000));

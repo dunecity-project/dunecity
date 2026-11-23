@@ -41,10 +41,10 @@ public:
     int getPurchaseCooldown() const { return purchaseCooldown; }
     /// Cycles until this Airport's free plane is ready (0: ready).
     int getFreePlaneTimer() const { return freePlaneTimer; }
-    /// Cycles a free plane takes: CityAircraft::kFreePlaneMs, two minutes.
+    /// Cycles a free plane takes: CityAircraft::kFreePlaneMs, five minutes.
     static int freePlaneCharge();
     /// Probes only: a shorter charge, so a few game minutes hold enough flights to measure
-    /// bombing. 0 (always, in the game) is the two minutes.
+    /// bombing. 0 (always, in the game) is the five minutes.
     static inline int testFreePlaneCycles = 0;
     /// True for a 3x3 Airport (see the class comment), false for the ordinary 4x4 one.
     bool isCompact() const { return compact; }

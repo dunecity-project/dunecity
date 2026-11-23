@@ -19,6 +19,7 @@
 // rule-ordered custom selection, then ordering, foundations and placement.
 
 #include "QuantBotInternal.h"
+#include <cstdlib>
 #include <players/QuantBotBuildPass.h>
 #include <string_view>
 
@@ -1051,22 +1052,55 @@ void QuantBot::planAirRaidDefence(BuildPass& pass) {
     // through the city (QuantBotAirDefencePolicy.h has the numbers).
     namespace Air = QuantBotAirDefencePolicy;
     airRaidPlan = AirRaidPlan();
-    if (!botConfig().force.airRaidTurrets || !pass.citySimEnabled) return;
+    if (!pass.citySimEnabled) return;
+    const bool raidSwitch = botConfig().force.airRaidTurrets;
+    // AirThreatTurrets (on by default). Stefan, 2026-11-24: "on skirmish with fully built base the
+    // ai doesn't build rocket turret defenes and everyones base gets steamrolled by a plane".
+    // DUNECITY_TEST_AIR_THREAT_TURRETS (0 or 1) is an experiment-only override for match arms,
+    // read once per process and never a match rule.
+    static const int threatOverride = [] {
+        const char* text = std::getenv("DUNECITY_TEST_AIR_THREAT_TURRETS");
+        return text != nullptr && (text[0] == '0' || text[0] == '1') ? text[0] - '0' : -1;
+    }();
+    const bool threatSwitch = threatOverride >= 0 ? threatOverride == 1 : botConfig().force.airThreatTurrets;
+    if (!raidSwitch && !threatSwitch) return;
     const auto& raid = getHouse()->getAirRaid();
     const Uint32 now = getGameCycleCount();
-    // A house no bomb has hit lately leaves here: with the switch on, a game without bombing
-    // plays exactly as with it off.
-    if (!Air::bombedRecently(raid.lastHitCycle, now)) return;
-    const Air::Hold hold = Air::orderHold(raid, now, pass.itemCount[Structure_RocketTurret]);
-    // The same reserves a city airplane purchase respects (buyCityAirplanes), with this rule's
-    // own floor on top.
-    airRaidPlan.reserve = Air::cashReserve(pass.economyReserve, pass.strategicReserveCost,
-                                           pass.civicReserveCost, pass.cityWorkingReserve);
+    Air::Hold hold = Air::Hold::NotBombed;
+    if (raidSwitch && Air::bombedRecently(raid.lastHitCycle, now)) {
+        hold = Air::orderHold(raid, now, pass.itemCount[Structure_RocketTurret]);
+    } else if (threatSwitch && cityPlaneThreat()) {
+        // Not bombed lately, but another team can bomb: the baseline before the first bomb.
+        airRaidPlan.threat = true;
+        hold = Air::threatHold(true, raid, now, pass.itemCount[Structure_RocketTurret]);
+    } else {
+        // Neither bombed nor threatened: with the switches on, a game without city airplanes
+        // plays exactly as with them off.
+        return;
+    }
+    // With AirThreatTurrets the turret is paid ahead of the strategic and civic savings, keeping
+    // the economy's reserve. Without it: the same reserves a city airplane purchase respects
+    // (buyCityAirplanes), with this rule's own floor on top.
+    airRaidPlan.reserve = threatSwitch ? Air::threatReserve(pass.economyReserve)
+        : Air::cashReserve(pass.economyReserve, pass.strategicReserveCost,
+                           pass.civicReserveCost, pass.cityWorkingReserve);
     airRaidPlan.active = hold == Air::Hold::None;
     if (!airRaidPlan.active && pass.emitStatsLog)
         traceDecision("air_raid_defence_hold", AITelemetry::Record().set("reason", Air::holdName(hold))
+            .set("threat_only", airRaidPlan.threat)
             .set("bombed_cycle", raid.lastHitCycle).set("raid_turrets", int(raid.turretsOrdered))
             .set("rocket_turrets", pass.itemCount[Structure_RocketTurret]));
+}
+
+bool QuantBot::cityPlaneThreat() const {
+    if (!currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing) return false;
+    for (int h = 0; h < NUM_HOUSES; ++h) {
+        const House* other = currentGame->getHouse(h);
+        if (other == nullptr || !other->isAlive() || other->getTeamID() == getHouse()->getTeamID()) continue;
+        if (other->getNumItems(Structure_Airport) > 0 || other->getNumItems(Unit_AmbientAirplane) > 0
+            || other->getNumLostItems(Unit_AmbientAirplane) > 0) return true;
+    }
+    return false;
 }
 
 void QuantBot::chooseYardAirRaidDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -1133,8 +1167,8 @@ void QuantBot::noteAirRaidTurretOrdered(BuildPass& pass, const BuilderTurn& turn
         .set("spendable_after", pass.money).set("reserve", airRaidPlan.reserve));
     // One line per turret for the match tables, like CITY_PLANE_KILL. own_rocket_turrets counts
     // the standing ones, without this order.
-    SDL_Log("CITY_AIR_DEFENCE: house=%d turret_at=%d/%d bombed_cycle=%u own_rocket_turrets=%d cycle=%u",
-            houseID, site.x, site.y, raid.lastHitCycle, standing, now);
+    SDL_Log("CITY_AIR_DEFENCE: house=%d turret_at=%d/%d bombed_cycle=%u own_rocket_turrets=%d threat=%d cycle=%u",
+            houseID, site.x, site.y, raid.lastHitCycle, standing, airRaidPlan.threat ? 1 : 0, now);
 }
 
 void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
