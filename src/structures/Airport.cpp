@@ -56,7 +56,7 @@ int Airport::freePlaneCharge() {
         return value > 0 ? MILLI2CYCLES(value * 1000) : 0;
     }();
     if (testFreePlaneCycles > 0) return testFreePlaneCycles;
-    return experiment > 0 ? experiment : Palace::getSpecialWeaponCooldownForHouse(HOUSE_ORDOS);
+    return experiment > 0 ? experiment : MILLI2CYCLES(DuneCity::CityAircraft::kFreePlaneMs);
 }
 
 void Airport::init() {
@@ -70,7 +70,7 @@ void Airport::init() {
     // An Airport built during the game has its free plane ready at once (Stefan, 2026-11-23:
     // "when you build an airport you should get one"). One that stands when the game begins, on
     // a scenario map or in a generated city, charges first, so that no house bombs in the
-    // first five minutes.
+    // first two minutes.
     freePlaneTimer = currentGame->getGameCycleCount() > 0 ? 0 : freePlaneCharge();
     graphic   = pGFXManager->getObjPic(graphicID, getOwner()->getHouseID());
     numImagesX = DuneCity::CitySprites::specialFrames;

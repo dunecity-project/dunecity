@@ -604,9 +604,9 @@ void checkAirport(const std::string& mapData) {
         record("airport", "patrol=" + std::to_string(patrol) + " ornithopters=" + std::to_string(ornithopters)
                               + " city_planes_launched=" + std::to_string(planes) + " patrol_timer="
                               + std::to_string(timerAtStart) + "->" + std::to_string(airport->getSpawnTimer()));
-        // One free plane every five minutes, the time a Palace takes to make a Saboteur: at 5:00
-        // and at 10:00 in these eleven minutes.
-        require(planes == 2, "The Airport did not launch its free plane at five and at ten minutes");
+        // One free plane every two minutes, as long as the last one is gone: two to five in these
+        // eleven minutes (a plane nobody shoots at flies until it crosses the map's edge).
+        require(planes >= 2 && planes <= 5, "The Airport did not launch its free plane every two minutes");
         if(patrol) {
             require(ornithopters == 2, "With the patrol rule on the Airport did not send out its pair of Ornithopters");
         } else {
@@ -623,7 +623,7 @@ void checkAirport(const std::string& mapData) {
 // ---------------------------------------------------------------------------------------------
 
 // Stefan, 2026-11-23: "when you build an airport you should get one". An Airport that stands when
-// the game begins charges for five minutes first (checkAirport: launches at 5:00 and 10:00); one
+// the game begins charges for two minutes first (checkAirport); one
 // placed during the game has its free plane ready and launches it at its next five-second tick.
 void checkAirportBuiltPlane(const std::string& mapData) {
     auto game = newGame(mapData, 19, Rules{true, true, false, true, true});
@@ -640,7 +640,7 @@ void checkAirportBuiltPlane(const std::string& mapData) {
     record("airport_built", "free plane launched " + std::to_string(launchedAfter) + " cycles after the Airport was placed; next in "
                                 + std::to_string(airport->getFreePlaneTimer()) + " cycles");
     require(launchedAfter >= 0, "An Airport built during the game did not launch its free plane within ten seconds");
-    require(airport->getFreePlaneTimer() > MILLI2CYCLES(4 * 60 * 1000), "The launch did not restart the five-minute clock");
+    require(airport->getFreePlaneTimer() > MILLI2CYCLES(100 * 1000), "The launch did not restart the two-minute clock");
     game.reset();
     currentGame = nullptr;
 }

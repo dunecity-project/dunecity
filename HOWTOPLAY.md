@@ -151,9 +151,12 @@ not order them, but you can buy more planes.
   airport. An Airport already on a map grows to 4x4 towards whichever side has free ground; one
   that is boxed in by other buildings, and every Airport in a game saved before this change, stays
   3x3 with the same picture drawn smaller. Both work the same.
+- **The Airport in the city.** As in Micropolis it has no population of its own: it is counted,
+  and a city needs one for its commercial zones to keep growing. It pollutes twice as much as a
+  fully built industrial zone, so keep it away from housing.
 
-- **The free plane.** Each powered Airport makes a free plane every five minutes, the time a Palace
-  takes to make a Saboteur; the Airport's panel shows the countdown. It takes off when the clock
+- **The free plane.** Each powered Airport makes a free plane every two minutes; the Airport's panel
+  shows the countdown. It takes off when the clock
   has run out and your house has no free plane in the air, and that restarts the clock of all your
   Airports, so a second Airport does not shorten the wait. An Airport you build during the game
   has its free plane ready at once; Airports that stand when the game begins charge first.

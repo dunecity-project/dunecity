@@ -42,9 +42,9 @@ TEST_CASE("getStructureCityRole categorises mapped buildings", "[city-effects][r
     REQUIRE(getStructureCityRole(Structure_HeavyFactory)     == CityRole::Industrial);
     REQUIRE(getStructureCityRole(Structure_RepairYard)       == CityRole::Industrial);
     REQUIRE(getStructureCityRole(Structure_Refinery)         == CityRole::Industrial);
-    // Starport and Airport have specific city roles
+    // The Starport is industrial; the Airport, as in Micropolis, has no role and no population
     REQUIRE(getStructureCityRole(Structure_StarPort)         == CityRole::Industrial);
-    REQUIRE(getStructureCityRole(Structure_Airport)          == CityRole::Commercial);
+    REQUIRE(getStructureCityRole(Structure_Airport)          == CityRole::None);
     // Barracks/WOR are residential (infantry garrison = population)
     REQUIRE(getStructureCityRole(Structure_Barracks)         == CityRole::Residential);
     REQUIRE(getStructureCityRole(Structure_WOR)              == CityRole::Residential);
@@ -758,9 +758,14 @@ TEST_CASE("Palace hosts one residential zone and no commercial zone",
 TEST_CASE("Starport and Airport have correct city roles",
           "[city-effects][role]") {
     REQUIRE(getStructureCityRole(Structure_StarPort) == CityRole::Industrial);
-    REQUIRE(getStructureCityRole(Structure_Airport)  == CityRole::Commercial);
+    REQUIRE(getStructureCityRole(Structure_Airport)  == CityRole::None);
     REQUIRE(getStructureMaxLevel(Structure_StarPort) == 3);
-    REQUIRE(getStructureMaxLevel(Structure_Airport)  == 3);
+    REQUIRE(getStructureMaxLevel(Structure_Airport)  == 0);
+    // Micropolis getPollutionValue(): airport tiles 100, twice a developed industrial tile.
+    REQUIRE(getPollutionEmission(Structure_Airport, 0) == 100);
+    REQUIRE(getPollutionEmission(Structure_Airport, 3) == 100);
+    REQUIRE(getPollutionEmission(Structure_ZoneIndustrial, 3) == 50);
+    REQUIRE(getZonePopulation(Structure_Airport, 3) == 0);
 }
 
 // --- Traffic pollution -------------------------------------------------------

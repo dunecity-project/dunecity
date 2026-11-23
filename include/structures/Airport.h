@@ -41,12 +41,10 @@ public:
     int getPurchaseCooldown() const { return purchaseCooldown; }
     /// Cycles until this Airport's free plane is ready (0: ready).
     int getFreePlaneTimer() const { return freePlaneTimer; }
-    /// Cycles a free plane takes: what an Ordos Palace takes to make a Saboteur, five minutes
-    /// (Stefan, 2026-11-23: "delay the time you get a free plane to be the time it takes to get a
-    /// saboteur"). It was a one-in-six roll every five seconds, about half a minute.
+    /// Cycles a free plane takes: CityAircraft::kFreePlaneMs, two minutes.
     static int freePlaneCharge();
     /// Probes only: a shorter charge, so a few game minutes hold enough flights to measure
-    /// bombing. 0 (always, in the game) is the Saboteur's time.
+    /// bombing. 0 (always, in the game) is the two minutes.
     static inline int testFreePlaneCycles = 0;
     /// True for a 3x3 Airport (see the class comment), false for the ordinary 4x4 one.
     bool isCompact() const { return compact; }

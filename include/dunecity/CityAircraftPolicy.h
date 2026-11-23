@@ -603,6 +603,10 @@ inline constexpr int kRunOvershootTiles = 12;
 inline constexpr int kPlanePrice = 1500;
 inline constexpr int kMaxPlanesPerHouse = 10;
 inline constexpr int kPurchaseCooldownMs = 60000;
+/// The free plane's clock: two minutes (Stefan, 2026-11-23: "reduce the free plane from 5 mins
+/// to 2 mins"). It was the Ordos Palace's five (the time to make a Saboteur), and before that a
+/// one-in-six roll every five seconds, about half a minute.
+inline constexpr int kFreePlaneMs = 120000;
 /// Flights of its own that must have ended before a computer player judges whether planes pay.
 inline constexpr int kPurchaseEvidenceFlights = 1;
 /// True when a house's planes have so far destroyed at least their price per ended flight.

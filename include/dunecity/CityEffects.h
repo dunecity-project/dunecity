@@ -148,7 +148,10 @@ enum class CityRole {
 /// Palace → civic residential: one residential zone's population (Stefan, 2026-11-22: "nerf
 ///   palaces slightly, make it only have 1 residential not residential and commercial").
 /// StarPort → shipyard / industrial high (jobs + economic role).
-/// Airport → commercial high (transport/trade boost).
+/// Airport → no role and no population, as in Micropolis, where it is a special building that
+/// is only counted (simulate.cpp, `case AIRPORT: airportPop++`) and lifts the commercial cap
+/// (Stefan, 2026-11-23: "airport should not have population unless the original did, make it like
+/// micropolis"). Until then it was commercial-high with a level and jobs of its own.
 /// Barracks/WOR → residential high (infantry garrisons = population).
 inline CityRole getStructureCityRole(int itemID) {
     switch (itemID) {
@@ -160,7 +163,6 @@ inline CityRole getStructureCityRole(int itemID) {
         case Structure_ZoneCommercial:
         case Structure_Radar:
         case Structure_IX:
-        case Structure_Airport:
             return CityRole::Commercial;
         case Structure_ZoneIndustrial:
         case Structure_ConstructionYard:
@@ -200,7 +202,6 @@ inline int getStructureMaxLevel(int itemID) {
         case Structure_IX:              // commercial high
         case Structure_ConstructionYard: // industrial high (acts as factory)
         case Structure_StarPort:        // shipyard — industrial high
-        case Structure_Airport:         // transport hub — commercial high
         case Structure_Barracks:        // residential high (infantry)
         case Structure_WOR:             // residential high (heavy infantry)
         case Structure_TechCenter:      // civic high (IX vehicle support)
@@ -223,10 +224,18 @@ inline int effectiveCityLevel(int itemID, int level) {
 
 // --- Pollution emission ------------------------------------------------------
 
+/// Micropolis getPollutionValue(): port, airport and coal plant tiles 100 (industrial 50).
+constexpr int kAirportPollution = 100;
+
 /// Per-source pollution emission (0-100 scale), scaled by current level.
 /// Industrial sources pollute by their capped city density. Government tax
 /// exemption does not remove factory emissions.
 inline int getPollutionEmission(int itemID, int level) {
+    // The Airport pollutes as Micropolis's does (Stefan, 2026-11-23: "it should have pollution
+    // like micropolis"): scan.cpp getPollutionValue() returns 100 for seaport, airport and coal
+    // power plant tiles and 50 for a developed industrial tile, which is this table's top
+    // industrial value. It has no level, so the value does not scale.
+    if (itemID == Structure_Airport) return kAirportPollution;
     level = effectiveCityLevel(itemID, level);
     if (level <= 0) return 0;
     if (getStructureCityRole(itemID) != CityRole::Industrial) return 0;
