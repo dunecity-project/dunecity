@@ -730,7 +730,7 @@ void checkPurchase(const std::string& mapData) {
             airports.push_back(dynamic_cast<Airport*>(place(owner, Structure_Airport, Coord(20, 10 + 6 * i))));
             require(airports.back() != nullptr, "Could not place an Airport");
         }
-        owner->addCredits(10000);
+        owner->startingCredits += 10000;   // addCredits() stops at the house's storage capacity
         // No cycle is played before the purchases: the Airports' own roll could launch a free plane.
         require(owner->hasPower(), "The Airports are not powered");
         const int before = owner->getCredits();
@@ -767,7 +767,7 @@ void checkPurchase(const std::string& mapData) {
         owner->takeCredits(owner->getCredits() - (CA::kPlanePrice - 100));
         require(owner->getCredits() < CA::kPlanePrice && !airports[3]->canBuyAirplane() && !airports[3]->buyAirplane()
                     && planes() == flying, "A house bought a plane it could not pay for");
-        owner->addCredits(CA::kPlanePrice);
+        owner->startingCredits += CA::kPlanePrice;
         const int rich = owner->getCredits();
         require(flying >= CA::kMaxPlanesPerHouse
                     || (airports[3]->buyAirplane() && planes() == flying + 1 && owner->getCredits() == rich - CA::kPlanePrice),
