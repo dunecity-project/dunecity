@@ -167,6 +167,16 @@ Commit `8bf33b94e` (not pushed, no version bump; protocol 133, save format 9895)
   Airport's footprint, the two road cases). `CitySpritePolicyTestCase` and the skirmish generator's catalogue
   follow the size; the generator's pinned digests did not move. `city_plane_effect`'s pictures show both sizes
   (looked at: correct). Mini: `dunelegacy_tests`, `city_aircraft_probe` passed on `8bf33b94e`.
+- **Gates on the Airport build.** AWS job `20261123T162927-ctest-0e17a6` (`ef2a81ac9`): the four AI gates,
+  `bundled_three_way_startup`, `city_aircraft_probe` and `city_plane_effect` passed; `city_plane_flights` died
+  with SIGSEGV on both workers. The crash was in the probe, not the game (`runCityPlaneFlights` read the ground
+  object of a tile whose building a bomb had destroyed since the sight entered it; the earlier runs passed by
+  timing). Fixed in `b2cdcedb0`; it then passed on the Mini and on AWS (`20261123T170259-ctest-423b20`, 392 s).
+  Mini: `perf_regression` passed (122.8 s). No off/on AI matches were run for the Airport's size.
+- **Installed** on `Stefans-MacBook-Air.local`, `/Applications/dunecity.app`, 05:30 UTC: `build-int` as built
+  from `8bf33b94e` (before the later Carryall commit `485291f04`); hashes and deep signature verified there, no
+  launch by an agent. Backups there: the 1.0.876 release app and the `6cb58d1e8` build. Package and receipt:
+  `../outputs/install-mba-20261123-8bf33b94e/`.
 - **Known gaps.** A compact Airport is over-estimated by one row and column where code asks the item for its
   size instead of the object: the map editor and map preview (`MapEditor.cpp`, `MapEditorRadarView.cpp`,
   `INIMapPreviewCreator.cpp`) and two AI spots (`QuantBotPlacement.cpp:491`, `QuantBotForce.cpp:1050`).
