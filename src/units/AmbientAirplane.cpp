@@ -41,7 +41,8 @@ AmbientAirplane::AmbientAirplane(House* newOwner) : AirUnit(newOwner)
     bombs = bombLoad();
     bombTimer = 0;
     bombSightTile = Coord::Invalid();
-    stickGap = CA::kStickGapTicks + 1;
+    stickGap = CA::kStickTailBombs + 1;
+    stickPhase = 0;
 }
 
 AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
@@ -70,8 +71,13 @@ AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
         bombTimer = 0;
         bombSightTile = Coord::Invalid();
     }
-    stickGap = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_PURCHASE
-        ? std::clamp(stream.readSint32(), 0, CA::kStickGapTicks + 1) : CA::kStickGapTicks + 1;
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_PURCHASE) {
+        stickGap = std::clamp(stream.readSint32(), 0, CA::kStickTailBombs + 1);
+        stickPhase = std::clamp(stream.readSint32(), 0, CA::kStickPhasePeriod + CA::kStickPhaseStep);
+    } else {
+        stickGap = CA::kStickTailBombs + 1;
+        stickPhase = 0;
+    }
     // init() sets the cruise row; a save may be between take-off frames.
     if(takeoffFrame >= CA::kAirplaneLastTakeoffFrame && takeoffFrame <= CA::kAirplaneFirstTakeoffFrame) {
         drawnFrame = CA::airplaneTakeoffRow(takeoffFrame);
@@ -117,6 +123,7 @@ void AmbientAirplane::save(OutputStream& stream) const
     stream.writeSint32(bombSightTile.x);
     stream.writeSint32(bombSightTile.y);
     stream.writeSint32(stickGap);
+    stream.writeSint32(stickPhase);
 }
 
 bool AmbientAirplane::canPass(int xPos, int yPos) const
@@ -523,11 +530,12 @@ Coord AmbientAirplane::bombSight() const
 }
 
 /**
-    City Plane Carpet Bombing: one sprite tick of the stick. While a building of another
-    team is under the bomb sight, and for CA::kStickGapTicks ticks after the last one, a bomb
-    is released towards the sight: two a tile on an axis heading. Nothing is released while
-    the sight is over a building of the plane's own team or off the map. A bomb damages the
-    building its impact point lies on and, by the ordinary splash rule, units of any side
+    City Plane Carpet Bombing: one game cycle of the stick. A stick starts with a bomb the
+    cycle a building of another team comes under the bomb sight, releases another every
+    25/8 cycles (two a tile on an axis heading) while one is under it, and CA::kStickTailBombs
+    more after the last. A bomb that falls due while the sight is over a building of the
+    plane's own team, or off the map, or with the rack empty, is not released. A bomb damages
+    the building its impact point lies on and, by the ordinary splash rule, units of any side
     within a tile of it.
 */
 void AmbientAirplane::dropStick(Uint32 gameCycle)
@@ -545,9 +553,18 @@ void AmbientAirplane::dropStick(Uint32 gameCycle)
         }
     }
     const bool own = building != nullptr && building->getOwner()->getTeamID() == owner->getTeamID();
-    if(building != nullptr && !own) stickGap = 0;
-    else if(stickGap <= CA::kStickGapTicks) ++stickGap;
-    if(bombs <= 0 || !onMap || own || stickGap > CA::kStickGapTicks) return;
+    const bool enemy = building != nullptr && !own;
+    if(stickGap > CA::kStickTailBombs) {
+        if(!enemy) return;                          // no stick, nothing to start one
+        stickPhase = CA::kStickPhasePeriod;         // a new stick: its first bomb is due now
+    } else {
+        stickPhase += CA::kStickPhaseStep;
+    }
+    if(enemy) stickGap = 0;
+    if(stickPhase < CA::kStickPhasePeriod) return;
+    stickPhase -= CA::kStickPhasePeriod;
+    if(!enemy && ++stickGap > CA::kStickTailBombs) return;   // the tail is spent
+    if(bombs <= 0 || !onMap || own) return;
 
     bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kStickDamage, false, building));
     --bombs;
@@ -595,11 +612,13 @@ bool AmbientAirplane::update()
     }
 
     const Uint32 gameCycle = currentGame->getGameCycleCount();
-    // The bomb sight is followed every cycle, so no tile it crosses is missed. The stick
-    // (City Plane Carpet Bombing) is released on sprite ticks instead, below.
+    // The bomb sight is followed every cycle, so no tile it crosses is missed.
     const bool bombing = currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing;
     const bool stick = bombing && currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing;
-    if(bombing && !stick && takeoffFrame == 0) dropBomb(gameCycle);
+    if(bombing && takeoffFrame == 0) {
+        if(stick) dropStick(gameCycle);
+        else      dropBomb(gameCycle);
+    }
     if(!CA::isSpriteTick(gameCycle)) {
         return true;
     }
@@ -607,7 +626,6 @@ bool AmbientAirplane::update()
     if(remainingTicks > 0) --remainingTicks;
 
     if(bombing) bombs = CA::rearmBombs(bombs, bombTimer, bombLoad(), bombRearmTicks());
-    if(stick && takeoffFrame == 0) dropStick(gameCycle);
 
     if(takeoffFrame == 0) {
         if(remainingTicks > 0) {

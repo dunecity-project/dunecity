@@ -110,7 +110,7 @@ private:
     bool crashWouldHit(int teamID, FixPoint from, FixPoint to) const;
     /// City Plane Bombing: one bomb when the bomb sight enters a tile of an enemy building.
     void dropBomb(Uint32 gameCycle);
-    /// City Plane Carpet Bombing: one sprite tick of the stick (CityAircraft::kStick*).
+    /// City Plane Carpet Bombing: one game cycle of the stick (CityAircraft::kStick*).
     void dropStick(Uint32 gameCycle);
     /// The point CityAircraft::kBombSightDistance ahead on the course, in world units.
     Coord bombSight() const;
@@ -126,7 +126,8 @@ private:
     Sint32 bombs;           ///< Bombs on board (saved from 9890)
     Sint32 bombTimer;       ///< Sprite ticks towards the next bomb, 0 while full (saved from 9890)
     Coord  bombSightTile;   ///< Tile the bomb sight was over last cycle (saved from 9890)
-    Sint32 stickGap;        ///< Sprite ticks since an enemy building was under the sight (saved from 9891)
+    Sint32 stickGap;        ///< Bombs due since an enemy building was under the sight; above kStickTailBombs: no stick (saved from 9891)
+    Sint32 stickPhase;      ///< The stick's clock towards its next bomb (saved from 9891)
 };
 
 #endif // AMBIENTAIRPLANE_H

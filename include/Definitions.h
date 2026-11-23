@@ -223,8 +223,8 @@
 //       (16). The Airport still saves its Ornithopter patrol timer and pair counter, which stand
 //       still unless the match rule Airport Ornithopter Patrol is on. The three city plane rules
 //       are bits 2-4 of the MOD15 Trooper byte, set only in their non-default state.
-// 9891: The city airplane also saves its stick gap counter (sprite ticks since an enemy building
-//       was last under its bomb sight) after the bomb sight tile, and an Airport saves its plane
+// 9891: The city airplane also saves its stick tail counter and stick clock (AmbientAirplane::
+//       stickGap, stickPhase) after the bomb sight tile, and an Airport saves its plane
 //       purchase cooldown after the patrol counters. An Explosion may be the new Explosion_Bomb
 //       (14). Three more city plane rules are bits 5-7 of the MOD15 Trooper byte.
 #define SAVEGAMEVERSION     9891

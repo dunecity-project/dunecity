@@ -525,6 +525,7 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
     plane->bombs = carpet ? 5 : 2;
     plane->bombTimer = carpet ? 17 : 77;
     plane->stickGap = 1;
+    plane->stickPhase = 3;
     auto* sold = dynamic_cast<Airport*>(place(game->getHouse(HOUSE_ATREIDES), Structure_Airport, Coord(40, 40)));
     require(sold != nullptr, "Could not place the Airport for the save");
     sold->purchaseCooldown = 1234;
@@ -533,9 +534,9 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
     for(int i = 0; i < 10; ++i) game->updateGameState();
     plane = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
     require(plane != nullptr, "The plane left before the save");
-    const int bombs = plane->bombs, timer = plane->bombTimer, gap = plane->stickGap;
+    const int bombs = plane->bombs, timer = plane->bombTimer, gap = plane->stickGap, phase = plane->stickPhase;
     const int cooldown = sold->purchaseCooldown;
-    require((!carpet || gap > 0) && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
+    require((!carpet || (gap == 3 && bombs == 4)) && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
     const std::string path = gOut + "/city-plane-effect.dls";
     require(game->saveGame(path), "Could not write the save");
     game.reset();
@@ -550,7 +551,7 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
     require(loaded->bombs == bombs && loaded->bombTimer == timer, "The plane lost its bomb load in the save");
     // The aimed bombs follow the sight tile, the stick its gap counter.
     require(carpet || loaded->bombSightTile.isValid(), "The plane lost its bomb sight tile in the save");
-    require(loaded->stickGap == gap, "The plane lost its stick gap counter in the save");
+    require(loaded->stickGap == gap && loaded->stickPhase == phase, "The plane lost its stick counters in the save");
     const auto* airport = dynamic_cast<Airport*>(game->getObjectManager().getObject(airportID));
     require(airport != nullptr && airport->getPurchaseCooldown() == cooldown, "The Airport lost its purchase cooldown in the save");
     require(AmbientAirplane::all().size() == 1 && AmbientAirplane::all().front() == loaded,
@@ -561,7 +562,7 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
                 && options.cityPlanePurchase == carpet,
             "The save lost the city plane rules");
     record("save", std::string(carpet ? "stick " : "aimed ") + "bombs=" + std::to_string(bombs) + " timer=" + std::to_string(timer) + " stick_gap="
-                       + std::to_string(gap) + " purchase_cooldown=" + std::to_string(cooldown) + " restored=1");
+                       + std::to_string(gap) + " stick_phase=" + std::to_string(phase) + " purchase_cooldown=" + std::to_string(cooldown) + " restored=1");
     game.reset();
     currentGame = nullptr;
     require(AmbientAirplane::all().empty(), "A finished game left a city airplane registered");
@@ -624,7 +625,7 @@ void checkStick(const std::string& mapData) {
         record("stick_run", name + " bombs=" + std::to_string(dropped) + " health_after=" + std::to_string(health[0]));
         const int expected = item == Structure_WindTrap ? 0 : item == Structure_RocketTurret ? 80
                            : item == Structure_ConstructionYard ? 160 : item == Structure_Refinery ? 90 : 640;
-        if(health[0] != expected) SDL_Log("CITY_PLANE_EFFECT_TODO: %s expected %d got %d", name.c_str(), expected, health[0]);
+        require(health[0] == expected, "One stick over a " + name + " did not leave it at " + std::to_string(expected));
     }
 
     // The stick runs on across a one-tile road between two buildings, and one tile past the last.
@@ -634,7 +635,7 @@ void checkStick(const std::string& mapData) {
     }, health, true);
     record("stick_gap", "two Wind Traps one tile apart: bombs=" + std::to_string(dropped) + " health_after="
                             + std::to_string(health[0]) + "," + std::to_string(health[1]));
-    if(false) require(dropped == 12 && health[0] == 0 && health[1] == 0,
+    require(dropped == 12 && health[0] == 0 && health[1] == 0,
             "The stick did not run unbroken over two Wind Traps a tile apart with twelve bombs");
 
     // Own and allied buildings: nothing is released over them, also not as the tail of a stick.
@@ -650,7 +651,7 @@ void checkStick(const std::string& mapData) {
                                  + std::to_string(health[3]) + " allied_wall=" + std::to_string(health[4]));
     require(health[0] == 200 && health[1] == 200 && health[3] == 50 && health[4] == 50,
             "A stick bomb damaged the plane's own or an allied building");
-    if(false) require(dropped == 4 && health[2] == 0, "The enemy Wind Trap between own buildings did not get exactly its four bombs");
+    require(dropped == 4 && health[2] == 0, "The enemy Wind Trap between own buildings did not get exactly its four bombs");
 
     // Twenty enemy walls in a row: the load is 24, two a tile, so twelve walls fall.
     dropped = flyRow(mapData, 5, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
@@ -659,7 +660,7 @@ void checkStick(const std::string& mapData) {
     }, health, true);
     const int standing = static_cast<int>(std::count_if(health.begin(), health.end(), [](int h) { return h > 0; }));
     record("stick_load", "walls=20 bombs=" + std::to_string(dropped) + " standing=" + std::to_string(standing));
-    if(false) require(dropped == CA::kStickLoad && standing == 20 - CA::kStickLoad / 2, "A stick did not stop at one bomb load");
+    require(dropped == CA::kStickLoad && standing == 20 - CA::kStickLoad / 2, "A stick did not stop at one bomb load");
     int bombs = 0, timer = 0, ticks = 0;
     while(bombs < CA::kStickLoad) { bombs = CA::rearmBombs(bombs, timer, CA::kStickLoad, CA::kStickRearmTicks); ++ticks; }
     require(ticks == CA::kStickLoad * CA::kStickRearmTicks, "The stick rack does not refill at one bomb per rearm time");
@@ -705,8 +706,8 @@ void checkRepairingBuilding(const std::string& mapData) {
         }
         record("repairing", std::string(carpet ? "stick" : "aimed bombs") + " on a repairing Wind Trap: lowest_health="
                                 + std::to_string(lowest));
-        if(false) { if(carpet) require(lowest == 0, "The stick did not destroy a repairing Wind Trap");
-        else require(lowest == 1, "Two aimed bombs did not leave a repairing Wind Trap on 1 hit point"); }
+        if(carpet) require(lowest == 0, "The stick did not destroy a repairing Wind Trap");
+        else require(lowest == 1, "Two aimed bombs did not leave a repairing Wind Trap on 1 hit point");
         game.reset();
         currentGame = nullptr;
     }
@@ -727,7 +728,7 @@ void checkPurchase(const std::string& mapData) {
             require(airports.back() != nullptr, "Could not place an Airport");
         }
         owner->addCredits(10000);
-        for(int i = 0; i < 3; ++i) game->updateGameState();
+        // No cycle is played before the purchases: the Airports' own roll could launch a free plane.
         require(owner->hasPower(), "The Airports are not powered");
         const int before = owner->getCredits();
         const Uint32 ownPlayer = owner->getPlayerList().front()->getPlayerID();
@@ -757,17 +758,17 @@ void checkPurchase(const std::string& mapData) {
         const int afterThree = owner->getCredits();
         require(afterThree == before - 3 * CA::kPlanePrice, "Three planes did not cost 4500");
         // A minute later the first Airport is ready again, but not for a house that cannot pay.
-        for(const AmbientAirplane* plane : std::vector<AmbientAirplane*>(AmbientAirplane::all()))
-            const_cast<AmbientAirplane*>(plane)->leaveMap();
-        for(int i = 0; i < MILLI2CYCLES(CA::kPurchaseCooldownMs) + 2; ++i) game->updateGameState();
+        for(int i = 0; i < MILLI2CYCLES(CA::kPurchaseCooldownMs); ++i) game->updateGameState();
         require(airports[0]->getPurchaseCooldown() == 0, "The purchase cooldown did not run out in a minute");
         const int flying = planes();
-        owner->takeCredits(owner->getCredits() - (CA::kPlanePrice - 1));
-        require(owner->getCredits() == CA::kPlanePrice - 1 && !airports[3]->canBuyAirplane() && !airports[3]->buyAirplane()
+        owner->takeCredits(owner->getCredits() - (CA::kPlanePrice - 100));
+        require(owner->getCredits() < CA::kPlanePrice && !airports[3]->canBuyAirplane() && !airports[3]->buyAirplane()
                     && planes() == flying, "A house bought a plane it could not pay for");
-        owner->addCredits(1);
-        require(flying >= CA::kMaxPlanesPerHouse || (airports[3]->buyAirplane() && owner->getCredits() == 0),
-                "A house with exactly 1500 credits could not buy a plane");
+        owner->addCredits(CA::kPlanePrice);
+        const int rich = owner->getCredits();
+        require(flying >= CA::kMaxPlanesPerHouse
+                    || (airports[3]->buyAirplane() && planes() == flying + 1 && owner->getCredits() == rich - CA::kPlanePrice),
+                "A house that could pay again could not buy a plane");
         record("purchase", "rule=1 price=" + std::to_string(CA::kPlanePrice) + " three_planes_credits=" + std::to_string(before)
                                + "->" + std::to_string(afterThree) + " fourth_refused=1 other_house_refused=1 cooldown_cycles="
                                + std::to_string(MILLI2CYCLES(CA::kPurchaseCooldownMs)) + " unaffordable_refused=1");

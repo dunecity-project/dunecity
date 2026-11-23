@@ -478,11 +478,12 @@ inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, k
 // over. using a ornithopter attack explosion but make it a bit bigger and deadlier").
 // Match rule GameOptionsClass::cityPlaneCarpetBombing, with cityPlaneBombing.
 //
-// While an enemy building is under the bomb sight the plane releases one bomb every
-// sprite tick: half a tile of flight on an axis heading, so two bombs a tile. The
-// stick carries on for kStickGapTicks more ticks (one tile) after the last building,
-// so it runs unbroken across a road between two zones; it never falls on a tile that
-// holds a building of the plane's own team.
+// A stick starts with a bomb the cycle an enemy building comes under the bomb sight
+// and releases another every 25/8 game cycles (kStickPhasePeriod / kStickPhaseStep):
+// half a tile of flight on an axis heading, so exactly two bombs a tile. It carries
+// on for kStickTailBombs more bombs (one tile) after the last building, so it runs
+// unbroken across a road between two zones; it never falls on a tile that holds a
+// building of the plane's own team.
 // Against the Ornithopter's rocket (Dune City ObjectData: 45 damage, Explosion_Small):
 // a stick bomb does kStickDamage = 60, a third more, and its impact is the same
 // explosion drawn half again as large (Explosion_Bomb). Two bombs a tile are 120 a
@@ -501,8 +502,13 @@ inline constexpr int kStickLoad = 24;
 inline constexpr int kStickDamage = 60;
 /// Sprite ticks to regain one stick bomb (2 s).
 inline constexpr int kStickRearmTicks = 40;
-/// Sprite ticks the stick carries on after the last enemy building under the sight.
-inline constexpr int kStickGapTicks = 2;
+/// Bombs the stick still releases after the last enemy building under the sight.
+inline constexpr int kStickTailBombs = 2;
+/// The stick's clock: kStickPhaseStep is added every game cycle and a bomb is due each
+/// time kStickPhasePeriod is reached: one bomb per 3.125 cycles, 32 world units of an
+/// axis heading's 10.24 a cycle.
+inline constexpr int kStickPhaseStep = 8;
+inline constexpr int kStickPhasePeriod = 25;
 
 // ---------------------------------------------------------------------------
 // Bombing runs (match rule GameOptionsClass::cityPlaneBombingRuns). Each leg of the
