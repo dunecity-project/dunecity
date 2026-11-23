@@ -471,18 +471,11 @@ TEST_CASE("A computer player buys planes only when its own planes have paid", "[
     CHECK(purchasePays(5600 * 100, 100));
 }
 
-TEST_CASE("A computer player with heaps of money sends a wave of ten", "[city][aircraft]") {
+TEST_CASE("A computer player with heaps of money buys planes that do not pay", "[city][aircraft]") {
     using namespace DuneCity::CityAircraft;
-    // A wave starts on twice its price in surplus, with no bought plane in the air, two minutes
-    // after the last raid purchase.
-    CHECK_FALSE(raidStarts(kRaidStartSurplus - 1, false, kRaidPauseMs));
-    CHECK(raidStarts(kRaidStartSurplus, false, kRaidPauseMs));
-    CHECK_FALSE(raidStarts(1000000, true, kRaidPauseMs));
-    CHECK_FALSE(raidStarts(1000000, false, kRaidPauseMs - 1));
-    // It is ten planes, each within fifteen seconds of the one before, however rich the house.
-    CHECK_FALSE(raidContinues(0, 0));
-    CHECK(raidContinues(1, kRaidContinueMs));
-    CHECK(raidContinues(kMaxPlanesPerHouse - 1, 0));
-    CHECK_FALSE(raidContinues(kMaxPlanesPerHouse, 0));
-    CHECK_FALSE(raidContinues(5, kRaidContinueMs + 1));
+    // Twice a full ten planes' price beyond its reserves, and for as long as that lasts.
+    CHECK(kRichSurplus == 30000);
+    CHECK_FALSE(richBuys(kRichSurplus - 1));
+    CHECK(richBuys(kRichSurplus));
+    CHECK(richBuys(1000000));
 }

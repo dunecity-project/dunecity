@@ -102,16 +102,6 @@ public:
     const QuantBotAirDefencePolicy::RaidRecord& getAirRaid() const { return airRaid; }
     void noteBombHit(int x, int y, Uint32 cycle) { airRaid.noteHit(x, y, cycle); }
     void noteAirRaidTurretOrdered(Uint32 cycle) { airRaid.noteTurretOrdered(cycle); }
-    /// A computer player's wave of bought city airplanes (CityAircraft::raidStarts): how many
-    /// this wave and when the last. Saved with the air raid record.
-    int getPlaneRaidBought() const { return planeRaidBought; }
-    Uint32 getPlaneRaidLastCycle() const { return planeRaidLastCycle; }
-    bool hasPlaneRaided() const { return planeRaidEver; }
-    void notePlaneRaidPurchase(Uint32 cycle, bool firstOfWave) {
-        planeRaidBought = static_cast<Uint8>(firstOfWave ? 1 : planeRaidBought + 1);
-        planeRaidLastCycle = cycle;
-        planeRaidEver = true;
-    }
     /// Team 0 (anonymous houses) and the Natives house never die: neither is a side of the match.
     bool isAlive() const;
 
@@ -377,9 +367,6 @@ public:
 protected:
     bool autoRepairEnabled = false;
     bool repairReturnEnabled = true;   ///< saved from SAVEGAMEVERSION_REPAIR_RETURN; on is the behaviour before it
-    Uint8 planeRaidBought = 0;      ///< bought planes of the current wave (saved from 9898)
-    Uint32 planeRaidLastCycle = 0;  ///< cycle of the last raid purchase
-    bool planeRaidEver = false;
     QuantBotAirDefencePolicy::RaidRecord airRaid;   ///< saved from SAVEGAMEVERSION_AIR_RAID_RECORD; an older save has none
     void decrementHarvesters(int itemID);
 

@@ -538,21 +538,9 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
     const int flightsEnded = getHouse()->getNumLostItems(Unit_AmbientAirplane);
     const int64_t destroyedCredits = getHouse()->getCombatReward(Unit_AmbientAirplane).damageMilli / 1000;
     const bool pays = CA::purchasePays(destroyedCredits, flightsEnded);
-    // Or a raid: heaps of money buy a wave of ten to break up a base although single planes do
-    // not pay (CityAircraft::raidStarts, raidContinues). The wave's count and clock are the
-    // House's, so a loaded game goes on with the same wave.
-    bool boughtInAir = false;
-    for (const AmbientAirplane* plane : AmbientAirplane::all()) {
-        if (plane->getOwner() == getHouse() && plane->isBought() && plane->getHealth() > 0) boughtInAir = true;
-    }
-    const Uint32 now = currentGame->getGameCycleCount();
-    const int64_t sinceLastMs = getHouse()->hasPlaneRaided()
-        ? int64_t(now - getHouse()->getPlaneRaidLastCycle()) * GAMESPEED_DEFAULT : int64_t(CA::kRaidPauseMs);
-    const bool raidGoesOn = CA::raidContinues(getHouse()->getPlaneRaidBought(), sinceLastMs);
-    const bool raidStart = !raidGoesOn && CA::raidStarts(int64_t(pass.money) - reserve, boughtInAir, sinceLastMs);
-    const bool raid = raidGoesOn || raidStart;
-    if (!pays && !raid) return;
-    int raidBought = raidGoesOn ? getHouse()->getPlaneRaidBought() : 0;
+    // Or heaps of money: it buys although single planes do not pay, to break up a massively
+    // built city (CityAircraft::richBuys). Checked again at each Airport as the money goes.
+    if (!pays && !CA::richBuys(int64_t(pass.money) - reserve)) return;
     bool enemyBuilding = false, checked = false;
     for (const StructureBase* structure : getStructureList()) {
         if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_Airport) continue;
@@ -568,17 +556,13 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
             }
         }
         if (!enemyBuilding) return;
-        if (!pays && raidBought >= CA::kMaxPlanesPerHouse) break;
+        if (!pays && !CA::richBuys(int64_t(pass.money) - reserve)) break;
         if (!doBuyCityAirplane(airport)) continue;
         pass.money -= CA::kPlanePrice;
-        if (!pays) {
-            currentGame->getHouse(getHouse()->getHouseID())->notePlaneRaidPurchase(now, raidBought == 0);
-            ++raidBought;
-        }
         traceDecision("city_airplane_bought", AITelemetry::Record().set("airport", airport->getObjectID())
             .set("price", CA::kPlanePrice).set("spendable_after", pass.money).set("reserve", reserve)
             .set("flights_ended", flightsEnded).set("destroyed_credits", destroyedCredits)
-            .set("pays", pays ? 1 : 0).set("raid", raid ? 1 : 0)
+            .set("pays", pays ? 1 : 0)
             .set("planes", getHouse()->getNumItems(Unit_AmbientAirplane)));
     }
 }

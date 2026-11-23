@@ -574,27 +574,16 @@ inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
     return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(kPlanePrice) * flightsEnded;
 }
 
-// A raid (Stefan, 2026-11-23: "if the ai has heaps and heaps of money then spawning 10 could be
-// useful to break up the enemy base"). Against turrets that fire, single planes stop paying and
-// purchasePays() ends the buying; ten at once saturate the turrets under them. A computer player
-// with a surplus (credits beyond its reserves and cash floor) of twice a full wave's price starts
-// a wave when it has no bought plane in the air and its last raid purchase is kRaidPauseMs old.
-// The wave is kMaxPlanesPerHouse planes, bought one per Airport and build pass while the last
-// purchase is no older than kRaidContinueMs, and then it is over: 15,000 credits every two
-// minutes at most. The count and the clock are kept with the House and saved. (The first form
-// stopped on the surplus alone; a house with a million credits bought 819 planes in six minutes.)
-inline constexpr int kRaidStartSurplus = 2 * kMaxPlanesPerHouse * kPlanePrice;   // 30,000
-inline constexpr int kRaidContinueMs = 15000;
-inline constexpr int kRaidPauseMs = 120000;
-/// A wave may start: `surplus` credits beyond reserves and floor, no bought plane flying, and
-/// `sinceLastMs` since the last raid purchase (a house that never raided: a large number).
-inline constexpr bool raidStarts(int64_t surplus, bool boughtInAir, int64_t sinceLastMs) {
-    return !boughtInAir && sinceLastMs >= kRaidPauseMs && surplus >= kRaidStartSurplus;
-}
-/// The wave under way goes on: `bought` planes so far, the last `sinceLastMs` ago.
-inline constexpr bool raidContinues(int bought, int64_t sinceLastMs) {
-    return bought > 0 && bought < kMaxPlanesPerHouse && sinceLastMs <= kRaidContinueMs;
-}
+// Heaps of money (Stefan, 2026-11-23: "if the ai has heaps and heaps of money then spawning 10
+// could be useful to break up the enemy base"; "no don't cap the planes. I want planes to act as
+// a counter to a massively built city where the game becomes a stalemate"). Against turrets that
+// fire, single planes stop paying and purchasePays() ends the buying. A computer player with
+// kRichSurplus credits beyond its reserves and cash floor buys all the same, one plane per
+// Airport and build pass, for as long as it stays that rich; the ten planes in the air are its
+// only limit. On Metropolis, a million credits a house and 928 Rocket Turrets, that was 819
+// planes and 455 buildings in six minutes: slow, costly, and the thing that moves a stalemate.
+inline constexpr int kRichSurplus = 2 * kMaxPlanesPerHouse * kPlanePrice;   // 30,000
+inline constexpr bool richBuys(int64_t surplus) { return surplus >= kRichSurplus; }
 
 // ---------------------------------------------------------------------------
 // Anti-air against the airplane (match rule GameOptionsClass::cityPlaneDefence).

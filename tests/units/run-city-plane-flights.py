@@ -330,19 +330,15 @@ if least and min(least) < 3000:
     failures.append('purchase: a house was left with %d credits after buying a plane' % min(least))
 # A computer player buys for one of two reasons. Its planes pay: at least one flight has ended and
 # their bombs destroyed at least 1500 credits a flight (the purchase shows up a cycle or two after
-# the decision, in which one more flight may have ended). Or it is rich and sends a wave: such
-# purchases come at most ten in any two minutes per house.
-waves = {}
+# the decision, in which one more flight may have ended). Or it has heaps of money: 30,000 credits
+# beyond its reserves, of which at least the 3000-credit floor and the surplus less the plane are
+# still there after paying.
 for r in purchases:
     ended, destroyed = int(r['flights_ended']), int(r['destroyed_credits'])
-    if not (ended >= 1 and destroyed >= PRICE * (ended - 1)):
-        waves.setdefault((r['map'], r['seed'], r['house']), []).append(int(r['cycle']))
-for (name, seed, house), at in waves.items():
-    at.sort()
-    most = max(sum(1 for other in at if cycle <= other < cycle + 7500) for cycle in at)
-    if most > 10:
-        failures.append('purchase: house %s on %s seed %s bought %d planes that did not pay within two minutes'
-                        % (house, name, seed, most))
+    pays = ended >= 1 and destroyed >= PRICE * (ended - 1)
+    if not pays and int(r['credits_after']) < 30000 + 3000 - PRICE:
+        failures.append('purchase: house %s on %s seed %s bought a plane that did not pay with %s credits left'
+                        % (r['house'], r['map'], r['seed'], r['credits_after']))
 if failures:
     sys.exit('CITY PLANE FLIGHTS FAILED: ' + '; '.join(failures))
 print('City plane flights: ' + str(out / 'summary.md'))
