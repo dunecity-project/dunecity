@@ -180,6 +180,16 @@ agent-workspace run --project dunecity --owner OWNER --tests --wait -- dunecity-
 dunecity-queue report JOB --follow   # outside the wrapper; accepted is not passed
 ```
 
+Wait for the result of every queue job you submit (games and gates alike); never end a turn on
+"next" or "I will" while results are owed. Submitted through `agent-workspace run`, a job carries
+your owner id, and that is how the hooks find it. In Claude Code a background hook
+(`~/.local/share/agent-workspace/queue_watch.py`) starts a new turn in your session with a summary
+when your jobs finish, so you need no waiter of your own. Codex and OMP have no such wake: keep the
+turn open with `dunecity-queue wait JOB...`. A Stop hook refuses once to end a turn while your jobs
+run and nothing waits on them. The notice says a job finished, not that it passed: read
+`dunecity-queue report JOB` first (`~/.config/agent-workspace/POLICY.md`, "Queue jobs: wait for the
+result").
+
 `perf_regression` stays on the Mini: its budgets are calibrated on that machine (and it launches a
 game through the real main menu), so run it alone on a quiet Mac. Every other test that runs on the
 dummy video driver is `headless` and runs on AWS (`-L nightly -LE gui`); only five more stay on the
