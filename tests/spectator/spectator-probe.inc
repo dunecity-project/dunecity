@@ -4,6 +4,7 @@
 // only, exactly as the existing menu and campaign-balance probes do.
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <typeinfo>
 
@@ -710,9 +711,20 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
             result[house->getHouseID()] = {house->getNumStructures(), house->getNumUnits()};
         return result;
     };
+    // Every item type each faction has and its credits, to name what differs when the totals do.
+    const auto census = [](Game& match) {
+        std::map<std::pair<int, int>, int> result;
+        for(House* house : housesWithControllers(match)) {
+            for(int item = 0; item < Num_ItemID; ++item)
+                if(house->getNumItems(item) != 0) result[{house->getHouseID(), item}] = house->getNumItems(item);
+            result[{house->getHouseID(), -1}] = house->getCredits();
+        }
+        return result;
+    };
     const auto standingAtSave = standing(game);
     advance(game, 400);
     const auto playedOn = standing(game);
+    const auto playedOnCensus = census(game);
 
     // Destroy the old Game before building the reload: Game's destructor deletes the global
     // map and screen border, so two live Games would have the second one's globals torn down
@@ -775,6 +787,19 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
                 before != standingAtSave.end() ? before->second.second : -1,
                 other != playedOn.end() ? other->second.first : -1, other != playedOn.end() ? other->second.second : -1,
                 has.first, has.second);
+    }
+    {
+        const auto resumedCensus = census(*reloaded);
+        std::set<std::pair<int, int>> keys;
+        for(const auto& entry : playedOnCensus) keys.insert(entry.first);
+        for(const auto& entry : resumedCensus) keys.insert(entry.first);
+        for(const auto& key : keys) {
+            const auto a = playedOnCensus.find(key), b = resumedCensus.find(key);
+            const int played = a != playedOnCensus.end() ? a->second : 0, loaded = b != resumedCensus.end() ? b->second : 0;
+            if(played != loaded)
+                SDL_Log("SPECTATOR_PROBE_DETAIL: house %d %s: played on %d, reloaded %d", key.first,
+                        key.second < 0 ? "credits" : getItemNameByID(key.second).c_str(), played, loaded);
+        }
     }
     require(resumed == playedOn, "The reloaded match did not continue as the match played on");
     // Only now, so that the reloaded match is unchanged while it is compared: the observer cannot
