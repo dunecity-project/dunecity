@@ -190,7 +190,9 @@ QuantBot::AirliftDecline QuantBot::planAirliftDrop() {
     Coord target = findBaseCentre(front->getOwner()->getHouseID());
     if (target.isInvalid()) target = front->getLocation();
     if (origin.isInvalid() || target.isInvalid() || blockDistance(origin, target) < kMinDropTrip) return AirliftDecline::Trip;
-    const int free = airliftFreeCarryalls() - (getHouse()->getNumItems(Unit_Harvester) > 0 ? 1 : 0);
+    // Measured (smoke batches, 2026-11-23): a house launches one or two waves in thirty minutes
+    // and its Carryalls are almost always out with harvesters, so a drop takes every free one.
+    const int free = airliftFreeCarryalls();
     if (free < kMinDropCarryalls) return AirliftDecline::Carryalls;
 
     // The strongest whole vehicles of the wave, at most a third of it: the wave stays the main
@@ -271,9 +273,9 @@ void QuantBot::updateAirliftDrop() {
     const Uint32 now = getGameCycleCount();
     if (!airliftDrop.point.isValid()) {
         if (!(force.airliftRearDrop || force.airliftFlankDrop)) return;
-        // One plan per launched wave, decided in its first thirty seconds.
+        // One plan per launched wave, tried every pass of its first ninety seconds.
         if (customWave.launched == 0 || customWave.launched == airliftDrop.wave || customWave.members.empty()) return;
-        if (now - customWave.launched > MILLI2CYCLES(30000)) { airliftDrop.wave = customWave.launched; return; }
+        if (now - customWave.launched > MILLI2CYCLES(90000)) { airliftDrop.wave = customWave.launched; return; }
         // Every refused attempt is counted by its reason (one attempt a pass, for the reports).
         switch (planAirliftDrop()) {
             case AirliftDecline::None: break;
@@ -284,8 +286,8 @@ void QuantBot::updateAirliftDrop() {
             case AirliftDecline::Point: ++airliftStats.declinedPoint; return;
         }
     }
-    // Sorties: one unit per free Carryall, one Carryall kept for the harvesters.
-    int free = airliftFreeCarryalls() - (getHouse()->getNumItems(Unit_Harvester) > 0 ? 1 : 0);
+    // Sorties: one unit per free Carryall.
+    int free = airliftFreeCarryalls();
     while (free > 0 && !airliftDrop.pending.empty()) {
         const Uint32 id = airliftDrop.pending.front();
         airliftDrop.pending.erase(airliftDrop.pending.begin());
