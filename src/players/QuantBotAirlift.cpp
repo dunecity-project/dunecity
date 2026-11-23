@@ -180,18 +180,18 @@ void QuantBot::trackAirliftJobs() {
     }
 }
 
-bool QuantBot::planAirliftDrop() {
+QuantBot::AirliftDecline QuantBot::planAirliftDrop() {
     const auto& force = botConfig().force;
     const Uint32 now = getGameCycleCount();
     const auto* front = getObject(customWave.front);
     if (!front || !front->getOwner() || front->getOwner()->isNatives()
-        || front->getOwner()->getTeamID() == getHouse()->getTeamID()) return false;
+        || front->getOwner()->getTeamID() == getHouse()->getTeamID()) return AirliftDecline::Front;
     const Coord origin = findBaseCentre(getHouse()->getHouseID());
     Coord target = findBaseCentre(front->getOwner()->getHouseID());
     if (target.isInvalid()) target = front->getLocation();
-    if (origin.isInvalid() || target.isInvalid() || blockDistance(origin, target) < kMinDropTrip) return false;
+    if (origin.isInvalid() || target.isInvalid() || blockDistance(origin, target) < kMinDropTrip) return AirliftDecline::Trip;
     const int free = airliftFreeCarryalls() - (getHouse()->getNumItems(Unit_Harvester) > 0 ? 1 : 0);
-    if (free < kMinDropCarryalls) return false;
+    if (free < kMinDropCarryalls) return AirliftDecline::Carryalls;
 
     // The strongest whole vehicles of the wave, at most a third of it: the wave stays the main
     // attack. Full health only - a Carryall takes anything damaged to a Repair Yard instead.
@@ -208,7 +208,7 @@ bool QuantBot::planAirliftDrop() {
         return pa != pb ? pa > pb : a->getObjectID() < b->getObjectID();
     });
     const int size = std::min({int(group.size()), std::max(0, force.airliftGroup), waveVehicles / 3});
-    if (size < kMinDropGroup) return false;
+    if (size < kMinDropGroup) return AirliftDecline::Group;
 
     // Both on: rear and flank take turns, wave by wave.
     const bool rear = force.airliftRearDrop && (!force.airliftFlankDrop || airliftStats.rearDrops <= airliftStats.flankDrops);
@@ -250,7 +250,7 @@ bool QuantBot::planAirliftDrop() {
         radius = takeLeft ? radiusLeft : radiusRight;
     }
     // A base on the map's rim has no ground behind it; nothing is flown then.
-    if (point.isInvalid()) return false;
+    if (point.isInvalid()) return AirliftDecline::Point;
 
     airliftDrop = AirliftDrop{};
     airliftDrop.kind = rear ? AirliftKind::Rear : AirliftKind::Flank;
@@ -263,7 +263,7 @@ bool QuantBot::planAirliftDrop() {
     traceDecision("airlift_drop", AITelemetry::Record().set("kind", rear ? "rear" : "flank").set("units", size)
         .set("x", point.x).set("y", point.y).set("target_x", target.x).set("target_y", target.y).set("radius", radius)
         .set("free_carryalls", free).set("wave_vehicles", waveVehicles));
-    return true;
+    return AirliftDecline::None;
 }
 
 void QuantBot::updateAirliftDrop() {
@@ -273,8 +273,22 @@ void QuantBot::updateAirliftDrop() {
         if (!(force.airliftRearDrop || force.airliftFlankDrop)) return;
         // One plan per launched wave, decided in its first thirty seconds.
         if (customWave.launched == 0 || customWave.launched == airliftDrop.wave || customWave.members.empty()) return;
-        if (now - customWave.launched > MILLI2CYCLES(30000)) { airliftDrop.wave = customWave.launched; return; }
-        if (!planAirliftDrop()) return;
+        if (now - customWave.launched > MILLI2CYCLES(30000)) {
+            airliftDrop.wave = customWave.launched;
+            switch (airliftDeclined) {
+                case AirliftDecline::Front: ++airliftStats.declinedFront; break;
+                case AirliftDecline::Trip: ++airliftStats.declinedTrip; break;
+                case AirliftDecline::Carryalls: ++airliftStats.declinedCarryalls; break;
+                case AirliftDecline::Group: ++airliftStats.declinedGroup; break;
+                case AirliftDecline::Point: ++airliftStats.declinedPoint; break;
+                case AirliftDecline::None: break;
+            }
+            traceDecision("airlift_declined", AITelemetry::Record().set("reason", int(airliftDeclined)));
+            airliftDeclined = AirliftDecline::None;
+            return;
+        }
+        airliftDeclined = planAirliftDrop();
+        if (airliftDeclined != AirliftDecline::None) return;
     }
     // Sorties: one unit per free Carryall, one Carryall kept for the harvesters.
     int free = airliftFreeCarryalls() - (getHouse()->getNumItems(Unit_Harvester) > 0 ? 1 : 0);
@@ -336,15 +350,16 @@ void QuantBot::updateAirliftRetreat() {
     // flown home, the most valuable first; the rest keeps fighting, as it does without this.
     if (!botConfig().force.airliftRetreatLift) return;
     if (!airliftLocalDefeat) { airliftRetreating = false; return; }
+    ++airliftStats.defeatPasses;
     int free = airliftFreeCarryalls();
-    if (free <= 0) return;
+    if (free <= 0) { ++airliftStats.retreatNoCarryall; return; }
     std::vector<const UnitBase*> fighters;
     for (const Uint32 id : customWave.members) {
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
         if (!liftable(unit, getHouse()) || airliftJobs.count(id) || dangerAt(unit->getLocation()) == 0) continue;
         fighters.push_back(unit);
     }
-    if (fighters.empty()) return;
+    if (fighters.empty()) { ++airliftStats.retreatNoFighter; return; }
     const Coord home = airliftHome();
     if (home.isInvalid()) return;
     std::sort(fighters.begin(), fighters.end(), [](const UnitBase* a, const UnitBase* b) {
@@ -404,6 +419,7 @@ void QuantBot::updateAirliftRescue() {
         --free;
         ++orders;
         ++airliftStats.rescues;
+        ++(damaged ? airliftStats.rescuesDamaged : airliftStats.rescuesAlone);
         traceDecision("airlift_rescue", AITelemetry::Record().set("unit", int(unit->getObjectID()))
             .set("item", int(unit->getItemID())).set("damaged", damaged).set("x", at.x).set("y", at.y));
     }
