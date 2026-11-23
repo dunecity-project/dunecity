@@ -747,7 +747,7 @@ void checkBuildingSplash(const std::string& mapData) {
     const int afterNear = healthOf(*game, enemy);
     currentGameMap->damage(plane->getObjectID(), raider, Coord(31 * TILESIZE, 33 * TILESIZE - TILESIZE / 4), Bullet_Bomb,
                            CA::kStickDamage, radius, false, true, NONE_ID, DeviationReward::Provenance());
-    record("stick_splash", "bomb a quarter tile off an enemy Wind Trap: expected " + std::to_string(effectNear) + ", health 200->"
+    record("stick_splash", "bomb a quarter tile off an enemy Wind Trap: expected " + std::to_string(effectNear) + " and health 200->"
                                + std::to_string(afterNear) + "; three quarters off would do " + std::to_string(effectFarther)
                                + "; own Wind Trap after a bomb a quarter tile off it: " + std::to_string(healthOf(*game, own)));
     require(effectNear == 125 && afterNear == 75, "A heavy bomb a quarter tile off an enemy building did not splash it with 125");

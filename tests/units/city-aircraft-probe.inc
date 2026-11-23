@@ -1471,11 +1471,12 @@ void checkShotDownPlaneDetonates() {
             ++damaged;
     }
     cityRequire(damaged > 0, "the Death Hand reference damaged nothing; the fixture proves nothing");
-    // The shooter is credited exactly as a Death Hand's owner is, plus the plane.
-    cityRequire(crash.shooterUnitKills == deathHand.shooterUnitKills + 1,
-                "the shooter's unit kills differ from a Death Hand's");
-    cityRequire(crash.shooterStructureKills == deathHand.shooterStructureKills,
-                "the shooter's structure kills differ from a Death Hand's");
+    // The shooter is credited the plane and nothing else. The crash is the plane's own damage,
+    // dealt in its owner's name (Stefan, 2026-11-23: "does the damage dealt include damage when
+    // it crashes? it has a nuclear missile effect so that should be counted"); until then the
+    // shooter was credited what the blast destroyed, as a Death Hand's owner is.
+    cityRequire(crash.shooterUnitKills == 1, "the shooter is credited more than the plane it shot down");
+    cityRequire(crash.shooterStructureKills == 0, "the shooter is credited the buildings the crash destroyed");
     // Seventeen blast centres, one large explosion each (all inside the map here).
     cityRequire(deathHand.newExplosions == 17, "the Death Hand reference did not explode at 17 centres");
     cityRequire(crash.newExplosions >= deathHand.newExplosions,
