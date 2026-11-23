@@ -528,7 +528,17 @@ int AmbientAirplane::freePlanes(const House* house)
 int AmbientAirplane::rocketChaseRange4(int houseID)
 {
     return currentGame->objectData.data[Structure_RocketTurret][houseID].weaponrange
-           * CA::kRocketChaseRangeFactor * TILESIZE * 4;
+           * turretReachFactor() * TILESIZE * 4;
+}
+
+int AmbientAirplane::turretReachFactor()
+{
+    static const int factor = [] {
+        const char* text = std::getenv("DUNECITY_TEST_PLANE_REACH_FACTOR");
+        const int value = text != nullptr ? std::atoi(text) : 0;
+        return value >= 1 && value <= CA::kRocketChaseRangeFactor ? value : CA::kRocketChaseRangeFactor;
+    }();
+    return factor;
 }
 
 bool AmbientAirplane::rocketCanMeet(const Coord& launch, int range4) const

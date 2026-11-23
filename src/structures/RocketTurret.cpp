@@ -118,7 +118,8 @@ const ObjectBase* RocketTurret::findTarget() const {
         if(!(isOrnithopterUnit(unit->getItemID()) || (cityPlanes && unit->getItemID() == Unit_AmbientAirplane))
            || unit->getHealth() <= 0 || !unit->isActive() || !canAttack(unit)) continue;
         const int distance = DynastyProjectile::distance(center*4, unit->getCenterPoint()*4);
-        if(distance <= getWeaponRange()*3*TILESIZE*4 && distance < bestDistance) {
+        const int factor = unit->getItemID() == Unit_AmbientAirplane ? AmbientAirplane::turretReachFactor() : 3;
+        if(distance <= getWeaponRange()*factor*TILESIZE*4 && distance < bestDistance) {
             best = unit;
             bestDistance = distance;
         }
@@ -129,7 +130,7 @@ const ObjectBase* RocketTurret::findTarget() const {
 const ObjectBase* RocketTurret::cityPlaneInReach() const {
     const Coord center = getCenterPoint();
     const AmbientAirplane* best = nullptr;
-    int bestDistance = getWeaponRange()*3*TILESIZE*4 + 1;
+    int bestDistance = getWeaponRange()*AmbientAirplane::turretReachFactor()*TILESIZE*4 + 1;
     for(const AmbientAirplane* plane : AmbientAirplane::all()) {
         if(plane->getHealth() <= 0 || !plane->isActive()) continue;
         const int distance = DynastyProjectile::distance(center*4, plane->getCenterPoint()*4);

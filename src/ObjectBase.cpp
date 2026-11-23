@@ -1321,7 +1321,7 @@ bool ObjectBase::targetInWeaponRange() const {
            || (object->getItemID() == Unit_AmbientAirplane
                && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence)))
         return DynastyProjectile::distance(getCenterPoint()*4, object->getCenterPoint()*4)
-            <= getWeaponRange()*3*TILESIZE*4;
+            <= getWeaponRange()*(object->getItemID() == Unit_AmbientAirplane ? AmbientAirplane::turretReachFactor() : 3)*TILESIZE*4;
     Coord coord = (target.getObjPointer())->getClosestPoint(location);
     FixPoint dist = blockDistance(location,coord);
 

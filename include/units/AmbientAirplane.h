@@ -98,6 +98,11 @@ public:
     /// How far from its launch point a rocket of house `houseID` may chase a city airplane, in
     /// quarter world units (CityAircraft::kRocketChaseRangeFactor x the Rocket Turret's range).
     static int rocketChaseRange4(int houseID);
+    /// How many times its WeaponRange a Rocket Turret reaches a city airplane, and its rocket
+    /// chases one: CityAircraft::kRocketChaseRangeFactor (3, as for Ornithopters). Balance
+    /// experiments only: DUNECITY_TEST_PLANE_REACH_FACTOR (1 to 3) for a whole process, read
+    /// once; never set in a game people play (it is not a match rule).
+    static int turretReachFactor();
     /// True when a turret rocket fired now from `launch` (world units) meets this plane no
     /// farther than `range4` quarter world units from `launch`.
     bool rocketCanMeet(const Coord& launch, int range4) const;
