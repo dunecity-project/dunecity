@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <structures/Airport.h>
 
 #include <globals.h>
@@ -46,7 +47,16 @@ Airport::Airport(InputStream& stream) : StructureBase(stream) {
 }
 
 int Airport::freePlaneCharge() {
-    return testFreePlaneCycles > 0 ? testFreePlaneCycles : Palace::getSpecialWeaponCooldownForHouse(HOUSE_ORDOS);
+    // Balance experiments only (tests/ai matches on the queue): DUNECITY_TEST_FREE_PLANE_SECONDS
+    // sets the charge for a whole process, read once. Never set in a game people play: it is
+    // not part of the match rules and two players with different values would fall out of step.
+    static const int experiment = [] {
+        const char* seconds = std::getenv("DUNECITY_TEST_FREE_PLANE_SECONDS");
+        const int value = seconds != nullptr ? std::atoi(seconds) : 0;
+        return value > 0 ? MILLI2CYCLES(value * 1000) : 0;
+    }();
+    if (testFreePlaneCycles > 0) return testFreePlaneCycles;
+    return experiment > 0 ? experiment : Palace::getSpecialWeaponCooldownForHouse(HOUSE_ORDOS);
 }
 
 void Airport::init() {
