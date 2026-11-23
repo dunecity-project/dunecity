@@ -1,3 +1,100 @@
+## 2026-11-23 - City planes, final rules: crash counted, building splash, performance score, Airport as in Micropolis, free plane every two minutes (unreleased, after 1.0.876)
+
+Stefan, playing `e640f8f66` and later builds: "does the damage dealt include damage when it crashes? it has a
+nuclear missile effect so that should be counted"; "the plane should drop bombs when it will splash enemy units
+or buildings with them, also it starts dropping bombs slighly too last when aproaching a building"; "also
+include planes in the performance scores so we know how cost effective it is compared to other units. think
+about how we could include it in the ratio for when to buy them as well"; "also reduce the free plane from 5
+mins to 2 mins. also airport should not have population unless the original did, make it like micropolis. also
+it should have pollution like micropolis". Commits `0fb66768b`, `66780f5ef`, `071c3d2c0`, `d9d4126d1`,
+`77aa1aad7`, `5d2e19fca`; protocol 133, save format unchanged by these. This entry replaces the numbers of the
+balance entry below, which counted bombs only and had the five-minute free plane.
+
+**What changed (defaults, no switch).**
+- **The crash is the plane's damage** (`0fb66768b`). The Death Hand blast of a shot-down plane was dealt in the
+  name of the house that shot it down. It is now dealt by the plane and its owner
+  (`AmbientAirplane::crash`, `Bullet::detonateDeathHand`), so the Stats row, the house's combat record and
+  QuantBot's buy rule include it. One `CITY_PLANE_CRASH:` line per crash gives the buildings and credits it
+  destroyed, the enemy's and the plane's own side's; `vanilla-match.py` records it as event `crash`.
+- **Splash on buildings, and an earlier start** (`66780f5ef`). A heavy bomb that misses a building of another
+  team by up to a tile and a half splashes it with half of what a unit there would take: 125 within half a tile
+  of the footprint, 62 to a tile, 31 beyond; a direct hit is still 250 (`stickBuildingDamage`, `Map.cpp`). The
+  bomber's own side's buildings take no splash. A stick starts with a bomb the cycle the next bomb would do at
+  least 125 to an enemy building or ground unit (`AmbientAirplane::bombEffectAt`, `kStickStartDamage`), half a
+  tile before the sight reaches a building, and carries on while a bomb would do at least 62
+  (`kStickCarryDamage`). It used to wait three cycles after the sight had entered the first building.
+  `CITY_PLANE_KILL` is logged for every building a bomb destroys, direct or by splash.
+- **The plane has a performance score and is bought against the army's** (`071c3d2c0`).
+  `CityAircraft::planePerformanceScore`: credits its bombs and crashes destroyed over the price of every ended
+  flight plus one price of prior, the formula of `UnitMixPolicy::performanceScore`. The Stats window shows it
+  under the allocation table with the score the house buys at. QuantBot buys while the plane's score is at
+  least its army's own, held between x0.5 and x1.0 (`planeBuyScore`, `planeWorthBuying`); this replaces "a
+  flight must destroy its price". The heaps-of-money rule (`richBuys`, 30,000 spare) is unchanged.
+- **Airport as in Micropolis** (`5d2e19fca`). No city role, level or population: in Micropolis it is only
+  counted (`simulate.cpp`, `case AIRPORT: airportPop++`) and lifts the commercial cap, which DuneCity already
+  does through `hasAirport`. It emits 100 pollution, Micropolis's value for airport tiles (a developed
+  industrial tile is 50); QuantBot's placement treats it as a polluter.
+- **Free plane every two minutes** (`kFreePlaneMs`), not five.
+
+**Before and after, with crash damage counted.** Before is the plane before any balance (turrets at 24 tiles,
+100 hit points, no splash on buildings, five-minute free plane), run on the same build through the
+experiment-only variables; the earlier stick start, the crash credit and the new buy rule are in both arms.
+The middle column is `e640f8f66` as the balance entry measured it (bombs only).
+
+| Defence | Measure | Before | `e640f8f66` | Now (`5d2e19fca`) |
+|---|---|---:|---:|---:|
+| Ordinary AI city (48 AWS games, rs160, four Brutal QuantBots, 45 min) | credits destroyed per flight, bombs | 259 | 606 | 1,022 |
+| | ... by its crash | 332 | not counted | 497 |
+| | ... together (a plane costs 1,500) | 591 | | 1,519 |
+| | buildings per flight, bombs and crash | 1.55 + 1.59 | 3.73 | 5.95 + 1.95 |
+| | flights shot down | 90% | 90% | 88% |
+| | flights per game | 29 | | 53 |
+| | planes bought per game | 6.1 | | 11.9 |
+| | buildings bombed per game | 45 | 118 | 316 (+270, +252 to +287) |
+| | time-outs | 58% | 58% | 29% (-29 points, -50 to -8) |
+| | game length, minutes | 41.5 | | 36.7 (-4.9, -7.5 to -2.3) |
+| Thin: 2P City, 16 Rocket Turrets for 1,342 buildings (one six-minute probe game) | credits per flight, free planes only | 6,532 (7 flights) | | 4,372 (10 flights) |
+| | ... with the AI buying | 6,532 (none bought) | | 5,928 (1 bought) |
+| | flights shot down | 3 of 7 | | 6 of 10 |
+| | buildings bombed, share of the map | 26% | | 25% and 36% |
+| Saturated: Metropolis, 928 Rocket Turrets, free planes only | credits per flight | 292 | | 575 |
+| | flights shot down | 37 of 40 | | 38 of 40 |
+| Saturated, four AIs with about a million credits buying freely | credits per flight | 333 | | 600 |
+| | flights shot down | 97% | | 96% |
+| | buildings bombed in six minutes | 579 (14% of the map) | | 1,155 (28%) |
+| | credits spent on planes | 1.32 million | | 1.18 million |
+
+- In ordinary AI games Atreides' placement rose (+0.18, +0.03 to +0.34); no other house's moved measurably.
+  Houses eliminated per game 2.00 and 2.44 (+0.44, -0.02 to +0.85). No building of the plane's own side was
+  lost to its own crash in any of the 96 games. The AI's air-raid turrets: 1.25 and 2.35 a game.
+- The time-out rate of ordinary AI games halved. That is the first package that moved it: the two-minute clock
+  nearly doubles the flights, and splash with the earlier start takes a flight from 3.7 to 6 buildings. The two
+  were not measured apart in this round (the clock alone, at 24 tiles and 100 hit points, gave 111 buildings a
+  game against 40 in the earlier round).
+- In an ordinary AI city a plane now destroys about what it costs. On 2P City the difference between the
+  columns is inside one game's noise (7 and 10 flights). The probe games use a half-minute free-plane clock
+  (`Airport::testFreePlaneCycles`), so their totals per game overstate a real game's; per-flight numbers do not.
+- Results: `../outputs/city-planes-20261123e/matches5/` (`before`, `after`, `report-before-after.md`).
+
+**Tests and gates on `5d2e19fca`.** AWS `20261123T230001-ctest-761c52`: `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`,
+`quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`, `city_aircraft_probe` and `city_plane_flights` passed.
+The seventh, `city_plane_effect`, was running on the `aws` worker when AWS stopped it (no spot capacity) and was
+still queued behind the 1.0.877 release job when this was written, so the full registered test was run on the
+Mini instead and passed (554 s). Mini: `dunelegacy_tests`, `city_aircraft_probe`,
+`city_plane_effect` again with one seed (a bomb a quarter tile off an enemy Wind Trap takes 125, none off an own one; four
+Wind Traps under a crash are credited to the plane's house as 1,200 credits; 5 free launches in 11 minutes; a
+plane 302 cycles after an Airport is built, the next 7,500 cycles later), `city_plane_flights` and
+`perf_regression` (124 s) passed. `CityAircraftPolicyTestCase` covers the score and the buy rule,
+`CityEffectsTestCase` the Airport's role and pollution.
+
+**Installed.** The coordinating session reports `5d2e19fca` on the MacBook Air since 23:19 (not installed by
+this session). Not pushed, no version bump by this session.
+
+**Not verified.** Nothing on a real screen by an agent. No game against a human on these rules: Stefan's "too
+strong" game was before anti-air fired at all, and this build bombs 2.7 times as many buildings a game as
+`e640f8f66` did in AI matches. The clock and the splash were not measured apart. Troopers against the plane
+were not measured. The Stats line was checked by its test, not by eye.
+
 ## 2026-11-23 - City planes: balance. Turrets reach them at 16 tiles, 150 hit points, bombs on units (unreleased, after 1.0.876)
 
 Stefan, after `noimpact` (a Metropolis game on `3339071a8`: 1,234 planes bought for about 1.85 million credits,

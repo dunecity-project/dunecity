@@ -169,24 +169,30 @@ not order them, but you can buy more planes.
   once. You can buy as fast as you can pay, until your house has ten planes in the air (the panel
   shows the count).
 - **When computer players buy.** A computer player keeps its reserves and 3000 credits more, and
-  then buys for one of two reasons. Its planes pay: so far their bombs have destroyed at least
-  1500 credits of enemy property per flight (the free plane gives the first evidence). Or it is
-  rich: with 30,000 credits to spare it keeps buying, up to ten in the air, even where single
-  planes do not pay. That is what grinds down a massively built city when a game has stalled.
+  then buys for one of two reasons. Its planes pay: the plane has a performance score like every
+  unit type, the credits its bombs and its crash have destroyed for each credit of plane (x1.0 is
+  a plane that destroys what it costs), and the computer buys while that score is at least what
+  its army gets for a credit, never asking for more than x1.0 and never accepting less than x0.5.
+  The free plane gives the first evidence. Or it is rich: with 30,000 credits to spare it keeps
+  buying, up to ten in the air, even where single planes do not pay. That is what grinds down a
+  massively built city when a game has stalled.
 - **Finding your Airport.** With nothing selected, the side menu lists an **Airport** button under
   the Construction Yard's. It selects your Airport (the one that can sell a plane now, if you have
   several) without moving the view.
 - **Where it flies.** Each leg of the flight is a run across one enemy building, picked at random from
   all enemy buildings on the map, and on for twelve tiles beyond it. Then it turns for the next.
-- **Bombs.** Over enemy buildings and enemy ground units the plane lays a stick of heavy bombs like
-  a heavy bomber: the first half a tile inside the first building under it, then one every two
-  tiles for as long as an enemy building or unit is under it, and one more after the last. The rack never empties. A bomb does 250
-  damage to the building it lands on and goes off in a large explosion four tiles wide. One hit
-  destroys a zone, Wind Trap, Gun or Rocket Turret, Heavy Factory, Repair Yard, Silo or Wall. Two
-  hits destroy every other building except a Nuclear Plant (three) and a Palace (four). Bombs are
-  never released over your own or an allied building. Against ground units a bomb's blast reaches
-  a tile and a half: the full 250 within half a tile, 125 to a tile, less beyond, whoever owns
-  the unit.
+- **Bombs.** The plane lays a stick of heavy bombs like a heavy bomber. The first bomb is released
+  as soon as it would land within half a tile of an enemy building or within a tile of an enemy
+  ground unit; then one falls every two tiles for as long as a bomb would still reach an enemy building or unit
+  with its blast, and one more after the last. The rack never empties. A bomb does 250 damage to
+  the building it lands on and goes off in a large explosion four tiles wide. One hit destroys a
+  zone, Wind Trap, Gun or Rocket Turret, Heavy Factory, Repair Yard, Silo or Wall. Two hits
+  destroy every other building except a Nuclear Plant (three) and a Palace (four). A bomb that
+  just misses an enemy building still splashes it: 125 within half a tile of its edge, 62 to a
+  tile, 31 to a tile and a half. Bombs are never released over your own or an allied building,
+  and their splash never damages your own or an allied building. Against ground units a bomb's
+  blast reaches a tile and a half: the full 250 within half a tile, 125 to a tile, less beyond,
+  whoever owns the unit.
 - **The fall.** A bomb takes 1.2 seconds to fall and lands three tiles ahead of where it left the
   plane. By then the plane is nine tiles further on, so you see the stick drop back from it and go
   off behind it. A bomb never damages an aircraft, not the plane that dropped it nor any other.
@@ -201,14 +207,17 @@ not order them, but you can buy more planes.
   of buildings to one flight.
 - **The crash.** A plane that is shot down crashes with the blast of a Death Hand where it falls.
   Nothing holds its fire for that: a plane shot down over your city crashes into your city, which
-  costs far less than letting it bomb on.
+  costs far less than letting it bomb on. What the crash destroys counts as the plane's damage
+  and goes to the score of the house that sent it, not to whoever shot it down.
 - **Computer players under bombs.** While its buildings are being bombed a computer player adds
   Rocket Turrets spread through its city, near the hits first and at least six tiles apart, until
   every building has one within eight tiles: at most two a minute, eight a raid, and only from
   spare money and with power for them.
 - **Stats and picture.** The Stats window lists the City Airplane with your other units: how many
-  are flying, the units it destroyed, the planes you lost and the hit points its bombs removed. A
-  selected plane or helicopter shows its own picture.
+  are flying, the units it destroyed, the planes you lost (every flight that has ended), the hit
+  points its bombs and crashes removed, and its performance score next to those of your other
+  unit types. Under the table a line shows the plane's score and the score at which a computer
+  player in your place would buy another. A selected plane or helicopter shows its own picture.
 - **No Ornithopters.** An Airport no longer sends out Ornithopters. They come from the High-Tech
   Factory as before.
 
