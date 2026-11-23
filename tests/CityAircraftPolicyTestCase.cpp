@@ -455,3 +455,16 @@ TEST_CASE("Aircraft art provenance records the original XPM sources", "[city][ai
     CHECK(manifest.find("scripts/import-micropolis-aircraft.py") != std::string::npos);
     CHECK(manifest.find("GPL-3.0-or-later") != std::string::npos);
 }
+
+TEST_CASE("A computer player buys planes only when its own planes have paid", "[city][aircraft]") {
+    using namespace DuneCity::CityAircraft;
+    // No evidence yet: the free plane flies first.
+    CHECK_FALSE(purchasePays(1000000, 0));
+    CHECK_FALSE(purchasePays(1000000, kPurchaseEvidenceFlights - 1));
+    // Three flights ended: they must have destroyed 4500 credits between them.
+    CHECK_FALSE(purchasePays(3 * kPlanePrice - 1, 3));
+    CHECK(purchasePays(3 * kPlanePrice, 3));
+    // A defended city (391 credits a flight in the first AI matches) does not pay; an open one does.
+    CHECK_FALSE(purchasePays(391 * 100, 100));
+    CHECK(purchasePays(5600 * 100, 100));
+}

@@ -62,7 +62,7 @@ public:
 
 private:
     DuneCity::AirPatrolCycle patrol{getMaxSpawnTimer()};
-    Sint32 purchaseCooldown = 0;   ///< Cycles since-purchase clock QuantBot paces itself by (saved from 9891)
+    Sint32 purchaseCooldown = 0;   ///< Clock started at each purchase; nothing waits on it (saved from 9891)
     bool compact = false;          ///< 3x3 instead of 4x4 (saved from SAVEGAMEVERSION_AIRPORT_4X4)
     static inline bool nextIsCompact = false;   ///< Set only by a living CompactPlacement
     /// Puts a city airplane on the runway. Null when the unit could not be created.

@@ -29,7 +29,8 @@ The test requires, over the games played:
 - The stick destroys more buildings per flight than the base arm in every game, and under half
   the buildings on the map in a game (some buildings, not all).
 - With runs no smaller a share of flights bombs than without.
-- No plane is bought with the purchase rule off and at least one with it on, every purchase
+- No plane is bought with the purchase rule off and at least one with it on; a computer player
+  buys only when its planes have destroyed at least their price per ended flight; every purchase
   leaves its house 3000 credits or more. There is no limit on planes in the air.
 
 Outputs: flights.csv, purchases.csv, games.csv, summary.md, and per game run.log.
@@ -317,6 +318,14 @@ if not any(int(r['bought']) for r in by_arm['purchase']):
     failures.append('purchase: no plane was bought with the rule on')
 if least and min(least) < 3000:
     failures.append('purchase: a house was left with %d credits after buying a plane' % min(least))
+# A computer player buys only on its own planes' record: at least three flights ended, and their
+# bombs destroyed at least 1500 credits a flight. The purchase shows up a cycle or two after the
+# decision, in which one more flight may have ended.
+for r in purchases:
+    ended, destroyed = int(r['flights_ended']), int(r['destroyed_credits'])
+    if ended < 3 or destroyed < PRICE * (ended - 1):
+        failures.append('purchase: house %s bought on %s seed %s with %d flights ended and %d credits destroyed'
+                        % (r['house'], r['map'], r['seed'], ended, destroyed))
 if failures:
     sys.exit('CITY PLANE FLIGHTS FAILED: ' + '; '.join(failures))
 print('City plane flights: ' + str(out / 'summary.md'))

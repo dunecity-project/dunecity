@@ -196,7 +196,7 @@ int runCityPlaneFlights() {
     int bought[NUM_HOUSES] = {};
     int mostPlanes = 0;
     std::ofstream purchases(out + "/purchases.csv");
-    purchases << "cycle,house,credits_after,planes\n";
+    purchases << "cycle,house,credits_after,planes,flights_ended,destroyed_credits\n";
 
     while(!game->finished && game->getGameCycleCount() < cycles) {
         game->updateGameState();
@@ -302,7 +302,9 @@ int runCityPlaneFlights() {
                 const House* house = airport->getOwner();
                 ++bought[house->getHouseID()];
                 purchases << cycle << ',' << house->getHouseID() << ',' << house->getCredits() << ','
-                          << house->getNumItems(Unit_AmbientAirplane) << '\n';
+                          << house->getNumItems(Unit_AmbientAirplane) << ','
+                          << house->getNumLostItems(Unit_AmbientAirplane) << ','
+                          << house->getCombatReward(Unit_AmbientAirplane).damageMilli / 1000 << '\n';
             }
             before = airport->purchaseCooldown;
         }

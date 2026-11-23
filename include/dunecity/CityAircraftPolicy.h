@@ -546,14 +546,32 @@ inline constexpr int kRunOvershootTiles = 12;
 // kMaxPlanesPerHouse in the air (Stefan, 2026-11-23: "i should be able to buy more
 // planes, up to 10"). There is no wait between purchases for a player: the first
 // version sold one plane a minute per Airport, and with flights of half a minute that
-// held him to one plane in the air. kPurchaseCooldownMs is now only QuantBot's own
-// pace (QuantBot::buyCityAirplanes): the measured one plane a minute per Airport.
-// The Airport's free roll is unchanged: it still only launches for a house with no plane.
+// held him to one plane in the air. Nothing waits on kPurchaseCooldownMs any more: an
+// Airport still starts that clock at each purchase and keeps it in the save, and the
+// probes read it to see a purchase.
+// The Airport's free roll is unchanged: it still only launches for a house with no free plane.
+//
+// A computer player (Stefan, 2026-11-23: "AI buys freely too", then "ai should figure out
+// when it makes sense to buy") buys on its own planes' record, purchasePays(): the credit
+// value its planes' bombs have destroyed so far (the house's combat record of the type:
+// price x share of hit points removed, buildings and units) against the price of every
+// flight that has ended (shot down or flown off the map). The free plane flies first and
+// gives the evidence: no purchase before kPurchaseEvidenceFlights flights have ended, and
+// then only while the average flight has destroyed at least what a plane costs. Against a
+// city whose turrets bring planes down early the record stays under the price and it stops
+// buying; against an open city it buys up to the ten-plane limit. QuantBot's reserves and
+// cash floor still apply (QuantBot::buyCityAirplanes).
 // ---------------------------------------------------------------------------
 
 inline constexpr int kPlanePrice = 1500;
 inline constexpr int kMaxPlanesPerHouse = 10;
 inline constexpr int kPurchaseCooldownMs = 60000;
+/// Flights of its own that must have ended before a computer player judges whether planes pay.
+inline constexpr int kPurchaseEvidenceFlights = 3;
+/// True when a house's planes have so far destroyed at least their price per ended flight.
+inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
+    return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(kPlanePrice) * flightsEnded;
+}
 
 // ---------------------------------------------------------------------------
 // Anti-air against the airplane (match rule GameOptionsClass::cityPlaneDefence).

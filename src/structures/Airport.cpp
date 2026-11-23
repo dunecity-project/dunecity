@@ -119,7 +119,7 @@ bool Airport::canBuyAirplane() const {
     Purchase: the Airport launches a plane now instead of waiting for its free roll, also while
     the house already has planes in the air, up to CA::kMaxPlanesPerHouse (Stefan, 2026-11-23:
     "i should be able to buy more planes, up to 10"). A player buys as fast as he can pay;
-    purchaseCooldown, started here, is only read by QuantBot as its own pace. The same call serves a
+    purchaseCooldown, started here, holds nobody back; the probes read it to see a purchase. The same call serves a
     human's Buy button (CMD_AIRPORT_BUY_AIRPLANE) and QuantBot (QuantBot::buyCityAirplanes).
 */
 bool Airport::buyAirplane() {

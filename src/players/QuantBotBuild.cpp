@@ -515,11 +515,15 @@ void QuantBot::firePalaceWeapon(const Palace* pPalace) {
     wanted from pass.money (the house's credits less what its queues are already committed
     to). A plane is bought only from what is left: after paying, the house must still hold its
     largest reserve of this pass (economy, strategic, civic, city working capital) plus
-    kCityAirplaneCashFloor. QuantBot buys at most one plane a minute at each Airport (the
-    Airport's purchase clock, CityAircraft::kPurchaseCooldownMs), so one Airport never costs it
-    more than 1500 credits a minute: the pace its matches were measured at. A player has no such
-    wait and may hold ten planes in the air (Airport::canBuyAirplane). A plane is only worth buying while another team has a
-    building to bomb, and bombing must be on.
+    kCityAirplaneCashFloor.
+
+    Stefan, 2026-11-23: "AI buys freely too", then "ai should figure out when it makes sense to
+    buy". There is no wait between purchases; what decides is the record of the house's own
+    planes (CityAircraft::purchasePays): the credit value their bombs have destroyed against
+    1500 for every flight that has ended. The free plane gives the first evidence. One purchase
+    per Airport and build pass (the order is a command, so the count of planes in the air only
+    moves once it has run), up to the ten-plane limit (Airport::canBuyAirplane). A plane is
+    only worth buying while another team has a building to bomb, and bombing must be on.
 */
 void QuantBot::buyCityAirplanes(BuildPass& pass) {
     const auto& options = currentGame->getGameInitSettings().getGameOptions();
@@ -528,12 +532,16 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
     namespace CA = DuneCity::CityAircraft;
     const int reserve = std::max({pass.economyReserve, pass.strategicReserveCost, pass.civicReserveCost,
                                   pass.cityWorkingReserve, 0}) + kCityAirplaneCashFloor;
+    // Do this house's planes pay? Every removal of a plane counts as a loss with the house,
+    // shot down or flown off the map alike, so the losses are the flights that have ended.
+    const int flightsEnded = getHouse()->getNumLostItems(Unit_AmbientAirplane);
+    const int64_t destroyedCredits = getHouse()->getCombatReward(Unit_AmbientAirplane).damageMilli / 1000;
+    if (!CA::purchasePays(destroyedCredits, flightsEnded)) return;
     bool enemyBuilding = false, checked = false;
     for (const StructureBase* structure : getStructureList()) {
         if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_Airport) continue;
         const auto* airport = static_cast<const Airport*>(structure);
-        if (airport->getPurchaseCooldown() > 0 || !airport->canBuyAirplane()
-            || pass.money < CA::kPlanePrice + reserve) continue;
+        if (!airport->canBuyAirplane() || pass.money < CA::kPlanePrice + reserve) continue;
         if (!checked) {
             checked = true;
             for (const StructureBase* other : getStructureList()) {
@@ -548,6 +556,7 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
         pass.money -= CA::kPlanePrice;
         traceDecision("city_airplane_bought", AITelemetry::Record().set("airport", airport->getObjectID())
             .set("price", CA::kPlanePrice).set("spendable_after", pass.money).set("reserve", reserve)
+            .set("flights_ended", flightsEnded).set("destroyed_credits", destroyedCredits)
             .set("planes", getHouse()->getNumItems(Unit_AmbientAirplane)));
     }
 }
