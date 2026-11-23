@@ -42,14 +42,28 @@ void runStrategicSiteProbe(Game& game) {
     // fixture: 16 to 22 crashes in the six minutes, up to five buildings each), and every
     // destroyed building is bare rock again: the legacy arm then found a Palace site in its
     // second minute and never starved. So the same fragmentation is applied to newly bared
-    // rock on every cycle, in both arms.
+    // rock on every cycle, in both arms. A site this house has already planned for anything
+    // but a Palace is left as it is: turning it to sand would strand that order in its yard
+    // (a Rocket Turret waited to be placed for four minutes), which is not the failure under test.
+    const auto plannedForOther=[&](int x, int y) {
+        for (const auto& entry:bot->reservedStructures) {
+            if (entry.second.item==Structure_Palace) continue;
+            const Coord size=getStructureSize(entry.second.item), at=entry.second.location;
+            if (x>=at.x && x<at.x+size.x && y>=at.y && y<at.y+size.y) return true;
+        }
+        for (const auto& yard:bot->builderPlaceLocations)
+            for (const Coord& at:yard.second)
+                if (at.x==x && at.y==y) return true;
+        return false;
+    };
     const auto fragment=[&]() {
         for (int y=0;y<currentGameMap->getSizeY();y+=3)
             for (int x=0;x<currentGameMap->getSizeX();++x) {
                 auto* tile=currentGameMap->getTile(x,y);
                 const int terrain=tile->getType();
                 if ((terrain==Terrain_Rock || terrain==Terrain_Slab)
-                    && !tile->hasAStructure() && !tile->hasCityZone() && !tile->isRoad())
+                    && !tile->hasAStructure() && !tile->hasCityZone() && !tile->isRoad()
+                    && !plannedForOther(x,y))
                     tile->setType(Terrain_Sand);
             }
     };
