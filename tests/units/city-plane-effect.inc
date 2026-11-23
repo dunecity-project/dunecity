@@ -519,11 +519,11 @@ void checkBombLoad(const std::string& mapData) {
     record("rearm", "ticks_per_bomb=" + std::to_string(CA::kBombRearmTicks) + " full_load_ticks=" + std::to_string(ticks));
 }
 
-void checkSavedBombLoad(const std::string& mapData) {
-    auto game = newGame(mapData, 6, Rules{true, true, false, true, true});
+void checkSavedBombLoad(const std::string& mapData, bool carpet) {
+    auto game = newGame(mapData, 6, Rules{true, true, false, carpet, carpet});
     auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), Coord(10, 20), Coord(kMapSize + 20, 20), RIGHT);
     plane->bombs = 2;
-    plane->bombTimer = 17;
+    plane->bombTimer = carpet ? 17 : 77;
     plane->stickGap = 0;
     auto* sold = dynamic_cast<Airport*>(place(game->getHouse(HOUSE_ATREIDES), Structure_Airport, Coord(40, 40)));
     require(sold != nullptr, "Could not place the Airport for the save");
@@ -535,7 +535,7 @@ void checkSavedBombLoad(const std::string& mapData) {
     require(plane != nullptr, "The plane left before the save");
     const int bombs = plane->bombs, timer = plane->bombTimer, gap = plane->stickGap;
     const int cooldown = sold->purchaseCooldown;
-    require(gap > 0 && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
+    require((!carpet || gap > 0) && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
     const std::string path = gOut + "/city-plane-effect.dls";
     require(game->saveGame(path), "Could not write the save");
     game.reset();
@@ -548,7 +548,8 @@ void checkSavedBombLoad(const std::string& mapData) {
     auto* loaded = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
     require(loaded != nullptr, "The saved plane did not come back");
     require(loaded->bombs == bombs && loaded->bombTimer == timer, "The plane lost its bomb load in the save");
-    require(loaded->bombSightTile.isValid(), "The plane lost its bomb sight tile in the save");
+    // The aimed bombs follow the sight tile, the stick its gap counter.
+    require(carpet || loaded->bombSightTile.isValid(), "The plane lost its bomb sight tile in the save");
     require(loaded->stickGap == gap, "The plane lost its stick gap counter in the save");
     const auto* airport = dynamic_cast<Airport*>(game->getObjectManager().getObject(airportID));
     require(airport != nullptr && airport->getPurchaseCooldown() == cooldown, "The Airport lost its purchase cooldown in the save");
@@ -556,9 +557,10 @@ void checkSavedBombLoad(const std::string& mapData) {
             "The loaded plane is not the one city airplane the game knows");
     const auto& options = game->getGameInitSettings().getGameOptions();
     require(options.cityPlaneDefence && options.cityPlaneBombing && !options.airportOrnithopterPatrol
-                && options.cityPlaneCarpetBombing && !options.cityPlaneBombingRuns && options.cityPlanePurchase,
+                && options.cityPlaneCarpetBombing == carpet && !options.cityPlaneBombingRuns
+                && options.cityPlanePurchase == carpet,
             "The save lost the city plane rules");
-    record("save", "bombs=" + std::to_string(bombs) + " timer=" + std::to_string(timer) + " stick_gap="
+    record("save", std::string(carpet ? "stick " : "aimed ") + "bombs=" + std::to_string(bombs) + " timer=" + std::to_string(timer) + " stick_gap="
                        + std::to_string(gap) + " purchase_cooldown=" + std::to_string(cooldown) + " restored=1");
     game.reset();
     currentGame = nullptr;
@@ -834,7 +836,8 @@ int runCityPlaneEffect() {
     gChecks << "check,detail\n";
     checkBombTargets(mapData);
     checkBombLoad(mapData);
-    checkSavedBombLoad(mapData);
+    checkSavedBombLoad(mapData, false);
+    checkSavedBombLoad(mapData, true);
     checkAirport(mapData);
     checkHoldFire(mapData);
     checkStick(mapData);
