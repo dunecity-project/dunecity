@@ -531,7 +531,8 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
     plane->bombs = carpet ? 5 : 2;
     plane->bombTimer = carpet ? 17 : 77;
     plane->stickGap = 1;
-    plane->stickPhase = 3;
+    plane->stickPhase = carpet ? 11 : 3;   // the stick's tail bomb falls due seven cycles on
+    plane->setBought(carpet);
     auto* sold = dynamic_cast<Airport*>(place(game->getHouse(HOUSE_ATREIDES), Structure_Airport, Coord(40, 40)));
     require(sold != nullptr, "Could not place the Airport for the save");
     sold->purchaseCooldown = 1234;
@@ -542,7 +543,7 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
     require(plane != nullptr, "The plane left before the save");
     const int bombs = plane->bombs, timer = plane->bombTimer, gap = plane->stickGap, phase = plane->stickPhase;
     const int cooldown = sold->purchaseCooldown;
-    require((!carpet || (gap == 3 && bombs == 5)) && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
+    require((!carpet || (gap == CA::kStickTailBombs + 1 && bombs == 5)) && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
     const std::string path = gOut + "/city-plane-effect.dls";
     require(game->saveGame(path), "Could not write the save");
     game.reset();
@@ -558,6 +559,7 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
     // The aimed bombs follow the sight tile, the stick its gap counter.
     require(carpet || loaded->bombSightTile.isValid(), "The plane lost its bomb sight tile in the save");
     require(loaded->stickGap == gap && loaded->stickPhase == phase, "The plane lost its stick counters in the save");
+    require(loaded->isBought() == carpet, "The plane lost whether it was bought in the save");
     const auto* airport = dynamic_cast<Airport*>(game->getObjectManager().getObject(airportID));
     require(airport != nullptr && airport->getPurchaseCooldown() == cooldown, "The Airport lost its purchase cooldown in the save");
     require(AmbientAirplane::all().size() == 1 && AmbientAirplane::all().front() == loaded,
