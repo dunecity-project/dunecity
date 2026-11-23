@@ -108,6 +108,13 @@ public:
     /// experiments only: DUNECITY_TEST_PLANE_ROCKET_HITS=0 for a whole process restores the
     /// rockets before them (Stefan: "is the rockets hitting planes too much of a nerf? test that").
     static bool rocketsHitPlanes();
+    /// Balance experiments only, read once per process and never a match rule (Stefan,
+    /// 2026-11-23: "test a few different things, we could increase the cost but make it stronger
+    /// hp, faster, do more damage"): DUNECITY_TEST_PLANE_HP and DUNECITY_TEST_PLANE_SPEED_PCT
+    /// change the city airplane's hit points and speed in the unit data of a new game.
+    static void applyBalanceExperiment(ObjectData& data);
+    /// Damage of one stick bomb: CityAircraft::kStickDamage, or DUNECITY_TEST_BOMB_DAMAGE.
+    static int stickDamage();
     /// True when a turret rocket fired now from `launch` (world units) meets this plane no
     /// farther than `range4` quarter world units from `launch`.
     bool rocketCanMeet(const Coord& launch, int range4) const;

@@ -531,6 +531,31 @@ int AmbientAirplane::rocketChaseRange4(int houseID)
            * turretReachFactor() * TILESIZE * 4;
 }
 
+void AmbientAirplane::applyBalanceExperiment(ObjectData& data)
+{
+    const auto number = [](const char* name) {
+        const char* text = std::getenv(name);
+        return text != nullptr ? std::atoi(text) : 0;
+    };
+    const int hitPoints = number("DUNECITY_TEST_PLANE_HP");
+    const int speedPercent = number("DUNECITY_TEST_PLANE_SPEED_PCT");
+    for(int house = 0; house < NUM_HOUSES; ++house) {
+        auto& plane = data.data[Unit_AmbientAirplane][house];
+        if(hitPoints > 0) plane.hitpoints = hitPoints;
+        if(speedPercent > 0) plane.maxspeed = plane.maxspeed * speedPercent / 100;
+    }
+}
+
+int AmbientAirplane::stickDamage()
+{
+    static const int damage = [] {
+        const char* text = std::getenv("DUNECITY_TEST_BOMB_DAMAGE");
+        const int value = text != nullptr ? std::atoi(text) : 0;
+        return value > 0 ? value : CA::kStickDamage;
+    }();
+    return damage;
+}
+
 bool AmbientAirplane::rocketsHitPlanes()
 {
     static const bool hits = [] {
@@ -632,7 +657,7 @@ void AmbientAirplane::dropStick(Uint32 gameCycle)
     if(!enemy && ++stickGap > CA::kStickTailBombs) return;   // the tail is spent
     if(!onMap || own) return;
 
-    bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kStickDamage, false,
+    bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, stickDamage(), false,
                                     building != nullptr ? building : unit));
     ++bombsReleased;
     SDL_Log("CITY_PLANE_BOMB: house=%d object=%u target_house=%d target_item=%d cycle=%u", owner->getHouseID(),

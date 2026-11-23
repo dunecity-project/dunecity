@@ -958,6 +958,7 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             randomGen.setSeed(gameInitSettings.getRandomSeed());
 
             objectData.loadFromINIFile(ModManager::instance().getActiveObjectDataPath(), false);
+            AmbientAirplane::applyBalanceExperiment(objectData);   // nothing unless a test variable is set
 
             // City zones must not be buildable when the active mod doesn't
             // opt into DuneCity city-sim features. Force-disable them in the
