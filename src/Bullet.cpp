@@ -865,14 +865,6 @@ case Bullet_LargeRocket: {
                && tile->getGroundObject()->getHealth() > 0) {
                 building = tile->getGroundObject();
             }
-            // The stick's heavy bomb: a building of more than four tiles survives one hit
-            // (CityAircraft::stickDamageTo). The aimed rule's bomb keeps its own damage.
-            if(building != nullptr && damage == DuneCity::CityAircraft::kStickDamage
-               && currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
-                const auto* structure = static_cast<const StructureBase*>(building);
-                damage = DuneCity::CityAircraft::stickDamageTo(
-                    structure->getStructureSizeX() * structure->getStructureSizeY(), structure->getMaxHealth());
-            }
             currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
             if(building != nullptr && building->getHealth() <= 0) {
                 // One line per building a bomb destroys, for the match tables (tests/ai/city-plane-report.py).
