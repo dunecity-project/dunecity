@@ -1,3 +1,83 @@
+## 2026-11-23 - City planes: balance. Turrets reach them at 16 tiles, 150 hit points, bombs on units (unreleased, after 1.0.876)
+
+Stefan, after `noimpact` (a Metropolis game on `3339071a8`: 1,234 planes bought for about 1.85 million credits,
+1,268 of 1,291 shot down, median life 11 seconds, 47% dropped nothing, 579 buildings worth 120,700 credits):
+"why are turrets reaching 24 tiles?? thatv sounds insane", "we need to BALANCE the plans", "don't nerf them too
+much", "the idea is it should be able to deal some real damage to enemy bases to break up a stalemate", "also
+get planes to drop bombs on enemy units as well". Commits `9956e8ec6` (bombs on units), `e640f8f66` (the
+balance); not pushed, no version bump; protocol 133, save format unchanged by these two.
+
+**What changed (defaults, no switch).**
+- A Rocket Turret reaches a city airplane, and its rocket chases one, at twice its WeaponRange: 16 tiles
+  (`CityAircraft::kTurretPlaneReachFactor`; it was the Ornithopter's three times, 24, which Ornithopters keep).
+- The plane has 150 hit points (`kPlaneHitPoints`), five turret rockets instead of four. Every mod's unit data
+  was seeded with 100, so a new game that reads exactly 100 gets 150 (`AmbientAirplane::applyBalance`, after the
+  unit data is loaded); `config/ObjectData.ini.default` says 150. A saved game keeps what it saved.
+- The stick also starts over enemy ground units (not Sandworms, never aircraft). Against units the heavy bomb's
+  blast reaches a tile and a half: 250 within half a tile, 125 to a tile, 62 and 31 beyond
+  (`stickUnitDamage`). Buildings still take damage only when the bomb lands on them. Bombing runs still aim at
+  buildings.
+- Unchanged on the evidence: speed, bomb damage 250, price 1500, the five-minute free plane, rockets that go
+  off on contact.
+
+**Before and after** (before: 24 tiles, 100 hit points; both with bombs on units).
+
+| Defence | Measure | Before | After |
+|---|---|---:|---:|
+| Ordinary AI city (48 AWS games, rs160, four Brutal QuantBots) | credits destroyed per flight | 215 | 606 |
+| | buildings per flight | 1.42 | 3.73 |
+| | flights shot down | 92% | 90% |
+| | buildings bombed per game | 40 | 118 (+78, +68 to +88) |
+| | time-outs | 52% | 58% (+6 points, -10 to +21) |
+| Thin: 2P City, 16 Rocket Turrets for 1,342 buildings (six-minute probe game) | credits destroyed per flight | 3,882 | 5,746 |
+| | flights shot down | 7 of 12 | 8 of 11 |
+| | median life of a plane | 25 s | 40 s |
+| Saturated: Metropolis, 928 Rocket Turrets, free planes only | credits destroyed per flight | 119 | 383 |
+| | flights shot down | 39 of 40 | 39 of 40 |
+| Saturated, four AIs with about a million credits buying freely | credits destroyed per flight | 170 | 318 |
+| | flights shot down | 97% | 97% |
+| | buildings destroyed in six minutes | 624 (15% of the map) | 1,285 (31%) |
+| | credits spent on planes | 1.33 million | 1.21 million |
+
+No house's placement moved in the AWS games. The probe games use a half-minute free-plane clock
+(`Airport::testFreePlaneCycles`), so their totals per game overstate a real game's; the per-flight numbers do not.
+
+**What was tested and not chosen** (same 48 AWS games unless said; `../outputs/city-planes-20261123e/matches2/`,
+tables `report-base-*.md`).
+- Free plane every 2 minutes or every minute instead of 5 (at 24 tiles, 100 hit points): 111 and 180 buildings a
+  game against 40, time-outs 54% and 46% (not separable). Kept at five minutes: the chosen package already
+  triples the bombing, and five minutes was Stefan's own rule.
+- Reach 16 alone: 411 credits a flight, 83 buildings a game. Reach 16 with 300 bomb damage: 487 and 76.
+- **Speed is the cliff.** A turret rocket is 12% faster than the plane. 15% more speed: 34% shot down, 3,127
+  credits a flight, 635 buildings a game; on Metropolis 87% of the map in six minutes (reach 16 alone: 26%).
+  125 hit points with 10% more speed: 77%. "Strong" (150, +15%, 300) and "heavy" (200, +15%, 350): 633 and 631
+  buildings a game. Do not raise the plane's speed without raising the rockets'.
+- Rockets going off on contact (Stefan: "is the rockets hitting planes too much of a nerf? test that also"):
+  no. With the older rockets 228 credits a flight against 215, 40.3 buildings a game against 40.1.
+- No package moved the time-out rate of ordinary AI games measurably. The stalemate effect is measured on
+  Metropolis, where rich AIs now take about a third of a 928-turret map in six minutes at a loss.
+
+**The first AWS round was void.** `matches/free60`, `free120`, `reach2`, `hitsoff` and the first `s-*` arms
+replayed the baseline digit for digit: the cluster loads the harness without its command-line dispatch
+(`cluster_unit.py`), so variables set after `parse_args()` never reached a worker, and an `env` prefix is refused
+by the queue ("--rev requires a distributed batch harness"). `vanilla-match.py --env KEY=VALUE` now applies them
+in `play()`; a two-game check showed 107 and 103 launches against 20 and 24 before the valid round ran.
+Experiment-only variables, read per process and never a match rule: `DUNECITY_TEST_FREE_PLANE_SECONDS`,
+`DUNECITY_TEST_PLANE_REACH_FACTOR`, `DUNECITY_TEST_PLANE_ROCKET_HITS`, `DUNECITY_TEST_PLANE_HP`,
+`DUNECITY_TEST_PLANE_SPEED_PCT`, `DUNECITY_TEST_BOMB_DAMAGE`.
+
+**Tests and gates on `e640f8f66`.** AWS job `20261123T215825-ctest-de8966`: the four AI gates, `city_aircraft_probe`,
+`city_plane_flights` and `city_plane_effect` all passed. Mini: `dunelegacy_tests`, `city_aircraft_probe`,
+`city_plane_effect` (one seed; three enemy tanks in the open get a four-bomb stick and are destroyed, three own
+tanks get none; rocket cut-off at 16 tiles; a rocket leaves a plane at 120 of 150), `city_plane_flights`,
+`perf_regression` (122 s) passed. A 48-game set on the final commit with no test variable
+(`20261123T215829-b2-final-eb5d82`, `matches2/final`) is identical to the tested package digit for digit (606
+credits a flight, 117.9 buildings a game); QuantBot ordered 2.04 air-raid Rocket Turrets a game in it.
+
+**Not verified.** Nothing on a real screen by an agent. No game against a human. The AI's turret response was
+counted in match logs only. A plane now needs five turret rockets or two Launcher rockets; Troopers were not
+measured against it.
+
 ## 2026-11-23 - Carryalls, second set: the harvester raid is a default in vanilla Construction Yard starts; more Carryalls, reserve, squad retreat, perimeter raid and flown-in defence stay off (unreleased, after 1.0.876)
 
 Stefan: "try building more carryalls, try defining when a squad is outnumbers and should retreat and retreat
