@@ -376,7 +376,8 @@ QuantBotConfig::QuantBotConfig() {
     force.airliftReserve = 0;
     force.squadRetreat = false;
     force.squadRetreatAirlift = false;
-    force.airliftHarvesterDrop = false;
+    force.airliftHarvesterDrop = true;
+    force.airliftHarvesterDropEverywhere = false;
     force.airliftPerimeterDrop = false;
     force.airliftRaidGroup = 4;
     force.airliftBaseDefence = false;
@@ -909,6 +910,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "SquadRetreat", force.squadRetreat);
         iniFile.setBoolValue("Force Concentration", "SquadRetreatAirlift", force.squadRetreatAirlift);
         iniFile.setBoolValue("Force Concentration", "AirliftHarvesterDrop", force.airliftHarvesterDrop);
+        iniFile.setBoolValue("Force Concentration", "AirliftHarvesterDropEverywhere", force.airliftHarvesterDropEverywhere);
         iniFile.setBoolValue("Force Concentration", "AirliftPerimeterDrop", force.airliftPerimeterDrop);
         iniFile.setIntValue("Force Concentration", "AirliftRaidGroup", force.airliftRaidGroup);
         iniFile.setBoolValue("Force Concentration", "AirliftBaseDefence", force.airliftBaseDefence);
@@ -1271,6 +1273,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.squadRetreat = iniFile.getBoolValue("Force Concentration", "SquadRetreat", force.squadRetreat);
     force.squadRetreatAirlift = iniFile.getBoolValue("Force Concentration", "SquadRetreatAirlift", force.squadRetreatAirlift);
     force.airliftHarvesterDrop = iniFile.getBoolValue("Force Concentration", "AirliftHarvesterDrop", force.airliftHarvesterDrop);
+    force.airliftHarvesterDropEverywhere = iniFile.getBoolValue("Force Concentration", "AirliftHarvesterDropEverywhere", force.airliftHarvesterDropEverywhere);
     force.airliftPerimeterDrop = iniFile.getBoolValue("Force Concentration", "AirliftPerimeterDrop", force.airliftPerimeterDrop);
     force.airliftRaidGroup = std::clamp(iniFile.getIntValue("Force Concentration", "AirliftRaidGroup", force.airliftRaidGroup), 2, 8);
     force.airliftBaseDefence = iniFile.getBoolValue("Force Concentration", "AirliftBaseDefence", force.airliftBaseDefence);
@@ -2028,7 +2031,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.airliftReserve != 0) addNamed("airliftReserve", force.airliftReserve);
     if (force.squadRetreat) addNamed("squadRetreat", force.squadRetreat);
     if (force.squadRetreatAirlift) addNamed("squadRetreatAirlift", force.squadRetreatAirlift);
-    if (force.airliftHarvesterDrop) addNamed("airliftHarvesterDrop", force.airliftHarvesterDrop);
+    addNamed("airliftHarvesterDrop", force.airliftHarvesterDrop);   // default on: always part of the hash
+    if (force.airliftHarvesterDropEverywhere) addNamed("airliftHarvesterDropEverywhere", force.airliftHarvesterDropEverywhere);
     if (force.airliftPerimeterDrop) addNamed("airliftPerimeterDrop", force.airliftPerimeterDrop);
     if (force.airliftRaidGroup != 4) addNamed("airliftRaidGroup", force.airliftRaidGroup);
     if (force.airliftBaseDefence) addNamed("airliftBaseDefence", force.airliftBaseDefence);

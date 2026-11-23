@@ -1651,6 +1651,8 @@ private:
     /// A live, standing vehicle of ours that no Carryall or Repair Yard has a claim on.
     bool airliftable(const UnitBase* unit) const;
     bool squadRetreatActive() const;
+    /// AirliftHarvesterDrop in the scope it is a default in (or everywhere, test-only).
+    bool airliftHarvesterDropActive() const;
     /// SquadRetreatAirlift: a withdrawal to \a destination by Carryall instead of on the ground.
     bool airliftRetreatByAir(const UnitBase* unit, Coord destination);
     /// AirliftBaseDefence / AirliftHarvesterDefence: fly \a unit to the attacker \a aim.

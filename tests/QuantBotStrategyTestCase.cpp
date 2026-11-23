@@ -412,6 +412,8 @@ TEST_CASE("Carryall manoeuvres default off and each switch is loaded saved and h
     REQUIRE_FALSE(defaults.force.airliftRetreatLift);
     REQUIRE_FALSE(defaults.force.airliftRescue);
     REQUIRE_FALSE(defaults.force.airliftFerry);
+    REQUIRE(defaults.force.airliftHarvesterDrop);   // the one that earned the default (scoped in QuantBot)
+    REQUIRE_FALSE(defaults.force.airliftHarvesterDropEverywhere);
     REQUIRE(defaults.force.airliftGroup == 6);
     REQUIRE(defaults.force.airliftCarryalls == 0);
     const auto path = std::filesystem::temp_directory_path() / "quantbot-airlift-test.ini";
@@ -419,7 +421,8 @@ TEST_CASE("Carryall manoeuvres default off and each switch is loaded saved and h
     for (const char* key : {"AirliftRearDrop=true", "AirliftFlankDrop=true", "AirliftRetreatLift=true",
                             "AirliftRescue=true", "AirliftFerry=true", "AirliftGroup=9", "AirliftCarryalls=3",
                             "AirliftRescueHealth=25", "AirliftRescueCutOff=false", "AirliftReserve=4",
-                            "SquadRetreat=true", "SquadRetreatAirlift=true", "AirliftHarvesterDrop=true",
+                            "SquadRetreat=true", "SquadRetreatAirlift=true", "AirliftHarvesterDrop=false",
+                            "AirliftHarvesterDropEverywhere=true",
                             "AirliftPerimeterDrop=true", "AirliftRaidGroup=6", "AirliftBaseDefence=true",
                             "AirliftHarvesterDefence=true"}) {
         {

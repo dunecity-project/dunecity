@@ -27,6 +27,7 @@
 //   SquadRetreat            a wave outmatched where it stands falls back to the protected rally
 //   SquadRetreatAirlift     a withdrawing unit far from its rally takes a free Carryall
 //   AirliftHarvesterDrop    free units are flown beside an enemy harvester no enemy weapon covers
+//                           (DEFAULT ON in the scope of airliftHarvesterDropActive(); the only one)
 //   AirliftPerimeterDrop    the same, beside an enemy building no enemy weapon covers
 //   AirliftBaseDefence      a distant defender of an attacked building is flown to the attacker
 //   AirliftHarvesterDefence the same for an attacked harvester
@@ -93,11 +94,25 @@ bool QuantBot::airliftActive() const {
     const auto& force = botConfig().force;
     return gameMode == GameMode::Custom
         && (force.airliftRearDrop || force.airliftFlankDrop || force.airliftRetreatLift || force.airliftRescue
-            || force.airliftFerry || force.squadRetreatAirlift || force.airliftHarvesterDrop
+            || force.airliftFerry || force.squadRetreatAirlift || airliftHarvesterDropActive()
             || force.airliftPerimeterDrop || force.airliftBaseDefence || force.airliftHarvesterDefence);
 }
 
 bool QuantBot::airliftable(const UnitBase* unit) const { return liftable(unit, getHouse()); }
+
+bool QuantBot::airliftHarvesterDropActive() const {
+    const auto& force = botConfig().force;
+    if (!force.airliftHarvesterDrop || gameMode != GameMode::Custom) return false;
+    if (force.airliftHarvesterDropEverywhere) return true;
+    // The default's scope is where the raid was measured to win (docs/formations.md, "Mass
+    // Carryall manoeuvres", rounds 7 to 9): vanilla Construction Yard starts, 1v1 Hard +0.54 and
+    // Brutal +0.46 over 192 games each, level in 4-player free-for-alls. From a Fortress start
+    // it was level with negative estimates (-0.19, -0.18, -0.08), and city games from a
+    // Construction Yard start were not played, so neither gets it.
+    return autonomousCustomArmy() && (difficulty == Difficulty::Hard || difficulty == Difficulty::Brutal)
+        && !isAlliedWithHuman() && currentGame && !currentGame->isCitySimEnabled()
+        && initialMilitaryValue >= 0 && initialItemCount[Structure_Refinery] == 0;
+}
 
 bool QuantBot::squadRetreatActive() const {
     return botConfig().force.squadRetreat && gameMode == GameMode::Custom;
@@ -620,7 +635,7 @@ bool QuantBot::planAirliftRaid() {
     const Coord base = findBaseCentre(getHouse()->getHouseID());
     if (base.isInvalid()) return false;
     // Both on: harvester and perimeter raids take turns.
-    const bool harvesters = force.airliftHarvesterDrop
+    const bool harvesters = airliftHarvesterDropActive()
         && (!force.airliftPerimeterDrop || airliftStats.harvesterRaids <= airliftStats.perimeterRaids);
     const AirliftKind kind = harvesters ? AirliftKind::HarvesterRaid : AirliftKind::PerimeterRaid;
     // Free, whole vehicles standing at home: nobody is taken out of a wave or a defence.
@@ -675,7 +690,7 @@ bool QuantBot::planAirliftRaid() {
 
 void QuantBot::updateAirliftRaid() {
     const auto& force = botConfig().force;
-    if (!(force.airliftHarvesterDrop || force.airliftPerimeterDrop)) return;
+    if (!(airliftHarvesterDropActive() || force.airliftPerimeterDrop)) return;
     const Uint32 now = getGameCycleCount();
     if (!airliftRaid.point.isValid() && !planAirliftRaid()) return;
     const auto* target = getObject(airliftRaid.objective);

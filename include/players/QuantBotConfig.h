@@ -286,7 +286,12 @@ struct QuantBotConfig {
         int airliftReserve;                    ///< The newest Carryalls kept for manoeuvres: no harvester or repair work, 0-12 (default 0).
         bool squadRetreat;                     ///< A wave outmatched where it stands falls back to the protected rally (ratio: [Army Recovery] LocalWithdrawBps).
         bool squadRetreatAirlift;              ///< A withdrawing unit 20 tiles or more from its rally takes a free Carryall.
-        bool airliftHarvesterDrop;             ///< Free units are flown beside an enemy harvester no enemy weapon covers.
+        /// Free units at home are flown beside an enemy harvester no enemy weapon covers. DEFAULT
+        /// ON since 2026-11-24, in the scope it was measured to win in (QuantBot::
+        /// airliftHarvesterDropActive): Custom Hard/Brutal, no city simulation, a house that
+        /// started without a Refinery (a Construction Yard start), not allied with a human.
+        bool airliftHarvesterDrop;
+        bool airliftHarvesterDropEverywhere;   ///< Test-only: the raid in every Custom game (Fortress starts, city games), as rounds 4-8 measured it.
         bool airliftPerimeterDrop;             ///< Free units are flown beside an enemy building no enemy weapon covers.
         int airliftRaidGroup;                  ///< Units one such raid carries, 2-8 (default 4).
         bool airliftBaseDefence;               ///< A defender 20 tiles or more from an attacked building is flown to it.
