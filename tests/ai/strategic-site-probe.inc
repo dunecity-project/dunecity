@@ -36,14 +36,24 @@ void runStrategicSiteProbe(Game& game) {
     // Fragment only bare rock/slab rows. Never open mountain paths, alter spice or change roads'
     // underlying terrain; existing buildings and city lots are preserved too. The real placement
     // assertion below remains authoritative: an untouched Palace site must fail this setup.
-    for (int y=0;y<currentGameMap->getSizeY();y+=3)
-        for (int x=0;x<currentGameMap->getSizeX();++x) {
-            auto* tile=currentGameMap->getTile(x,y);
-            const int terrain=tile->getType();
-            if ((terrain==Terrain_Rock || terrain==Terrain_Slab)
-                && !tile->hasAStructure() && !tile->hasCityZone() && !tile->isRoad())
-                tile->setType(Terrain_Sand);
-        }
+    //
+    // The condition has to hold for the whole run, not only at its start. Since 1.0.877 a city
+    // plane that is shot down crashes onto the city and destroys the lots under it (this
+    // fixture: 16 to 22 crashes in the six minutes, up to five buildings each), and every
+    // destroyed building is bare rock again: the legacy arm then found a Palace site in its
+    // second minute and never starved. So the same fragmentation is applied to newly bared
+    // rock on every cycle, in both arms.
+    const auto fragment=[&]() {
+        for (int y=0;y<currentGameMap->getSizeY();y+=3)
+            for (int x=0;x<currentGameMap->getSizeX();++x) {
+                auto* tile=currentGameMap->getTile(x,y);
+                const int terrain=tile->getType();
+                if ((terrain==Terrain_Rock || terrain==Terrain_Slab)
+                    && !tile->hasAStructure() && !tile->hasCityZone() && !tile->isRoad())
+                    tile->setType(Terrain_Sand);
+            }
+    };
+    fragment();
     for (const auto* yard:yards) {
         bot->planningBuilder=yard->getObjectID();
         bot->clearPlacementCache();
@@ -74,6 +84,7 @@ void runStrategicSiteProbe(Game& game) {
     bool sawOverdue=false;
     for (Uint32 cycle=0;cycle<6*minute;++cycle) {
         game.updateGameState();
+        fragment();
         sawOverdue|=bot->palaceEligibleSinceCycle!=std::numeric_limits<Uint32>::max()
             && game.getGameCycleCount()-bot->palaceEligibleSinceCycle>=Uint32(MILLI2CYCLES(45000));
         if ((cycle+1)%minute) continue;
