@@ -818,7 +818,9 @@ void checkFall(const std::string& mapData) {
                            + std::to_string(impact.x / TILESIZE) + "/" + std::to_string(impact.y / TILESIZE) + " on_target="
                            + std::to_string(hit != nullptr && hit->getObjectID() == trapID) + " plane_tiles_past_impact="
                            + std::to_string(planeAhead / TILESIZE));
-        require(fall >= CA::kBombFallCycles - 1 && fall <= CA::kBombFallCycles + 1, "A bomb did not fall for 75 cycles");
+        // Seen from outside the bullet: the release shows a cycle late and the bomb bursts the cycle it comes
+        // within one step of its target.
+        require(fall >= CA::kBombFallCycles - 3 && fall <= CA::kBombFallCycles + 1, "A bomb did not fall for about 75 cycles");
         require(hit != nullptr && hit->getObjectID() == trapID && impact.x / TILESIZE == aimed.x / TILESIZE
                     && impact.y / TILESIZE == aimed.y / TILESIZE,
                 "A bomb did not land on the building tile it was released at");
