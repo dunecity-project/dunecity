@@ -634,7 +634,7 @@ void checkStick(const std::string& mapData) {
         ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(31, row))->getObjectID());
     }, health, true);
     record("stick_gap", "two Wind Traps one tile apart: bombs=" + std::to_string(dropped) + " health_after="
-                            + std::to_string(health[0]) + "," + std::to_string(health[1]));
+                            + std::to_string(health[0]) + " and " + std::to_string(health[1]));
     require(dropped == 12 && health[0] == 0 && health[1] == 0,
             "The stick did not run unbroken over two Wind Traps a tile apart with twelve bombs");
 
