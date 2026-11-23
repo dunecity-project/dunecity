@@ -22,6 +22,14 @@
 //   AirliftRetreatLift  a wave outmatched where it stands is flown home, most valuable first
 //   AirliftRescue       a damaged or cut-off vehicle under enemy fire is flown home
 //   AirliftFerry        wave members far behind the wave's front are flown up to it
+// Second set (2026-11-24):
+//   AirliftReserve          the newest Carryalls are the army's: no harvester or repair work
+//   SquadRetreat            a wave outmatched where it stands falls back to the protected rally
+//   SquadRetreatAirlift     a withdrawing unit far from its rally takes a free Carryall
+//   AirliftHarvesterDrop    free units are flown beside an enemy harvester no enemy weapon covers
+//   AirliftPerimeterDrop    the same, beside an enemy building no enemy weapon covers
+//   AirliftBaseDefence      a distant defender of an attacked building is flown to the attacker
+//   AirliftHarvesterDefence the same for an attacked harvester
 // A Carryall carries one unit, so a drop is flown in sorties: each pass orders as many units as
 // there are free Carryalls. Every lift is the engine's own Carryall request (a forced move to
 // the drop point, then GroundUnit::requestCarryall), so pickup, flight and landing are the code
@@ -60,6 +68,11 @@ constexpr int kRescueAloneTiles = 6;   ///< No friendly fighter this close: the 
 constexpr int kRescueOrdersPerPass = 2;
 constexpr int kFerryGap = 25;          ///< Tiles behind the wave's front before a member is flown up.
 constexpr int kFerryMinWave = 6;       ///< A smaller wave has no front to speak of.
+constexpr int kRetreatLiftTiles = 20;  ///< A shorter withdrawal is driven.
+constexpr int kDefenceLiftTiles = 20;  ///< A nearer defender drives to the attacker.
+constexpr int kRaidHomeTiles = 30;     ///< A raid takes free units standing this close to the base centre.
+constexpr int kRaidNextTiles = 20;     ///< A landed raider's next target is looked for this far around it.
+constexpr int kEconomyCarryalls = 2;   ///< Carryalls a reserve always leaves to harvesters and repairs.
 
 int unitPrice(const UnitBase* unit) {
     return currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price;
@@ -80,7 +93,31 @@ bool QuantBot::airliftActive() const {
     const auto& force = botConfig().force;
     return gameMode == GameMode::Custom
         && (force.airliftRearDrop || force.airliftFlankDrop || force.airliftRetreatLift || force.airliftRescue
-            || force.airliftFerry);
+            || force.airliftFerry || force.squadRetreatAirlift || force.airliftHarvesterDrop
+            || force.airliftPerimeterDrop || force.airliftBaseDefence || force.airliftHarvesterDefence);
+}
+
+bool QuantBot::airliftable(const UnitBase* unit) const { return liftable(unit, getHouse()); }
+
+bool QuantBot::squadRetreatActive() const {
+    return botConfig().force.squadRetreat && gameMode == GameMode::Custom;
+}
+
+bool QuantBot::airliftReserves(const UnitBase* carrier, const GroundUnit* passenger) const {
+    const int reserve = botConfig().force.airliftReserve;
+    if (reserve <= 0 || gameMode != GameMode::Custom || !carrier || !passenger) return false;
+    // A manoeuvre's own unit may take any Carryall.
+    if (airliftBooking == passenger->getObjectID() || airliftJobs.count(passenger->getObjectID())) return false;
+    // The newest Carryalls are the army's, as long as two are left to the economy. Derived
+    // from the fleet as it stands, so nothing about it needs saving.
+    int owned = 0, newer = 0;
+    for (const Uint32 id : currentGame->getCarryallCandidateIds()) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit || unit->getOwner() != getHouse() || unit->getItemID() != Unit_Carryall || unit->getHealth() <= 0) continue;
+        ++owned;
+        if (id > carrier->getObjectID()) ++newer;
+    }
+    return newer < std::min(reserve, owned - kEconomyCarryalls);
 }
 
 int QuantBot::airliftFreeCarryalls() const {
@@ -94,12 +131,15 @@ int QuantBot::airliftFreeCarryalls() const {
     return free;
 }
 
-bool QuantBot::orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind) {
+bool QuantBot::orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind, Uint32 objective) {
     if (!unit || !getMap().tileExists(drop)) return false;
     const auto* ground = static_cast<const GroundUnit*>(unit);
     const ATTACKMODE before = unit->getAttackMode();
     doMove2Pos(unit, drop.x, drop.y, true);
-    if (!doRequestCarryallDrop(ground) || !ground->hasBookedCarrier()) {
+    airliftBooking = unit->getObjectID();   // it may book a reserved Carryall
+    const bool booked = doRequestCarryallDrop(ground) && ground->hasBookedCarrier();
+    airliftBooking = NONE_ID;
+    if (!booked) {
         // No aircraft after all. It must not set off for the drop point on the ground.
         const_cast<GroundUnit*>(ground)->cancelCarryallPickup();
         doMove2Pos(unit, unit->getLocation().x, unit->getLocation().y, false);
@@ -110,6 +150,7 @@ bool QuantBot::orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind) 
     job.kind = kind;
     job.drop = drop;
     job.ordered = getGameCycleCount();
+    job.objective = objective;
     airliftJobs[unit->getObjectID()] = job;
     ++airliftStats.ordered;
     return true;
@@ -153,22 +194,44 @@ void QuantBot::trackAirliftJobs() {
                 // The landed part of a drop waits for the rest (updateAirliftDrop strikes).
                 if (airliftDrop.firstLanding == 0) airliftDrop.firstLanding = now;
                 ++it;
+            } else if (job.kind == AirliftKind::HarvesterRaid || job.kind == AirliftKind::PerimeterRaid) {
+                ++it;   // held while it raids (continueAirliftRaid, below, from the next pass)
             } else {
                 // Flown up to the wave: it hunts on with it. Flown home: it keeps its Area Guard.
                 if (job.kind == AirliftKind::Ferry) doSetAttackMode(unit, HUNT);
+                if (job.kind == AirliftKind::Defence) {
+                    // Set down beside the fight: the same order and booking a driven defender gets.
+                    const auto* aim = getObject(job.objective);
+                    if (aim && aim->getHealth() > 0 && aim->getOwner()
+                        && aim->getOwner()->getTeamID() != getHouse()->getTeamID()) {
+                        const_cast<UnitBase*>(unit)->setGuardPoint(unit->getLocation());
+                        doAttackObject(unit, aim, !unit->isInAttackRange(aim));
+                        defenceAssignments[unit->getObjectID()] = aim->getObjectID();
+                    }
+                }
                 it = airliftJobs.erase(it);
             }
             continue;
         }
-        if (job.landed) { ++it; continue; }
+        if (job.landed) {
+            if ((job.kind == AirliftKind::HarvesterRaid || job.kind == AirliftKind::PerimeterRaid)
+                && unit->isActive() && !continueAirliftRaid(unit, job)) {
+                it = airliftJobs.erase(it);
+                continue;
+            }
+            ++it;
+            continue;
+        }
         // Not lifted yet. A lost booking (the aircraft was shot down or took other work) is
         // rebooked at once or given up: it never drives on alone. Ninety seconds bound a
         // unit that sits in a repair bay or waits for an aircraft that does not arrive.
         const bool waiting = unit->isActive() && (ground->isAwaitingPickup() || ground->hasBookedCarrier());
         const bool overdue = now - job.ordered > MILLI2CYCLES(90000);
         if (unit->isActive() && (!waiting || overdue)) {
+            airliftBooking = unit->getObjectID();
             const bool rebooked = !overdue && airliftFreeCarryalls() > 0 && unit->getAttackMode() == CARRYALLREQUESTED
                 && doRequestCarryallDrop(ground) && ground->hasBookedCarrier();
+            airliftBooking = NONE_ID;
             if (!rebooked) {
                 const_cast<GroundUnit*>(ground)->cancelCarryallPickup();
                 doMove2Pos(unit, unit->getLocation().x, unit->getLocation().y, false);
@@ -476,21 +539,233 @@ void QuantBot::updateAirliftFerry() {
     }
 }
 
+bool QuantBot::airliftRetreatByAir(const UnitBase* unit, Coord destination) {
+    if (gameMode != GameMode::Custom || !botConfig().force.squadRetreatAirlift) return false;
+    if (!airliftable(unit) || airliftJobs.count(unit->getObjectID())
+        || blockDistance(unit->getLocation(), destination) < kRetreatLiftTiles) return false;
+    if (airliftFreeCarryalls() <= 0) return false;
+    if (!orderAirlift(unit, destination, AirliftKind::Retreat)) return false;
+    ++airliftStats.retreatUnits;
+    return true;
+}
+
+bool QuantBot::airliftDefender(const UnitBase* unit, const ObjectBase* aim, bool worker) {
+    const auto& force = botConfig().force;
+    if (gameMode != GameMode::Custom || !(worker ? force.airliftHarvesterDefence : force.airliftBaseDefence)) return false;
+    if (!aim || aim->isAFlyingUnit() || !getMap().tileExists(aim->getLocation())) return false;
+    // Whole units only: a Carryall takes a damaged one to a Repair Yard instead.
+    if (!airliftable(unit) || airliftJobs.count(unit->getObjectID()) || unit->getHealth() < unit->getMaxHealth()) return false;
+    const Coord contact = aim->getLocation();
+    if (blockDistance(unit->getLocation(), contact) < kDefenceLiftTiles || airliftFreeCarryalls() <= 0) return false;
+    // Set down four tiles short of the attacker, on the defender's side of it.
+    const int dx = unit->getLocation().x - contact.x, dy = unit->getLocation().y - contact.y;
+    const int length = std::max({1, std::abs(dx), std::abs(dy)});
+    const Coord centre = contact + Coord(dx * 4 / length, dy * 4 / length);
+    Coord point = Coord::Invalid();
+    for (int ring = 0; ring <= 3 && point.isInvalid(); ++ring)
+        for (int oy = -ring; oy <= ring && point.isInvalid(); ++oy)
+            for (int ox = -ring; ox <= ring && point.isInvalid(); ++ox) {
+                if (std::max(std::abs(ox), std::abs(oy)) != ring) continue;
+                const Coord p = centre + Coord(ox, oy);
+                if (!getMap().tileExists(p)) continue;
+                const auto* tile = getMap().getTile(p);
+                if (tile->isMountain() || tile->hasAStructure() || tile->isSpiceBloom() || tile->hasAGroundObject()) continue;
+                point = p;
+            }
+    if (point.isInvalid() || !orderAirlift(unit, point, AirliftKind::Defence, aim->getObjectID())) return false;
+    ++(worker ? airliftStats.harvesterDefenceLifts : airliftStats.baseDefenceLifts);
+    return true;
+}
+
+const ObjectBase* QuantBot::airliftRaidTarget(AirliftKind kind, Coord near, int maxTiles) const {
+    // An enemy harvester, or the dearest enemy building, that no observed enemy weapon covers
+    // (the tactical danger map is 0 on it). True positions, as the ground harvester raid uses.
+    const int team = getHouse()->getTeamID();
+    const ObjectBase* best = nullptr;
+    int bestPrice = -1, bestDistance = 0;
+    const auto consider = [&](const ObjectBase* object, int price, Coord at) {
+        const int distance = blockDistance(near, at).lround();
+        if (maxTiles > 0 && distance > maxTiles) return;
+        if (best && (price < bestPrice || (price == bestPrice && (distance > bestDistance
+            || (distance == bestDistance && object->getObjectID() > best->getObjectID()))))) return;
+        best = object; bestPrice = price; bestDistance = distance;
+    };
+    const auto hostile = [&](const ObjectBase* object) {
+        return object->getOwner() && !object->getOwner()->isNatives() && object->getOwner()->isAlive()
+            && object->getOwner()->getTeamID() != team && object->getHealth() > 0;
+    };
+    if (kind == AirliftKind::HarvesterRaid) {
+        for (const auto* unit : getUnitList()) {
+            if (unit->getItemID() != Unit_Harvester || !hostile(unit) || !unit->isActive() || unit->isPickedUp()) continue;
+            if (!getMap().tileExists(unit->getLocation()) || dangerAt(unit->getLocation()) != 0) continue;
+            consider(unit, 0, unit->getLocation());   // every harvester is worth the same: the nearest
+        }
+    } else {
+        for (const auto* structure : getStructureList()) {
+            if (!hostile(structure) || structure->canAttack() || structure->getItemID() == Structure_Wall) continue;
+            if (dangerAt(structure->getLocation(), structure->getStructureSize()) != 0) continue;
+            const int price = currentGame->objectData.data[structure->getItemID()][structure->getProductionHouseID()].price;
+            consider(structure, price, structure->getClosestPoint(near));
+        }
+    }
+    return best;
+}
+
+bool QuantBot::planAirliftRaid() {
+    const auto& force = botConfig().force;
+    const Uint32 now = getGameCycleCount();
+    if (now < airliftRaidNext) return false;
+    airliftRaidNext = now + MILLI2CYCLES(5000);
+    if (airliftFreeCarryalls() <= 0) { ++airliftStats.raidNoCarryall; return false; }
+    const Coord base = findBaseCentre(getHouse()->getHouseID());
+    if (base.isInvalid()) return false;
+    // Both on: harvester and perimeter raids take turns.
+    const bool harvesters = force.airliftHarvesterDrop
+        && (!force.airliftPerimeterDrop || airliftStats.harvesterRaids <= airliftStats.perimeterRaids);
+    const AirliftKind kind = harvesters ? AirliftKind::HarvesterRaid : AirliftKind::PerimeterRaid;
+    // Free, whole vehicles standing at home: nobody is taken out of a wave or a defence.
+    std::vector<const UnitBase*> group;
+    for (const auto* unit : getUnitList()) {
+        if (!airliftable(unit) || !orderableCombatUnit(unit) || airliftJobs.count(unit->getObjectID())) continue;
+        if (unit->getHealth() < unit->getMaxHealth() || unit->getAttackMode() == HUNT) continue;
+        if (unitRole(unit, {UnitRole::Repair, UnitRole::BaseDefence, UnitRole::LiveDefence, UnitRole::Defence,
+                            UnitRole::Wave, UnitRole::Escort, UnitRole::ColonyGuard}) != UnitRole::Free) continue;
+        if (blockDistance(unit->getLocation(), base) > kRaidHomeTiles) continue;
+        group.push_back(unit);
+    }
+    if (int(group.size()) < 2) { ++airliftStats.raidNoGroup; return false; }
+    std::sort(group.begin(), group.end(), [](const UnitBase* a, const UnitBase* b) {
+        const int pa = unitPrice(a), pb = unitPrice(b);
+        return pa != pb ? pa > pb : a->getObjectID() < b->getObjectID();
+    });
+    const ObjectBase* target = airliftRaidTarget(kind, base, 0);
+    const Coord at = target ? target->getClosestPoint(base) : Coord::Invalid();
+    Coord point = Coord::Invalid();
+    if (target && blockDistance(base, at) >= kMinDropTrip)
+        for (int ring = 1; ring <= 4 && point.isInvalid(); ++ring)
+            for (int oy = -ring; oy <= ring && point.isInvalid(); ++oy)
+                for (int ox = -ring; ox <= ring && point.isInvalid(); ++ox) {
+                    if (std::max(std::abs(ox), std::abs(oy)) != ring) continue;
+                    const Coord p = at + Coord(ox, oy);
+                    if (!getMap().tileExists(p) || dangerAt(p) != 0) continue;
+                    const auto* tile = getMap().getTile(p);
+                    if (tile->isMountain() || tile->hasAStructure() || tile->isSpiceBloom() || tile->hasAGroundObject()) continue;
+                    point = p;
+                }
+    if (point.isInvalid()) {
+        // Nothing uncovered within reach of a landing: look again in twenty seconds.
+        ++airliftStats.raidNoTarget;
+        airliftRaidNext = now + MILLI2CYCLES(20000);
+        return false;
+    }
+    airliftRaid = AirliftDrop{};
+    airliftRaid.kind = kind;
+    airliftRaid.point = point;
+    airliftRaid.target = at;
+    airliftRaid.objective = target->getObjectID();
+    airliftRaid.planned = now;
+    const int size = std::min(int(group.size()), force.airliftRaidGroup);
+    for (int i = 0; i < size; ++i) airliftRaid.pending.push_back(group[i]->getObjectID());
+    ++(harvesters ? airliftStats.harvesterRaids : airliftStats.perimeterRaids);
+    traceDecision("airlift_raid", AITelemetry::Record().set("kind", harvesters ? "harvester" : "perimeter")
+        .set("units", size).set("target", int(target->getObjectID())).set("target_item", int(target->getItemID()))
+        .set("x", point.x).set("y", point.y));
+    return true;
+}
+
+void QuantBot::updateAirliftRaid() {
+    const auto& force = botConfig().force;
+    if (!(force.airliftHarvesterDrop || force.airliftPerimeterDrop)) return;
+    const Uint32 now = getGameCycleCount();
+    if (!airliftRaid.point.isValid() && !planAirliftRaid()) return;
+    const auto* target = getObject(airliftRaid.objective);
+    const bool live = target && target->getHealth() > 0;
+    int free = airliftFreeCarryalls();
+    while (live && free > 0 && !airliftRaid.pending.empty()) {
+        const Uint32 id = airliftRaid.pending.front();
+        airliftRaid.pending.erase(airliftRaid.pending.begin());
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!airliftable(unit) || unit->getHealth() < unit->getMaxHealth()) continue;
+        if (orderAirlift(unit, airliftRaid.point, airliftRaid.kind, airliftRaid.objective)) {
+            --free;
+            ++airliftStats.raidUnits;
+        }
+    }
+    // The plan is spent once everyone is ordered, its target is gone or two minutes passed; the
+    // raiders already out carry on by themselves. The next raid is planned a minute later.
+    if (airliftRaid.pending.empty() || !live || now - airliftRaid.planned > MILLI2CYCLES(120000)) {
+        airliftRaid = AirliftDrop{};
+        airliftRaidNext = now + MILLI2CYCLES(60000);
+    }
+}
+
+bool QuantBot::continueAirliftRaid(const UnitBase* unit, AirliftJob& job) {
+    const Uint32 now = getGameCycleCount();
+    const bool fit = unit->getHealth() * 100 >= FixPoint(unit->getMaxHealth()) * 40
+        && now - job.ordered < MILLI2CYCLES(180000);
+    const auto* target = getObject(job.objective);
+    const bool live = target && target->getHealth() > 0 && target->getOwner()
+        && target->getOwner()->getTeamID() != getHouse()->getTeamID()
+        && (!target->isAUnit() || (target->isActive() && !static_cast<const UnitBase*>(target)->isPickedUp()));
+    if (fit && live) {
+        // The engine lets go of a forced target that drives out of reach; a raider does not.
+        if (unit->getTarget() != target) doAttackObject(unit, target, true);
+        return true;
+    }
+    if (fit) {
+        if (const auto* next = airliftRaidTarget(job.kind, unit->getLocation(), kRaidNextTiles)) {
+            job.objective = next->getObjectID();
+            doAttackObject(unit, next, true);
+            ++airliftStats.raidRetargets;
+            return true;
+        }
+    }
+    // Done, hurt, or out for three minutes: home, by Carryall when one is free.
+    const Coord home = airliftHome();
+    if (home.isInvalid()) { doSetAttackMode(unit, AREAGUARD); return false; }
+    const auto* ground = static_cast<const GroundUnit*>(unit);
+    doSetAttackMode(unit, AREAGUARD);
+    doMove2Pos(unit, home.x, home.y, true);
+    if (airliftable(unit) && airliftFreeCarryalls() > 0) {
+        airliftBooking = unit->getObjectID();
+        const bool booked = doRequestCarryallDrop(ground) && ground->hasBookedCarrier();
+        airliftBooking = NONE_ID;
+        if (booked) {
+            // The same job, now a flight home that trackAirliftJobs follows to its landing.
+            job.kind = AirliftKind::Retreat;
+            job.drop = home;
+            job.ordered = now;
+            job.lifted = job.landed = false;
+            job.objective = NONE_ID;
+            ++airliftStats.ordered;
+            return true;
+        }
+        // No aircraft: the Carryall request must not leave it waiting; it drives.
+        const_cast<GroundUnit*>(ground)->cancelCarryallPickup();
+        doSetAttackMode(unit, AREAGUARD);
+        doMove2Pos(unit, home.x, home.y, true);
+    }
+    return false;
+}
+
 void QuantBot::updateAirlift() {
     if (!airliftActive()) {
         // Switched off (a config change between a save and its reload): nothing stays held.
-        if (!airliftJobs.empty() || airliftDrop.point.isValid()) {
+        if (!airliftJobs.empty() || airliftDrop.point.isValid() || airliftRaid.point.isValid()) {
             airliftJobs.clear();
             airliftDrop = AirliftDrop{};
+            airliftRaid = AirliftDrop{};
         }
         return;
     }
     trackAirliftJobs();
-    if (getHouse()->getNumItems(Unit_Carryall) <= 0 && airliftJobs.empty() && !airliftDrop.point.isValid()) return;
+    if (getHouse()->getNumItems(Unit_Carryall) <= 0 && airliftJobs.empty() && !airliftDrop.point.isValid()
+        && !airliftRaid.point.isValid()) return;
     updateAirliftRescue();
     updateAirliftRetreat();
     updateAirliftDrop();
     updateAirliftFerry();
+    updateAirliftRaid();
 }
 
 void QuantBot::saveAirlift(OutputStream& stream) const {
@@ -517,6 +792,18 @@ void QuantBot::saveAirlift(OutputStream& stream) const {
     // The fired counts decide whose turn it is when rear and flank are both on.
     stream.writeSint32(airliftStats.rearDrops);
     stream.writeSint32(airliftStats.flankDrops);
+    // SAVEGAMEVERSION_AIRLIFT_RAIDS: the jobs' objectives (in job order), then the raid.
+    for (const auto& [id, job] : airliftJobs) stream.writeUint32(job.objective);
+    stream.writeUint8(static_cast<Uint8>(airliftRaid.kind));
+    coord(airliftRaid.point);
+    coord(airliftRaid.target);
+    stream.writeUint32(airliftRaid.objective);
+    stream.writeUint32(airliftRaid.planned);
+    stream.writeUint32(Uint32(airliftRaid.pending.size()));
+    for (const Uint32 id : airliftRaid.pending) stream.writeUint32(id);
+    stream.writeUint32(airliftRaidNext);
+    stream.writeSint32(airliftStats.harvesterRaids);
+    stream.writeSint32(airliftStats.perimeterRaids);
 }
 
 void QuantBot::loadAirlift(InputStream& stream) {
@@ -524,7 +811,7 @@ void QuantBot::loadAirlift(InputStream& stream) {
     const auto coord = [&]() { Coord v; v.x = stream.readSint32(); v.y = stream.readSint32(); return v; };
     const auto kind = [&]() {
         const Uint8 value = stream.readUint8();
-        if (value > static_cast<Uint8>(AirliftKind::Ferry)) throw std::runtime_error("Invalid airlift kind");
+        if (value > static_cast<Uint8>(AirliftKind::PerimeterRaid)) throw std::runtime_error("Invalid airlift kind");
         return static_cast<AirliftKind>(value);
     };
     const auto valid = [&](Coord p) { return p.isInvalid() || getMap().tileExists(p); };
@@ -556,4 +843,20 @@ void QuantBot::loadAirlift(InputStream& stream) {
     airliftRetreating = stream.readBool();
     airliftStats.rearDrops = stream.readSint32();
     airliftStats.flankDrops = stream.readSint32();
+    airliftRaid = AirliftDrop{};
+    airliftRaidNext = 0;
+    if (currentGame->getLoadedSavegameVersion() < SAVEGAMEVERSION_AIRLIFT_RAIDS) return;
+    for (auto& [id, job] : airliftJobs) job.objective = stream.readUint32();
+    airliftRaid.kind = kind();
+    airliftRaid.point = coord();
+    airliftRaid.target = coord();
+    airliftRaid.objective = stream.readUint32();
+    airliftRaid.planned = stream.readUint32();
+    const Uint32 raiders = stream.readUint32();
+    if (raiders > kMaxEntries || !valid(airliftRaid.point) || !valid(airliftRaid.target))
+        throw std::runtime_error("Invalid airlift raid");
+    for (Uint32 i = 0; i < raiders; ++i) airliftRaid.pending.push_back(stream.readUint32());
+    airliftRaidNext = stream.readUint32();
+    airliftStats.harvesterRaids = stream.readSint32();
+    airliftStats.perimeterRaids = stream.readSint32();
 }

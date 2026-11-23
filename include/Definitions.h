@@ -238,7 +238,12 @@
 // 9895: The Airport is 4x4 tiles and saves whether it is compact (Airport::compact, 3x3) after
 //       its purchase cooldown. An Airport from an older save is compact: its tiles in that save
 //       hold a 3x3 claim.
-#define SAVEGAMEVERSION     9895
+// 9896: QuantBot's Carryall manoeuvre state (9894) grows: every lift job saves its objective,
+//       and the planned harvester or perimeter raid, its retry clock and the raid counts follow
+//       the retreat state (QuantBot::saveAirlift). A 9894 or 9895 save has none of these.
+#define SAVEGAMEVERSION     9896
+/// First save with the raid part of QuantBot's Carryall manoeuvre state.
+#define SAVEGAMEVERSION_AIRLIFT_RAIDS 9896
 /// First save whose Airports say whether they are compact (3x3) or the full 4x4.
 #define SAVEGAMEVERSION_AIRPORT_4X4 9895
 /// First save with QuantBot's Carryall manoeuvre state.

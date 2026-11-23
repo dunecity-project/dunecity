@@ -18,6 +18,7 @@
 #include <structures/RepairYard.h>
 #include <structures/RepairYardJob.h>
 #include <players/AIDecisionLog.h>
+#include <players/QuantBot.h>
 
 #include <globals.h>
 
@@ -233,7 +234,13 @@ void RepairYard::updateStructureSpecificStuff() {
                     for(UnitBase* pUnit : unitList) {
                         if ((pUnit->getOwner() == owner) && (pUnit->getItemID() == Unit_Carryall)) {
                             Carryall* pTmpCarryall = static_cast<Carryall*>(pUnit);
-                            if (!pTmpCarryall->isBooked()) {
+                            // AirliftReserve (QuantBot, default 0): not one of the army's own.
+                            const bool reserved = std::any_of(owner->getPlayerList().begin(), owner->getPlayerList().end(),
+                                [&](const auto& player) {
+                                    const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+                                    return bot && bot->airliftReserves(pTmpCarryall, pRepairUnit);
+                                });
+                            if (!pTmpCarryall->isBooked() && !reserved) {
                                 pCarryall = pTmpCarryall;
                                 break;
                             }

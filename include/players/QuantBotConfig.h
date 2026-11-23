@@ -282,7 +282,15 @@ struct QuantBotConfig {
         bool airliftRescue;                    ///< A damaged or cut-off vehicle under fire is flown home.
         bool airliftFerry;                     ///< Wave members far behind the wave's front are flown up to it.
         int airliftGroup;                      ///< Most units one rear/flank drop carries, 3-12 (default 6).
-        int airliftCarryalls;                  ///< Carryalls built on top of the transport target, 0-6 (default 0).
+        int airliftCarryalls;                  ///< Carryalls built on top of the transport target, 0-12 (default 0).
+        int airliftReserve;                    ///< The newest Carryalls kept for manoeuvres: no harvester or repair work, 0-12 (default 0).
+        bool squadRetreat;                     ///< A wave outmatched where it stands falls back to the protected rally (ratio: [Army Recovery] LocalWithdrawBps).
+        bool squadRetreatAirlift;              ///< A withdrawing unit 20 tiles or more from its rally takes a free Carryall.
+        bool airliftHarvesterDrop;             ///< Free units are flown beside an enemy harvester no enemy weapon covers.
+        bool airliftPerimeterDrop;             ///< Free units are flown beside an enemy building no enemy weapon covers.
+        int airliftRaidGroup;                  ///< Units one such raid carries, 2-8 (default 4).
+        bool airliftBaseDefence;               ///< A defender 20 tiles or more from an attacked building is flown to it.
+        bool airliftHarvesterDefence;          ///< A defender 20 tiles or more from an attacked harvester is flown to it.
         int airliftRescueHealth;               ///< Rescue a vehicle below this health percent, 0-90; 0 = never by damage (default 50).
         bool airliftRescueCutOff;              ///< Rescue a vehicle with no friendly fighter near it (default on).
         /// Default-OFF city economy (docs/formations.md, "Economy: nuclear consolidation and palace districts").

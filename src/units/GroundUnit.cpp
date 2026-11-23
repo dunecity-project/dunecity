@@ -274,6 +274,18 @@ Carryall* GroundUnit::findFreeCarrier() const {
         if(carryall->isDropOfferer() || !carryall->isOwnedCarrier()) {
             continue;  // A delivery flight that removes itself; booking it strands the unit.
         }
+        // AirliftReserve (QuantBot, default 0): the army's own Carryalls take no other work.
+        bool reserved = false;
+        for(const auto& player : owner->getPlayerList()) {
+            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            if(bot != nullptr && bot->airliftReserves(carryall, this)) {
+                reserved = true;
+                break;
+            }
+        }
+        if(reserved) {
+            continue;
+        }
         return carryall;
     }
 

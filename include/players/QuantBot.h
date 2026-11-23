@@ -119,6 +119,9 @@ public:
     /// only by the in-range aircraft candidate filter, which both need for the same
     /// out-of-range release, not by launcher spacing or wave tracking.
     bool managesAutonomousRocketHunt(const UnitBase* unit) const;
+    /// AirliftReserve: is \a carrier one of the army's own Carryalls, and \a passenger not a
+    /// manoeuvre's unit? Asked by the engine before a harvester, repair or stall lift books it.
+    bool airliftReserves(const UnitBase* carrier, const GroundUnit* passenger) const;
     /// Shared by automatic repair and the AI reservation: an exhausted economy
     /// cannot finish this AI-owned repair. Explicit human and defence claims win.
     bool declinesUnfundedRepair(const UnitBase* unit) const;
@@ -1601,7 +1604,7 @@ private:
             || (!airliftJobs.empty() && airliftJobs.count(id));
     }
     // ---- Mass Carryall manoeuvres (QuantBotAirlift.cpp; docs/formations.md) ----
-    enum class AirliftKind : Uint8 { Rear, Flank, Retreat, Rescue, Ferry };
+    enum class AirliftKind : Uint8 { Rear, Flank, Retreat, Rescue, Ferry, Defence, HarvesterRaid, PerimeterRaid };
     /// One unit under a lift order, from the order until it is set down (a rear or flank
     /// unit until its group strikes). Held like a split group: no rally or regroup orders.
     struct AirliftJob {
@@ -1609,6 +1612,7 @@ private:
         Coord drop = Coord::Invalid();
         Uint32 ordered = 0;
         bool lifted = false, landed = false;
+        Uint32 objective = NONE_ID;         ///< what a defender or raider attacks once it is down
     };
     std::map<Uint32, AirliftJob> airliftJobs;
     /// The rear or flank drop of the current wave; point is invalid while there is none.
@@ -1619,8 +1623,12 @@ private:
         Uint32 wave = 0;                    ///< customWave.launched of the wave it was planned for
         Uint32 planned = 0, firstLanding = 0;
         std::vector<Uint32> pending;        ///< not yet ordered, dearest first
+        Uint32 objective = NONE_ID;         ///< a raid's harvester or building
     };
     AirliftDrop airliftDrop;
+    AirliftDrop airliftRaid;                ///< the harvester or perimeter raid being flown out
+    Uint32 airliftRaidNext = 0;             ///< no new raid is planned before this cycle
+    mutable Uint32 airliftBooking = NONE_ID; ///< the unit a manoeuvre is booking right now (airliftReserves)
     bool airliftLocalDefeat = false;        ///< the wave is outmatched where it stands (updateArmyPosture)
     bool airliftRetreating = false;         ///< a retreat lift of this defeat has been counted
     /// For the match reports; rearDrops and flankDrops also decide whose turn it is and are saved.
@@ -1630,14 +1638,27 @@ private:
         /// Why a wave got no drop (every refused attempt, one a pass) and why a defeat got no lift.
         int declinedFront = 0, declinedTrip = 0, declinedCarryalls = 0, declinedGroup = 0, declinedPoint = 0,
             defeatPasses = 0, retreatNoCarryall = 0, retreatNoFighter = 0, rescuesDamaged = 0, rescuesAlone = 0,
-            ferried = 0;
+            ferried = 0, squadRetreats = 0, harvesterRaids = 0, perimeterRaids = 0, raidUnits = 0, raidRetargets = 0,
+            raidNoTarget = 0, raidNoGroup = 0, raidNoCarryall = 0, baseDefenceLifts = 0, harvesterDefenceLifts = 0;
     };
     enum class AirliftDecline : Uint8 { None, Front, Trip, Carryalls, Group, Point };
     AirliftStats airliftStats;
     bool airliftActive() const;
     int airliftFreeCarryalls() const;
     Coord airliftHome();
-    bool orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind);
+    bool orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind, Uint32 objective = NONE_ID);
+    /// A live, standing vehicle of ours that no Carryall or Repair Yard has a claim on.
+    bool airliftable(const UnitBase* unit) const;
+    bool squadRetreatActive() const;
+    /// SquadRetreatAirlift: a withdrawal to \a destination by Carryall instead of on the ground.
+    bool airliftRetreatByAir(const UnitBase* unit, Coord destination);
+    /// AirliftBaseDefence / AirliftHarvesterDefence: fly \a unit to the attacker \a aim.
+    bool airliftDefender(const UnitBase* unit, const ObjectBase* aim, bool worker);
+    const ObjectBase* airliftRaidTarget(AirliftKind kind, Coord near, int maxTiles) const;
+    bool planAirliftRaid();
+    void updateAirliftRaid();
+    /// A landed raider's next step; false when it is done and the job ends.
+    bool continueAirliftRaid(const UnitBase* unit, AirliftJob& job);
     void releaseAirliftJob(const UnitBase* unit, const AirliftJob& job);
     void trackAirliftJobs();
     AirliftDecline planAirliftDrop();

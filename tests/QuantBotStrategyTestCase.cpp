@@ -417,7 +417,10 @@ TEST_CASE("Carryall manoeuvres default off and each switch is loaded saved and h
     std::set<std::string> hashes{defaults.getConfigHash()};
     for (const char* key : {"AirliftRearDrop=true", "AirliftFlankDrop=true", "AirliftRetreatLift=true",
                             "AirliftRescue=true", "AirliftFerry=true", "AirliftGroup=9", "AirliftCarryalls=3",
-                            "AirliftRescueHealth=25", "AirliftRescueCutOff=false"}) {
+                            "AirliftRescueHealth=25", "AirliftRescueCutOff=false", "AirliftReserve=4",
+                            "SquadRetreat=true", "SquadRetreatAirlift=true", "AirliftHarvesterDrop=true",
+                            "AirliftPerimeterDrop=true", "AirliftRaidGroup=6", "AirliftBaseDefence=true",
+                            "AirliftHarvesterDefence=true"}) {
         {
             std::ofstream ini(path);
             ini << "[Force Concentration]\n" << key << '\n';
@@ -447,7 +450,7 @@ TEST_CASE("Carryall manoeuvres default off and each switch is loaded saved and h
     QuantBotConfig clamped;
     REQUIRE(clamped.applyOverrides(path.string()));
     REQUIRE(clamped.force.airliftGroup == 12);
-    REQUIRE(clamped.force.airliftCarryalls == 6);
+    REQUIRE(clamped.force.airliftCarryalls == 12);
     std::filesystem::remove(path);
 }
 

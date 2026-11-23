@@ -526,6 +526,8 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
     for (const auto id:response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
+        // On a Carryall order already (a defender in flight): a new order would cancel it.
+        if (!airliftJobs.empty() && airliftJobs.count(id)) continue;
         groundSquad.erase(id);
         // Distant non-forced Area Guard targets are discarded by UnitBase.
         // Force transit, then release it inside guard range in checkAllUnits.
@@ -540,6 +542,15 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
                     .set("target",victim->getObjectID()).set("target_item",victim->getItemID())
                     .set("replaced",intruder->getObjectID()).set("reason","defence_dispatch"));
             }
+        // AirliftBaseDefence / AirliftHarvesterDefence (default off): a distant defender of an
+        // attacked building or harvester is flown to the attacker; its booking starts on landing.
+        const bool defendingWorker = clearingSpice || (protectedAsset && !protectedAsset->isAStructure());
+        const bool defendingBase = !defendingWorker
+            && (baseAttack || assetEmergency || (protectedAsset && protectedAsset->isAStructure()));
+        if ((defendingWorker || defendingBase) && airliftDefender(unit, aim, defendingWorker)) {
+            ++dispatched;
+            continue;
+        }
         doAttackObject(unit,aim,!unit->isInAttackRange(aim));
         defenceAssignments[id] = aim->getObjectID();
         ++dispatched;
@@ -2637,8 +2648,11 @@ void QuantBot::updateArmyPosture() {
         situation.severeLocalDefeat = retreatPreserveActive() && situation.severeLocalDefeat;
         situation.coreUnderAttack = false;
         situation.windowCovered = false;
-        localSquadWithdraw = localSquadWithdraw && (retreatPreserveActive() || forceVariant(kForceFallBack));
+        // SquadRetreat (default off) is that same local withdrawal as a config switch.
+        localSquadWithdraw = localSquadWithdraw
+            && (retreatPreserveActive() || forceVariant(kForceFallBack) || squadRetreatActive());
     }
+    if (localSquadWithdraw && !wasLocalWithdraw && squadRetreatActive()) ++airliftStats.squadRetreats;
     if (localSquadWithdraw && !wasLocalWithdraw && forceVariant(kForceFallBack)) ++forceStats.fallBacks;
     const auto previous = armyPosture;
     const auto decision = ArmyPosturePolicy::evaluate(armyPosture, postureSince, situation, thresholds);
@@ -3315,6 +3329,8 @@ std::vector<Coord> QuantBot::assemblySlots(Coord anchor, int radius) const {
 bool QuantBot::withdrawUnit(const UnitBase* unit, Coord anchor, int radius,
                             const std::vector<Coord>* slots, std::set<int64_t>* reserved) {
     if (!unit || anchor.isInvalid()) return false;
+    // On a Carryall order already: a second order would cancel the pickup.
+    if (!airliftJobs.empty() && airliftJobs.count(unit->getObjectID())) return false;
     const int arrival = std::max(1, radius);
     // Already home, or already walking to somewhere inside the assembly area.
     if (blockDistance(unit->getLocation(), anchor).lround() <= arrival) {
@@ -3373,6 +3389,11 @@ bool QuantBot::withdrawUnit(const UnitBase* unit, Coord anchor, int radius,
     // the rally. RETREAT is never used: it returns false from
     // isInGuardRange/isInAttackRange (UnitBase.cpp:1446,1492), so a retreating
     // army cannot shoot back at all.
+    // SquadRetreatAirlift (default off): far from the rally, a free Carryall takes it there.
+    if (airliftRetreatByAir(unit, destination)) {
+        if (reserved) reserved->insert(key(destination));
+        return true;
+    }
     doSetAttackMode(unit, AREAGUARD);
     doMove2Pos(unit, destination.x, destination.y, true);
     if (reserved) reserved->insert(key(destination));
