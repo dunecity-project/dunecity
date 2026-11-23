@@ -130,7 +130,7 @@ LABELS = (('launched', 'City planes launched per game'), ('bought', '... of them
           ('eliminated', 'Houses eliminated before the end, per game'), ('minutes', 'Game length, minutes'))
 report = ['# City plane rules in AI matches: %s against %s' % (args.off, args.on), '',
           '%d games played in both arms%s.' % (len(pairs), ', %d failed' % len(failed) if failed else ', none failed'), '',
-          '| Measure | %s | %s | Paired difference | 95% interval |' % (args.off_label, args.on_label), '|---|---:|---:|---:|---|']
+          '| Measure | %s | %s | Paired difference | 95%% interval |' % (args.off_label, args.on_label), '|---|---:|---:|---:|---|']
 for name, label in LABELS:
     off = [measures[args.off][pair][name] for pair in pairs]
     on = [measures[args.on][pair][name] for pair in pairs]
@@ -146,7 +146,7 @@ for pair in pairs:
         if house in on:
             by_house[house].append((off[house], on[house]))
 if by_house:
-    report += ['', '| House | Placement score %s | %s | Paired difference | 95% interval |' % (args.off_label, args.on_label),
+    report += ['', '| House | Placement score %s | %s | Paired difference | 95%% interval |' % (args.off_label, args.on_label),
                '|---|---:|---:|---:|---|']
     for house, values in sorted(by_house.items()):
         low, high = match_score.bootstrap([b - a for a, b in values], 20261123)

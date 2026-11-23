@@ -1,3 +1,146 @@
+## 2026-11-23 - City planes: a bomb stick that never runs out, bombing runs, planes for 1500 credits (unreleased, after 1.0.876)
+
+Stefan, after playing `4cf0fd5c4` on the MBA: "next allow the ai to spawn planes for 1500 credits. also the planes
+don't seem to be dropping bombs on enemy cities, so fix that. they should drop bombs like a b-52 does as they fly
+over. using a ornithopter attack explosion but make it a bit bigger and deadlier"; then "the planes DO go over an
+enemy city - i don't think this was tested properly", "planes racks don't empty", "the planes own bombs shouldn't
+hurt it, and they should take a while to drop ... so that the plane has already passed the bombs". Commits
+0c9dca9b6 to 6f5687ba4 (engine final at 0ab621bfb) on `integrate/feature-batch`; not pushed, no version bump.
+
+- **Why he saw no bombs, in the build he played.** Bombing was on. His own log from the Air (Custom Game, 4P -
+  192x192 - Metropolis, every house a QuantBot Brutal and watched, 148 to 289 Rocket Turrets a house, 114 game
+  minutes) has 660 flights, 2,725 `CITY_PLANE_BOMB` lines (73% of flights dropped one) and 76 buildings destroyed.
+  A plane carried six bombs and released one per enemy building tile under its sight, so the rack was empty about a
+  second after the first enemy building, a median 8.5 s after take-off; the next bomb came back after 8 s and a plane
+  lived a median 13 s. Reproduced on the Mini on that map: the plane had an empty rack for 85% of the cycles its
+  centre was over an enemy building (931 of 1,096 samples), and it passes over 22 tiles of enemy building per
+  flight. With his own `Dune City.ini` on 2P - 192x192 - City (the local human against one AI) the 24-bomb stick of
+  0c9dca9b6 was still empty for 89% (4,842 of 5,440 cycles). Second cause: of 348 bombs that landed in the
+  reproduction, 90 left a building on exactly 1 hit point. Two 100-point bombs land six cycles apart on a 200-point
+  zone, and a repairing building regains 1/6 hit point a cycle (`StructureBase::update`: every AI building below
+  half health, and a human's with auto-repair).
+- **Why the tests of 2026-11-22 passed.** `city_plane_effect` flew single passes over a 22-building base whose
+  buildings did not repair and counted bombs and buildings per run; the AI matches counted bombs and buildings per
+  game. Nothing measured what share of the enemy buildings under a plane got a bomb, and no test played a city.
+- **Every link checked with his own options file** (copied to scratch on the Mini, never into the repository; game
+  started through the same code the menus run): the six rules are at their defaults in the options as `main()` reads
+  them, in the mod's effective options, in the Random Skirmish screen's start, in a campaign start, in the Custom Game
+  screen, its lobby, the settings stream and in the game; his file has none of the keys and the mod's
+  `GameOptions.ini` has none, so the defaults apply. A save of his made before 9890 (format 9888, two planes in the
+  air) loads with the rules at their defaults and plays on. A second older save could not be checked: the headless
+  probe waited in the Workshop download prompt for a mod that save needs. On 2P City with the human seat both
+  directions bomb (132 bombs from the human's planes on the AI, 146 the other way, in six minutes). On that map the
+  city is 1,222 zones, 18 Police Stations, 8 Nuclear Plants and 2 Airports, all structures a bomb can hit, and 8,659
+  road tiles, which are tile state and never a target. Not done as asked: `4cf0fd5c4` was not built separately (one
+  build tree); the evidence for that build is his own log, and the reproduction is the base arm of the new probe,
+  which plays that build's rules in the current binary.
+- **The stick** (match rule `City Plane Carpet Bombing`, default on, INI key only; `AmbientAirplane::dropStick`).
+  A stick starts with a bomb the cycle an enemy building comes under the bomb sight and releases one every 25/8
+  cycles, exactly two a tile on an axis heading, for as long as one is under it, and two more after the last (one
+  tile), so it runs across a road between two zones. **There is no rack**: no load, no rearm. Nothing is released
+  while the sight is over a building of the plane's own team. A bomb does 60 (the Ornithopter's rocket does 45) and
+  bursts as that rocket's explosion drawn half again as large (`Explosion_Bomb`), with its sound. 120 a tile
+  crossed: a zone or Wind Trap (200) crossed through both tiles is destroyed, also while repairing; a Rocket Turret
+  keeps 80, a Construction Yard 160 of 400, a Refinery 90 of 450, a Palace 640 of 1000. Ground units under the
+  stick take the ordinary splash whoever owns them (a tank on the road between two bombed Wind Traps: 200 to 155
+  for the defender's, 200 to 128 for the plane's own). Off, the plane drops one aimed 100-point bomb per building
+  tile from a rack of six, as in `4cf0fd5c4`.
+- **The fall** (both bomb kinds; `CityAircraft::kBombSightDistance`, `kBombFallCycles`). The sight is three tiles
+  ahead of the plane and a bomb takes 75 cycles (1.2 s) to reach it, at 2.56 world units a cycle against the plane's
+  10.24. The plane flies 12 tiles in that time, so it is 9 tiles past the impact when the bomb goes off; the blast
+  reaches ground units one tile away. Measured: 73 cycles from the release being visible to the explosion, impact on
+  the building tile that was under the sight, plane 8 whole tiles past it.
+- **Own bombs** (`Map::damage`). `Bullet_Bomb` never damages an aircraft: not the plane that dropped it, another of
+  its house, an ally, an enemy plane or an Ornithopter. In `4cf0fd5c4` a bomb could not damage an aircraft either
+  (it is a ground blast); it is now an explicit rule with a test.
+- **Bombing runs** (`City Plane Bombing Runs`, default on; `AmbientAirplane::pickBombingRun`). Each leg of a flight
+  is aimed at a living building of another team, drawn evenly from all of them with the game's random generator, and
+  ends twelve tiles beyond it on the same line, kept on the map. Off: Micropolis's random waypoint. The flight still
+  lasts five minutes and then leaves.
+- **Buying a plane** (`City Plane Purchase`, default on; `Airport::buyAirplane`, `CMD_AIRPORT_BUY_AIRPLANE`,
+  `QuantBot::buyCityAirplanes`). Choices made, for Stefan to correct: a powered Airport launches a plane at once for
+  1500 credits; a house may have three planes in the air; an Airport sells one a minute; the free roll is unchanged
+  and still only launches for a house with no plane. A human gets a **Buy airplane 1500** button on the Airport
+  panel at the same price and limits. QuantBot buys at the end of its build pass, only while another team has a
+  building, and only if after paying it still holds its largest reserve of that pass (economy, strategic, civic,
+  city working capital) plus 3000: one Airport can never cost it more than 1500 credits a minute.
+- **Formats.** Protocol stays 133 (unreleased) with a note; the three rules are bits 5-7 of the MOD15 Trooper byte,
+  set only when off, so every bit of that byte is now in use. Save format **9891**: the plane saves its stick tail
+  counter and clock, the Airport its purchase cooldown, and an explosion may be `Explosion_Bomb`. A 9890 save (the
+  MBA build) takes the older-save path (no stick in progress, cooldown 0); none was available to load in a test.
+- **Whole games through the Custom Game path** (`tests/units/run-city-plane-flights.py`, CTest
+  `city_plane_flights`: `initialCustomGameRules()`, `CustomGameMenu`, the `CustomGamePlayers` lobby and its Start
+  with the shipped default options; 13.5 game minutes, seeds 4711-4713, Mini, 6f5687ba4; each arm adds one rule,
+  base is the build of `4cf0fd5c4`):
+
+  | Per arm (6 games) | base | + stick | + runs | + purchase (defaults) |
+  |---|---:|---:|---:|---:|
+  | Enemy building tiles under the bomb sight that got a bomb | 20% | 98% | 98% | 98% |
+  | Flights that released a bomb | 83% | 79% | 92% | 95% |
+  | Bombs per flight | 4.9 | 54.7 | 83.5 | 78.4 |
+  | Buildings destroyed per flight | 0.48 | 5.12 | 7.79 | 7.22 |
+  | Most buildings destroyed by one flight | 10 | 32 | 51 | 49 |
+  | Buildings destroyed by bombs per game | 22.7 | 243.8 | 379.0 | 488.7 |
+  | ... of the buildings at the start | 0.8% | 8.9% | 13.9% | 17.9% |
+  | Planes bought per game / credits spent | 0 | 0 | 0 | 28.5 / 42,750 |
+
+  Paired by map and seed: stick +4.28 buildings per flight (+3.35 to +4.90); runs +0.20 of flights bombing (+0.12
+  to +0.29) and +5.36 buildings per flight (+1.87 to +9.40); purchase +19 flights a game (+6 to +33) and +110
+  buildings a game (+31 to +177). By map, defaults: Metropolis (928 Rocket Turrets, every house an AI with a
+  million credits) 685 buildings a game, 16.7% of those at the start, a plane lasting a median 14.7 s, 56 planes
+  bought; City (16 Rocket Turrets, the human seat idle) 292 buildings a game, 21.8%, a plane lasting 25.8 s, one
+  plane bought. 171 purchases in all; the least a house held after paying was 13,468 credits. The probe's own
+  default configuration (one seed, six minutes): 22% against 98% of tiles bombed.
+  **Open for Stefan:** with a rack that never empties and runs aimed at enemy buildings, a lightly defended city
+  loses about a fifth of its buildings in 13.5 minutes. Each pass still leaves Construction Yards, Palaces,
+  Refineries and turrets standing; the levers are `kStickDamage`, the Bombing Runs rule (5.7% without it on City)
+  and Rocket Turrets.
+- **Unit probe** (`city_plane_effect`, Mini, 6f5687ba4; 117 paired runs over an undefended 22-building base whose
+  buildings do not repair): aimed bombs 3.79 bombs and 1.03 buildings a run, stick 14.57 bombs and 1.28 buildings
+  (+0.26, +0.16 to +0.37), four at most, no Construction Yard or Palace in one run; the plane keeps 100 hit points
+  on every run. Fixed cases: the stick's five buildings as above; two Wind Traps a tile apart 12 bombs, both
+  destroyed; own and allied buildings beside the target untouched; forty walls 82 bombs, none standing; a
+  repairing Wind Trap left on 1 by the aimed bombs and destroyed by the stick; two bomb blasts centred on five
+  aircraft change none of them and take a tank there from 200 to 170; purchase: three planes 4,500 credits, the
+  fourth refused, another house's command refused, 3,750 cycles of cooldown, a house under 1500 refused; the
+  save keeps stick counters and cooldown. Pictures of a run: `effect-1/aimed.png`, `stick.png` (looked at: a
+  dotted line of bombs drops back from the plane and bursts behind it; the bomb picture is a few pixels).
+- **AI matches** (AWS, `vanilla-match.py --ffa default --houses harkonnen atreides ordos mercenary`, Brutal, 45
+  min, `rs160-dunecity`, seeds 9101-9148, 6f5687ba4; 48 games per arm, none failed; arms
+  `tests/ai/game-options/city-plane-b52-{off,on,nopurchase}.ini`, off = the rules of `4cf0fd5c4`; paired per game):
+
+  | Per game | 4cf0fd5c4 rules | Defaults | Difference (95% interval) |
+  |---|---:|---:|---|
+  | Flights that released a bomb | 62.5% | 92.8% | +30.3 points (+28.2 to +32.4) |
+  | Bombs per flight | 3.37 | 36.06 | +32.69 (+31.58 to +33.79) |
+  | Buildings destroyed per flight | 0.42 | 3.12 | +2.70 (+2.57 to +2.83) |
+  | Buildings destroyed by bombs | 68.5 | 474.5 | +406.0 (+368.8 to +444.5) |
+  | Credits destroyed by bombs | 6,219 | 61,350 | +55,131 (+50,371 to +59,973) |
+  | Planes bought / credits spent | 0 | 4.08 / 6,125 | +4.08 (+2.90 to +5.38) |
+  | Planes shot down | 143.3 | 138.4 | -4.9 (-21.7 to +11.3) |
+  | Time-outs | 50% | 44% | -6 points (-25 to +12) |
+  | Houses eliminated before the end | 1.88 | 2.10 | +0.23 (-0.17 to +0.65) |
+  | Game length, minutes | 40.9 | 39.2 | -1.7 (-4.2 to +0.7) |
+
+  Placement score: Ordos -0.345 to -0.106 (+0.240, +0.033 to +0.439); Atreides -0.109, Harkonnen +0.042, Mercenary
+  -0.099, none separable from zero. The stick and runs without purchases give the same picture (Ordos +0.269,
+  +0.057 to +0.476); purchases on top of them change nothing measurable in bombs or buildings, and placement by
+  at most 0.04 (Mercenary +0.042, +0.007 to +0.087; Ordos -0.030, -0.064 to -0.002). An AI house in these games
+  rarely has 4,500 spare credits: four planes bought a game against 157 launched. Buildings destroyed over the 48
+  default games: 16,933 zones, 4,182 Walls, 409 Silos, 371 Repair Yards, 364 Heavy Factories, 186 Wind Traps, 14
+  Palaces, 11 Construction Yards. Why the plane rules lift Ordos, as on 2026-11-22, is not investigated.
+- **Gates.** AWS `20261123T125147-ctest-d72850` on 6f5687ba4: `quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+  `city_aircraft_probe`, `city_plane_flights` (444 s) and `city_plane_effect` (1,135 s) all passed. Mini on
+  6f5687ba4: `dunelegacy_tests`, `city_aircraft_probe`, `perf_regression` (124.6 s), `city_plane_effect` and
+  `city_plane_flights` passed. Match jobs `20261123T125132-b52-off-8d2095`, `20261123T125139-b52-on-5d61c6`,
+  `20261123T125143-b52-nopurchase-df7231`. Results: `../outputs/city-planes-20261123b/`.
+- **Not verified.** Nothing on a real screen: the pictures are headless renders at 640x480, the sound and the
+  Airport's Buy button were not seen or clicked (the command behind the button is tested). No human played; the
+  human seat in the City games stood idle. A network game, a game between this build and the MBA's, and loading
+  a 9890 save were not tried. `4cf0fd5c4` itself was not rebuilt. Launchers and Troopers still aim at where a
+  plane was. The balance of an unlimited stick against a human's city is measured only as above.
+
 ## 2026-11-23 - Local build of the feature batch installed on the MBA; macOS packaging fix (unreleased, after 1.0.876)
 
 Stefan: "install on my mba".

@@ -134,33 +134,47 @@ runs the same way in both modes.
 ## City airplanes
 
 A powered **Airport** (city games only) launches the city airplane and the traffic helicopter. You do
-not build, select or order them.
+not select or order them, but you can buy more planes.
 
 - **How a plane comes back.** Every five seconds each of your powered Airports has a one in six chance
   of launching a plane, as long as your house has none in the air: about half a minute on average
-  after the last one was shot down or left the map. It costs nothing. A house has one plane at a time
-  however many Airports it owns; a second Airport only shortens the wait. The plane takes off from
-  the runway three tiles east of the Airport, flies straight legs across the whole map for five
-  minutes and then leaves over the nearest edge. Human and computer players get the same plane.
-- **Bombs.** The plane carries six bombs. It keeps its course and drops one bomb for every tile of
-  enemy building its course crosses; a bomb comes back every 8 seconds. A bomb does 100 damage to
-  the building it lands on: two take a Wind Trap, a zone, a turret or a Heavy Factory, a
-  Construction Yard takes four and a Palace ten. One run destroys one building on average, three
-  at most, and never a Construction Yard or a Palace on its own. Your own and allied buildings are
-  never bombed. Units standing on the bombed tile take splash damage.
+  after the last one was shot down or left the map. This plane costs nothing. It takes off from the
+  runway three tiles east of the Airport and flies for five minutes, then leaves over the nearest
+  edge. Human and computer players get the same plane.
+- **Buying a plane.** Select a powered Airport and press **Buy airplane 1500**: a plane takes off at
+  once, also while you already have one flying. A house can have three planes in the air, and each
+  Airport sells one plane a minute (the panel shows the wait). Computer players buy planes too, but
+  only from spare money: after paying they keep their reserves and 3000 credits more.
+- **Where it flies.** Each leg of the flight is a run across one enemy building, picked at random from
+  all enemy buildings on the map, and on for twelve tiles beyond it. Then it turns for the next.
+- **Bombs.** Over enemy buildings the plane lays a stick of bombs like a heavy bomber: one bomb every
+  half tile for as long as an enemy building is under it, and for one more tile after the last, so a
+  road between two zones is bombed as well. The rack never empties. Each bomb is an Ornithopter
+  rocket's explosion, half again as large, and does 60 damage (an Ornithopter's rocket does 45). Two
+  bombs a tile make 120 for every tile of a building the plane crosses: a zone or Wind Trap crossed
+  through both its tiles is destroyed, a Rocket Turret keeps 80 of 200, a Construction Yard 160 of
+  400, a Refinery 90 of 450 and a Palace 640 of 1000. Bombs are never released over your own or an
+  allied building. Ground units under the stick take splash damage, whoever owns them.
+- **The fall.** A bomb takes 1.2 seconds to fall and lands three tiles ahead of where it left the
+  plane. By then the plane is nine tiles further on, so you see the stick drop back from it and go
+  off behind it. A bomb never damages an aircraft, not the plane that dropped it nor any other.
 - **Shooting it down.** Rocket Turrets fire at an enemy plane from three times their normal range, as
   they do at Ornithopters, and their rockets fly to where the plane will be. A plane has 100 hit
   points and a rocket does 30, so four hits bring it down. About one rocket per turret hits on each
   pass: one or two turrets wound it, four bring it down in half the passes and six in most. Damage
   stays on the plane, so it falls on a later pass. Rocket Turrets need power in the Dune City options.
+  A plane that is not shot down bombs for its whole five minutes, so a city needs Rocket Turrets.
 - **The crash.** A plane that is shot down crashes with the blast of a Death Hand. Turrets, Launchers
   and Troopers therefore hold only the shot that would bring it down onto their own side, and fire
   it once the plane is clear.
 - **No Ornithopters.** An Airport no longer sends out Ornithopters. They come from the High-Tech
   Factory as before.
 
-Three lines in `[Game Options]` of `Dune City.ini` switch these rules (hosts decide in multiplayer):
-`City Plane Defence = true`, `City Plane Bombing = true`, `Airport Ornithopter Patrol = false`.
+Six lines in `[Game Options]` of `Dune City.ini` switch these rules (hosts decide in multiplayer):
+`City Plane Defence = true`, `City Plane Bombing = true`, `Airport Ornithopter Patrol = false`,
+`City Plane Carpet Bombing = true` (false: one aimed 100-point bomb per building tile from a rack of
+six), `City Plane Bombing Runs = true` (false: random waypoints anywhere on the map) and
+`City Plane Purchase = true`.
 
 ## Research your house's technology
 
