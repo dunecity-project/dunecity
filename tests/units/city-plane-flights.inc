@@ -235,8 +235,17 @@ int runCityPlaneFlights() {
                 }
                 if(bombedNow) flight.sightTileBombed = true;
                 // The building under the bomb sight: closed and counted when the sight leaves it.
+                // Looked up afresh every cycle: the building seen when the sight entered the tile may
+                // have fallen to a bomb since (sightTileEnemy is only set on entering the tile).
                 Uint32 under = NONE_ID;
-                if(flight.sightTileEnemy) under = currentGameMap->getTile(tileAt)->getGroundObject()->getObjectID();
+                if(tileAt.isValid() && currentGameMap->tileExists(tileAt)) {
+                    const Tile* below = currentGameMap->getTile(tileAt);
+                    const ObjectBase* object = below->hasAGroundObject() ? below->getGroundObject() : nullptr;
+                    if(object != nullptr && object->isAStructure() && object->getHealth() > 0
+                       && object->getOwner()->getTeamID() != plane->getOwner()->getTeamID()) {
+                        under = object->getObjectID();
+                    }
+                }
                 if(under != flight.sightBuilding) {
                     if(flight.sightBuilding != NONE_ID && flight.sightBuildingCycles >= kBombPeriodCycles) {
                         ++flight.sightBuildings;
