@@ -982,7 +982,7 @@ void checkRocketChase(const std::string& mapData) {
 
 // Pictures for a person to look at (no assertion beyond "it rendered"): a plane crossing a row
 // of zones and Wind Traps, drawn 14 cycles after its first bomb lands, with the aimed bombs
-// (aimed.png) and with the stick (stick.png).
+// (aimed.png) and with the stick (stick.png). Below the row stand a 4x4 Airport and a compact 3x3 one.
 void checkPictures(const std::string& mapData) {
     for(const bool carpet : {false, true}) {
         auto game = newGame(mapData, 11, Rules{true, true, false, carpet});
@@ -991,6 +991,13 @@ void checkPictures(const std::string& mapData) {
         const int items[] = {Structure_ZoneResidential, Structure_WindTrap, Structure_ZoneCommercial, Structure_WindTrap,
                              Structure_ZoneIndustrial, Structure_ZoneResidential};
         for(int i = 0; i < 6; ++i) place(owner, items[i], Coord(22 + 3 * i, row));
+        // Off the plane's course, for the eye: the 4x4 Airport and, beside it, a compact 3x3 one
+        // as an old save or a crowded map has it (the same sprite cell scaled into three tiles).
+        place(owner, Structure_Airport, Coord(23, row + 5));
+        {
+            Airport::CompactPlacement compact;
+            place(owner, Structure_Airport, Coord(30, row + 5));
+        }
         for(int i = 0; i < 5; ++i) game->updateGameState();
         fly(game->getHouse(HOUSE_HARKONNEN), Coord(4, row), Coord(kMapSize + 20, row), RIGHT);
         int sinceFirst = -1, explosions = 0;
