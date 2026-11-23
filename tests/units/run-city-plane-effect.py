@@ -116,6 +116,9 @@ parser.add_argument('--replay-save', type=Path,
                          'it, and how each plane ends (replay.csv, replay-planes.csv)')
 parser.add_argument('--replay-mod', type=Path, action='append', default=[],
                     help='a mod directory the save needs, copied into the scratch profile (repeatable)')
+parser.add_argument('--replay-workshop-revision', type=Path, action='append', default=[],
+                    help='a Workshop revision directory (workshop/revisions/HASH of the profile the save came from) '
+                         'the save needs; without it the game tries to download it (repeatable)')
 parser.add_argument('--replay-cycles', type=int, default=3750)
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
@@ -169,6 +172,8 @@ if not args.report:
             (profile / 'mods').mkdir()
             for mod in args.replay_mod:
                 shutil.copytree(mod, profile / 'mods' / mod.name)
+            for revision in args.replay_workshop_revision:
+                shutil.copytree(revision, profile / 'workshop' / 'revisions' / revision.name)
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy',
                    SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1',
                    CITY_PLANE_EFFECT_OUT=str(out),
