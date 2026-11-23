@@ -55,8 +55,18 @@ hurt it, and they should take a while to drop ... so that the plane has already 
   (it is a ground blast); it is now an explicit rule with a test.
 - **Bombing runs** (`City Plane Bombing Runs`, default on; `AmbientAirplane::pickBombingRun`). Each leg of a flight
   is aimed at a living building of another team, drawn evenly from all of them with the game's random generator, and
-  ends twelve tiles beyond it on the same line, kept on the map. Off: Micropolis's random waypoint. The flight still
-  lasts five minutes and then leaves.
+  ends twelve tiles beyond it on the same line, kept on the map. Off: Micropolis's random waypoint. Five minutes
+  (`kAirplaneMaxTicks`) is only the upper bound of a flight: the plane is retired when its centre crosses the map
+  edge, and it turns too wide to stay in after a waypoint near the edge. Measured in `flights-1` (corrected
+  2026-11-23, earlier text here and in the Rocket Turret entry below said a flight lasts five minutes): flights that were
+  not shot down ended after a median 23 to 25 seconds on 2P City with runs (longest 141 s) and 34 to 40 seconds
+  with random waypoints (longest 305 s), 13 to 19 seconds on Metropolis.
+- **Is 1500 too cheap?** (Stefan asked, 2026-11-23.) Building prices destroyed per flight, bought and free planes
+  alike: 391 credits in the AWS matches (3.0 buildings, shot down after a median 12.9 s), 861 on Metropolis
+  (6.1 buildings, 14.6 s), about 1,700 on 2P City with eight Rocket Turrets a house (14.5 buildings, 31 s). On
+  Metropolis the four houses spent 84,000 credits a game on 56 planes for 31,000 credits more destroyed; all 56
+  are the one-a-minute-per-Airport limit, so with a million credits the price does not bind. 97% of flights in
+  the AWS matches were the free plane. Not changed.
 - **Buying a plane** (`City Plane Purchase`, default on; `Airport::buyAirplane`, `CMD_AIRPORT_BUY_AIRPLANE`,
   `QuantBot::buyCityAirplanes`). Choices made, for Stefan to correct: a powered Airport launches a plane at once for
   1500 credits; a house may have three planes in the air; an Airport sells one a minute; the free roll is unchanged

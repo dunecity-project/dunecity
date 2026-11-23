@@ -139,8 +139,10 @@ not select or order them, but you can buy more planes.
 - **How a plane comes back.** Every five seconds each of your powered Airports has a one in six chance
   of launching a plane, as long as your house has none in the air: about half a minute on average
   after the last one was shot down or left the map. This plane costs nothing. It takes off from the
-  runway three tiles east of the Airport and flies for five minutes, then leaves over the nearest
-  edge. Human and computer players get the same plane.
+  runway three tiles east of the Airport. A flight ends when the plane crosses the edge of the map,
+  which a run towards a building near the edge soon makes it do: a plane that is not shot down is
+  usually gone within half a minute to a minute. Five minutes is the longest a flight can last.
+  Human and computer players get the same plane.
 - **Buying a plane.** Select a powered Airport and press **Buy airplane 1500**: a plane takes off at
   once, also while you already have one flying. A house can have three planes in the air, and each
   Airport sells one plane a minute (the panel shows the wait). Computer players buy planes too, but
@@ -163,7 +165,8 @@ not select or order them, but you can buy more planes.
   points and a rocket does 30, so four hits bring it down. About one rocket per turret hits on each
   pass: one or two turrets wound it, four bring it down in half the passes and six in most. Damage
   stays on the plane, so it falls on a later pass. Rocket Turrets need power in the Dune City options.
-  A plane that is not shot down bombs for its whole five minutes, so a city needs Rocket Turrets.
+  A plane that is not shot down keeps bombing until it flies off the map, and the next one follows
+  about half a minute later, so a city needs Rocket Turrets.
 - **The crash.** A plane that is shot down crashes with the blast of a Death Hand. Turrets, Launchers
   and Troopers therefore hold only the shot that would bring it down onto their own side, and fire
   it once the plane is clear.
