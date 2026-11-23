@@ -143,6 +143,7 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_SCOUTPOST_SLOWPOST_UPGRADE:
         case CMD_RADAR_RESEARCH:
         case CMD_RESEARCH_TECH_LEVEL:
+        case CMD_AIRPORT_BUY_AIRPLANE:
             return true;
 
         // No acting object: pause/resume and the sync probe carry only the issuer, the city

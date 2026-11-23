@@ -38,9 +38,10 @@ AmbientAirplane::AmbientAirplane(House* newOwner) : AirUnit(newOwner)
 
     takeoffFrame = 0;
     remainingTicks = CA::kAirplaneMaxTicks;
-    bombs = CA::kBombLoad;
+    bombs = bombLoad();
     bombTimer = 0;
     bombSightTile = Coord::Invalid();
+    stickGap = CA::kStickGapTicks + 1;
 }
 
 AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
@@ -59,16 +60,18 @@ AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
         remainingTicks = CA::kAirplaneMaxTicks;
     }
     if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_BOMBS) {
-        bombs = std::clamp(stream.readSint32(), 0, CA::kBombLoad);
-        bombTimer = std::clamp(stream.readSint32(), 0, CA::kBombRearmTicks - 1);
+        bombs = std::clamp(stream.readSint32(), 0, bombLoad());
+        bombTimer = std::clamp(stream.readSint32(), 0, bombRearmTicks() - 1);
         bombSightTile.x = stream.readSint32();
         bombSightTile.y = stream.readSint32();
     } else {
         // A plane from an older save was unarmed; it continues with a full load.
-        bombs = CA::kBombLoad;
+        bombs = bombLoad();
         bombTimer = 0;
         bombSightTile = Coord::Invalid();
     }
+    stickGap = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_PURCHASE
+        ? std::clamp(stream.readSint32(), 0, CA::kStickGapTicks + 1) : CA::kStickGapTicks + 1;
     // init() sets the cruise row; a save may be between take-off frames.
     if(takeoffFrame >= CA::kAirplaneLastTakeoffFrame && takeoffFrame <= CA::kAirplaneFirstTakeoffFrame) {
         drawnFrame = CA::airplaneTakeoffRow(takeoffFrame);
@@ -113,6 +116,7 @@ void AmbientAirplane::save(OutputStream& stream) const
     stream.writeSint32(bombTimer);
     stream.writeSint32(bombSightTile.x);
     stream.writeSint32(bombSightTile.y);
+    stream.writeSint32(stickGap);
 }
 
 bool AmbientAirplane::canPass(int xPos, int yPos) const
@@ -188,8 +192,59 @@ Coord AmbientAirplane::micropolisDestination() const
                  CA::toMicropolis(destination.y * TILESIZE + TILESIZE / 2, TILESIZE));
 }
 
+int AmbientAirplane::bombLoad()
+{
+    return currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing ? CA::kStickLoad : CA::kBombLoad;
+}
+
+int AmbientAirplane::bombRearmTicks()
+{
+    return currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing ? CA::kStickRearmTicks
+                                                                                     : CA::kBombRearmTicks;
+}
+
+/**
+    City Plane Bombing Runs: the next leg crosses a building of another team.
+
+    The building is drawn evenly from every living structure not on the plane's team, so a
+    house with more buildings draws more runs. The waypoint lies CA::kRunOvershootTiles
+    beyond it on the line from the plane, kept on the map, so the plane flies across the
+    building and what stands behind it before the usual arrival rule draws the next leg.
+    The draw is from the game's own random generator, as Micropolis's waypoint is.
+*/
+bool AmbientAirplane::pickBombingRun()
+{
+    const auto isTarget = [this](const StructureBase* structure) {
+        return structure->getHealth() > 0 && structure->getOwner()->getTeamID() != owner->getTeamID();
+    };
+    int count = 0;
+    for(const StructureBase* structure : structureList) {
+        if(isTarget(structure)) ++count;
+    }
+    if(count == 0) return false;
+    int pick = currentGame->randomGen.rand(0, count - 1);
+    const StructureBase* target = nullptr;
+    for(const StructureBase* structure : structureList) {
+        if(isTarget(structure) && pick-- == 0) { target = structure; break; }
+    }
+    if(target == nullptr) return false;
+    const Coord from = getCenterPoint();
+    const Coord to = target->getCenterPoint();
+    const int dx = to.x - from.x, dy = to.y - from.y;
+    const int length = static_cast<int>(CA::integerSqrt(int64_t(dx) * dx + int64_t(dy) * dy));
+    // Right above the building there is no line to extend: fly on to another one.
+    if(length < TILESIZE) return false;
+    const int beyond = CA::kRunOvershootTiles * TILESIZE;
+    const int x = std::clamp(to.x + dx * beyond / length, 0, currentGameMap->getSizeX() * TILESIZE - 1);
+    const int y = std::clamp(to.y + dy * beyond / length, 0, currentGameMap->getSizeY() * TILESIZE - 1);
+    setFlightDestination(Coord(x / TILESIZE, y / TILESIZE));
+    return true;
+}
+
 void AmbientAirplane::pickDestination()
 {
+    if(currentGame->getGameInitSettings().getGameOptions().cityPlaneBombingRuns
+       && currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing && pickBombingRun()) return;
     // doAirplaneSprite:
     //   destX = getRandom((WORLD_W * 16) + 100) - 50;
     //   destY = getRandom((WORLD_H * 16) + 100) - 50;
@@ -459,12 +514,52 @@ CA::Intercept AmbientAirplane::turretRocketIntercept(const Coord& missile) const
     a tile. The plane's own and allied buildings are never aimed at, and a bomb
     only damages a building its impact point lies on, so they are never hit.
 */
-void AmbientAirplane::dropBomb(Uint32 gameCycle)
+Coord AmbientAirplane::bombSight() const
 {
     const FixPoint angleRad = (angle * (FixPt_PI << 1)) / 8;
     const int sight = CA::toWorld(CA::kBombSightDistance, TILESIZE);
+    const Coord from = getCenterPoint();
+    return Coord(from.x + lround(FixPoint::cos(angleRad) * sight), from.y - lround(FixPoint::sin(angleRad) * sight));
+}
+
+/**
+    City Plane Carpet Bombing: one sprite tick of the stick. While a building of another
+    team is under the bomb sight, and for CA::kStickGapTicks ticks after the last one, a bomb
+    is released towards the sight: two a tile on an axis heading. Nothing is released while
+    the sight is over a building of the plane's own team or off the map. A bomb damages the
+    building its impact point lies on and, by the ordinary splash rule, units of any side
+    within a tile of it.
+*/
+void AmbientAirplane::dropStick(Uint32 gameCycle)
+{
     Coord from = getCenterPoint();
-    Coord aim(from.x + lround(FixPoint::cos(angleRad) * sight), from.y - lround(FixPoint::sin(angleRad) * sight));
+    Coord aim = bombSight();
+    const ObjectBase* building = nullptr;
+    bool onMap = false;
+    if(aim.x >= 0 && aim.y >= 0 && currentGameMap->tileExists(aim.x / TILESIZE, aim.y / TILESIZE)) {
+        onMap = true;
+        const Tile* tile = currentGameMap->getTile(aim.x / TILESIZE, aim.y / TILESIZE);
+        if(tile->hasAGroundObject() && tile->getGroundObject() != nullptr && tile->getGroundObject()->isAStructure()
+           && tile->getGroundObject()->getHealth() > 0) {
+            building = tile->getGroundObject();
+        }
+    }
+    const bool own = building != nullptr && building->getOwner()->getTeamID() == owner->getTeamID();
+    if(building != nullptr && !own) stickGap = 0;
+    else if(stickGap <= CA::kStickGapTicks) ++stickGap;
+    if(bombs <= 0 || !onMap || own || stickGap > CA::kStickGapTicks) return;
+
+    bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kStickDamage, false, building));
+    --bombs;
+    SDL_Log("CITY_PLANE_BOMB: house=%d object=%u target_house=%d target_item=%d cycle=%u", owner->getHouseID(),
+            objectID, building ? building->getOwner()->getHouseID() : -1, building ? int(building->getItemID()) : -1,
+            gameCycle);
+}
+
+void AmbientAirplane::dropBomb(Uint32 gameCycle)
+{
+    Coord from = getCenterPoint();
+    Coord aim = bombSight();
     const Coord sightTile = (aim.x < 0 || aim.y < 0) ? Coord::Invalid() : Coord(aim.x / TILESIZE, aim.y / TILESIZE);
     if(sightTile == bombSightTile) return;
     bombSightTile = sightTile;
@@ -500,16 +595,19 @@ bool AmbientAirplane::update()
     }
 
     const Uint32 gameCycle = currentGame->getGameCycleCount();
-    // The bomb sight is followed every cycle, so no tile it crosses is missed.
+    // The bomb sight is followed every cycle, so no tile it crosses is missed. The stick
+    // (City Plane Carpet Bombing) is released on sprite ticks instead, below.
     const bool bombing = currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing;
-    if(bombing && takeoffFrame == 0) dropBomb(gameCycle);
+    const bool stick = bombing && currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing;
+    if(bombing && !stick && takeoffFrame == 0) dropBomb(gameCycle);
     if(!CA::isSpriteTick(gameCycle)) {
         return true;
     }
 
     if(remainingTicks > 0) --remainingTicks;
 
-    if(bombing) bombs = CA::rearmBombs(bombs, bombTimer);
+    if(bombing) bombs = CA::rearmBombs(bombs, bombTimer, bombLoad(), bombRearmTicks());
+    if(stick && takeoffFrame == 0) dropStick(gameCycle);
 
     if(takeoffFrame == 0) {
         if(remainingTicks > 0) {

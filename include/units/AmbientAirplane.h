@@ -110,12 +110,23 @@ private:
     bool crashWouldHit(int teamID, FixPoint from, FixPoint to) const;
     /// City Plane Bombing: one bomb when the bomb sight enters a tile of an enemy building.
     void dropBomb(Uint32 gameCycle);
+    /// City Plane Carpet Bombing: one sprite tick of the stick (CityAircraft::kStick*).
+    void dropStick(Uint32 gameCycle);
+    /// The point CityAircraft::kBombSightDistance ahead on the course, in world units.
+    Coord bombSight() const;
+    /// City Plane Bombing Runs: aim the next leg across a random enemy building. False when
+    /// no other team has a building left.
+    bool pickBombingRun();
+    /// Bombs this plane carries and sprite ticks per regained bomb under the match rules.
+    static int bombLoad();
+    static int bombRearmTicks();
 
     Sint32 takeoffFrame;    ///< Micropolis frames 11..9, 0 once cruising
     Sint32 remainingTicks;  ///< Cruise budget; zero means an outward departure
     Sint32 bombs;           ///< Bombs on board (saved from 9890)
     Sint32 bombTimer;       ///< Sprite ticks towards the next bomb, 0 while full (saved from 9890)
     Coord  bombSightTile;   ///< Tile the bomb sight was over last cycle (saved from 9890)
+    Sint32 stickGap;        ///< Sprite ticks since an enemy building was under the sight (saved from 9891)
 };
 
 #endif // AMBIENTAIRPLANE_H

@@ -3,6 +3,8 @@
 #include "DefaultStructureInterface.h"
 #include "CityStatsBox.h"
 #include <GUI/Label.h>
+#include <GUI/TextButton.h>
+#include <dunecity/CityAircraftPolicy.h>
 #include <GUI/VBox.h>
 #include <structures/Airport.h>
 #include <House.h>
@@ -21,6 +23,15 @@ protected:
         patrolLabel.setTextFontSize(11);
         patrolLabel.setTextColor(COLOR_WHITE);
         details.addWidget(&patrolLabel, (Sint32)55);
+        // City Plane Purchase: launch a plane now for CityAircraft::kPlanePrice credits.
+        buyButton.setText(_("Buy airplane") + std::string(" ") + std::to_string(DuneCity::CityAircraft::kPlanePrice));
+        buyButton.setTooltipText(_("Launch a city airplane now. Up to three in the air; one a minute per Airport."));
+        buyButton.setOnClick([id] {
+            auto* airport = dynamic_cast<Airport*>(currentGame->getObjectManager().getObject(id));
+            if (airport) airport->handleBuyAirplaneClick();
+        });
+        buyButton.setVisible(false);
+        details.addWidget(&buyButton, (Sint32)24);
         cityStats.attachTo(details,COLOR_WHITE,false);
         details.addWidget(Spacer::create(),0.99);
     }
@@ -30,12 +41,20 @@ protected:
         if (!currentGame->getGameInitSettings().getGameOptions().airportOrnithopterPatrol) {
             // No Ornithopter patrol (the default): the panel says what the Airport does launch.
             const House* owner=airport->getOwner();
+            const int flying=owner->getNumItems(Unit_AmbientAirplane);
+            const bool purchase=currentGame->getGameInitSettings().getGameOptions().cityPlanePurchase;
+            const int wait=(airport->getPurchaseCooldown()*GAMESPEED_DEFAULT+999)/1000;
             patrolLabel.setText(_("City airplane")+std::string("\n")
                 +(!owner->hasPower() ? _("Needs power")
-                  : owner->getNumItems(Unit_AmbientAirplane)>0 ? _("In flight") : _("Next flight soon")));
+                  : flying>0 ? std::to_string(flying)+_(" in flight") : _("Next flight soon"))
+                +(purchase && wait>0 ? std::string("\n")+_("Next purchase ")+std::to_string(wait/60)+":"
+                    +(wait%60<10?"0":"")+std::to_string(wait%60) : std::string()));
+            buyButton.setVisible(purchase);
+            buyButton.setEnabled(purchase && currentGame->canControlHouse(owner) && airport->canBuyAirplane());
             cityStats.update(airport);
             return DefaultStructureInterface::update();
         }
+        buyButton.setVisible(false);
         const int seconds=(airport->getSpawnTimer()*GAMESPEED_DEFAULT+999)/1000;
         std::string status;
         if (seconds>0) status=std::to_string(seconds/60)+":"+(seconds%60<10?"0":"")+std::to_string(seconds%60);
@@ -50,6 +69,7 @@ protected:
 private:
     VBox details;
     Label patrolLabel;
+    TextButton buyButton;
     CityStatsBox cityStats;
 };
 #endif

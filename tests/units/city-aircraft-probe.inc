@@ -1693,6 +1693,9 @@ int runCityAircraftProbe() {
     // themselves are checked off against on in city_plane_effect.
     settings.gameOptions.cityPlaneDefence = false;
     settings.gameOptions.cityPlaneBombing = false;
+    settings.gameOptions.cityPlaneCarpetBombing = false;
+    settings.gameOptions.cityPlaneBombingRuns = false;
+    settings.gameOptions.cityPlanePurchase = false;
     std::ifstream map(PROBE_MAP_PATH);
     gMapData.assign((std::istreambuf_iterator<char>(map)), std::istreambuf_iterator<char>());
     cityRequire(!gMapData.empty(), "fixture map is empty");

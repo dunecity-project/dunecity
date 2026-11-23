@@ -340,6 +340,9 @@ public:
                     && (cityPlaneDefence == goc.cityPlaneDefence)
                     && (cityPlaneBombing == goc.cityPlaneBombing)
                     && (airportOrnithopterPatrol == goc.airportOrnithopterPatrol)
+                    && (cityPlaneCarpetBombing == goc.cityPlaneCarpetBombing)
+                    && (cityPlaneBombingRuns == goc.cityPlaneBombingRuns)
+                    && (cityPlanePurchase == goc.cityPlanePurchase)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -395,6 +398,9 @@ public:
             if(!cityPlaneDefence) optStr += "/cityPlaneDefence=0";
             if(!cityPlaneBombing) optStr += "/cityPlaneBombing=0";
             if(airportOrnithopterPatrol) optStr += "/airportOrnithopterPatrol=1";
+            if(!cityPlaneCarpetBombing) optStr += "/cityPlaneCarpetBombing=0";
+            if(!cityPlaneBombingRuns) optStr += "/cityPlaneBombingRuns=0";
+            if(!cityPlanePurchase) optStr += "/cityPlanePurchase=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -509,6 +515,20 @@ public:
         /// An Airport sends out pairs of Ornithopters on the Palace timer, as up to 1.0.876.
         /// Off (the default) it launches the city airplane and helicopter only. INI key only.
         bool        airportOrnithopterPatrol = false;
+        /// With City Plane Bombing: the plane lays a stick of bombs along its course while enemy
+        /// buildings are under it, one bomb every half tile, each a larger Ornithopter rocket
+        /// impact (CityAircraft::kStick*). Off is the single aimed bomb per building tile of the
+        /// first bombing rule (kBomb*). INI key only.
+        bool        cityPlaneCarpetBombing = true;
+        /// Each leg of a city airplane's flight is a run across a random enemy building and on
+        /// beyond it (AmbientAirplane::pickBombingRun). Off is Micropolis's random waypoint
+        /// anywhere on the map. INI key only.
+        bool        cityPlaneBombingRuns = true;
+        /// A powered Airport launches a city airplane at once for CityAircraft::kPlanePrice
+        /// credits (Airport::buyAirplane): a button for a human, a budget rule for QuantBot
+        /// (QuantBot::buyCityAirplanes). Off, planes only come from the Airport's free roll.
+        /// INI key only.
+        bool        cityPlanePurchase = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

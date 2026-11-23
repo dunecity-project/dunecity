@@ -858,9 +858,15 @@ case Bullet_LargeRocket: {
                         currentGame->objectData.data[building->getItemID()][building->getOriginalHouseID()].price,
                         currentGame->getGameCycleCount());
             }
-            soundPlayer->playSoundAt(Sound_ExplosionMedium, position/TILESIZE);
-            const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1,Explosion_Medium2});
-            currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
+            if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
+                // The stick: the Ornithopter rocket's impact, drawn half again as large.
+                soundPlayer->playSoundAt(Sound_ExplosionSmall, position/TILESIZE);
+                currentGame->getExplosionList().push_back(new Explosion(Explosion_Bomb,position,houseID));
+            } else {
+                soundPlayer->playSoundAt(Sound_ExplosionMedium, position/TILESIZE);
+                const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1,Explosion_Medium2});
+                currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
+            }
         } break;
 
         case Bullet_Sonic:

@@ -1318,12 +1318,17 @@ TEST_CASE("The Trooper Ornithopter reach defaults on and its off state is hashed
         GameInitSettings restored(input);
         REQUIRE(restored.getGameOptions().trooperOrnithopterReach);
     }
-    SECTION("an unknown Trooper rule bit is refused") {
+    SECTION("every bit of the byte is a rule: bit 5 turns City Plane Carpet Bombing off") {
         if(!options.trooperOrnithopterReach) {
             auto bytes = encoded;
             bytes[changed.front()] = static_cast<char>(0x20 | 1);
             IMemoryStream input(bytes.data(), bytes.size());
-            REQUIRE_THROWS(GameInitSettings(input));
+            GameInitSettings restored(input);
+            REQUIRE(restored.getGameOptions().trooperAntiAir);
+            REQUIRE(restored.getGameOptions().trooperOrnithopterReach);
+            REQUIRE_FALSE(restored.getGameOptions().cityPlaneCarpetBombing);
+            REQUIRE(restored.getGameOptions().cityPlaneBombingRuns);
+            REQUIRE(restored.getGameOptions().cityPlanePurchase);
         }
     }
 }
@@ -1334,12 +1339,18 @@ TEST_CASE("The city plane rules keep their defaults out of the stream and round-
     REQUIRE(defaults.cityPlaneDefence);
     REQUIRE(defaults.cityPlaneBombing);
     REQUIRE_FALSE(defaults.airportOrnithopterPatrol);
+    REQUIRE(defaults.cityPlaneCarpetBombing);
+    REQUIRE(defaults.cityPlaneBombingRuns);
+    REQUIRE(defaults.cityPlanePurchase);
 
     auto original = makeSeparateFactionCoop(false);
     const auto plainOptions = original.getGameOptions();
     REQUIRE(plainOptions.cityPlaneDefence);
     REQUIRE(plainOptions.cityPlaneBombing);
     REQUIRE_FALSE(plainOptions.airportOrnithopterPatrol);
+    REQUIRE(plainOptions.cityPlaneCarpetBombing);
+    REQUIRE(plainOptions.cityPlaneBombingRuns);
+    REQUIRE(plainOptions.cityPlanePurchase);
     OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
     const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
 
@@ -1347,8 +1358,14 @@ TEST_CASE("The city plane rules keep their defaults out of the stream and round-
     options.cityPlaneDefence = GENERATE(true, false);
     options.cityPlaneBombing = GENERATE(true, false);
     options.airportOrnithopterPatrol = GENERATE(false, true);
+    options.cityPlaneCarpetBombing = GENERATE(true, false);
+    options.cityPlaneBombingRuns = GENERATE(true, false);
+    options.cityPlanePurchase = GENERATE(true, false);
     const Uint8 bits = static_cast<Uint8>((options.cityPlaneDefence ? 0 : 4) | (options.cityPlaneBombing ? 0 : 8)
-                                          | (options.airportOrnithopterPatrol ? 16 : 0));
+                                          | (options.airportOrnithopterPatrol ? 16 : 0)
+                                          | (options.cityPlaneCarpetBombing ? 0 : 32)
+                                          | (options.cityPlaneBombingRuns ? 0 : 64)
+                                          | (options.cityPlanePurchase ? 0 : 128));
     REQUIRE((options == plainOptions) == (bits == 0));
     REQUIRE((options.getHash() == plainOptions.getHash()) == (bits == 0));
 

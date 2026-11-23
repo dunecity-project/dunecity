@@ -263,6 +263,9 @@ protected:
         \param  pPalace the palace to activate the special weapon of
     */
     void doSpecialWeapon(const Palace* pPalace) const;
+    /// City Plane Purchase: has an own Airport launch a city airplane for its price. False when
+    /// the Airport cannot sell one now (Airport::canBuyAirplane).
+    bool doBuyCityAirplane(const class Airport* airport) const;
 
     /**
         Launch the deathhand missile an target position x,y.

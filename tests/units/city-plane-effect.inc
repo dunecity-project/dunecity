@@ -74,6 +74,8 @@ struct Rules {
     bool defence;
     bool bombing;
     bool patrol;
+    bool carpet = false;    // City Plane Carpet Bombing: the stick instead of one aimed bomb a tile
+    bool purchase = false;  // City Plane Purchase
 };
 
 // Atreides defends; Harkonnen owns the plane; Ordos is Harkonnen's ally.
@@ -82,6 +84,10 @@ std::unique_ptr<Game> newGame(const std::string& mapData, int seed, const Rules&
     options.cityPlaneDefence = rules.defence;
     options.cityPlaneBombing = rules.bombing;
     options.airportOrnithopterPatrol = rules.patrol;
+    options.cityPlaneCarpetBombing = rules.carpet;
+    options.cityPlanePurchase = rules.purchase;
+    // Every plane here flies a course the probe gives it, never a bombing run of its own choice.
+    options.cityPlaneBombingRuns = false;
     options.immortalHumanPlayer = false;
     GameInitSettings init("city-plane-effect.ini", mapData, "City plane effect", true, options);
     init.randomSeed = seed;

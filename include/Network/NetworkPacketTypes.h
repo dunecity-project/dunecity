@@ -439,6 +439,12 @@
 //      drops Bullet_Bomb on enemy buildings under its course; its bomb load is saved, save
 //      format 9890) and Airport Ornithopter Patrol (default off: an Airport no longer sends out
 //      Ornithopters). An older peer would desync on all three.
+//      Also in 133, three more city plane rules as bits 5-7 of that byte (every bit of it is
+//      now in use), each default on: City Plane Carpet Bombing (a stick of bombs every half
+//      tile while enemy buildings are under the plane), City Plane Bombing Runs (each leg of a
+//      flight crosses a random enemy building) and City Plane Purchase (an Airport launches a
+//      plane for 1500 credits: CMD_AIRPORT_BUY_AIRPLANE, appended after
+//      CMD_RESEARCH_TECH_LEVEL, and QuantBot's own purchases). Save format 9891.
 #define NETWORK_PROTOCOL_VERSION            133
 
 // Mod transfer limits

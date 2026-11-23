@@ -22,6 +22,8 @@
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
+#include <structures/Airport.h>
+#include <dunecity/CityAircraftPolicy.h>
 #include <players/QuantBotArmyCounterPolicy.h>
 #include <cstdlib>
 #include <string_view>
@@ -506,6 +508,48 @@ void QuantBot::firePalaceWeapon(const Palace* pPalace) {
     }
 }
 
+/**
+    Stefan, 2026-11-23: "allow the ai to spawn planes for 1500 credits".
+
+    Runs at the end of build(), after repairs, production and placement have taken what they
+    wanted from pass.money (the house's credits less what its queues are already committed
+    to). A plane is bought only from what is left: after paying, the house must still hold its
+    largest reserve of this pass (economy, strategic, civic, city working capital) plus
+    kCityAirplaneCashFloor. The Airport itself sells at most one plane a minute and none to a
+    house with three in the air (Airport::canBuyAirplane), so one Airport can never cost more
+    than 1500 credits a minute. A plane is only worth buying while another team has a
+    building to bomb, and bombing must be on.
+*/
+void QuantBot::buyCityAirplanes(BuildPass& pass) {
+    const auto& options = currentGame->getGameInitSettings().getGameOptions();
+    if (!options.cityPlanePurchase || !options.cityPlaneBombing || builderOnly()) return;
+    if (getHouse()->getNumItems(Structure_Airport) == 0) return;
+    namespace CA = DuneCity::CityAircraft;
+    const int reserve = std::max({pass.economyReserve, pass.strategicReserveCost, pass.civicReserveCost,
+                                  pass.cityWorkingReserve, 0}) + kCityAirplaneCashFloor;
+    bool enemyBuilding = false, checked = false;
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_Airport) continue;
+        const auto* airport = static_cast<const Airport*>(structure);
+        if (!airport->canBuyAirplane() || pass.money < CA::kPlanePrice + reserve) continue;
+        if (!checked) {
+            checked = true;
+            for (const StructureBase* other : getStructureList()) {
+                if (other->getHealth() > 0 && other->getOwner()->getTeamID() != getHouse()->getTeamID()) {
+                    enemyBuilding = true;
+                    break;
+                }
+            }
+        }
+        if (!enemyBuilding) return;
+        if (!doBuyCityAirplane(airport)) continue;
+        pass.money -= CA::kPlanePrice;
+        traceDecision("city_airplane_bought", AITelemetry::Record().set("airport", airport->getObjectID())
+            .set("price", CA::kPlanePrice).set("spendable_after", pass.money).set("reserve", reserve)
+            .set("planes", getHouse()->getNumItems(Unit_AmbientAirplane)));
+    }
+}
+
 void QuantBot::fighterPass() {
     // The Fighter's share of build(): the retreat point and the palace weapons. It never
     // produces, places, repairs or cancels anything (docs/ai-roles.md).
@@ -564,6 +608,7 @@ void QuantBot::build(int militaryValue) {
         }
     }
     if (!civWarsRules() && !researchRequired(pass)) startTechResearch(pass);
+    buyCityAirplanes(pass);
 
     traceCapitalOutcome(pass);
     // MULTIPLAYER FIX: Use deterministic timer instead of random

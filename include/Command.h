@@ -90,6 +90,7 @@ typedef enum {
 
     CMD_AI_SUPPORT_ROLE,              ///< AI_SUPPORT_ROLE(ROLE): AIRole for the QuantBot partner in the issuing human's house
     CMD_RESEARCH_TECH_LEVEL,          ///< RESEARCH_TECH_LEVEL(LAB_OBJECT_ID), next level for its owner
+    CMD_AIRPORT_BUY_AIRPLANE,         ///< AIRPORT_BUY_AIRPLANE(AIRPORT_OBJECT_ID), match rule City Plane Purchase
 
     CMD_MAX
 } CMDTYPE;

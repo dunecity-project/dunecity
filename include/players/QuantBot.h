@@ -2282,6 +2282,11 @@ private:
     bool starportUnlocks(BuildPass& pass, BuilderTurn& turn, Uint32 goal);
     /// Fires a ready palace weapon: summon/saboteur, or the Death Hand at the largest enemy base.
     void firePalaceWeapon(const Palace* pPalace);
+    /// Cash a house keeps, beyond this pass's reserves, after paying for a city airplane.
+    static constexpr int kCityAirplaneCashFloor = 3000;
+    /// City Plane Purchase: buys a city airplane at each own Airport that can sell one, from
+    /// what this pass left over (QuantBotBuild.cpp).
+    void buyCityAirplanes(BuildPass& pass);
     /// The Fighter role's build-phase work instead of build(): retreat point and palace weapons.
     void fighterPass();
     void attack(int militaryValue);

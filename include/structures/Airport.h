@@ -22,9 +22,21 @@ public:
     int getSpawnTimer() const { return patrol.remainingCycles; }
     int getPendingAircraft() const { return patrol.pendingAircraft; }
     ObjectInterface* getInterfaceContainer() override;
+    /// City Plane Purchase: this Airport may launch a plane for CityAircraft::kPlanePrice now
+    /// (rule on, city game, powered, cooled down, the house below its plane limit and able to pay).
+    bool canBuyAirplane() const;
+    /// Pays and launches; false, and nothing changes, unless canBuyAirplane().
+    bool buyAirplane();
+    /// The local player's Buy button: CMD_AIRPORT_BUY_AIRPLANE.
+    void handleBuyAirplaneClick();
+    /// Game cycles until this Airport may sell its next plane.
+    int getPurchaseCooldown() const { return purchaseCooldown; }
 
 private:
     DuneCity::AirPatrolCycle patrol{getMaxSpawnTimer()};
+    Sint32 purchaseCooldown = 0;   ///< Cycles until the next purchase here (saved from 9891)
+    /// Puts a city airplane on the runway. Null when the unit could not be created.
+    class AmbientAirplane* launchAirplane(bool bought);
     void init();
     /// Micropolis doAirport(): launch the city airplane or traffic helicopter.
     void updateCityAircraft();

@@ -465,12 +465,65 @@ inline FixPoint bombSpeed() { return FixPoint(64) / 10; }
 
 /// One sprite tick of the bomb rack: returns the load after rearming. `timer`
 /// counts ticks towards the next bomb and rests at 0 while the rack is full.
-inline int rearmBombs(int bombs, int& timer) {
-    if(bombs >= kBombLoad) { timer = 0; return kBombLoad; }
-    if(++timer < kBombRearmTicks) return bombs;
+inline int rearmBombs(int bombs, int& timer, int load, int rearmTicks) {
+    if(bombs >= load) { timer = 0; return load; }
+    if(++timer < rearmTicks) return bombs;
     timer = 0;
     return bombs + 1;
 }
+inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, kBombLoad, kBombRearmTicks); }
+
+// ---------------------------------------------------------------------------
+// The stick (Stefan, 2026-11-23: "they should drop bombs like a b-52 does as they fly
+// over. using a ornithopter attack explosion but make it a bit bigger and deadlier").
+// Match rule GameOptionsClass::cityPlaneCarpetBombing, with cityPlaneBombing.
+//
+// While an enemy building is under the bomb sight the plane releases one bomb every
+// sprite tick: half a tile of flight on an axis heading, so two bombs a tile. The
+// stick carries on for kStickGapTicks more ticks (one tile) after the last building,
+// so it runs unbroken across a road between two zones; it never falls on a tile that
+// holds a building of the plane's own team.
+// Against the Ornithopter's rocket (Dune City ObjectData: 45 damage, Explosion_Small):
+// a stick bomb does kStickDamage = 60, a third more, and its impact is the same
+// explosion drawn half again as large (Explosion_Bomb). Two bombs a tile are 120 a
+// tile crossed: a 2x2 zone or Wind Trap (200) crossed through both tiles takes 240 and
+// is destroyed even with the hit point a repairing building regains between bombs
+// (the old rule's 2 x 100 left such a building at 1); a Rocket Turret (200, one tile)
+// takes 120 and stands; a Construction Yard (400, two tiles) keeps 160, a Refinery
+// (450, three tiles) 90, a Palace (1000, three tiles) 640. The load is kStickLoad = 24,
+// twelve tiles of stick, and comes back one bomb per kStickRearmTicks (2 s): a full
+// load in 48 s, the same time the old load of six took.
+// ---------------------------------------------------------------------------
+
+/// Bombs a plane carries under the stick rule.
+inline constexpr int kStickLoad = 24;
+/// Damage of one stick bomb to the building it lands on.
+inline constexpr int kStickDamage = 60;
+/// Sprite ticks to regain one stick bomb (2 s).
+inline constexpr int kStickRearmTicks = 40;
+/// Sprite ticks the stick carries on after the last enemy building under the sight.
+inline constexpr int kStickGapTicks = 2;
+
+// ---------------------------------------------------------------------------
+// Bombing runs (match rule GameOptionsClass::cityPlaneBombingRuns). Each leg of the
+// flight is aimed at a living building of another team, drawn evenly from all of
+// them, and ends kRunOvershootTiles beyond it on the same line, so the plane crosses
+// the building and whatever stands around it before it turns for the next one.
+// ---------------------------------------------------------------------------
+
+inline constexpr int kRunOvershootTiles = 12;
+
+// ---------------------------------------------------------------------------
+// Buying a plane (Stefan, 2026-11-23: "allow the ai to spawn planes for 1500
+// credits"). Match rule GameOptionsClass::cityPlanePurchase. A powered Airport
+// launches a plane at once for kPlanePrice while its house has fewer than
+// kMaxPlanesPerHouse in the air, and then not again for kPurchaseCooldownMs. The
+// Airport's free roll is unchanged: it still only launches for a house with no plane.
+// ---------------------------------------------------------------------------
+
+inline constexpr int kPlanePrice = 1500;
+inline constexpr int kMaxPlanesPerHouse = 3;
+inline constexpr int kPurchaseCooldownMs = 60000;
 
 // ---------------------------------------------------------------------------
 // Anti-air against the airplane (match rule GameOptionsClass::cityPlaneDefence).

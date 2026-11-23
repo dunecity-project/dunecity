@@ -15,6 +15,10 @@
 #include <players/AIDecisionLog.h>
 #include <FileClasses/TextManager.h>
 #include <GUI/ObjectInterfaces/AirportInterface.h>
+#include <Command.h>
+#include <CommandManager.h>
+
+#include <algorithm>
 
 Airport::Airport(House* newOwner) : StructureBase(newOwner) {
     Airport::init();
@@ -27,6 +31,9 @@ Airport::Airport(InputStream& stream) : StructureBase(stream) {
         const int remaining=stream.readSint32();
         const int pending=stream.readSint32();
         patrol.restore(remaining,pending,getMaxSpawnTimer());
+    }
+    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_PURCHASE) {
+        purchaseCooldown = std::max(0, stream.readSint32());
     }
 }
 
@@ -60,6 +67,65 @@ void Airport::save(OutputStream& stream) const {
     StructureBase::save(stream);
     stream.writeSint32(patrol.remainingCycles);
     stream.writeSint32(patrol.pendingAircraft);
+    stream.writeSint32(purchaseCooldown);
+}
+
+AmbientAirplane* Airport::launchAirplane(bool bought) {
+    namespace CA = DuneCity::CityAircraft;
+    const Coord centre = getLocation() + Coord(structureSize.x / 2, structureSize.y / 2);
+    auto* unit = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane));
+    if (unit == nullptr) return nullptr;
+    // makeSprite(SPRITE_AIRPLANE, (posX << 4) + 48, (posY << 4) + 12):
+    // three tiles east of the airport tile, on the runway.
+    Coord start = centre + Coord(3, 0);
+    if (!currentGameMap->tileExists(start)) start = centre;
+    unit->deploy(start);
+    unit->setGuardPoint(start);
+    unit->doSetAttackMode(STOP);
+    // newSprite(): an airport within 20 tiles of the eastern edge starts
+    // the plane already westbound instead of running the take-off east.
+    if (start.x > currentGameMap->getSizeX() - 20) unit->beginWestboundCruise();
+    else                                           unit->beginTakeoff();
+    // One line per event for the match tables (tests/ai/city-plane-report.py).
+    SDL_Log("CITY_PLANE_LAUNCHED: house=%d object=%u bought=%d cycle=%u", owner->getHouseID(), unit->getObjectID(),
+            bought ? 1 : 0, currentGame->getGameCycleCount());
+    AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1,
+        "city_aircraft_spawned", AITelemetry::Record().set("airport", objectID)
+            .set("object", unit->getObjectID()).set("item", Unit_AmbientAirplane)
+            .set("x", start.x).set("y", start.y).set("bought", bought ? 1 : 0));
+    return unit;
+}
+
+bool Airport::canBuyAirplane() const {
+    namespace CA = DuneCity::CityAircraft;
+    return currentGame->getGameInitSettings().getGameOptions().cityPlanePurchase
+        && currentGame->isCitySimEnabled() && getHealth() > 0 && owner->hasPower() && purchaseCooldown <= 0
+        && currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled
+        && owner->getNumItems(Unit_AmbientAirplane) < CA::kMaxPlanesPerHouse
+        && owner->getCredits() >= CA::kPlanePrice;
+}
+
+/**
+    Stefan, 2026-11-23: "allow the ai to spawn planes for 1500 credits". Match rule City Plane
+    Purchase: the Airport launches a plane now instead of waiting for its free roll, also while
+    the house already has one in the air, up to CA::kMaxPlanesPerHouse. The same call serves a
+    human's Buy button (CMD_AIRPORT_BUY_AIRPLANE) and QuantBot (QuantBot::buyCityAirplanes).
+*/
+bool Airport::buyAirplane() {
+    namespace CA = DuneCity::CityAircraft;
+    if (!canBuyAirplane()) return false;
+    if (launchAirplane(true) == nullptr) return false;
+    owner->takeCredits(CA::kPlanePrice);
+    purchaseCooldown = MILLI2CYCLES(CA::kPurchaseCooldownMs);
+    SDL_Log("CITY_PLANE_BOUGHT: house=%d price=%d cycle=%u", owner->getHouseID(), CA::kPlanePrice,
+            currentGame->getGameCycleCount());
+    return true;
+}
+
+void Airport::handleBuyAirplaneClick() {
+    if (currentGame && pLocalPlayer && currentGame->canControlHouse(owner))
+        currentGame->getCommandManager().addCommand(
+            Command(pLocalPlayer->getPlayerID(), CMD_AIRPORT_BUY_AIRPLANE, objectID));
 }
 
 /**
@@ -91,26 +157,7 @@ void Airport::updateCityAircraft() {
     if (currentGame->randomGen.rand(0, CA::kAirplaneRandomMax) == 0) {
         if (owner->getNumItems(Unit_AmbientAirplane) > 0) return;   // generatePlane(): already flying
         if (!currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled) return;
-        auto* unit = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane));
-        if (unit == nullptr) return;
-        // makeSprite(SPRITE_AIRPLANE, (posX << 4) + 48, (posY << 4) + 12):
-        // three tiles east of the airport tile, on the runway.
-        Coord start = centre + Coord(3, 0);
-        if (!currentGameMap->tileExists(start)) start = centre;
-        unit->deploy(start);
-        unit->setGuardPoint(start);
-        unit->doSetAttackMode(STOP);
-        // newSprite(): an airport within 20 tiles of the eastern edge starts
-        // the plane already westbound instead of running the take-off east.
-        if (start.x > currentGameMap->getSizeX() - 20) unit->beginWestboundCruise();
-        else                                           unit->beginTakeoff();
-        // One line per event for the match tables (tests/ai/city-plane-report.py).
-        SDL_Log("CITY_PLANE_LAUNCHED: house=%d object=%u cycle=%u", owner->getHouseID(), unit->getObjectID(),
-                currentGame->getGameCycleCount());
-        AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1,
-            "city_aircraft_spawned", AITelemetry::Record().set("airport", objectID)
-                .set("object", unit->getObjectID()).set("item", Unit_AmbientAirplane)
-                .set("x", start.x).set("y", start.y));
+        launchAirplane(false);
         return;
     }
 
@@ -133,6 +180,7 @@ void Airport::updateCityAircraft() {
 void Airport::updateStructureSpecificStuff() {
     firstAnimFrame = lastAnimFrame = curAnimFrame =
         DuneCity::CitySprites::poweredFrame(currentGame->getGameCycleCount(), owner->hasPower());
+    if (purchaseCooldown > 0) --purchaseCooldown;
     if (!currentGame->isCitySimEnabled() || getHealth() <= 0) return;
     if (currentGame->getGameCycleCount() % MILLI2CYCLES(5000) == 0) updateCityAircraft();
     // Stefan, 2026-11-22: "remove ornithopter spawn from airports". The patrol only runs under

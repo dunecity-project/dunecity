@@ -43,6 +43,7 @@
 #include <structures/BuilderBase.h>
 #include <structures/TurretBase.h>
 #include <structures/Palace.h>
+#include <structures/Airport.h>
 #include <structures/TechCenter.h>
 #include <structures/ResearchLab.h>
 #include <structures/Scoutpost.h>
@@ -444,6 +445,13 @@ case CMD_INFANTRY_CAPTURE: {
             auto* lab = dynamic_cast<ResearchLab*>(currentGame->getObjectManager().getObject(parameter[0]));
             if(!mayActOnObject(playerID, commandID, parameter[0], lab)) return;
             lab->getOwner()->startTechResearch(lab->getObjectID());
+        } break;
+
+        case CMD_AIRPORT_BUY_AIRPLANE: {
+            if(parameter.size() != 1) return;
+            auto* airport = dynamic_cast<Airport*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], airport)) return;
+            airport->buyAirplane();
         } break;
 
         case CMD_BUILDER_UPGRADE: {

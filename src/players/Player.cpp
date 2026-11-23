@@ -29,6 +29,7 @@
 #include <structures/StarPort.h>
 #include <structures/ConstructionYard.h>
 #include <structures/Palace.h>
+#include <structures/Airport.h>
 #include <structures/TurretBase.h>
 #include <structures/Scoutpost.h>
 #include <units/Saboteur.h>
@@ -356,6 +357,10 @@ void Player::doMoveOwnUnitsOffPlot(const ConstructionYard* pConstYard, Uint32 it
     if(pConstYard->getOwner() == getHouse() && pConstYard->isActive()) {
         const_cast<ConstructionYard*>(pConstYard)->moveOwnUnitsOffPlot(itemID, x, y, true);
     }
+}
+
+bool Player::doBuyCityAirplane(const Airport* airport) const {
+    return airport->getOwner() == getHouse() && airport->isActive() && const_cast<Airport*>(airport)->buyAirplane();
 }
 
 void Player::doSpecialWeapon(const Palace* pPalace) const {

@@ -53,7 +53,8 @@ typedef enum {
     Explosion_Flames = 10,
     Explosion_SpiceBloom = 11,
     Explosion_FlameImpact = 12,       ///< Tornie: damaging ground fire without the destroyed-vehicle opening frames
-    Explosion_FlameImpactVisual = 13 ///< Tornie: visual-only companion flames around the damaging impact
+    Explosion_FlameImpactVisual = 13, ///< Tornie: visual-only companion flames around the damaging impact
+    Explosion_Bomb = 14               ///< DuneCity: the Ornithopter rocket's impact drawn half again as large (save 9891)
 } ExplosionID_enum;
 
 typedef enum {
