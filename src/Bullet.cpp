@@ -462,7 +462,11 @@ void Bullet::updateDynastyProjectile()
         trooperAntiAir = item == Unit_Trooper || item == Unit_Troopers
             || item == Unit_Troopers5 || item == Unit_FlameTrooper;
     }
-    const bool tracksCityPlane = bulletID == Bullet_TurretRocket
+    // City Plane Defence: a turret's and a Launcher's rocket fly to where they meet a city
+    // airplane and go off on touching it. The Launcher's used to fly to where the plane had been
+    // and had no test against aircraft at all (Stefan, 2026-11-23: "rockets fired at them seem to
+    // go right through them").
+    const bool tracksCityPlane = (bulletID == Bullet_TurretRocket || bulletID == Bullet_Rocket)
         && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence;
     for(int elapsed=0; elapsed<48; ++elapsed) {
         if(projectileClock % 150 == 0) {
@@ -489,7 +493,7 @@ void Bullet::updateDynastyProjectile()
             if(tracksCityPlane) {
                 const auto* object = target.getObjPointer();
                 if(object && object->getItemID() == Unit_AmbientAirplane && object->getHealth() > 0) {
-                    const auto meet = static_cast<const AmbientAirplane*>(object)->turretRocketIntercept(previous);
+                    const auto meet = static_cast<const AmbientAirplane*>(object)->rocketIntercept(previous, bulletID);
                     if(meet.possible && DynastyProjectile::distance(source*4, meet.point) <= chaseRange4) {
                         tracksPlane = true;
                         meetingPoint = meet.point;
@@ -512,7 +516,32 @@ void Bullet::updateDynastyProjectile()
                 return;
             }
             if(!trooperAntiAir) liveTarget = target.getObjPointer();
-            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket || tracksTrooperTarget)
+            // A rocket fired at a city airplane also goes off on another enemy plane it touches on
+            // its way; with ten bombers a house they fly in streams and the rocket used to pass
+            // through every plane but its own. The lowest object ID wins a tie (the registry has
+            // no fixed order).
+            if(chaseRange4 > 0) {
+                const AmbientAirplane* touched = nullptr;
+                int touchedAt = 0;
+                for(const AmbientAirplane* plane : AmbientAirplane::all()) {
+                    if(plane == chased || plane->getHealth() <= 0 || !plane->isActive()
+                       || plane->getOwner()->getTeamID() == owner->getTeamID()
+                       || (touched != nullptr && plane->getObjectID() > touched->getObjectID())) continue;
+                    const int at = plane->touchedBy(previous, position);
+                    if(at < 0) continue;
+                    touched = plane;
+                    touchedAt = at;
+                }
+                if(touched != nullptr) {
+                    realX = FixPoint(previous.x+int((position.x-previous.x)*Sint64(touchedAt)/1024))/4;
+                    realY = FixPoint(previous.y+int((position.y-previous.y)*Sint64(touchedAt)/1024))/4;
+                    destroy(touched->getObjectID());
+                    return;
+                }
+            }
+            const bool launcherAtPlane = bulletID == Bullet_Rocket && tracksCityPlane && liveTarget
+                && liveTarget->getItemID() == Unit_AmbientAirplane;
+            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket || tracksTrooperTarget || launcherAtPlane)
                && liveTarget && liveTarget->getHealth() > 0
                && liveTarget->isAFlyingUnit()) {
                 const Coord targetNow = liveTarget->getCenterPoint()*4;

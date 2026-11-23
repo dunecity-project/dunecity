@@ -40,6 +40,13 @@ Airport::Airport(InputStream& stream) : StructureBase(stream) {
     // a 3x3 claim. init() ran before this was known, so the footprint is set again here.
     compact = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRPORT_4X4 ? stream.readBool() : true;
     structureSize = compact ? Coord(3, 3) : Coord(4, 4);
+    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRPORT_FREE_PLANE_CLOCK) {
+        freePlaneTimer = std::max(0, stream.readSint32());
+    }
+}
+
+int Airport::freePlaneCharge() {
+    return testFreePlaneCycles > 0 ? testFreePlaneCycles : Palace::getSpecialWeaponCooldownForHouse(HOUSE_ORDOS);
 }
 
 void Airport::init() {
@@ -50,6 +57,7 @@ void Airport::init() {
     // and draws the same sprite cell scaled into its tiles (StructureBase::blitToScreen).
     structureSize = compact ? Coord(3, 3) : Coord(4, 4);
     graphicID = ObjPic_Airport;
+    freePlaneTimer = freePlaneCharge();   // charges from the day it is built, as a Palace does
     graphic   = pGFXManager->getObjPic(graphicID, getOwner()->getHouseID());
     numImagesX = DuneCity::CitySprites::specialFrames;
     numImagesY = 1;
@@ -75,6 +83,7 @@ void Airport::save(OutputStream& stream) const {
     stream.writeSint32(patrol.pendingAircraft);
     stream.writeSint32(purchaseCooldown);
     stream.writeBool(compact);
+    stream.writeSint32(freePlaneTimer);
 }
 
 AmbientAirplane* Airport::launchAirplane(bool bought) {
@@ -165,13 +174,21 @@ void Airport::updateCityAircraft() {
 
     namespace CA = DuneCity::CityAircraft;
 
-    if (currentGame->randomGen.rand(0, CA::kAirplaneRandomMax) == 0) {
-        // generatePlane(): already flying. Stefan, 2026-11-23: "the normal plane that respawns
-        // should be free": the free plane is counted apart from bought ones, so it comes back
-        // half a minute after the last free plane whatever the house has bought.
-        if (AmbientAirplane::freePlanes(owner) > 0) return;
-        if (!currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled) return;
-        launchAirplane(false);
+    // The free plane (Stefan, 2026-11-23: "the normal plane that respawns should be free";
+    // "delay the time you get a free plane to be the time it takes to get a saboteur"). It is
+    // counted apart from bought planes and launches when this Airport's clock has run out and
+    // the house has no free plane in the air. The launch restarts the clock of every Airport of
+    // the house, so a second Airport does not shorten the wait. Micropolis rolled one in six
+    // here (generatePlane()); that roll is gone, and with it one draw from the game's generator.
+    if (freePlaneTimer <= 0 && AmbientAirplane::freePlanes(owner) == 0
+        && currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled) {
+        if (launchAirplane(false) != nullptr) {
+            for (StructureBase* structure : structureList) {
+                if (structure->getOwner() == owner && structure->getItemID() == Structure_Airport) {
+                    static_cast<Airport*>(structure)->freePlaneTimer = freePlaneCharge();
+                }
+            }
+        }
         return;
     }
 
@@ -195,6 +212,7 @@ void Airport::updateStructureSpecificStuff() {
     firstAnimFrame = lastAnimFrame = curAnimFrame =
         DuneCity::CitySprites::poweredFrame(currentGame->getGameCycleCount(), owner->hasPower());
     if (purchaseCooldown > 0) --purchaseCooldown;
+    if (freePlaneTimer > 0) --freePlaneTimer;
     if (!currentGame->isCitySimEnabled() || getHealth() <= 0) return;
     if (currentGame->getGameCycleCount() % MILLI2CYCLES(5000) == 0) updateCityAircraft();
     // Stefan, 2026-11-22: "remove ornithopter spawn from airports". The patrol only runs under

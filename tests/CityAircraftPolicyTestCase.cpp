@@ -461,6 +461,8 @@ TEST_CASE("A computer player buys planes only when its own planes have paid", "[
     // No evidence yet: the free plane flies first.
     CHECK_FALSE(purchasePays(1000000, 0));
     CHECK_FALSE(purchasePays(1000000, kPurchaseEvidenceFlights - 1));
+    CHECK(purchasePays(kPlanePrice, 1));
+    CHECK_FALSE(purchasePays(kPlanePrice - 1, 1));
     // Three flights ended: they must have destroyed 4500 credits between them.
     CHECK_FALSE(purchasePays(3 * kPlanePrice - 1, 3));
     CHECK(purchasePays(3 * kPlanePrice, 3));

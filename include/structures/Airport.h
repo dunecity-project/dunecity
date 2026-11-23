@@ -39,6 +39,15 @@ public:
     void handleBuyAirplaneClick();
     /// Game cycles until this Airport may sell its next plane.
     int getPurchaseCooldown() const { return purchaseCooldown; }
+    /// Cycles until this Airport's free plane is ready (0: ready).
+    int getFreePlaneTimer() const { return freePlaneTimer; }
+    /// Cycles a free plane takes: what an Ordos Palace takes to make a Saboteur, five minutes
+    /// (Stefan, 2026-11-23: "delay the time you get a free plane to be the time it takes to get a
+    /// saboteur"). It was a one-in-six roll every five seconds, about half a minute.
+    static int freePlaneCharge();
+    /// Probes only: a shorter charge, so a few game minutes hold enough flights to measure
+    /// bombing. 0 (always, in the game) is the Saboteur's time.
+    static inline int testFreePlaneCycles = 0;
     /// True for a 3x3 Airport (see the class comment), false for the ordinary 4x4 one.
     bool isCompact() const { return compact; }
 
@@ -62,6 +71,7 @@ public:
 
 private:
     DuneCity::AirPatrolCycle patrol{getMaxSpawnTimer()};
+    Sint32 freePlaneTimer = 0;     ///< Cycles until the free plane is ready (saved from 9897)
     Sint32 purchaseCooldown = 0;   ///< Clock started at each purchase; nothing waits on it (saved from 9891)
     bool compact = false;          ///< 3x3 instead of 4x4 (saved from SAVEGAMEVERSION_AIRPORT_4X4)
     static inline bool nextIsCompact = false;   ///< Set only by a living CompactPlacement

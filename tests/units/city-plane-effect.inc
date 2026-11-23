@@ -604,7 +604,9 @@ void checkAirport(const std::string& mapData) {
         record("airport", "patrol=" + std::to_string(patrol) + " ornithopters=" + std::to_string(ornithopters)
                               + " city_planes_launched=" + std::to_string(planes) + " patrol_timer="
                               + std::to_string(timerAtStart) + "->" + std::to_string(airport->getSpawnTimer()));
-        require(planes >= 2, "The Airport did not keep launching city airplanes");
+        // One free plane every five minutes, the time a Palace takes to make a Saboteur: at 5:00
+        // and at 10:00 in these eleven minutes.
+        require(planes == 2, "The Airport did not launch its free plane at five and at ten minutes");
         if(patrol) {
             require(ornithopters == 2, "With the patrol rule on the Airport did not send out its pair of Ornithopters");
         } else {
@@ -961,6 +963,55 @@ void checkRocketChase(const std::string& mapData) {
             "A rocket chasing a plane flew farther than 24 tiles from its turret");
     require(headOn.planeHealth == 70 && headOn.farthest10 <= reach * 10, "A rocket no longer hits a plane coming head-on");
 
+    // Stefan, 2026-11-23: "rockets fired at them seem to go right through them". A rocket fired at
+    // one plane goes off on another enemy plane it touches on the way: two planes come head-on in
+    // line, the rocket is fired at the far one and the near one takes it.
+    {
+        auto game = newGame(mapData, 17, Rules{true, false, false});
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
+        auto* turret = place(owner, Structure_RocketTurret, launchTile);
+        static_cast<TurretBase*>(turret)->attackMode = STOP;
+        for(int i = 0; i < 5; ++i) game->updateGameState();
+        auto* harkonnen = game->getHouse(HOUSE_HARKONNEN);
+        auto* nearPlane = fly(harkonnen, Coord(18, row), Coord(-20, row), LEFT);
+        auto* farPlane = fly(harkonnen, Coord(34, row), Coord(-20, row), LEFT);
+        const Uint32 nearID = nearPlane->getObjectID(), farID = farPlane->getObjectID();
+        Coord from = launch, at = farPlane->getCenterPoint();
+        bulletList.push_back(new Bullet(turret->getObjectID(), &from, &at, Bullet_TurretRocket, 30, true, farPlane));
+        for(int tick = 0; tick < 300 && !bulletList.empty(); ++tick) game->updateGameState();
+        record("rocket_chase", "rocket fired at the far of two planes in line: near plane health=" + std::to_string(healthOf(*game, nearID))
+                                   + " far plane health=" + std::to_string(healthOf(*game, farID)));
+        require(healthOf(*game, nearID) == 70 && healthOf(*game, farID) == 100,
+                "A rocket passed through an enemy plane on the way to its target");
+        game.reset();
+        currentGame = nullptr;
+    }
+    // A Launcher's rocket flies to where it meets the plane and goes off on touching it; it used
+    // to fly to where the plane had been and had no test against aircraft.
+    {
+        auto game = newGame(mapData, 18, Rules{true, false, false});
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        auto* launcher = owner->createUnit(Unit_Launcher, true);
+        require(launcher != nullptr, "Could not create the Launcher");
+        launcher->deploy(launchTile);
+        launcher->doSetAttackMode(STOP);
+        auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), Coord(26, row), Coord(-20, row), LEFT);
+        const Uint32 planeID = plane->getObjectID();
+        for(int i = 0; i < 2; ++i) game->updateGameState();
+        const bool takes = launcher->canAttack(plane);
+        Coord from = launch, at = plane->getCenterPoint();
+        const int damage = game->objectData.data[Unit_Launcher][HOUSE_ATREIDES].weapondamage;
+        bulletList.push_back(new Bullet(launcher->getObjectID(), &from, &at, Bullet_Rocket, damage, true, plane));
+        for(int tick = 0; tick < 300 && !bulletList.empty(); ++tick) game->updateGameState();
+        record("rocket_chase", "Launcher may attack a plane coming over it=" + std::to_string(takes) + "; its rocket (" + std::to_string(damage)
+                                   + ") leaves the plane at health=" + std::to_string(healthOf(*game, planeID)));
+        require(takes, "A Launcher holds its fire at an enemy city airplane");
+        require(healthOf(*game, planeID) == std::max(0, 100 - damage), "A Launcher's rocket did not hit the plane it was fired at");
+        game.reset();
+        currentGame = nullptr;
+    }
+
     // The turret's side of the rule: it takes a plane it can meet inside 24 tiles and no other.
     auto game = newGame(mapData, 15, Rules{true, false, false});
     auto* owner = game->getHouse(HOUSE_ATREIDES);
@@ -1041,7 +1092,10 @@ void checkHoldFire(const std::string& mapData) {
         const bool last = turret->canAttack(plane);
         record("hold_fire", "defence=" + std::to_string(defence) + " full_health_shot=" + std::to_string(full)
                                 + " killing_shot=" + std::to_string(last));
-        require(!last, "A turret may fire the shot that brings the plane down onto its own wall");
+        // Stefan, 2026-11-23: "yes they can crash it in their own city". With the rule on nothing is
+        // held; with it off (the game up to 1.0.876) every shot over the turret's own wall is.
+        require(last == defence, defence ? "A turret still holds the shot that brings the plane down onto its own wall"
+                                         : "With City Plane Defence off a turret fires the killing shot over its own wall");
         require(full == defence, defence ? "A turret holds a shot that cannot bring the plane down"
                                          : "With City Plane Defence off a turret fires at a plane over its own wall");
         game.reset();

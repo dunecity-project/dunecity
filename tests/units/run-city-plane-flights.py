@@ -325,12 +325,12 @@ if not any(int(r['bought']) for r in by_arm['purchase']):
     failures.append('purchase: no plane was bought with the rule on')
 if least and min(least) < 3000:
     failures.append('purchase: a house was left with %d credits after buying a plane' % min(least))
-# A computer player buys only on its own planes' record: at least three flights ended, and their
+# A computer player buys only on its own planes' record: at least one flight ended, and their
 # bombs destroyed at least 1500 credits a flight. The purchase shows up a cycle or two after the
 # decision, in which one more flight may have ended.
 for r in purchases:
     ended, destroyed = int(r['flights_ended']), int(r['destroyed_credits'])
-    if ended < 3 or destroyed < PRICE * (ended - 1):
+    if ended < 1 or destroyed < PRICE * (ended - 1):
         failures.append('purchase: house %s bought on %s seed %s with %d flights ended and %d credits destroyed'
                         % (r['house'], r['map'], r['seed'], ended, destroyed))
 if failures:

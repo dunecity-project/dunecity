@@ -241,7 +241,12 @@
 // 9896: QuantBot's Carryall manoeuvre state (9894) grows: every lift job saves its objective,
 //       and the planned harvester or perimeter raid, its retry clock and the raid counts follow
 //       the retreat state (QuantBot::saveAirlift). A 9894 or 9895 save has none of these.
-#define SAVEGAMEVERSION     9896
+// 9897: An Airport saves the clock of its free plane (Airport::freePlaneTimer) after the compact
+//       flag: the free plane now takes as long as a Palace takes to make a Saboteur. An older
+//       save's Airports start with a full clock.
+#define SAVEGAMEVERSION     9897
+/// First save with an Airport's free plane clock.
+#define SAVEGAMEVERSION_AIRPORT_FREE_PLANE_CLOCK 9897
 /// First save with the raid part of QuantBot's Carryall manoeuvre state.
 #define SAVEGAMEVERSION_AIRLIFT_RAIDS 9896
 /// First save whose Airports say whether they are compact (3x3) or the full 4x4.

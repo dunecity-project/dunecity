@@ -90,6 +90,11 @@ public:
     Coord velocity16() const;
     /// Where a turret rocket leaving `missile` (quarter world units) now meets this plane.
     DuneCity::CityAircraft::Intercept turretRocketIntercept(const Coord& missile) const;
+    /// The same for any rocket type's speed (a Launcher's is faster than a turret's).
+    DuneCity::CityAircraft::Intercept rocketIntercept(const Coord& missile, Uint32 bulletID) const;
+    /// Where on a rocket's step from `rocketFrom` to `rocketTo` (quarter world units) it touches
+    /// this plane, in 1024ths of the step, or -1 when it passes more than an eighth of a tile off.
+    int touchedBy(const Coord& rocketFrom, const Coord& rocketTo) const;
     /// How far from its launch point a rocket of house `houseID` may chase a city airplane, in
     /// quarter world units (CityAircraft::kRocketChaseRangeFactor x the Rocket Turret's range).
     static int rocketChaseRange4(int houseID);

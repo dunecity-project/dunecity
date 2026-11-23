@@ -176,6 +176,13 @@ int runCityPlaneFlights() {
     game->initGame(init);
     game->bReplay = false;
     game->initializeGameLoop();
+    // The free plane takes five minutes in the game. These games are six to fourteen minutes long
+    // and measure bombing per flight, so the probe keeps the earlier half-minute here: every
+    // Airport's clock is set once, and each relaunch uses the probe's charge.
+    Airport::testFreePlaneCycles = MILLI2CYCLES(30000);
+    for(StructureBase* structure : structureList) {
+        if(structure->getItemID() == Structure_Airport) static_cast<Airport*>(structure)->freePlaneTimer = Airport::testFreePlaneCycles;
+    }
     const auto& played = game->getGameInitSettings().getGameOptions();
     require(played.cityPlaneCarpetBombing == (rules[0] == '1') && played.cityPlaneBombingRuns == (rules[1] == '1')
                 && played.cityPlanePurchase == (rules[2] == '1') && played.cityPlaneBombing && played.cityPlaneDefence,

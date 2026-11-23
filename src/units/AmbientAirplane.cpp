@@ -464,28 +464,16 @@ bool AmbientAirplane::crashEndangers(const ObjectBase& attacker, const ObjectBas
     const FixPoint lead = distanceFrom(attacker.getCenterPoint(), plane.getCenterPoint()) * plane.getMaxSpeed()
                         / slowestMissile;
     const int teamID = attacker.getOwner()->getTeamID();
-    if(currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence) {
-        // Only the shot that could bring the plane down is held. Shots already on their way
-        // count; a turret's rocket damage is exact, any other weapon's is doubled for safety.
-        int pending = 0;
-        for(const Bullet* bullet : bulletList) {
-            if(bullet->getTarget() == &plane) pending += bullet->getDamage();
-        }
-        const bool turret = attacker.getItemID() == Structure_RocketTurret;
-        const int shot = turret
-            ? static_cast<const RocketTurret&>(attacker).rocketDamage()
-            : 2 * currentGame->objectData.data[attacker.getItemID()][attacker.getOriginalHouseID()].weapondamage;
-        if(plane.getHealth() - pending > shot) return false;
-        if(turret) {
-            // Its rocket flies to the meeting point: only a crash from there on matters, one
-            // tile short of it to four tiles beyond for a rocket that needs a second approach.
-            const auto meet = plane.turretRocketIntercept(attacker.getCenterPoint() * 4);
-            if(meet.possible) {
-                const FixPoint along = plane.getMaxSpeed() * meet.cycles16 / 16;
-                return plane.crashWouldHit(teamID, std::max(FixPoint(0), along - TILESIZE), along + 4 * TILESIZE);
-            }
-        }
-    }
+    // City Plane Defence: nothing holds its fire for the crash. The first form of the rule held
+    // only the shot that would bring the plane down onto the shooter's own side, counting the
+    // rockets already in flight. In Stefan's game of 2026-11-23 (Metropolis, hundreds of Rocket
+    // Turrets a house, up to ten bombers a house) that held 59% of all turret-plane pairs in
+    // reach and 99% of the Launchers': over a city every shot was "the killing one", so planes
+    // bombed on until they flew clear ("rocket turrets are no longer attacking planes, neither
+    // are launchers"; asked whether a plane may be brought down over the defender's own city:
+    // "yes they can crash it in their own city"). With the rule off (the game up to 1.0.876)
+    // every shot at a plane over the shooter's own side is still held.
+    if(currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence) return false;
     return plane.crashWouldHit(teamID, 0, lead);
 }
 
@@ -498,11 +486,34 @@ Coord AmbientAirplane::velocity16() const
 
 CA::Intercept AmbientAirplane::turretRocketIntercept(const Coord& missile) const
 {
+    return rocketIntercept(missile, Bullet_TurretRocket);
+}
+
+CA::Intercept AmbientAirplane::rocketIntercept(const Coord& missile, Uint32 bulletID) const
+{
     // Bullet::updateDynastyProjectile moves the rocket `step` quarter units every 150 ticks of
     // a clock that advances 48 a cycle.
-    static const int rocketSpeed16 = DynastyProjectile::parameters(Bullet_TurretRocket).step * 48 * 16 / 150;
+    const int rocketSpeed16 = DynastyProjectile::parameters(bulletID).step * 48 * 16 / 150;
     const Coord velocity = velocity16();
     return CA::intercept(missile, Coord(lround(realX * 4), lround(realY * 4)), velocity.x, velocity.y, rocketSpeed16);
+}
+
+int AmbientAirplane::touchedBy(const Coord& rocketFrom, const Coord& rocketTo) const
+{
+    // The same narrow test a rocket makes against its own target (one eighth of a tile, in
+    // relative motion so that crossing the same place at different times is no hit). The plane's
+    // own way during one rocket step: velocity16 is per cycle and a step is 150/48 cycles.
+    const Coord now(lround(realX * 4), lround(realY * 4));
+    const Coord velocity = velocity16();
+    const Coord before(now.x - velocity.x * 25 / 128, now.y - velocity.y * 25 / 128);
+    const Coord a = rocketFrom - before;
+    const Coord d = (rocketTo - now) - a;
+    const Sint64 length = Sint64(d.x) * d.x + Sint64(d.y) * d.y;
+    const Sint64 projection = -(Sint64(a.x) * d.x + Sint64(a.y) * d.y);
+    const Sint64 t = length ? std::clamp<Sint64>(projection * 1024 / length, 0, 1024) : 0;
+    const Sint64 dx = Sint64(a.x) * 1024 + Sint64(d.x) * t;
+    const Sint64 dy = Sint64(a.y) * 1024 + Sint64(d.y) * t;
+    return dx * dx + dy * dy <= Sint64(32 * 1024) * (32 * 1024) ? static_cast<int>(t) : -1;
 }
 
 int AmbientAirplane::freePlanes(const House* house)

@@ -3,6 +3,7 @@
 #include "DefaultStructureInterface.h"
 #include "CityStatsBox.h"
 #include <GUI/Label.h>
+#include <units/AmbientAirplane.h>
 #include <GUI/TextButton.h>
 #include <dunecity/CityAircraftPolicy.h>
 #include <GUI/VBox.h>
@@ -43,11 +44,18 @@ protected:
             const House* owner=airport->getOwner();
             const int flying=owner->getNumItems(Unit_AmbientAirplane);
             const bool purchase=currentGame->getGameInitSettings().getGameOptions().cityPlanePurchase;
+            const int freeWait=(airport->getFreePlaneTimer()*GAMESPEED_DEFAULT+999)/1000;
             patrolLabel.setText(_("City airplane")+std::string("\n")
                 +(!owner->hasPower() ? _("Needs power")
                   : flying>0 ? std::to_string(flying)
                       +(purchase ? "/"+std::to_string(DuneCity::CityAircraft::kMaxPlanesPerHouse) : std::string())
-                      +_(" in flight") : _("Next flight soon")));
+                      +_(" in flight") : _("No plane in flight"))
+                +(owner->hasPower() && AmbientAirplane::freePlanes(owner) == 0
+                    ? std::string("\n") + (airport->getFreePlaneTimer() > 0
+                        ? _("Free plane in ") + std::to_string(freeWait / 60) + ":" + (freeWait % 60 < 10 ? "0" : "")
+                              + std::to_string(freeWait % 60)
+                        : _("Free plane ready"))
+                    : std::string()));
             buyButton.setVisible(purchase);
             buyButton.setEnabled(purchase && currentGame->canControlHouse(owner) && airport->canBuyAirplane());
             cityStats.update(airport);

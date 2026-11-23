@@ -556,7 +556,8 @@ inline constexpr int kRunOvershootTiles = 12;
 // value its planes' bombs have destroyed so far (the house's combat record of the type:
 // price x share of hit points removed, buildings and units) against the price of every
 // flight that has ended (shot down or flown off the map). The free plane flies first and
-// gives the evidence: no purchase before kPurchaseEvidenceFlights flights have ended, and
+// gives the evidence: no purchase before one flight has ended (kPurchaseEvidenceFlights; the
+// free plane now comes only every five minutes, so three would mean a quarter of an hour), and
 // then only while the average flight has destroyed at least what a plane costs. Against a
 // city whose turrets bring planes down early the record stays under the price and it stops
 // buying; against an open city it buys up to the ten-plane limit. QuantBot's reserves and
@@ -567,7 +568,7 @@ inline constexpr int kPlanePrice = 1500;
 inline constexpr int kMaxPlanesPerHouse = 10;
 inline constexpr int kPurchaseCooldownMs = 60000;
 /// Flights of its own that must have ended before a computer player judges whether planes pay.
-inline constexpr int kPurchaseEvidenceFlights = 3;
+inline constexpr int kPurchaseEvidenceFlights = 1;
 /// True when a house's planes have so far destroyed at least their price per ended flight.
 inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
     return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(kPlanePrice) * flightsEnded;
