@@ -3,6 +3,7 @@
 // gains a test hook: private state is reached through -fno-access-control in the probe build
 // only, exactly as the existing menu and campaign-balance probes do.
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <typeinfo>
 
@@ -696,6 +697,23 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
     const Uint32 cycleAtSave = game.gameCycleCount;
     require(game.saveGame(savePath.c_str()), "Could not save the observed match");
 
+    // What every faction has 400 cycles later when the match is simply played on. The reloaded
+    // match below must arrive at exactly the same: a saved game continues as it would have.
+    // Up to 2026-11-23 this asked instead that the reloaded factions had no fewer buildings and
+    // units after 400 cycles than at the reload, which holds only while nothing fights. The
+    // factions of this fixture hold about a million credits each, so they buy City Airplanes
+    // from cycle 25 (CityAircraft::richBuys) and bomb each other before the save and after the
+    // reload alike.
+    const auto standing = [](Game& match) {
+        std::map<int, std::pair<int, int>> result;
+        for(House* house : housesWithControllers(match))
+            result[house->getHouseID()] = {house->getNumStructures(), house->getNumUnits()};
+        return result;
+    };
+    const auto standingAtSave = standing(game);
+    advance(game, 400);
+    const auto playedOn = standing(game);
+
     // Destroy the old Game before building the reload: Game's destructor deletes the global
     // map and screen border, so two live Games would have the second one's globals torn down
     // by the first one's destructor. This is the same ordering the spice-income fixture uses.
@@ -745,21 +763,30 @@ void runSpectatorProbe(std::unique_ptr<Game>& owned, const std::string& savePath
                 || mode == RadarView::RadarMode::AnimationRadarOn,
                 "The reloaded observer lost the minimap");
     }
+    require(standing(*reloaded) == standingAtSave, "The reload changed what a faction has");
+    advance(*reloaded, 400);
+    require(reloaded->gameCycleCount == cycleAtSave + 400, "The reloaded observed match did not advance");
+    const auto resumed = standing(*reloaded);
+    for(const auto& [houseID, has] : resumed) {
+        const auto before = standingAtSave.find(houseID);
+        const auto other = playedOn.find(houseID);
+        SDL_Log("SPECTATOR_PROBE_DETAIL: house %d at the save %d buildings %d units; 400 cycles on: played on %d/%d, reloaded %d/%d",
+                houseID, before != standingAtSave.end() ? before->second.first : -1,
+                before != standingAtSave.end() ? before->second.second : -1,
+                other != playedOn.end() ? other->second.first : -1, other != playedOn.end() ? other->second.second : -1,
+                has.first, has.second);
+    }
+    require(resumed == playedOn, "The reloaded match did not continue as the match played on");
+    // Only now, so that the reloaded match is unchanged while it is compared: the observer cannot
+    // repair another house's building.
     {
-        StructureBase* target = anyStructureOf(reloadedHouses.back());
+        StructureBase* target = anyStructureOf(housesWithControllers(*reloaded).back());
         require(target != nullptr, "The reload lost the other faction's buildings");
         target->health = target->getMaxHealth() / 2;
         target->repairing = false;
         runAs(Player::OBSERVER_PLAYER_ID, CMD_STRUCTURE_REPAIR, {target->getObjectID()});
         require(!target->isRepairing(), "A reloaded observer could repair another house's building");
     }
-    long long reloadedBefore = 0;
-    for(House* house : reloadedHouses) reloadedBefore += house->getNumStructures() + house->getNumUnits();
-    advance(*reloaded, 400);
-    require(reloaded->gameCycleCount > cycleAtSave, "The reloaded observed match did not advance");
-    long long reloadedAfter = 0;
-    for(House* house : reloadedHouses) reloadedAfter += house->getNumStructures() + house->getNumUnits();
-    require(reloadedAfter >= reloadedBefore, "The reloaded factions lost ground immediately");
 
     // Use the same next-game settings copy as the Restart Game confirmation.
     reloaded->setNextGameInitSettings(reloaded->getGameInitSettings());
