@@ -1,3 +1,43 @@
+## 2026-11-23 - Stats: Trooper and City Airplane rows; natives and Stats probes follow the plane's rules (in the 1.0.877 candidate)
+
+Stefan on `5d2e19fca`, spectating a Brutal Harkonnen: "i can't see the % for troopers or airplanes" / "on the
+left". Commit `93f6f8f18`; protocol 133, save format unchanged.
+
+- **Two rows under the ten unit-mix slots of the Army allocation table** (`HouseStatsWindow::refreshAllocation`,
+  `kTrooperRow`, `kPlaneRow`). Neither type has a goal share of army value, so the last column holds the number
+  that does govern it and the note says which.
+  - Trooper: performance as a slot is scored (`UnitMixPolicy::performanceScore` on the house's Trooper record,
+    one price of prior); per cent = the infantry cap (`AllocationSnapshot::infantryQuotaBps`).
+  - City Airplane, in a city game once the house has an Airport or has flown a plane:
+    `CityAircraft::planePerformanceScore`; per cent = that score as a share of the house's buy score
+    (`QuantBot::getCityPlaneBuyScore`), so 100 or more means it buys. `-` until a build pass has set the buy
+    score, which needs an Airport.
+  - The note is three lines: "Performance x: score. Goal %: share of army value." / "Trooper %: infantry cap."
+    with the anti-air floor or "- = not allocated." / "City Airplane %: of its buy score x1.0; buys at 100."
+    The separate "Infantry cap" and "City Airplane: x.., bought at .." lines are gone.
+  - The table's header and rows take 16 lines instead of 18 and the note 40 instead of 60: at 640x480 the
+    left column was already full to the window's edge with ten rows.
+- **The unit table says City Airplane** (`HouseStatsWindow::unitName`); the unit data's item name stays
+  "Ambient Airplane".
+- **Two stale tests, both failing in the nightly tier of the 1.0.877 pre-release run; the game was right.**
+  - `natives_probe` ("The crash's kills are not credited to the Natives"): since `0fb66768b` a crash is the
+    plane's damage and goes to the house that sent it. The spectated and campaign checks now require the plane
+    on the Natives' record and what the crash destroys on the plane's house's.
+  - `stats_ui_*` ("An excluded unit type is listed for this house"): stale since `3fff76592`, which listed the
+    City Airplane in the unit table at Stefan's request. The probe now requires it there by name and checks
+    both new rows against the house's record, the infantry cap and the buy score.
+- **Why this got to a release run:** these changes were gated on the four AI gates, the plane probes and
+  `perf_regression`, not on the nightly tier. A default or scoring change needs
+  `dunecity-queue ctest ... -L nightly -LE gui` as well.
+
+**Tests on `93f6f8f18`, Mini, `build-int`:** `dunelegacy_tests`, `natives_probe`, `stats_ui_640x480`,
+`stats_ui_1920x1080` and `stats_ui_vanilla` passed. The 640x480 screenshot of the probe was read by an agent:
+twelve rows, Trooper x0.9 / 18.00, City Airplane x0.3 / 70.00, three note lines inside the window.
+
+**Not verified.** Not seen in a real game on the MacBook Air. Stefan asked for "the %"; what each per cent
+means was this session's choice. A human player's own house still shows no allocation table at all, so no
+Trooper or City Airplane row either. The nightly tier was not rerun on AWS by this session.
+
 ## 2026-11-23 - City planes, final rules: crash counted, building splash, performance score, Airport as in Micropolis, free plane every two minutes (unreleased, after 1.0.876)
 
 Stefan, playing `e640f8f66` and later builds: "does the damage dealt include damage when it crashes? it has a
