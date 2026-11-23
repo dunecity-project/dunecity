@@ -69,7 +69,8 @@ hurt it, and they should take a while to drop ... so that the plane has already 
   the AWS matches were the free plane. Not changed.
 - **Buying a plane** (`City Plane Purchase`, default on; `Airport::buyAirplane`, `CMD_AIRPORT_BUY_AIRPLANE`,
   `QuantBot::buyCityAirplanes`). Choices made, for Stefan to correct: a powered Airport launches a plane at once for
-  1500 credits; a house may have three planes in the air; an Airport sells one a minute; the free roll is unchanged
+  1500 credits; no limit on planes in the air (Stefan, 2026-11-23: "no limit on planes in the air"; the first
+  version, measured below, stopped at three per house); an Airport sells one a minute; the free roll is unchanged
   and still only launches for a house with no plane. A human gets a **Buy airplane 1500** button on the Airport
   panel at the same price and limits. QuantBot buys at the end of its build pass, only while another team has a
   building, and only if after paying it still holds its largest reserve of that pass (economy, strategic, civic,
@@ -111,8 +112,8 @@ hurt it, and they should take a while to drop ... so that the plane has already 
   on every run. Fixed cases: the stick's five buildings as above; two Wind Traps a tile apart 12 bombs, both
   destroyed; own and allied buildings beside the target untouched; forty walls 82 bombs, none standing; a
   repairing Wind Trap left on 1 by the aimed bombs and destroyed by the stick; two bomb blasts centred on five
-  aircraft change none of them and take a tank there from 200 to 170; purchase: three planes 4,500 credits, the
-  fourth refused, another house's command refused, 3,750 cycles of cooldown, a house under 1500 refused; the
+  aircraft change none of them and take a tank there from 200 to 170; purchase: four planes 6,000 credits (the
+  fourth was refused under the first version's three-plane limit), another house's command refused, 3,750 cycles of cooldown, a house under 1500 refused; the
   save keeps stick counters and cooldown. Pictures of a run: `effect-1/aimed.png`, `stick.png` (looked at: a
   dotted line of bombs drops back from the plane and bursts behind it; the bomb picture is a few pixels).
 - **AI matches** (AWS, `vanilla-match.py --ffa default --houses harkonnen atreides ordos mercenary`, Brutal, 45

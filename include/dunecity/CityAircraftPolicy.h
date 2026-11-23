@@ -534,13 +534,15 @@ inline constexpr int kRunOvershootTiles = 12;
 // ---------------------------------------------------------------------------
 // Buying a plane (Stefan, 2026-11-23: "allow the ai to spawn planes for 1500
 // credits"). Match rule GameOptionsClass::cityPlanePurchase. A powered Airport
-// launches a plane at once for kPlanePrice while its house has fewer than
-// kMaxPlanesPerHouse in the air, and then not again for kPurchaseCooldownMs. The
+// launches a plane at once for kPlanePrice, and then not again for
+// kPurchaseCooldownMs. There is no limit on planes in the air (Stefan,
+// 2026-11-23: "no limit on planes in the air"; the first version stopped at
+// three per house). What bounds them is the cooldown and the length of a flight:
+// one Airport can have sold at most five planes that are still flying. The
 // Airport's free roll is unchanged: it still only launches for a house with no plane.
 // ---------------------------------------------------------------------------
 
 inline constexpr int kPlanePrice = 1500;
-inline constexpr int kMaxPlanesPerHouse = 3;
 inline constexpr int kPurchaseCooldownMs = 60000;
 
 // ---------------------------------------------------------------------------

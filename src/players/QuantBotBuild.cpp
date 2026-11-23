@@ -515,9 +515,9 @@ void QuantBot::firePalaceWeapon(const Palace* pPalace) {
     wanted from pass.money (the house's credits less what its queues are already committed
     to). A plane is bought only from what is left: after paying, the house must still hold its
     largest reserve of this pass (economy, strategic, civic, city working capital) plus
-    kCityAirplaneCashFloor. The Airport itself sells at most one plane a minute and none to a
-    house with three in the air (Airport::canBuyAirplane), so one Airport can never cost more
-    than 1500 credits a minute. A plane is only worth buying while another team has a
+    kCityAirplaneCashFloor. The Airport itself sells at most one plane a minute
+    (Airport::canBuyAirplane), so one Airport can never cost more than 1500 credits a minute.
+    There is no limit on planes in the air. A plane is only worth buying while another team has a
     building to bomb, and bombing must be on.
 */
 void QuantBot::buyCityAirplanes(BuildPass& pass) {

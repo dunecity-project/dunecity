@@ -144,7 +144,7 @@ not select or order them, but you can buy more planes.
   usually gone within half a minute to a minute. Five minutes is the longest a flight can last.
   Human and computer players get the same plane.
 - **Buying a plane.** Select a powered Airport and press **Buy airplane 1500**: a plane takes off at
-  once, also while you already have one flying. A house can have three planes in the air, and each
+  once, also while you already have planes flying. There is no limit on planes in the air; each
   Airport sells one plane a minute (the panel shows the wait). Computer players buy planes too, but
   only from spare money: after paying they keep their reserves and 3000 credits more.
 - **Where it flies.** Each leg of the flight is a run across one enemy building, picked at random from

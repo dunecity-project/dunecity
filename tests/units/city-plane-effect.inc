@@ -753,26 +753,27 @@ void checkPurchase(const std::string& mapData) {
         require(planes() == 1 && owner->getCredits() == before - CA::kPlanePrice, "The Buy command did not launch one plane for 1500");
         require(airports[0]->getPurchaseCooldown() == MILLI2CYCLES(CA::kPurchaseCooldownMs) && !airports[0]->canBuyAirplane(),
                 "An Airport may sell a second plane within a minute");
-        require(airports[1]->buyAirplane() && airports[2]->buyAirplane() && planes() == CA::kMaxPlanesPerHouse,
+        // No limit on planes in the air (Stefan, 2026-11-23): every Airport sells one, with three flying too.
+        require(airports[1]->buyAirplane() && airports[2]->buyAirplane() && planes() == 3,
                 "The other Airports did not sell the second and third plane");
-        require(!airports[3]->canBuyAirplane() && !airports[3]->buyAirplane() && planes() == CA::kMaxPlanesPerHouse,
-                "A house bought a fourth plane");
-        const int afterThree = owner->getCredits();
-        require(afterThree == before - 3 * CA::kPlanePrice, "Three planes did not cost 4500");
+        require(airports[3]->canBuyAirplane() && airports[3]->buyAirplane() && planes() == 4,
+                "A house with three planes in the air could not buy a fourth");
+        const int afterFour = owner->getCredits();
+        require(afterFour == before - 4 * CA::kPlanePrice, "Four planes did not cost 6000");
         // A minute later the first Airport is ready again, but not for a house that cannot pay.
         for(int i = 0; i < MILLI2CYCLES(CA::kPurchaseCooldownMs); ++i) game->updateGameState();
         require(airports[0]->getPurchaseCooldown() == 0, "The purchase cooldown did not run out in a minute");
         const int flying = planes();
         owner->takeCredits(owner->getCredits() - (CA::kPlanePrice - 100));
-        require(owner->getCredits() < CA::kPlanePrice && !airports[3]->canBuyAirplane() && !airports[3]->buyAirplane()
+        require(owner->getCredits() < CA::kPlanePrice && !airports[0]->canBuyAirplane() && !airports[0]->buyAirplane()
                     && planes() == flying, "A house bought a plane it could not pay for");
         owner->startingCredits += CA::kPlanePrice;
         const int rich = owner->getCredits();
-        require(flying >= CA::kMaxPlanesPerHouse
-                    || (airports[3]->buyAirplane() && planes() == flying + 1 && owner->getCredits() == rich - CA::kPlanePrice),
+        require(airports[0]->buyAirplane() && planes() == flying + 1 && owner->getCredits() == rich - CA::kPlanePrice,
                 "A house that could pay again could not buy a plane");
-        record("purchase", "rule=1 price=" + std::to_string(CA::kPlanePrice) + " three_planes_credits=" + std::to_string(before)
-                               + "->" + std::to_string(afterThree) + " fourth_refused=1 other_house_refused=1 cooldown_cycles="
+        record("purchase", "rule=1 price=" + std::to_string(CA::kPlanePrice) + " four_planes_credits=" + std::to_string(before)
+                               + "->" + std::to_string(afterFour) + " planes_before_fifth=" + std::to_string(flying)
+                               + " fifth_bought=1 other_house_refused=1 cooldown_cycles="
                                + std::to_string(MILLI2CYCLES(CA::kPurchaseCooldownMs)) + " unaffordable_refused=1");
         game.reset();
         currentGame = nullptr;

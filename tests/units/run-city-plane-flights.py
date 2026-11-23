@@ -27,7 +27,7 @@ The test requires, over the games played:
   the buildings on the map in a game (some buildings, not all).
 - With runs no smaller a share of flights bombs than without.
 - No plane is bought with the purchase rule off and at least one with it on, every purchase
-  leaves its house 3000 credits or more, and no house ever has more than three planes in the air.
+  leaves its house 3000 credits or more. There is no limit on planes in the air.
 
 Outputs: flights.csv, purchases.csv, games.csv, summary.md, and per game run.log.
 """

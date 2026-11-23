@@ -101,14 +101,14 @@ bool Airport::canBuyAirplane() const {
     return currentGame->getGameInitSettings().getGameOptions().cityPlanePurchase
         && currentGame->isCitySimEnabled() && getHealth() > 0 && owner->hasPower() && purchaseCooldown <= 0
         && currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled
-        && owner->getNumItems(Unit_AmbientAirplane) < CA::kMaxPlanesPerHouse
         && owner->getCredits() >= CA::kPlanePrice;
 }
 
 /**
     Stefan, 2026-11-23: "allow the ai to spawn planes for 1500 credits". Match rule City Plane
     Purchase: the Airport launches a plane now instead of waiting for its free roll, also while
-    the house already has one in the air, up to CA::kMaxPlanesPerHouse. The same call serves a
+    the house already has planes in the air, however many (Stefan, 2026-11-23: "no limit on
+    planes in the air"); the cooldown is the only limit besides the price. The same call serves a
     human's Buy button (CMD_AIRPORT_BUY_AIRPLANE) and QuantBot (QuantBot::buyCityAirplanes).
 */
 bool Airport::buyAirplane() {

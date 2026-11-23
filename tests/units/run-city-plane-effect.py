@@ -20,7 +20,7 @@ Dune City mod's own options (explored map, no fog, Rocket Turrets need power):
   buildings, a road between two buildings, own buildings beside the target, forty walls in
   one stick, tanks under it and a repairing building; the fall time, the impact tile and a
   bomb's blast centred on five aircraft; pictures of a run (aimed.png, stick.png); and City
-  Plane Purchase: price, the three-plane limit, the one-minute cooldown, another house's Buy
+  Plane Purchase: price, no limit on planes in the air, the one-minute cooldown, another house's Buy
   command and a house that cannot pay.
 
 Differences are on minus off, paired by encounter, with a 95% bootstrap interval

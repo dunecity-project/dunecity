@@ -25,7 +25,7 @@ protected:
         details.addWidget(&patrolLabel, (Sint32)55);
         // City Plane Purchase: launch a plane now for CityAircraft::kPlanePrice credits.
         buyButton.setText(_("Buy airplane") + std::string(" ") + std::to_string(DuneCity::CityAircraft::kPlanePrice));
-        buyButton.setTooltipText(_("Launch a city airplane now. Up to three in the air; one a minute per Airport."));
+        buyButton.setTooltipText(_("Launch a city airplane now. One a minute per Airport."));
         buyButton.setOnClick([id] {
             auto* airport = dynamic_cast<Airport*>(currentGame->getObjectManager().getObject(id));
             if (airport) airport->handleBuyAirplaneClick();
