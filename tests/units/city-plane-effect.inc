@@ -965,9 +965,14 @@ void checkRocketChase(const std::string& mapData) {
     for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
     auto* turret = dynamic_cast<RocketTurret*>(place(owner, Structure_RocketTurret, launchTile));
     auto* harkonnen = game->getHouse(HOUSE_HARKONNEN);
-    const bool near = turret->canAttack(fly(harkonnen, Coord(6, row), Coord(kMapSize + 20, row), RIGHT));
-    const bool far = turret->canAttack(fly(harkonnen, Coord(10, row), Coord(kMapSize + 20, row), RIGHT));
-    const bool coming = turret->canAttack(fly(harkonnen, Coord(26, row), Coord(-20, row), LEFT));
+    turret->attackMode = STOP;
+    auto* nearPlane = fly(harkonnen, Coord(6, row), Coord(kMapSize + 20, row), RIGHT);
+    auto* farPlane = fly(harkonnen, Coord(10, row), Coord(kMapSize + 20, row), RIGHT);
+    auto* comingPlane = fly(harkonnen, Coord(26, row), Coord(-20, row), LEFT);
+    for(int i = 0; i < 2; ++i) game->updateGameState();   // a plane has a velocity once it has moved
+    const bool near = turret->canAttack(nearPlane);
+    const bool far = turret->canAttack(farPlane);
+    const bool coming = turret->canAttack(comingPlane);
     record("rocket_chase", "turret takes a plane flying away from 2 tiles=" + std::to_string(near) + " from 6 tiles="
                                + std::to_string(far) + " coming head-on from 22 tiles=" + std::to_string(coming));
     require(near && !far && coming, "A turret takes a plane its rocket cannot meet inside 24 tiles, or refuses one it can");
