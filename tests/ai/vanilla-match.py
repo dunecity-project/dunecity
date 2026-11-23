@@ -281,7 +281,18 @@ def build_probe(args, scratch):
 
 
 
+def apply_env(args):
+    """Set the --env variables for the games this process plays. Called from play() as well as
+    after parsing: the cluster loads this file without its command-line dispatch (cluster_unit.py),
+    so code after parse_args() never runs on a worker. On 2026-11-23 that made five balance arms
+    replay the baseline digit for digit."""
+    for item in getattr(args, 'env', None) or []:
+        name, _, value = item.partition('=')
+        os.environ[name] = value
+
+
 def play(args, scratch, binary, key):
+    apply_env(args)
     tag, difficulty, name, seed, sides_text = key
     sides = side_list(sides_text)
     out = scratch / f'{name}-{seed}-{abs(hash(sides_text)) % 10**8}-{tag}'
@@ -900,9 +911,7 @@ parser.add_argument('--adjudicate', type=float, default=1000,
                          'least this many credits')
 match_score.add_arguments(parser)
 args = parser.parse_args()
-for item in args.env:
-    name, _, value = item.partition('=')
-    os.environ[name] = value
+apply_env(args)
 if bool(args.pairs) == bool(args.ffa):
     parser.error('Give exactly one of --pairs and --ffa.')
 if args.ffa:
