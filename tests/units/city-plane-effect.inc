@@ -856,13 +856,16 @@ void checkFall(const std::string& mapData) {
     for(size_t i = 0; i < aircraft.size(); ++i)
         require(lround(aircraft[i]->getHealth()) == before[i], "A bomb damaged an aircraft at the centre of its blast");
     require(lround(tank->getHealth()) < tankBefore, "A bomb did not damage a tank at the centre of its blast");
+    std::string after;
+    for(const ObjectBase* object : aircraft) after += (after.empty() ? "" : "/") + std::to_string(lround(object->getHealth()));
+    const int tankAfter = lround(tank->getHealth());
     currentGameMap->damage(own->getObjectID(), harkonnen, centre, Bullet_SmallRocket, CA::kStickDamage, TILESIZE, true, true,
                            NONE_ID, DeviationReward::Provenance());
     require(lround(enemy->getHealth()) < before[3], "The control blast aimed at aircraft did not damage a plane");
-    record("own_bombs", "bomb at the centre of five aircraft: own_plane=" + std::to_string(before[0]) + "->"
-                            + std::to_string(lround(own->getHealth())) + " second_own=" + std::to_string(lround(second->getHealth()))
-                            + " allied=" + std::to_string(lround(allied->getHealth())) + " tank=" + std::to_string(tankBefore) + "->"
-                            + std::to_string(lround(tank->getHealth())) + " control_rocket_hurts_plane=1");
+    record("own_bombs", "two bomb blasts centred on five aircraft (own plane/second own/allied/enemy plane/enemy Ornithopter): "
+                            "health after " + after + " unchanged; tank there " + std::to_string(tankBefore) + "->"
+                            + std::to_string(tankAfter) + "; control rocket blast then takes the enemy plane to "
+                            + std::to_string(lround(enemy->getHealth())));
     game.reset();
     currentGame = nullptr;
 }

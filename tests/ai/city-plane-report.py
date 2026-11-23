@@ -10,7 +10,10 @@ one with city-plane-rules-on.ini (the defaults):
   python3 tests/ai/vanilla-match.py --tag planes-on  --game-options tests/ai/game-options/city-plane-rules-on.ini  ...
   python3 tests/ai/city-plane-report.py --results DIR [DIR ...] --off planes-off --on planes-on
 
-Per arm and game: planes launched, bombs dropped, buildings and credits destroyed by bombs,
+The same report compares any two tags, e.g. the bomb stick, bombing run and purchase rules
+(city-plane-b52-off.ini against city-plane-b52-on.ini, --off-label/--on-label name the columns).
+
+Per arm and game: planes launched and bought, bombs dropped, buildings and credits destroyed by bombs,
 planes shot down (and by what), Ornithopters an Airport sent out, the time-out rate, the game
 length and each house's placement score (tests/ai/match_score.py). The paired difference on - off
 is per game (same map, seed and sides) with a 95% bootstrap interval. Every house plays the same
@@ -35,6 +38,8 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument('--results', type=Path, nargs='+', required=True)
 parser.add_argument('--off', default='planes-off', help='Tag of the games played with the rules of 1.0.876')
 parser.add_argument('--on', default='planes-on', help='Tag of the games played with the default rules')
+parser.add_argument('--off-label', default='Off', help='Column title of the --off arm')
+parser.add_argument('--on-label', default='On', help='Column title of the --on arm')
 parser.add_argument('--output', type=Path, help='Also write the report here')
 args = parser.parse_args()
 
@@ -92,8 +97,15 @@ def game_measures(tag, pair):
             if HOUSE_NUMBERS[r['house']] != int(game['winner']):
                 eliminated.setdefault(HOUSE_NUMBERS[r['house']], float(game['end_s'] or 0))
     placing = match_score.score_game([HOUSE_NUMBERS[r['house']] for r in rows_h], eliminated) if len(rows_h) > 1 else {}
+    launched = max(1, count('launched'))
+    bombers = len({row['object'] for row in rows if row['event'] == 'bomb'})
     return {
         'launched': count('launched'),
+        'bought': count('bought'),
+        'spent': sum(number(row['price']) for row in rows if row['event'] == 'bought'),
+        'bombing_share': 100.0 * bombers / launched,
+        'bombs_per_flight': count('bomb') / launched,
+        'buildings_per_flight': len(kills) / launched,
         'bombs': count('bomb'),
         'buildings': len(kills),
         'credits': sum(number(row['price']) for row in kills),
@@ -108,14 +120,17 @@ def game_measures(tag, pair):
 
 
 measures = {tag: {pair: game_measures(tag, pair) for pair in pairs} for tag in (args.off, args.on)}
-LABELS = (('launched', 'City planes launched per game'), ('bombs', 'Bombs dropped per game'),
+LABELS = (('launched', 'City planes launched per game'), ('bought', '... of them bought'),
+          ('spent', 'Credits spent on planes per game'), ('bombing_share', 'Flights that released a bomb, %'),
+          ('bombs_per_flight', 'Bombs per flight'), ('buildings_per_flight', 'Buildings destroyed per flight'),
+          ('bombs', 'Bombs dropped per game'),
           ('buildings', 'Buildings destroyed by bombs per game'), ('credits', 'Credits destroyed by bombs per game'),
           ('down', 'City planes shot down per game'), ('down_by_turret', '... by a Rocket Turret'),
           ('patrol', 'Ornithopters sent out by Airports per game'), ('timeout', 'Time-outs (share of games)'),
           ('eliminated', 'Houses eliminated before the end, per game'), ('minutes', 'Game length, minutes'))
 report = ['# City plane rules in AI matches: %s against %s' % (args.off, args.on), '',
           '%d games played in both arms%s.' % (len(pairs), ', %d failed' % len(failed) if failed else ', none failed'), '',
-          '| Measure | Off | On | Paired difference (on - off) | 95% interval |', '|---|---:|---:|---:|---|']
+          '| Measure | %s | %s | Paired difference | 95% interval |' % (args.off_label, args.on_label), '|---|---:|---:|---:|---|']
 for name, label in LABELS:
     off = [measures[args.off][pair][name] for pair in pairs]
     on = [measures[args.on][pair][name] for pair in pairs]
@@ -131,7 +146,8 @@ for pair in pairs:
         if house in on:
             by_house[house].append((off[house], on[house]))
 if by_house:
-    report += ['', '| House | Placement score off | on | Paired difference | 95% interval |', '|---|---:|---:|---:|---|']
+    report += ['', '| House | Placement score %s | %s | Paired difference | 95% interval |' % (args.off_label, args.on_label),
+               '|---|---:|---:|---:|---|']
     for house, values in sorted(by_house.items()):
         low, high = match_score.bootstrap([b - a for a, b in values], 20261123)
         report.append('| %s | %+.3f | %+.3f | %+.3f | %+.3f to %+.3f |'
