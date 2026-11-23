@@ -266,6 +266,9 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
         repairPressureYard = stream.readUint32();
         repairPressureSince = stream.readUint32();
     }
+    // SAVEGAMEVERSION_AIRLIFT: the Carryall manoeuvres. An older save has none under way.
+    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRLIFT) loadAirlift(stream);
+    else { airliftJobs.clear(); airliftDrop = AirliftDrop{}; airliftLocalDefeat = airliftRetreating = false; }
     resolveStrategyProfile();
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
@@ -415,6 +418,9 @@ void QuantBot::save(OutputStream& stream) const {
     // on reload, nor may an observer expand earlier than its host.
     stream.writeUint32(repairPressureYard);
     stream.writeUint32(repairPressureSince);
+    // SAVEGAMEVERSION_AIRLIFT: who is under a lift order and the planned drop decide the next
+    // orders and cannot be recomputed from the world.
+    saveAirlift(stream);
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.

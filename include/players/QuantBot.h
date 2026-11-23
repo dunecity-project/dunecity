@@ -1597,8 +1597,51 @@ private:
     void updateSplits();
     /// Held by a force controller (a split group, a muster or O's siege hold): no rally or regroup orders.
     bool forceHeld(Uint32 id) const {
-        return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)) || (!siegeHeld.empty() && siegeHeld.count(id));
+        return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)) || (!siegeHeld.empty() && siegeHeld.count(id))
+            || (!airliftJobs.empty() && airliftJobs.count(id));
     }
+    // ---- Mass Carryall manoeuvres (QuantBotAirlift.cpp; docs/formations.md) ----
+    enum class AirliftKind : Uint8 { Rear, Flank, Retreat, Rescue };
+    /// One unit under a lift order, from the order until it is set down (a rear or flank
+    /// unit until its group strikes). Held like a split group: no rally or regroup orders.
+    struct AirliftJob {
+        AirliftKind kind = AirliftKind::Rear;
+        Coord drop = Coord::Invalid();
+        Uint32 ordered = 0;
+        bool lifted = false, landed = false;
+    };
+    std::map<Uint32, AirliftJob> airliftJobs;
+    /// The rear or flank drop of the current wave; point is invalid while there is none.
+    struct AirliftDrop {
+        AirliftKind kind = AirliftKind::Rear;
+        Coord point = Coord::Invalid();     ///< where the group is set down
+        Coord target = Coord::Invalid();    ///< the enemy base centre it then hunts towards
+        Uint32 wave = 0;                    ///< customWave.launched of the wave it was planned for
+        Uint32 planned = 0, firstLanding = 0;
+        std::vector<Uint32> pending;        ///< not yet ordered, dearest first
+    };
+    AirliftDrop airliftDrop;
+    bool airliftLocalDefeat = false;        ///< the wave is outmatched where it stands (updateArmyPosture)
+    bool airliftRetreating = false;         ///< a retreat lift of this defeat has been counted
+    /// For the match reports; rearDrops and flankDrops also decide whose turn it is and are saved.
+    struct AirliftStats {
+        int rearDrops = 0, flankDrops = 0, retreatLifts = 0, retreatUnits = 0, rescues = 0, strikes = 0,
+            ordered = 0, lifted = 0, landed = 0, lostInLift = 0, lostWaiting = 0, cancelled = 0, carryallsLost = 0;
+    };
+    AirliftStats airliftStats;
+    bool airliftActive() const;
+    int airliftFreeCarryalls() const;
+    Coord airliftHome();
+    bool orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind);
+    void releaseAirliftJob(const UnitBase* unit, const AirliftJob& job);
+    void trackAirliftJobs();
+    bool planAirliftDrop();
+    void updateAirliftDrop();
+    void updateAirliftRetreat();
+    void updateAirliftRescue();
+    void updateAirlift();
+    void saveAirlift(OutputStream& stream) const;
+    void loadAirlift(InputStream& stream);
     /// Telemetry for the duel reports only: never read by a decision, not saved.
     struct ForceStats {
         int focusSwitches = 0, converges = 0, pooled = 0, recalled = 0, musters = 0, musterReleases = 0,

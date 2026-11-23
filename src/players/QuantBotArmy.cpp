@@ -2625,6 +2625,8 @@ void QuantBot::updateArmyPosture() {
     }
     const bool wasLocalWithdraw = localSquadWithdraw;
     localSquadWithdraw = localWithdrawSince != std::numeric_limits<Uint32>::max();
+    // AirliftRetreatLift reads the verdict itself, before the withdrawal switch below masks it.
+    airliftLocalDefeat = localSquadWithdraw;
 
     // Withdrawals are off by default (QuantBotConfig::RecoverySettings::withdrawalsEnabled):
     // measured on six all-against-Atreides seeds, every withdrawal trigger together cost a
@@ -4827,6 +4829,8 @@ void QuantBot::retreatAllUnits() {
         updateHuntParties();
         // Force concentration (test-only candidates, docs/formations.md "Concentrating force").
         concentrateForces();
+        // Mass Carryall manoeuvres (default off; docs/formations.md, "Mass Carryall manoeuvres").
+        updateAirlift();
         // Test-only harvester raids (docs/ai-play-styles.md; none in a real game).
         updateStyleRaiders();
         const bool preserving = retreatPreserveActive();

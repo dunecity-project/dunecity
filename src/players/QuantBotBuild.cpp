@@ -4167,6 +4167,10 @@ void QuantBot::planOpeningProduction(BuildPass& pass) {
     if (pass.fleetRatios)
         pass.transportBaseline = pass.transportTarget = (std::min(pass.mapSpiceHarvesterTarget,
             pass.itemCount[Unit_Harvester]) * fleetRatioTreatment().carryallQuarters + 3) / 4;
+    // AirliftCarryalls (default 0): aircraft for the Carryall manoeuvres on top of what the
+    // harvesters and Repair Yards need, once the house has that first transport.
+    if (gameMode == GameMode::Custom && botConfig().force.airliftCarryalls > 0 && pass.transportTarget > 0)
+        pass.transportTarget += botConfig().force.airliftCarryalls;
 }
 
 void QuantBot::planDefenceCoverage(BuildPass& pass) {

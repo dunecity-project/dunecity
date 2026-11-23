@@ -904,6 +904,7 @@ void QuantBot::onDecrementStructures(int itemID, const Coord& location) {
 /// When we take losses we should hold off from attacking for longer...
 void QuantBot::onDecrementUnits(int itemID) {
     traceDecision("unit_lost", AITelemetry::Record().set("item", itemID));
+    if (isCarryallUnit(itemID)) ++airliftStats.carryallsLost;
     // Material mobile-combat attrition for the posture machine. Only our own
     // mobile combat units count: transports, workers, MCVs, saboteurs, worms and
     // ambient traffic are economic or incidental losses and must never be able

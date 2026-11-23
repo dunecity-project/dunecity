@@ -232,7 +232,12 @@
 // 9893: A House saves whether its Repair Yards have repaired units flown back to where they
 //       were picked up (House::repairReturnEnabled, CMD_HOUSE_REPAIR_RETURN) after its
 //       auto-repair flag. A house from an older save has it on, which is what yards did before.
-#define SAVEGAMEVERSION     9893
+// 9894: QuantBot saves its Carryall manoeuvres after the repair-capacity wait: the units under
+//       a lift order, the planned rear or flank drop and the retreat state (QuantBot::
+//       saveAirlift). An older save has none; a bot plans its next manoeuvre afresh.
+#define SAVEGAMEVERSION     9894
+/// First save with QuantBot's Carryall manoeuvre state.
+#define SAVEGAMEVERSION_AIRLIFT 9894
 /// First save whose houses carry the Repair Yard "Return units" switch.
 #define SAVEGAMEVERSION_REPAIR_RETURN 9893
 /// First save whose city airplanes say whether they were bought.

@@ -275,6 +275,13 @@ struct QuantBotConfig {
         bool counterPunch;                     ///< After a defence at home ends, the army hits the attacker.
         bool leaderRaid;                       ///< While the leader's army is away, the army hits its base.
         bool gangUpLeader;                     ///< FFA: waves target a runaway leader.
+        /// Default-OFF mass Carryall manoeuvres (docs/formations.md, "Mass Carryall manoeuvres").
+        bool airliftRearDrop;                  ///< Part of a launched wave is flown behind the enemy base.
+        bool airliftFlankDrop;                 ///< Part of a launched wave is flown to one side of the enemy base.
+        bool airliftRetreatLift;               ///< A wave outmatched where it stands is flown home, dearest first.
+        bool airliftRescue;                    ///< A damaged or cut-off vehicle under fire is flown home.
+        int airliftGroup;                      ///< Most units one rear/flank drop carries, 3-12 (default 6).
+        int airliftCarryalls;                  ///< Carryalls built on top of the transport target, 0-6 (default 0).
         /// Default-OFF city economy (docs/formations.md, "Economy: nuclear consolidation and palace districts").
         bool nuclearConsolidation;             ///< Nuclear Plants replace Wind Traps; the freed land is rebuilt.
         bool palaceDistricts;                  ///< A Palace funded first in every R/C district (else one Stadium).

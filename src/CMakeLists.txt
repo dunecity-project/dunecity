@@ -306,6 +306,7 @@ target_sources(dunecity
         players/QuantBotParks.cpp
         players/QuantBotArmy.cpp
         players/QuantBotBlob.cpp
+        players/QuantBotAirlift.cpp
         players/QuantBotForce.cpp
         players/QuantBotStyle.cpp
         players/QuantBotStrategy.cpp
