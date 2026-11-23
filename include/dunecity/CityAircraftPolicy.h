@@ -574,6 +574,23 @@ inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
     return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(kPlanePrice) * flightsEnded;
 }
 
+// A raid (Stefan, 2026-11-23: "if the ai has heaps and heaps of money then spawning 10 could be
+// useful to break up the enemy base"). Against turrets that fire, single planes stop paying and
+// purchasePays() ends the buying; ten at once saturate the turrets under them. A computer player
+// with a surplus (credits beyond its reserves and cash floor) of twice a full wave starts one
+// while it has no bought plane in the air, and keeps buying, one per Airport and build pass,
+// while its last purchase is no older than kRaidContinueMs and its surplus is still above one
+// wave's price: about ten planes, 15,000 credits, a wave. The next wave waits until the last
+// bought plane is gone and the surplus is back.
+inline constexpr int kRaidStartSurplus = 2 * kMaxPlanesPerHouse * kPlanePrice;   // 30,000
+inline constexpr int kRaidStopSurplus = kMaxPlanesPerHouse * kPlanePrice;        // 15,000
+inline constexpr int kRaidContinueMs = 15000;
+/// `surplus`: credits beyond reserves and floor; `boughtInAir`: the house has a bought plane
+/// flying; `boughtJustNow`: its last purchase was within kRaidContinueMs.
+inline constexpr bool raidBuys(int64_t surplus, bool boughtInAir, bool boughtJustNow) {
+    return boughtJustNow ? surplus >= kRaidStopSurplus : (!boughtInAir && surplus >= kRaidStartSurplus);
+}
+
 // ---------------------------------------------------------------------------
 // Anti-air against the airplane (match rule GameOptionsClass::cityPlaneDefence).
 //

@@ -520,5 +520,6 @@
   {"id": "unit_priority_infantry_target", "name": "Unit Priorities: Infantry_Target", "section": "Unit Priorities", "key": "Infantry_Target", "kind": "int", "levels": [15, 20, 25], "default": 20, "owner_doc": "include/players/QuantBotConfig.h#TargetPriority"},
   {"id": "unit_priority_troopers_build", "name": "Unit Priorities: Troopers_Build", "section": "Unit Priorities", "key": "Troopers_Build", "kind": "int", "levels": [37, 50, 62], "default": 50, "owner_doc": "include/players/QuantBotConfig.h#TargetPriority"},
   {"id": "unit_priority_troopers_target", "name": "Unit Priorities: Troopers_Target", "section": "Unit Priorities", "key": "Troopers_Target", "kind": "int", "levels": [37, 50, 62], "default": 50, "owner_doc": "include/players/QuantBotConfig.h#TargetPriority"},
+  {"id": "air_raid_turrets", "name": "Force Concentration: AirRaidTurrets", "section": "Force Concentration", "key": "AirRaidTurrets", "kind": "bool", "levels": [0, 1], "default": 1, "owner_doc": "include/players/QuantBotConfig.h#ForceSettings"},
   {"id": "technology_installments", "name": "Game Options: Technology Installments", "scope": "game", "section": "Game Options", "key": "Technology Installments", "kind": "bool", "levels": [0, 1], "default": 0, "owner_doc": "docs/quantbot-army-recovery.md"}
 ]

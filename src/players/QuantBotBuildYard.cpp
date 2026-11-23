@@ -353,6 +353,12 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardTurretCluster(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (airRaidPlan.active) {
+        // AirRaidTurrets (default on): while city airplanes bomb the house, Rocket Turrets
+        // spread through its city. Never set unless a bomb landed in the last three minutes.
+        chooseYardAirRaidDefence(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     if (pass.economyProject != NONE_ID) {
         // NuclearConsolidation / PalaceDistricts (default off): the city economy project.
         chooseYardEconomyProject(pass, turn, yardTurn);
@@ -1031,6 +1037,104 @@ void QuantBot::planPalaceTurrets(BuildPass& pass) {
     traceDecision("palace_turret_plan", AITelemetry::Record().set("reason", reason)
         .set("palaces", int(palaces.size())).set("unguarded", unguarded).set("money", pass.money)
         .set("x", site.x).set("y", site.y));
+}
+
+// The policy keeps its own cycles-per-minute so the unit tests include it without the city headers.
+static_assert(QuantBotAirDefencePolicy::kCyclesPerMinute == DuneCity::kCyclesPerMinute,
+              "QuantBotAirDefencePolicy counts game minutes differently from the city simulation");
+
+void QuantBot::planAirRaidDefence(BuildPass& pass) {
+    // AirRaidTurrets (on by default). Stefan, 2026-11-23: "also make the ai respond when being
+    // bombed by planes by having more turrets dispersed". The core and perimeter rules above put
+    // turrets where ground attacks arrive and around the assets the city cannot lose; a plane
+    // flies over all of it. While bombs land on the house's buildings this adds Rocket Turrets
+    // through the city (QuantBotAirDefencePolicy.h has the numbers).
+    namespace Air = QuantBotAirDefencePolicy;
+    airRaidPlan = AirRaidPlan();
+    if (!botConfig().force.airRaidTurrets || !pass.citySimEnabled) return;
+    const auto& raid = getHouse()->getAirRaid();
+    const Uint32 now = getGameCycleCount();
+    // A house no bomb has hit lately leaves here: with the switch on, a game without bombing
+    // plays exactly as with it off.
+    if (!Air::bombedRecently(raid.lastHitCycle, now)) return;
+    const Air::Hold hold = Air::orderHold(raid, now, pass.itemCount[Structure_RocketTurret]);
+    // The same reserves a city airplane purchase respects (buyCityAirplanes), with this rule's
+    // own floor on top.
+    airRaidPlan.reserve = Air::cashReserve(pass.economyReserve, pass.strategicReserveCost,
+                                           pass.civicReserveCost, pass.cityWorkingReserve);
+    airRaidPlan.active = hold == Air::Hold::None;
+    if (!airRaidPlan.active && pass.emitStatsLog)
+        traceDecision("air_raid_defence_hold", AITelemetry::Record().set("reason", Air::holdName(hold))
+            .set("bombed_cycle", raid.lastHitCycle).set("raid_turrets", int(raid.turretsOrdered))
+            .set("rocket_turrets", pass.itemCount[Structure_RocketTurret]));
+}
+
+void QuantBot::chooseYardAirRaidDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    namespace Air = QuantBotAirDefencePolicy;
+    // One order per pass across all yards, after power recovery and the essentials and ahead of
+    // optional growth. Only a yard that can build the turret now: unlocking it (the yard upgrade,
+    // the Radar) stays with the coverage rules that already do that for aircraft over the base.
+    if (!airRaidPlan.active || airRaidPlan.ordered || yardTurn.itemID != NONE_ID
+        || yardTurn.skipRemainingStructureLogic
+        || !campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)) return;
+    if (!hasPowerBufferForTurret(pass)) {
+        // Rocket Turrets need power in this game and the house has none to spare. No turret it
+        // cannot power: one Wind Trap first, under the same cash rule, unless generation is
+        // already on its way.
+        if (!powerGenerationPending(pass) && campaignAvailableToBuild(turn.pBuilder, Structure_WindTrap)
+            && Air::affordable(pass.money, buildingCapitalCost(pass, Structure_WindTrap), airRaidPlan.reserve)
+            && findPlaceLocation(Structure_WindTrap).isValid()) {
+            airRaidPlan.ordered = true;
+            yardTurn.itemID = Structure_WindTrap;
+            yardTurn.structureRule = "air_raid_defence_power";
+            yardTurn.skipRemainingStructureLogic = true;
+        }
+        return;
+    }
+    // A house in a blackout adds no consumer; restoring power is the essentials' work.
+    if (!getHouse()->hasPower()) return;
+    int cost = purchasePrice(turn.pBuilder, Structure_RocketTurret);
+    if (!Air::affordable(pass.money, cost, airRaidPlan.reserve)) return;
+    if (!airRaidPlan.searched) {
+        airRaidPlan.searched = true;
+        airRaidPlan.site = findAirRaidTurretSite(&airRaidPlan.uncovered, &airRaidPlan.nearHit);
+        if (airRaidPlan.site.isInvalid() && pass.emitStatsLog)
+            traceDecision("air_raid_defence_hold", AITelemetry::Record()
+                .set("reason", airRaidPlan.uncovered > 0 ? "no_site" : "city_covered")
+                .set("uncovered_buildings", airRaidPlan.uncovered)
+                .set("bombed_cycle", getHouse()->getAirRaid().lastHitCycle));
+    }
+    if (airRaidPlan.site.isInvalid()) return;
+    for (const auto& slab : foundationOrders(turn.pBuilder, Structure_RocketTurret, airRaidPlan.site))
+        cost += purchasePrice(turn.pBuilder, slab.item);
+    if (!Air::affordable(pass.money, cost, airRaidPlan.reserve)) return;
+    airRaidPlan.ordered = true;
+    yardTurn.itemID = Structure_RocketTurret;
+    yardTurn.crimeServiceSite = airRaidPlan.site;
+    yardTurn.structureRule = "air_raid_defence";
+    yardTurn.skipRemainingStructureLogic = true;
+}
+
+void QuantBot::noteAirRaidTurretOrdered(BuildPass& pass, const BuilderTurn& turn, Coord site) {
+    const Uint32 now = getGameCycleCount();
+    const int houseID = getHouse()->getHouseID();
+    // The pace and the per-raid count live with the house, which saves them: after a load the
+    // next order waits exactly as long as it would have. Every peer runs this same pass, so the
+    // record changes identically everywhere.
+    currentGame->getHouse(houseID)->noteAirRaidTurretOrdered(now);
+    const auto& raid = getHouse()->getAirRaid();
+    const int standing = getHouse()->getNumItems(Structure_RocketTurret);
+    traceDecision("air_raid_turret_ordered", AITelemetry::Record()
+        .set("builder", turn.pBuilder->getObjectID()).set("x", site.x).set("y", site.y)
+        .set("bombed_cycle", raid.lastHitCycle).set("cycles_since_bomb", now - raid.lastHitCycle)
+        .set("near_hit", airRaidPlan.nearHit).set("uncovered_buildings", airRaidPlan.uncovered)
+        .set("raid_turrets", int(raid.turretsOrdered)).set("own_rocket_turrets", standing)
+        .set("rocket_turrets_with_queued", pass.itemCount[Structure_RocketTurret] + 1)
+        .set("spendable_after", pass.money).set("reserve", airRaidPlan.reserve));
+    // One line per turret for the match tables, like CITY_PLANE_KILL. own_rocket_turrets counts
+    // the standing ones, without this order.
+    SDL_Log("CITY_AIR_DEFENCE: house=%d turret_at=%d/%d bombed_cycle=%u own_rocket_turrets=%d cycle=%u",
+            houseID, site.x, site.y, raid.lastHitCycle, standing, now);
 }
 
 void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -3103,7 +3207,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && std::string_view(yardTurn.structureRule)!="perimeter_battery"
         && std::string_view(yardTurn.structureRule)!="ground_threat"
         && std::string_view(yardTurn.structureRule)!="vanilla_core_defence"
-        && std::string_view(yardTurn.structureRule)!="turret_cluster") {
+        && std::string_view(yardTurn.structureRule)!="turret_cluster"
+        && std::string_view(yardTurn.structureRule)!="air_raid_defence") {
         yardTurn.itemID=NONE_ID;
         yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="core_infrastructure_before_more_rockets";
@@ -3114,7 +3219,8 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && std::string_view(yardTurn.structureRule)!="ground_threat"
         && std::string_view(yardTurn.structureRule)!="perimeter_battery"
         && std::string_view(yardTurn.structureRule)!="turret_cluster"
-        && std::string_view(yardTurn.structureRule)!="early_rocket_cover") {
+        && std::string_view(yardTurn.structureRule)!="early_rocket_cover"
+        && std::string_view(yardTurn.structureRule)!="air_raid_defence") {
         yardTurn.itemID=NONE_ID;yardTurn.crimeServiceSite=Coord::Invalid();
         yardTurn.structureRule="funded_standing_battery_required";
     }
@@ -3394,6 +3500,10 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
                         - pass.itemCount[Unit_Harvester] - pass.itemCount[Unit_RebelHarvester]));
             }
             reservedStructures[planningBuilder] = {yardTurn.itemID, selectedPlaceLocation};
+            // AirRaidTurrets: the order stands, so it counts against the pace and the raid's cap.
+            if (yardTurn.itemID == Structure_RocketTurret && yardTurn.structureRule
+                && std::string_view(yardTurn.structureRule) == "air_raid_defence")
+                noteAirRaidTurretOrdered(pass, turn, selectedPlaceLocation);
             if (yardTurn.placeLocations->empty()) yardTurn.placeLocations->push_back(selectedPlaceLocation);
             traceDecision("site_reserved", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", yardTurn.itemID).set("x", selectedPlaceLocation.x).set("y", selectedPlaceLocation.y));

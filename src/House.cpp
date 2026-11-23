@@ -264,6 +264,11 @@ House::House(InputStream& stream) : choam(this) {
             techResearchPaid = techResearchTotalCost;
         }
     }
+    // SAVEGAMEVERSION_AIR_RAID_RECORD: the bombs on this house's buildings and the turrets
+    // ordered in answer. A house from an older save has not been bombed.
+    if(currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIR_RAID_RECORD) {
+        loadAirRaid(stream);
+    }
 }
 
 
@@ -371,6 +376,38 @@ void House::save(OutputStream& stream) const {
     stream.writeSint32(techResearchTotalCost);
     stream.writeSint32(techResearchTotalCycles);
     stream.writeFixPoint(techResearchPaid);
+    saveAirRaid(stream);
+}
+
+// The record of city airplane bombs on this house's buildings (QuantBotAirDefencePolicy::
+// RaidRecord): QuantBot's AirRaidTurrets rule reads it, so a loaded game must answer a raid
+// exactly as the saved one would have. At most 10 + 8 x 8 bytes.
+void House::saveAirRaid(OutputStream& stream) const {
+    stream.writeUint32(airRaid.lastHitCycle);
+    stream.writeUint32(airRaid.lastTurretCycle);
+    stream.writeUint8(airRaid.turretsOrdered);
+    stream.writeUint8(airRaid.hitCount);
+    for(int i = 0; i < airRaid.hitCount; ++i) {
+        stream.writeSint16(airRaid.hits[i].x);
+        stream.writeSint16(airRaid.hits[i].y);
+        stream.writeUint32(airRaid.hits[i].cycle);
+    }
+}
+
+void House::loadAirRaid(InputStream& stream) {
+    airRaid = QuantBotAirDefencePolicy::RaidRecord();
+    airRaid.lastHitCycle = stream.readUint32();
+    airRaid.lastTurretCycle = stream.readUint32();
+    airRaid.turretsOrdered = stream.readUint8();
+    airRaid.hitCount = stream.readUint8();
+    if(airRaid.hitCount > QuantBotAirDefencePolicy::kMaxHits) {
+        THROW(std::runtime_error, "Invalid house air raid record");
+    }
+    for(int i = 0; i < airRaid.hitCount; ++i) {
+        airRaid.hits[i].x = stream.readSint16();
+        airRaid.hits[i].y = stream.readSint16();
+        airRaid.hits[i].cycle = stream.readUint32();
+    }
 }
 
 

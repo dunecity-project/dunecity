@@ -655,6 +655,13 @@ ThreatTurrets=1
 # Denser observed-ground cover (175 value/rocket), still 2-8 locally and 12 reactive total.
 # Default off: the final paired trial did not meet the +1 rocket/house acceptance gate.
 MoreRocketTurrets=0
+# Stefan, 2026-11-23: "also make the ai respond when being bombed by planes by having more turrets
+# dispersed". While city airplane bombs land on a house's buildings, and for three game minutes
+# after the last one, it adds Rocket Turrets spread through its city: beside a building with no own
+# Rocket Turret within 8 tiles, first near the bomb hits, at least 6 tiles from the other Rocket
+# Turrets. At most 2 a minute, 8 a raid and 24 Rocket Turrets in all; bought only from cash above
+# the build pass's largest reserve plus 500, and only when the house can power it. 0 = off.
+AirRaidTurrets=1
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.

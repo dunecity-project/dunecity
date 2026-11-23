@@ -20,6 +20,7 @@
 
 #include <players/CombatReward.h>
 #include <players/DeviationReward.h>
+#include <players/QuantBotAirDefencePolicy.h>
 namespace AITelemetry { class Record; }
 class ObjectData;
 
@@ -95,6 +96,12 @@ public:
     /// only matters where the match rule Manual Carryall Drops allows the flight at all.
     bool isRepairReturnEnabled() const { return repairReturnEnabled; }
     void setRepairReturnEnabled(bool enabled) { repairReturnEnabled = enabled; }
+    /// Bombs of enemy city airplanes on this house's buildings, and the Rocket Turrets its
+    /// QuantBot ordered in answer (AirRaidTurrets, QuantBotAirDefencePolicy.h). Deterministic
+    /// simulation state: the bomb's impact writes the hits (Bullet.cpp), QuantBot the orders.
+    const QuantBotAirDefencePolicy::RaidRecord& getAirRaid() const { return airRaid; }
+    void noteBombHit(int x, int y, Uint32 cycle) { airRaid.noteHit(x, y, cycle); }
+    void noteAirRaidTurretOrdered(Uint32 cycle) { airRaid.noteTurretOrdered(cycle); }
     /// Team 0 (anonymous houses) and the Natives house never die: neither is a side of the match.
     bool isAlive() const;
 
@@ -315,6 +322,8 @@ public:
     int getRadarResearchRemaining() const { return radarResearch.remaining; }
     void saveRadarResearch(OutputStream& stream) const;
     void loadRadarResearch(InputStream& stream);
+    void saveAirRaid(OutputStream& stream) const;
+    void loadAirRaid(InputStream& stream);
 
     void incrementUnits(int itemID, bool addMilitaryValue = true);
     void decrementUnits(int itemID);
@@ -358,6 +367,7 @@ public:
 protected:
     bool autoRepairEnabled = false;
     bool repairReturnEnabled = true;   ///< saved from SAVEGAMEVERSION_REPAIR_RETURN; on is the behaviour before it
+    QuantBotAirDefencePolicy::RaidRecord airRaid;   ///< saved from SAVEGAMEVERSION_AIR_RAID_RECORD; an older save has none
     void decrementHarvesters(int itemID);
 
     /**

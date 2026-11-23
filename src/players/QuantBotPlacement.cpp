@@ -2484,6 +2484,95 @@ Coord QuantBot::findClusterTurretLocation(bool palaces) {
     return Coord::Invalid();
 }
 
+// AirRaidTurrets (on by default; QuantBotAirDefencePolicy.h). Stefan, 2026-11-23: "also make the
+// ai respond when being bombed by planes by having more turrets dispersed". The city planner
+// (findCityTurretPlaceLocation) covers the assets the city cannot lose and the perimeter and
+// cluster searches face a ground front; this one spreads. It ranks the own buildings that have no
+// own Rocket Turret within kCoverTiles (buildings near a recent bomb hit first, then the one
+// farthest from the turrets) and, beside the best of them, takes the legal tile farthest from the
+// turrets. The legality checks are the ones every turret search here uses. One bounded window per
+// building tried, at most kTargetsTried of them.
+Coord QuantBot::findAirRaidTurretSite(int* uncovered, bool* nearHit) {
+    AITelemetry::PerformanceScope perfScope("ai.findAirRaidTurretSite", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Air = QuantBotAirDefencePolicy;
+    if (uncovered) *uncovered = 0;
+    if (nearHit) *nearHit = false;
+    const auto& raid = getHouse()->getAirRaid();
+    const Uint32 now = getGameCycleCount();
+    // Only Rocket Turrets fire at aircraft, so only they count as cover and for the spacing.
+    std::vector<Coord> turrets;
+    for (const StructureBase* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+            && structure->getItemID() == Structure_RocketTurret) turrets.push_back(structure->getLocation());
+    for (const auto& entry : reservedStructures)
+        if (entry.first != planningBuilder && entry.second.item == Structure_RocketTurret)
+            turrets.push_back(entry.second.location);
+    struct Target { int rank; Uint32 id; Coord origin, size, hit; };
+    std::vector<Target> targets;
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        const Uint32 item = structure->getItemID();
+        // The city is every building of the house; its turrets and walls are not what a plane bombs it for.
+        if (item == Structure_RocketTurret || item == Structure_GunTurret || item == Structure_Wall) continue;
+        const Coord origin = structure->getLocation(), size = structure->getStructureSize();
+        int nearest = Air::kNoTurret;
+        for (const Coord turret : turrets)
+            nearest = std::min(nearest, Air::footprintDistance(turret.x, turret.y, origin.x, origin.y, size.x, size.y));
+        if (Air::covered(nearest)) continue;
+        int hitDistance = Air::kNoHit;
+        Coord hit = Coord::Invalid();
+        for (int i = 0; i < raid.hitCount; ++i) {
+            if (!Air::bombedRecently(raid.hits[i].cycle, now)) continue;
+            const int d = Air::footprintDistance(raid.hits[i].x, raid.hits[i].y, origin.x, origin.y, size.x, size.y);
+            if (d < hitDistance) { hitDistance = d; hit = Coord(raid.hits[i].x, raid.hits[i].y); }
+        }
+        targets.push_back({Air::targetRank(hitDistance, nearest), structure->getObjectID(), origin, size,
+                           hitDistance <= Air::kHitNeighbourhoodTiles ? hit : Coord::Invalid()});
+    }
+    if (uncovered) *uncovered = int(targets.size());
+    // Best first; the object id breaks ties, so every peer tries the same buildings in the same order.
+    std::sort(targets.begin(), targets.end(), [](const Target& a, const Target& b) {
+        return a.rank != b.rank ? a.rank > b.rank : a.id < b.id;
+    });
+    const int reach = Air::kSiteReachTiles;
+    const size_t tries = std::min(targets.size(), size_t(Air::kTargetsTried));
+    for (size_t i = 0; i < tries; ++i) {
+        const Target& target = targets[i];
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        for (int y = std::max(0, target.origin.y - reach); y <= std::min(getMap().getSizeY() - 1, target.origin.y + target.size.y - 1 + reach); ++y) {
+            for (int x = std::max(0, target.origin.x - reach); x <= std::min(getMap().getSizeX() - 1, target.origin.x + target.size.x - 1 + reach); ++x) {
+                const int d = Air::footprintDistance(x, y, target.origin.x, target.origin.y, target.size.x, target.size.y);
+                if (d < 1 || d > reach) continue;
+                int nearest = Air::kNoTurret;
+                for (const Coord turret : turrets)
+                    nearest = std::min(nearest, Air::tileDistance(turret.x, turret.y, x, y));
+                if (!Air::spacedEnough(nearest)) continue;
+                if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
+                if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
+                if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+                if (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
+                int passable = 0;
+                for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                    if ((!ox && !oy) || !getMap().tileExists(x + ox, y + oy)) continue;
+                    const Tile* tile = getMap().getTile(x + ox, y + oy);
+                    if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+                }
+                if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+                const int score = Air::siteScore(nearest,
+                    target.hit.isValid() ? Air::tileDistance(target.hit.x, target.hit.y, x, y) : Air::kNoHit, d);
+                if (score > bestScore) { bestScore = score; best = Coord(x, y); }
+            }
+        }
+        if (best.isValid()) {
+            if (nearHit) *nearHit = target.hit.isValid();
+            return best;
+        }
+    }
+    return Coord::Invalid();
+}
+
 bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money, bool emergency,
                                          Uint32& selectedItem, Coord& selectedSite, bool landValueOnly, Uint32 requiredItem) {
     AITelemetry::PerformanceScope perfScope("ai.selectCityServiceInvestment", getGameCycleCount(), getHouse()->getHouseID());

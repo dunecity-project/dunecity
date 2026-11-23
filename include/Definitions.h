@@ -244,7 +244,14 @@
 // 9897: An Airport saves the clock of its free plane (Airport::freePlaneTimer) after the compact
 //       flag: the free plane now takes as long as a Palace takes to make a Saboteur. An older
 //       save's Airports start with a full clock.
-#define SAVEGAMEVERSION     9897
+// 9898: A House saves its record of city airplane bombs on its buildings after the research
+//       payment state (House::saveAirRaid): the cycle of the last bomb, up to eight recent hit
+//       tiles with their cycles, and the count and clock of the Rocket Turrets its QuantBot
+//       ordered against the raid (AirRaidTurrets). A house from an older save has no record:
+//       it has not been bombed.
+#define SAVEGAMEVERSION     9898
+/// First save with a House's record of bomb hits and its air raid turret orders.
+#define SAVEGAMEVERSION_AIR_RAID_RECORD 9898
 /// First save with an Airport's free plane clock.
 #define SAVEGAMEVERSION_AIRPORT_FREE_PLANE_CLOCK 9897
 /// First save with the raid part of QuantBot's Carryall manoeuvre state.

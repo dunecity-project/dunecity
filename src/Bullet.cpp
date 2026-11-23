@@ -894,6 +894,13 @@ case Bullet_LargeRocket: {
                && tile->getGroundObject()->getHealth() > 0) {
                 building = tile->getGroundObject();
             }
+            if(building != nullptr && building->getOwner()->getTeamID() != owner->getTeamID()) {
+                // The bombed house notes where and when (House::noteBombHit); its QuantBot answers
+                // with Rocket Turrets spread through the city (AirRaidTurrets). Noted here, because
+                // the plane may be gone before its bomb lands and the damager cannot be asked then.
+                currentGame->getHouse(building->getOwner()->getHouseID())
+                    ->noteBombHit(position.x/TILESIZE, position.y/TILESIZE, currentGame->getGameCycleCount());
+            }
             currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
             if(building != nullptr && building->getHealth() <= 0) {
                 // One line per building a bomb destroys, for the match tables (tests/ai/city-plane-report.py).

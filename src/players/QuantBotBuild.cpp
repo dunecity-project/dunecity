@@ -23,6 +23,7 @@
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
 #include <structures/Airport.h>
+#include <units/AmbientAirplane.h>
 #include <dunecity/CityAircraftPolicy.h>
 #include <players/QuantBotArmyCounterPolicy.h>
 #include <cstdlib>
@@ -536,7 +537,21 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
     // shot down or flown off the map alike, so the losses are the flights that have ended.
     const int flightsEnded = getHouse()->getNumLostItems(Unit_AmbientAirplane);
     const int64_t destroyedCredits = getHouse()->getCombatReward(Unit_AmbientAirplane).damageMilli / 1000;
-    if (!CA::purchasePays(destroyedCredits, flightsEnded)) return;
+    const bool pays = CA::purchasePays(destroyedCredits, flightsEnded);
+    // Or a raid: heaps of money buy a wave of ten to break up a base although single planes do
+    // not pay (CityAircraft::raidBuys). The Airport's purchase clock tells how old the last
+    // purchase is; it starts at kPurchaseCooldownMs.
+    bool boughtInAir = false, boughtJustNow = false;
+    for (const AmbientAirplane* plane : AmbientAirplane::all()) {
+        if (plane->getOwner() == getHouse() && plane->isBought() && plane->getHealth() > 0) boughtInAir = true;
+    }
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() == getHouse() && structure->getItemID() == Structure_Airport
+            && static_cast<const Airport*>(structure)->getPurchaseCooldown()
+                   > MILLI2CYCLES(CA::kPurchaseCooldownMs - CA::kRaidContinueMs)) boughtJustNow = true;
+    }
+    const bool raid = CA::raidBuys(int64_t(pass.money) - reserve, boughtInAir, boughtJustNow);
+    if (!pays && !raid) return;
     bool enemyBuilding = false, checked = false;
     for (const StructureBase* structure : getStructureList()) {
         if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_Airport) continue;
@@ -557,6 +572,7 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
         traceDecision("city_airplane_bought", AITelemetry::Record().set("airport", airport->getObjectID())
             .set("price", CA::kPlanePrice).set("spendable_after", pass.money).set("reserve", reserve)
             .set("flights_ended", flightsEnded).set("destroyed_credits", destroyedCredits)
+            .set("pays", pays ? 1 : 0).set("raid", raid ? 1 : 0)
             .set("planes", getHouse()->getNumItems(Unit_AmbientAirplane)));
     }
 }
@@ -594,6 +610,7 @@ void QuantBot::build(int militaryValue) {
     planTurretClusters(pass);
     planCityEconomyProjects(pass);
     planPalaceTurrets(pass);
+    planAirRaidDefence(pass);
     planCityResearchOrder(pass);
     planTechSavings(pass);
     planMissionObjectives(pass);

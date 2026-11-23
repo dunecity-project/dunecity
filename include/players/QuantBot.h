@@ -41,6 +41,7 @@ class Harvester;
 #include <players/FrontBatteryPolicy.h>
 #include <players/QuantBotVanillaPolicy.h>
 #include <players/QuantBotCoreDefencePolicy.h>
+#include <players/QuantBotAirDefencePolicy.h>
 #include <players/UnitMixPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
@@ -2133,6 +2134,34 @@ private:
     /// PalaceTurrets (default off): plan one Palace guard turret from spare cash into the
     /// TurretClusters pass fields when no cluster turret is planned.
     void planPalaceTurrets(BuildPass& pass);
+    /// AirRaidTurrets (on by default; QuantBotAirDefencePolicy.h). Stefan, 2026-11-23: "also make
+    /// the ai respond when being bombed by planes by having more turrets dispersed". This build
+    /// pass's plan. It is scratch refilled by planAirRaidDefence every pass, like
+    /// visibleGroundTurretThreats; what a save must keep is the house's own record
+    /// (House::getAirRaid), which House saves.
+    struct AirRaidPlan {
+        bool active = false;     ///< bombed lately and the pace and caps allow an order this pass
+        bool searched = false;   ///< the site search has run this pass
+        bool ordered = false;    ///< a yard took the turret (or its Wind Trap) this pass
+        int reserve = 0;         ///< cash that must remain after paying (QuantBotAirDefencePolicy::cashReserve)
+        int uncovered = 0;       ///< own buildings with no own Rocket Turret within kCoverTiles, at the search
+        bool nearHit = false;    ///< the chosen site serves a building in a recent hit's neighbourhood
+        Coord site = Coord::Invalid();
+    } airRaidPlan;
+    /// Opens this pass's plan when the house was bombed lately and may order: the cheap checks
+    /// only (switch, record, pace, caps) and the cash that has to remain.
+    void planAirRaidDefence(BuildPass& pass);
+    /// One Rocket Turret per pass across all yards at the plan's dispersed site, or the Wind Trap
+    /// that powers it; from spare cash only, the yard never saves for it.
+    void chooseYardAirRaidDefence(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// A legal Rocket Turret tile within kSiteReachTiles of an own building that has no own
+    /// Rocket Turret (standing or planned) within kCoverTiles: buildings near a recent bomb hit
+    /// first, then the one farthest from the turrets; beside it the tile farthest from them.
+    /// Invalid when every building is covered or no tile is legal. \a uncovered receives the
+    /// number of uncovered buildings, \a nearHit whether the site serves a hit's neighbourhood.
+    Coord findAirRaidTurretSite(int* uncovered = nullptr, bool* nearHit = nullptr);
+    /// The order was accepted: the house's record, the decision trace and the match log line.
+    void noteAirRaidTurretOrdered(BuildPass& pass, const BuilderTurn& turn, Coord site);
     /// MassHold: health-weighted value of our live (Rocket Turrets: powered) turrets within
     /// kMassTurretSupportTiles of \a building.
     int64_t turretSupportNear(const ObjectBase* building) const;

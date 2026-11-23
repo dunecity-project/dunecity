@@ -9,6 +9,7 @@
 #include <players/QuantBotSpendingPolicy.h>
 #include <players/QuantBotVanillaPolicy.h>
 #include <players/QuantBotCoreDefencePolicy.h>
+#include <players/QuantBotAirDefencePolicy.h>
 #include <players/QuantBotFieldExpansionPolicy.h>
 #include <players/StarportBuyingPolicy.h>
 #include <players/TacticalSafetyPolicy.h>
@@ -3990,5 +3991,160 @@ TEST_CASE("PalaceTurrets defaults off, round trips and hashes independently", "[
         REQUIRE(restored.force.palaceDenseClearing == loaded.force.palaceDenseClearing);
         REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
     }
+    std::filesystem::remove(path);
+}
+
+// AirRaidTurrets (Stefan, 2026-11-23: "also make the ai respond when being bombed by planes by
+// having more turrets dispersed"): the house's record of the raid and the arithmetic of the answer.
+TEST_CASE("AirRaidTurrets: the bombing record opens, refreshes and closes a raid", "[ai][air-raid]") {
+    namespace Air = QuantBotAirDefencePolicy;
+    REQUIRE(Air::kBombedWindowCycles == 3u * 3750u);
+    Air::RaidRecord raid;
+    // A house that was never bombed is not bombed at any cycle, the first one included.
+    REQUIRE_FALSE(Air::bombedRecently(raid.lastHitCycle, 0));
+    REQUIRE_FALSE(Air::bombedRecently(raid.lastHitCycle, 100000));
+    REQUIRE(Air::orderHold(raid, 5000, 0) == Air::Hold::NotBombed);
+
+    raid.noteHit(40, 50, 10000);
+    REQUIRE(raid.lastHitCycle == 10000u);
+    REQUIRE(int(raid.hitCount) == 1);
+    REQUIRE(Air::bombedRecently(raid.lastHitCycle, 10000));
+    REQUIRE(Air::bombedRecently(raid.lastHitCycle, 10000 + Air::kBombedWindowCycles));
+    REQUIRE_FALSE(Air::bombedRecently(raid.lastHitCycle, 10001 + Air::kBombedWindowCycles));
+
+    // The next bomb of the stick, within four tiles, refreshes the same entry.
+    raid.noteHit(43, 52, 10010);
+    REQUIRE(int(raid.hitCount) == 1);
+    REQUIRE(int(raid.hits[0].x) == 43);
+    REQUIRE(int(raid.hits[0].y) == 52);
+    REQUIRE(raid.hits[0].cycle == 10010u);
+    // Five tiles away is another neighbourhood.
+    raid.noteHit(48, 52, 10020);
+    REQUIRE(int(raid.hitCount) == 2);
+
+    // The list holds eight neighbourhoods; a ninth replaces the oldest.
+    for (int i = 2; i < Air::kMaxHits; ++i) raid.noteHit(40 + 10 * i, 90, 10020 + uint32_t(i));
+    REQUIRE(int(raid.hitCount) == Air::kMaxHits);
+    raid.noteHit(200, 200, 10100);
+    REQUIRE(int(raid.hitCount) == Air::kMaxHits);
+    REQUIRE(int(raid.hits[0].x) == 200);        // entry 0 (cycle 10010) was the oldest
+    REQUIRE(raid.hits[0].cycle == 10100u);
+    REQUIRE(raid.lastHitCycle == 10100u);
+
+    // Turrets ordered against this raid are counted until a bomb lands after a quiet window.
+    raid.noteTurretOrdered(10200);
+    raid.noteTurretOrdered(12100);
+    REQUIRE(int(raid.turretsOrdered) == 2);
+    REQUIRE(raid.lastTurretCycle == 12100u);
+    raid.noteHit(41, 50, 10100 + Air::kBombedWindowCycles);       // still the same raid
+    REQUIRE(int(raid.turretsOrdered) == 2);
+    raid.noteHit(41, 50, raid.lastHitCycle + Air::kBombedWindowCycles + 1);   // a new raid
+    REQUIRE(int(raid.turretsOrdered) == 0);
+    REQUIRE(raid.lastTurretCycle == 12100u);
+    // A bomb at cycle 0 still counts as a hit (0 means never).
+    Air::RaidRecord early;
+    early.noteHit(1, 1, 0);
+    REQUIRE(Air::bombedRecently(early.lastHitCycle, 0));
+}
+
+TEST_CASE("AirRaidTurrets: pace, caps and the cash rule", "[ai][air-raid]") {
+    namespace Air = QuantBotAirDefencePolicy;
+    REQUIRE(Air::kMaxTurretsPerMinute == 2);
+    REQUIRE(Air::kOrderIntervalCycles == 1875u);
+    REQUIRE(Air::kMaxTurretsPerRaid == 8);
+    REQUIRE(Air::kMaxRocketTurrets == 24);
+    Air::RaidRecord raid;
+    raid.noteHit(10, 10, 20000);
+    REQUIRE(Air::orderHold(raid, 20000, 3) == Air::Hold::None);
+    // The house-wide ceiling counts every Rocket Turret, standing and queued.
+    REQUIRE(Air::orderHold(raid, 20000, Air::kMaxRocketTurrets - 1) == Air::Hold::None);
+    REQUIRE(Air::orderHold(raid, 20000, Air::kMaxRocketTurrets) == Air::Hold::HouseCap);
+    // Half a game minute between two orders.
+    raid.noteTurretOrdered(20000);
+    REQUIRE(Air::orderHold(raid, 20000, 3) == Air::Hold::Pace);
+    REQUIRE(Air::orderHold(raid, 20000 + Air::kOrderIntervalCycles - 1, 3) == Air::Hold::Pace);
+    REQUIRE(Air::orderHold(raid, 20000 + Air::kOrderIntervalCycles, 3) == Air::Hold::None);
+    // Eight against one raid, then none until a new raid opens.
+    for (int i = 1; i < Air::kMaxTurretsPerRaid; ++i) raid.noteTurretOrdered(20000);
+    REQUIRE(int(raid.turretsOrdered) == Air::kMaxTurretsPerRaid);
+    REQUIRE(Air::orderHold(raid, 20000 + Air::kOrderIntervalCycles, 3) == Air::Hold::RaidCap);
+    REQUIRE(Air::orderHold(raid, 20001 + Air::kBombedWindowCycles, 3) == Air::Hold::NotBombed);
+    raid.noteHit(10, 10, 20001 + Air::kBombedWindowCycles);
+    REQUIRE(Air::orderHold(raid, 20001 + Air::kBombedWindowCycles, 3) == Air::Hold::None);
+    REQUIRE(std::string_view(Air::holdName(Air::Hold::Pace)) == "pace");
+    REQUIRE(std::string_view(Air::holdName(Air::Hold::None)) == "none");
+
+    // After paying, the largest reserve of the build pass plus 500 credits must remain.
+    REQUIRE(Air::kCashFloor == 500);
+    REQUIRE(Air::cashReserve(100, 900, 300, 0) == 1400);
+    REQUIRE(Air::cashReserve(-50, -1, 0, 0) == 500);
+    REQUIRE(Air::affordable(1650, 250, 1400));
+    REQUIRE_FALSE(Air::affordable(1649, 250, 1400));
+    REQUIRE_FALSE(Air::affordable(std::numeric_limits<int>::min(), 250, 1400));
+}
+
+TEST_CASE("AirRaidTurrets: cover, spacing and where the next turret goes", "[ai][air-raid]") {
+    namespace Air = QuantBotAirDefencePolicy;
+    REQUIRE(Air::kCoverTiles == 8);
+    REQUIRE(Air::kMinSpacingTiles == 6);
+    REQUIRE(Air::tileDistance(3, 4, 10, 2) == 7);
+    // A 2x2 lot at 10/10: inside it, beside it, diagonally off its far corner.
+    REQUIRE(Air::footprintDistance(11, 11, 10, 10, 2, 2) == 0);
+    REQUIRE(Air::footprintDistance(9, 10, 10, 10, 2, 2) == 1);
+    REQUIRE(Air::footprintDistance(15, 20, 10, 10, 2, 2) == 9);
+    REQUIRE(Air::footprintDistance(2, 11, 10, 10, 2, 2) == 8);
+
+    REQUIRE(Air::covered(0));
+    REQUIRE(Air::covered(Air::kCoverTiles));
+    REQUIRE_FALSE(Air::covered(Air::kCoverTiles + 1));
+    REQUIRE_FALSE(Air::covered(Air::kNoTurret));
+    REQUIRE_FALSE(Air::spacedEnough(Air::kMinSpacingTiles - 1));
+    REQUIRE(Air::spacedEnough(Air::kMinSpacingTiles));
+    REQUIRE(Air::spacedEnough(Air::kNoTurret));
+    // Every site within reach of an uncovered building keeps the spacing.
+    REQUIRE(Air::spacedEnough(Air::kCoverTiles + 1 - Air::kSiteReachTiles));
+
+    // Target: the neighbourhood of a recent hit first, whatever the distances elsewhere.
+    REQUIRE(Air::targetRank(Air::kHitNeighbourhoodTiles, 9) > Air::targetRank(Air::kHitNeighbourhoodTiles + 1, 40));
+    REQUIRE(Air::targetRank(3, 9) > Air::targetRank(Air::kNoHit, Air::kNoTurret));
+    // Then the building farthest from the own Rocket Turrets, up to two cover radii.
+    REQUIRE(Air::targetRank(8, 14) > Air::targetRank(2, 10));
+    REQUIRE(Air::targetRank(Air::kNoHit, 14) > Air::targetRank(Air::kNoHit, 10));
+    REQUIRE(Air::targetRank(Air::kNoHit, 30) == Air::targetRank(Air::kNoHit, Air::kNoTurret));
+    // Then the one nearest the hit.
+    REQUIRE(Air::targetRank(2, 12) > Air::targetRank(5, 12));
+
+    // Site: farthest from the turrets, then nearest the hit, then nearest the building.
+    REQUIRE(Air::siteScore(9, 20, 3) > Air::siteScore(8, 0, 1));
+    REQUIRE(Air::siteScore(9, 4, 3) > Air::siteScore(9, 5, 1));
+    REQUIRE(Air::siteScore(9, 4, 1) > Air::siteScore(9, 4, 2));
+    REQUIRE(Air::siteScore(Air::kNoTurret, Air::kNoHit, 1) == Air::siteScore(2 * Air::kCoverTiles, Air::kNoHit, 1));
+}
+
+TEST_CASE("AirRaidTurrets defaults on, round trips and hashes only when off", "[ai][air-raid][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.airRaidTurrets);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-air-raid-turrets-test.ini";
+    {
+        std::ofstream file(path);
+        file << "[Force Concentration]\nAirRaidTurrets=false\n";
+    }
+    QuantBotConfig loaded;
+    REQUIRE(loaded.applyOverrides(path.string()));
+    REQUIRE_FALSE(loaded.force.airRaidTurrets);
+    REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(loaded.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.force.airRaidTurrets);
+    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    {
+        std::ofstream file(path);
+        file << "[Force Concentration]\nAirRaidTurrets=true\n";
+    }
+    QuantBotConfig on;
+    REQUIRE(on.applyOverrides(path.string()));
+    REQUIRE(on.force.airRaidTurrets);
+    REQUIRE(on.getConfigHash() == defaults.getConfigHash());
     std::filesystem::remove(path);
 }
