@@ -229,7 +229,12 @@
 //       (14). Three more city plane rules are bits 5-7 of the MOD15 Trooper byte.
 // 9892: The city airplane also saves whether it was bought (AmbientAirplane::bought) after the
 //       stick clock: the Airport's free plane is counted apart from bought planes.
-#define SAVEGAMEVERSION     9892
+// 9893: A House saves whether its Repair Yards have repaired units flown back to where they
+//       were picked up (House::repairReturnEnabled, CMD_HOUSE_REPAIR_RETURN) after its
+//       auto-repair flag. A house from an older save has it on, which is what yards did before.
+#define SAVEGAMEVERSION     9893
+/// First save whose houses carry the Repair Yard "Return units" switch.
+#define SAVEGAMEVERSION_REPAIR_RETURN 9893
 /// First save whose city airplanes say whether they were bought.
 #define SAVEGAMEVERSION_CITY_PLANE_FREE 9892
 /// First save with the stick gap counter of a city airplane and an Airport's purchase cooldown.

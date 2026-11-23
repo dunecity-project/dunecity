@@ -95,6 +95,7 @@ inline int exactParameterCount(CMDTYPE commandID) {
         case CMD_AI_SUPPORT_ROLE:               return 1;
         case CMD_RESEARCH_TECH_LEVEL:           return 1;
         case CMD_AIRPORT_BUY_AIRPLANE:          return 1;
+        case CMD_HOUSE_REPAIR_RETURN:           return 1;
 
         // The city commands read up to three optional parameters
         // (CitySimulation::executeCityCommand substitutes 0 for missing ones).

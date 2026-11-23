@@ -88,6 +88,13 @@ public:
     void restoreObserverAI(bool enabled) { ai = enabled; }
     bool isAutoRepairEnabled() const { return autoRepairEnabled; }
     void setAutoRepairEnabled(bool enabled) { autoRepairEnabled = enabled; }
+    /// The Repair Yard side panel's "Return units" switch (CMD_HOUSE_REPAIR_RETURN). On: a free
+    /// Carryall flies a repaired unit back to where it was picked up (a unit that drove in goes
+    /// back to the spot it guarded). Off: the yard releases it beside itself. One switch for the
+    /// whole house, because a unit takes whichever yard is free, not one the player chose. It
+    /// only matters where the match rule Manual Carryall Drops allows the flight at all.
+    bool isRepairReturnEnabled() const { return repairReturnEnabled; }
+    void setRepairReturnEnabled(bool enabled) { repairReturnEnabled = enabled; }
     /// Team 0 (anonymous houses) and the Natives house never die: neither is a side of the match.
     bool isAlive() const;
 
@@ -350,6 +357,7 @@ public:
 
 protected:
     bool autoRepairEnabled = false;
+    bool repairReturnEnabled = true;   ///< saved from SAVEGAMEVERSION_REPAIR_RETURN; on is the behaviour before it
     void decrementHarvesters(int itemID);
 
     /**

@@ -445,6 +445,9 @@
 //      flight crosses a random enemy building) and City Plane Purchase (an Airport launches a
 //      plane for 1500 credits: CMD_AIRPORT_BUY_AIRPLANE, appended after
 //      CMD_RESEARCH_TECH_LEVEL, and QuantBot's own purchases). Save format 9891.
+//      Also in 133 (still unreleased): CMD_HOUSE_REPAIR_RETURN, appended after
+//      CMD_AIRPORT_BUY_AIRPLANE, switches whether the issuer's Repair Yards have repaired units
+//      flown back to where they were picked up (House::repairReturnEnabled, save format 9893).
 #define NETWORK_PROTOCOL_VERSION            133
 
 // Mod transfer limits

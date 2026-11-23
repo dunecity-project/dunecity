@@ -213,8 +213,13 @@ void RepairYard::updateStructureSpecificStuff() {
             }
         } else {
             // Unit is fully repaired - handle deployment
-            bool needsCarryall = blockDistance(location, pRepairUnit->getGuardPoint()) >= MIN_CARRYALL_LIFT_DISTANCE 
-                               && currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops;
+            // The flight back to where the unit was picked up (its guard point: Carryall::
+            // pickupTarget sets it at the pickup; a unit that drove in still has the spot it
+            // guarded). The house's "Return units" switch turns it off: the unit is then
+            // released beside the yard below.
+            bool needsCarryall = blockDistance(location, pRepairUnit->getGuardPoint()) >= MIN_CARRYALL_LIFT_DISTANCE
+                               && currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops
+                               && owner->isRepairReturnEnabled();
             
             if (pRepairUnit->hasBookedCarrier()) {
                 // Already has a carryall coming - wait for it

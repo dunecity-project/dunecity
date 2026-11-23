@@ -158,6 +158,7 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_CITY_SET_BUDGET:
         case CMD_CITY_TOOL:
         case CMD_HOUSE_AUTO_REPAIR:
+        case CMD_HOUSE_REPAIR_RETURN:
         case CMD_AI_SUPPORT_ROLE:
         case CMD_CAMPAIGN_SKIP:
         case CMD_MATCH_PAUSE:

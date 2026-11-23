@@ -23,7 +23,14 @@
 
 #include <GUI/HBox.h>
 #include <GUI/ProgressBar.h>
+#include <GUI/TextButton.h>
 #include <GUI/VBox.h>
+
+#include <Command.h>
+#include <CommandManager.h>
+#include <Game.h>
+#include <House.h>
+#include <players/HumanPlayer.h>
 
 #include <units/UnitBase.h>
 
@@ -52,6 +59,22 @@ protected:
         Uint32 color = ownerAccentColor();
         mainHBox.addWidget(&textVBox);
         cityStats_.attachTo(textVBox, color, false, false, SIDEBARWIDTH - 25);
+
+        // "Return units": whether a repaired unit is flown back to where it was picked up or
+        // released beside the yard. One switch for the house (House::isRepairReturnEnabled),
+        // shown on every Repair Yard; the click is an ordinary command, so it takes effect a
+        // few cycles later on every peer and in replays.
+        returnButton.setText(_("Return units on"));
+        returnButton.setTooltipText(_("On: a Carryall flies a repaired unit back to where it was picked up. Off: it stays beside the Repair Yard."));
+        returnButton.setOnClick([objectID] {
+            const auto* yard = currentGame->getObjectManager().getObject(objectID);
+            if(yard == nullptr || pLocalPlayer == nullptr || yard->getOwner() != pLocalHouse) return;
+            currentGame->getCommandManager().addCommand(
+                Command(pLocalPlayer->getPlayerID(), CMD_HOUSE_REPAIR_RETURN,
+                        pLocalHouse->isRepairReturnEnabled() ? 0u : 1u));
+        });
+        returnButton.setVisible(false);
+        textVBox.addWidget(&returnButton, returnButtonHeight);
 
         textVBox.addWidget(Spacer::create(), 0.5);
         repairUnitRow.addWidget(Spacer::create());
@@ -88,6 +111,16 @@ protected:
             }
         }
 
+        // Without the match rule Manual Carryall Drops no yard flies a unit back, so there is
+        // nothing to switch.
+        const House* owner = pObject->getOwner();
+        const bool flights = currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops;
+        returnButton.setVisible(flights);
+        returnButton.setEnabled(flights && owner == pLocalHouse && pLocalPlayer != nullptr
+                                && !currentGame->isObserving());
+        const std::string text = owner->isRepairReturnEnabled() ? _("Return units on") : _("Return units off");
+        if(returnButton.getText() != text) returnButton.setText(text);
+
         cityStats_.update(dynamic_cast<StructureBase*>(pObject));
 
         return DefaultStructureInterface::update();
@@ -96,7 +129,9 @@ protected:
 private:
     /// Tall enough for every unit picture the sidebar can show.
     static constexpr Sint32 repairUnitRowHeight = 60;
+    static constexpr Sint32 returnButtonHeight = 20;
 
+    TextButton          returnButton;
     PictureProgressBar  repairUnitProgressBar;
     HBox                repairUnitRow;
     VBox                textVBox;

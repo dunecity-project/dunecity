@@ -882,6 +882,16 @@ case CMD_INFANTRY_CAPTURE: {
             if (house) house->setAutoRepairEnabled(parameter[0] != 0);
         } break;
 
+        case CMD_HOUSE_REPAIR_RETURN: {
+            // The issuer's own house, like auto repair: no object is named, so no player can
+            // switch another house's yards.
+            if (parameter.size() != 1 || parameter[0] > 1) return;
+            const auto* issuer = currentGame->getPlayerByID(playerID);
+            if (!issuer || !issuer->getHouse()) return;
+            auto* house = currentGame->getHouse(issuer->getHouse()->getHouseID());
+            if (house) house->setRepairReturnEnabled(parameter[0] != 0);
+        } break;
+
         case CMD_AI_SUPPORT_ROLE: {
             // A human switches the QuantBot partner sharing its own house (docs/ai-roles.md);
             // the role is decided here, on every peer, from the issuer and the parameter only.

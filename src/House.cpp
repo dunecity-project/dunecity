@@ -109,6 +109,9 @@ House::House(InputStream& stream) : choam(this) {
     if(houseID == HOUSE_NATIVES) teamID = NATIVES_TEAM;
     autoRepairEnabled = currentGame && currentGame->getLoadedSavegameVersion() >= 9824
         ? stream.readBool() : false;
+    repairReturnEnabled = currentGame
+            && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_REPAIR_RETURN
+        ? stream.readBool() : true;
 
     // Storage capacity is reconstructed after the houses, but the absolute
     // credit ceiling applies immediately, even while loading an older save.
@@ -311,6 +314,7 @@ void House::save(OutputStream& stream) const {
     stream.writeUint8(houseID);
     stream.writeUint8(teamID);
     stream.writeBool(autoRepairEnabled);
+    stream.writeBool(repairReturnEnabled);
 
     stream.writeFixPoint(storedCredits);
     stream.writeFixPoint(startingCredits);

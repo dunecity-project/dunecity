@@ -1182,7 +1182,8 @@ void QuantBot::planBuildBudget(BuildPass& pass) {
             const auto* unit = repairDemandActive ? contained : yard->getRepairUnit();
             if (unit && unit->getHealth()<unit->getMaxHealth()) {
                 ++pass.busyRepairBays;repairQueue.insert(unit->getObjectID());
-            } else returnUnit=dynamic_cast<const GroundUnit*>(unit);
+            } else if (getHouse()->isRepairReturnEnabled()) returnUnit=dynamic_cast<const GroundUnit*>(unit);
+            // A shared house whose human switched "Return units" off has no flight to wait for.
         } else if (structure->getItemID()==Structure_Refinery) {
             const auto* unit=dynamic_cast<const Harvester*>(static_cast<const Refinery*>(structure)->getContainedHarvester());
             if (unit && unit->getAmountOfSpice()<=0) returnUnit=unit;
