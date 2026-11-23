@@ -134,42 +134,50 @@ runs the same way in both modes.
 ## City airplanes
 
 A powered **Airport** (city games only) launches the city airplane and the traffic helicopter. You do
-not select or order them, but you can buy more planes.
+not order them, but you can buy more planes.
 
-- **How a plane comes back.** Every five seconds each of your powered Airports has a one in six chance
-  of launching a plane, as long as your house has none in the air: about half a minute on average
-  after the last one was shot down or left the map. This plane costs nothing. It takes off from the
-  runway three tiles east of the Airport. A flight ends when the plane crosses the edge of the map,
-  which a run towards a building near the edge soon makes it do: a plane that is not shot down is
-  usually gone within half a minute to a minute. Five minutes is the longest a flight can last.
-  Human and computer players get the same plane.
+- **The free plane.** Every five seconds each of your powered Airports has a one in six chance of
+  launching a plane, as long as your house has no free plane in the air: about half a minute on
+  average after the last one was shot down or left the map. This plane costs nothing, and planes you
+  have bought do not hold it back. It takes off from the runway three tiles east of the Airport. A
+  flight ends when the plane crosses the edge of the map, which a run towards a building near the
+  edge soon makes it do: a plane that is not shot down is usually gone within half a minute to a
+  minute. Five minutes is the longest a flight can last. Human and computer players get the same
+  plane.
 - **Buying a plane.** Select a powered Airport and press **Buy airplane 1500**: a plane takes off at
-  once, also while you already have planes flying. There is no limit on planes in the air; each
-  Airport sells one plane a minute (the panel shows the wait). Computer players buy planes too, but
-  only from spare money: after paying they keep their reserves and 3000 credits more.
+  once. You can buy as fast as you can pay, until your house has ten planes in the air (the panel
+  shows the count). Computer players buy planes too, but only one a minute at each Airport and only
+  from spare money: after paying they keep their reserves and 3000 credits more.
+- **Finding your Airport.** With nothing selected, the side menu lists an **Airport** button under
+  the Construction Yard's. It selects your Airport (the one that can sell a plane now, if you have
+  several) without moving the view.
 - **Where it flies.** Each leg of the flight is a run across one enemy building, picked at random from
   all enemy buildings on the map, and on for twelve tiles beyond it. Then it turns for the next.
-- **Bombs.** Over enemy buildings the plane lays a stick of bombs like a heavy bomber: one bomb every
-  half tile for as long as an enemy building is under it, and for one more tile after the last, so a
-  road between two zones is bombed as well. The rack never empties. Each bomb is an Ornithopter
-  rocket's explosion, half again as large, and does 60 damage (an Ornithopter's rocket does 45). Two
-  bombs a tile make 120 for every tile of a building the plane crosses: a zone or Wind Trap crossed
-  through both its tiles is destroyed, a Rocket Turret keeps 80 of 200, a Construction Yard 160 of
-  400, a Refinery 90 of 450 and a Palace 640 of 1000. Bombs are never released over your own or an
-  allied building. Ground units under the stick take splash damage, whoever owns them.
+- **Bombs.** Over enemy buildings the plane lays a stick of heavy bombs like a heavy bomber: the
+  first half a tile inside the first building under it, then one every two tiles for as long as an
+  enemy building is under it, and one more after the last. The rack never empties. A bomb does 250
+  damage to the building it lands on and goes off in a large explosion four tiles wide. One hit
+  destroys a zone, Wind Trap, Gun or Rocket Turret, Heavy Factory, Repair Yard, Silo or Wall. Two
+  hits destroy every other building except a Nuclear Plant (three) and a Palace (four). Bombs are
+  never released over your own or an allied building. Ground units within a tile of a bomb take
+  heavy splash damage, whoever owns them.
 - **The fall.** A bomb takes 1.2 seconds to fall and lands three tiles ahead of where it left the
   plane. By then the plane is nine tiles further on, so you see the stick drop back from it and go
   off behind it. A bomb never damages an aircraft, not the plane that dropped it nor any other.
-- **Shooting it down.** Rocket Turrets fire at an enemy plane from three times their normal range, as
-  they do at Ornithopters, and their rockets fly to where the plane will be. A plane has 100 hit
-  points and a rocket does 30, so four hits bring it down. About one rocket per turret hits on each
-  pass: one or two turrets wound it, four bring it down in half the passes and six in most. Damage
-  stays on the plane, so it falls on a later pass. Rocket Turrets need power in the Dune City options.
-  A plane that is not shot down keeps bombing until it flies off the map, and the next one follows
-  about half a minute later, so a city needs Rocket Turrets.
+- **Shooting it down.** Rocket Turrets fire at an enemy plane from three times their normal range (24
+  tiles), as they do at Ornithopters, and their rockets fly to where the plane will be. A rocket
+  that is 24 tiles from its turret goes off, and a turret does not fire at a plane its rocket cannot
+  catch inside that distance: a plane flying away is left to the turrets ahead of it. A plane has
+  100 hit points and a rocket does 30, so four hits bring it down. Damage stays on the plane, so it
+  falls on a later pass. Rocket Turrets need power in the Dune City options. A plane that is not
+  shot down keeps bombing until it flies off the map, and the next one follows about half a minute
+  later, so a city needs Rocket Turrets. A turret that a bomb lands on is destroyed.
 - **The crash.** A plane that is shot down crashes with the blast of a Death Hand. Turrets, Launchers
   and Troopers therefore hold only the shot that would bring it down onto their own side, and fire
   it once the plane is clear.
+- **Stats and picture.** The Stats window lists the City Airplane with your other units: how many
+  are flying, the units it destroyed, the planes you lost and the hit points its bombs removed. A
+  selected plane or helicopter shows its own picture.
 - **No Ornithopters.** An Airport no longer sends out Ornithopters. They come from the High-Tech
   Factory as before.
 

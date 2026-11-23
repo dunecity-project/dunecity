@@ -1,3 +1,76 @@
+## 2026-11-23 - City planes after Stefan played them: heavy bomb, ten planes, rocket cut-off, Airport shortcut; installed on the MBA (unreleased, after 1.0.876)
+
+Stefan played `4f2d99bf8` and then `f4de2f8cd` on the MacBook Air and changed the rules of the entry below. His
+words, in order, and what each became (commits `4f2d99bf8`, `3fff76592`, `ededc735d`, `6cb58d1e8`; not pushed, no
+version bump; protocol still 133, save format 9892 for these changes and 9893/9894 with the Carryall session's):
+
+- **"no limit on planes in the air"**, then **"it still limits me to one in flight, i should be able to buy more
+  planes, up to 10"**. What held him to one was the one-a-minute-per-Airport wait, with flights of half a minute. A
+  player now buys as fast as he can pay, up to `kMaxPlanesPerHouse` = 10 in the air. The wait
+  (`kPurchaseCooldownMs`, `Airport::purchaseCooldown`) is now only QuantBot's own pace: one plane a minute per
+  Airport, the pace its matches were measured at. **My choice, for Stefan to correct.**
+- **"the normal plane that respawns should be free"**. It was; it is now also counted apart from bought planes
+  (`AmbientAirplane::bought`, `freePlanes`, save 9892), so it comes back half a minute after the last free plane
+  whatever the house has bought.
+- **"make a new bomb ... i want a big explosion. drop less frequently them but they should do more damage. a direct
+  hit in the middle of a residential for example should destroy it and 2 hits should be taking out other
+  buildings"**. `kStickDamage` 250 (was 60); one bomb every 12.5 cycles, two tiles of flight (was two a tile);
+  the first bomb of a stick `kStickLeadCycles` = 3 after the sight enters a building, half a tile inside it; one
+  tail bomb. `Explosion_Bomb` is a large building explosion drawn four tiles wide with `Sound_ExplosionLarge`; the
+  falling bomb is the Death Hand rocket's picture. One hit destroys every 200-point building (zones, Wind Trap,
+  turrets, Heavy Factory, Repair Yard, Silo, Wall), two everything else up to 500, a Nuclear Plant takes three, a
+  Palace four.
+- **"one hit right in the middle should not destroy heavy factory or repair yard, two hits should though"**, then,
+  after playing, **"actually the damage looks ok."** A 60% cap for buildings larger than 2x2 went in (`92b3a0804`)
+  and came out again (`ededc735d`). The bomb is the flat 250.
+- **"missiles chasing a plan just keep going forever. there needs to be a distance cutoff"**. A turret rocket is
+  1.13 times as fast as the plane, so after a plane flying away it flew nine times the gap (probe: 44.7 tiles for
+  a 5-tile gap). A rocket chasing a city airplane now goes off 3 x WeaponRange = 24 tiles from where it was fired
+  (`kRocketChaseRangeFactor`, `Bullet::updateDynastyProjectile`, also a Trooper's rocket), and a Rocket Turret
+  takes no plane its rocket cannot meet inside that distance (`RocketTurret::canMeetCityPlane`).
+- **"include plane in the unit performance stats"**: the City Airplane is no longer hidden from the Stats window's
+  unit table (`HouseStatsWindow.cpp`). Its bombs were already credited to it (`ObjectBase::handleDamage`).
+- **"change the plane icon so it doesn't just look like an ornithopter when selected"**: `Picture_CityAirplane`
+  and `Picture_CityHelicopter` are made from the aircraft's own sprite sheets (`GFXManager.cpp`, `sand.cpp`).
+- **"make airport available on the side menu so you can find it"**: `Structure_Airport` is second in
+  `GameInterface::kBuilderShortcutTypes`; `Game::selectBuilderOfType` selects the house's Airport that can sell a
+  plane now. The view does not move.
+- **"is 1500 too cheap"** and the flight-length correction are in the entry below.
+
+**Measured.**
+- `city_plane_effect` (AWS, 1,182 s): one stick over a Wind Trap, Rocket Turret, Refinery 0 left, Construction
+  Yard 150, Palace 500; twenty Wind Traps side by side 21 bombs, none standing; ten planes bought at once from one
+  Airport, the eleventh refused; rocket after a plane flying away from 5 tiles: 44.7 tiles without the cut-off
+  (control: range set to 240), 4.5 with it; head-on from 26 tiles still hits. Defence per pass is nearly
+  unchanged by the cut-off: 0.27 planes shot down a pass (0.29 before). The stick against the aimed bombs: 4.50
+  against 3.79 bombs a run, 1.76 against 1.03 buildings (+0.74, +0.56 to +0.91), at most 5 of 22 buildings in one
+  run; a Construction Yard fell to a single run 3 times in 117 (two hits on a diagonal), a Palace never.
+- `city_plane_flights` (Mini, default configuration, six game minutes, one seed; coverage is now per building
+  that stays under the sight for two tiles of flight): base 17% of those buildings bombed, defaults 100%;
+  buildings destroyed per flight 0.52 base, 21.9 defaults; on 2P City (16 Rocket Turrets) the defaults destroyed
+  35% of the buildings on the map in six minutes (471 of 1,342). **Open for Stefan:** that is far more than the
+  first stick (about 22% in 13.5 minutes); he played it and said the damage looks ok.
+- AI matches on AWS, `1731106a4`, 48 pairs, rs160-dunecity, four QuantBot Brutal, 45 minutes, 4cf0fd5c4 rules
+  against the defaults (`../outputs/city-planes-20261123c/matches/report-off-on.md`): buildings destroyed by bombs
+  per game 74.9 against 545.4; per flight 0.53 against 7.21; planes shot down per game 115.5 against 59.4;
+  time-outs 58% against 10% (-48 points, -67 to -29); houses eliminated 1.79 against 2.83; game length 41.7
+  against 32.0 minutes; planes bought 1.58 a game; no house's placement separable from 0. 1,462 Rocket Turrets
+  fell to bombs in the 48 default games.
+- Gates on `1731106a4`: AWS job `20261123T155042-ctest-17bd4d`, all seven passed (four AI gates, three plane
+  probes). Mini: `dunelegacy_tests`, `city_aircraft_probe` passed; `perf_regression` failed once on `f4de2f8cd`
+  (one house update of 93 ms, `house_max` 14.6 against a budget of 10, means well inside budget, the Mini busy
+  with other sessions) and passed on the rerun on `6cb58d1e8` (126 s).
+
+**Installed** on `Stefans-MacBook-Air.local`, `/Applications/dunecity.app`: `4f2d99bf8` at 03:56 UTC, `f4de2f8cd`
+at 04:28, `6cb58d1e8` at 04:55 (each swapped in when Stefan closed the game; hashes and deep signature verified
+there; no launch or graphical check by an agent). `6cb58d1e8` also carries the Carryall session's commits up to
+`e898f959d`. Backups on the Air: the 1.0.876 release app and the `f4de2f8cd` build. Packages and receipts:
+`../outputs/install-mba-20261123-6cb58d1e8/`, `-f4de2f8cd/`.
+
+**Not verified.** Nothing on a real screen by an agent: the explosion's size, the bomb picture, the icons, the
+Stats row and the two buttons are untested beyond headless renders and commands. No network game. The AI's pace
+with the new bomb was measured only at one plane a minute per Airport.
+
 ## 2026-11-23 - City planes: a bomb stick that never runs out, bombing runs, planes for 1500 credits (unreleased, after 1.0.876)
 
 Stefan, after playing `4cf0fd5c4` on the MBA: "next allow the ai to spawn planes for 1500 credits. also the planes
