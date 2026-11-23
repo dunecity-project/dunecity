@@ -722,6 +722,38 @@ void checkStick(const std::string& mapData) {
     }
 }
 
+// Stefan, 2026-11-23: "does the damage dealt include damage when it crashes? it has a nuclear
+// missile effect so that should be counted". A plane brought down over enemy buildings: the
+// crash is the plane's damage, credited to its owner's City Airplane record, not to the house
+// that shot it down.
+void checkCrashCredit(const std::string& mapData) {
+    auto game = newGame(mapData, 20, Rules{true, false, false});
+    auto* defender = game->getHouse(HOUSE_ATREIDES);
+    auto* raider = game->getHouse(HOUSE_HARKONNEN);
+    std::vector<Uint32> ids;
+    for(int i = 0; i < 4; ++i) ids.push_back(place(defender, Structure_WindTrap, Coord(28 + 2 * (i % 2), 28 + 2 * (i / 2)))->getObjectID());
+    auto* turret = place(defender, Structure_RocketTurret, Coord(40, 40));
+    static_cast<TurretBase*>(turret)->attackMode = STOP;
+    auto* plane = fly(raider, Coord(30, 30), Coord(kMapSize + 20, 30), RIGHT);
+    plane->currentMaxSpeed = 0;
+    for(int i = 0; i < 2; ++i) game->updateGameState();
+    const int64_t planeBefore = raider->getCombatReward(Unit_AmbientAirplane).damageMilli;
+    const int64_t turretBefore = defender->getCombatReward(Structure_RocketTurret).damageMilli;
+    plane->handleDamage(1000, turret->getObjectID(), defender, DeviationReward::liveProvenance(turret, defender));
+    for(int i = 0; i < 5; ++i) game->updateGameState();
+    int hitPoints = 0;
+    for(const Uint32 id : ids) hitPoints += healthOf(*game, id);
+    const int64_t credited = raider->getCombatReward(Unit_AmbientAirplane).damageMilli - planeBefore;
+    const int64_t toShooter = defender->getCombatReward(Structure_RocketTurret).damageMilli - turretBefore;
+    record("crash_credit", "four Wind Traps under the crash keep " + std::to_string(hitPoints) + " of 800 hit points; credited to the plane's house "
+                               + std::to_string(credited / 1000) + " credits of damage");
+    require(hitPoints < 800, "The crash did not damage the buildings under it");
+    require(credited > 0, "The crash damage was not credited to the plane's owner as the City Airplane's");
+    require(toShooter >= 0, "The crash damage was booked against the house that shot the plane down");
+    game.reset();
+    currentGame = nullptr;
+}
+
 // Stefan, 2026-11-23: "also get planes to drop bombs on enemy units as well". Three enemy tanks in
 // a row in the open, no building near: the stick starts over them and its blast, a tile and a
 // half against units, hurts every one. The same three tanks of the plane's own side get no bomb.
@@ -1321,6 +1353,7 @@ int runCityPlaneEffect() {
     checkStick(mapData);
     checkRepairingBuilding(mapData);
     checkBombsOnUnits(mapData);
+    checkCrashCredit(mapData);
     checkPurchase(mapData);
     checkPictures(mapData);
     checkFall(mapData);

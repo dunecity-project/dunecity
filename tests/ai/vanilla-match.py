@@ -123,9 +123,10 @@ SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
 # patrol, and a plane an Airport sold (tests/ai/city-plane-report.py).
 PLANE_EVENTS = (('CITY_PLANE_LAUNCHED:', 'launched'), ('CITY_PLANE_BOMB:', 'bomb'), ('CITY_PLANE_KILL:', 'kill'),
                 ('CITY_PLANE_DOWN:', 'down'), ('CITY_PLANE_PATROL:', 'patrol'), ('CITY_PLANE_BOUGHT:', 'bought'),
-                ('CITY_AIR_DEFENCE:', 'air_defence'))
+                ('CITY_AIR_DEFENCE:', 'air_defence'), ('CITY_PLANE_CRASH:', 'crash'))
 PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name', 'price', 'killer_house',
-                'killer_item', 'bombs', 'released', 'bought', 'cycle')
+                'killer_item', 'bombs', 'released', 'bought', 'cycle', 'enemy_destroyed', 'enemy_credits', 'enemy_hp',
+                'own_destroyed', 'own_credits')
 PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()

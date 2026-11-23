@@ -383,7 +383,44 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     // With City Plane Defence planes are shot down all over the map, about one a minute per
     // house in AI matches: only a crash on or near the screen shakes it. Presentation only.
     const bool shake = screenborder->isInsideScreen(at, Coord(TILESIZE * 8, TILESIZE * 8));
-    Bullet::detonateDeathHand(shooterID, credited, at, DynastyProjectile::deathHandDamage, false, provenance, shake);
+    // The crash is the plane's own damage (Stefan, 2026-11-23: "does the damage dealt include
+    // damage when it crashes? it has a nuclear missile effect so that should be counted"). It
+    // was dealt in the name of whoever shot the plane down, so on the defender's city it counted
+    // as that house's own fire and nowhere as the plane's. It is now dealt by the plane and its
+    // owner: the Stats window's City Airplane row and QuantBot's record of whether its planes
+    // pay (CityAircraft::purchasePays) include it. The buildings in reach are measured before
+    // and after for one log line per crash (tests/ai/city-plane-report.py).
+    struct Standing { Uint32 id; bool enemy; int price; int health; };
+    std::vector<Standing> standing;
+    constexpr int reach = 2 * TILESIZE + Bullet::deathHandBlastRadius;
+    for(const StructureBase* structure : structureList) {
+        if(structure->getHealth() <= 0) continue;
+        const Coord topLeft = structure->getLocation() * TILESIZE;
+        const Coord bottomRight = topLeft + structure->getStructureSize() * TILESIZE;
+        if(at.x < topLeft.x - reach || at.y < topLeft.y - reach || at.x >= bottomRight.x + reach
+           || at.y >= bottomRight.y + reach) continue;
+        standing.push_back({structure->getObjectID(), structure->getOwner()->getTeamID() != getOwner()->getTeamID(),
+                            currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price,
+                            static_cast<int>(lround(structure->getHealth()))});
+    }
+    Bullet::detonateDeathHand(objectID, getOwner(), at, DynastyProjectile::deathHandDamage, false,
+                              DeviationReward::liveProvenance(this, getOwner()), shake);
+    int enemyDestroyed = 0, enemyCredits = 0, enemyHitPoints = 0, ownDestroyed = 0, ownCredits = 0;
+    for(const Standing& before : standing) {
+        const ObjectBase* object = currentGame->getObjectManager().getObject(before.id);
+        const int after = (object == nullptr || object->getHealth() <= 0) ? 0 : static_cast<int>(lround(object->getHealth()));
+        if(before.enemy) {
+            enemyHitPoints += std::max(0, before.health - after);
+            if(after <= 0) { ++enemyDestroyed; enemyCredits += before.price; }
+        } else if(after <= 0) {
+            ++ownDestroyed;
+            ownCredits += before.price;
+        }
+    }
+    SDL_Log("CITY_PLANE_CRASH: house=%d object=%u killer_house=%d enemy_destroyed=%d enemy_credits=%d enemy_hp=%d "
+            "own_destroyed=%d own_credits=%d cycle=%u",
+            getOwner()->getHouseID(), objectID, credited->getHouseID(), enemyDestroyed, enemyCredits, enemyHitPoints,
+            ownDestroyed, ownCredits, currentGame->getGameCycleCount());
 }
 
 bool AmbientAirplane::crashWouldHit(int teamID, FixPoint near, FixPoint far) const
