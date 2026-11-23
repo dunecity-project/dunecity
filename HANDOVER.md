@@ -1,3 +1,104 @@
+## 2026-11-24 - City planes nerfed for the opening: free plane every five minutes, none in the first five; AirThreatTurrets measured and left off (in the 1.0.877 candidate)
+
+Stefan, after playing `5d2e19fca`: "i just tried the game and the planes seem overpowered. on skirmish with fully
+built base the ai doesn't build rocket turret defenes and everyones base gets steamrolled by a plane. we need to
+nerf them a bit somehow so they don't decide the game but still allow really built up houses to spam them as a
+form of economic victory via manufacturing. so early game balance. maybe you get one free plane every 5 mins plus
+whatever else you think is best". Commits `45549eced` (rules, switch, logging), `1c1766b8d` (switch default off
+after measurement). Protocol 133, save format unchanged. Not pushed, no version bump by this session.
+
+**What changed for players.**
+- The free plane comes every five minutes again (`CityAircraft::kFreePlaneMs`), not two.
+- Nobody bombs in the first five minutes of a game. An Airport that stands at the start charges first (as
+  before); one built in the first five minutes is ready when they are up, not at once
+  (`Airport::Airport`, `freePlaneTimer = charge - min(cycle, charge)`); one built later is ready at once.
+- Unchanged, on the evidence below: the building splash (50%), the price (1500), ten planes in the air, the
+  computer player's buy rules (performance score against its army's, or 30,000 credits to spare).
+
+**Stefan's case is the measured case.** `vanilla-match.py --maps rs160-dunecity` hard-codes his Random Skirmish
+start (`VanillaMatch::makeSkirmishInit`: Fortress base, army 5, city 4). Each house starts with 8 Rocket Turrets,
+4 Gun Turrets, its Airport and a city of about ninety zones beyond the turrets. All arms below are 48 games on
+seeds 9101-9148, four Brutal QuantBots, 45 minutes, `tests/ai/game-options/city-plane-b52-on.ini`.
+
+| 48 fully built four-house games | Before balance (`matches5/before`) | Two-minute clock (`n1-now`, = `5d2e19fca`) | **Final** (`n2-off`, = `1c1766b8d`) |
+|---|---:|---:|---:|
+| Buildings lost to bombs and crashes a game, by minute 10 | 22 | 179 | **56** |
+| ... by minute 20 | 46 | 254 | **117** |
+| ... by minute 45 | 92 | 419 | **254** |
+| Flights a game | 29 | 53 | **35** |
+| Flights shot down | 90% | 88% | **87%** |
+| Credits destroyed a flight, bombs and crash (a plane costs 1500) | 591 | 1,519 | **1,374** |
+| Planes bought a game | 6.1 | 11.9 | **12.6** |
+| Time-outs | 58% | 29% | **50%** |
+| Game length, minutes | 41.5 | 36.7 | **40.5** |
+
+- Final against the two-minute clock, paired: buildings bombed a game -143 (-164 to -122); time-outs +21 points
+  (+4 to +38); houses eliminated a game -0.38 (-0.77 to 0.00); game length +3.8 minutes (+1.2 to +6.4).
+  Placement: Mercenary -0.22 (-0.38 to -0.04), no other house moved measurably (Harkonnen +0.21, -0.02 to +0.44).
+- **Do planes decide an ordinary game now?** New logging (`CITY_HOUSE_OUT`, `CITY_PLANE_CRASH_KILL`, below), final
+  arm: of 99 houses eliminated, 4% lost more than half their buildings to planes; for the median eliminated
+  house planes took 16% of what it lost. Not measured for the two-minute arm (no logging then).
+- **The AI's Rocket Turrets when its first bomb landed** (`CITY_FIRST_BOMB`, final arm): 11 (median, 0 to 78), at
+  minute 5.3 (median). The fully built start's 8 plus the ones its core and perimeter rules add.
+
+**Building splash: kept at 50%.** With the five-minute clock (`n1-free300*`, on `91951bf49`):
+
+| Splash on buildings | 50% (kept) | 25% | none |
+|---|---:|---:|---:|
+| Buildings lost by minute 10 / 20 / 45 | 56 / 117 / 254 | 46 / 100 / 244 | 41 / 93 / 222 |
+| Credits a flight | 1,374 | 1,196 | 1,193 |
+| Time-outs | 50% | 50% | 52% |
+
+The clock moved the opening from 179 to 56 buildings; removing the splash on top took 15 more and left
+time-outs where they were. Kept, so that a rich house's planes still pay (Stefan: "still allow really built up
+houses to spam them as a form of economic victory").
+
+**AirThreatTurrets ([Force Concentration], built, measured, default off).** Stefan's "the ai doesn't build rocket
+turret defenes" asked for it: a house that can be bombed (another team has an Airport or has flown a plane)
+spreads Rocket Turrets by the AirRaidTurrets coverage rule before the first bomb, one a minute up to 16, paid
+ahead of strategic and civic savings. 48 paired games on `45549eced`, off (`n2-off`) against on (`n2-on`):
+
+| | Off (default) | On |
+|---|---:|---:|
+| Buildings lost by minute 10 / 20 / 45 | 56 / 117 / 254 | 56 / 116 / 254 |
+| Buildings bombed a game, paired | | +4 (-14 to +23) |
+| Anti-air turrets ordered a game (threat / raid) | 0 / 1.6 | 9.2 / 11.9 |
+| Rocket Turrets at the first bomb (median) | 11 | 11 |
+| Flights shot down | 87% | 86% |
+| Time-outs | 50% | 40% (-10 points, -27 to +6) |
+| Placement | | no house moved measurably |
+
+A plane over a city is shot down about three seconds after it arrives whether eleven Rocket Turrets stand there
+or sixteen, and it has dropped its stick by then. What lowers the bombing is how often a plane comes. The rule
+stays as a switch (`AirThreatTurrets=1`; `DUNECITY_TEST_AIR_THREAT_TURRETS=0/1` for match arms).
+
+**The rich-house route (Metropolis, four AIs with about a million credits, six-minute probe game).** `run-city-plane-flights.py` on `1c1766b8d`: 827 flights, 789 of them bought (1.18 million credits), 96% shot
+down, 600 credits destroyed a flight, 1,155 buildings bombed in six minutes, 28% of the map: the same as on
+`5d2e19fca`, as it must be, since the nerf changed only the free plane's clock and the probe sets its own
+half-minute clock (`Airport::testFreePlaneCycles`). The purchase rules were not touched. On 2P City, 16 Rocket
+Turrets for 1,342 buildings: 5,928 credits a flight, 36% of the map in six minutes.
+
+**New match logging.** `CITY_FIRST_BOMB` (Rocket and Gun Turrets a house has when the first bomb lands on it,
+`Bullet.cpp`), `CITY_PLANE_CRASH_KILL` (one line per building of another team a crash destroys, with its owner),
+`CITY_HOUSE_OUT` (buildings an eliminated house lost, `vanilla-match.inc`), `threat=` on `CITY_AIR_DEFENCE`.
+`vanilla-match.py` records them in `planes.csv` (events `first_bomb`, `crash_kill`, `house_out`). Results:
+`../outputs/city-planes-20261124/nerf/` (`report-now-final.md`, `report-n2-off-on.md`).
+
+**Tests and gates on `1c1766b8d`.** AWS (`aws-mel2`): `20261124T005410-ctest-48e7d9` - the four AI gates
+(`quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`,
+`quantbot_ffa_army_deploys`), `city_aircraft_probe`, `city_plane_effect` and `city_plane_flights` passed;
+`20261124T005413-ctest-d4fc4b` - the whole headless nightly tier (`-L nightly -LE gui`), 248 of 248 passed.
+Mini, `build-int` at `1c1766b8d`: `dunelegacy_tests`, `genome_registry_contract`, `perf_regression` (124 s)
+passed; at `45549eced` also `natives_probe`, `city_aircraft_probe` and `city_plane_effect` (one seed: free
+launches at 5:00 and 10:00 of eleven minutes; an Airport built at cycle 10 ready 18,740 cycles later, at the
+five minutes; one built after them launched 272 cycles after placement). Unit tests: `AirThreatTurrets` policy
+and config (`QuantBotStrategyTestCase`), `kFreePlaneMs == 300000` (`CityAircraftPolicyTestCase`).
+
+**Not verified.** No game against a human on these rules, nothing on a real screen by an agent. Stefan's
+"steamrolled" game was not replayed. The time-out rate is back near the level before any plane balance (50%
+against 58%): planes no longer break ordinary stalemates; whether a rich house still does is the Metropolis line
+above. 2P City and the 3P/6P maps were not re-measured.
+
 ## 2026-11-23 - Stats: Trooper and City Airplane rows; natives and Stats probes follow the plane's rules (in the 1.0.877 candidate)
 
 Stefan on `5d2e19fca`, spectating a Brutal Harkonnen: "i can't see the % for troopers or airplanes" / "on the
