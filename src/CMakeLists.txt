@@ -1130,10 +1130,14 @@ elseif(APPLE)
                 \"\${CMAKE_INSTALL_PREFIX}/dunecity.app/Contents/Resources/licenses/SDL3-LICENSE.txt\" COPYONLY)
         endif()
         message(STATUS \"Bundling macOS runtime dependencies...\")
+        # The SDL2 library's directory is searched too: a Homebrew library may name
+        # a sibling through @rpath (brotli 1.2.1's libbrotlidec asks for
+        # @rpath/libbrotlicommon.1.dylib, and freetype 2.15 needs libbrotlidec), and
+        # BundleUtilities resolves such a name only in the directories it is given.
         fixup_bundle(
             \"\${CMAKE_INSTALL_PREFIX}/dunecity.app\"
             \"\${_runtime_libraries}\"
-            \"${DUNECITY_MACOS_DEPENDENCY_DIRS}\"
+            \"${DUNECITY_MACOS_DEPENDENCY_DIRS};$<TARGET_FILE_DIR:SDL2::SDL2>\"
         )
         # BundleUtilities flattens framework-root executable symlinks. Restore
         # Sparkle's complete, already portable framework before signing, keeping
