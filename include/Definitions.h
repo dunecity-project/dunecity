@@ -235,7 +235,12 @@
 // 9894: QuantBot saves its Carryall manoeuvres after the repair-capacity wait: the units under
 //       a lift order, the planned rear or flank drop and the retreat state (QuantBot::
 //       saveAirlift). An older save has none; a bot plans its next manoeuvre afresh.
-#define SAVEGAMEVERSION     9894
+// 9895: The Airport is 4x4 tiles and saves whether it is compact (Airport::compact, 3x3) after
+//       its purchase cooldown. An Airport from an older save is compact: its tiles in that save
+//       hold a 3x3 claim.
+#define SAVEGAMEVERSION     9895
+/// First save whose Airports say whether they are compact (3x3) or the full 4x4.
+#define SAVEGAMEVERSION_AIRPORT_4X4 9895
 /// First save with QuantBot's Carryall manoeuvre state.
 #define SAVEGAMEVERSION_AIRLIFT 9894
 /// First save whose houses carry the Repair Yard "Return units" switch.

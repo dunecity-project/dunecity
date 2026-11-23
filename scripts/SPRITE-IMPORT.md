@@ -12,8 +12,12 @@ python3 scripts/build-city-atlases.py --check  # compare every pixel and manifes
 
 A full `import-micropolis.py` run also invokes the atlas builder. It reads the
 original tile IDs and assembles the full source footprint before downscaling:
-2x2 R/C/I, 3x3 airport/stadium/nuclear, 1x1 road. Original art attribution is in
+2x2 R/C/I, 4x4 airport, 3x3 stadium/nuclear, 1x1 road. Original art attribution is in
 `imported_sprites/micropolis/NOTICE.txt`; no simulation footprint changed.
+
+The airport cell is 64 px since 2026-11-23, when the Airport's footprint grew from 3x3 to 4x4
+(the original sprite is 6x6 tiles, 96 px). An Airport that has to stay 3x3 (an older save, or a
+map with no room for the fourth row and column) draws the same cell scaled into three tiles.
 
 | Atlas | Columns x rows | Content |
 |---|---:|---|

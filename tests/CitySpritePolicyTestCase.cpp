@@ -120,7 +120,7 @@ TEST_CASE("Shipped city atlases match renderer dimensions and contain real anima
                             Spec{"industrial", industrialColumns, industrialRows, 32},
                             Spec{"roads", 16, roadRows, 16},
                             Spec{"stadium", specialFrames, 1, 48},
-                            Spec{"airport", specialFrames, 1, 48},
+                            Spec{"airport", specialFrames, 1, 64},     // the Airport is 4x4 tiles
                             Spec{"nuclear", specialFrames, 1, 48}}) {
         INFO(spec.name);
         Pixels pixels(spec.name);
@@ -138,7 +138,8 @@ TEST_CASE("Shipped city atlases match renderer dimensions and contain real anima
     }
     for (const auto* name : {"stadium", "airport", "nuclear"}) {
         Pixels pixels(name);
-        CHECK(pixels.cell(1, 0, 48) != pixels.cell(2, 0, 48));
+        const int cell = std::string(name) == "airport" ? 64 : 48;
+        CHECK(pixels.cell(1, 0, cell) != pixels.cell(2, 0, cell));
     }
     Pixels roads("roads");
     for (int mask = 0; mask < 16; ++mask) {

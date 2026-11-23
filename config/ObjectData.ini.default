@@ -545,7 +545,8 @@ TechLevel = 4
 Prerequisite = Windtrap, Radar
 
 [Airport]
-# DuneCity economic building. 3x3 footprint. Provides commercial/transport
+# DuneCity economic building. 4x4 footprint (3x3 where an older map or save has
+# no room for the fourth row and column). Provides commercial/transport
 # boost to nearby areas — equivalent to SimCity Classic's airport zone.
 Enabled = true
 HitPoints = 500

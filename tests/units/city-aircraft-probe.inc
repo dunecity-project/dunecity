@@ -22,6 +22,11 @@
 //               leaves no tile, unit-count or airport-slot reference behind.
 //   continuation A save taken mid-patrol/mid-flight reloads and then replays
 //               bit-identically, so the new state is complete and deterministic.
+//   footprint   The Airport is 4x4 tiles (Stefan, 2026-11-23: "make an airport 4x4
+//               squares not 3x3"): a placed one holds sixteen tiles and its wreck
+//               frees them; the scenario loader grows an Airport written as 3x3
+//               where the map has room and keeps it 3x3 where it has none; both
+//               sizes come back from a save.
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -36,13 +41,16 @@
 #include <dunecity/CitySimulation.h>
 #include <structures/Airport.h>
 #include <structures/RocketTurret.h>
+#include <structures/ZoneStructure.h>
 #include <units/AmbientAirplane.h>
 #include <units/AmbientHelicopter.h>
 #include <units/UnitBase.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <set>
 #include <string>
@@ -89,7 +97,7 @@ std::unique_ptr<Game> newCityGame(int seed, const std::string& mapData = gMapDat
     return game;
 }
 
-/// Flatten a patch so a 3x3 Airport and the road grid can be placed on it.
+/// Flatten a patch so an Airport and the road grid can be placed on it.
 void clearGround(const Coord& origin, int width, int height) {
     for(int y = origin.y; y < origin.y + height; ++y)
         for(int x = origin.x; x < origin.x + width; ++x) {
@@ -107,7 +115,7 @@ void powerHouse(House* house) {
 }
 
 Airport* placeAirport(House* house, const Coord& at) {
-    clearGround(at + Coord(-1, -1), 5, 5);
+    clearGround(at + Coord(-1, -1), 6, 6);     // the 4x4 Airport and one tile round it
     auto* structure = house->placeStructure(NONE_ID, Structure_Airport, at.x, at.y, true, true);
     cityRequire(structure != nullptr, "could not place the city airport");
     structure->setVisible(VIS_ALL, true);
@@ -1681,6 +1689,261 @@ void checkAntiAirIgnoresNatives() {
     currentGame = nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// footprint
+// ---------------------------------------------------------------------------
+std::string tileText(const Coord& at) {
+    return std::to_string(at.x) + "/" + std::to_string(at.y);     // no comma: record() writes CSV
+}
+
+/// The Airport standing on tile `at`, or null.
+Airport* airportAt(const Coord& at) {
+    if(!currentGameMap->tileExists(at)) return nullptr;
+    return dynamic_cast<Airport*>(currentGameMap->getTile(at)->getGroundObject());
+}
+
+/// `airport` has its top-left tile at `at`, is `size` tiles each way, and holds exactly those
+/// tiles of the map: every one of them and no other.
+void requireFootprint(const Airport* airport, const Coord& at, int size, const std::string& what) {
+    cityRequire(airport != nullptr, what + ": no Airport stands there");
+    cityRequire(airport->getLocation() == at,
+                what + ": top-left is " + tileText(airport->getLocation()) + ", expected " + tileText(at));
+    cityRequire(airport->getStructureSize() == Coord(size, size),
+                what + ": size is " + std::to_string(airport->getStructureSizeX()) + "x"
+                     + std::to_string(airport->getStructureSizeY()) + ", expected " + std::to_string(size) + "x"
+                     + std::to_string(size));
+    cityRequire(airport->isCompact() == (size == 3), what + ": the compact flag does not match the size");
+    int held = 0;
+    for(int y = 0; y < currentGameMap->getSizeY(); ++y)
+        for(int x = 0; x < currentGameMap->getSizeX(); ++x) {
+            const ObjectBase* ground = currentGameMap->getTile(x, y)->getGroundObject();
+            if(ground == nullptr || ground->getObjectID() != airport->getObjectID()) continue;
+            ++held;
+            cityRequire(x >= at.x && x < at.x + size && y >= at.y && y < at.y + size,
+                        what + ": holds tile " + tileText(Coord(x, y)) + " outside its footprint");
+        }
+    cityRequire(held == size * size,
+                what + ": holds " + std::to_string(held) + " tiles, expected " + std::to_string(size * size));
+}
+
+/// Destroys `airport` the way a kill does (StructureBase::destroy()) and requires that nothing
+/// throws, that its tiles are free of it and show a wreck, and that it is gone from the game.
+/// Until the 4x4 table was added, destroy() threw "Invalid structure size" for a 4x4 structure.
+void requireDestroyFreesTiles(Airport* airport, const std::string& what) {
+    const Coord at = airport->getLocation();
+    const Coord size = airport->getStructureSize();
+    const Uint32 id = airport->getObjectID();
+    House* owner = airport->getOwner();
+    const int before = owner->getNumItems(Structure_Airport);
+    try {
+        airport->destroy();
+    } catch(const std::exception& e) {
+        throw std::runtime_error("city-aircraft probe: " + what + ": destroy() threw: " + e.what());
+    }
+    cityRequire(currentGame->getObjectManager().getObject(id) == nullptr, what + ": the wreck is still an object");
+    cityRequire(!tileReferences(id), what + ": the wreck left a tile reference");
+    cityRequire(owner->getNumItems(Structure_Airport) == before - 1, what + ": the wreck is still counted");
+    for(int y = at.y; y < at.y + size.y; ++y)
+        for(int x = at.x; x < at.x + size.x; ++x) {
+            const Tile* tile = currentGameMap->getTile(x, y);
+            cityRequire(!tile->hasANonInfantryGroundObject(), what + ": tile " + tileText(Coord(x, y)) + " is still held");
+            cityRequire(tile->getDestroyedStructureTile() != DestroyedStructure_None,
+                        what + ": tile " + tileText(Coord(x, y)) + " shows no wreck");
+        }
+}
+
+/// SizeX of the fixture map: a scenario position is y * SizeX + x.
+constexpr int kFixtureWidth = 51;
+
+struct AirportCase {
+    const char* name;
+    Coord file;      ///< top-left of the 3x3 the scenario line is written for
+    Coord placed;    ///< top-left the loader must choose
+    int size;        ///< 4, or 3 for a compact Airport
+};
+
+/// One Airport per rule of INIMapLoader::loadStructures ("Airport footprints"). The neighbours
+/// are 2x2 Residential Zones; see airportScenario() for where they stand.
+const AirportCase kAirportCases[] = {
+    {"free_ground_grows_east_south",         Coord(8, 2),   Coord(8, 2),   4},
+    {"zones_east_and_south_grow_west_north", Coord(15, 6),  Coord(14, 5),  4},
+    {"boxed_in_stays_compact",               Coord(34, 20), Coord(34, 20), 3},
+    {"east_edge_with_west_neighbour_compact",Coord(48, 14), Coord(48, 14), 3},
+    {"unit_to_the_east_grows_west_south",    Coord(5, 15),  Coord(4, 15),  4},
+    {"first_of_two_airports_grows",          Coord(15, 20), Coord(15, 20), 4},
+    {"second_blocked_by_the_first_compact",  Coord(19, 21), Coord(19, 21), 3},
+    {"road_to_the_east_grows_west_south",    Coord(46, 9),  Coord(45, 9),  4},
+    {"roads_all_round_grows_over_them",      Coord(40, 9),  Coord(40, 9),  4},
+};
+
+const Coord kScenarioZones[] = {
+    Coord(18, 6), Coord(15, 9),                                  // east and south of the Airport at (15,6)
+    Coord(32, 20), Coord(37, 20), Coord(34, 18), Coord(34, 23),  // west, east, north, south of (34,20)
+    Coord(46, 14),                                               // west of (48,14) in the map's last columns
+    Coord(22, 21),                                               // east of (19,21)
+};
+const Coord kScenarioUnit(8, 15);                                // directly east of the Airport at (5,15)
+/// A street along the east side of the Airport at (46,9): a footprint that keeps it is preferred.
+const Coord kKeptRoads[] = {Coord(49, 9), Coord(49, 10), Coord(49, 11)};
+/// A street all round the Airport at (40,9), one tile out: every 4x4 footprint takes road tiles.
+/// The Airport grows east and south over seven of them; the rest of the street stays.
+const Coord kTakenRoads[] = {Coord(43, 9), Coord(43, 10), Coord(43, 11), Coord(43, 12),
+                             Coord(40, 12), Coord(41, 12), Coord(42, 12)};
+const Coord kRemainingRoads[] = {Coord(39, 8), Coord(40, 8), Coord(41, 8), Coord(42, 8), Coord(43, 8),
+                                 Coord(39, 9), Coord(39, 10), Coord(39, 11), Coord(39, 12)};
+
+/// The fixture map as a scenario with nine Airports, each written as the 3x3 at its file
+/// position, their neighbours, two streets and one pre-placed unit. This is the text a map file holds, so
+/// the Airports go through the real INIMapLoader.
+std::string airportScenario() {
+    cityRequire(gMapData.find("[STRUCTURES]") == std::string::npos, "the fixture map already has structures");
+    const auto pos = [](const Coord& at) { return std::to_string(at.y * kFixtureWidth + at.x); };
+    std::string map = gMapData;
+    const auto units = map.find("[UNITS]");
+    cityRequire(units != std::string::npos, "the fixture map has no [UNITS] section");
+    const auto unitsLineEnd = map.find('\n', units);
+    cityRequire(unitsLineEnd != std::string::npos, "the fixture map's [UNITS] section is empty");
+    map.insert(unitsLineEnd + 1, "ID090=Player1,Quad,256," + pos(kScenarioUnit) + ",64,Area Guard\n");
+
+    int id = 0;
+    const auto line = [&](const char* item, const Coord& at) {
+        char key[16];
+        snprintf(key, sizeof(key), "ID%03d", ++id);
+        map += std::string(key) + "=Player1," + item + ",256," + pos(at) + "\n";
+    };
+    const auto airport = [&](int index) { line("Airport", kAirportCases[index].file); };
+    const auto zone = [&](int index) { line("Residential Zone", kScenarioZones[index]); };
+    map += "\n[STRUCTURES]\n";
+    airport(0);
+    // These two zones come after their Airport in the file: the loader has to know the lines
+    // that follow before it lets an Airport grow, or the Airport would take their tiles.
+    airport(1); zone(0); zone(1);
+    // These four come before theirs.
+    zone(2); zone(3); zone(4); zone(5); airport(2);
+    zone(6); airport(3);
+    airport(4);
+    // The first grows east onto the column next to the second, whose own growth east a zone
+    // blocks: the second finds the first Airport's chosen footprint in its way.
+    airport(5); airport(6); zone(7);
+    const auto road = [&](const Coord& at) { map += "GEN" + pos(at) + "=Player1,Road\n"; };
+    // This street comes before its Airport in the file, the next one after its Airport: a road
+    // line under the row and column an Airport grew by must not be laid under the building.
+    for(const Coord& at : kKeptRoads) road(at);
+    airport(7);
+    airport(8);
+    for(const Coord& at : kTakenRoads) road(at);
+    for(const Coord& at : kRemainingRoads) road(at);
+    return map;
+}
+
+void requireScenarioAirports(const std::string& when, std::vector<Uint32>* ids) {
+    int index = 0;
+    for(const AirportCase& c : kAirportCases) {
+        const Airport* airport = airportAt(c.file);
+        requireFootprint(airport, c.placed, c.size, when + " " + c.name);
+        if(ids->size() <= static_cast<size_t>(index)) ids->push_back(airport->getObjectID());
+        cityRequire((*ids)[index] == airport->getObjectID(), when + " " + c.name + ": a different object stands there");
+        ++index;
+    }
+    int airports = 0;
+    for(const StructureBase* structure : structureList) if(structure->getItemID() == Structure_Airport) ++airports;
+    cityRequire(airports == static_cast<int>(std::size(kAirportCases)), when + ": the map does not hold exactly the scenario's Airports");
+    for(const Coord& at : kScenarioZones) {
+        const auto* zone = dynamic_cast<const ZoneStructure*>(currentGameMap->getTile(at)->getGroundObject());
+        cityRequire(zone != nullptr && zone->getLocation() == at,
+                    when + ": the zone at " + tileText(at) + " is missing; an Airport took its tiles");
+    }
+    for(const Coord& at : kKeptRoads)
+        cityRequire(currentGameMap->getTile(at)->isRoad(), when + ": the street at " + tileText(at) + " was built over although the Airport had room on the other side");
+    for(const Coord& at : kRemainingRoads)
+        cityRequire(currentGameMap->getTile(at)->isRoad(), when + ": the street tile " + tileText(at) + " beside the Airport is gone");
+    for(const Coord& at : kTakenRoads)
+        cityRequire(!currentGameMap->getTile(at)->isRoad(), when + ": a road was laid under the Airport at " + tileText(at));
+}
+
+void checkAirportFootprint() {
+    // An Airport placed the way a builder's finished Airport is: 4x4, sixteen tiles.
+    {
+        auto game = newCityGame(1840);
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        const Coord at(20, 12);
+        clearGround(at + Coord(-1, -1), 6, 6);
+        cityRequire(getStructureSize(Structure_Airport) == Coord(4, 4), "getStructureSize(Structure_Airport) is not 4x4");
+        auto* airport = dynamic_cast<Airport*>(owner->placeStructure(NONE_ID, Structure_Airport, at.x, at.y, false));
+        requireFootprint(airport, at, 4, "placed Airport");
+        // A unit on the fourth column refuses the site: the game asks for all sixteen tiles.
+        const Coord second(30, 20);
+        clearGround(second + Coord(-1, -1), 6, 6);
+        auto* blocker = owner->placeUnit(Unit_Quad, second.x + 3, second.y + 1, true);
+        cityRequire(blocker != nullptr, "could not place the unit on the Airport site");
+        cityRequire(owner->placeStructure(NONE_ID, Structure_Airport, second.x, second.y, false) == nullptr,
+                    "an Airport was placed over a unit on its fourth column");
+        record("footprint", "placed=" + tileText(at) + " size=4x4 tiles=16 fourth_column_checked=1");
+
+        // The wreck: the corner, edge and centre pieces of the 3x3 wreck art, edges and centre repeated.
+        requireDestroyFreesTiles(airport, "placed Airport");
+        const auto piece = [&](int dx, int dy) { return currentGameMap->getTile(at.x + dx, at.y + dy)->getDestroyedStructureTile(); };
+        cityRequire(piece(0, 0) == Destroyed3x3Structure_TopLeft && piece(3, 0) == Destroyed3x3Structure_TopRight
+                 && piece(0, 3) == Destroyed3x3Structure_BottomLeft && piece(3, 3) == Destroyed3x3Structure_BottomRight,
+                    "the 4x4 wreck's corners are not the corner pieces");
+        cityRequire(piece(1, 0) == Destroyed3x3Structure_TopCenter && piece(2, 0) == Destroyed3x3Structure_TopCenter
+                 && piece(0, 1) == Destroyed3x3Structure_CenterLeft && piece(0, 2) == Destroyed3x3Structure_CenterLeft
+                 && piece(3, 1) == Destroyed3x3Structure_CenterRight && piece(3, 2) == Destroyed3x3Structure_CenterRight
+                 && piece(1, 3) == Destroyed3x3Structure_BottomCenter && piece(2, 3) == Destroyed3x3Structure_BottomCenter,
+                    "the 4x4 wreck's edges are not the edge pieces");
+        cityRequire(piece(1, 1) == Destroyed3x3Structure_CenterCenter && piece(2, 1) == Destroyed3x3Structure_CenterCenter
+                 && piece(1, 2) == Destroyed3x3Structure_CenterCenter && piece(2, 2) == Destroyed3x3Structure_CenterCenter,
+                    "the 4x4 wreck's middle is not the centre piece");
+        record("footprint", "destroyed=4x4 threw=0 tiles_freed=16 wreck_pieces=16");
+        game.reset();
+        currentGame = nullptr;
+    }
+
+    // The scenario loader's rule, through the real INIMapLoader.
+    auto game = newCityGame(1841, airportScenario());
+    cityRequire(currentGameMap->getSizeX() == kFixtureWidth, "the fixture map is not 51 tiles wide any more");
+    cityRequire(currentGameMap->getTile(kScenarioUnit)->hasAGroundObject()
+             && dynamic_cast<UnitBase*>(currentGameMap->getTile(kScenarioUnit)->getGroundObject()) != nullptr,
+                "the scenario's pre-placed unit is missing");
+    std::vector<Uint32> ids;
+    requireScenarioAirports("loaded map", &ids);
+    cityRequire(!Airport::nextIsCompact, "the compact Airport hint outlived the map load");
+    for(const AirportCase& c : kAirportCases)
+        record("footprint", std::string("scenario case=") + c.name + " file=" + tileText(c.file)
+                          + " placed=" + tileText(c.placed) + " size=" + std::to_string(c.size) + "x" + std::to_string(c.size));
+
+    // An Airport placed after that map load is 4x4 again, next to a compact one.
+    {
+        auto* owner = airportAt(kAirportCases[0].file)->getOwner();
+        const Coord at(40, 2);
+        auto* airport = dynamic_cast<Airport*>(owner->placeStructure(NONE_ID, Structure_Airport, at.x, at.y, true));
+        requireFootprint(airport, at, 4, "Airport placed after the map load");
+        requireDestroyFreesTiles(airport, "Airport placed after the map load");
+    }
+
+    // Both sizes come back from a save, on their tiles.
+    const std::string path = gCityAircraftOut + "/city-airport-footprint-" + gCityAircraftMod + ".dls";
+    cityRequire(game->saveGame(path), "could not write the Airport footprint save");
+    game.reset();
+    currentGame = nullptr;
+
+    game = std::make_unique<Game>();
+    currentGame = game.get();
+    game->initGame(GameInitSettings(path));
+    game->initializeGameLoop();
+    requireScenarioAirports("loaded save", &ids);
+    for(int cycle = 0; cycle < 20; ++cycle) game->updateGameState();
+    requireScenarioAirports("loaded save after 20 cycles", &ids);
+    record("footprint", "save airports=" + std::to_string(ids.size()) + " full=6 compact=3 restored=1");
+
+    // A loaded compact Airport and a loaded 4x4 one both die cleanly.
+    requireDestroyFreesTiles(airportAt(kAirportCases[2].file), "loaded compact Airport");
+    requireDestroyFreesTiles(airportAt(kAirportCases[0].file), "loaded 4x4 Airport");
+    record("footprint", "destroyed_after_load=3x3+4x4 threw=0");
+    game.reset();
+    currentGame = nullptr;
+}
+
 } // namespace
 
 int runCityAircraftProbe() {
@@ -1731,6 +1994,7 @@ int runCityAircraftProbe() {
     phase("anti_air_natives", checkAntiAirIgnoresNatives);
     phase("continuation", checkSaveContinuation);
     phase("departure_continuation", checkDepartureSaveContinuation);
+    phase("footprint", checkAirportFootprint);
 
     gCityAircraftCsv.close();
     SDL_Log("CITY_AIRCRAFT_PROBE_PASS: %s", gCityAircraftMod.c_str());

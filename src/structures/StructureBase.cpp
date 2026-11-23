@@ -291,6 +291,15 @@ void StructureBase::blitToScreen() {
                                             numImagesX, numImagesY);
     SDL_Rect source = calcSpriteSourceRect(structureTexture,indexX,numImagesX,indexY,numImagesY);
 
+    // A compact Airport (Airport::isCompact(): an older save, or a map with no room for 4x4)
+    // has a 3x3 footprint but the 4x4 Airport's 64 px sprite cell. Draw the cell into the
+    // structure's own tiles at every zoom level; for a 4x4 Airport that is the cell's own size.
+    // The DuneCity Dune2 skin below draws into the same rectangle.
+    if(itemID == Structure_Airport) {
+        dest.w = dune2rWorldExtent(world2zoomedWorld(TILESIZE * structureSize.x));
+        dest.h = dune2rWorldExtent(world2zoomedWorld(TILESIZE * structureSize.y));
+    }
+
     if(isTornieStructureForDiagnostics(itemID)) {
         static std::set<std::tuple<int, int, int, int, int>> loggedDrawStates;
         const int ownerHouse = owner ? owner->getHouseID() : -1;
@@ -832,6 +841,15 @@ void StructureBase::destroy() {
     static int DestroyedStructureTiles3x3[] = { Destroyed3x3Structure_TopLeft, Destroyed3x3Structure_TopCenter, Destroyed3x3Structure_TopRight,
                                                 Destroyed3x3Structure_CenterLeft, Destroyed3x3Structure_CenterCenter, Destroyed3x3Structure_CenterRight,
                                                 Destroyed3x3Structure_BottomLeft, Destroyed3x3Structure_BottomCenter, Destroyed3x3Structure_BottomRight};
+    // The 4x4 Airport: the 3x3 pieces with the edge and centre pieces repeated once, as the 5x2 table does.
+    static int DestroyedStructureTiles4x4[] = { Destroyed3x3Structure_TopLeft, Destroyed3x3Structure_TopCenter,
+                                                Destroyed3x3Structure_TopCenter, Destroyed3x3Structure_TopRight,
+                                                Destroyed3x3Structure_CenterLeft, Destroyed3x3Structure_CenterCenter,
+                                                Destroyed3x3Structure_CenterCenter, Destroyed3x3Structure_CenterRight,
+                                                Destroyed3x3Structure_CenterLeft, Destroyed3x3Structure_CenterCenter,
+                                                Destroyed3x3Structure_CenterCenter, Destroyed3x3Structure_CenterRight,
+                                                Destroyed3x3Structure_BottomLeft, Destroyed3x3Structure_BottomCenter,
+                                                Destroyed3x3Structure_BottomCenter, Destroyed3x3Structure_BottomRight };
 
 
     if(itemID == Structure_Wall) {
@@ -866,6 +884,15 @@ void StructureBase::destroy() {
                 } else if(structureSize.x == 3) {
                     pDestroyedStructureTiles = DestroyedStructureTiles3x3;
                     DestroyedStructureTilesSizeY = 3;
+                } else {
+                    THROW(std::runtime_error, "StructureBase::destroy(): Invalid structure size");
+                }
+            } break;
+
+            case 4: {
+                if(structureSize.x == 4) {
+                    pDestroyedStructureTiles = DestroyedStructureTiles4x4;
+                    DestroyedStructureTilesSizeY = 4;
                 } else {
                     THROW(std::runtime_error, "StructureBase::destroy(): Invalid structure size");
                 }

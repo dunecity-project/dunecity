@@ -21,6 +21,7 @@
 #include <algorithm>
 
 Airport::Airport(House* newOwner) : StructureBase(newOwner) {
+    compact = nextIsCompact;
     Airport::init();
     setHealth(getMaxHealth());
 }
@@ -35,14 +36,19 @@ Airport::Airport(InputStream& stream) : StructureBase(stream) {
     if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_PURCHASE) {
         purchaseCooldown = std::max(0, stream.readSint32());
     }
+    // An Airport from a save older than the 4x4 Airport is compact: its tiles in that save hold
+    // a 3x3 claim. init() ran before this was known, so the footprint is set again here.
+    compact = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRPORT_4X4 ? stream.readBool() : true;
+    structureSize = compact ? Coord(3, 3) : Coord(4, 4);
 }
 
 void Airport::init() {
     itemID = Structure_Airport;
     owner->incrementStructures(itemID);
 
-    structureSize.x = 3;
-    structureSize.y = 3;
+    // Stefan, 2026-11-23: "make an airport 4x4 squares not 3x3". A compact Airport stays 3x3
+    // and draws the same sprite cell scaled into its tiles (StructureBase::blitToScreen).
+    structureSize = compact ? Coord(3, 3) : Coord(4, 4);
     graphicID = ObjPic_Airport;
     graphic   = pGFXManager->getObjPic(graphicID, getOwner()->getHouseID());
     numImagesX = DuneCity::CitySprites::specialFrames;
@@ -68,6 +74,7 @@ void Airport::save(OutputStream& stream) const {
     stream.writeSint32(patrol.remainingCycles);
     stream.writeSint32(patrol.pendingAircraft);
     stream.writeSint32(purchaseCooldown);
+    stream.writeBool(compact);
 }
 
 AmbientAirplane* Airport::launchAirplane(bool bought) {
@@ -76,7 +83,8 @@ AmbientAirplane* Airport::launchAirplane(bool bought) {
     auto* unit = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane));
     if (unit == nullptr) return nullptr;
     // makeSprite(SPRITE_AIRPLANE, (posX << 4) + 48, (posY << 4) + 12):
-    // three tiles east of the airport tile, on the runway.
+    // three tiles east of the airport's centre tile, on the runway. For the 4x4 and the compact
+    // 3x3 Airport alike that is the second tile east of the building.
     Coord start = centre + Coord(3, 0);
     if (!currentGameMap->tileExists(start)) start = centre;
     unit->setBought(bought);

@@ -22,7 +22,7 @@
     "airport": {
       "columns": 9,
       "rows": 1,
-      "cell": 48,
+      "cell": 64,
       "models": 1
     },
     "stadium": {

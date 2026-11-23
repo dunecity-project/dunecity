@@ -490,7 +490,9 @@ GFXManager::GFXManager() {
             {ObjPic_ZoneIndustrial, "industrial", 2 * D2_TILESIZE},
             {ObjPic_CityRoad, "roads", D2_TILESIZE},
             {ObjPic_Stadium, "stadium", 3 * D2_TILESIZE},
-            {ObjPic_Airport, "airport", 3 * D2_TILESIZE},
+            // Stefan, 2026-11-23: "make an airport 4x4 squares not 3x3". A compact (3x3)
+            // Airport draws this same cell scaled into its tiles (Airport::isCompact()).
+            {ObjPic_Airport, "airport", 4 * D2_TILESIZE},
             {ObjPic_NuclearPlant, "nuclear", 3 * D2_TILESIZE},
             {ObjPic_Park, "park", D2_TILESIZE},
         };
@@ -2092,7 +2094,7 @@ GFXManager::GFXManager() {
         if (stadTex) smallDetailPicTex[Picture_Stadium] = std::move(stadTex);
         else         smallDetailPicTex[Picture_Stadium] = extractSmallDetailPic("PALACE.WSA");
 
-        auto airTex = makeStructDetailPic(ObjPic_Airport, 3 * D2_TILESIZE, 3 * D2_TILESIZE);
+        auto airTex = makeStructDetailPic(ObjPic_Airport, 4 * D2_TILESIZE, 4 * D2_TILESIZE);
         if (airTex) smallDetailPicTex[Picture_Airport] = std::move(airTex);
         else        smallDetailPicTex[Picture_Airport] = extractSmallDetailPic("STARPORT.WSA");
 
@@ -3274,7 +3276,7 @@ GFXManager::GFXManager() {
     struct CityEditorIcon { int uiID; int objectID; int tiles; };
     for(const auto& icon : {CityEditorIcon{UI_MapEditor_PoliceStation, ObjPic_PoliceStation, 2},
                             CityEditorIcon{UI_MapEditor_Stadium, ObjPic_Stadium, 3},
-                            CityEditorIcon{UI_MapEditor_Airport, ObjPic_Airport, 3}}) {
+                            CityEditorIcon{UI_MapEditor_Airport, ObjPic_Airport, 4}}) {
         for(int house = 0; house < NUM_HOUSES; ++house) {
             uiGraphic[icon.uiID][house] = getSubPicture(
                 objPic[icon.objectID][HOUSE_HARKONNEN][0].get(), 0, 0,

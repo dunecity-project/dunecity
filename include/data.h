@@ -117,7 +117,7 @@ typedef enum {
     // Extended structure IDs — placed after units to preserve save-compat
     // for all pre-existing IDs.  isStructure() handles the gap.
     Structure_Stadium = 48,           ///< DuneCity: Stadium civic building (land-value boost, 3x3)
-    Structure_Airport = 49,           ///< DuneCity: Airport economic building (commercial boost, 3x3)
+    Structure_Airport = 49,           ///< DuneCity: Airport economic building (commercial boost, 4x4; 3x3 when compact)
     Structure_ExtLastID = 49,
 
     // Extended unit IDs — placed after extended structures to preserve

@@ -90,7 +90,7 @@ FOOTPRINT: Dict[str, Tuple[int, int]] = {
     "Starport": (3, 3),
     "Nuclear Plant": (3, 3),
     "Stadium": (3, 3),
-    "Airport": (3, 3),
+    "Airport": (4, 4),
     "Outpost": (2, 2),
     "Barracks": (2, 2),
     "WOR": (2, 2),

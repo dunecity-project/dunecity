@@ -39,6 +39,7 @@
 #include <mod/ModManager.h>
 
 #include <structures/StructureBase.h>
+#include <structures/Airport.h>
 #include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <structures/Refinery.h>
@@ -1492,7 +1493,10 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
     if (!byScenario && (itemID == Structure_Slab1 || itemID == Structure_Slab4)
         && !currentGame->getGameInitSettings().getGameOptions().concreteRequired) return nullptr;
 
-    const Coord requestedStructureSize = getStructureSize(itemID);
+    // An Airport is 4x4, except the compact (3x3) one the scenario loader asks for on a map
+    // with no room for the fourth row and column (Airport::CompactPlacement).
+    const Coord requestedStructureSize = itemID == Structure_Airport ? Airport::nextPlacementSize()
+                                                                     : getStructureSize(itemID);
     if(requestedStructureSize.x <= 0 || requestedStructureSize.y <= 0
        || xPos + requestedStructureSize.x > currentGameMap->getSizeX()
        || yPos + requestedStructureSize.y > currentGameMap->getSizeY()) {

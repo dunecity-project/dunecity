@@ -142,7 +142,7 @@ typedef enum {
     ObjPic_NuclearPlant,   ///< DuneCity: Micropolis nuclear-plant sprite (3x3 footprint)
     ObjPic_PoliceStation,  ///< DuneCity: Micropolis police-station sprite (2x2 footprint)
     ObjPic_Stadium,        ///< DuneCity: Micropolis stadium sprite (3x3 footprint)
-    ObjPic_Airport,        ///< DuneCity: Micropolis airport sprite (3x3 footprint)
+    ObjPic_Airport,        ///< DuneCity: Micropolis airport sprite (4x4 footprint; a compact Airport draws it into 3x3)
     ObjPic_Hospital,       ///< DuneCity: Micropolis hospital sprite (2x2, auto-placed on residential)
     ObjPic_Church,         ///< DuneCity: Micropolis church sprite (2x2, auto-placed on residential)
     ObjPic_SonicTrike,     ///< Tornie: Rebels-only light sonic vehicle

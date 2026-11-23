@@ -269,7 +269,7 @@ Coord getStructureSize(int itemID) {
         case Structure_PowerLine:           return Coord(1,1); break;
         case Structure_Stadium:             return Coord(3,3); break;
         case Structure_Park:                return Coord(1,1); break;
-        case Structure_Airport:             return Coord(3,3); break;
+        case Structure_Airport:             return Coord(4,4); break;    // a compact Airport is 3x3: Airport::isCompact()
         case Structure_AdvancedWindTrap:    return Coord(3,3); break;
         case Structure_AdvancedWindTrapMK2: return Coord(2,3); break;
         case Structure_AdvancedWindTrapMK3: return Coord(3,2); break;

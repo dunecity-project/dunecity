@@ -85,8 +85,11 @@ def build(raw_dir):
                 frames.append((1 + density, row, composite(tiles, 621 + (value * 4 + density) * 9, 3, repl)))
     save("industrial", 5, 18, 32, frames, 8)
 
-    for name, base, size in [("airport", 709, 6), ("stadium", 779, 4), ("nuclear", 811, 4)]:
-        frames = [(0, 0, composite(tiles, base, size, target=48))]
+    # Last column: the cell in pixels, 16 per footprint tile. The Airport is 4x4 tiles (Stefan,
+    # 2026-11-23: "make an airport 4x4 squares not 3x3"), drawn from the original 96 px sprite;
+    # the Stadium and the Nuclear Plant are 3x3.
+    for name, base, size, cell in [("airport", 709, 6, 64), ("stadium", 779, 4, 48), ("nuclear", 811, 4, 48)]:
+        frames = [(0, 0, composite(tiles, base, size, target=cell))]
         for phase in range(8):
             active_base = base
             if name == "airport":
@@ -97,8 +100,8 @@ def build(raw_dir):
                 repl = {801: 932 + phase, 805: 940 + phase}
             else:
                 repl = {820: 952 + phase % 4}
-            frames.append((phase + 1, 0, composite(tiles, active_base, size, repl, target=48)))
-        save(name, 9, 1, 48, frames, 1)
+            frames.append((phase + 1, 0, composite(tiles, active_base, size, repl, target=cell)))
+        save(name, 9, 1, cell, frames, 1)
 
     # Park (Micropolis tool.cpp putDownPark): WOODS2..WOODS5 (tiles 40-43), then the
     # animated FOUNTAIN (840-843). One 16-pixel tile per frame, the 1x1 footprint.
