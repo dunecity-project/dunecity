@@ -547,6 +547,11 @@ both with the rule on:
 - Tests: `saboteur_target_probe` now 20 cases per mod; new are vehicle and building shown to the owner at
   least 1 s before the blast, and a Saboteur shot on the way that leaves a body and no explosion, each for a
   human and a QuantBot owner.
+- Verified for `ed37d29e3`: AWS job `20261123T160302-ctest-8c0a96` 9/9 (the four AI gates,
+  `quantbot_baseline_807_check`, `quantbot_custom_attack`, `dunelegacy_tests`, both Saboteur probes). On the
+  Mini, `build-int` at or after that commit: `saboteur_target_probe`, `saboteur_effect_probe`,
+  `dunelegacy_tests` and `perf_regression` passed. The effect probe's numbers are those of the entry below
+  (rule on: 94.8% destroy something for either owner, 326 credits per Saboteur).
 - Not measured: matches were not re-run for this commit (the reveal changes what the owner's house has
   explored, so games differ from the entry below after the first approach); nothing was checked in a windowed
   game.
