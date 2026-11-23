@@ -1144,6 +1144,15 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-repair-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-repair-probe)
         set_tests_properties(quantbot_carryall_repair PROPERTIES TIMEOUT 900 PROCESSORS 2)
+        # The Repair Yard "Return units" switch (CMD_HOUSE_REPAIR_RETURN), in a Custom Game started
+        # from Stefan's saved options: on, a repaired unit is flown back to where it was picked up;
+        # off (clicked in the yard's side panel), it stays beside the yard; a unit that drove in;
+        # save and load, an older save; a QuantBot house; and the Dune City default for Manual
+        # Carryall Drops, including a profile that stored "off" before the default was adopted.
+        dunecity_add_test(headless nightly NAME repair_return_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-repair-return-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/repair-return-probe)
+        set_tests_properties(repair_return_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
