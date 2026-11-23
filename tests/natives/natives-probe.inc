@@ -733,12 +733,22 @@ void runSpectatedInteractions() {
         AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(enemies[2]), last->getLocation() + Coord(1, 1));
         plane->setHealth(10);      // two trooper rockets bring it down
         const Uint32 planeID = plane->getObjectID();
+        const House* sender = game->getHouse(enemies[2]);
         const int unitKills = natives(*game)->getNumDestroyedUnits(), structureKills = natives(*game)->getNumDestroyedStructures();
+        const int senderStructureKills = sender->getNumDestroyedStructures();
         nativesAttack(*game, plane, 2, plane->getLocation() + Coord(0, 4));
         untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "the Natives shooting down the plane");
         const Uint32 decided = untilOut(*game, loser, 20, "plane crash");
-        nRequire(natives(*game)->getNumDestroyedStructures() == structureKills + 1 && natives(*game)->getNumDestroyedUnits() > unitKills,
-                 "The crash's kills are not credited to the Natives");
+        // The Natives are credited the plane they shot down. What its crash destroys is the plane's
+        // damage and goes to the house that sent it, whoever shot it down (Stefan, 2026-11-23:
+        // "does the damage dealt include damage when it crashes? it has a nuclear missile effect
+        // so that should be counted"; AmbientAirplane::crash). Up to 0fb66768b the crash was dealt
+        // in the shooter's name and this check asked for the building on the Natives' record.
+        nRequire(natives(*game)->getNumDestroyedUnits() > unitKills, "The plane the Natives shot down is not their kill");
+        nRequire(natives(*game)->getNumDestroyedStructures() == structureKills,
+                 "The crash's kill is on the Natives' record, not on the plane's house's");
+        nRequire(sender->getNumDestroyedStructures() == senderStructureKills + 1,
+                 "The crash's kill is not credited to the house that sent the plane");
         expectWatchedEnd(*game, "spectated plane crash", decided, enemies[2]);
         expectAnalytics(*game, "spectated plane crash", enemies[2]);
         nEnd(game);
@@ -864,19 +874,25 @@ void runCampaignInteractions() {
         const Uint32 planeID = plane->getObjectID(), secondID = second->getObjectID();
         House* nativesHouse = game->getOrCreateNativesHouse();
         const int nativeKills = nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures();
+        const int senderKills = enemy->getNumDestroyedUnits() + enemy->getNumDestroyedStructures();
         const int planeLosses = enemy->getNumLostItems(Unit_AmbientAirplane);
         nativesAttack(*game, plane, 3, plane->getLocation() + Coord(0, 4));
         untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "the Natives shooting down the campaign plane");
         untilGone(*game, secondID, 4, "the chained crash");
         runCycles(*game, 300);
         nRequire(!game->finished, "The campaign mission ended on a crash that decided nothing");
-        nRequire(nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures() >= nativeKills + 2,
-                 "The crash and its chain are not credited to the Natives");
+        // The plane they shot down is the Natives' kill; the second plane, which the first one's
+        // crash takes, is the crash's kill and so the plane's house's (see the spectated case).
+        nRequire(nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures() >= nativeKills + 1,
+                 "The plane the Natives shot down is not their kill");
+        nRequire(enemy->getNumDestroyedUnits() + enemy->getNumDestroyedStructures() >= senderKills + 1,
+                 "The chained crash is not credited to the house that sent the plane");
         nRequire(enemy->getNumLostItems(Unit_AmbientAirplane) == planeLosses + 2, "The enemy did not lose both planes");
         for(QuantBot* bot : bots) nRequire(!bot->campaignAIAttackFlag, "A Natives crash provoked the campaign AI's offensive");
         SDL_Log("NATIVES_PROBE: campaign mission %d: Natives shot down %s's plane over its %s, chained crash, %d Natives kills, "
-                "mission running, campaign AI not provoked", mission, houseName(enemy->getHouseID()).c_str(),
-                targetName.c_str(), nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures());
+                "%d kills of the planes' house, mission running, campaign AI not provoked", mission, houseName(enemy->getHouseID()).c_str(),
+                targetName.c_str(), nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures() - nativeKills,
+                enemy->getNumDestroyedUnits() + enemy->getNumDestroyedStructures() - senderKills);
         nEnd(game);
     }
     for(const bool playerFalls : {false, true}) {

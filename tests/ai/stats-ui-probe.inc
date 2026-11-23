@@ -7,6 +7,7 @@
 #include <GUI/dune/ObservedHouseSelector.h>
 #include <GameInterface.h>
 #include <players/QuantBot.h>
+#include <dunecity/CityAircraftPolicy.h>
 #include <players/CombatReward.h>
 #include <dunecity/CitySimulation.h>
 #include <misc/OMemoryStream.h>
@@ -65,14 +66,20 @@ void runStatsUiProbe(Game& game) {
     seedLedger(pLocalHouse,Unit_Tank,7,123456,3);
     seedLedger(pLocalHouse,Unit_Launcher,2,45678,5);
     seedLedger(otherHouse,Unit_Quad,11,222000,1);
-    // The four types the table must never list, given exactly the things that
+    // The three types the table must never list, given exactly the things that
     // would otherwise make a row appear: real ledger history on two houses and,
-    // below, units the house actually owns right now.
-    const Uint32 hiddenTypes[]={Unit_AmbientAirplane,Unit_AmbientHelicopter,
+    // below, units the house actually owns right now. The City Airplane was the
+    // fourth until it bombed for its house: it is listed since 3fff76592 (Stefan,
+    // 2026-11-23: "also include plane in the unit performance stats") and is
+    // checked as a listed type further down.
+    const Uint32 hiddenTypes[]={Unit_AmbientHelicopter,
                                 Unit_RocketTrike,Unit_EliteLauncher};
     seedLedger(pLocalHouse,Unit_EliteLauncher,13,98765,4);
     seedLedger(pLocalHouse,Unit_RocketTrike,5,4321,2);
     seedLedger(otherHouse,Unit_AmbientHelicopter,1,1000,1);
+    // The City Airplane: a ledger and a live plane on the local house, flights
+    // that ended without a kill on the other.
+    seedLedger(pLocalHouse,Unit_AmbientAirplane,4,30000,6);
     seedLedger(otherHouse,Unit_AmbientAirplane,0,0,2);
     auto placeOwnedUnit=[&](House* house,Uint32 item) -> UnitBase* {
         for(int y=1;y<currentGameMap->getSizeY()-1;++y)
@@ -92,6 +99,8 @@ void runStatsUiProbe(Game& game) {
     }
     require(liveHiddenPlaced>0,
             "The exclusion check could not give this house a live excluded unit");
+    require(placeOwnedUnit(pLocalHouse,Unit_AmbientAirplane)!=nullptr,
+            "The Stats fixture could not give this house a City Airplane");
     pLocalHouse->numBuiltUnits+=42;
     pLocalHouse->setSpiceIncomeMultiplier(5);
     pLocalHouse->harvestedSpice+=FixPoint(1234 * 5);
@@ -275,7 +284,10 @@ void runStatsUiProbe(Game& game) {
     require(liveHiddenOwned>0,"The exclusion check lost the live excluded units it placed");
     SDL_Log("STATS_UI_DIAG: hidden_live_placed=%d hidden_live_owned=%d",
             liveHiddenPlaced,liveHiddenOwned);
-    for(const auto item : {Unit_Tank,Unit_Launcher}) {
+    require(tableRow(Unit_AmbientAirplane)>=0,"The City Airplane is missing from the unit table");
+    require(stats->ledger[tableRow(Unit_AmbientAirplane)].name=="City Airplane",
+            "The unit table does not call the plane City Airplane");
+    for(const auto item : {Unit_Tank,Unit_Launcher,Unit_AmbientAirplane}) {
         const int index=tableRow(item);
         require(index>=0,"A unit type with a nonzero ledger is missing from the table");
         const auto& entry=stats->ledger[index];
@@ -412,8 +424,16 @@ void runStatsUiProbe(Game& game) {
     require(factory->isAvailableToBuild(Unit_Tank) && factory->isAvailableToBuild(Unit_Launcher),
             "The Stats fixture factory has no real producible allocation units");
     seedLedger(botHouse,Unit_Launcher,31,123456789,7);
+    // The two rows under the slots need evidence of their own: Troopers and City Airplanes that
+    // fought and were lost.
+    seedLedger(botHouse,Unit_Trooper,2,50000,3);
+    seedLedger(botHouse,Unit_AmbientAirplane,3,600000,5);
     for(int step=0;step<120;++step) { game.processObjects();++game.gameCycleCount; }
     const_cast<QuantBot*>(bot)->build(bot->militaryUnitValue());
+    // The pass sets the plane's buy score only for a house with an Airport. This house has none,
+    // so the score is given here (test-only access), at the policy's floor so that the row's per
+    // cent is not simply the score times a hundred.
+    const_cast<QuantBot*>(bot)->cityPlaneBuyScore=DuneCity::CityAircraft::kPlaneBuyScoreFloor;
     const auto& snapshot=bot->getAllocationSnapshot();
     SDL_Log("STATS_UI_DIAG: snapshot_ready=%d cycle=%u learning=%d",
             int(snapshot.ready),snapshot.cycle,int(snapshot.learning));
@@ -475,6 +495,61 @@ void runStatsUiProbe(Game& game) {
                 }
             }
             require(hasGoal,"The allocation fixture never displayed a real allocated goal");
+            {
+                // Under the ten slots: the Trooper with the infantry cap as its per cent, and in a
+                // city game the City Airplane with its score as a share of its buy score.
+                const auto& trooperRow=stats->allocationRows[HouseStatsWindow::kTrooperRow];
+                const auto& planeRow=stats->allocationRows[HouseStatsWindow::kPlaneRow];
+                for(const auto* row : {&trooperRow,&planeRow})
+                    for(const auto* label : {&row->name,&row->performance,&row->goal})
+                        require(GUIStyle::getInstance().getTextWidth(label->getText(),
+                                    label->getTextFontSize())<=label->getSize().x,
+                                "A Trooper or City Airplane allocation cell is wider than its column");
+                const auto& trooper=game.objectData.data[Unit_Trooper][botHouse->getHouseID()];
+                require(trooperRow.name.getText()==getItemNameByID(Unit_Trooper),
+                        "The allocation table has no Trooper row");
+                if(trooper.enabled && trooper.price>0) {
+                    const int64_t score=UnitMixPolicy::performanceScore(
+                        botHouse->getCombatReward(Unit_Trooper).total(),
+                        int64_t(botHouse->getNumLostItems(Unit_Trooper))*trooper.price*1000,trooper.price*1000);
+                    require(score>0,"The Trooper fixture ledger produced no score");
+                    require(trooperRow.performance.getText()==fmt::sprintf("x%.1f",static_cast<double>(score)/1000000.0),
+                            "The Trooper row's performance is not the Trooper's score");
+                    require(trooperRow.goal.getText()==fmt::sprintf("%d.%02d",snapshot.infantryQuotaBps/100,
+                                snapshot.infantryQuotaBps%100),
+                            "The Trooper row's per cent is not the infantry cap");
+                } else {
+                    require(trooperRow.performance.getText()=="-" && trooperRow.goal.getText()=="-",
+                            "A house that cannot raise Troopers was given a Trooper score or cap");
+                }
+                require(stats->allocationNoteLabel.getText().find("Trooper %: infantry cap")!=std::string::npos,
+                        "The note does not say what the Trooper's per cent is");
+                if(game.isCitySimEnabled()) {
+                    const int64_t score=DuneCity::CityAircraft::planePerformanceScore(
+                        botHouse->getCombatReward(Unit_AmbientAirplane).total(),
+                        botHouse->getNumLostItems(Unit_AmbientAirplane));
+                    const int64_t buyScore=bot->getCityPlaneBuyScore();
+                    require(score>0 && buyScore>0,"The City Airplane fixture has no score or buy score");
+                    const int64_t bps=std::min<int64_t>(99999,score*10000/buyScore);
+                    require(planeRow.name.getText()=="City Airplane","The allocation table has no City Airplane row");
+                    require(planeRow.performance.getText()==fmt::sprintf("x%.1f",static_cast<double>(score)/1000000.0),
+                            "The City Airplane row's performance is not the plane's score");
+                    require(planeRow.goal.getText()==fmt::sprintf("%d.%02d",int(bps/100),int(bps%100)),
+                            "The City Airplane row's per cent is not its score as a share of its buy score");
+                    require(stats->allocationNoteLabel.getText().find("City Airplane %: of its buy score")!=std::string::npos,
+                            "The note does not say what the City Airplane's per cent is");
+                    SDL_Log("STATS_UI_DIAG: trooper_row=%s/%s plane_row=%s/%s",trooperRow.performance.getText().c_str(),
+                            trooperRow.goal.getText().c_str(),planeRow.performance.getText().c_str(),
+                            planeRow.goal.getText().c_str());
+                } else {
+                    require(planeRow.name.getText().empty() && planeRow.performance.getText().empty()
+                            && planeRow.goal.getText().empty(),"A game without a city shows a City Airplane row");
+                }
+                // The note must end above the window's bottom edge, clear of the Close button's row.
+                const int noteLines=1+int(std::count(stats->allocationNoteLabel.getText().begin(),
+                                                     stats->allocationNoteLabel.getText().end(),'\n'));
+                require(noteLines<=3,"The allocation note has more lines than its three-line space");
+            }
             require(stats->allocationGoalHeader.getText()=="Goal %",
                     "The goal column is missing its percent unit");
             require(snapshot.learning,"The allocation fixture never exercised measured performance");

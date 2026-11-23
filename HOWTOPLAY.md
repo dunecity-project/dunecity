@@ -214,10 +214,15 @@ not order them, but you can buy more planes.
   every building has one within eight tiles: at most two a minute, eight a raid, and only from
   spare money and with power for them.
 - **Stats and picture.** The Stats window lists the City Airplane with your other units: how many
-  are flying, the units it destroyed, the planes you lost (every flight that has ended), the hit
-  points its bombs and crashes removed, and its performance score next to those of your other
-  unit types. Under the table a line shows the plane's score and the score at which a computer
-  player in your place would buy another. A selected plane or helicopter shows its own picture.
+  are flying, the units it destroyed, the planes you lost (every flight that has ended) and the
+  hit points its bombs and crashes removed. For a computer player's house the Army allocation
+  table on the left has two rows under its ten unit types. **Trooper** shows the Trooper's
+  performance score, and as its per cent the infantry cap: the most of the army's value that may
+  be infantry. **City Airplane** (once the house has an Airport or has flown a plane) shows the
+  plane's performance score, and as its per cent that score as a share of the score the house
+  buys at: at 100 or more it buys planes. Neither number is a share of the army as the ten rows
+  above are; the note under the table says so. A selected plane or helicopter shows its own
+  picture.
 - **No Ornithopters.** An Airport no longer sends out Ornithopters. They come from the High-Tech
   Factory as before.
 
