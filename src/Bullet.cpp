@@ -299,6 +299,8 @@ case Bullet_LargeRocket: {
             speed = DuneCity::CityAircraft::bombSpeed();
             detonationTimer = -1;
             if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
+                // The heavy bomb's blast against ground units: a tile and a half (Map::damage).
+                damageRadius = DuneCity::CityAircraft::kStickUnitBlastTiles2 * TILESIZE / 2;
                 numFrames = 16;
                 graphic = pGFXManager->getObjPic(ObjPic_Bullet_LargeRocket, houseID);
             } else {

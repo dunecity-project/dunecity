@@ -526,6 +526,17 @@ inline constexpr int kStickTailBombs = 1;
 /// tiles) of an axis heading's 10.24 a cycle.
 inline constexpr int kStickPhaseStep = 2;
 inline constexpr int kStickPhasePeriod = 25;
+/// Enemy ground units start and carry a stick as buildings do (Stefan, 2026-11-23: "also get
+/// planes to drop bombs on enemy units as well"). Against units the heavy bomb's blast reaches
+/// kStickUnitBlastRadius, a tile and a half, the size its explosion is drawn: the full
+/// kStickDamage within half a tile of the impact, half of it to a tile, a quarter to a tile and
+/// a half (stickUnitDamage). A unit keeps moving for the 1.2 seconds the bomb falls, so a
+/// blast of half a tile, the aimed bomb's, would nearly always miss it. Buildings still take
+/// damage only when the bomb lands on them.
+inline constexpr int kStickUnitBlastTiles2 = 3;   // in half tiles
+inline constexpr int stickUnitDamage(int damage, int distance, int tileSize) {
+    return damage >> (distance / (tileSize / 2));
+}
 /// Cycles from the sight entering the first building of a stick to its first bomb:
 /// 3 x 10.24 = 30.7 world units, half a tile inside the building.
 inline constexpr int kStickLeadCycles = 3;

@@ -15,6 +15,7 @@
  *  along with Dune Legacy.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <dunecity/CityAircraftPolicy.h>
 #include <Map.h>
 #include <DynastyProjectile.h>
 #include <GasDeviationPolicy.h>
@@ -473,6 +474,11 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                             const auto scaledDamage = OrdinaryDamagePolicy::damageAt(
                                 ordinaryDamageMode, bulletID, ordinarySourceItemID, lround(damage), distance);
                             pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
+                        } else if(bulletID == Bullet_Bomb && damageRadius > TILESIZE/2) {
+                            // The city airplane's heavy bomb: full damage within half a tile, halved
+                            // for every half tile beyond (CityAircraft::stickUnitDamage).
+                            pUnit->handleDamage(DuneCity::CityAircraft::stickUnitDamage(lround(damage), distance, TILESIZE),
+                                                damagerID, damagerOwner, provenance);
                         } else {
                             const auto scaledDamage = lround(damage) >> (distance/(TILESIZE/4) + (dynastyBlast ? 0 : 1));
                             pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);

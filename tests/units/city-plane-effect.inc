@@ -722,6 +722,37 @@ void checkStick(const std::string& mapData) {
     }
 }
 
+// Stefan, 2026-11-23: "also get planes to drop bombs on enemy units as well". Three enemy tanks in
+// a row in the open, no building near: the stick starts over them and its blast, a tile and a
+// half against units, hurts every one. The same three tanks of the plane's own side get no bomb.
+void checkBombsOnUnits(const std::string& mapData) {
+    for(const int house : {HOUSE_ATREIDES, HOUSE_HARKONNEN}) {
+        std::vector<int> health;
+        const int dropped = flyRow(mapData, 7, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
+            for(int i = 0; i < 3; ++i) {
+                auto* tank = game.getHouse(house)->createUnit(Unit_Tank, true);
+                require(tank != nullptr, "Could not create a tank for the stick");
+                tank->deploy(Coord(28 + 2 * i, row));
+                tank->doSetAttackMode(STOP);
+                ids.push_back(tank->getObjectID());
+            }
+        }, health, true);
+        record("stick_on_units", std::string(house == HOUSE_ATREIDES ? "enemy" : "own") + " tanks in the open: bombs=" + std::to_string(dropped)
+                                     + " health_after=" + std::to_string(health[0]) + "/" + std::to_string(health[1]) + "/"
+                                     + std::to_string(health[2]));
+        if(house == HOUSE_ATREIDES) {
+            require(dropped >= 2, "The plane dropped no stick on enemy tanks in the open");
+            require(health[0] < 200 && health[1] < 200 && health[2] < 200, "A tank under the stick was not damaged");
+        } else {
+            require(dropped == 0 && health[0] == 200 && health[1] == 200 && health[2] == 200,
+                    "The plane bombed tanks of its own side");
+        }
+    }
+    require(CA::stickUnitDamage(250, 0, TILESIZE) == 250 && CA::stickUnitDamage(250, TILESIZE / 2, TILESIZE) == 125
+                && CA::stickUnitDamage(250, TILESIZE, TILESIZE) == 62 && CA::stickUnitDamage(250, TILESIZE * 3 / 2, TILESIZE) == 31,
+            "The heavy bomb's damage to units by distance is not 250 / 125 / 62 / 31");
+}
+
 // Stefan's game of 2026-11-23: the building is repairing (every AI building below half health
 // is, and a human's with auto-repair), so it gets a hit point back between two bombs. The first
 // rule's 2 x 100 then leaves a 200-point Wind Trap standing on 1; the stick destroys it.
@@ -1289,6 +1320,7 @@ int runCityPlaneEffect() {
     checkRocketChase(mapData);
     checkStick(mapData);
     checkRepairingBuilding(mapData);
+    checkBombsOnUnits(mapData);
     checkPurchase(mapData);
     checkPictures(mapData);
     checkFall(mapData);

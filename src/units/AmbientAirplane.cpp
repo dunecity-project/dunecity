@@ -599,7 +599,25 @@ void AmbientAirplane::dropStick(Uint32 gameCycle)
         }
     }
     const bool own = building != nullptr && building->getOwner()->getTeamID() == owner->getTeamID();
-    const bool enemy = building != nullptr && !own;
+    // An enemy ground unit under the sight counts as an enemy building does: a tank column, a
+    // Harvester or infantry in the open gets the stick too. Sandworms are nobody's enemy here.
+    const ObjectBase* unit = nullptr;
+    if(building == nullptr && onMap) {
+        const Tile* tile = currentGameMap->getTile(aim.x / TILESIZE, aim.y / TILESIZE);
+        const auto find = [&](const auto& ids) {
+            for(Uint32 id : ids) {
+                const ObjectBase* object = currentGame->getObjectManager().getObject(id);
+                if(unit == nullptr && object != nullptr && object->isAUnit() && object->getHealth() > 0
+                   && object->getItemID() != Unit_Sandworm
+                   && object->getOwner()->getTeamID() != owner->getTeamID()) {
+                    unit = object;
+                }
+            }
+        };
+        find(tile->getNonInfantryGroundObjectList());
+        find(tile->getInfantryList());
+    }
+    const bool enemy = (building != nullptr && !own) || unit != nullptr;
     if(stickGap > CA::kStickTailBombs) {
         if(!enemy) return;                          // no stick, nothing to start one
         // A new stick: its first bomb is due kStickLeadCycles from now, inside the building.
@@ -614,7 +632,8 @@ void AmbientAirplane::dropStick(Uint32 gameCycle)
     if(!enemy && ++stickGap > CA::kStickTailBombs) return;   // the tail is spent
     if(!onMap || own) return;
 
-    bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kStickDamage, false, building));
+    bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kStickDamage, false,
+                                    building != nullptr ? building : unit));
     ++bombsReleased;
     SDL_Log("CITY_PLANE_BOMB: house=%d object=%u target_house=%d target_item=%d cycle=%u", owner->getHouseID(),
             objectID, building ? building->getOwner()->getHouseID() : -1, building ? int(building->getItemID()) : -1,
