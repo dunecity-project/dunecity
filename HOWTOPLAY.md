@@ -152,18 +152,24 @@ not order them, but you can buy more planes.
   that is boxed in by other buildings, and every Airport in a game saved before this change, stays
   3x3 with the same picture drawn smaller. Both work the same.
 
-- **The free plane.** Every five seconds each of your powered Airports has a one in six chance of
-  launching a plane, as long as your house has no free plane in the air: about half a minute on
-  average after the last one was shot down or left the map. This plane costs nothing, and planes you
-  have bought do not hold it back. It takes off from the runway two tiles east of the Airport. A
-  flight ends when the plane crosses the edge of the map, which a run towards a building near the
-  edge soon makes it do: a plane that is not shot down is usually gone within half a minute to a
-  minute. Five minutes is the longest a flight can last. Human and computer players get the same
-  plane.
+- **The free plane.** Each powered Airport makes a free plane every five minutes, the time a Palace
+  takes to make a Saboteur; the Airport's panel shows the countdown. It takes off when the clock
+  has run out and your house has no free plane in the air, and that restarts the clock of all your
+  Airports, so a second Airport does not shorten the wait. An Airport you build during the game
+  has its free plane ready at once; Airports that stand when the game begins charge first.
+  Planes you have bought do not hold the free one back. It takes off from the runway two tiles
+  east of the Airport. A flight ends when the plane
+  is shot down or crosses the edge of the map, which a run towards a building near the edge soon
+  makes it do: a plane that is not shot down is usually gone within half a minute to a minute.
+  Human and computer players get the same plane.
 - **Buying a plane.** Select a powered Airport and press **Buy airplane 1500**: a plane takes off at
   once. You can buy as fast as you can pay, until your house has ten planes in the air (the panel
-  shows the count). Computer players buy planes too, but only one a minute at each Airport and only
-  from spare money: after paying they keep their reserves and 3000 credits more.
+  shows the count).
+- **When computer players buy.** A computer player keeps its reserves and 3000 credits more, and
+  then buys for one of two reasons. Its planes pay: so far their bombs have destroyed at least
+  1500 credits of enemy property per flight (the free plane gives the first evidence). Or it is
+  rich: with 30,000 credits to spare it keeps buying, up to ten in the air, even where single
+  planes do not pay. That is what grinds down a massively built city when a game has stalled.
 - **Finding your Airport.** With nothing selected, the side menu lists an **Airport** button under
   the Construction Yard's. It selects your Airport (the one that can sell a plane now, if you have
   several) without moving the view.
@@ -181,16 +187,21 @@ not order them, but you can buy more planes.
   plane. By then the plane is nine tiles further on, so you see the stick drop back from it and go
   off behind it. A bomb never damages an aircraft, not the plane that dropped it nor any other.
 - **Shooting it down.** Rocket Turrets fire at an enemy plane from three times their normal range (24
-  tiles), as they do at Ornithopters, and their rockets fly to where the plane will be. A rocket
-  that is 24 tiles from its turret goes off, and a turret does not fire at a plane its rocket cannot
-  catch inside that distance: a plane flying away is left to the turrets ahead of it. A plane has
-  100 hit points and a rocket does 30, so four hits bring it down. Damage stays on the plane, so it
-  falls on a later pass. Rocket Turrets need power in the Dune City options. A plane that is not
-  shot down keeps bombing until it flies off the map, and the next one follows about half a minute
-  later, so a city needs Rocket Turrets. A turret that a bomb lands on is destroyed.
-- **The crash.** A plane that is shot down crashes with the blast of a Death Hand. Turrets, Launchers
-  and Troopers therefore hold only the shot that would bring it down onto their own side, and fire
-  it once the plane is clear.
+  tiles), as they do at Ornithopters, and Launchers from their own range. Their rockets fly to
+  where the plane will be and go off on touching it, or on any other enemy plane they touch on the
+  way. A rocket that is 24 tiles from where it was fired goes off, and a turret does not fire at
+  a plane its rocket cannot catch inside that distance: a plane flying away is left to the turrets
+  ahead of it. A plane has 100 hit points; a turret's rocket does 30 and a Launcher's 75. Damage
+  stays on the plane. Rocket Turrets need power in the Dune City options, and a turret that a
+  bomb lands on is destroyed. A city without Rocket Turrets under a plane's course loses dozens
+  of buildings to one flight.
+- **The crash.** A plane that is shot down crashes with the blast of a Death Hand where it falls.
+  Nothing holds its fire for that: a plane shot down over your city crashes into your city, which
+  costs far less than letting it bomb on.
+- **Computer players under bombs.** While its buildings are being bombed a computer player adds
+  Rocket Turrets spread through its city, near the hits first and at least six tiles apart, until
+  every building has one within eight tiles: at most two a minute, eight a raid, and only from
+  spare money and with power for them.
 - **Stats and picture.** The Stats window lists the City Airplane with your other units: how many
   are flying, the units it destroyed, the planes you lost and the hit points its bombs removed. A
   selected plane or helicopter shows its own picture.
