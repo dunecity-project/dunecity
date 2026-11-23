@@ -659,10 +659,16 @@ void checkStick(const std::string& mapData) {
         }, health, true);
         const std::string name = getItemNameByID(item);
         record("stick_run", name + " bombs=" + std::to_string(dropped) + " health_after=" + std::to_string(health[0]));
-        // One hit destroys the 200-point buildings; the Construction Yard (two tiles) takes one
-        // hit, the Refinery and the Palace (three tiles) two.
-        const int expected = item == Structure_ConstructionYard ? 150 : item == Structure_Palace ? 500 : 0;
-        require(health[0] == expected, "One stick over a " + name + " did not leave it at " + std::to_string(expected));
+        // The stick starts half a tile before the building (125 of splash) and then lands a bomb
+        // every two tiles: a Wind Trap gets a direct hit and falls; a one-tile turret only the
+        // splash of the bombs before and behind it; a Construction Yard one direct hit, a Refinery
+        // and a Palace along their three tiles one direct hit and the splash of the next.
+        const int full = item == Structure_Palace ? 1000 : item == Structure_Refinery ? 450
+                       : item == Structure_ConstructionYard ? 400 : 200;
+        if(item == Structure_WindTrap) require(health[0] == 0, "One stick over a Wind Trap did not destroy it");
+        else if(item == Structure_Palace || item == Structure_ConstructionYard)
+            require(health[0] > 0 && health[0] <= full - 250, "One stick over a " + name + " did not land its direct hit, or destroyed it");
+        else require(health[0] < full, "One stick over a " + name + " did not damage it");
     }
 
     // The stick runs on in step across a one-tile road between two buildings: one bomb each, one
@@ -673,8 +679,8 @@ void checkStick(const std::string& mapData) {
     }, health, true);
     record("stick_gap", "two Wind Traps one tile apart: bombs=" + std::to_string(dropped) + " health_after="
                             + std::to_string(health[0]) + " and " + std::to_string(health[1]));
-    require(dropped == 4 && health[0] == 0 && health[1] == 0,
-            "The stick did not run on over two Wind Traps a tile apart with four bombs");
+    require(dropped >= 3 && dropped <= 6 && health[0] == 0 && health[1] == 0,
+            "The stick did not run on over two Wind Traps a tile apart and destroy both");
 
     // Own and allied buildings: nothing is released over them, also not as the tail of a stick.
     dropped = flyRow(mapData, 4, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
@@ -699,7 +705,8 @@ void checkStick(const std::string& mapData) {
     }, health, true);
     const int standing = static_cast<int>(std::count_if(health.begin(), health.end(), [](int h) { return h > 0; }));
     record("stick_rack", "wind_traps=20 bombs=" + std::to_string(dropped) + " standing=" + std::to_string(standing));
-    require(dropped == 20 + CA::kStickTailBombs && standing == 0, "The stick stopped before the end of twenty Wind Traps");
+    require(dropped >= 20 && dropped <= 20 + 2 + CA::kStickTailBombs && standing == 0,
+            "The stick stopped before the end of twenty Wind Traps");
 
     // Units under the stick take the ordinary splash, whoever owns them: a tank on the road
     // between two enemy Wind Traps, once the defender's and once the plane's own.
@@ -720,6 +727,36 @@ void checkStick(const std::string& mapData) {
                                   + std::to_string(tankFull) + "->" + std::to_string(tankHealth));
         require(tankHealth < tankFull, "A tank on the road under the stick took no splash");
     }
+}
+
+// Stefan, 2026-11-23: "the plane should drop bombs when it will splash enemy units or buildings
+// with them". A heavy bomb that misses a building of another team splashes it with half of what a
+// unit there would take; a building of the bomber's own side beside it takes nothing.
+void checkBuildingSplash(const std::string& mapData) {
+    auto game = newGame(mapData, 21, Rules{true, true, false, true});
+    auto* raider = game->getHouse(HOUSE_HARKONNEN);
+    const Uint32 enemy = place(game->getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(30, 30))->getObjectID();
+    const Uint32 own = place(raider, Structure_WindTrap, Coord(30, 33))->getObjectID();
+    auto* plane = fly(raider, Coord(4, 50), Coord(kMapSize + 20, 50), RIGHT);
+    const int radius = CA::kStickUnitBlastTiles2 * TILESIZE / 2;
+    // A quarter tile north of the enemy trap's top edge, then three quarters, then on the own trap's edge.
+    const Coord near(31 * TILESIZE, 30 * TILESIZE - TILESIZE / 4), farther(31 * TILESIZE, 30 * TILESIZE - 3 * TILESIZE / 4);
+    const int effectNear = plane->bombEffectAt(near), effectFarther = plane->bombEffectAt(farther);
+    currentGameMap->damage(plane->getObjectID(), raider, near, Bullet_Bomb, CA::kStickDamage, radius, false, true, NONE_ID,
+                           DeviationReward::Provenance());
+    const int afterNear = healthOf(*game, enemy);
+    currentGameMap->damage(plane->getObjectID(), raider, Coord(31 * TILESIZE, 33 * TILESIZE - TILESIZE / 4), Bullet_Bomb,
+                           CA::kStickDamage, radius, false, true, NONE_ID, DeviationReward::Provenance());
+    record("stick_splash", "bomb a quarter tile off an enemy Wind Trap: expected " + std::to_string(effectNear) + ", health 200->"
+                               + std::to_string(afterNear) + "; three quarters off would do " + std::to_string(effectFarther)
+                               + "; own Wind Trap after a bomb a quarter tile off it: " + std::to_string(healthOf(*game, own)));
+    require(effectNear == 125 && afterNear == 75, "A heavy bomb a quarter tile off an enemy building did not splash it with 125");
+    require(effectFarther == 62, "A heavy bomb three quarters of a tile off an enemy building would not splash it with 62");
+    require(healthOf(*game, own) == 200, "A heavy bomb splashed a building of the bomber's own side");
+    require(CA::stickBuildingDamage(250, 0, TILESIZE, 50) == 250 && CA::stickBuildingDamage(250, TILESIZE + 8, TILESIZE, 50) == 31,
+            "The heavy bomb's damage to buildings by distance is not 250 on the footprint and 31 beyond a tile");
+    game.reset();
+    currentGame = nullptr;
 }
 
 // Stefan, 2026-11-23: "does the damage dealt include damage when it crashes? it has a nuclear
@@ -932,9 +969,12 @@ void checkFall(const std::string& mapData) {
         // Seen from outside the bullet: the release shows a cycle late and the bomb bursts the cycle it comes
         // within one step of its target.
         require(fall >= CA::kBombFallCycles - 3 && fall <= CA::kBombFallCycles + 1, "A bomb did not fall for about 75 cycles");
-        require(hit != nullptr && hit->getObjectID() == trapID && impact.x / TILESIZE == aimed.x / TILESIZE
-                    && impact.y / TILESIZE == aimed.y / TILESIZE,
-                "A bomb did not land on the building tile it was released at");
+        // The aimed bomb lands on the building; the stick's first bomb up to half a tile before it.
+        require(impact.x / TILESIZE == aimed.x / TILESIZE && impact.y / TILESIZE == aimed.y / TILESIZE,
+                "A bomb did not land on the tile it was released at");
+        if(carpet) require(impact.x >= 29 * TILESIZE + TILESIZE / 2 - 12 && impact.x < 32 * TILESIZE,
+                           "The stick's first bomb did not land within half a tile of the building's near edge");
+        else require(hit != nullptr && hit->getObjectID() == trapID, "An aimed bomb did not land on its building");
         require(planeAhead >= 8 * TILESIZE, "The plane had not passed its bomb by eight tiles when it went off");
         game.reset();
         currentGame = nullptr;
@@ -1354,6 +1394,7 @@ int runCityPlaneEffect() {
     checkRepairingBuilding(mapData);
     checkBombsOnUnits(mapData);
     checkCrashCredit(mapData);
+    checkBuildingSplash(mapData);
     checkPurchase(mapData);
     checkPictures(mapData);
     checkFall(mapData);

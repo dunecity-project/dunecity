@@ -584,6 +584,50 @@ void AmbientAirplane::applyBalance(ObjectData& data)
     }
 }
 
+int AmbientAirplane::bombEffectAt(const Coord& aim, const ObjectBase** hit) const
+{
+    const int radius = CA::kStickUnitBlastTiles2 * TILESIZE / 2;
+    const int damage = stickDamage();
+    const int splash = CA::stickBuildingSplashPercent();
+    int best = 0;
+    const auto consider = [&](const ObjectBase* object, int effect) {
+        if(effect > best) {
+            best = effect;
+            if(hit != nullptr) *hit = object;
+        }
+    };
+    std::set<Uint32> seen;
+    for(int y = (aim.y - radius) / TILESIZE; y <= (aim.y + radius) / TILESIZE; ++y) {
+        for(int x = (aim.x - radius) / TILESIZE; x <= (aim.x + radius) / TILESIZE; ++x) {
+            if(x < 0 || y < 0 || !currentGameMap->tileExists(x, y)) continue;
+            const Tile* tile = currentGameMap->getTile(x, y);
+            const auto each = [&](const auto& ids) {
+                for(Uint32 id : ids) {
+                    if(!seen.insert(id).second) continue;
+                    const ObjectBase* object = currentGame->getObjectManager().getObject(id);
+                    if(object == nullptr || object->getHealth() <= 0 || object->getItemID() == Unit_Sandworm
+                       || object->getOwner()->getTeamID() == owner->getTeamID()) continue;
+                    if(object->isAStructure()) {
+                        const auto* structure = static_cast<const StructureBase*>(object);
+                        const Coord topLeft = structure->getLocation() * TILESIZE;
+                        const Coord bottomRight = topLeft + structure->getStructureSize() * TILESIZE;
+                        const int dx = std::max({topLeft.x - aim.x, 0, aim.x - (bottomRight.x - 1)});
+                        const int dy = std::max({topLeft.y - aim.y, 0, aim.y - (bottomRight.y - 1)});
+                        const int distance = static_cast<int>(lround(sqrt(static_cast<double>(dx * dx + dy * dy))));
+                        if(distance <= radius) consider(object, CA::stickBuildingDamage(damage, distance, TILESIZE, splash));
+                    } else if(object->isAUnit() && !object->isAFlyingUnit()) {
+                        const int distance = static_cast<int>(lround(distanceFrom(object->getCenterPoint(), aim)));
+                        if(distance <= radius) consider(object, CA::stickUnitDamage(damage, distance, TILESIZE));
+                    }
+                }
+            };
+            each(tile->getNonInfantryGroundObjectList());
+            each(tile->getInfantryList());
+        }
+    }
+    return best;
+}
+
 int AmbientAirplane::stickDamage()
 {
     static const int damage = [] {
@@ -637,15 +681,14 @@ Coord AmbientAirplane::bombSight() const
 }
 
 /**
-    City Plane Carpet Bombing: one game cycle of the stick. A stick starts when a building of
-    another team comes under the bomb sight: its first bomb is released CA::kStickLeadCycles
-    later (half a tile inside that building), then one every 12.5 cycles (two tiles on an axis
-    heading) while a building of another team is under the sight, and CA::kStickTailBombs more
-    after the last. A bomb that falls due while the sight is over a building of the plane's own
-    team, or off the map, is not released. There is no rack to empty. A bomb lands
-    CA::kBombFallCycles later on the point the sight was on, does CA::kStickDamage to the
-    building that point lies on and, by the ordinary splash rule, damages ground units of any
-    side within a tile of it; it never damages an aircraft (Map::damage).
+    City Plane Carpet Bombing: one game cycle of the stick. A stick starts with a bomb the cycle
+    a bomb released now would do at least CA::kStickStartDamage to a building or ground unit of
+    another team (a direct hit or its splash, bombEffectAt), then one bomb every 12.5 cycles (two
+    tiles on an axis heading) while a bomb would do at least CA::kStickCarryDamage, and
+    CA::kStickTailBombs more after that. A bomb that falls due while the sight is over a building
+    of the plane's own team, or off the map, is not released. There is no rack to empty. A bomb
+    lands CA::kBombFallCycles later on the point the sight was on; it never damages an aircraft
+    (Map::damage).
 */
 void AmbientAirplane::dropStick(Uint32 gameCycle)
 {
@@ -662,41 +705,27 @@ void AmbientAirplane::dropStick(Uint32 gameCycle)
         }
     }
     const bool own = building != nullptr && building->getOwner()->getTeamID() == owner->getTeamID();
-    // An enemy ground unit under the sight counts as an enemy building does: a tank column, a
-    // Harvester or infantry in the open gets the stick too. Sandworms are nobody's enemy here.
-    const ObjectBase* unit = nullptr;
-    if(building == nullptr && onMap) {
-        const Tile* tile = currentGameMap->getTile(aim.x / TILESIZE, aim.y / TILESIZE);
-        const auto find = [&](const auto& ids) {
-            for(Uint32 id : ids) {
-                const ObjectBase* object = currentGame->getObjectManager().getObject(id);
-                if(unit == nullptr && object != nullptr && object->isAUnit() && object->getHealth() > 0
-                   && object->getItemID() != Unit_Sandworm
-                   && object->getOwner()->getTeamID() != owner->getTeamID()) {
-                    unit = object;
-                }
-            }
-        };
-        find(tile->getNonInfantryGroundObjectList());
-        find(tile->getInfantryList());
-    }
-    const bool enemy = (building != nullptr && !own) || unit != nullptr;
+    // What a bomb released now would do: a direct hit on an enemy building, or its splash on
+    // enemy buildings and ground units around the point (bombEffectAt). Nothing over a building
+    // of the plane's own side.
+    const ObjectBase* target = nullptr;
+    const int effect = (!onMap || own) ? 0 : bombEffectAt(aim, &target);
     if(stickGap > CA::kStickTailBombs) {
-        if(!enemy) return;                          // no stick, nothing to start one
-        // A new stick: its first bomb is due kStickLeadCycles from now, inside the building.
-        stickPhase = CA::kStickPhasePeriod - CA::kStickLeadCycles * CA::kStickPhaseStep;
-        stickGap = 0;
-        return;
+        if(effect < CA::kStickStartDamage) return;  // no stick, nothing worth starting one
+        stickPhase = CA::kStickPhasePeriod;         // a new stick: its first bomb falls now
+    } else {
+        stickPhase += CA::kStickPhaseStep;
     }
-    stickPhase += CA::kStickPhaseStep;
+    const bool enemy = effect >= CA::kStickCarryDamage;
     if(enemy) stickGap = 0;
     if(stickPhase < CA::kStickPhasePeriod) return;
     stickPhase -= CA::kStickPhasePeriod;
     if(!enemy && ++stickGap > CA::kStickTailBombs) return;   // the tail is spent
     if(!onMap || own) return;
+    if(building == nullptr) building = (target != nullptr && target->isAStructure()) ? target : nullptr;
 
     bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, stickDamage(), false,
-                                    building != nullptr ? building : unit));
+                                    building != nullptr ? building : target));
     ++bombsReleased;
     SDL_Log("CITY_PLANE_BOMB: house=%d object=%u target_house=%d target_item=%d cycle=%u", owner->getHouseID(),
             objectID, building ? building->getOwner()->getHouseID() : -1, building ? int(building->getItemID()) : -1,

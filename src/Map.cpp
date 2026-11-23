@@ -436,6 +436,19 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                                 pStructure->addSmoke(realPos, currentGame->getGameCycleCount());
                             }
                         }
+                    } else if(bulletID == Bullet_Bomb && damageRadius > TILESIZE/2 && damagerOwner != nullptr
+                              && pStructure->getOwner()->getTeamID() != damagerOwner->getTeamID()) {
+                        // The city airplane's heavy bomb splashes a building of another team it
+                        // just missed (CityAircraft::stickBuildingDamage); never the bomber's own side.
+                        const int dx = std::max({topLeftCorner.x - realPos.x, 0, realPos.x - (bottomRightCorner.x - 1)});
+                        const int dy = std::max({topLeftCorner.y - realPos.y, 0, realPos.y - (bottomRightCorner.y - 1)});
+                        const int offFootprint = static_cast<int>(lround(sqrt(static_cast<double>(dx*dx + dy*dy))));
+                        if(offFootprint <= damageRadius) {
+                            const int splash = DuneCity::CityAircraft::stickBuildingDamage(
+                                lround(damage), std::max(1, offFootprint), TILESIZE,
+                                DuneCity::CityAircraft::stickBuildingSplashPercent());
+                            if(splash > 0) pStructure->handleDamage(splash, damagerID, damagerOwner, provenance);
+                        }
                     }
                 } else if(pObject && pObject->isAUnit()) {
                     const auto pUnit = static_cast<UnitBase*>(pObject);

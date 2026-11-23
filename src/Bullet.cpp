@@ -904,16 +904,28 @@ case Bullet_LargeRocket: {
                 currentGame->getHouse(building->getOwner()->getHouseID())
                     ->noteBombHit(position.x/TILESIZE, position.y/TILESIZE, currentGame->getGameCycleCount());
             }
+            // The buildings of other teams the blast can reach, a direct hit or the heavy bomb's
+            // splash: one line for each it destroys, for the match tables
+            // (tests/ai/city-plane-report.py).
+            struct InReach { Uint32 id; int house; int item; int price; };
+            std::vector<InReach> inReach;
+            for(const StructureBase* structure : structureList) {
+                if(structure->getHealth() <= 0 || structure->getOwner()->getTeamID() == owner->getTeamID()) continue;
+                const Coord topLeft = structure->getLocation() * TILESIZE;
+                const Coord bottomRight = topLeft + structure->getStructureSize() * TILESIZE;
+                if(position.x < topLeft.x - damageRadius || position.y < topLeft.y - damageRadius
+                   || position.x >= bottomRight.x + damageRadius || position.y >= bottomRight.y + damageRadius) continue;
+                inReach.push_back({structure->getObjectID(), structure->getOwner()->getHouseID(), static_cast<int>(structure->getItemID()),
+                                   currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price});
+            }
             currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
-            if(building != nullptr && building->getHealth() <= 0) {
-                // One line per building a bomb destroys, for the match tables (tests/ai/city-plane-report.py).
-                std::string name = getItemNameByID(building->getItemID());
+            for(const InReach& before : inReach) {
+                const ObjectBase* hit = currentGame->getObjectManager().getObject(before.id);
+                if(hit != nullptr && hit->getHealth() > 0) continue;
+                std::string name = getItemNameByID(before.item);
                 std::replace(name.begin(), name.end(), ' ', '_');
                 SDL_Log("CITY_PLANE_KILL: house=%d target_house=%d target_item=%d target_name=%s price=%d cycle=%u",
-                        houseID, building->getOwner()->getHouseID(), building->getItemID(),
-                        name.c_str(),
-                        currentGame->objectData.data[building->getItemID()][building->getOriginalHouseID()].price,
-                        currentGame->getGameCycleCount());
+                        houseID, before.house, before.item, name.c_str(), before.price, currentGame->getGameCycleCount());
             }
             if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
                 // The stick's heavy bomb: the large building explosion drawn four tiles wide.

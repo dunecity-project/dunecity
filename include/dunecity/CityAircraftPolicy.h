@@ -86,6 +86,7 @@
  * both the simulation and the tests stay bit-identical across platforms.
  */
 
+#include <cstdlib>
 #include <DataTypes.h>
 #include <Definitions.h>
 #include <fixmath/FixPoint.h>
@@ -504,9 +505,8 @@ inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, k
 //   (1000) four.
 // - One bomb every 12.5 game cycles (kStickPhasePeriod / kStickPhaseStep): two tiles of
 //   flight on an axis heading, a quarter of the first stick's rate.
-// - A stick starts when an enemy building comes under the bomb sight; its first bomb is
-//   released kStickLeadCycles later, half a tile inside that building's edge, not on
-//   the edge itself. It carries on for kStickTailBombs more bombs after the last
+// - A stick starts with a bomb as soon as the next bomb would splash an enemy building or
+//   unit (kStickStartDamage, below). It carries on for kStickTailBombs more bombs after the last
 //   building (so it runs on across roads and gaps of up to two tiles in step); it never
 //   falls on a tile that holds a building of the plane's own team.
 // - Its impact is Explosion_Bomb: the large building explosion drawn four tiles wide,
@@ -537,9 +537,34 @@ inline constexpr int kStickUnitBlastTiles2 = 3;   // in half tiles
 inline constexpr int stickUnitDamage(int damage, int distance, int tileSize) {
     return damage >> (distance / (tileSize / 2));
 }
-/// Cycles from the sight entering the first building of a stick to its first bomb:
-/// 3 x 10.24 = 30.7 world units, half a tile inside the building.
-inline constexpr int kStickLeadCycles = 3;
+/// Splash and the start of a stick (Stefan, 2026-11-23: "the plane should drop bombs when it will
+/// splash enemy units or buildings with them, also it starts dropping bombs slighly too last when
+/// aproaching a building"). A bomb that misses a building of another team by up to a tile and a
+/// half now splashes it with kStickBuildingSplashPercent of what a unit there would take: 125
+/// within half a tile of its footprint, 62 to a tile, 31 beyond (a direct hit is still 250). The
+/// bomber's own side's buildings take no splash, as they take no bomb. A stick starts with a bomb
+/// the cycle the next bomb would do at least kStickStartDamage to an enemy building or ground
+/// unit, which is half a tile before the bomb sight reaches a building, and carries on while a
+/// bomb would do at least kStickCarryDamage. (It used to wait three cycles after the sight had
+/// entered the first building, so the first bomb fell half a tile inside it.)
+inline constexpr int kStickBuildingSplashPercent = 50;
+inline constexpr int kStickStartDamage = 125;
+inline constexpr int kStickCarryDamage = 62;
+/// What a heavy bomb of `damage` does to a building whose footprint is `distance` world units
+/// from the impact (0: the bomb landed on it).
+inline constexpr int stickBuildingDamage(int damage, int distance, int tileSize, int splashPercent) {
+    return distance <= 0 ? damage : stickUnitDamage(damage, distance, tileSize) * splashPercent / 100;
+}
+/// kStickBuildingSplashPercent, or the experiment-only DUNECITY_TEST_BOMB_BUILDING_SPLASH_PCT
+/// (0 to 100, read once per process, never a match rule).
+inline int stickBuildingSplashPercent() {
+    static const int percent = [] {
+        const char* text = std::getenv("DUNECITY_TEST_BOMB_BUILDING_SPLASH_PCT");
+        const int value = text != nullptr ? std::atoi(text) : -1;
+        return value >= 0 && value <= 100 ? value : kStickBuildingSplashPercent;
+    }();
+    return percent;
+}
 
 // ---------------------------------------------------------------------------
 // Bombing runs (match rule GameOptionsClass::cityPlaneBombingRuns). Each leg of the

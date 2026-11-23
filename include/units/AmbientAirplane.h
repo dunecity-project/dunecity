@@ -116,6 +116,9 @@ public:
     static void applyBalance(ObjectData& data);
     /// Damage of one stick bomb: CityAircraft::kStickDamage, or DUNECITY_TEST_BOMB_DAMAGE.
     static int stickDamage();
+    /// The most a stick bomb landing on `aim` (world units) would do to one building or ground
+    /// unit of another team (0: nothing in its blast). `hit` receives that object.
+    int bombEffectAt(const Coord& aim, const ObjectBase** hit = nullptr) const;
     /// True when a turret rocket fired now from `launch` (world units) meets this plane no
     /// farther than `range4` quarter world units from `launch`.
     bool rocketCanMeet(const Coord& launch, int range4) const;
