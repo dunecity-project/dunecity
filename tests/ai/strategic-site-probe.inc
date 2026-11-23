@@ -16,6 +16,23 @@ void runStrategicSiteProbe(Game& game) {
     require(house->getNumItems(Structure_HeavyFactory)>0 && house->getNumItems(Structure_LightFactory)>0,
         "Siting fixture lost the Palace prerequisites");
 
+    // The physical no-site condition set up below has to last the six minutes. City planes
+    // undo it: a plane's bombs, and since 1.0.877 its crash when it is shot down (a Death Hand
+    // blast; 16 to 22 crashes in this fixture's six minutes, up to five buildings each), destroy
+    // lots, and every destroyed lot is bare rock again. The legacy arm then found a Palace site
+    // in its second minute, placed two Palaces and never starved. This test is about siting, so
+    // both arms play without the two rules that make planes destroy buildings: nothing bombs,
+    // and nothing is shot down over the city.
+    {
+        auto rules=game.getGameInitSettings().getGameOptions();
+        rules.cityPlaneBombing=false;
+        rules.cityPlaneDefence=false;
+        game.gameInitSettings.setGameOptions(rules);
+        require(!game.getGameInitSettings().getGameOptions().cityPlaneBombing
+            && !game.getGameInitSettings().getGameOptions().cityPlaneDefence,
+            "Siting fixture could not switch the city plane rules off");
+    }
+
     std::vector<BuilderBase*> yards;
     for (auto* structure:structureList)
         if (structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard)
@@ -36,38 +53,14 @@ void runStrategicSiteProbe(Game& game) {
     // Fragment only bare rock/slab rows. Never open mountain paths, alter spice or change roads'
     // underlying terrain; existing buildings and city lots are preserved too. The real placement
     // assertion below remains authoritative: an untouched Palace site must fail this setup.
-    //
-    // The condition has to hold for the whole run, not only at its start. Since 1.0.877 a city
-    // plane that is shot down crashes onto the city and destroys the lots under it (this
-    // fixture: 16 to 22 crashes in the six minutes, up to five buildings each), and every
-    // destroyed building is bare rock again: the legacy arm then found a Palace site in its
-    // second minute and never starved. So the same fragmentation is applied to newly bared
-    // rock on every cycle, in both arms. A site this house has already planned for anything
-    // but a Palace is left as it is: turning it to sand would strand that order in its yard
-    // (a Rocket Turret waited to be placed for four minutes), which is not the failure under test.
-    const auto plannedForOther=[&](int x, int y) {
-        for (const auto& entry:bot->reservedStructures) {
-            if (entry.second.item==Structure_Palace) continue;
-            const Coord size=getStructureSize(entry.second.item), at=entry.second.location;
-            if (x>=at.x && x<at.x+size.x && y>=at.y && y<at.y+size.y) return true;
+    for (int y=0;y<currentGameMap->getSizeY();y+=3)
+        for (int x=0;x<currentGameMap->getSizeX();++x) {
+            auto* tile=currentGameMap->getTile(x,y);
+            const int terrain=tile->getType();
+            if ((terrain==Terrain_Rock || terrain==Terrain_Slab)
+                && !tile->hasAStructure() && !tile->hasCityZone() && !tile->isRoad())
+                tile->setType(Terrain_Sand);
         }
-        for (const auto& yard:bot->builderPlaceLocations)
-            for (const Coord& at:yard.second)
-                if (at.x==x && at.y==y) return true;
-        return false;
-    };
-    const auto fragment=[&]() {
-        for (int y=0;y<currentGameMap->getSizeY();y+=3)
-            for (int x=0;x<currentGameMap->getSizeX();++x) {
-                auto* tile=currentGameMap->getTile(x,y);
-                const int terrain=tile->getType();
-                if ((terrain==Terrain_Rock || terrain==Terrain_Slab)
-                    && !tile->hasAStructure() && !tile->hasCityZone() && !tile->isRoad()
-                    && !plannedForOther(x,y))
-                    tile->setType(Terrain_Sand);
-            }
-    };
-    fragment();
     for (const auto* yard:yards) {
         bot->planningBuilder=yard->getObjectID();
         bot->clearPlacementCache();
@@ -98,7 +91,6 @@ void runStrategicSiteProbe(Game& game) {
     bool sawOverdue=false;
     for (Uint32 cycle=0;cycle<6*minute;++cycle) {
         game.updateGameState();
-        fragment();
         sawOverdue|=bot->palaceEligibleSinceCycle!=std::numeric_limits<Uint32>::max()
             && game.getGameCycleCount()-bot->palaceEligibleSinceCycle>=Uint32(MILLI2CYCLES(45000));
         if ((cycle+1)%minute) continue;
