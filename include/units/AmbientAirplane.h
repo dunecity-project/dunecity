@@ -99,7 +99,7 @@ public:
     /// quarter world units (CityAircraft::kRocketChaseRangeFactor x the Rocket Turret's range).
     static int rocketChaseRange4(int houseID);
     /// How many times its WeaponRange a Rocket Turret reaches a city airplane, and its rocket
-    /// chases one: CityAircraft::kRocketChaseRangeFactor (3, as for Ornithopters). Balance
+    /// chases one: CityAircraft::kTurretPlaneReachFactor (2: 16 tiles; Ornithopters keep 3). Balance
     /// experiments only: DUNECITY_TEST_PLANE_REACH_FACTOR (1 to 3) for a whole process, read
     /// once; never set in a game people play (it is not a match rule).
     static int turretReachFactor();
@@ -111,8 +111,9 @@ public:
     /// Balance experiments only, read once per process and never a match rule (Stefan,
     /// 2026-11-23: "test a few different things, we could increase the cost but make it stronger
     /// hp, faster, do more damage"): DUNECITY_TEST_PLANE_HP and DUNECITY_TEST_PLANE_SPEED_PCT
-    /// change the city airplane's hit points and speed in the unit data of a new game.
-    static void applyBalanceExperiment(ObjectData& data);
+    /// change the city airplane's hit points and speed in the unit data of a new game. Without
+    /// them applyBalance() only lifts the seeded 100 hit points to CityAircraft::kPlaneHitPoints.
+    static void applyBalance(ObjectData& data);
     /// Damage of one stick bomb: CityAircraft::kStickDamage, or DUNECITY_TEST_BOMB_DAMAGE.
     static int stickDamage();
     /// True when a turret rocket fired now from `launch` (world units) meets this plane no

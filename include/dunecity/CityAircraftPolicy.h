@@ -625,6 +625,23 @@ inline int64_t integerSqrt(int64_t value) {
 /// now only fires at a plane its rocket can meet inside this distance (RocketTurret::canAttack).
 inline constexpr int kRocketChaseRangeFactor = 3;
 
+// Balance of 2026-11-23, set from measurements (HANDOVER.md, "City planes: balance"). Stefan:
+// "why are turrets reaching 24 tiles?? thatv sounds insane", "we need a balance with these
+// planes, don't nerf them too much", "it should be able to deal some real damage to enemy bases
+// to break up a stalemate".
+// - A Rocket Turret reaches a city airplane, and its rocket chases one, kTurretPlaneReachFactor
+//   = 2 times its WeaponRange: 16 tiles. It was the Ornithopter's 3 (24 tiles), under which 92%
+//   of flights in ordinary AI games were shot down, half within ten seconds of take-off.
+//   Ornithopters keep 3.
+// - The plane has kPlaneHitPoints = 150, five turret rockets instead of four. The unit data of
+//   every mod was seeded with 100, so a new game that reads exactly 100 gets 150
+//   (AmbientAirplane::applyBalance); another value is a mod's own choice and stays.
+// - Its speed stays. A turret rocket is 12% faster than the plane; 15% more speed outran the
+//   rockets and took 87% of Metropolis in six minutes, 10% with 125 hit points 77%.
+inline constexpr int kTurretPlaneReachFactor = 2;
+inline constexpr int kPlaneHitPoints = 150;
+inline constexpr int kPlaneHitPointsSeeded = 100;
+
 struct Intercept {
     bool possible = false;  ///< false when the target is as fast as the missile
     int cycles16 = 0;       ///< flight time in sixteenths of a game cycle

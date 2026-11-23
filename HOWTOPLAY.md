@@ -175,23 +175,24 @@ not order them, but you can buy more planes.
   several) without moving the view.
 - **Where it flies.** Each leg of the flight is a run across one enemy building, picked at random from
   all enemy buildings on the map, and on for twelve tiles beyond it. Then it turns for the next.
-- **Bombs.** Over enemy buildings the plane lays a stick of heavy bombs like a heavy bomber: the
-  first half a tile inside the first building under it, then one every two tiles for as long as an
-  enemy building is under it, and one more after the last. The rack never empties. A bomb does 250
+- **Bombs.** Over enemy buildings and enemy ground units the plane lays a stick of heavy bombs like
+  a heavy bomber: the first half a tile inside the first building under it, then one every two
+  tiles for as long as an enemy building or unit is under it, and one more after the last. The rack never empties. A bomb does 250
   damage to the building it lands on and goes off in a large explosion four tiles wide. One hit
   destroys a zone, Wind Trap, Gun or Rocket Turret, Heavy Factory, Repair Yard, Silo or Wall. Two
   hits destroy every other building except a Nuclear Plant (three) and a Palace (four). Bombs are
-  never released over your own or an allied building. Ground units within a tile of a bomb take
-  heavy splash damage, whoever owns them.
+  never released over your own or an allied building. Against ground units a bomb's blast reaches
+  a tile and a half: the full 250 within half a tile, 125 to a tile, less beyond, whoever owns
+  the unit.
 - **The fall.** A bomb takes 1.2 seconds to fall and lands three tiles ahead of where it left the
   plane. By then the plane is nine tiles further on, so you see the stick drop back from it and go
   off behind it. A bomb never damages an aircraft, not the plane that dropped it nor any other.
-- **Shooting it down.** Rocket Turrets fire at an enemy plane from three times their normal range (24
-  tiles), as they do at Ornithopters, and Launchers from their own range. Their rockets fly to
+- **Shooting it down.** Rocket Turrets fire at an enemy plane from twice their normal range (16
+  tiles; Ornithopters they see at 24), and Launchers from their own range. Their rockets fly to
   where the plane will be and go off on touching it, or on any other enemy plane they touch on the
-  way. A rocket that is 24 tiles from where it was fired goes off, and a turret does not fire at
+  way. A rocket that is 16 tiles from where it was fired goes off, and a turret does not fire at
   a plane its rocket cannot catch inside that distance: a plane flying away is left to the turrets
-  ahead of it. A plane has 100 hit points; a turret's rocket does 30 and a Launcher's 75. Damage
+  ahead of it. A plane has 150 hit points; a turret's rocket does 30 and a Launcher's 75. Damage
   stays on the plane. Rocket Turrets need power in the Dune City options, and a turret that a
   bomb lands on is destroyed. A city without Rocket Turrets under a plane's course loses dozens
   of buildings to one flight.

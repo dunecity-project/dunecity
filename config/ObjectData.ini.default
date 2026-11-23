@@ -899,7 +899,7 @@ Builder = WOR
 
 [Ambient Airplane]
 Enabled = true
-HitPoints = 100
+HitPoints = 150
 Price = 0
 ViewRange = 3
 MaxSpeed = 10.24  # Micropolis doAirplaneSprite: 8/16 tile per 50ms sprite tick

@@ -531,7 +531,7 @@ int AmbientAirplane::rocketChaseRange4(int houseID)
            * turretReachFactor() * TILESIZE * 4;
 }
 
-void AmbientAirplane::applyBalanceExperiment(ObjectData& data)
+void AmbientAirplane::applyBalance(ObjectData& data)
 {
     const auto number = [](const char* name) {
         const char* text = std::getenv(name);
@@ -541,6 +541,7 @@ void AmbientAirplane::applyBalanceExperiment(ObjectData& data)
     const int speedPercent = number("DUNECITY_TEST_PLANE_SPEED_PCT");
     for(int house = 0; house < NUM_HOUSES; ++house) {
         auto& plane = data.data[Unit_AmbientAirplane][house];
+        if(plane.hitpoints == CA::kPlaneHitPointsSeeded) plane.hitpoints = CA::kPlaneHitPoints;
         if(hitPoints > 0) plane.hitpoints = hitPoints;
         if(speedPercent > 0) plane.maxspeed = plane.maxspeed * speedPercent / 100;
     }
@@ -570,7 +571,7 @@ int AmbientAirplane::turretReachFactor()
     static const int factor = [] {
         const char* text = std::getenv("DUNECITY_TEST_PLANE_REACH_FACTOR");
         const int value = text != nullptr ? std::atoi(text) : 0;
-        return value >= 1 && value <= CA::kRocketChaseRangeFactor ? value : CA::kRocketChaseRangeFactor;
+        return value >= 1 && value <= CA::kRocketChaseRangeFactor ? value : CA::kTurretPlaneReachFactor;
     }();
     return factor;
 }

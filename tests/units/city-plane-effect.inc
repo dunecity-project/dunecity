@@ -381,7 +381,7 @@ RunOutcome playRun(const std::string& mapData, int direction, int offset, int se
         outcome.planeHealth = lround(live->getHealth());
     }
     // No turret fires here: whatever the plane lost, it lost to its own bombs.
-    require(outcome.planeHealth == 100, "A plane lost hit points on a run over an undefended base");
+    require(outcome.planeHealth == CA::kPlaneHitPoints, "A plane lost hit points on a run over an undefended base");
     for(int i = 0; i < 40; ++i) game->updateGameState();
     for(const auto& building : buildings) {
         const auto* structure = game->getObjectManager().getObject(building.id);
@@ -456,7 +456,7 @@ int flyRow(const std::string& mapData, int seed, bool bombing, Setup setup, std:
         auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
         if(live == nullptr) break;
         dropped = static_cast<int>(live->getBombsReleased());
-        require(lround(live->getHealth()) == 100, "A plane lost hit points to its own bombs");
+        require(lround(live->getHealth()) == CA::kPlaneHitPoints, "A plane lost hit points to its own bombs");
     }
     for(int i = 0; i < 2 * CA::kBombFallCycles; ++i) game->updateGameState();
     health.clear();
@@ -878,7 +878,7 @@ void checkFall(const std::string& mapData) {
         for(int tick = 0; tick < 700 && landed < 0; ++tick) {
             game->updateGameState();
             auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
-            require(live != nullptr && lround(live->getHealth()) == 100, "The plane was lost or hurt before its first bomb landed");
+            require(live != nullptr && lround(live->getHealth()) == CA::kPlaneHitPoints, "The plane was lost or hurt before its first bomb landed");
             if(released < 0 && live->getBombsReleased() > 0) {
                 released = tick;
                 for(const Bullet* bullet : bulletList)
@@ -951,7 +951,7 @@ void checkFall(const std::string& mapData) {
 
 // Stefan, 2026-11-23: "missiles chasing a plane just keep going forever. there needs to be a
 // distance cutoff". A turret rocket is 1.13 times as fast as the plane, so after a plane flying
-// away it flew nine times the gap between them. Now it goes off once it is 3 x WeaponRange (24
+// away it flew nine times the gap between them. Now it goes off once it is 2 x WeaponRange (16
 // tiles) from where it was fired, and a turret takes no plane it cannot meet inside that.
 void checkRocketChase(const std::string& mapData) {
     const int row = 30;
@@ -963,7 +963,7 @@ void checkRocketChase(const std::string& mapData) {
         auto game = newGame(mapData, 14, Rules{true, false, false});
         // The cut-off is 3 x the Rocket Turret's WeaponRange: the control arm sets a range no rocket reaches.
         for(int h = 0; h < NUM_HOUSES; ++h)
-            game->objectData.data[Structure_RocketTurret][h].weaponrange = rangeTiles / CA::kRocketChaseRangeFactor;
+            game->objectData.data[Structure_RocketTurret][h].weaponrange = rangeTiles / AmbientAirplane::turretReachFactor();
         auto* owner = game->getHouse(HOUSE_ATREIDES);
         for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
         auto* turret = place(owner, Structure_RocketTurret, launchTile);
@@ -999,7 +999,7 @@ void checkRocketChase(const std::string& mapData) {
         currentGame = nullptr;
         return flight;
     };
-    const int reach = 24;
+    const int reach = 8 * CA::kTurretPlaneReachFactor;   // WeaponRange 8: sixteen tiles
     // A plane five tiles away and flying away: the meeting point is 45 tiles off.
     const Flight unlimited = chase(240, 9, RIGHT, -1);
     const Flight away = chase(reach, 9, RIGHT, -1);
@@ -1008,14 +1008,14 @@ void checkRocketChase(const std::string& mapData) {
     const Flight turned = chase(reach, 30, LEFT, 20);
     record("rocket_chase", "plane flying away from 5 tiles: without a cut-off the rocket flew " + std::to_string(unlimited.farthest10)
                                + " tenths of a tile in " + std::to_string(unlimited.cycles) + " cycles (plane health "
-                               + std::to_string(unlimited.planeHealth) + "); with the 24-tile cut-off " + std::to_string(away.farthest10)
+                               + std::to_string(unlimited.planeHealth) + "); with the cut-off at " + std::to_string(reach) + " tiles " + std::to_string(away.farthest10)
                                + " in " + std::to_string(away.cycles) + " cycles; head-on from 26 tiles " + std::to_string(headOn.farthest10)
                                + " (plane health " + std::to_string(headOn.planeHealth) + "); plane turning away after 20 cycles "
                                + std::to_string(turned.farthest10) + " in " + std::to_string(turned.cycles) + " cycles");
     require(unlimited.farthest10 > 400, "The control rocket did not chase the plane beyond forty tiles");
     require(away.farthest10 <= reach * 10 + 6 && turned.farthest10 <= reach * 10 + 6,
-            "A rocket chasing a plane flew farther than 24 tiles from its turret");
-    require(headOn.planeHealth == 70 && headOn.farthest10 <= reach * 10, "A rocket no longer hits a plane coming head-on");
+            "A rocket chasing a plane flew farther than its turret's reach against planes");
+    require(headOn.planeHealth == CA::kPlaneHitPoints - 30 && headOn.farthest10 <= reach * 10, "A rocket no longer hits a plane coming head-on");
 
     // Stefan, 2026-11-23: "rockets fired at them seem to go right through them". A rocket fired at
     // one plane goes off on another enemy plane it touches on the way: two planes come head-on in
@@ -1036,7 +1036,7 @@ void checkRocketChase(const std::string& mapData) {
         for(int tick = 0; tick < 300 && !bulletList.empty(); ++tick) game->updateGameState();
         record("rocket_chase", "rocket fired at the far of two planes in line: near plane health=" + std::to_string(healthOf(*game, nearID))
                                    + " far plane health=" + std::to_string(healthOf(*game, farID)));
-        require(healthOf(*game, nearID) == 70 && healthOf(*game, farID) == 100,
+        require(healthOf(*game, nearID) == CA::kPlaneHitPoints - 30 && healthOf(*game, farID) == CA::kPlaneHitPoints,
                 "A rocket passed through an enemy plane on the way to its target");
         game.reset();
         currentGame = nullptr;
@@ -1061,28 +1061,28 @@ void checkRocketChase(const std::string& mapData) {
         record("rocket_chase", "Launcher may attack a plane coming over it=" + std::to_string(takes) + "; its rocket (" + std::to_string(damage)
                                    + ") leaves the plane at health=" + std::to_string(healthOf(*game, planeID)));
         require(takes, "A Launcher holds its fire at an enemy city airplane");
-        require(healthOf(*game, planeID) == std::max(0, 100 - damage), "A Launcher's rocket did not hit the plane it was fired at");
+        require(healthOf(*game, planeID) == std::max(0, CA::kPlaneHitPoints - damage), "A Launcher's rocket did not hit the plane it was fired at");
         game.reset();
         currentGame = nullptr;
     }
 
-    // The turret's side of the rule: it takes a plane it can meet inside 24 tiles and no other.
+    // The turret's side of the rule: it takes a plane it can meet inside its sixteen tiles and no other.
     auto game = newGame(mapData, 15, Rules{true, false, false});
     auto* owner = game->getHouse(HOUSE_ATREIDES);
     for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
     auto* turret = dynamic_cast<RocketTurret*>(place(owner, Structure_RocketTurret, launchTile));
     auto* harkonnen = game->getHouse(HOUSE_HARKONNEN);
     turret->attackMode = STOP;
-    auto* nearPlane = fly(harkonnen, Coord(6, row), Coord(kMapSize + 20, row), RIGHT);
+    auto* nearPlane = fly(harkonnen, Coord(5, row), Coord(kMapSize + 20, row), RIGHT);
     auto* farPlane = fly(harkonnen, Coord(10, row), Coord(kMapSize + 20, row), RIGHT);
     auto* comingPlane = fly(harkonnen, Coord(26, row), Coord(-20, row), LEFT);
     for(int i = 0; i < 2; ++i) game->updateGameState();   // a plane has a velocity once it has moved
     const bool near = turret->canAttack(nearPlane);
     const bool far = turret->canAttack(farPlane);
     const bool coming = turret->canAttack(comingPlane);
-    record("rocket_chase", "turret takes a plane flying away from 2 tiles=" + std::to_string(near) + " from 6 tiles="
+    record("rocket_chase", "turret takes a plane flying away from 1 tile=" + std::to_string(near) + " from 6 tiles="
                                + std::to_string(far) + " coming head-on from 22 tiles=" + std::to_string(coming));
-    require(near && !far && coming, "A turret takes a plane its rocket cannot meet inside 24 tiles, or refuses one it can");
+    require(near && !far && coming, "A turret takes a plane its rocket cannot meet inside its reach, or refuses one it can");
     game.reset();
     currentGame = nullptr;
 }

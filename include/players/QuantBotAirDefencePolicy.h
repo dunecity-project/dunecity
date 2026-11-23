@@ -39,9 +39,9 @@ constexpr bool bombedRecently(uint32_t lastHitCycle, uint32_t now) {
 // --- How dense --------------------------------------------------------------------------
 
 /// Every building of the city should have an own Rocket Turret within eight tiles of its
-/// footprint (Chebyshev tiles). A Rocket Turret reaches a city airplane at 24 tiles (three times
-/// its WeaponRange of 8, CityAircraft::kRocketChaseRangeFactor), so a plane over a covered
-/// building is at most a third of that reach from one turret, and the turrets of the buildings
+/// footprint (Chebyshev tiles). A Rocket Turret reaches a city airplane at 16 tiles (twice
+/// its WeaponRange of 8, CityAircraft::kTurretPlaneReachFactor), so a plane over a covered
+/// building is at most half that reach from one turret, and the turrets of the buildings
 /// around it are inside the reach too, so several fire at it.
 constexpr int kCoverTiles = 8;
 /// A new turret keeps at least six tiles (Chebyshev) from every own Rocket Turret, standing or
