@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""City airplane flights in whole games, three match rules off against on, in the existing build.
+
+Stefan's games: a Custom Game on the bundled 4P - 192x192 - Metropolis map (2026-11-23, 148 to
+289 Rocket Turrets a house) and on 2P - 192x192 - City (eight a house), every house played by
+QuantBot Brutal and spectated, in the Dune City mod's options. The same map and seed are played
+in four states of the rules, each adding one to the last:
+
+    base      the game at 1d520fa6c: one aimed 100-point bomb per building tile, random
+              waypoints, planes only from the Airport's free roll
+    stick     + City Plane Carpet Bombing
+    runs      + City Plane Bombing Runs
+    purchase  + City Plane Purchase (all defaults)
+
+Per arm: flights per game, the share of flights whose plane crossed an enemy building and an
+enemy zone, the share that released a bomb, bombs and buildings destroyed per flight, the
+seconds a plane lasted, planes bought and credits spent. Differences are paired by map and
+seed with a 95% bootstrap interval (tests/ai/match_score.py).
+
+The test requires, over the games played: the base arm leaves most twice-bombed buildings
+standing (under 0.5 buildings destroyed per flight) while the stick destroys more per flight in
+every game; with runs no smaller a share of flights bombs than without; no plane is bought with
+the purchase rule off and at least one with it on, every purchase leaves its house 3000
+credits or more, and no house ever has more than three planes in the air.
+
+Outputs: flights.csv, purchases.csv, games.csv, summary.md, and per game run.log.
+"""
+import argparse
+import csv
+import os
+import re
+import shlex
+import statistics
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+sys.path.insert(0, str(root / 'tests/ai'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+from probe_profile import default_build_dir, discard_profile_assets, require_free_space, scratch_dir  # noqa: E402
+from match_score import bootstrap  # noqa: E402
+
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
+MAPS = {'metropolis': ('data/maps/multiplayer/4P - 192x192 - Metropolis.ini', 4),
+        'city': ('data/maps/singleplayer/2P - 192x192 - City.ini', 2)}
+ARMS = (('base', '000'), ('stick', '100'), ('runs', '110'), ('purchase', '111'))
+CYCLES_PER_SECOND = 62.5
+PRICE = 1500
+
+
+def build_probe(build, out):
+    subprocess.run([sys.executable, str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+    commands = native_build_commands(build)
+    main = (root / 'src/main.cpp').read_text(encoding='utf-8')
+    needle = 'int menuResult = MainMenu().showMenu();'
+    if main.count(needle) != 1:
+        raise RuntimeError('Main-menu injection point changed; update the city plane flights runner.')
+    main = main.replace(needle, 'int menuResult = runCityPlaneFlights();')
+    main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
+    position = main.index('int main(')
+    main = (main[:position] + NATIVE_INCLUDES + '#include "'
+            + (root / 'tests/units/city-plane-flights.inc').as_posix() + '"\n' + main[position:])
+    source, obj = out / 'city-plane-flights-main.cpp', out / 'city-plane-flights-main.o'
+    source.write_text(main, encoding='utf-8')
+    compile_command = shlex.split(next(line for line in commands if ' -c ' in line and '/src/main.cpp' in line))
+    # A private diagnostic object must not overwrite Ninja's production depfile/PCH records.
+    for option in ('-include', '-MT', '-MF'):
+        if option in compile_command:
+            position = compile_command.index(option)
+            del compile_command[position:position + 2]
+    for option in ('-MD', '-MMD'):
+        if option in compile_command:
+            compile_command.remove(option)
+    compile_command[compile_command.index('-o') + 1] = str(obj)
+    compile_command[compile_command.index('-c') + 1] = str(source)
+    compile_command.append('-fno-access-control')
+    binary = native_probe_binary(build, out, 'city-plane-flights')
+    link = shlex.split(next(line for line in commands if ' -o ' + NATIVE_TARGET + ' ' in line))
+    link = link[link.index('&&') + 1:]
+    link = link[:link.index('&&')]
+    link[link.index('-o') + 1] = str(binary)
+    link = [str(obj) if argument.endswith('/main.cpp.o') else argument for argument in link]
+    with (out / 'build.log').open('w') as log:
+        subprocess.run(compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+        subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
+    return binary
+
+
+def play(binary, scratch, out, game, cycles, timeout):
+    name, seed, arm, rules = game
+    run = out / 'games' / ('%s-%d-%s' % (name, seed, arm))
+    run.mkdir(parents=True, exist_ok=True)
+    profile = scratch / ('profile-%s-%d-%s' % (name, seed, arm))
+    profile.mkdir()
+    (profile / 'Dune City.ini').write_text(
+        '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
+        'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = Plane watcher\n',
+        encoding='utf-8')
+    path, players = MAPS[name]
+    env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
+               SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1', CITY_PLANE_FLIGHTS_OUT=str(run),
+               CITY_PLANE_FLIGHTS_MAP=str(root / path), CITY_PLANE_FLIGHTS_PLAYERS=str(players),
+               CITY_PLANE_FLIGHTS_SEED=str(seed), CITY_PLANE_FLIGHTS_CYCLES=str(cycles), CITY_PLANE_FLIGHTS_RULES=rules)
+    logfile = run / 'run.log'
+    with logfile.open('w') as log:
+        subprocess.run([str(binary), '--window', '--showlog'], cwd=run, env=env, stdout=log, stderr=subprocess.STDOUT,
+                       check=True, timeout=timeout)
+    lines = [line for line in logfile.read_text(errors='replace').splitlines() if line.startswith('CITY_PLANE_')]
+    if sum('CITY_PLANE_FLIGHTS_PASS:' in line for line in lines) != 1 or any('CITY_PLANE_FLIGHTS_FAIL:' in line for line in lines):
+        raise RuntimeError('Missing or failed city plane flights game; see ' + str(logfile))
+    # Only the plane lines are kept: a whole game's log is hundreds of megabytes of city simulation.
+    logfile.write_text('\n'.join(lines) + '\n')
+    discard_profile_assets(profile)
+    return run
+
+
+def fields(line):
+    return dict(part.split('=') for part in line.split(': ', 1)[1].split())
+
+
+def collect(out, games, cycles):
+    flights, purchases, summary = [], [], []
+    for name, seed, arm, rules in games:
+        run = out / 'games' / ('%s-%d-%s' % (name, seed, arm))
+        key = dict(map=name, seed=seed, arm=arm)
+        lines = (run / 'run.log').read_text().splitlines()
+        launched = {fields(l)['object']: fields(l) for l in lines if l.startswith('CITY_PLANE_LAUNCHED:')}
+        down = {fields(l)['object'] for l in lines if l.startswith('CITY_PLANE_DOWN:')}
+        starts = [fields(l) for l in lines if l.startswith('CITY_PLANE_FLIGHTS_START:')]
+        with (run / 'flights.csv').open(newline='') as handle:
+            rows = list(csv.DictReader(handle))
+        for row in rows:
+            start = launched.get(row['object'], {})
+            end = 'down' if row['object'] in down else 'flying' if int(row['last']) >= cycles - 1 else 'left'
+            flights.append(dict(key, **row, bought=start.get('bought', '0'), end=end,
+                                seconds=round((int(row['last']) - int(row['first'])) / CYCLES_PER_SECOND, 1)))
+        with (run / 'purchases.csv').open(newline='') as handle:
+            bought = list(csv.DictReader(handle))
+        purchases += [dict(key, **row) for row in bought]
+        with (run / 'houses.csv').open(newline='') as handle:
+            houses = list(csv.DictReader(handle))
+        count = len(rows)
+        summary.append(dict(
+            key, flights=count, crossed_building=sum(int(r['crossed_building']) for r in rows),
+            crossed_zone=sum(int(r['crossed_zone']) for r in rows), bombed=sum(int(r['bombs']) > 0 for r in rows),
+            bombs=sum(int(r['bombs']) for r in rows), destroyed=sum(int(r['destroyed']) for r in rows),
+            credits_destroyed=sum(int(r['credits']) for r in rows), shot_down=len(down), bought=len(bought),
+            credits_spent=PRICE * len(bought),
+            buildings_start=sum(int(s['buildings']) for s in starts),
+            buildings_end=sum(int(h['buildings']) for h in houses),
+            turrets_start=sum(int(s['rocket_turrets']) for s in starts),
+            least_credits_after=min((int(r['credits_after']) for r in bought), default='')))
+    for name, rows in (('flights', flights), ('purchases', purchases), ('games', summary)):
+        with (out / (name + '.csv')).open('w', newline='') as handle:
+            if rows:
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+    return flights, purchases, summary
+
+
+def seed_list(text):
+    return [int(part) for part in text.split(',')]
+
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
+parser.add_argument('--output-dir', type=Path, default=default_build_dir(root) / 'city-plane-flights')
+parser.add_argument('--maps', nargs='+', choices=sorted(MAPS), default=sorted(MAPS))
+parser.add_argument('--seeds', type=seed_list, default=[4711], help='Game seeds, e.g. 4711,4712')
+parser.add_argument('--minutes', type=float, default=6.0, help='Game minutes per game')
+parser.add_argument('--jobs', type=int, default=2, help='Games played at once')
+parser.add_argument('--report', action='store_true', help='Only recompute the report from the games in --output-dir')
+parser.add_argument('--wall-timeout', type=int, default=2400)
+args = parser.parse_args()
+build, out = args.build_dir.resolve(), args.output_dir.resolve()
+out.mkdir(parents=True, exist_ok=True)
+cycles = int(args.minutes * 60 * CYCLES_PER_SECOND)
+games = [(name, seed, arm, rules) for name in args.maps for seed in args.seeds for arm, rules in ARMS]
+
+if not args.report:
+    require_free_space()
+    binary = build_probe(build, out)
+    with scratch_dir('city-plane-flights') as scratch:
+        with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+            list(pool.map(lambda game: play(binary, scratch, out, game, cycles, args.wall_timeout), games))
+    subprocess.run([sys.executable, str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+
+flights, purchases, summary = collect(out, games, cycles)
+by_arm = {arm: [row for row in summary if row['arm'] == arm] for arm, _ in ARMS}
+flights_by = {arm: [row for row in flights if row['arm'] == arm] for arm, _ in ARMS}
+
+
+def per_flight(rows, value):
+    return sum(value(row) for row in rows) / len(rows) if rows else 0.0
+
+
+def table(chosen_maps, title):
+    lines = ['### ' + title, '',
+             '| Measure | ' + ' | '.join(arm for arm, _ in ARMS) + ' |', '|---|' + '---:|' * len(ARMS)]
+    rows = {arm: [r for r in by_arm[arm] if r['map'] in chosen_maps] for arm, _ in ARMS}
+    fl = {arm: [r for r in flights_by[arm] if r['map'] in chosen_maps] for arm, _ in ARMS}
+
+    def add(label, value, form='%.2f'):
+        lines.append('| ' + label + ' | ' + ' | '.join(form % value(arm) for arm, _ in ARMS) + ' |')
+    games_n = max(1, len(rows[ARMS[0][0]]))
+    add('Games', lambda a: len(rows[a]), '%d')
+    add('Flights per game', lambda a: len(fl[a]) / max(1, len(rows[a])), '%.1f')
+    add('Flights that crossed an enemy building, %', lambda a: 100 * per_flight(fl[a], lambda r: int(r['crossed_building'])), '%.0f')
+    add('Flights that crossed an enemy zone, %', lambda a: 100 * per_flight(fl[a], lambda r: int(r['crossed_zone'])), '%.0f')
+    add('Flights that released a bomb, %', lambda a: 100 * per_flight(fl[a], lambda r: int(r['bombs']) > 0), '%.0f')
+    add('Bombs released per flight', lambda a: per_flight(fl[a], lambda r: int(r['bombs'])))
+    add('Bombs that fell on a building, %', lambda a: 100 * sum(int(r['on_building']) for r in fl[a]) / max(1, sum(int(r['bombs']) for r in fl[a])), '%.0f')
+    add('Buildings destroyed per flight', lambda a: per_flight(fl[a], lambda r: int(r['destroyed'])))
+    add('Buildings destroyed per 100 bombs', lambda a: 100 * sum(int(r['destroyed']) for r in fl[a]) / max(1, sum(int(r['bombs']) for r in fl[a])), '%.1f')
+    add('Most buildings destroyed by one flight', lambda a: max((int(r['destroyed']) for r in fl[a]), default=0), '%d')
+    add('Buildings destroyed by bombs per game', lambda a: sum(int(r['destroyed']) for r in rows[a]) / max(1, len(rows[a])), '%.1f')
+    add('... as % of the buildings at the start', lambda a: 100 * sum(int(r['destroyed']) for r in rows[a]) / max(1, sum(int(r['buildings_start']) for r in rows[a])), '%.1f')
+    add('Credits of buildings destroyed per game', lambda a: sum(int(r['credits_destroyed']) for r in rows[a]) / max(1, len(rows[a])), '%.0f')
+    add('Planes shot down per game', lambda a: sum(int(r['shot_down']) for r in rows[a]) / max(1, len(rows[a])), '%.1f')
+    add('Median seconds a plane lasted', lambda a: statistics.median([float(r['seconds']) for r in fl[a] if r['end'] != 'flying'] or [0]), '%.1f')
+    add('Planes bought per game', lambda a: sum(int(r['bought']) for r in rows[a]) / max(1, len(rows[a])), '%.1f')
+    add('Credits spent on planes per game', lambda a: sum(int(r['credits_spent']) for r in rows[a]) / max(1, len(rows[a])), '%.0f')
+    del games_n
+    return lines + ['']
+
+
+def paired(first, second, value):
+    """Mean per-game difference second - first over (map, seed), with its 95% bootstrap interval."""
+    index = {(r['map'], r['seed']): r for r in by_arm[first]}
+    diffs = [value(r) - value(index[(r['map'], r['seed'])]) for r in by_arm[second]]
+    low, high = bootstrap(diffs, 20261123)[-2:]
+    return sum(diffs) / len(diffs), low, high, diffs
+
+
+def rate(row, field):
+    return int(row[field]) / max(1, int(row['flights']))
+
+
+report = ['# City airplane flights in whole games', '',
+          '%.0f game minutes a game, QuantBot Brutal on every house, Dune City mod options (explored, no fog). '
+          'Each arm adds one rule to the one before it; base is the game at 1d520fa6c.' % args.minutes, '']
+if len(args.maps) > 1:
+    report += table(args.maps, 'All maps')
+for name in args.maps:
+    turrets = [int(r['turrets_start']) for r in by_arm['base'] if r['map'] == name]
+    report += table([name], '%s (%s; %d Rocket Turrets on the map at the start)'
+                    % (name, MAPS[name][0].split('/')[-1], turrets[0] if turrets else 0))
+report += ['## Paired by map and seed (%d games an arm)' % len(by_arm['base']), '',
+           '| Step | Measure | Mean difference | 95% interval |', '|---|---|---:|---|']
+steps = (('base', 'stick', 'Buildings destroyed per flight', lambda r: rate(r, 'destroyed')),
+         ('base', 'stick', 'Buildings destroyed per game', lambda r: int(r['destroyed'])),
+         ('stick', 'runs', 'Flights that released a bomb, share', lambda r: rate(r, 'bombed')),
+         ('stick', 'runs', 'Buildings destroyed per flight', lambda r: rate(r, 'destroyed')),
+         ('runs', 'purchase', 'Flights per game', lambda r: int(r['flights'])),
+         ('runs', 'purchase', 'Buildings destroyed per game', lambda r: int(r['destroyed'])))
+results = {}
+for first, second, label, value in steps:
+    mean, low, high, diffs = paired(first, second, value)
+    results[(second, label)] = (mean, low, high, diffs)
+    report.append('| %s -> %s | %s | %+.2f | %+.2f to %+.2f |' % (first, second, label, mean, low, high))
+least = [int(r['credits_after']) for r in purchases]
+report += ['', 'Purchases: %d in all; the least a house held after paying was %s credits.'
+           % (len(purchases), min(least) if least else 'n/a'), '']
+(out / 'summary.md').write_text('\n'.join(report) + '\n', encoding='utf-8')
+print('\n'.join(report))
+
+failures = []
+base_rate = per_flight(flights_by['base'], lambda r: int(r['destroyed']))
+if base_rate >= 0.5:
+    failures.append('base: %.2f buildings destroyed per flight; the reproduction expects under 0.5' % base_rate)
+if not all(diff > 0 for diff in results[('stick', 'Buildings destroyed per flight')][3]):
+    failures.append('stick: not more buildings destroyed per flight than base in every game')
+if results[('runs', 'Flights that released a bomb, share')][0] < 0:
+    failures.append('runs: a smaller share of flights bombed than without')
+if any(int(r['bought']) for arm in ('base', 'stick', 'runs') for r in by_arm[arm]):
+    failures.append('purchase: a plane was bought with the rule off')
+if not any(int(r['bought']) for r in by_arm['purchase']):
+    failures.append('purchase: no plane was bought with the rule on')
+if least and min(least) < 3000:
+    failures.append('purchase: a house was left with %d credits after buying a plane' % min(least))
+if failures:
+    sys.exit('CITY PLANE FLIGHTS FAILED: ' + '; '.join(failures))
+print('City plane flights: ' + str(out / 'summary.md'))

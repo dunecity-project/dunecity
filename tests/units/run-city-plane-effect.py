@@ -11,10 +11,15 @@ Dune City mod's own options (explored map, no fog, Rocket Turrets need power):
   crash, and where the turret-cycles with the plane inside weapon range go (held, no target
   yet, turning, reloading). Bombing is off in both arms.
 - City Plane Bombing. A plane crosses an undefended base of 22 buildings on three headings and
-  thirteen offsets: bombs dropped, buildings and credits destroyed per run.
+  thirteen offsets: bombs dropped, buildings and credits destroyed per run. Three arms: off, on
+  with one aimed 100-point bomb per building tile (the first rule), and on with the stick
+  (City Plane Carpet Bombing: 60-point bombs, two a tile, load 24).
 - Airport Ornithopter Patrol and the fixed cases (checks.csv): what one run does to a Wind
   Trap, a Construction Yard and a Palace, own and allied buildings, the bomb load, the saved
-  bomb load, and what an Airport launches in eleven game minutes.
+  bomb load, and what an Airport launches in eleven game minutes; for the stick the same
+  buildings, a road between two buildings, own buildings beside the target, tanks under it
+  and a repairing building; and City Plane Purchase: price, the three-plane limit, the
+  one-minute cooldown, another house's Buy command and a house that cannot pay.
 
 Differences are on minus off, paired by encounter, with a 95% bootstrap interval
 (tests/ai/match_score.py). The test requires: with the defence rule more passes engaged, more
@@ -22,7 +27,8 @@ damage to the plane and more planes shot down (each whole interval above 0), and
 losing under 5 hit points and under 0.02 buildings a pass to its own fire (a rocket that meets
 the plane over an own building does its 30 there too) and to crashes; with bombing off no bomb and
 no damage, with it on buildings destroyed in some runs but never a Construction Yard or a
-Palace in a single run.
+Palace in a single run, in both bombing arms; and the stick destroying more buildings a run
+than the aimed bombs.
 
 Outputs: passes.csv, runs.csv, checks.csv, summary.md, run.log.
 """
@@ -59,15 +65,15 @@ def seed_list(text):
     return seeds
 
 
-def pair_up(rows, key, arm):
+def pair_up(rows, key, arm, first='0', second='1', every=('0', '1')):
     arms = {}
     for row in rows:
         arms.setdefault(tuple(row[field] for field in key), {})[row[arm]] = row
     pairs = []
     for name, both in sorted(arms.items()):
-        if set(both) != {'0', '1'}:
-            raise RuntimeError('Encounter without both arms: ' + repr(name))
-        pairs.append((name, both['0'], both['1']))
+        if set(both) != set(every):
+            raise RuntimeError('Encounter without every arm: ' + repr(name))
+        pairs.append((name, both[first], both[second]))
     return pairs
 
 
@@ -168,7 +174,9 @@ if not args.report:
 with (out / 'passes.csv').open(newline='') as handle:
     passes = pair_up(list(csv.DictReader(handle)), PASS_KEY, 'defence')
 with (out / 'runs.csv').open(newline='') as handle:
-    runs = pair_up(list(csv.DictReader(handle)), RUN_KEY, 'bombing')
+    run_rows = list(csv.DictReader(handle))
+runs = pair_up(run_rows, RUN_KEY, 'bombing', '0', '1', ('0', '1', '2'))
+stick_runs = pair_up(run_rows, RUN_KEY, 'bombing', '1', '2', ('0', '1', '2'))
 with (out / 'checks.csv').open(newline='') as handle:
     checks = list(csv.reader(handle))[1:]
 
@@ -228,7 +236,7 @@ on_runs = [pair[2] for pair in runs]
 with_loss = sum(1 for row in on_runs if int(row['destroyed']) > 0)
 with_bombs = sum(1 for row in on_runs if int(row['bombs']) > 0)
 report += ['## Bombing runs over an undefended base of 22 buildings', '',
-           '### City Plane Bombing (' + str(len(runs)) + ' paired runs)', '',
+           '### City Plane Bombing, one aimed bomb per building tile (' + str(len(runs)) + ' paired runs)', '',
            '| Measure | Bombing off | Bombing on | Paired difference (on - off) | 95% interval |',
            '|---|---:|---:|---:|---|',
            line('Bombs dropped per run (load 6)', bombs),
@@ -255,6 +263,38 @@ if any(int(row['yard_lost']) or int(row['palace_lost']) for row in on_runs):
     failures.append('bombing: a Construction Yard or Palace fell to a single run')
 if with_loss == len(on_runs):
     failures.append('bombing: every run destroyed a building')
+
+stick_bombs = paired(stick_runs, lambda row: float(row['bombs']))
+stick_damage = paired(stick_runs, lambda row: float(row['damage']))
+stick_destroyed = paired(stick_runs, lambda row: float(row['destroyed']))
+stick_credits = paired(stick_runs, lambda row: float(row['credits']))
+stick_on = [pair[2] for pair in stick_runs]
+stick_loss = sum(1 for row in stick_on if int(row['destroyed']) > 0)
+report += ['### City Plane Carpet Bombing, the stick against the aimed bombs (' + str(len(stick_runs)) + ' paired runs)', '',
+           '| Measure | Aimed bombs | Stick | Paired difference (stick - aimed) | 95% interval |',
+           '|---|---:|---:|---:|---|',
+           line('Bombs dropped per run (load 6 against 24)', stick_bombs),
+           line('Building hit points removed per run', stick_damage, 1),
+           line('Buildings destroyed per run', stick_destroyed),
+           line('Credits of buildings destroyed per run', stick_credits, 1), '',
+           'With the stick %d of %d runs dropped a bomb and %d destroyed at least one building; the most in one run '
+           'was %d buildings (%d credits) of 22. Construction Yards lost in a single run: %d; Palaces: %d.'
+           % (sum(1 for row in stick_on if int(row['bombs']) > 0), len(stick_on), stick_loss,
+              max(int(row['destroyed']) for row in stick_on), max(int(row['credits']) for row in stick_on),
+              sum(int(row['yard_lost']) for row in stick_on), sum(int(row['palace_lost']) for row in stick_on)), '']
+lost = {}
+for row in stick_on:
+    for name in row['lost'].split('+'):
+        if name != '-':
+            lost[name] = lost.get(name, 0) + 1
+report += ['Buildings destroyed over all runs with the stick: '
+           + (', '.join('%s %d' % item for item in sorted(lost.items(), key=lambda item: -item[1])) or 'none') + '.', '']
+if not stick_destroyed[3] > 0:
+    failures.append('stick: not more buildings destroyed than the aimed bombs, interval %+.3f to %+.3f' % stick_destroyed[3:5])
+if any(int(row['yard_lost']) or int(row['palace_lost']) for row in stick_on):
+    failures.append('stick: a Construction Yard or Palace fell to a single run')
+if max(int(row['destroyed']) for row in stick_on) >= 11:
+    failures.append('stick: one run destroyed half the base')
 
 report += ['## Fixed cases', ''] + ['- ' + name + ': ' + detail for name, detail in checks] + ['']
 (out / 'summary.md').write_text('\n'.join(report) + '\n', encoding='utf-8')

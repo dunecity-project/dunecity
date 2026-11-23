@@ -1124,6 +1124,15 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-plane-effect)
         # 7 minutes on the Mini, 17 on the AWS Linux workers.
         set_tests_properties(city_plane_effect PROPERTIES TIMEOUT 3000 PROCESSORS 2)
+        # Whole games on Stefan's two city maps (4P Metropolis, 2P City), QuantBot Brutal on every
+        # house, in four states of the bomb stick, bombing run and plane purchase rules: the
+        # stick must destroy more buildings per flight than the aimed bombs in every game, runs
+        # must not lower the share of flights that bomb, and planes are only bought with the
+        # purchase rule on, never leaving a house under 3000 credits or with four in the air.
+        dunecity_add_test(headless nightly NAME city_plane_flights COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-city-plane-flights.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-plane-flights)
+        set_tests_properties(city_plane_flights PROPERTIES TIMEOUT 3000 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME carryall_flight_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-carryall-flight-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/carryall-flight-probe)

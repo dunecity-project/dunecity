@@ -7,7 +7,8 @@
 //           Defence off and on; bombing is off in both arms, so what the defender loses is the
 //           crash. Per turret and cycle the probe records why the turret is not firing.
 //   runs    A plane crosses an undefended enemy base on three headings and thirteen offsets.
-//           City Plane Bombing off and on: bombs, buildings and credits destroyed per run.
+//           Bombing off, on with one aimed bomb per building tile (the first rule), and on
+//           with the stick (City Plane Carpet Bombing): bombs, buildings and credits per run.
 //   checks  Fixed cases with exact expectations: what one run does to a Wind Trap, a
 //           Construction Yard and a Palace, that own and allied buildings are never hit, the bomb
 //           load and its return, the saved bomb load, and what an Airport launches.
@@ -23,6 +24,9 @@
 #include <mod/ModManager.h>
 #include <sand.h>
 #include <structures/Airport.h>
+#include <Command.h>
+#include <players/Player.h>
+#include <units/Tank.h>
 #include <structures/RocketTurret.h>
 #include <units/AmbientAirplane.h>
 #include <dunecity/CityAircraftPolicy.h>
@@ -331,8 +335,10 @@ struct RunOutcome {
     std::string lost;
 };
 
-RunOutcome playRun(const std::string& mapData, int direction, int offset, int seed, bool bombing) {
-    auto game = newGame(mapData, seed, Rules{true, bombing, false});
+// rule 0: no bombing; 1: one aimed bomb per building tile; 2: the stick.
+RunOutcome playRun(const std::string& mapData, int direction, int offset, int seed, int rule) {
+    auto game = newGame(mapData, seed, Rules{true, rule > 0, false, rule == 2});
+    const int load = rule == 2 ? CA::kStickLoad : CA::kBombLoad;
     auto* owner = game->getHouse(HOUSE_ATREIDES);
     auto* enemy = game->getHouse(HOUSE_HARKONNEN);
     std::mt19937 jitter(static_cast<std::uint32_t>(seed) * 2654435761u + 131u);
@@ -356,10 +362,10 @@ RunOutcome playRun(const std::string& mapData, int direction, int offset, int se
     course(direction, site, offset, start, end, heading);
     auto* plane = fly(enemy, start, end, heading);
     const Uint32 planeID = plane->getObjectID();
-    require(plane->getBombs() == CA::kBombLoad, "A new plane does not carry a full bomb load");
+    require(plane->getBombs() == load, "A new plane does not carry a full bomb load");
 
     RunOutcome outcome;
-    int lastBombs = CA::kBombLoad;
+    int lastBombs = load;
     for(int tick = 0; tick < 1500; ++tick) {
         game->updateGameState();
         outcome.ticks = tick + 1;
@@ -394,9 +400,10 @@ int runRuns(const std::string& mapData, const std::vector<int>& seeds) {
     for(const int direction : {0, 1, 2})
     for(int offset = -6; offset <= 6; ++offset)
     for(const int seed : seeds) {
-        for(const bool bombing : {false, true}) {
+        for(const int bombing : {0, 1, 2}) {
             const auto o = playRun(mapData, direction, offset, seed, bombing);
-            require(o.bombs <= CA::kBombLoad, "A run dropped more than one bomb load");
+            // A crossing takes about three seconds: at most one bomb comes back on the way.
+            require(o.bombs <= (bombing == 2 ? CA::kStickLoad + 2 : CA::kBombLoad), "A run dropped more than one bomb load");
             require(bombing || (o.bombs == 0 && o.damage == 0), "A plane bombed with City Plane Bombing off");
             csv << direction << ',' << offset << ',' << seed << ',' << bombing << ',' << o.bombs << ',' << o.damage << ','
                 << o.damaged << ',' << o.destroyed << ',' << o.credits << ',' << o.yardLost << ',' << o.palaceLost << ','
@@ -426,8 +433,9 @@ int healthOf(Game& game, Uint32 id) {
 
 // One west-to-east run along `row` over whatever `setup` built; returns the bombs dropped.
 template <typename Setup>
-int flyRow(const std::string& mapData, int seed, bool bombing, Setup setup, std::vector<int>& health) {
-    auto game = newGame(mapData, seed, Rules{true, bombing, false});
+int flyRow(const std::string& mapData, int seed, bool bombing, Setup setup, std::vector<int>& health,
+           bool carpet = false) {
+    auto game = newGame(mapData, seed, Rules{true, bombing, false, carpet});
     std::vector<Uint32> ids;
     const int row = 30;
     setup(*game, row, ids);
@@ -512,15 +520,22 @@ void checkBombLoad(const std::string& mapData) {
 }
 
 void checkSavedBombLoad(const std::string& mapData) {
-    auto game = newGame(mapData, 6, Rules{true, true, false});
+    auto game = newGame(mapData, 6, Rules{true, true, false, true, true});
     auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), Coord(10, 20), Coord(kMapSize + 20, 20), RIGHT);
     plane->bombs = 2;
-    plane->bombTimer = 77;
+    plane->bombTimer = 17;
+    plane->stickGap = 0;
+    auto* sold = dynamic_cast<Airport*>(place(game->getHouse(HOUSE_ATREIDES), Structure_Airport, Coord(40, 40)));
+    require(sold != nullptr, "Could not place the Airport for the save");
+    sold->purchaseCooldown = 1234;
+    const Uint32 airportID = sold->getObjectID();
     const Uint32 planeID = plane->getObjectID();
     for(int i = 0; i < 10; ++i) game->updateGameState();
     plane = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
     require(plane != nullptr, "The plane left before the save");
-    const int bombs = plane->bombs, timer = plane->bombTimer;
+    const int bombs = plane->bombs, timer = plane->bombTimer, gap = plane->stickGap;
+    const int cooldown = sold->purchaseCooldown;
+    require(gap > 0 && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
     const std::string path = gOut + "/city-plane-effect.dls";
     require(game->saveGame(path), "Could not write the save");
     game.reset();
@@ -534,12 +549,17 @@ void checkSavedBombLoad(const std::string& mapData) {
     require(loaded != nullptr, "The saved plane did not come back");
     require(loaded->bombs == bombs && loaded->bombTimer == timer, "The plane lost its bomb load in the save");
     require(loaded->bombSightTile.isValid(), "The plane lost its bomb sight tile in the save");
+    require(loaded->stickGap == gap, "The plane lost its stick gap counter in the save");
+    const auto* airport = dynamic_cast<Airport*>(game->getObjectManager().getObject(airportID));
+    require(airport != nullptr && airport->getPurchaseCooldown() == cooldown, "The Airport lost its purchase cooldown in the save");
     require(AmbientAirplane::all().size() == 1 && AmbientAirplane::all().front() == loaded,
             "The loaded plane is not the one city airplane the game knows");
     const auto& options = game->getGameInitSettings().getGameOptions();
-    require(options.cityPlaneDefence && options.cityPlaneBombing && !options.airportOrnithopterPatrol,
+    require(options.cityPlaneDefence && options.cityPlaneBombing && !options.airportOrnithopterPatrol
+                && options.cityPlaneCarpetBombing && !options.cityPlaneBombingRuns && options.cityPlanePurchase,
             "The save lost the city plane rules");
-    record("save", "bombs=" + std::to_string(bombs) + " timer=" + std::to_string(timer) + " restored=1");
+    record("save", "bombs=" + std::to_string(bombs) + " timer=" + std::to_string(timer) + " stick_gap="
+                       + std::to_string(gap) + " purchase_cooldown=" + std::to_string(cooldown) + " restored=1");
     game.reset();
     currentGame = nullptr;
     require(AmbientAirplane::all().empty(), "A finished game left a city airplane registered");
@@ -578,6 +598,177 @@ void checkAirport(const std::string& mapData) {
             require(ornithopters == 0, "The Airport released an Ornithopter");
             require(airport->getSpawnTimer() == timerAtStart, "The patrol timer ran with the patrol rule off");
         }
+        game.reset();
+        currentGame = nullptr;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// checks: the stick (City Plane Carpet Bombing)
+// ---------------------------------------------------------------------------------------------
+
+void checkStick(const std::string& mapData) {
+    std::vector<int> health;
+    // One run each over a Wind Trap (200), a Rocket Turret (200, one tile), a Construction Yard
+    // (400), a Refinery (450) and a Palace (1000): 60 a bomb, two bombs a tile crossed.
+    for(const int item : {Structure_WindTrap, Structure_RocketTurret, Structure_ConstructionYard, Structure_Refinery,
+                          Structure_Palace}) {
+        const int dropped = flyRow(mapData, 3, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
+            auto* structure = place(game.getHouse(HOUSE_ATREIDES), item, Coord(30, row));
+            if(auto* turret = dynamic_cast<TurretBase*>(structure)) turret->attackMode = STOP;
+            ids.push_back(structure->getObjectID());
+        }, health, true);
+        const std::string name = getItemNameByID(item);
+        record("stick_run", name + " bombs=" + std::to_string(dropped) + " health_after=" + std::to_string(health[0]));
+        const int expected = item == Structure_WindTrap ? 0 : item == Structure_RocketTurret ? 80
+                           : item == Structure_ConstructionYard ? 160 : item == Structure_Refinery ? 90 : 640;
+        require(health[0] == expected, "One stick over a " + name + " did not leave it at " + std::to_string(expected));
+    }
+
+    // The stick runs on across a one-tile road between two buildings, and one tile past the last.
+    int dropped = flyRow(mapData, 3, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
+        ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(28, row))->getObjectID());
+        ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(31, row))->getObjectID());
+    }, health, true);
+    record("stick_gap", "two Wind Traps one tile apart: bombs=" + std::to_string(dropped) + " health_after="
+                            + std::to_string(health[0]) + "," + std::to_string(health[1]));
+    require(dropped == 12 && health[0] == 0 && health[1] == 0,
+            "The stick did not run unbroken over two Wind Traps a tile apart with twelve bombs");
+
+    // Own and allied buildings: nothing is released over them, also not as the tail of a stick.
+    dropped = flyRow(mapData, 4, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
+        ids.push_back(place(game.getHouse(HOUSE_HARKONNEN), Structure_WindTrap, Coord(20, row))->getObjectID());
+        ids.push_back(place(game.getHouse(HOUSE_ORDOS), Structure_WindTrap, Coord(26, row))->getObjectID());
+        ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(32, row))->getObjectID());
+        ids.push_back(place(game.getHouse(HOUSE_HARKONNEN), Structure_Wall, Coord(34, row))->getObjectID());
+        ids.push_back(place(game.getHouse(HOUSE_ORDOS), Structure_Wall, Coord(31, row))->getObjectID());
+    }, health, true);
+    record("stick_own_side", "bombs=" + std::to_string(dropped) + " own_trap=" + std::to_string(health[0]) + " allied_trap="
+                                 + std::to_string(health[1]) + " enemy_trap=" + std::to_string(health[2]) + " own_wall="
+                                 + std::to_string(health[3]) + " allied_wall=" + std::to_string(health[4]));
+    require(health[0] == 200 && health[1] == 200 && health[3] == 50 && health[4] == 50,
+            "A stick bomb damaged the plane's own or an allied building");
+    require(dropped == 4 && health[2] == 0, "The enemy Wind Trap between own buildings did not get exactly its four bombs");
+
+    // Twenty enemy walls in a row: the load is 24, two a tile, so twelve walls fall.
+    dropped = flyRow(mapData, 5, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
+        for(int i = 0; i < 20; ++i)
+            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_Wall, Coord(24 + i, row))->getObjectID());
+    }, health, true);
+    const int standing = static_cast<int>(std::count_if(health.begin(), health.end(), [](int h) { return h > 0; }));
+    record("stick_load", "walls=20 bombs=" + std::to_string(dropped) + " standing=" + std::to_string(standing));
+    require(dropped == CA::kStickLoad && standing == 20 - CA::kStickLoad / 2, "A stick did not stop at one bomb load");
+    int bombs = 0, timer = 0, ticks = 0;
+    while(bombs < CA::kStickLoad) { bombs = CA::rearmBombs(bombs, timer, CA::kStickLoad, CA::kStickRearmTicks); ++ticks; }
+    require(ticks == CA::kStickLoad * CA::kStickRearmTicks, "The stick rack does not refill at one bomb per rearm time");
+    record("stick_rearm", "ticks_per_bomb=" + std::to_string(CA::kStickRearmTicks) + " full_load_ticks=" + std::to_string(ticks));
+
+    // Units under the stick take the ordinary splash, whoever owns them: a tank on the road
+    // between two enemy Wind Traps, once the defender's and once the plane's own.
+    for(const int house : {HOUSE_ATREIDES, HOUSE_HARKONNEN}) {
+        int tankHealth = 0, tankFull = 0;
+        flyRow(mapData, 3, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
+            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(28, row))->getObjectID());
+            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(31, row))->getObjectID());
+            auto* tank = game.getHouse(house)->createUnit(Unit_Tank, true);
+            require(tank != nullptr, "Could not create the tank under the stick");
+            tank->deploy(Coord(30, row));
+            tank->doSetAttackMode(STOP);
+            tankFull = lround(tank->getHealth());
+            ids.push_back(tank->getObjectID());
+        }, health, true);
+        tankHealth = health[2];
+        record("stick_units", std::string(house == HOUSE_ATREIDES ? "enemy" : "own") + " tank on the road under the stick: health "
+                                  + std::to_string(tankFull) + "->" + std::to_string(tankHealth));
+        require(tankHealth < tankFull, "A tank on the road under the stick took no splash");
+    }
+}
+
+// Stefan's game of 2026-11-23: the building is repairing (every AI building below half health
+// is, and a human's with auto-repair), so it gets a hit point back between two bombs. The first
+// rule's 2 x 100 then leaves a 200-point Wind Trap standing on 1; the stick destroys it.
+void checkRepairingBuilding(const std::string& mapData) {
+    for(const bool carpet : {false, true}) {
+        auto game = newGame(mapData, 9, Rules{true, true, false, carpet});
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        owner->setAutoRepairEnabled(true);
+        const int row = 30;
+        const Uint32 id = place(owner, Structure_WindTrap, Coord(30, row))->getObjectID();
+        for(int i = 0; i < 5; ++i) game->updateGameState();
+        fly(game->getHouse(HOUSE_HARKONNEN), Coord(4, row), Coord(kMapSize + 20, row), RIGHT);
+        int lowest = healthOf(*game, id);
+        for(int tick = 0; tick < 500 && lowest > 0; ++tick) {
+            game->updateGameState();
+            lowest = std::min(lowest, healthOf(*game, id));
+        }
+        record("repairing", std::string(carpet ? "stick" : "aimed bombs") + " on a repairing Wind Trap: lowest_health="
+                                + std::to_string(lowest));
+        if(carpet) require(lowest == 0, "The stick did not destroy a repairing Wind Trap");
+        else require(lowest == 1, "Two aimed bombs did not leave a repairing Wind Trap on 1 hit point");
+        game.reset();
+        currentGame = nullptr;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// checks: buying a plane (City Plane Purchase)
+// ---------------------------------------------------------------------------------------------
+
+void checkPurchase(const std::string& mapData) {
+    for(const bool purchase : {false, true}) {
+        auto game = newGame(mapData, 10, Rules{true, true, false, true, purchase});
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        for(int i = 0; i < 8; ++i) place(owner, Structure_WindTrap, Coord(2 + 3 * (i / 4), 2 + 3 * (i % 4)));
+        std::vector<Airport*> airports;
+        for(int i = 0; i < 4; ++i) {
+            airports.push_back(dynamic_cast<Airport*>(place(owner, Structure_Airport, Coord(20, 10 + 6 * i))));
+            require(airports.back() != nullptr, "Could not place an Airport");
+        }
+        owner->addCredits(10000);
+        for(int i = 0; i < 3; ++i) game->updateGameState();
+        require(owner->hasPower(), "The Airports are not powered");
+        const int before = owner->getCredits();
+        const Uint32 ownPlayer = owner->getPlayerList().front()->getPlayerID();
+        const Uint32 otherPlayer = game->getHouse(HOUSE_HARKONNEN)->getPlayerList().front()->getPlayerID();
+        const auto planes = [&] { return owner->getNumItems(Unit_AmbientAirplane); };
+        if(!purchase) {
+            require(!airports[0]->canBuyAirplane() && !airports[0]->buyAirplane(), "An Airport sold a plane with the rule off");
+            Command(ownPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[0]->getObjectID()).executeCommand();
+            require(planes() == 0 && owner->getCredits() == before, "The Buy command launched a plane with the rule off");
+            record("purchase", "rule=0 planes=0 credits=" + std::to_string(before) + "->" + std::to_string(owner->getCredits()));
+            game.reset();
+            currentGame = nullptr;
+            continue;
+        }
+        // Another house's player may not buy at this Airport.
+        Command(otherPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[0]->getObjectID()).executeCommand();
+        require(planes() == 0 && owner->getCredits() == before, "Another house bought a plane at this Airport");
+        // The owner's Buy button.
+        Command(ownPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[0]->getObjectID()).executeCommand();
+        require(planes() == 1 && owner->getCredits() == before - CA::kPlanePrice, "The Buy command did not launch one plane for 1500");
+        require(airports[0]->getPurchaseCooldown() == MILLI2CYCLES(CA::kPurchaseCooldownMs) && !airports[0]->canBuyAirplane(),
+                "An Airport may sell a second plane within a minute");
+        require(airports[1]->buyAirplane() && airports[2]->buyAirplane() && planes() == CA::kMaxPlanesPerHouse,
+                "The other Airports did not sell the second and third plane");
+        require(!airports[3]->canBuyAirplane() && !airports[3]->buyAirplane() && planes() == CA::kMaxPlanesPerHouse,
+                "A house bought a fourth plane");
+        const int afterThree = owner->getCredits();
+        require(afterThree == before - 3 * CA::kPlanePrice, "Three planes did not cost 4500");
+        // A minute later the first Airport is ready again, but not for a house that cannot pay.
+        for(const AmbientAirplane* plane : std::vector<AmbientAirplane*>(AmbientAirplane::all()))
+            const_cast<AmbientAirplane*>(plane)->leaveMap();
+        for(int i = 0; i < MILLI2CYCLES(CA::kPurchaseCooldownMs) + 2; ++i) game->updateGameState();
+        require(airports[0]->getPurchaseCooldown() == 0, "The purchase cooldown did not run out in a minute");
+        const int flying = planes();
+        owner->takeCredits(owner->getCredits() - (CA::kPlanePrice - 1));
+        require(owner->getCredits() == CA::kPlanePrice - 1 && !airports[3]->canBuyAirplane() && !airports[3]->buyAirplane()
+                    && planes() == flying, "A house bought a plane it could not pay for");
+        owner->addCredits(1);
+        require(flying >= CA::kMaxPlanesPerHouse || (airports[3]->buyAirplane() && owner->getCredits() == 0),
+                "A house with exactly 1500 credits could not buy a plane");
+        record("purchase", "rule=1 price=" + std::to_string(CA::kPlanePrice) + " three_planes_credits=" + std::to_string(before)
+                               + "->" + std::to_string(afterThree) + " fourth_refused=1 other_house_refused=1 cooldown_cycles="
+                               + std::to_string(MILLI2CYCLES(CA::kPurchaseCooldownMs)) + " unaffordable_refused=1");
         game.reset();
         currentGame = nullptr;
     }
@@ -634,7 +825,8 @@ int runCityPlaneEffect() {
     settings.general.playerName = "AA tester";
     // What a Custom Game with the Dune City mod plays: the INI overlaid by the mod's GameOptions.ini.
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    require(gModOptions.cityPlaneDefence && gModOptions.cityPlaneBombing && !gModOptions.airportOrnithopterPatrol,
+    require(gModOptions.cityPlaneDefence && gModOptions.cityPlaneBombing && !gModOptions.airportOrnithopterPatrol
+                && gModOptions.cityPlaneCarpetBombing && gModOptions.cityPlaneBombingRuns && gModOptions.cityPlanePurchase,
             "The mod's options do not play the default city plane rules");
     const std::string mapData = fixtureMap();
 
@@ -645,6 +837,9 @@ int runCityPlaneEffect() {
     checkSavedBombLoad(mapData);
     checkAirport(mapData);
     checkHoldFire(mapData);
+    checkStick(mapData);
+    checkRepairingBuilding(mapData);
+    checkPurchase(mapData);
     gChecks.close();
 
     const int runs = runRuns(mapData, numbers(runSeedEnv));
