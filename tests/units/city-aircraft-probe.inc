@@ -1515,8 +1515,10 @@ void checkShotDownPlaneOverNatives() {
             cityRequire(crash.health[i] < crash.full[i], where + " is inside the blast's reach but took no damage");
     }
     cityRequire(deathHand.shooterUnitKills > 0, "the Death Hand reference killed no Natives unit; the fixture proves nothing");
-    cityRequire(crash.shooterUnitKills == deathHand.shooterUnitKills + 1,
-                "the shooter is not credited with the Natives units the crash destroyed (plus the plane)");
+    // The Natives units the crash destroys are the plane's kills, not the shooter's (the crash is
+    // dealt in the plane owner's name since 2026-11-23); the shooter is credited the plane.
+    cityRequire(crash.shooterUnitKills == 1,
+                "the shooter is credited the Natives units the crash destroyed, not only the plane");
 }
 
 /// A plane that simply flies off the edge ends without any blast.
