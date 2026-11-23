@@ -39,6 +39,7 @@ import csv
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -109,6 +110,13 @@ parser.add_argument('--run-seeds', type=seed_list, default=seed_list('1-3'),
 parser.add_argument('--report', action='store_true',
                     help='Only recompute the report from the CSVs in --output-dir')
 parser.add_argument('--wall-timeout', type=int, default=3000)
+parser.add_argument('--replay-save', type=Path,
+                    help='diagnosis instead of the test: load this saved game, play it on and report, for every '
+                         'Rocket Turret and Launcher near an enemy city airplane, whether it may fire and what stops '
+                         'it, and how each plane ends (replay.csv, replay-planes.csv)')
+parser.add_argument('--replay-mod', type=Path, action='append', default=[],
+                    help='a mod directory the save needs, copied into the scratch profile (repeatable)')
+parser.add_argument('--replay-cycles', type=int, default=3750)
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
@@ -157,16 +165,26 @@ if not args.report:
             '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
             'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = AA tester\n',
             encoding='utf-8')
+        if args.replay_save:
+            (profile / 'mods').mkdir()
+            for mod in args.replay_mod:
+                shutil.copytree(mod, profile / 'mods' / mod.name)
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy',
                    SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1',
                    CITY_PLANE_EFFECT_OUT=str(out),
                    CITY_PLANE_EFFECT_SEEDS=','.join(str(seed) for seed in args.seeds),
                    CITY_PLANE_EFFECT_RUN_SEEDS=','.join(str(seed) for seed in args.run_seeds))
+        if args.replay_save:
+            env.update(CITY_PLANE_EFFECT_REPLAY=str(args.replay_save.resolve()),
+                       CITY_PLANE_EFFECT_REPLAY_CYCLES=str(args.replay_cycles))
         logfile = out / 'run.log'
         with logfile.open('w') as log:
             subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
                            stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.wall_timeout)
         text = logfile.read_text(errors='replace')
+        if args.replay_save:
+            print('\n'.join(l for l in text.splitlines() if l.startswith('CITY_PLANE_REPLAY')))
+            sys.exit(0)
         if text.count('CITY_PLANE_EFFECT_PASS:') != 1 or 'CITY_PLANE_EFFECT_FAIL:' in text:
             raise RuntimeError('Missing or failed city plane effect run; see ' + str(logfile))
         discard_profile_assets(profile)

@@ -36,6 +36,8 @@
 #include <units/AmbientAirplane.h>
 #include <dunecity/CityAircraftPolicy.h>
 
+#include <set>
+#include <map>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -1053,6 +1055,108 @@ void checkHoldFire(const std::string& mapData) {
     record("intercept", "head_on_20_tiles_x=" + std::to_string(meet.point.x) + " cycles16=" + std::to_string(meet.cycles16));
 }
 
+// Diagnosis, not a test (run-city-plane-effect.py --replay-save): load a saved game, play it on and
+// report what the anti-air does about enemy city airplanes and how each plane ends. Written for
+// Stefan's save of 2026-11-23, "rocket turrets are no longer attacking planes, neither are
+// launchers. the planes seem to die when they turn from their own bombs".
+void replaySave(const std::string& path, int cycles) {
+    auto game = std::make_unique<Game>();
+    currentGame = game.get();
+    game->initGame(GameInitSettings(path));
+    game->initializeGameLoop();
+    std::ofstream out(gOut + "/replay.csv");
+    out << "cycle,planes,turret_pairs,turret_may_fire,turret_held_crash,turret_held_reach,turret_unpowered,turret_other,"
+           "turrets_targeting_plane,launcher_pairs,launcher_may_fire,launcher_held_crash,launcher_other,rockets_at_planes\n";
+    std::ofstream ends(gOut + "/replay-planes.csv");
+    ends << "object,house,bought,first_cycle,last_cycle,last_x,last_y,last_health,edge_tiles\n";
+    struct Seen { int house; bool bought; Uint32 first, last; Coord at; int health; };
+    std::map<Uint32, Seen> seen;
+    std::set<const Bullet*> known;
+    long firedTurret = 0, firedOther = 0, pairs = 0, may = 0, heldCrash = 0, heldReach = 0, unpowered = 0, other = 0;
+    long launcherPairs = 0, launcherMay = 0, launcherCrash = 0, launcherOther = 0;
+    int ended = 0, endedAtEdge = 0, endedHurt = 0;
+    const int mapW = currentGameMap->getSizeX(), mapH = currentGameMap->getSizeY();
+    for(int tick = 0; tick < cycles && !game->finished; ++tick) {
+        game->updateGameState();
+        const Uint32 cycle = game->getGameCycleCount();
+        std::set<Uint32> alive;
+        for(const AmbientAirplane* plane : AmbientAirplane::all()) {
+            if(plane->getHealth() <= 0) continue;
+            alive.insert(plane->getObjectID());
+            auto [it, fresh] = seen.try_emplace(plane->getObjectID(),
+                Seen{plane->getOwner()->getHouseID(), plane->isBought(), cycle, cycle, Coord(), 0});
+            it->second.last = cycle;
+            it->second.at = Coord(plane->getCenterPoint().x / TILESIZE, plane->getCenterPoint().y / TILESIZE);
+            it->second.health = lround(plane->getHealth());
+        }
+        for(auto it = seen.begin(); it != seen.end();) {
+            if(alive.count(it->first)) { ++it; continue; }
+            const Seen& s = it->second;
+            const int edge = std::min({s.at.x, s.at.y, mapW - 1 - s.at.x, mapH - 1 - s.at.y});
+            ends << it->first << ',' << s.house << ',' << s.bought << ',' << s.first << ',' << s.last << ',' << s.at.x << ','
+                 << s.at.y << ',' << s.health << ',' << edge << '\n';
+            ++ended;
+            if(edge <= 3) ++endedAtEdge;
+            if(s.health < 100) ++endedHurt;
+            it = seen.erase(it);
+        }
+        std::set<const Bullet*> now;
+        int inFlight = 0;
+        for(const Bullet* bullet : bulletList) {
+            const ObjectBase* target = bullet->getTarget();
+            if(target == nullptr || target->getItemID() != Unit_AmbientAirplane) continue;
+            now.insert(bullet);
+            ++inFlight;
+            if(!known.count(bullet)) (bullet->getBulletID() == Bullet_TurretRocket ? firedTurret : firedOther)++;
+        }
+        known.swap(now);
+        if(tick % 25 != 0) continue;
+        int p = 0, m = 0, hc = 0, hr = 0, up = 0, ot = 0, targeting = 0, lp = 0, lm = 0, lc = 0, lo = 0;
+        for(const StructureBase* structure : structureList) {
+            if(structure->getItemID() != Structure_RocketTurret || structure->getHealth() <= 0) continue;
+            const auto* turret = static_cast<const RocketTurret*>(structure);
+            const ObjectBase* aimed = turret->target.getObjPointer();
+            if(aimed != nullptr && aimed->getItemID() == Unit_AmbientAirplane) ++targeting;
+            const int reach = turret->getWeaponRange() * 3 * TILESIZE;
+            for(const AmbientAirplane* plane : AmbientAirplane::all()) {
+                if(plane->getHealth() <= 0 || plane->getOwner()->getTeamID() == turret->getOwner()->getTeamID()) continue;
+                if(distanceFrom(turret->getCenterPoint(), plane->getCenterPoint()) > reach) continue;
+                ++p;
+                if(!turret->getOwner()->hasPower()) ++up;
+                else if(turret->canAttack(plane)) ++m;
+                else if(AmbientAirplane::crashEndangers(*turret, *plane)) ++hc;
+                else if(!turret->canMeetCityPlane(plane)) ++hr;
+                else ++ot;
+            }
+        }
+        for(const UnitBase* unit : unitList) {
+            if((unit->getItemID() != Unit_Launcher && unit->getItemID() != Unit_EliteLauncher) || unit->getHealth() <= 0) continue;
+            const int range = unit->getWeaponRange() * TILESIZE;
+            for(const AmbientAirplane* plane : AmbientAirplane::all()) {
+                if(plane->getHealth() <= 0 || plane->getOwner()->getTeamID() == unit->getOwner()->getTeamID()) continue;
+                if(distanceFrom(unit->getCenterPoint(), plane->getCenterPoint()) > range) continue;
+                ++lp;
+                if(unit->canAttack(plane)) ++lm;
+                else if(AmbientAirplane::crashEndangers(*unit, *plane)) ++lc;
+                else ++lo;
+            }
+        }
+        out << cycle << ',' << alive.size() << ',' << p << ',' << m << ',' << hc << ',' << hr << ',' << up << ',' << ot << ','
+            << targeting << ',' << lp << ',' << lm << ',' << lc << ',' << lo << ',' << inFlight << '\n';
+        pairs += p; may += m; heldCrash += hc; heldReach += hr; unpowered += up; other += ot;
+        launcherPairs += lp; launcherMay += lm; launcherCrash += lc; launcherOther += lo;
+    }
+    SDL_Log("CITY_PLANE_REPLAY: cycles=%d turret_plane_pairs_in_reach=%ld may_fire=%ld held_for_crash=%ld held_out_of_rocket_reach=%ld "
+            "unpowered=%ld other=%ld rockets_fired_by_turrets=%ld rockets_fired_by_others=%ld",
+            cycles, pairs, may, heldCrash, heldReach, unpowered, other, firedTurret, firedOther);
+    SDL_Log("CITY_PLANE_REPLAY: launcher_plane_pairs_in_range=%ld may_fire=%ld held_for_crash=%ld other=%ld", launcherPairs,
+            launcherMay, launcherCrash, launcherOther);
+    SDL_Log("CITY_PLANE_REPLAY: planes_ended=%d within_three_tiles_of_the_edge=%d ended_below_full_health=%d still_flying=%zu",
+            ended, endedAtEdge, endedHurt, seen.size());
+    game.reset();
+    currentGame = nullptr;
+}
+
 std::vector<int> numbers(const char* text) {
     std::vector<int> values;
     std::istringstream input(text);
@@ -1069,6 +1173,11 @@ int runCityPlaneEffect() {
     const char* runSeedEnv = std::getenv("CITY_PLANE_EFFECT_RUN_SEEDS");
     require(outEnv && seedEnv && runSeedEnv, "Missing city plane effect runner environment");
     gOut = outEnv;
+    if(const char* replay = std::getenv("CITY_PLANE_EFFECT_REPLAY")) {
+        const char* cycles = std::getenv("CITY_PLANE_EFFECT_REPLAY_CYCLES");
+        replaySave(replay, cycles ? std::atoi(cycles) : 3750);
+        return -1;
+    }
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "AA tester";
     // What a Custom Game with the Dune City mod plays: the INI overlaid by the mod's GameOptions.ini.
