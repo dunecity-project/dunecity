@@ -1076,6 +1076,16 @@ void replaySave(const std::string& path, int cycles) {
     long launcherPairs = 0, launcherMay = 0, launcherCrash = 0, launcherOther = 0;
     int ended = 0, endedAtEdge = 0, endedHurt = 0;
     const int mapW = currentGameMap->getSizeX(), mapH = currentGameMap->getSizeY();
+    const auto standing = [] {
+        int buildings = 0, turrets = 0;
+        for(const StructureBase* structure : structureList) {
+            if(structure->getHealth() <= 0) continue;
+            ++buildings;
+            if(structure->getItemID() == Structure_RocketTurret) ++turrets;
+        }
+        return std::pair<int, int>(buildings, turrets);
+    };
+    const auto before = standing();
     for(int tick = 0; tick < cycles && !game->finished; ++tick) {
         game->updateGameState();
         const Uint32 cycle = game->getGameCycleCount();
@@ -1153,6 +1163,9 @@ void replaySave(const std::string& path, int cycles) {
             launcherMay, launcherCrash, launcherOther);
     SDL_Log("CITY_PLANE_REPLAY: planes_ended=%d within_three_tiles_of_the_edge=%d ended_below_full_health=%d still_flying=%zu",
             ended, endedAtEdge, endedHurt, seen.size());
+    const auto after = standing();
+    SDL_Log("CITY_PLANE_REPLAY: buildings %d->%d rocket_turrets %d->%d (all houses, every cause, new ones included)",
+            before.first, after.first, before.second, after.second);
     game.reset();
     currentGame = nullptr;
 }
