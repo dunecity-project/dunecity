@@ -1627,12 +1627,11 @@ private:
     struct AirliftStats {
         int rearDrops = 0, flankDrops = 0, retreatLifts = 0, retreatUnits = 0, rescues = 0, strikes = 0,
             ordered = 0, lifted = 0, landed = 0, lostInLift = 0, lostWaiting = 0, cancelled = 0, carryallsLost = 0;
-        /// Why a wave got no drop (one count per wave, its last reason) and why a defeat got no lift.
+        /// Why a wave got no drop (every refused attempt, one a pass) and why a defeat got no lift.
         int declinedFront = 0, declinedTrip = 0, declinedCarryalls = 0, declinedGroup = 0, declinedPoint = 0,
             defeatPasses = 0, retreatNoCarryall = 0, retreatNoFighter = 0, rescuesDamaged = 0, rescuesAlone = 0;
     };
     enum class AirliftDecline : Uint8 { None, Front, Trip, Carryalls, Group, Point };
-    AirliftDecline airliftDeclined = AirliftDecline::None;   ///< the current wave's last refusal; report only
     AirliftStats airliftStats;
     bool airliftActive() const;
     int airliftFreeCarryalls() const;

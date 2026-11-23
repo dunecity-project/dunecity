@@ -273,22 +273,16 @@ void QuantBot::updateAirliftDrop() {
         if (!(force.airliftRearDrop || force.airliftFlankDrop)) return;
         // One plan per launched wave, decided in its first thirty seconds.
         if (customWave.launched == 0 || customWave.launched == airliftDrop.wave || customWave.members.empty()) return;
-        if (now - customWave.launched > MILLI2CYCLES(30000)) {
-            airliftDrop.wave = customWave.launched;
-            switch (airliftDeclined) {
-                case AirliftDecline::Front: ++airliftStats.declinedFront; break;
-                case AirliftDecline::Trip: ++airliftStats.declinedTrip; break;
-                case AirliftDecline::Carryalls: ++airliftStats.declinedCarryalls; break;
-                case AirliftDecline::Group: ++airliftStats.declinedGroup; break;
-                case AirliftDecline::Point: ++airliftStats.declinedPoint; break;
-                case AirliftDecline::None: break;
-            }
-            traceDecision("airlift_declined", AITelemetry::Record().set("reason", int(airliftDeclined)));
-            airliftDeclined = AirliftDecline::None;
-            return;
+        if (now - customWave.launched > MILLI2CYCLES(30000)) { airliftDrop.wave = customWave.launched; return; }
+        // Every refused attempt is counted by its reason (one attempt a pass, for the reports).
+        switch (planAirliftDrop()) {
+            case AirliftDecline::None: break;
+            case AirliftDecline::Front: ++airliftStats.declinedFront; return;
+            case AirliftDecline::Trip: ++airliftStats.declinedTrip; return;
+            case AirliftDecline::Carryalls: ++airliftStats.declinedCarryalls; return;
+            case AirliftDecline::Group: ++airliftStats.declinedGroup; return;
+            case AirliftDecline::Point: ++airliftStats.declinedPoint; return;
         }
-        airliftDeclined = planAirliftDrop();
-        if (airliftDeclined != AirliftDecline::None) return;
     }
     // Sorties: one unit per free Carryall, one Carryall kept for the harvesters.
     int free = airliftFreeCarryalls() - (getHouse()->getNumItems(Unit_Harvester) > 0 ? 1 : 0);
