@@ -638,6 +638,43 @@ void checkStick(const std::string& mapData) {
         require(health[0] == expected, "One stick over a " + name + " did not leave it at " + std::to_string(expected));
     }
 
+    // Stefan, 2026-11-23: "one hit right in the middle should not destroy heavy factory or repair
+    // yard, two hits should though and it should be able to land two hits depending on the angle".
+    // Both are 3x2 with 200 hit points. One bomb in the middle leaves 80, the second destroys; a
+    // run along the three tiles lands two, a run across the two tiles one.
+    for(const int item : {Structure_HeavyFactory, Structure_RepairYard}) {
+        const std::string name = getItemNameByID(item);
+        int afterOne = -1, afterTwo = -1;
+        {
+            auto game = newGame(mapData, 16, Rules{true, true, false, true});
+            auto* structure = place(game->getHouse(HOUSE_ATREIDES), item, Coord(30, 30));
+            const Uint32 id = structure->getObjectID();
+            auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), Coord(4, 50), Coord(kMapSize + 20, 50), RIGHT);
+            for(int hit = 0; hit < 2; ++hit) {
+                Coord from = plane->getCenterPoint();
+                Coord aim(31 * TILESIZE + TILESIZE / 2, 31 * TILESIZE);   // the middle of the 3x2 footprint
+                bulletList.push_back(new Bullet(plane->getObjectID(), &from, &aim, Bullet_Bomb, CA::kStickDamage, false,
+                                                game->getObjectManager().getObject(id)));
+                for(int i = 0; i < 4 * CA::kBombFallCycles && !bulletList.empty(); ++i) game->updateGameState();
+                (hit == 0 ? afterOne : afterTwo) = healthOf(*game, id);
+            }
+            game.reset();
+            currentGame = nullptr;
+        }
+        const int alongLong = flyRow(mapData, 3, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
+            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), item, Coord(30, row))->getObjectID());
+        }, health, true);
+        const int longHealth = health[0];
+        record("stick_big_building", name + " one bomb in the middle health_after=" + std::to_string(afterOne) + " two="
+                                         + std::to_string(afterTwo) + "; one run along its three tiles bombs="
+                                         + std::to_string(alongLong) + " health_after=" + std::to_string(longHealth));
+        require(afterOne == 80 && afterTwo == 0, "One bomb did not leave a " + name + " at 80 or two did not destroy it");
+        require(longHealth == 0, "A run along the three tiles of a " + name + " did not land the two hits that destroy it");
+    }
+    require(CA::stickDamageTo(4, 200) == 250 && CA::stickDamageTo(6, 200) == 120 && CA::stickDamageTo(6, 450) == 250
+                && CA::stickDamageTo(9, 1000) == 250,
+            "The heavy bomb's damage by building size is not 250 / 120 / 250 / 250");
+
     // The stick runs on in step across a one-tile road between two buildings: one bomb each, one
     // on the road between them and one past the last.
     int dropped = flyRow(mapData, 3, true, [&](Game& game, int row, std::vector<Uint32>& ids) {

@@ -496,12 +496,17 @@ inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, k
 // ornithopter one is too small - i want a big explosion. drop less frequently them but
 // they should do more damage. a direct hit in the middle of a residential for example
 // should destroy it and 2 hits should be taking out other buildings"):
-// - kStickDamage = 250 to the building the bomb lands on. One hit destroys every
-//   200-point building (zones, Wind Trap, turrets, Heavy Factory, Repair Yard, Silo,
-//   Wall); two destroy everything up to 500 (Barracks, Light Factory, Construction
-//   Yard, High-Tech Factory, House IX, Police Station, WOR, Refinery, Airport, Radar,
+// - kStickDamage = 250 to the building the bomb lands on, but a building of more than
+//   four tiles loses at most kStickBigBuildingShare (60%) of its full hit points to one
+//   bomb (stickDamageTo; Stefan, 2026-11-23: "one hit right in the middle should not
+//   destroy heavy factory or repair yard, two hits should though"). One hit destroys
+//   the 200-point buildings of up to 2x2 (zones, Wind Trap, turrets, Silo, Wall); the
+//   Heavy Factory and the Repair Yard (200, 3x2) lose 120 and fall to the second. Two
+//   hits destroy everything else up to 500 (Barracks, Light Factory, Construction Yard,
+//   High-Tech Factory, House IX, Police Station, WOR, Refinery, Airport, Radar,
 //   Research Lab, Stadium, Starport); a Nuclear Plant (750) takes three and a Palace
-//   (1000) four.
+//   (1000) four. Sixty percent, not half: a repairing building gets a hit point or two
+//   back between the two bombs of one pass.
 // - One bomb every 12.5 game cycles (kStickPhasePeriod / kStickPhaseStep): two tiles of
 //   flight on an axis heading, a quarter of the first stick's rate.
 // - A stick starts when an enemy building comes under the bomb sight; its first bomb is
@@ -519,6 +524,14 @@ inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, k
 
 /// Damage of one stick bomb to the building it lands on.
 inline constexpr int kStickDamage = 250;
+/// Most a building of more than four tiles loses to one stick bomb, in percent of its
+/// full hit points.
+inline constexpr int kStickBigBuildingShare = 60;
+/// What one stick bomb does to a building of `tiles` tiles and `maxHealth` hit points.
+inline constexpr int stickDamageTo(int tiles, int maxHealth) {
+    const int cap = (maxHealth * kStickBigBuildingShare + 99) / 100;
+    return (tiles > 4 && cap < kStickDamage) ? cap : kStickDamage;
+}
 /// Bombs the stick still releases after the last enemy building under the sight.
 inline constexpr int kStickTailBombs = 1;
 /// The stick's clock: kStickPhaseStep is added every game cycle and a bomb is due each
