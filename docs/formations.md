@@ -7,6 +7,110 @@ sonic-lane rule, hunting in formation and the panel buttons described first belo
 `feat/formation-form-up` (save 9861, protocol 75) makes those buttons form the selection up
 where it stands.
 
+## Mass Carryall manoeuvres (2026-11-23; five switches, all default off; save 9894)
+
+Stefan: "get the ai to test different mass carry all drop movements - to retreat or to attack. could be behind
+enemy or to the side flanking or a rescue etc. also would make carryalls more valuable to have". **Result: none of
+them beats the control in his game, three variants of the drops lose, so every switch stays off.** QuantBot's
+Carryalls do what they did before: harvesters, repair trips, stalled units.
+
+### What QuantBot did with Carryalls before
+
+It never ordered one. Every combat lift came from the engine: a unit sent to a Repair Yard asks for a Carryall
+(`GroundUnit::doRepair`), a unit that fails three paths or stands still for 30 s asks for one (`UnitBase::
+finishPathRequest`, `tryLongStallCarryallRescue`), and a repaired unit is flown back (`RepairYard`). The fleet target
+is sized for harvesters and Repair Yards (`QuantBotBuildPolicy::carryallTarget`). In the games below a control house
+that survives 45 minutes builds 16 to 21 Carryalls and loses 11 to 13 of them.
+
+### The switches (`[Force Concentration]`, Custom games only, `src/players/QuantBotAirlift.cpp`)
+
+A Carryall carries one unit, so everything is flown in sorties: each pass orders one unit per free Carryall, and a
+unit is only ordered while a Carryall is free to book (one without a booking would drive to the drop point alone).
+A lift is the engine's own Carryall request, the code a player's drop order runs. Units under a lift order are held
+like a split group (`forceHeld`): no rally or regroup orders. The state is saved (`QuantBot::saveAirlift`, 9894) and
+each switch is in the multiplayer config hash when on.
+
+| Key | What it does |
+|---|---|
+| `AirliftRearDrop` | Within 90 s of a wave's launch, the dearest whole vehicles of the wave (at most half, at most `AirliftGroup`, default 6) are flown to the nearest standable ground out of observed enemy reach on the far side of the enemy base centre, 8 to 32 tiles out. They wait there until all are down (or 45 s after the first) and the ground wave is within 18 tiles of the base (at most 150 s), then hunt towards the base centre. |
+| `AirliftFlankDrop` | The same, square to the approach, on whichever side has ground nearer the base. Both on: they take turns. |
+| `AirliftRetreatLift` | While the wave is outmatched where it stands (the posture machine's sustained local verdict, read before the default-off withdrawal switch masks it), wave members under enemy fire are flown to the protected rally, dearest first, and leave the wave. |
+| `AirliftRescue` | A vehicle under enemy fire, 15 tiles or more from home, is flown to the rally when it is below `AirliftRescueHealth` percent (default 50) without a repair trip, or (`AirliftRescueCutOff`, default on) has no friendly fighter within 6 tiles. Two orders a pass. |
+| `AirliftFerry` | A whole wave member 25 tiles or more farther from the enemy base than the wave's nearest third, and not under fire, is flown to safe ground beside that third and hunts on. |
+| `AirliftCarryalls` | 0 to 6 Carryalls on top of the transport target (default 0). |
+
+Only whole units are flown to attack: a Carryall that picks up a damaged unit without a target takes it to a Repair
+Yard instead (`Carryall::pickupTarget`). For a retreat or rescue that is the wanted result.
+
+### Measurement
+
+`tests/ai/vanilla-match.py --ffa default@airlift-<arm>,default --control default`: Stefan's 4-player DuneCity
+free-for-all (generated 160x160 map, Fortress starts with 20,000-credit armies and 40,000-credit cities, his game
+options, four QuantBot Brutal, 45 game minutes), two houses with the manoeuvre and two control houses in every game,
+all six assignments of 16 seeds (9101 to 9116): 96 games an arm, 1,440 games, on AWS. Score is placement
+(`tests/ai/match_score.py`); the difference is the candidate houses' mean score minus the control houses' in the
+same game, with its 95% bootstrap interval. Overlays are `tests/ai/play-styles/airlift-*.ini`; the arms without
+"no fleet" also set `AirliftCarryalls=3` (`-big`: 6, and `AirliftGroup=12`). Round 1 is source 64104487a (a drop
+needed two free Carryalls and took at most a third of the wave), round 2 is 485291f04 (one free Carryall, at most
+half), round 3 is aa0dd1b7e. "Fired" is the share of candidate house-games in which it happened at least once; the
+counts are per candidate house-game. "Lost in the air" died with their Carryall; "lost waiting" died after the order
+and before the Carryall came. Carryalls built and lost are candidate / control and include the fleet of a house
+that was eliminated.
+
+| Round | Arm | Games | Fired | Times | Units lifted | Lost in the air | Lost waiting | Carryalls built | Carryalls lost | Score difference (95%) | Games timed out | Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | rear | 96 | 39% | 0.9 | 5.0 | 0.02 | 0.0 | 8.6 / 7.8 | 7.9 / 7.8 | -0.037 (-0.20..+0.14) | 22% | level |
+| 1 | flank | 96 | 41% | 1.3 | 7.2 | 0.03 | 0.0 | 8.7 / 8.0 | 8.2 / 7.8 | -0.017 (-0.20..+0.16) | 15% | level |
+| 1 | retreat | 96 | 19% | 0.2 | 0.8 | 0.00 | 0.0 | 9.0 / 8.1 | 8.4 / 7.8 | -0.020 (-0.20..+0.16) | 14% | level |
+| 1 | retreat, no fleet | 96 | 18% | 0.2 | 0.9 | 0.00 | 0.0 | 7.4 / 7.6 | 7.3 / 7.7 | +0.014 (-0.15..+0.17) | 4% | level |
+| 1 | rescue | 96 | 94% | 172.1 | 119.7 | 0.26 | 43.7 | 9.6 / 8.7 | 9.4 / 7.9 | -0.150 (-0.31..+0.01) | 17% | level |
+| 1 | rescue, no fleet | 96 | 96% | 157.6 | 106.5 | 0.20 | 41.8 | 8.3 / 9.0 | 8.9 / 8.3 | -0.135 (-0.29..+0.01) | 20% | level |
+| 1 | three more Carryalls, no manoeuvre | 96 | - | - | - | - | - | 8.8 / 8.0 | 8.1 / 7.8 | +0.002 (-0.17..+0.18) | 12% | level |
+| 2 | rear | 96 | 64% | 1.4 | 7.9 | 0.03 | 0.0 | 11.2 / 11.0 | 10.6 / 9.5 | -0.072 (-0.23..+0.09) | 32% | level |
+| 2 | flank | 96 | 71% | 1.8 | 9.9 | 0.03 | 0.0 | 10.5 / 11.5 | 10.5 / 10.2 | -0.211 (-0.36..-0.06) | 34% | **loses** |
+| 2 | rear, 12 units | 96 | 64% | 1.4 | 13.2 | 0.01 | 0.0 | 11.6 / 10.5 | 10.6 / 9.8 | -0.174 (-0.34..-0.01) | 25% | **loses** |
+| 2 | flank, 12 units | 96 | 69% | 1.6 | 15.9 | 0.06 | 0.0 | 11.9 / 11.7 | 10.8 / 10.4 | -0.220 (-0.36..-0.07) | 30% | **loses** |
+| 2 | rescue below 25% health only | 96 | 97% | 109.3 | 39.5 | 0.05 | 69.5 | 11.7 / 10.2 | 10.7 / 10.1 | -0.013 (-0.15..+0.14) | 16% | level |
+| 2 | rescue of cut-off units only | 96 | 97% | 106.7 | 79.9 | 0.33 | 11.4 | 12.6 / 10.2 | 11.8 / 9.7 | -0.083 (-0.24..+0.08) | 25% | level |
+| 3 | ferry | 96 | 47% | 31.2 | 31.0 | 0.01 | 0.0 | 12.8 / 10.8 | 10.7 / 10.3 | -0.057 (-0.23..+0.11) | 26% | level |
+| 3 | ferry, no fleet | 96 | 48% | 23.0 | 22.8 | 0.03 | 0.0 | 10.3 / 9.8 | 9.9 / 9.4 | +0.013 (-0.14..+0.18) | 20% | level |
+
+Houses alive at a time-out, candidate / control, were within four points of each other in every arm (`report.txt`
+in each round's folder has the column).
+
+### Why each stays off
+
+- **Rear and flank drops lose, and lose more the more they carry.** Flying is safe (0.01 to 0.06 units lost in the
+  air per house-game) and the group lands where it is sent. But the units it takes are the dearest of the wave, and
+  they fight apart from it: in round 2 a candidate house killed 9,000 to 16,000 credits less than a control house
+  (flank 73,946 v 87,004). In round 1 a drop fired in 40% of house-games with 5 to 7 units and was level; the
+  round 2 rear drop with 8 units is still level (-0.07); with 10 to 16 units in 64 to 71% of house-games it loses. This agrees with the split and flank waves S and T
+  ("Concentrating force", above): one concentrated wave is better.
+- **A rear drop often has nowhere to land.** These bases sit on the map's rim. In round 2, where one free
+  Carryall was enough, "no ground" was the commonest refusal of a rear drop (41 to 58 attempts a house-game); in
+  round 1 it was "no two free Carryalls" (47).
+- **The retreat lift hardly happens.** The local-defeat verdict held for 9 passes a house-game and in 7 of them no
+  Carryall was free; 0.8 units a house-game were flown out. Its score is the control's.
+- **The rescue fires constantly and does not pay.** 107 to 172 lifts a house-game. With the 50% threshold the
+  house fights less (kill value 56,699 v 62,922, loss value 54,782 v 63,634) and scores -0.15, its interval
+  touching 0. Below 25% health most die before the Carryall comes (69.5 of 109). Neither narrower variant is
+  better than the control.
+- **The ferry is safe and makes no difference.** 23 to 31 units a house-game flown up to the wave's front, 0.01
+  to 0.03 of them lost in the air, score level.
+- **More Carryalls do not pay.** `AirliftCarryalls=3` alone built 0.8 more Carryalls a house-game (2.3 more for a
+  house that survives), scored +0.002 (-0.17..+0.18), and in the manoeuvre arms the extra aircraft were lost at
+  about the rate they were built.
+
+Limits: one setting (his 4-player DuneCity free-for-all, Fortress, Brutal). Vanilla Construction Yard starts, 1v1
+and Hard were not played, and since nothing passed the first half of the default rule the Fortress, Brutal and
+`/weak` "not worse" runs were not needed. With 96 games an interval is about +-0.17 wide, so an effect smaller than
+that would not show. The manoeuvres have no fixture probe of their own; the evidence that they do what the table
+says is the per-house counts above (`tests/ai/airlift-report.py`), the config unit test (`[ai][config][airlift]`)
+and the gates. Evidence: `~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`dc-ffa`, `dc-ffa-r2`,
+`dc-ffa-r3`: per-arm `games.csv`, `houses.csv`, `summary.txt`; `report.txt` and `airlift-report.txt` per round;
+`smoke1` to `smoke3` are the local four- and eight-game batches that showed the first version of the drops almost
+never found two free Carryalls).
+
 ## Scenario tests: vanilla Construction Yard starts and troop-formation benchmarks (branch `test/formation-scenarios`)
 
 Stefan: "think of some more tests we can do on troop formations and run them. also make sure you are

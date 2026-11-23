@@ -1,3 +1,143 @@
+## 2026-11-23 - Carryalls: manual drops on by default reach old profiles, a Return units switch on Repair Yards, QuantBot's mass Carryall manoeuvres (unreleased, after 1.0.876)
+
+Stefan: "make manual carryall drop on by default on dune city. make a button for setting repairyards to return
+unit to where it was picked up from for repair or not (a toggle on the right hand menu)"; then "get the ai to test
+different mass carry all drop movements - to retreat or to attack. could be behind enemy or to the side flanking
+or a rescue etc. also would make carryalls more valuable to have". Commits 0ab915e86 to aa0dd1b7e on
+`integrate/feature-batch`; not pushed, no version bump. Protocol stays 133 (unreleased), save format 9893 (the
+switch) and 9894 (QuantBot's manoeuvre state).
+
+### Part 1: the default and the switch
+
+- **Why manual drops were still off for him.** The Dune City default has been on since 1.0.799 (`BundledGameOptions::
+  city`). Every options save (Options, or Game Rules with "Remember for new games") writes all options into
+  `[Game Options dunecity]`, so a section first written before then, and every re-save of it since, carries
+  `Manual Carryall Drops = false` over the mod default. His MacBook Air profile, read (not changed) on 2026-11-23,
+  has exactly that: off in the Dune City section, in a section last saved by a recent build (it has `Starport
+  Population`, not yet `Saboteur Hunt`). `tests/performance/data/stefan-game-options.ini` (captured 2026-10-18)
+  still had it on. The game statistics database does not record match rules, so how many other players are in that
+  state cannot be counted.
+- **Decision: one reset, then the choice is the player's.** A stored "off" is not evidence of a choice, because the
+  file stores every option on every save, and the one profile that could be checked holds an "off" its owner does
+  not want. A narrower rule was considered and rejected: dropping the value only from sections last saved before
+  v1.0.842 (the first release that writes a key 1.0.799 did not) would have left his own profile off. So start-up
+  (`adoptCarryallDropDefault`, `src/globals.cpp`, called from `main()` after the options are read) removes a
+  stored `Manual Carryall Drops = false` from `[Game Options dunecity]` once and writes `Carryall Drop Default = 1`
+  into the section. Every later options save writes that key too, so an "off" saved from then on stays off. A player
+  who did untick it on purpose gets it ticked once and unticks it once more. Vanilla, Dune2R, Tornie and Civ Wars
+  keep their own defaults (off) and their sections are not touched; saved games keep their saved rule.
+- **What Repair Yards did before, kept as the starting state.** A Carryall that picks up a unit bound for a Repair
+  Yard sets the unit's guard point to the pickup tile (`Carryall::pickupTarget`). When the repair is done the yard
+  books a free Carryall to fly the unit to its guard point if that is six or more tiles away and the match rule
+  Manual Carryall Drops is on (`RepairYard::updateStructureSpecificStuff`); with no free Carryall, or the rule off,
+  it releases the unit beside itself. A unit that drove in has no pickup tile; its guard point is still the spot it
+  guarded, so it is flown back there. None of that changed.
+- **The switch: "Return units on / off"** in the Repair Yard's side panel (`RepairYardInterface`), under the city
+  statistics. Off: the repaired unit is released beside the yard and no Carryall comes. It is **one switch per
+  house**, shown on every Repair Yard of that house, not one per yard: a damaged unit takes whichever free yard is
+  nearest (`GroundUnit::doRepair`), the player never picks the yard, so a per-yard setting would make the same
+  tank come back or not depending on which bay happened to be free. The button queues `CMD_HOUSE_REPAIR_RETURN`
+  (appended after `CMD_AIRPORT_BUY_AIRPLANE`; issuer's own house only, like auto repair), so it is in the command
+  stream of multiplayer games and replays. `House::repairReturnEnabled` is saved after the auto-repair flag from
+  format 9893; an older save loads on. The button is hidden while Manual Carryall Drops is off (there is no return
+  flight to switch) and disabled for another house's yard and for observers. A Carryall already booked for a
+  return when the switch goes off still makes that flight.
+- **AI houses** start on and never change it: that is what they did before, and QuantBot's transport planning
+  counts a finished repair waiting for its return flight as Carryall demand. In a house a human shares with a
+  QuantBot partner the human's switch applies to both, and QuantBot no longer counts a return flight that is
+  switched off (`QuantBotBuild.cpp`).
+- **Test: `repair_return_probe`** (`tests/units/repair-return-probe.inc`, `run-repair-return-probe.py`; headless,
+  nightly; 176 s on the Mini). Each case is a Custom Game started through the main menu's own steps
+  (`initialCustomGameRules`, the map and rules screen, the lobby's Start) from a profile holding his saved options
+  (`tests/ai/game-options/saboteur-hunt-on.ini` as `[Game Options dunecity]`), the switch is clicked in the real
+  panel and the trips are flown by `Game::updateGameState()`. Each case runs twice and must log the same cycles.
+  Results of the run at e898f959d (`build-int/repair-return-probe/`):
+
+  | Case | Result |
+  |---|---|
+  | on (starting state) | picked up at cycle 282, in the bay 607, Carryall takes it 976, set down 1283 on its pickup tile (29,27) |
+  | off (button clicked; command runs the next cycle) | released beside the yard at 54,57, no Carryall; switched on again, the next unit returns to its post |
+  | drove in, on | no Carryall until it is in the bay; flown back to the post it guarded |
+  | drove in, off / house without a Carryall | stays beside the yard |
+  | save | off survives save and load with a unit in the bay (which then stays by the yard); on again survives too; format 9893 |
+  | old save (format 9854) | all four houses load on |
+  | QuantBot house | starts on, its repaired unit is flown out; the human's command does not change it |
+  | Manual Carryall Drops off | no return flight, button hidden |
+  | default, four profiles | fresh: on. His options: on. Section saved before the revision with off: on, key removed, revision 1; an off saved afterwards is kept and offered. Off saved after the revision: off |
+
+- Not verified on a real screen: the button's place and text in the panel at his resolution. The probe checks it is
+  visible, enabled and clickable in the 640x480 dummy-driver panel.
+
+### Part 2: QuantBot's mass Carryall manoeuvres (five switches, none earned the default)
+
+- **Before:** QuantBot never ordered a Carryall. Combat units were lifted only by the engine (repair trips, three
+  failed paths, the 30-second stall rescue). Hindsight and `docs/formations.md` had no earlier Carryall assault,
+  airlift or rear attack; the nearest prior results were the split and flank ground waves S and T ("one
+  concentrated wave is better") and withdrawals, which are off because they cost wins.
+- **Built** (`src/players/QuantBotAirlift.cpp`, called from the unit pass after `concentrateForces()`; Custom games
+  only; `[Force Concentration]` keys, each hashed when on; state saved from format 9894): `AirliftRearDrop`,
+  `AirliftFlankDrop`, `AirliftRetreatLift`, `AirliftRescue` (with `AirliftRescueHealth`, `AirliftRescueCutOff`),
+  `AirliftFerry` (added after round 2, because splitting lost), `AirliftGroup`, `AirliftCarryalls`. What each does
+  is in `docs/formations.md`, "Mass Carryall manoeuvres". A Carryall carries one unit, so every manoeuvre flies
+  sorties and only orders a unit while a Carryall is free to book.
+- **Measured** in his game: 4-player DuneCity free-for-all on generated 160x160 maps, Fortress starts, his options,
+  QuantBot Brutal, 45 game minutes, two candidate and two control houses per game, 96 games an arm, 15 arms, 1,440
+  games on AWS (`tests/ai/vanilla-match.py --ffa default@airlift-<arm>,default --control default`, seeds 9101 to
+  9116). Paired placement-score difference against the control houses of the same game, 95% bootstrap interval:
+
+  | Manoeuvre | Fired (house-games) | Units lifted a house-game | Lost in the air / waiting | Score difference (95%) | Verdict |
+  |---|---|---|---|---|---|
+  | Rear drop, 6 units (round 2) | 64% | 7.9 | 0.03 / 0.0 | -0.072 (-0.23..+0.09) | level |
+  | Rear drop, 12 units | 64% | 13.2 | 0.01 / 0.0 | -0.174 (-0.34..-0.01) | loses |
+  | Flank drop, 6 units (round 2) | 71% | 9.9 | 0.03 / 0.0 | -0.211 (-0.36..-0.06) | loses |
+  | Flank drop, 12 units | 69% | 15.9 | 0.06 / 0.0 | -0.220 (-0.36..-0.07) | loses |
+  | Retreat lift | 19% | 0.8 | 0.00 / 0.0 | -0.020 (-0.20..+0.16) | level |
+  | Rescue, below 50% health or cut off | 94% | 119.7 | 0.26 / 43.7 | -0.150 (-0.31..+0.01) | level |
+  | Rescue, below 25% health only | 97% | 39.5 | 0.05 / 69.5 | -0.013 (-0.15..+0.14) | level |
+  | Rescue, cut-off units only | 97% | 79.9 | 0.33 / 11.4 | -0.083 (-0.24..+0.08) | level |
+  | Ferry to the wave's front | 47% | 31.0 | 0.01 / 0.0 | -0.057 (-0.23..+0.11) | level |
+  | Three more Carryalls, no manoeuvre | - | - | - | +0.002 (-0.17..+0.18) | level |
+
+  Games timed out in 4% to 34% of an arm's games, and candidate and control houses were alive at a time-out within
+  four points of each other in every arm. The full table (round 1 with the stricter first version of the drops, the
+  no-fleet arms, Carryalls built and lost per arm) is in `docs/formations.md`.
+- **Decision: every switch stays off; no default changed and no gate was touched.** The rule needs the interval
+  above 0 and none is. Why: a drop takes the dearest units out of the wave and they fight apart (a candidate house
+  killed 9,000 to 16,000 credits less than a control house in round 2), and it loses more the more it carries; a
+  rear drop often has no ground behind a base on the map's rim; the retreat lift finds no free Carryall in 7 of the
+  9 passes a house-game it is wanted; the rescue pulls 107 to 172 units a house-game out of fights, or, kept to
+  units below a quarter health, loses most of them before the Carryall arrives; the ferry is safe and changes
+  nothing.
+- **Does QuantBot build more Carryalls, and does it pay?** With `AirliftCarryalls=3` a house builds 0.8 more a
+  house-game (2.3 more for a house that survives: 19.7 against 17.4) and loses them at about the same rate. Alone
+  that scores +0.002 (-0.17..+0.18): neither a gain nor a measurable cost. A control house that survives the 45
+  minutes already builds 16 to 21 Carryalls and loses 11 to 13 of them, so in these games Carryalls are a running
+  cost of about 800 credits each. Nothing here made them worth more.
+- **Not done:** vanilla Construction Yard starts, 1v1 and Hard were not played; the Fortress, Brutal and `/weak`
+  "not worse" runs of the default rule were not needed because nothing passed its first half. The manoeuvres have
+  no fixture probe; their evidence is the per-house counts in the match reports (`tests/ai/airlift-report.py`), the
+  config unit test `[ai][config][airlift]` and the gates. During development one edit of two source files ran
+  about 30 seconds while another session's `perf_regression` held the checkout (a refused claim was not checked);
+  the files were put back at once and the change was re-applied under a claim.
+- **Evidence:** `~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`dc-ffa`, `dc-ffa-r2`, `dc-ffa-r3`:
+  per-arm `games.csv`, `houses.csv`, `summary.txt` and `cluster-evidence`; `report.txt` and `airlift-report.txt`
+  per round; `smoke1` to `smoke3`). Queue jobs `20261123T1608*-lift-*`, `20261123T1629*-lift2-*`,
+  `20261123T1647*-lift3-*`.
+
+### Gates and checks
+
+- AWS, source aa0dd1b7e (the last code commit), job `20261123T165547-ctest-d0ef72`: 11 of 11 passed -
+  `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`,
+  `quantbot_ffa_army_deploys`, `repair_return_probe`, `quantbot_carryall_repair`, `stalled_carryall_probe`,
+  `carryall_flight_probe`, `menu_probe_fixture`, `save_roundtrip_probe`, `dunelegacy_tests`. An earlier run at
+  64104487a (`20261123T160939-ctest-ea304b`, before rounds 2 and 3) passed 10 of 10.
+- `perf_regression` on the Mini: passed in 104.7 s at b2cdcedb0, which is aa0dd1b7e plus another session's
+  change to a city plane probe only. A first run at aa0dd1b7e also passed (124.1 s), but the workspace wrapper did
+  not accept it as a validated batch because that probe file was edited while it ran.
+- `repair_return_probe` on the Mini at e898f959d: passed (176 s). Built in `build-int` at aa0dd1b7e.
+- This entry, the `docs/formations.md` section and the `HOWTOPLAY.md` paragraph are a documentation-only commit
+  on top; the gates were not run again for it.
+
 ## 2026-11-23 - Airport 4x4 from the full Micropolis sprite; 3x3 where a map or save has no room (unreleased, after 1.0.876)
 
 Stefan: "make an airport 4x4 squares not 3x3 you can look at the original unskrunken sprite from micropolis".

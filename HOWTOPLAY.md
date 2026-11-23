@@ -131,6 +131,17 @@ You can play a **pure city-builder** skirmish on a big rock map, or a
 **hybrid** where you defend the colony while it grows. The simulation
 runs the same way in both modes.
 
+## Carryalls and Repair Yards
+
+Dune City games start with **Manual Carryall Drops** on (Game Rules): select units, press the Carryall drop
+button or key and click a spot, and a free Carryall flies each unit there. A damaged unit with a Repair Yard and
+a Carryall is flown in for repairs.
+
+Select a **Repair Yard** to find the **Return units** button in the side panel. On (the starting state): a
+Carryall flies each repaired unit back to where it was picked up. Off: repaired units stay beside the yard. The
+button sets all of your Repair Yards at once. It is hidden when Manual Carryall Drops is off, because then no
+unit is flown back.
+
 ## City airplanes
 
 A powered **Airport** (city games only) launches the city airplane and the traffic helicopter. You do
