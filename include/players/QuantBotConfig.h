@@ -282,7 +282,7 @@ struct QuantBotConfig {
         bool airliftRescue;                    ///< A damaged or cut-off vehicle under fire is flown home.
         bool airliftFerry;                     ///< Wave members far behind the wave's front are flown up to it.
         int airliftGroup;                      ///< Most units one rear/flank drop carries, 3-12 (default 6).
-        int airliftCarryalls;                  ///< Carryalls built on top of the transport target, 0-12 (default 0).
+        int airliftCarryalls;                  ///< Carryalls the High-Tech Factory buys beyond the transport target from leftover cash, 0-12 (default 0).
         int airliftReserve;                    ///< The newest Carryalls kept for manoeuvres: no harvester or repair work, 0-12 (default 0).
         bool squadRetreat;                     ///< A wave outmatched where it stands falls back to the protected rally (ratio: [Army Recovery] LocalWithdrawBps).
         bool squadRetreatAirlift;              ///< A withdrawing unit 20 tiles or more from its rally takes a free Carryall.

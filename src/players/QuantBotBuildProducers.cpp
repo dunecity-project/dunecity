@@ -1583,6 +1583,11 @@ void QuantBot::buildHighTechFactory(BuildPass& pass, BuilderTurn& turn) {
     air.carryallPrice = carryallPrice;
     air.carryalls = pass.itemCount[Unit_Carryall];
     air.carryallTarget = pass.vanillaBoomArmy ? std::min(1, pass.transportTarget) : pass.transportTarget;
+    // AirliftCarryalls (default 0): aircraft for the Carryall manoeuvres, bought here only, after
+    // Ornithopters and upgrades, from what is left to spend (chooseAirProduction, "carryall_target").
+    if (gameMode == GameMode::Custom && botConfig().force.airliftCarryalls > 0 && pass.transportTarget > 0
+        && !pass.vanillaBoomArmy)
+        air.carryallTarget += botConfig().force.airliftCarryalls;
     // CampaignHelperCarryallRatio (default 2): the support house's harvesting carryalls come from
     // here only while it has no Starport or its Starport has none in stock; one on order at a time
     // until a Repair Yard stands.

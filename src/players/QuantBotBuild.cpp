@@ -4183,10 +4183,10 @@ void QuantBot::planOpeningProduction(BuildPass& pass) {
     if (pass.fleetRatios)
         pass.transportBaseline = pass.transportTarget = (std::min(pass.mapSpiceHarvesterTarget,
             pass.itemCount[Unit_Harvester]) * fleetRatioTreatment().carryallQuarters + 3) / 4;
-    // AirliftCarryalls (default 0): aircraft for the Carryall manoeuvres on top of what the
-    // harvesters and Repair Yards need, once the house has that first transport.
-    if (gameMode == GameMode::Custom && botConfig().force.airliftCarryalls > 0 && pass.transportTarget > 0)
-        pass.transportTarget += botConfig().force.airliftCarryalls;
+    // AirliftCarryalls is NOT added here. The transport target is a capacity requirement that
+    // outranks army and economy spending; raising it by 3, 6 and 10 cost -0.54, -1.33 and -1.75
+    // of placement score in vanilla 1v1 Construction Yard starts (2026-11-24). The extra
+    // aircraft are a leftover purchase at the High-Tech Factory (QuantBotBuildProducers.cpp).
 }
 
 void QuantBot::planDefenceCoverage(BuildPass& pass) {
