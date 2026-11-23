@@ -1455,6 +1455,13 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.sellingBuildings = myINIFile.getBoolValue("Game Options", "Selling Buildings", true);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
 
+            // Dune City plays with Manual Carryall Drops on. A profile that stored "off" in its
+            // Dune City section before that became the default gets the default once.
+            if(adoptCarryallDropDefault(myINIFile)) {
+                SDL_Log("Dune City options: Manual Carryall Drops follows the mod default (on) from now on");
+                myINIFile.saveChangesTo(getConfigFilepath());
+            }
+
             pTextManager = std::make_unique<TextManager>();
 
             missingFiles = FileManager::getMissingFiles();

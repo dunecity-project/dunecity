@@ -131,6 +131,9 @@ const std::array<SDL_Color, 8> nativesRamp{{
 
 }
 
+const char* const kDuneCityGameOptionsSection = "Game Options dunecity";
+const char* const kCarryallDropDefaultKey = "Carryall Drop Default";
+
 std::string userGameOptionsSection() {
     const ModManager& mods = ModManager::instance();
     if(!mods.isInitialized() || mods.getActiveModName() == "vanilla") {
@@ -151,6 +154,8 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Sandworms Respawn", options.sandwormsRespawn);
     config.setBoolValue(section, "Killed Sandworms Drop Spice", options.killedSandwormsDropSpice);
     config.setBoolValue(section, "Manual Carryall Drops", options.manualCarryallDrops);
+    // From here on the value above is the player's own (see adoptCarryallDropDefault).
+    if(section == kDuneCityGameOptionsSection) config.setIntValue(section, kCarryallDropDefaultKey, 1);
     config.setIntValue(section, "Maximum Number of Units Override", options.maximumNumberOfUnitsOverride);
     config.setIntValue(section, "Maximum Number of Harvesters Override", options.maximumNumberOfHarvestersOverride);
     config.setIntValue(section, "Maximum Number of Construction Yards Override", options.maximumNumberOfConstructionYardsOverride);
@@ -185,6 +190,23 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Easy Mode", options.easyMode);
     config.setBoolValue(section, "Chaos Mode", options.chaosMode);
     config.setBoolValue(section, "Selling Buildings", options.sellingBuildings);
+}
+
+bool adoptCarryallDropDefault(INIFile& config) {
+    if(!config.hasSection(kDuneCityGameOptionsSection)
+       || config.getIntValue(kDuneCityGameOptionsSection, kCarryallDropDefaultKey, 0) >= 1) {
+        return false;
+    }
+    // A section written before this revision holds every option of the day it was saved, so an
+    // "off" in it does not say the player chose off: it is there for anyone who ever kept a
+    // change to any other option. It is dropped once and the mod's default (on) takes over. The
+    // revision stays in the section, so an "off" saved from now on is the player's and is kept.
+    if(config.hasKey(kDuneCityGameOptionsSection, "Manual Carryall Drops")
+       && !config.getBoolValue(kDuneCityGameOptionsSection, "Manual Carryall Drops", true)) {
+        config.removeKey(kDuneCityGameOptionsSection, "Manual Carryall Drops");
+    }
+    config.setIntValue(kDuneCityGameOptionsSection, kCarryallDropDefaultKey, 1);
+    return true;
 }
 
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options) {
