@@ -311,10 +311,11 @@ inline void report(Game& game, const std::vector<Side>& sides) {
         if (house->isAlive()) { ++alive; winner = side.house; }
         QuantBot::BlobStats stats;
         QuantBot::ForceStats force;
+        QuantBot::AirliftStats airlift;
         std::string strategy;
         for (const auto& player : house->getPlayerList())
             if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
-                stats = bot->blobStats; force = bot->forceStats;
+                stats = bot->blobStats; force = bot->forceStats; airlift = bot->airliftStats;
                 strategy = std::string(QuantBotStrategy::name(bot->strategy.mix)) + "-" + QuantBotStrategy::name(bot->strategy.tempo);
             }
         const auto home = FormationWaveMeasure::homeTrade()[side.house];
@@ -327,7 +328,10 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 "sized_responses=%d declined_responses=%d fall_backs=%d perimeter_turret_orders=%d turrets_built=%d "
                 "turrets_lost=%d raid_orders=%d turret_targets=%d press_on_orders=%d finish_waves=%d "
                 "fortified_holds=%d sonic_retargets=%d surplus_peak=%d siege_orders=%d siege_holds=%d "
-                "assault_holds=%d assault_waves=%d strategy=%s",
+                "assault_holds=%d assault_waves=%d airlift_rear=%d airlift_flank=%d airlift_retreats=%d "
+                "airlift_retreat_units=%d airlift_rescues=%d airlift_strikes=%d airlift_ordered=%d airlift_lifted=%d "
+                "airlift_landed=%d airlift_lost=%d airlift_lost_waiting=%d airlift_cancelled=%d carryalls=%d carryalls_built=%d "
+                "carryalls_lost=%d strategy=%s",
                 side.house, side.label.c_str(), int(house->isAlive()), house->getKillValue(),
                 house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units,
                 stats.parties, stats.gathered, stats.gatherTimeouts, stats.releases, stats.reforms, stats.fallbacks,
@@ -339,6 +343,9 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 force.perimeterTurretOrders, force.turretsBuilt, force.turretsLost, force.raidOrders,
                 force.turretTargets, force.pressOnOrders, force.finishWaves, force.fortifiedHolds, force.sonicRetargets,
                 force.surplusPeak, force.siegeOrders, force.siegeHolds, force.assaultHolds, force.assaultWaves,
+                airlift.rearDrops, airlift.flankDrops, airlift.retreatLifts, airlift.retreatUnits, airlift.rescues,
+                airlift.strikes, airlift.ordered, airlift.lifted, airlift.landed, airlift.lostInLift, airlift.lostWaiting, airlift.cancelled,
+                house->getNumItems(Unit_Carryall), house->getNumBuiltItems(Unit_Carryall), airlift.carryallsLost,
                 strategy.empty() ? "none" : strategy.c_str());
     }
     SDL_Log("FORMATION_DUEL_RESULT: winner=%d end_s=%.1f", alive == 1 ? winner : -1,

@@ -404,6 +404,49 @@ TEST_CASE("City construction capital defaults on and is loaded saved and hashed"
     std::filesystem::remove(path);
 }
 
+TEST_CASE("Carryall manoeuvres default off and each switch is loaded saved and hashed", "[ai][config][airlift]") {
+    QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.airliftRearDrop);
+    REQUIRE_FALSE(defaults.force.airliftFlankDrop);
+    REQUIRE_FALSE(defaults.force.airliftRetreatLift);
+    REQUIRE_FALSE(defaults.force.airliftRescue);
+    REQUIRE(defaults.force.airliftGroup == 6);
+    REQUIRE(defaults.force.airliftCarryalls == 0);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-airlift-test.ini";
+    std::set<std::string> hashes{defaults.getConfigHash()};
+    for (const char* key : {"AirliftRearDrop=true", "AirliftFlankDrop=true", "AirliftRetreatLift=true",
+                            "AirliftRescue=true", "AirliftGroup=9", "AirliftCarryalls=3"}) {
+        {
+            std::ofstream ini(path);
+            ini << "[Force Concentration]\n" << key << '\n';
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        INFO(key);
+        // Every switch is its own multiplayer configuration.
+        REQUIRE(hashes.insert(loaded.getConfigHash()).second);
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+        REQUIRE(restored.force.airliftRearDrop == loaded.force.airliftRearDrop);
+        REQUIRE(restored.force.airliftFlankDrop == loaded.force.airliftFlankDrop);
+        REQUIRE(restored.force.airliftRetreatLift == loaded.force.airliftRetreatLift);
+        REQUIRE(restored.force.airliftRescue == loaded.force.airliftRescue);
+        REQUIRE(restored.force.airliftGroup == loaded.force.airliftGroup);
+        REQUIRE(restored.force.airliftCarryalls == loaded.force.airliftCarryalls);
+    }
+    {
+        std::ofstream ini(path);
+        ini << "[Force Concentration]\nAirliftGroup=99\nAirliftCarryalls=99\n";
+    }
+    QuantBotConfig clamped;
+    REQUIRE(clamped.applyOverrides(path.string()));
+    REQUIRE(clamped.force.airliftGroup == 12);
+    REQUIRE(clamped.force.airliftCarryalls == 6);
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("Retreat preserve defaults off and both levels are loaded saved and hashed", "[ai][config][retreat]") {
     QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.retreatPreserve);

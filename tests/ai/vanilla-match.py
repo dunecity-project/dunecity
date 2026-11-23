@@ -85,7 +85,10 @@ DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed'
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
                      'gate_holds', 'gate_timeouts', 'raid_orders', 'turret_targets', 'press_on_orders',
                      'finish_waves', 'fortified_holds', 'sonic_retargets', 'surplus_peak', 'siege_orders',
-                     'siege_holds', 'assault_holds', 'assault_waves', 'strategy')
+                     'siege_holds', 'assault_holds', 'assault_waves',
+                     'airlift_rear', 'airlift_flank', 'airlift_retreats', 'airlift_retreat_units', 'airlift_rescues', 'airlift_strikes',
+                     'airlift_ordered', 'airlift_lifted', 'airlift_landed', 'airlift_lost', 'airlift_lost_waiting', 'airlift_cancelled', 'carryalls',
+                     'carryalls_built', 'carryalls_lost', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS + ('start_mix',)
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive', 'crush_kills')
