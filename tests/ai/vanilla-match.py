@@ -54,6 +54,7 @@ import re
 import shutil
 import statistics
 import subprocess
+import os
 import sys
 import threading
 import time
@@ -889,6 +890,9 @@ parser.add_argument('--seed-per-map', type=int, default=0, metavar='STRIDE',
 parser.add_argument('--jobs', type=int, default=4, help='Games played in parallel')
 parser.add_argument('--ai-telemetry', action='store_true', help='Keep the AI decision log (events.jsonl)')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
+parser.add_argument('--env', action='append', default=[], metavar='KEY=VALUE',
+                    help='Set an environment variable for every game played (repeatable): the engine\'s '
+                         'experiment-only overrides, e.g. DUNECITY_TEST_FREE_PLANE_SECONDS=120')
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--minutes-shown', default='5,10,15,20,30,40,60', help='Report: economy table minutes')
 parser.add_argument('--adjudicate', type=float, default=1000,
@@ -896,6 +900,9 @@ parser.add_argument('--adjudicate', type=float, default=1000,
                          'least this many credits')
 match_score.add_arguments(parser)
 args = parser.parse_args()
+for item in args.env:
+    name, _, value = item.partition('=')
+    os.environ[name] = value
 if bool(args.pairs) == bool(args.ffa):
     parser.error('Give exactly one of --pairs and --ffa.')
 if args.ffa:
