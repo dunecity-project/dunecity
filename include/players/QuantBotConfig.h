@@ -287,7 +287,7 @@ struct QuantBotConfig {
         bool squadRetreat;                     ///< A wave outmatched where it stands falls back to the protected rally (ratio: [Army Recovery] LocalWithdrawBps).
         bool squadRetreatAirlift;              ///< A withdrawing unit 20 tiles or more from its rally takes a free Carryall.
         /// Free units at home are flown beside an enemy harvester no enemy weapon covers. DEFAULT
-        /// ON since 2026-11-24, in the scope it was measured to win in (QuantBot::
+        /// ON since 2026-11-23, in the scope it was measured to win in (QuantBot::
         /// airliftHarvesterDropActive): Custom Hard/Brutal, no city simulation, a house that
         /// started without a Refinery (a Construction Yard start), not allied with a human.
         bool airliftHarvesterDrop;

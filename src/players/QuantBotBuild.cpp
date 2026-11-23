@@ -4185,7 +4185,7 @@ void QuantBot::planOpeningProduction(BuildPass& pass) {
             pass.itemCount[Unit_Harvester]) * fleetRatioTreatment().carryallQuarters + 3) / 4;
     // AirliftCarryalls is NOT added here. The transport target is a capacity requirement that
     // outranks army and economy spending; raising it by 3, 6 and 10 cost -0.54, -1.33 and -1.75
-    // of placement score in vanilla 1v1 Construction Yard starts (2026-11-24). The extra
+    // of placement score in vanilla 1v1 Construction Yard starts (2026-11-23). The extra
     // aircraft are a leftover purchase at the High-Tech Factory (QuantBotBuildProducers.cpp).
 }
 

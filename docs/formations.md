@@ -7,6 +7,149 @@ sonic-lane rule, hunting in formation and the panel buttons described first belo
 `feat/formation-form-up` (save 9861, protocol 75) makes those buttons form the selection up
 where it stands.
 
+## Carryall manoeuvres, second set: more Carryalls, squad retreat, raids, defence (2026-11-23; the harvester raid is a default in vanilla Construction Yard starts)
+
+Stefan: "try building more carryalls, try defining when a squad is outnumbers and should retreat and retreat
+them, they can either retreat using their own movement or get a carryall if available. also try doing targetted
+carryall drops onto enemy harvesters or to undefended parts of the base permimeter of an enemy. also use them to
+rush to the defence of a base under attack or to the defence of harvesters under attack", then "also try different
+maps. try vanilla maps as well, custom games, etc." **Result: one behaviour earned a default, the Carryall
+harvester raid, in the games it won in (vanilla Custom games from a Construction Yard start, Hard and Brutal).
+Everything else stays off.** The section below this one is the first set (rear and flank drops, retreat lift,
+rescue, ferry); its vanilla results are in the tables here.
+
+### The switches (`[Force Concentration]`, `src/players/QuantBotAirlift.cpp`, state saved from 9896)
+
+| Key | Default | What it does |
+|---|---|---|
+| `AirliftHarvesterDrop` | **on**, scoped | Every minute at most, two to `AirliftRaidGroup` (4) free, whole vehicles standing within 30 tiles of the base centre are flown beside the nearest enemy harvester that no observed enemy weapon covers (the tactical danger map is 0 on it) and attack it. A raider whose target is gone takes the next uncovered harvester within 20 tiles; after three minutes, or below 40% health, or with nothing left, it goes home, by Carryall when one is free. Scope of the default (`QuantBot::airliftHarvesterDropActive`): Custom game, Hard or Brutal, no city simulation, the house started without a Refinery (a Construction Yard or MCV start), not allied with a human. |
+| `AirliftHarvesterDropEverywhere` | off | Test-only: the raid in every Custom game, as rounds 4 to 9 measured it. |
+| `AirliftPerimeterDrop` | off | The same raid onto the dearest enemy building that no enemy weapon covers. |
+| `SquadRetreat` | off | The posture machine's local withdrawal as a config switch (the test-only fall-back `Y`): a wave outmatched where it stands, 1.3x for 9 s or 2.0x at once (`[Army Recovery] LocalWithdrawBps`, `LocalSevereBps`, `LocalPersistMs`), goes back to the protected rally and relaunches when ready. |
+| `SquadRetreatAirlift` | off | Any withdrawing unit 20 tiles or more from its rally takes a free Carryall instead of driving (`withdrawUnit`). |
+| `AirliftBaseDefence`, `AirliftHarvesterDefence` | off | A whole defender the scramble picks, 20 tiles or more from the attacker of a building or harvester, is flown to four tiles short of the attacker and gets its ordinary defence order on landing. |
+| `AirliftReserve` | 0 | The newest N Carryalls are the army's: the engine's harvester, repair and stall lifts skip them (`GroundUnit::findFreeCarrier`, `RepairYard`), two always stay with the economy. |
+| `AirliftCarryalls` | 0 | Up to 12 Carryalls beyond the transport target, bought at the High-Tech Factory from leftover cash after Ornithopters and upgrades. Until 9e03f4262 it raised the transport target itself; see "More Carryalls" below. |
+
+### Settings (all on AWS, `tests/ai/vanilla-match.py`, candidate against `default` in the same games)
+
+| Name | Games played as |
+|---|---|
+| `dcffa` | His game: 4-player DuneCity free-for-all, generated 160x160 map, Fortress starts, his options, Brutal, 45 min; two candidate and two control houses, all six assignments per seed |
+| `vanfort` | The same in the vanilla mod (`rs160-vanilla`) |
+| `sizes` | The same on `rs128-dunecity`, `rs192-dunecity` and `rs160-dune2r` |
+| `v1v1`, `v1v1b` | Vanilla 1v1 from Construction Yard starts as the Custom Game lobby starts them: Habbanya-Penny, Ergun-Sahij, Sihaya-Chvrches, Tuono-Orac; Hard (`v1v1`) and Brutal (`v1v1b`); 60 min; every seed with the two labels swapped |
+| `vffa` | Vanilla 4-player free-for-all from Construction Yard starts: Ergsun-Odenkirk, Sihaya-Bowie; Hard; 60 min |
+
+Score is placement (`tests/ai/match_score.py`); a cell is the candidate's paired score difference with its 95%
+bootstrap interval; bold is an interval that excludes 0. A 1v1 difference runs from -2 to +2.
+
+### Round 4 (source 167f740d1): the second set as first built
+
+The arms with "air", the raids and the defence arms also set `AirliftCarryalls=4` and `AirliftReserve=4`;
+`fleet6` and `fleet10` are extra Carryalls alone; `reserve` is 4 + 4 with no manoeuvre.
+
+| Arm | dcffa (96) | vanfort (48) | sizes (72) | v1v1 (48) | vffa (48) |
+|---|---|---|---|---|---|
+| fleet6 | -0.141 (-0.30..+0.03) | -0.014 (-0.25..+0.21) | -0.059 (-0.24..+0.13) | **-1.333 (-1.71..-0.92)** | **-0.366 (-0.58..-0.14)** |
+| fleet10 | -0.142 (-0.29..+0.01) | -0.042 (-0.26..+0.18) | -0.028 (-0.21..+0.15) | **-1.750 (-2.00..-1.50)** | **-0.417 (-0.66..-0.19)** |
+| reserve | -0.086 (-0.24..+0.07) | -0.097 (-0.33..+0.15) | -0.010 (-0.19..+0.18) | **-1.375 (-1.71..-0.96)** | **-0.396 (-0.60..-0.18)** |
+| squad-retreat (ground, 1.3x) | +0.007 (-0.15..+0.17) | +0.104 (-0.15..+0.35) | +0.009 (-0.18..+0.20) | +0.125 (-0.42..+0.71) | -0.006 (-0.26..+0.23) |
+| squad-retreat-200 (ground, 2.0x) | +0.058 (-0.09..+0.22) | +0.056 (-0.19..+0.29) | +0.008 (-0.17..+0.20) | +0.167 (-0.38..+0.75) | +0.096 (-0.15..+0.34) |
+| squad-retreat-air | -0.075 (-0.24..+0.09) | -0.069 (-0.31..+0.18) | -0.029 (-0.19..+0.14) | **-1.417 (-1.75..-1.00)** | **-0.374 (-0.59..-0.18)** |
+| squad-retreat-200-air | -0.080 (-0.24..+0.08) | -0.069 (-0.32..+0.18) | -0.015 (-0.19..+0.18) | **-1.333 (-1.71..-0.92)** | **-0.332 (-0.57..-0.09)** |
+| harvester raid | -0.066 (-0.23..+0.09) | **-0.266 (-0.49..-0.02)** | -0.085 (-0.27..+0.10) | +0.083 (-0.50..+0.62) | -0.118 (-0.37..+0.15) |
+| perimeter raid | **-0.234 (-0.39..-0.08)** | **-0.403 (-0.61..-0.18)** | **-0.250 (-0.42..-0.08)** | -0.208 (-0.75..+0.33) | **-0.570 (-0.78..-0.35)** |
+| base defence | -0.141 (-0.29..+0.01) | -0.056 (-0.29..+0.18) | -0.054 (-0.24..+0.13) | **-1.208 (-1.62..-0.75)** | **-0.541 (-0.73..-0.36)** |
+| harvester defence | -0.073 (-0.24..+0.09) | -0.083 (-0.32..+0.14) | -0.109 (-0.29..+0.08) | **-1.542 (-1.83..-1.21)** | **-0.460 (-0.67..-0.27)** |
+| both defences | -0.138 (-0.29..+0.02) | -0.056 (-0.29..+0.18) | -0.073 (-0.24..+0.10) | **-1.333 (-1.71..-0.92)** | **-0.477 (-0.66..-0.28)** |
+
+The first set on the vanilla settings (round 5, same source; these arms set `AirliftCarryalls=3`):
+
+| Arm | v1v1 (48) | vffa (48) | vanfort (48) |
+|---|---|---|---|
+| rear drop | **-0.583 (-1.08..-0.04)** | -0.076 (-0.30..+0.15) | -0.035 (-0.27..+0.20) |
+| flank drop | **-1.083 (-1.50..-0.58)** | **-0.271 (-0.50..-0.04)** | -0.125 (-0.38..+0.11) |
+| retreat lift | -0.375 (-0.88..+0.17) | -0.233 (-0.48..+0.00) | +0.007 (-0.24..+0.26) |
+| rescue below 25% | **-0.667 (-1.17..-0.12)** | -0.085 (-0.31..+0.14) | -0.031 (-0.28..+0.21) |
+| ferry | -0.375 (-0.92..+0.17) | -0.168 (-0.41..+0.08) | -0.056 (-0.31..+0.21) |
+| three more Carryalls alone | -0.542 (-1.04..+0.00) | -0.049 (-0.30..+0.22) | -0.032 (-0.28..+0.21) |
+
+**More Carryalls, as first built, were the largest effect in the whole study, and it was a loss.** In vanilla 1v1
+from a Construction Yard, 3, 6 and 10 extra Carryalls scored -0.54, -1.33 and -1.75. `AirliftCarryalls` was added
+to the transport target, and that target is a capacity requirement that outranks army and economy spending
+(`QuantBotBuild.cpp`, the "transport" capital candidate). Every arm that carried the setting inherited the loss,
+which is why the round-5 numbers of the first set on `v1v1` say little about the manoeuvres themselves. From
+Fortress starts, where the house is rich from the first minute, the same setting cost -0.01 to -0.14. Fixed in
+9e03f4262: the extra aircraft are a leftover purchase at the High-Tech Factory only.
+
+### Round 7 (source 9e03f4262): the fix, and the raid and defence without extra fleet or reserve
+
+`plain` arms set only the manoeuvre's own switch. `fleet6` is the fixed leftover purchase. The other arms still
+reserve four Carryalls.
+
+| Arm | v1v1 (96) | v1v1b (48) | vffa (96) | dcffa (96) | vanfort (48) |
+|---|---|---|---|---|---|
+| fleet6, leftover purchase | +0.125 (-0.27..+0.50) | +0.042 (-0.54..+0.58) | +0.048 (-0.12..+0.21) | -0.032 (-0.19..+0.13) | -0.028 (-0.26..+0.22) |
+| harvester raid, plain | +0.208 (-0.17..+0.62) | **+0.667 (+0.17..+1.17)** | +0.006 (-0.17..+0.18) | -0.063 (-0.22..+0.10) | -0.076 (-0.31..+0.17) |
+| harvester raid, 4 + reserve 4 | +0.062 (-0.33..+0.46) | +0.000 (-0.58..+0.58) | **-0.201 (-0.36..-0.02)** | -0.115 (-0.26..+0.03) | -0.069 (-0.32..+0.17) |
+| squad-retreat (ground, 1.3x) | +0.083 (-0.29..+0.46) | -0.167 (-0.71..+0.38) | +0.153 (-0.02..+0.32) | +0.065 (-0.10..+0.23) | -0.011 (-0.26..+0.23) |
+| squad-retreat-200 (ground) | -0.042 (-0.44..+0.33) | -0.250 (-0.79..+0.29) | +0.039 (-0.13..+0.21) | +0.021 (-0.13..+0.18) | -0.042 (-0.28..+0.21) |
+| squad-retreat-air, reserve 4 | **-0.521 (-0.88..-0.15)** | **-1.083 (-1.50..-0.58)** | **-0.379 (-0.53..-0.22)** | -0.077 (-0.21..+0.06) | -0.069 (-0.31..+0.18) |
+| both defences, plain | -0.104 (-0.48..+0.27) | -0.333 (-0.83..+0.25) | **-0.276 (-0.43..-0.12)** | -0.037 (-0.18..+0.10) | -0.050 (-0.29..+0.19) |
+| both defences, reserve 4 | **-0.812 (-1.17..-0.44)** | **-1.000 (-1.42..-0.50)** | **-0.460 (-0.60..-0.29)** | **-0.180 (-0.32..-0.03)** | -0.049 (-0.29..+0.19) |
+
+### Rounds 8 and 9: the harvester raid replicated, and the rest of the default rule
+
+Round 7 was 40 comparisons, so its one win could be chance. Round 8 replayed that comparison alone on fresh seeds
+(8301 to 8324), 192 games each:
+
+| Arm | v1v1b Brutal | v1v1 Hard | vffa Hard |
+|---|---|---|---|
+| harvester raid, plain | **+0.458 (+0.19..+0.73)** | **+0.542 (+0.27..+0.81)** | +0.035 (-0.08..+0.16) |
+| squad-retreat (ground, 1.3x) | +0.115 (-0.17..+0.40) | +0.042 (-0.24..+0.29) | +0.091 (-0.04..+0.21) |
+
+Round 9, Fortress 1v1 duels (`tests/ai/formation-duel.py`, sizes 128, 160, 192, all three house pairs):
+
+| Check | Games | Difference (95%) | Verdict |
+|---|---|---|---|
+| raid v default, Hard | 144 | -0.194 (-0.47..+0.10) | level |
+| raid v default, Brutal | 144 | -0.181 (-0.50..+0.12) | level |
+| raid `/weak` v none, paired with default `/weak` v none | 108 | +0.312 (+0.19..+0.44) | beats |
+
+In the winning games a raiding house flew 18 to 19 raids and 64 to 67 units a game, lost 0.5 to 0.6 of them in
+the air and about 10 waiting for a Carryall, and built about 4 more Carryalls than its opponent (21.7 v 17.1 on
+Brutal, 16.5 v 12.8 on Hard) with no setting asking for them; probably the raids keep its Carryalls busy and the
+transport target's queue rule orders more, which was not checked.
+
+### Decisions
+
+- **Harvester raid: default on, in the scope it won in.** The rule is met: the interval is above 0 (Hard and
+  Brutal, replicated), it is not worse on Brutal, on Fortress (level) or `/weak` (better). Its Fortress estimates
+  are all negative, though (-0.19, -0.18 in duels, -0.08 and -0.06 in the vanilla and DuneCity free-for-alls), so
+  the default does not reach Fortress starts: it needs a house that started without a Refinery. City games from a
+  Construction Yard start were not played (the harness plays bundled maps in the vanilla mod only), so city games
+  do not get it either. Easy and Medium were not played and do not get it.
+- **Squad retreat on the ground: off.** Seventeen of its twenty-three estimates are positive and none is conclusive
+  (best: +0.153 (-0.02..+0.32) and +0.091 (-0.04..+0.21) on `vffa`). If there is an effect it is below +0.1.
+- **Retreat by Carryall, defenders flown in: off.** Without the reserve they are level to negative (defence
+  plain loses on `vffa`); with it they lose.
+- **Carryall reserve: off.** It takes transport from the harvesters: every reserve arm loses on the vanilla
+  Construction Yard maps.
+- **More Carryalls: off.** Bought from leftover cash they change nothing measurable (+0.13, +0.04, +0.05, -0.03,
+  -0.03).
+- **Perimeter raid: off.** It loses in four of five settings, and the candidate house kills less (68,003 v
+  83,179 on `dcffa`).
+- **First set on vanilla maps: off**, as in the DuneCity free-for-all; flank and rear drops lose there too.
+
+Limits: bot against bot only. The scoped default was confirmed against an explicit off in round 10 (below in
+`HANDOVER.md`). The manoeuvres still have no fixture probe; their evidence is the per-house counts in the match
+tables (`tests/ai/airlift-report.py`), the config unit test and the gates. Evidence:
+`~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`r4` to `r10`; `tables-*.md` and `matrix-*.md` are
+the tables above with every count; `make-tables.py`, `make-matrix.py` and `submit-r*.sh` regenerate them). The
+first `r4`/`r5` submissions of `van1v1` and `vanffa` named two maps by file name instead of the harness's short
+name and were refused for those maps; `v1v1` and `vffa` are the complete reruns and the only ones quoted.
+
 ## Mass Carryall manoeuvres (2026-11-23; five switches, all default off; save 9894)
 
 Stefan: "get the ai to test different mass carry all drop movements - to retreat or to attack. could be behind
@@ -102,7 +245,7 @@ in each round's folder has the column).
   about the rate they were built.
 
 Limits: one setting (his 4-player DuneCity free-for-all, Fortress, Brutal). Vanilla Construction Yard starts, 1v1
-and Hard were not played, and since nothing passed the first half of the default rule the Fortress, Brutal and
+and Hard were not played in these three rounds (they were later: round 5 in the section above), and since nothing passed the first half of the default rule the Fortress, Brutal and
 `/weak` "not worse" runs were not needed. With 96 games an interval is about +-0.17 wide, so an effect smaller than
 that would not show. The manoeuvres have no fixture probe of their own; the evidence that they do what the table
 says is the per-house counts above (`tests/ai/airlift-report.py`), the config unit test (`[ai][config][airlift]`)

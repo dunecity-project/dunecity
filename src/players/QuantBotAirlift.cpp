@@ -22,7 +22,7 @@
 //   AirliftRetreatLift  a wave outmatched where it stands is flown home, most valuable first
 //   AirliftRescue       a damaged or cut-off vehicle under enemy fire is flown home
 //   AirliftFerry        wave members far behind the wave's front are flown up to it
-// Second set (2026-11-24):
+// Second set (2026-11-23):
 //   AirliftReserve          the newest Carryalls are the army's: no harvester or repair work
 //   SquadRetreat            a wave outmatched where it stands falls back to the protected rally
 //   SquadRetreatAirlift     a withdrawing unit far from its rally takes a free Carryall
