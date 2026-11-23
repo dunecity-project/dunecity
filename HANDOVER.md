@@ -1,3 +1,40 @@
+## 2026-11-23 - Airport 4x4 from the full Micropolis sprite; 3x3 where a map or save has no room (unreleased, after 1.0.876)
+
+Stefan: "make an airport 4x4 squares not 3x3 you can look at the original unskrunken sprite from micropolis".
+Commit `8bf33b94e` (not pushed, no version bump; protocol 133, save format 9895).
+
+- **Art.** `scripts/build-city-atlases.py` takes a cell size per entry: the airport atlas is 576x64 (nine 64 px
+  frames from the 6x6-tile, 96 px Micropolis airport), stadium and nuclear plant stay at 48. Only
+  `atlases/airport.png` and `atlases/manifest.json` changed. Pillow 11.3.0 re-encodes five other atlases with the
+  same pixels and different bytes when the script runs; they were restored, so do not commit them after a rerun.
+- **Footprint.** `Structure_Airport` is 4x4 for every Airport a player, an AI or the editor places (`sand.cpp`,
+  `Airport::init`). `StructureBase::destroy` threw on any size it did not know; it has a 4x4 wreck table now.
+- **Compact (3x3) Airports** (`Airport::compact`, saved from 9895) draw the same cell scaled into three tiles
+  (`StructureBase::blitToScreen`). They are: every Airport of a save older than 9895, whose tiles hold a 3x3
+  claim, and a scenario Airport with no room. No map file was changed.
+- **Scenario maps** (`INIMapLoader::loadStructures`). Every structure line claims its tiles first, an Airport its
+  3x3 at the file position. Then each Airport, in file order, tries the 4x4 footprints growing east/south,
+  west/south, east/north, west/north; it takes the first inside the map with no tile claimed by another line, an
+  earlier Airport's choice or an object already on the map (the pre-placed units), first without taking tiles
+  that have a Road line, then with (those Road lines are skipped). None fits: compact at the file position. One
+  `AIRPORT_FOOTPRINT:` log line each. By a model of the rule, 13 of the 22 Airports on the bundled maps become
+  4x4 and 9 stay 3x3; eight of the 13 take three to seven road tiles (Metropolis lines 652, 688, 2729; 2P City
+  241, 5179; Ash Quarter 191; Alkozeltser 6186, 6555). The road-second pass is one line to drop if roads should
+  always block. `Airport::CompactPlacement` is the loader's RAII hint to `House::placeStructure`.
+- **Tests.** `city_aircraft_probe` has a footprint phase: an ordinary Airport is 4x4 on sixteen tiles; destroying
+  it does not throw and frees them; a 4x4 and a compact Airport survive save and load; nine fixture Airports
+  through the real loader (free ground, zones east and south, boxed in, east edge, a unit to the east, an earlier
+  Airport's footprint, the two road cases). `CitySpritePolicyTestCase` and the skirmish generator's catalogue
+  follow the size; the generator's pinned digests did not move. `city_plane_effect`'s pictures show both sizes
+  (looked at: correct). Mini: `dunelegacy_tests`, `city_aircraft_probe` passed on `8bf33b94e`.
+- **Known gaps.** A compact Airport is over-estimated by one row and column where code asks the item for its
+  size instead of the object: the map editor and map preview (`MapEditor.cpp`, `MapEditorRadarView.cpp`,
+  `INIMapPreviewCreator.cpp`) and two AI spots (`QuantBotPlacement.cpp:491`, `QuantBotForce.cpp:1050`).
+  `scripts/validate_city_maps.py` still checks a 3x3 Airport and does not know the loader's rule. The Dune2
+  graphics skins' airport art was drawn for three tiles and is stretched onto four. No old save was loaded (none
+  with an Airport at hand); the compact path is tested through the loader and a 9895 save. Not behind a switch:
+  the MOD15 byte has no bit left and a footprint is not a match rule.
+
 ## 2026-11-23 - City planes after Stefan played them: heavy bomb, ten planes, rocket cut-off, Airport shortcut; installed on the MBA (unreleased, after 1.0.876)
 
 Stefan played `4f2d99bf8` and then `f4de2f8cd` on the MacBook Air and changed the rules of the entry below. His

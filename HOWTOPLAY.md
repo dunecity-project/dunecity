@@ -136,10 +136,15 @@ runs the same way in both modes.
 A powered **Airport** (city games only) launches the city airplane and the traffic helicopter. You do
 not order them, but you can buy more planes.
 
+- **The Airport's size.** An Airport you build covers 4x4 tiles and shows the full Micropolis
+  airport. An Airport already on a map grows to 4x4 towards whichever side has free ground; one
+  that is boxed in by other buildings, and every Airport in a game saved before this change, stays
+  3x3 with the same picture drawn smaller. Both work the same.
+
 - **The free plane.** Every five seconds each of your powered Airports has a one in six chance of
   launching a plane, as long as your house has no free plane in the air: about half a minute on
   average after the last one was shot down or left the map. This plane costs nothing, and planes you
-  have bought do not hold it back. It takes off from the runway three tiles east of the Airport. A
+  have bought do not hold it back. It takes off from the runway two tiles east of the Airport. A
   flight ends when the plane crosses the edge of the map, which a run towards a building near the
   edge soon makes it do: a plane that is not shot down is usually gone within half a minute to a
   minute. Five minutes is the longest a flight can last. Human and computer players get the same
