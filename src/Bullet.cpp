@@ -466,7 +466,8 @@ void Bullet::updateDynastyProjectile()
     // airplane and go off on touching it. The Launcher's used to fly to where the plane had been
     // and had no test against aircraft at all (Stefan, 2026-11-23: "rockets fired at them seem to
     // go right through them").
-    const bool tracksCityPlane = (bulletID == Bullet_TurretRocket || bulletID == Bullet_Rocket)
+    const bool tracksCityPlane = (bulletID == Bullet_TurretRocket
+                                  || (bulletID == Bullet_Rocket && AmbientAirplane::rocketsHitPlanes()))
         && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence;
     for(int elapsed=0; elapsed<48; ++elapsed) {
         if(projectileClock % 150 == 0) {
@@ -520,7 +521,7 @@ void Bullet::updateDynastyProjectile()
             // its way; with ten bombers a house they fly in streams and the rocket used to pass
             // through every plane but its own. The lowest object ID wins a tie (the registry has
             // no fixed order).
-            if(chaseRange4 > 0) {
+            if(chaseRange4 > 0 && AmbientAirplane::rocketsHitPlanes()) {
                 const AmbientAirplane* touched = nullptr;
                 int touchedAt = 0;
                 for(const AmbientAirplane* plane : AmbientAirplane::all()) {

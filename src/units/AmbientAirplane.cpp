@@ -531,6 +531,15 @@ int AmbientAirplane::rocketChaseRange4(int houseID)
            * turretReachFactor() * TILESIZE * 4;
 }
 
+bool AmbientAirplane::rocketsHitPlanes()
+{
+    static const bool hits = [] {
+        const char* text = std::getenv("DUNECITY_TEST_PLANE_ROCKET_HITS");
+        return text == nullptr || std::atoi(text) != 0;
+    }();
+    return hits;
+}
+
 int AmbientAirplane::turretReachFactor()
 {
     static const int factor = [] {

@@ -103,6 +103,11 @@ public:
     /// experiments only: DUNECITY_TEST_PLANE_REACH_FACTOR (1 to 3) for a whole process, read
     /// once; never set in a game people play (it is not a match rule).
     static int turretReachFactor();
+    /// The rocket rules of 2026-11-23 (a Launcher's rocket leads a plane and goes off on touching
+    /// it; a rocket goes off on any enemy plane it touches). Always true in the game. Balance
+    /// experiments only: DUNECITY_TEST_PLANE_ROCKET_HITS=0 for a whole process restores the
+    /// rockets before them (Stefan: "is the rockets hitting planes too much of a nerf? test that").
+    static bool rocketsHitPlanes();
     /// True when a turret rocket fired now from `launch` (world units) meets this plane no
     /// farther than `range4` quarter world units from `launch`.
     bool rocketCanMeet(const Coord& launch, int range4) const;
