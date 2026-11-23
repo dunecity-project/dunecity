@@ -1,3 +1,25 @@
+## 2026-11-23 - Local build of the feature batch installed on the MBA; macOS packaging fix (unreleased, after 1.0.876)
+
+Stefan: "install on my mba".
+
+- Installed `integrate/feature-batch` `4cf0fd5c4` (not pushed) on `Stefans-MacBook-Air.local` at
+  `/Applications/dunecity.app`, 2026-11-23 00:38 UTC, the game not running there. It shows 1.0.876 (no version
+  bump) and carries protocol 133 and save format 9890: the Custom Game tech level selector, Trooper Ornithopter
+  Reach, Saboteur Hunt and the three city plane rules. It cannot play online with the released 1.0.876, and a
+  game saved by it does not load in the released 1.0.876.
+- Package: `cmake --install build-int` (BundleUtilities, ad-hoc signed), executable SHA256
+  `6ccafbdcb765b85f005d39c42f272b4b064b4a25cf990b851a5c5ae7b9ab6acf`. On the Mini: no Homebrew or local link
+  paths in the bundle, `codesign --verify --deep --strict`, `scripts/verify-macos-runtime.py` passed. On the
+  Air: archive and executable hashes match and the deep signature verifies; no launch or graphical check there.
+  The app it replaced (the 1.0.876 installed 2026-11-22) is at
+  `/Applications/.dunecity-backup-before-4cf0fd5c4-20261123T003853Z/dunecity.app`. Archive, log and receipt:
+  `../outputs/install-mba-20261123/`.
+- **Packaging fix (`4cf0fd5c4`).** `cmake --install build-int` stopped in `fixup_bundle` with "otool -l failed"
+  on `@rpath/libbrotlicommon.1.dylib`. Homebrew updated on 2026-11-21: freetype 2.15 needs `libbrotlidec`, and
+  brotli 1.2.1's `libbrotlidec` names `libbrotlicommon` through `@rpath`, which BundleUtilities resolves only in
+  the directories it is given. The SDL2 library's directory is now in that list (`src/CMakeLists.txt`); for a
+  vcpkg build it is the directory already listed. CI's macOS build was not run for this commit.
+
 ## 2026-11-23 - City planes: Rocket Turrets shoot them down, planes bomb, Airports launch no Ornithopters (unreleased, after 1.0.876)
 
 Stefan: "next planes. rocket turrets aren't shooting at enemy planes it is broken. fix it. also make planes drop
