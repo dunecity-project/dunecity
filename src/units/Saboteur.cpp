@@ -167,6 +167,12 @@ bool Saboteur::update() {
                 dist.toDouble(), attackMode, destination.x, destination.y);
         }
         
+        const bool enemyTarget = getOwner()->getTeamID() != target.getObjPointer()->getOwner()->getTeamID();
+        if(keepsOwnHunt() && enemyTarget && dist <= 4
+           && (currentGame->getGameCycleCount() + getObjectID()) % 8 == 0) {
+            showTargetToOwner(closestPoint);
+        }
+
         // Up to 1.0.876 it blew up only once it had stopped next to its target, and most lost
         // Saboteurs were shot by that target during the last step. With the rule on it goes off
         // as soon as it is in reach.
@@ -179,6 +185,9 @@ bool Saboteur::update() {
                     }
 
                     ObjectBase* pObject = target.getObjPointer();
+                    if(keepsOwnHunt()) {
+                        showTargetToOwner(closestPoint);    // its owner sees what went up
+                    }
                     // One line per Saboteur for the match harnesses (tests/ai/vanilla-match.py).
                     SDL_Log("SABOTEUR_HIT: house=%d object=%u target_house=%d target_item=%d vehicle=%d price=%d cycle=%u "
                             "age_s=%d orders=%d overwrites=%d refused=%d",
@@ -244,6 +253,17 @@ const ObjectBase* Saboteur::findTarget() const {
     return pick;
 }
 
+void Saboteur::showTargetToOwner(const Coord& targetTile) {
+    // A Saboteur sees one tile around it and goes off half a step before it stands next to its
+    // target: without this its owner got 0.4 s to see what it blew up, on ground never explored
+    // nothing at all, and the Saboteur seemed to blow up by itself.
+    currentGameMap->viewMap(getOwner()->getHouseID(), targetTile, 2);
+}
+
+bool Saboteur::fallsWhenDestroyed() const {
+    return keepsOwnHunt() && !detonated;
+}
+
 void Saboteur::takeNearerTargetWhenSeen() {
     // A Saboteur is invisible until an enemy object is within two tiles; from then on it is shot
     // at. If something it can blow up is by then nearer than its pick (a vehicle that drove up,
@@ -306,11 +326,17 @@ void Saboteur::destroy()
     }
 
     Coord realPos(lround(realX), lround(realY));
+    // Drawn either way, so that the random stream does not depend on how a Saboteur ended.
     Uint32 explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1, Explosion_Medium2});
-    currentGame->getExplosionList().push_back(new Explosion(explosionID, realPos, owner->getHouseID()));
+    // With the rule on only the charge going off is a blast. A Saboteur that was shot blew up in
+    // the same way, which looked as if it had sabotaged nothing at all; it now falls like any
+    // foot soldier (InfantryBase::destroy).
+    if(!fallsWhenDestroyed()) {
+        currentGame->getExplosionList().push_back(new Explosion(explosionID, realPos, owner->getHouseID()));
 
-    if(isVisible(getOwner()->getTeamID())) {
-        soundPlayer->playSoundAt(Sound_ExplosionLarge,location);
+        if(isVisible(getOwner()->getTeamID())) {
+            soundPlayer->playSoundAt(Sound_ExplosionLarge,location);
+        }
     }
 
     InfantryBase::destroy();

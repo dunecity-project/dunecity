@@ -448,6 +448,36 @@ Stefan: "troopers should be shooting down ornithopters with their range missile 
   QuantBot Ornithopter raids on a field army; the nightly tier beyond the tests named above. Not pushed, no
   version bump.
 
+## 2026-11-23 - Saboteurs no longer seem to blow up by themselves (unreleased, after 1.0.876)
+
+Stefan, on the rule of the entry below: "there still seems to be something wrong with them, they often just
+blowup by themselves while finding a target". No Saboteur blows up without destroying its target: the charge
+only goes off in `Saboteur::update`, which destroys the target in the same step. Two things looked like it,
+both with the rule on:
+
+- A Saboteur that was shot blew up exactly like one that had set its charge off (`Saboteur::destroy` always
+  drew the explosion and played the large blast; infantry bodies and screams were suppressed for Saboteurs).
+  That is 20.1% of the Saboteurs released in those matches (218 of 1083; 47 of them killed by their own
+  house's Sonic Tank waves, 40 by enemy Sonic Tanks). With the rule on a Saboteur that is destroyed without
+  having sabotaged anything now falls like any foot soldier: body, scream, no blast
+  (`InfantryBase::fallsWhenDestroyed`, overridden by `Saboteur`). The random explosion kind is still drawn, so
+  the game's random stream does not depend on how a Saboteur ended. Rule off: unchanged.
+- A Saboteur sees one tile and goes off half a step before it stands next to its target. On ground its owner
+  had not explored the owner saw the target for 0.4 s before the blast (`saboteur_target_probe`, measured on
+  the build before this commit). With the rule on its owner is shown the target (two tiles around its nearest
+  tile) from four tiles out and again at the blast: 1.9 to 2.4 s before the blast in the probe
+  (`Saboteur::showTargetToOwner`). The reveal is for the owner's house only and changes nothing about who sees
+  the Saboteur.
+- Nothing else of the rule changed: target choice, the reach it goes off at, and the refusal of army orders are
+  as in the entry below. Not changed either: a Sonic Tank wave still kills its own house's Saboteur like any
+  other unit in its path.
+- Tests: `saboteur_target_probe` now 20 cases per mod; new are vehicle and building shown to the owner at
+  least 1 s before the blast, and a Saboteur shot on the way that leaves a body and no explosion, each for a
+  human and a QuantBot owner.
+- Not measured: matches were not re-run for this commit (the reveal changes what the owner's house has
+  explored, so games differ from the entry below after the first approach); nothing was checked in a windowed
+  game.
+
 ## 2026-11-23 - Saboteurs take the nearest building or vehicle; rule renamed Saboteur Hunt (unreleased, after 1.0.876)
 
 Stefan, on the vehicle-first rule of the entry below: "it should go for buildings or vehicles, whatever is

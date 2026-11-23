@@ -5,7 +5,9 @@ A Palace releases a Saboteur for a human house and for a QuantBot house. It must
 the nearest thing it may blow up, building or vehicle alike (harvesters and MCVs included,
 aircraft and infantry not), and blow it up; a vehicle that turns up beside it on the way is
 taken instead of the one further off; with nothing to sabotage it waits in Guard. An explicit
-order (kept even past a nearer building that sees it) and Area Guard are covered too
+order (kept even past a nearer building that sees it) and Area Guard are covered too. Its
+owner is shown the target for at least a second before the blast, and a Saboteur that is shot
+on the way falls like a foot soldier instead of blowing up
 (tests/units/saboteur-target-probe.inc).
 
 Requires the existing Ninja Release build and bundled game assets. Uses an isolated
@@ -108,7 +110,7 @@ for mod in mods:
                               stdout=log, stderr=subprocess.STDOUT, timeout=120)
     text = logfile.read_text(errors='replace')
     for line in text.splitlines():
-        if 'SABOTEUR_TARGET_CASE:' in line or 'SABOTEUR_TARGET_PROBE_' in line:
+        if 'SABOTEUR_TARGET_CASE:' in line or 'SABOTEUR_TARGET_SHOWN:' in line or 'SABOTEUR_TARGET_PROBE_' in line:
             print(mod + ': ' + line[line.index('SABOTEUR_TARGET_'):])
     passed = done.returncode == 0 and 'SABOTEUR_TARGET_PROBE_PASS:' in text \
         and 'SABOTEUR_TARGET_PROBE_FAIL:' not in text

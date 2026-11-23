@@ -77,6 +77,10 @@ public:
 protected:
     void setSpeeds() override;
     Coord movementEndpoint() const override;
+
+    /// Does it fall like a foot soldier (a body on the ground, a scream) when it is destroyed
+    /// without being squashed?
+    virtual bool fallsWhenDestroyed() const { return true; }
     void targeting() override;
 
     // infantry state

@@ -72,8 +72,14 @@ public:
     /// Called by the Palace that released it: the match log counts from here.
     void markReleased();
 
+protected:
+    /// With the match rule on, a Saboteur that is destroyed without having set its charge off
+    /// falls like any foot soldier; with the rule off it blows up however it ends, as before.
+    bool fallsWhenDestroyed() const override;
+
 private:
     void takeNearerTargetWhenSeen();
+    void showTargetToOwner(const Coord& targetTile);
 
     bool detonated = false;     ///< Set as it blows up its target; never saved, it is gone that cycle.
     /// The target its own search last chose; a different target is its owner's order. Never

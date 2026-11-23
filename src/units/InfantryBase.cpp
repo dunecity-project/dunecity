@@ -500,7 +500,7 @@ void InfantryBase::destroy() {
                 // this unit has captured a building
             }
 
-        } else if(getItemID() != Unit_Saboteur) {
+        } else if(fallsWhenDestroyed()) {
             // "normal" dead
             pTile->assignDeadUnit( DeadUnit_Infantry,
                                         owner->getHouseID(),

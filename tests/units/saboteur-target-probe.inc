@@ -5,6 +5,12 @@
 // moved, and a hunting one only blew up after it had stopped next to its target. Each case below
 // runs the real Palace special weapon and Game::updateGameState until the Saboteur is gone, then
 // checks what was destroyed.
+//
+// A Saboteur sees one tile and goes off half a step before it stands next to its target, so its
+// owner saw the target for 0.4 s before the blast, and a Saboteur that was shot blew up exactly
+// like one that had sabotaged something: both looked like a Saboteur blowing up by itself. The last cases check that its owner is shown the target on the approach and that a
+// shot Saboteur falls like a foot soldier.
+#include <Explosion.h>
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -232,7 +238,7 @@ inline void workersAreVehicles(const std::string& ownerClass) {
             f.label.c_str(), seconds);
 }
 
-/// No enemy vehicle anywhere: the old rule still applies and the nearest structure goes.
+/// No enemy vehicle anywhere: the nearest structure goes, the nearer Soldier is no target.
 inline void structureWithoutVehicles(const std::string& ownerClass) {
     Fixture f(ownerClass, "no-vehicle");
     const auto* trap = f.enemyStructure("Wind Trap 5 tiles off", Structure_WindTrap, 30, 38);
@@ -307,6 +313,63 @@ inline void areaGuardTakesNearest() {
             f.label.c_str(), seconds);
 }
 
+/// Its owner must see what it is about to blow up. The target stands in ground the owner never
+/// explored; the Saboteur itself sees one tile. From four tiles out the target is shown to the
+/// owner, so there is a second or more to see it before the blast, and the blast is shown too.
+inline void targetShownBeforeBlast(const std::string& ownerClass, bool building) {
+    Fixture f(ownerClass, building ? "building-shown-before-blast" : "vehicle-shown-before-blast");
+    const ObjectBase* victim = building
+        ? static_cast<const ObjectBase*>(f.enemyStructure("Refinery 12 tiles east", Structure_Refinery, 45, 30))
+        : static_cast<const ObjectBase*>(f.enemyUnit("Tank 12 tiles east", Unit_Tank, 44, 31));
+    const Uint32 victimID = victim->getObjectID();
+    const int house = f.owner->getHouseID();
+    auto* saboteur = f.release();
+    const Uint32 saboteurID = saboteur->getObjectID();
+    require(!currentGameMap->getTile(victim->getClosestPoint(saboteur->getLocation()))->isExploredByHouse(house),
+            f.label + ": the fixture's target stands on ground the owner has already explored");
+    Uint32 shownCycle = 0;
+    int shownDistance = -1;
+    const Uint32 deadline = f.game->getGameCycleCount() + MILLI2CYCLES(120 * 1000);
+    while(f.game->getGameCycleCount() < deadline && f.alive(saboteurID)) {
+        const Coord nearest = victim->getClosestPoint(saboteur->getLocation());
+        if(shownCycle == 0 && currentGameMap->getTile(nearest)->isExploredByHouse(house)) {
+            shownCycle = f.game->getGameCycleCount();
+            shownDistance = blockDistance(saboteur->getLocation(), nearest).lround();
+        }
+        f.game->updateGameState();
+    }
+    f.requireOnlyVictim(saboteurID, victimID);
+    const int shownMs = shownCycle == 0 ? 0
+        : static_cast<int>((f.game->getGameCycleCount() - shownCycle) * GAMESPEED_DEFAULT);
+    SDL_Log("SABOTEUR_TARGET_SHOWN: %s target shown to its owner %d ms before the blast, from %d tiles",
+            f.label.c_str(), shownMs, shownDistance);
+    require(shownMs >= 1000, f.label + ": the owner saw the target for " + std::to_string(shownMs)
+            + " ms before the blast (at least 1000 required)");
+    require(!f.game->getExplosionList().empty(), f.label + ": the sabotage left no blast");
+    SDL_Log("SABOTEUR_TARGET_CASE: %s showed its owner the %s for %d ms before blowing it up",
+            f.label.c_str(), building ? "Refinery" : "Tank", shownMs);
+}
+
+/// A Saboteur that is shot has sabotaged nothing and must not look as if it had: it falls like
+/// any foot soldier (a body on the ground), with no blast.
+inline void shotSaboteurFalls(const std::string& ownerClass) {
+    Fixture f(ownerClass, "shot-on-the-way");
+    const auto* tank = f.enemyUnit("Tank 20 tiles east", Unit_Tank, 52, 31);
+    auto* saboteur = f.release();
+    const Uint32 saboteurID = saboteur->getObjectID();
+    for(int cycle = 0; cycle < MILLI2CYCLES(3 * 1000); ++cycle) f.game->updateGameState();
+    require(f.alive(saboteurID) && saboteur->getTarget() == tank, f.label + ": the Saboteur was not on its way to the Tank");
+    require(f.game->getExplosionList().empty(), f.label + ": the fixture already shows an explosion");
+    const Coord where = saboteur->getLocation();
+    saboteur->handleDamage(saboteur->getHealth().lround() + 1, tank->getObjectID(), f.enemy);
+    for(int cycle = 0; cycle < 3 && f.alive(saboteurID); ++cycle) f.game->updateGameState();
+    require(!f.alive(saboteurID), f.label + ": the shot Saboteur is still alive");
+    require(f.alive(tank->getObjectID()), f.label + ": the Tank was destroyed by a Saboteur that never reached it");
+    require(f.game->getExplosionList().empty(), f.label + ": a shot Saboteur blew up as if it had sabotaged something");
+    require(currentGameMap->getTile(where)->hasDeadUnits(), f.label + ": a shot Saboteur left no body");
+    SDL_Log("SABOTEUR_TARGET_CASE: %s was shot on the way and fell like a foot soldier, with no blast", f.label.c_str());
+}
+
 } // namespace SaboteurTargetProbe
 
 int runSaboteurTargetProbe() {
@@ -320,9 +383,12 @@ int runSaboteurTargetProbe() {
         workersAreVehicles(ownerClass);
         structureWithoutVehicles(ownerClass);
         nothingToSabotage(ownerClass);
+        targetShownBeforeBlast(ownerClass, false);
+        targetShownBeforeBlast(ownerClass, true);
+        shotSaboteurFalls(ownerClass);
     }
     explicitOrderKept();
     areaGuardTakesNearest();
-    SDL_Log("SABOTEUR_TARGET_PROBE_PASS: mod=%s human and QuantBot owners, 14 cases", mod.c_str());
+    SDL_Log("SABOTEUR_TARGET_PROBE_PASS: mod=%s human and QuantBot owners, 20 cases", mod.c_str());
     return -1;
 }
