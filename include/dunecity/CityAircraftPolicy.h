@@ -457,11 +457,25 @@ inline constexpr int kBombLoad = 6;
 inline constexpr int kBombDamage = 100;
 /// Sprite ticks to regain one bomb (8 s of game time at 50 ms a tick).
 inline constexpr int kBombRearmTicks = 160;
-/// How far ahead of the plane the bomb lands, in Micropolis units (1.5 tiles).
-inline constexpr int kBombSightDistance = 24;
-/// Bomb speed in world units per game cycle at TILESIZE 64: slower than the plane
-/// (10.24), so the bomb is seen falling behind it for about a quarter of a second.
-inline FixPoint bombSpeed() { return FixPoint(64) / 10; }
+// The fall (Stefan, 2026-11-23: "the planes own bombs shouldn't hurt it, and they should
+// take a while to drop ... so that the plane has already passed the bombs"). A bomb is
+// released towards the bomb sight, kBombSightDistance = 3 tiles ahead of the plane, and
+// takes kBombFallCycles = 75 game cycles (1.2 s) to get there: 2.56 world units a cycle,
+// a quarter of the plane's 10.24, so it is seen dropping back from the plane. In those
+// 75 cycles the plane flies 12 tiles: when the bomb goes off the plane is 9 tiles past
+// it, against a blast that reaches units one tile from the impact. The bomb lands on
+// the tile that was under the sight when it was released, 0.3 s before the plane itself
+// passed over it. Whatever the geometry, a bomb never damages an aircraft (Map::damage).
+
+/// How far ahead of the plane the bomb lands, in Micropolis units (3 tiles).
+inline constexpr int kBombSightDistance = 48;
+/// Game cycles a bomb takes from release to impact (1.2 s).
+inline constexpr int kBombFallCycles = 75;
+/// Bomb speed in world units per game cycle at TILESIZE 64: the sight distance over the
+/// fall time.
+inline FixPoint bombSpeed() {
+    return FixPoint(kBombSightDistance * 64 / kMicropolisUnitsPerTile) / kBombFallCycles;
+}
 
 /// One sprite tick of the bomb rack: returns the load after rearming. `timer`
 /// counts ticks towards the next bomb and rests at 0 while the rack is full.
@@ -491,17 +505,15 @@ inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, k
 // is destroyed even with the hit point a repairing building regains between bombs
 // (the old rule's 2 x 100 left such a building at 1); a Rocket Turret (200, one tile)
 // takes 120 and stands; a Construction Yard (400, two tiles) keeps 160, a Refinery
-// (450, three tiles) 90, a Palace (1000, three tiles) 640. The load is kStickLoad = 24,
-// twelve tiles of stick, and comes back one bomb per kStickRearmTicks (2 s): a full
-// load in 48 s, the same time the old load of six took.
+// (450, three tiles) 90, a Palace (1000, three tiles) 640.
+// The rack does not empty (Stefan, 2026-11-23: "planes racks don't empty"): there is
+// no load and no rearm time under the stick rule. With a load, six bombs or twenty-four,
+// a plane in his games had nothing left for 85 to 89% of the time it was over an enemy
+// building (HANDOVER.md, 2026-11-23).
 // ---------------------------------------------------------------------------
 
-/// Bombs a plane carries under the stick rule.
-inline constexpr int kStickLoad = 24;
 /// Damage of one stick bomb to the building it lands on.
 inline constexpr int kStickDamage = 60;
-/// Sprite ticks to regain one stick bomb (2 s).
-inline constexpr int kStickRearmTicks = 40;
 /// Bombs the stick still releases after the last enemy building under the sight.
 inline constexpr int kStickTailBombs = 2;
 /// The stick's clock: kStickPhaseStep is added every game cycle and a bomb is due each

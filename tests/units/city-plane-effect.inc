@@ -24,9 +24,14 @@
 #include <mod/ModManager.h>
 #include <sand.h>
 #include <structures/Airport.h>
+#include <ScreenBorder.h>
+#include <misc/draw_util.h>
+#include <FileClasses/LoadSavePNG.h>
 #include <Command.h>
 #include <players/Player.h>
 #include <units/Tank.h>
+#include <Explosion.h>
+#include <players/DeviationReward.h>
 #include <structures/RocketTurret.h>
 #include <units/AmbientAirplane.h>
 #include <dunecity/CityAircraftPolicy.h>
@@ -332,13 +337,13 @@ const std::vector<Building>& baseLayout() {
 
 struct RunOutcome {
     int bombs = 0, damage = 0, destroyed = 0, credits = 0, damaged = 0, yardLost = 0, palaceLost = 0, ticks = 0;
+    int planeHealth = 0;
     std::string lost;
 };
 
 // rule 0: no bombing; 1: one aimed bomb per building tile; 2: the stick.
 RunOutcome playRun(const std::string& mapData, int direction, int offset, int seed, int rule) {
     auto game = newGame(mapData, seed, Rules{true, rule > 0, false, rule == 2});
-    const int load = rule == 2 ? CA::kStickLoad : CA::kBombLoad;
     auto* owner = game->getHouse(HOUSE_ATREIDES);
     auto* enemy = game->getHouse(HOUSE_HARKONNEN);
     std::mt19937 jitter(static_cast<std::uint32_t>(seed) * 2654435761u + 131u);
@@ -362,18 +367,19 @@ RunOutcome playRun(const std::string& mapData, int direction, int offset, int se
     course(direction, site, offset, start, end, heading);
     auto* plane = fly(enemy, start, end, heading);
     const Uint32 planeID = plane->getObjectID();
-    require(plane->getBombs() == load, "A new plane does not carry a full bomb load");
+    require(plane->getBombs() == CA::kBombLoad, "A new plane does not carry a full load of aimed bombs");
 
     RunOutcome outcome;
-    int lastBombs = load;
     for(int tick = 0; tick < 1500; ++tick) {
         game->updateGameState();
         outcome.ticks = tick + 1;
         auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
         if(live == nullptr) break;
-        if(live->getBombs() < lastBombs) outcome.bombs += lastBombs - live->getBombs();
-        lastBombs = live->getBombs();
+        outcome.bombs = static_cast<int>(live->getBombsReleased());
+        outcome.planeHealth = lround(live->getHealth());
     }
+    // No turret fires here: whatever the plane lost, it lost to its own bombs.
+    require(outcome.planeHealth == 100, "A plane lost hit points on a run over an undefended base");
     for(int i = 0; i < 40; ++i) game->updateGameState();
     for(const auto& building : buildings) {
         const auto* structure = game->getObjectManager().getObject(building.id);
@@ -402,8 +408,8 @@ int runRuns(const std::string& mapData, const std::vector<int>& seeds) {
     for(const int seed : seeds) {
         for(const int bombing : {0, 1, 2}) {
             const auto o = playRun(mapData, direction, offset, seed, bombing);
-            // A crossing takes about three seconds: at most one bomb comes back on the way.
-            require(o.bombs <= (bombing == 2 ? CA::kStickLoad + 2 : CA::kBombLoad), "A run dropped more than one bomb load");
+            // The aimed bombs come from a rack of six; the stick has none.
+            require(bombing == 2 || o.bombs <= CA::kBombLoad, "A run dropped more than one load of aimed bombs");
             require(bombing || (o.bombs == 0 && o.damage == 0), "A plane bombed with City Plane Bombing off");
             csv << direction << ',' << offset << ',' << seed << ',' << bombing << ',' << o.bombs << ',' << o.damage << ','
                 << o.damaged << ',' << o.destroyed << ',' << o.credits << ',' << o.yardLost << ',' << o.palaceLost << ','
@@ -442,15 +448,15 @@ int flyRow(const std::string& mapData, int seed, bool bombing, Setup setup, std:
     for(int i = 0; i < 5; ++i) game->updateGameState();
     auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), Coord(4, row), Coord(kMapSize + 20, row), RIGHT);
     const Uint32 planeID = plane->getObjectID();
-    int dropped = 0, lastBombs = plane->getBombs();
+    int dropped = 0;
     for(int tick = 0; tick < 700; ++tick) {
         game->updateGameState();
         auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
         if(live == nullptr) break;
-        if(live->getBombs() < lastBombs) dropped += lastBombs - live->getBombs();
-        lastBombs = live->getBombs();
+        dropped = static_cast<int>(live->getBombsReleased());
+        require(lround(live->getHealth()) == 100, "A plane lost hit points to its own bombs");
     }
-    for(int i = 0; i < 40; ++i) game->updateGameState();
+    for(int i = 0; i < 2 * CA::kBombFallCycles; ++i) game->updateGameState();
     health.clear();
     for(const Uint32 id : ids) health.push_back(healthOf(*game, id));
     game.reset();
@@ -536,7 +542,7 @@ void checkSavedBombLoad(const std::string& mapData, bool carpet) {
     require(plane != nullptr, "The plane left before the save");
     const int bombs = plane->bombs, timer = plane->bombTimer, gap = plane->stickGap, phase = plane->stickPhase;
     const int cooldown = sold->purchaseCooldown;
-    require((!carpet || (gap == 3 && bombs == 4)) && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
+    require((!carpet || (gap == 3 && bombs == 5)) && cooldown == 1224, "The stick gap counter or the purchase cooldown did not run before the save");
     const std::string path = gOut + "/city-plane-effect.dls";
     require(game->saveGame(path), "Could not write the save");
     game.reset();
@@ -653,21 +659,14 @@ void checkStick(const std::string& mapData) {
             "A stick bomb damaged the plane's own or an allied building");
     require(dropped == 4 && health[2] == 0, "The enemy Wind Trap between own buildings did not get exactly its four bombs");
 
-    // Twenty enemy walls in a row: the load is 24, two a tile, so twelve walls fall. One bomb
-    // comes back during the two seconds the stick lasts and falls on the thirteenth wall's rubble or beyond.
+    // The rack does not empty: forty enemy walls in a row all fall, two bombs a tile and the tail.
     dropped = flyRow(mapData, 5, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
-        for(int i = 0; i < 20; ++i)
-            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_Wall, Coord(24 + i, row))->getObjectID());
+        for(int i = 0; i < 40; ++i)
+            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_Wall, Coord(14 + i, row))->getObjectID());
     }, health, true);
     const int standing = static_cast<int>(std::count_if(health.begin(), health.end(), [](int h) { return h > 0; }));
-    record("stick_load", "walls=20 bombs=" + std::to_string(dropped) + " standing=" + std::to_string(standing));
-    require(dropped >= CA::kStickLoad && dropped <= CA::kStickLoad + 1 && standing >= 20 - CA::kStickLoad / 2 - 1
-                && standing <= 20 - CA::kStickLoad / 2,
-            "A stick did not stop at one bomb load");
-    int bombs = 0, timer = 0, ticks = 0;
-    while(bombs < CA::kStickLoad) { bombs = CA::rearmBombs(bombs, timer, CA::kStickLoad, CA::kStickRearmTicks); ++ticks; }
-    require(ticks == CA::kStickLoad * CA::kStickRearmTicks, "The stick rack does not refill at one bomb per rearm time");
-    record("stick_rearm", "ticks_per_bomb=" + std::to_string(CA::kStickRearmTicks) + " full_load_ticks=" + std::to_string(ticks));
+    record("stick_rack", "walls=40 bombs=" + std::to_string(dropped) + " standing=" + std::to_string(standing));
+    require(dropped == 2 * 40 + CA::kStickTailBombs && standing == 0, "The stick stopped before the end of forty walls");
 
     // Units under the stick take the ordinary splash, whoever owns them: a tank on the road
     // between two enemy Wind Traps, once the defender's and once the plane's own.
@@ -780,6 +779,127 @@ void checkPurchase(const std::string& mapData) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// checks: the fall, and a plane's own bombs
+// ---------------------------------------------------------------------------------------------
+
+// Stefan, 2026-11-23: "the planes own bombs shouldn't hurt it, and they should take a while to
+// drop ... so that the plane has already passed the bombs".
+void checkFall(const std::string& mapData) {
+    for(const bool carpet : {false, true}) {
+        auto game = newGame(mapData, 12, Rules{true, true, false, carpet});
+        const int row = 30;
+        auto* trap = place(game->getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(30, row));
+        const Uint32 trapID = trap->getObjectID();
+        for(int i = 0; i < 5; ++i) game->updateGameState();
+        auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), Coord(4, row), Coord(kMapSize + 20, row), RIGHT);
+        const Uint32 planeID = plane->getObjectID();
+        int released = -1, landed = -1, planeAhead = 0;
+        Coord impact = Coord::Invalid(), aimed = Coord::Invalid();
+        for(int tick = 0; tick < 700 && landed < 0; ++tick) {
+            game->updateGameState();
+            auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+            require(live != nullptr && lround(live->getHealth()) == 100, "The plane was lost or hurt before its first bomb landed");
+            if(released < 0 && live->getBombsReleased() > 0) {
+                released = tick;
+                for(const Bullet* bullet : bulletList)
+                    if(bullet->getBulletID() == Bullet_Bomb) aimed = bullet->destination;
+            }
+            if(released >= 0 && !game->getExplosionList().empty()) {
+                landed = tick;
+                impact = game->getExplosionList().front()->getPosition();
+                planeAhead = live->getCenterPoint().x - impact.x;
+            }
+        }
+        require(released >= 0 && landed >= 0, "No bomb was released and landed");
+        const int fall = landed - released;
+        const auto* hit = currentGameMap->getTile(impact.x / TILESIZE, impact.y / TILESIZE)->getGroundObject();
+        record("fall", std::string(carpet ? "stick" : "aimed") + " fall_cycles=" + std::to_string(fall) + " impact_tile="
+                           + std::to_string(impact.x / TILESIZE) + "/" + std::to_string(impact.y / TILESIZE) + " on_target="
+                           + std::to_string(hit != nullptr && hit->getObjectID() == trapID) + " plane_tiles_past_impact="
+                           + std::to_string(planeAhead / TILESIZE));
+        require(fall >= CA::kBombFallCycles - 1 && fall <= CA::kBombFallCycles + 1, "A bomb did not fall for 75 cycles");
+        require(hit != nullptr && hit->getObjectID() == trapID && impact.x / TILESIZE == aimed.x / TILESIZE
+                    && impact.y / TILESIZE == aimed.y / TILESIZE,
+                "A bomb did not land on the building tile it was released at");
+        require(planeAhead >= 8 * TILESIZE, "The plane had not passed its bomb by eight tiles when it went off");
+        game.reset();
+        currentGame = nullptr;
+    }
+
+    // The rule, whatever the geometry: a bomb's blast with aircraft right at its centre. The
+    // dropping plane, another plane of its house, an allied plane, an enemy plane and an enemy
+    // Ornithopter all keep their health; a tank there (the control) does not, and the same blast
+    // as an Ornithopter's rocket aimed at aircraft (the second control) does hurt a plane.
+    auto game = newGame(mapData, 13, Rules{true, true, false, true});
+    const Coord spot(30, 30);
+    const Coord centre(spot.x * TILESIZE + TILESIZE / 2, spot.y * TILESIZE + TILESIZE / 2);
+    auto* harkonnen = game->getHouse(HOUSE_HARKONNEN);
+    auto* own = fly(harkonnen, spot, spot + Coord(20, 0), RIGHT);
+    auto* second = fly(harkonnen, spot, spot + Coord(20, 0), RIGHT);
+    auto* allied = fly(game->getHouse(HOUSE_ORDOS), spot, spot + Coord(20, 0), RIGHT);
+    auto* enemy = fly(game->getHouse(HOUSE_ATREIDES), spot, spot + Coord(20, 0), RIGHT);
+    auto* ornithopter = game->getHouse(HOUSE_ATREIDES)->createUnit(Unit_Ornithopter, true);
+    auto* tank = game->getHouse(HOUSE_ATREIDES)->createUnit(Unit_Tank, true);
+    require(ornithopter != nullptr && tank != nullptr, "Could not create the units under the bomb");
+    ornithopter->deploy(spot);
+    tank->deploy(spot);
+    const std::vector<ObjectBase*> aircraft = {own, second, allied, enemy, ornithopter};
+    std::vector<int> before;
+    for(const ObjectBase* object : aircraft) before.push_back(lround(object->getHealth()));
+    const int tankBefore = lround(tank->getHealth());
+    for(const bool air : {false, true})
+        currentGameMap->damage(own->getObjectID(), harkonnen, centre, Bullet_Bomb, CA::kStickDamage, TILESIZE / 2, air, true,
+                               NONE_ID, DeviationReward::Provenance());
+    for(size_t i = 0; i < aircraft.size(); ++i)
+        require(lround(aircraft[i]->getHealth()) == before[i], "A bomb damaged an aircraft at the centre of its blast");
+    require(lround(tank->getHealth()) < tankBefore, "A bomb did not damage a tank at the centre of its blast");
+    currentGameMap->damage(own->getObjectID(), harkonnen, centre, Bullet_SmallRocket, CA::kStickDamage, TILESIZE, true, true,
+                           NONE_ID, DeviationReward::Provenance());
+    require(lround(enemy->getHealth()) < before[3], "The control blast aimed at aircraft did not damage a plane");
+    record("own_bombs", "bomb at the centre of five aircraft: own_plane=" + std::to_string(before[0]) + "->"
+                            + std::to_string(lround(own->getHealth())) + " second_own=" + std::to_string(lround(second->getHealth()))
+                            + " allied=" + std::to_string(lround(allied->getHealth())) + " tank=" + std::to_string(tankBefore) + "->"
+                            + std::to_string(lround(tank->getHealth())) + " control_rocket_hurts_plane=1");
+    game.reset();
+    currentGame = nullptr;
+}
+
+// Pictures for a person to look at (no assertion beyond "it rendered"): a plane crossing a row
+// of zones and Wind Traps, drawn 14 cycles after its first bomb lands, with the aimed bombs
+// (aimed.png) and with the stick (stick.png).
+void checkPictures(const std::string& mapData) {
+    for(const bool carpet : {false, true}) {
+        auto game = newGame(mapData, 11, Rules{true, true, false, carpet});
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        const int row = 30;
+        const int items[] = {Structure_ZoneResidential, Structure_WindTrap, Structure_ZoneCommercial, Structure_WindTrap,
+                             Structure_ZoneIndustrial, Structure_ZoneResidential};
+        for(int i = 0; i < 6; ++i) place(owner, items[i], Coord(22 + 3 * i, row));
+        for(int i = 0; i < 5; ++i) game->updateGameState();
+        fly(game->getHouse(HOUSE_HARKONNEN), Coord(4, row), Coord(kMapSize + 20, row), RIGHT);
+        int sinceFirst = -1, explosions = 0;
+        for(int tick = 0; tick < 400 && sinceFirst < 14; ++tick) {
+            game->updateGameState();
+            if(sinceFirst >= 0 || !game->getExplosionList().empty()) ++sinceFirst;
+        }
+        explosions = static_cast<int>(game->getExplosionList().size());
+        screenborder->setNewScreenCenter(Coord(30 * TILESIZE, row * TILESIZE));
+        SDL_SetRenderTarget(renderer, screenTexture);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        game->drawScreen();
+        auto image = renderReadSurface(renderer);
+        SDL_SetRenderTarget(renderer, nullptr);
+        require(image != nullptr, "Could not read back the rendered bombing run");
+        const std::string path = gOut + (carpet ? "/stick.png" : "/aimed.png");
+        SavePNG(image.get(), path.c_str());
+        record("picture", std::string(carpet ? "stick.png" : "aimed.png") + " explosions_on_screen=" + std::to_string(explosions));
+        game.reset();
+        currentGame = nullptr;
+    }
+}
+
 // The off state is the game up to 1.0.876: a turret holds every shot at a plane over its own wall
 // and sees it only inside weapon range. On, it fires the shots that cannot bring it down.
 void checkHoldFire(const std::string& mapData) {
@@ -847,6 +967,8 @@ int runCityPlaneEffect() {
     checkStick(mapData);
     checkRepairingBuilding(mapData);
     checkPurchase(mapData);
+    checkPictures(mapData);
+    checkFall(mapData);
     gChecks.close();
 
     const int runs = runRuns(mapData, numbers(runSeedEnv));

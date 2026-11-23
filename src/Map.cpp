@@ -364,7 +364,9 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
             }
         }
     } else {
-        if(air || dynastyBlast) {
+        // The city airplane's bomb (Bullet_Bomb) bursts on the ground: it never damages an
+        // aircraft, not the plane that dropped it, another of its house, an ally or an enemy.
+        if((air || dynastyBlast) && bulletID != Bullet_Bomb) {
             // air damage
             if(dynastyBlast || bulletID == Bullet_DRocket || bulletID == Bullet_Rocket || bulletID == Bullet_TurretRocket || bulletID == Bullet_SmallRocket) {
                 for(auto objectID : affectedAirUnits) {

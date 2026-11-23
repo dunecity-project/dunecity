@@ -38,7 +38,7 @@ AmbientAirplane::AmbientAirplane(House* newOwner) : AirUnit(newOwner)
 
     takeoffFrame = 0;
     remainingTicks = CA::kAirplaneMaxTicks;
-    bombs = bombLoad();
+    bombs = CA::kBombLoad;
     bombTimer = 0;
     bombSightTile = Coord::Invalid();
     stickGap = CA::kStickTailBombs + 1;
@@ -61,13 +61,13 @@ AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
         remainingTicks = CA::kAirplaneMaxTicks;
     }
     if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_BOMBS) {
-        bombs = std::clamp(stream.readSint32(), 0, bombLoad());
-        bombTimer = std::clamp(stream.readSint32(), 0, bombRearmTicks() - 1);
+        bombs = std::clamp(stream.readSint32(), 0, CA::kBombLoad);
+        bombTimer = std::clamp(stream.readSint32(), 0, CA::kBombRearmTicks - 1);
         bombSightTile.x = stream.readSint32();
         bombSightTile.y = stream.readSint32();
     } else {
         // A plane from an older save was unarmed; it continues with a full load.
-        bombs = bombLoad();
+        bombs = CA::kBombLoad;
         bombTimer = 0;
         bombSightTile = Coord::Invalid();
     }
@@ -197,17 +197,6 @@ Coord AmbientAirplane::micropolisDestination() const
 {
     return Coord(CA::toMicropolis(destination.x * TILESIZE + TILESIZE / 2, TILESIZE),
                  CA::toMicropolis(destination.y * TILESIZE + TILESIZE / 2, TILESIZE));
-}
-
-int AmbientAirplane::bombLoad()
-{
-    return currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing ? CA::kStickLoad : CA::kBombLoad;
-}
-
-int AmbientAirplane::bombRearmTicks()
-{
-    return currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing ? CA::kStickRearmTicks
-                                                                                     : CA::kBombRearmTicks;
 }
 
 /**
@@ -384,8 +373,9 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
             getOwner()->getHouseID(), at.x / TILESIZE, at.y / TILESIZE, credited->getHouseID(),
             currentGame->getGameCycleCount());
     const ObjectBase* shooter = currentGame->getObjectManager().getObject(shooterID);
-    SDL_Log("CITY_PLANE_DOWN: house=%d object=%u killer_house=%d killer_item=%d bombs=%d cycle=%u",
-            getOwner()->getHouseID(), objectID, credited->getHouseID(), shooter ? shooter->getItemID() : -1, bombs,
+    SDL_Log("CITY_PLANE_DOWN: house=%d object=%u killer_house=%d killer_item=%d released=%d cycle=%u",
+            getOwner()->getHouseID(), objectID, credited->getHouseID(), shooter ? shooter->getItemID() : -1,
+            static_cast<int>(bombsReleased),
             currentGame->getGameCycleCount());
     // With City Plane Defence planes are shot down all over the map, about one a minute per
     // house in AI matches: only a crash on or near the screen shakes it. Presentation only.
@@ -516,7 +506,7 @@ CA::Intercept AmbientAirplane::turretRocketIntercept(const Coord& missile) const
     City Plane Bombing: the bomb sight is the point CA::kBombSightDistance
     ahead on the plane's course. Each time it enters a tile on which a building
     of another team stands, and a bomb is on board, the bomb is released towards
-    that point; it lands about a quarter of a second later (Bullet_Bomb) and damages
+    that point; it lands CA::kBombFallCycles later (Bullet_Bomb) and damages
     the building it lands on, and by the ordinary splash rule units within half
     a tile. The plane's own and allied buildings are never aimed at, and a bomb
     only damages a building its impact point lies on, so they are never hit.
@@ -534,9 +524,10 @@ Coord AmbientAirplane::bombSight() const
     cycle a building of another team comes under the bomb sight, releases another every
     25/8 cycles (two a tile on an axis heading) while one is under it, and CA::kStickTailBombs
     more after the last. A bomb that falls due while the sight is over a building of the
-    plane's own team, or off the map, or with the rack empty, is not released. A bomb damages
-    the building its impact point lies on and, by the ordinary splash rule, units of any side
-    within a tile of it.
+    plane's own team, or off the map, is not released. There is no rack to empty. A bomb
+    lands CA::kBombFallCycles later on the point the sight was on, damages the building that
+    point lies on and, by the ordinary splash rule, ground units of any side within a tile of
+    it; it never damages an aircraft (Map::damage).
 */
 void AmbientAirplane::dropStick(Uint32 gameCycle)
 {
@@ -564,10 +555,10 @@ void AmbientAirplane::dropStick(Uint32 gameCycle)
     if(stickPhase < CA::kStickPhasePeriod) return;
     stickPhase -= CA::kStickPhasePeriod;
     if(!enemy && ++stickGap > CA::kStickTailBombs) return;   // the tail is spent
-    if(bombs <= 0 || !onMap || own) return;
+    if(!onMap || own) return;
 
     bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kStickDamage, false, building));
-    --bombs;
+    ++bombsReleased;
     SDL_Log("CITY_PLANE_BOMB: house=%d object=%u target_house=%d target_item=%d cycle=%u", owner->getHouseID(),
             objectID, building ? building->getOwner()->getHouseID() : -1, building ? int(building->getItemID()) : -1,
             gameCycle);
@@ -595,6 +586,7 @@ void AmbientAirplane::dropBomb(Uint32 gameCycle)
 
     bulletList.push_back(new Bullet(objectID, &from, &aim, Bullet_Bomb, CA::kBombDamage, false, building));
     --bombs;
+    ++bombsReleased;
     SDL_Log("CITY_PLANE_BOMB: house=%d object=%u target_house=%d target_item=%d cycle=%u", owner->getHouseID(),
             objectID, building->getOwner()->getHouseID(), building->getItemID(), gameCycle);
 }
@@ -625,7 +617,7 @@ bool AmbientAirplane::update()
 
     if(remainingTicks > 0) --remainingTicks;
 
-    if(bombing) bombs = CA::rearmBombs(bombs, bombTimer, bombLoad(), bombRearmTicks());
+    if(bombing && !stick) bombs = CA::rearmBombs(bombs, bombTimer);
 
     if(takeoffFrame == 0) {
         if(remainingTicks > 0) {

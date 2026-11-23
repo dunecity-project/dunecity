@@ -1,15 +1,19 @@
 // City airplane flights in a whole game: what planes do over real cities with real defences.
 //
-// One Custom Game per process on a bundled city map, every house played by QuantBot Brutal and
-// watched by a spectator, in the Dune City mod's own options. This is Stefan's game of
-// 2026-11-23 (4P - 192x192 - Metropolis, 148 to 289 Rocket Turrets a house) and his earlier
-// two-player game (2P - 192x192 - City). The runner plays the same map and seed under different
-// states of three match rules: City Plane Carpet Bombing, City Plane Bombing Runs and City Plane
-// Purchase (City Plane Defence and City Plane Bombing stay on, the Ornithopter patrol off).
+// One Custom Game per process on a bundled city map, started the way a player starts it: the
+// Custom Game screen (CustomGameMenu) with the profile's saved mod and the shipped default
+// options, its Next handler's GameInitSettings, the lobby (CustomGamePlayers) seating QuantBot
+// Brutal, and the lobby's Start. This is Stefan's game of 2026-11-23 (4P - 192x192 -
+// Metropolis, every house an AI and watched, 148 to 289 Rocket Turrets a house) and his
+// two-player game (2P - 192x192 - City, the local human against one AI). The runner plays the
+// same map and seed under different states of three match rules, set as the Game Rules window
+// would set them: City Plane Carpet Bombing, City Plane Bombing Runs and City Plane Purchase
+// (City Plane Defence and City Plane Bombing stay on, the Ornithopter patrol off).
 //
 // Recorded from the live objects, cycle by cycle:
 //   flights.csv    one row per plane: when it flew, whether its centre crossed an enemy building
-//                  and an enemy zone, bombs released, and what its bombs did.
+//                  and an enemy zone, the enemy building tiles that came under its bomb sight
+//                  and how many of them got a bomb, bombs released, and what its bombs did.
 //   purchases.csv  one row per plane an Airport sold: the buyer's credits afterwards.
 //   houses.csv     every house at the end: credits, buildings, planes bought.
 // The engine's own CITY_PLANE_* log lines (launch, purchase, shot down) are merged by the runner.
@@ -21,6 +25,10 @@
 #include <Map.h>
 #include <Bullet.h>
 #include <mod/ModManager.h>
+#include <Menu/CustomGameMenu.h>
+#include <Menu/CustomGamePlayers.h>
+#include <players/PlayerFactory.h>
+#include <misc/FileSystem.h>
 #include <sand.h>
 #include <structures/Airport.h>
 #include <structures/StructureBase.h>
@@ -29,6 +37,8 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <misc/IMemoryStream.h>
+#include <misc/OMemoryStream.h>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -58,6 +68,11 @@ struct Flight {
     bool crossedBuilding = false, crossedZone = false;
     int bombs = 0, onBuilding = 0, damage = 0, destroyed = 0, credits = 0;
     int lastHealth = 0;
+    // The bomb sight: enemy building tiles that came under it, and those that got a bomb.
+    int sightTiles = 0, bombedTiles = 0;
+    Coord sightTile = Coord::Invalid();
+    bool sightTileEnemy = false, sightTileBombed = false;
+    Uint32 released = 0;
 };
 
 struct Falling {
@@ -79,30 +94,55 @@ int runCityPlaneFlights() {
     const Uint32 cycles = static_cast<Uint32>(std::atoi(env("CITY_PLANE_FLIGHTS_CYCLES").c_str()));
     require(rules.size() == 3 && players >= 2 && cycles > 0, "Bad city plane flights runner environment");
 
-    require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
-    // What a Custom Game with the Dune City mod plays: the INI overlaid by the mod's GameOptions.ini.
-    auto options = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    require(options.cityPlaneDefence && options.cityPlaneBombing && !options.airportOrnithopterPatrol
-                && options.cityPlaneCarpetBombing && options.cityPlaneBombingRuns && options.cityPlanePurchase,
-            "The mod's options do not play the default city plane rules");
-    require(options.startWithExploredMap && !options.fogOfWar, "The mod's options are not explored and fog-free");
-    options.cityPlaneCarpetBombing = rules[0] == '1';
-    options.cityPlaneBombingRuns = rules[1] == '1';
-    options.cityPlanePurchase = rules[2] == '1';
-
+    const std::string seats = env("CITY_PLANE_FLIGHTS_SEATS");   // "human": the local player and AIs; "spectate": AIs only
     const std::string mapPath = env("CITY_PLANE_FLIGHTS_MAP");
-    std::ifstream mapFile(mapPath);
-    std::stringstream mapData;
-    mapData << mapFile.rdbuf();
-    require(!mapData.str().empty(), "Missing map " + mapPath);
-    GameInitSettings init(mapPath.substr(mapPath.find_last_of('/') + 1), mapData.str(), false, options);
+    GameInitSettings init;
+    {
+        // The Custom Game screen: it restores the profile's mod (Custom Game Mod = dunecity) and
+        // that mod's effective options, exactly what a player who opens it gets.
+        CustomGameMenu browser(false);
+        require(ModManager::instance().getActiveModName() == "dunecity", "The Custom Game screen did not select the dunecity mod");
+        auto& options = browser.currentGameOptions;
+        require(options.cityPlaneDefence && options.cityPlaneBombing && !options.airportOrnithopterPatrol
+                    && options.cityPlaneCarpetBombing && options.cityPlaneBombingRuns && options.cityPlanePurchase,
+                "The Custom Game screen does not offer the default city plane rules");
+        require(options.startWithExploredMap && !options.fogOfWar, "The mod's options are not explored and fog-free");
+        // The Game Rules window's result for this arm.
+        options.cityPlaneCarpetBombing = rules[0] == '1';
+        options.cityPlaneBombingRuns = rules[1] == '1';
+        options.cityPlanePurchase = rules[2] == '1';
+        // CustomGameMenu::onNext().
+        init = GameInitSettings(getBasename(mapPath, true), readCompleteFile(mapPath),
+                                browser.multiplePlayersPerHouseCheckbox.isChecked(), options);
+    }
+    {
+        CustomGamePlayers lobby(init, true, false);
+        lobby.update();
+        require(lobby.numHouses == players, "The lobby does not seat the map's houses");
+        const int ai = PlayerFactory::getIndexByPlayerClass("qBotBrutal");
+        require(ai >= 0, "Missing QuantBot Brutal");
+        lobby.spectating = seats == "spectate";
+        int humans = 0;
+        for(int row = 0; row < lobby.numHouses; ++row) {
+            if(lobby.getSeatPlayer(2 * row) == 0 && !lobby.spectating) { ++humans; continue; }   // PLAYER_HUMAN
+            require(lobby.selectSeatPlayer(2 * row, ai), "The lobby cannot seat QuantBot Brutal");
+            lobby.onChangePlayerDropDownBoxes(true, 2 * row);
+        }
+        require(humans == (lobby.spectating ? 0 : 1), "The lobby did not seat exactly the local human");
+        lobby.addAllPlayersToGameInitSettings();   // the Start button's last step before the game
+        init = lobby.gameInitSettings;
+    }
     init.randomSeed = static_cast<Uint32>(std::atoi(env("CITY_PLANE_FLIGHTS_SEED").c_str()));
-    init.setLocalSpectator(true);
-    for(int i = 0; i < players; ++i) {
-        // Random house, as the Custom Game screen's default; every house its own team.
-        GameInitSettings::HouseInfo info(HOUSE_INVALID, i + 1);
-        info.addPlayerInfo({"QuantBot Brutal", "qBotBrutal"});
-        init.addHouseInfo(info);
+    // The settings travel through their stream as they do into a save or to a peer.
+    {
+        OMemoryStream saved;
+        saved.open();
+        init.save(saved);
+        IMemoryStream stream(saved.getData(), saved.getDataLength());
+        const GameInitSettings restored(stream);
+        require(restored.getGameOptions() == init.getGameOptions()
+                    && restored.getGameOptions().getHash() == init.getGameOptions().getHash(),
+                "The city plane rules did not survive the settings stream");
     }
 
     auto game = std::make_unique<Game>();
@@ -118,8 +158,9 @@ int runCityPlaneFlights() {
     require(game->isCitySimEnabled(), "The map is not a city game");
     for(int h = 0; h < NUM_HOUSES; ++h) {
         if(const House* house = game->getHouse(h)) {
-            SDL_Log("CITY_PLANE_FLIGHTS_START: house=%d rocket_turrets=%d airports=%d buildings=%d credits=%d", h,
-                    house->getNumItems(Structure_RocketTurret), house->getNumItems(Structure_Airport),
+            if(house->getNumStructures() == 0) continue;   // the Natives hold no city
+            SDL_Log("CITY_PLANE_FLIGHTS_START: house=%d human=%d rocket_turrets=%d airports=%d buildings=%d credits=%d", h,
+                    int(!house->isAI()), house->getNumItems(Structure_RocketTurret), house->getNumItems(Structure_Airport),
                     house->getNumStructures(), house->getCredits());
         }
     }
@@ -146,6 +187,29 @@ int runCityPlaneFlights() {
             if(fresh) { flight.house = house; flight.first = cycle; }
             flight.last = cycle;
             flight.lastHealth = plane->getHealth().lround();
+            if(plane->takeoffFrame == 0) {
+                // The tile under the bomb sight: closed and counted when the sight moves on.
+                const Coord aim = plane->bombSight();
+                const Coord tileAt = (aim.x < 0 || aim.y < 0) ? Coord::Invalid() : Coord(aim.x / TILESIZE, aim.y / TILESIZE);
+                const bool bombedNow = plane->getBombsReleased() > flight.released;
+                flight.released = plane->getBombsReleased();
+                if(!(tileAt == flight.sightTile)) {
+                    if(flight.sightTileEnemy) {
+                        ++flight.sightTiles;
+                        if(flight.sightTileBombed || bombedNow) ++flight.bombedTiles;
+                    }
+                    flight.sightTile = tileAt;
+                    flight.sightTileBombed = false;
+                    flight.sightTileEnemy = false;
+                    if(tileAt.isValid() && currentGameMap->tileExists(tileAt)) {
+                        const Tile* under = currentGameMap->getTile(tileAt);
+                        flight.sightTileEnemy = under->hasAGroundObject() && under->getGroundObject() != nullptr
+                            && under->getGroundObject()->isAStructure() && under->getGroundObject()->getHealth() > 0
+                            && under->getGroundObject()->getOwner()->getTeamID() != plane->getOwner()->getTeamID();
+                    }
+                }
+                if(bombedNow) flight.sightTileBombed = true;
+            }
             const Coord at = plane->getCenterPoint();
             if(at.x < 0 || at.y < 0 || !currentGameMap->tileExists(at.x / TILESIZE, at.y / TILESIZE)) continue;
             const Tile* tile = currentGameMap->getTile(at.x / TILESIZE, at.y / TILESIZE);
@@ -199,10 +263,11 @@ int runCityPlaneFlights() {
     }
 
     std::ofstream flightsOut(out + "/flights.csv");
-    flightsOut << "object,house,first,last,crossed_building,crossed_zone,bombs,on_building,damage,destroyed,credits,last_health\n";
+    flightsOut << "object,house,first,last,crossed_building,crossed_zone,sight_tiles,bombed_tiles,bombs,on_building,damage,destroyed,credits,last_health\n";
     for(const auto& [object, flight] : flights) {
         flightsOut << object << ',' << flight.house << ',' << flight.first << ',' << flight.last << ','
-                   << flight.crossedBuilding << ',' << flight.crossedZone << ',' << flight.bombs << ','
+                   << flight.crossedBuilding << ',' << flight.crossedZone << ',' << flight.sightTiles << ','
+                   << flight.bombedTiles << ',' << flight.bombs << ','
                    << flight.onBuilding << ',' << flight.damage << ',' << flight.destroyed << ',' << flight.credits << ','
                    << flight.lastHealth << '\n';
     }

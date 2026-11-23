@@ -1,27 +1,33 @@
 #!/usr/bin/env python3
 """City airplane flights in whole games, three match rules off against on, in the existing build.
 
-Stefan's games: a Custom Game on the bundled 4P - 192x192 - Metropolis map (2026-11-23, 148 to
-289 Rocket Turrets a house) and on 2P - 192x192 - City (eight a house), every house played by
-QuantBot Brutal and spectated, in the Dune City mod's options. The same map and seed are played
-in four states of the rules, each adding one to the last:
+Stefan's games, started through the Custom Game screen and its lobby with the shipped default
+options: the bundled 4P - 192x192 - Metropolis map with every house a QuantBot Brutal and the
+player watching (his game of 2026-11-23, 148 to 289 Rocket Turrets a house), and 2P - 192x192 -
+City with the local human against one QuantBot Brutal (eight Rocket Turrets a house). The same
+map and seed are played in four states of the rules, each adding one to the last:
 
-    base      the game at 1d520fa6c: one aimed 100-point bomb per building tile, random
-              waypoints, planes only from the Airport's free roll
-    stick     + City Plane Carpet Bombing
+    base      the build Stefan played (4cf0fd5c4): one aimed 100-point bomb per building tile
+              from a rack of six, random waypoints, planes only from the Airport's free roll
+    stick     + City Plane Carpet Bombing (two 60-point bombs a tile, no rack)
     runs      + City Plane Bombing Runs
     purchase  + City Plane Purchase (all defaults)
 
 Per arm: flights per game, the share of flights whose plane crossed an enemy building and an
-enemy zone, the share that released a bomb, bombs and buildings destroyed per flight, the
-seconds a plane lasted, planes bought and credits spent. Differences are paired by map and
-seed with a 95% bootstrap interval (tests/ai/match_score.py).
+enemy zone, the enemy building tiles that came under the bomb sight and the share of them that
+got a bomb, bombs and buildings destroyed per flight, the seconds a plane lasted, planes bought
+and credits spent. Differences are paired by map and seed with a 95% bootstrap interval
+(tests/ai/match_score.py).
 
-The test requires, over the games played: the base arm leaves most twice-bombed buildings
-standing (under 0.5 buildings destroyed per flight) while the stick destroys more per flight in
-every game; with runs no smaller a share of flights bombs than without; no plane is bought with
-the purchase rule off and at least one with it on, every purchase leaves its house 3000
-credits or more, and no house ever has more than three planes in the air.
+The test requires, over the games played:
+- Stefan's report reproduced in the base arm: under half the enemy building tiles that come
+  under a plane's bomb sight get a bomb ("the planes DO go over an enemy city" and drop nothing).
+- With the default rules at least 95% of those tiles get a bomb, in every game.
+- The stick destroys more buildings per flight than the base arm in every game, and under half
+  the buildings on the map in a game (some buildings, not all).
+- With runs no smaller a share of flights bombs than without.
+- No plane is bought with the purchase rule off and at least one with it on, every purchase
+  leaves its house 3000 credits or more, and no house ever has more than three planes in the air.
 
 Outputs: flights.csv, purchases.csv, games.csv, summary.md, and per game run.log.
 """
@@ -44,8 +50,8 @@ from probe_profile import default_build_dir, discard_profile_assets, require_fre
 from match_score import bootstrap  # noqa: E402
 
 NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
-MAPS = {'metropolis': ('data/maps/multiplayer/4P - 192x192 - Metropolis.ini', 4),
-        'city': ('data/maps/singleplayer/2P - 192x192 - City.ini', 2)}
+MAPS = {'metropolis': ('data/maps/multiplayer/4P - 192x192 - Metropolis.ini', 4, 'spectate'),
+        'city': ('data/maps/singleplayer/2P - 192x192 - City.ini', 2, 'human')}
 ARMS = (('base', '000'), ('stick', '100'), ('runs', '110'), ('purchase', '111'))
 CYCLES_PER_SECOND = 62.5
 PRICE = 1500
@@ -97,12 +103,15 @@ def play(binary, scratch, out, game, cycles, timeout):
     profile.mkdir()
     (profile / 'Dune City.ini').write_text(
         '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
-        'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = Plane watcher\n',
+        'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = Plane watcher\n'
+        # The one saved choice of Stefan's the screen needs; every game option is the shipped default.
+        'Custom Game Mod = dunecity\n',
         encoding='utf-8')
-    path, players = MAPS[name]
+    path, players, seats = MAPS[name]
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1', CITY_PLANE_FLIGHTS_OUT=str(run),
                CITY_PLANE_FLIGHTS_MAP=str(root / path), CITY_PLANE_FLIGHTS_PLAYERS=str(players),
+               CITY_PLANE_FLIGHTS_SEATS=seats,
                CITY_PLANE_FLIGHTS_SEED=str(seed), CITY_PLANE_FLIGHTS_CYCLES=str(cycles), CITY_PLANE_FLIGHTS_RULES=rules)
     logfile = run / 'run.log'
     with logfile.open('w') as log:
@@ -146,6 +155,7 @@ def collect(out, games, cycles):
         summary.append(dict(
             key, flights=count, crossed_building=sum(int(r['crossed_building']) for r in rows),
             crossed_zone=sum(int(r['crossed_zone']) for r in rows), bombed=sum(int(r['bombs']) > 0 for r in rows),
+            sight_tiles=sum(int(r['sight_tiles']) for r in rows), bombed_tiles=sum(int(r['bombed_tiles']) for r in rows),
             bombs=sum(int(r['bombs']) for r in rows), destroyed=sum(int(r['destroyed']) for r in rows),
             credits_destroyed=sum(int(r['credits']) for r in rows), shot_down=len(down), bought=len(bought),
             credits_spent=PRICE * len(bought),
@@ -212,6 +222,8 @@ def table(chosen_maps, title):
     add('Flights that crossed an enemy building, %', lambda a: 100 * per_flight(fl[a], lambda r: int(r['crossed_building'])), '%.0f')
     add('Flights that crossed an enemy zone, %', lambda a: 100 * per_flight(fl[a], lambda r: int(r['crossed_zone'])), '%.0f')
     add('Flights that released a bomb, %', lambda a: 100 * per_flight(fl[a], lambda r: int(r['bombs']) > 0), '%.0f')
+    add('Enemy building tiles under the bomb sight per flight', lambda a: per_flight(fl[a], lambda r: int(r['sight_tiles'])), '%.1f')
+    add('... of them that got a bomb, %', lambda a: 100 * sum(int(r['bombed_tiles']) for r in fl[a]) / max(1, sum(int(r['sight_tiles']) for r in fl[a])), '%.0f')
     add('Bombs released per flight', lambda a: per_flight(fl[a], lambda r: int(r['bombs'])))
     add('Bombs that fell on a building, %', lambda a: 100 * sum(int(r['on_building']) for r in fl[a]) / max(1, sum(int(r['bombs']) for r in fl[a])), '%.0f')
     add('Buildings destroyed per flight', lambda a: per_flight(fl[a], lambda r: int(r['destroyed'])))
@@ -242,13 +254,15 @@ def rate(row, field):
 
 report = ['# City airplane flights in whole games', '',
           '%.0f game minutes a game, QuantBot Brutal on every house, Dune City mod options (explored, no fog). '
-          'Each arm adds one rule to the one before it; base is the game at 1d520fa6c.' % args.minutes, '']
+          'Each arm adds one rule to the one before it; base is the build Stefan played (4cf0fd5c4).' % args.minutes, '']
 if len(args.maps) > 1:
     report += table(args.maps, 'All maps')
 for name in args.maps:
     turrets = [int(r['turrets_start']) for r in by_arm['base'] if r['map'] == name]
-    report += table([name], '%s (%s; %d Rocket Turrets on the map at the start)'
-                    % (name, MAPS[name][0].split('/')[-1], turrets[0] if turrets else 0))
+    report += table([name], '%s (%s, %s; %d Rocket Turrets on the map at the start)'
+                    % (name, MAPS[name][0].split('/')[-1],
+                       'every house an AI, watched' if MAPS[name][2] == 'spectate' else 'the local human against an AI',
+                       turrets[0] if turrets else 0))
 report += ['## Paired by map and seed (%d games an arm)' % len(by_arm['base']), '',
            '| Step | Measure | Mean difference | 95% interval |', '|---|---|---:|---|']
 steps = (('base', 'stick', 'Buildings destroyed per flight', lambda r: rate(r, 'destroyed')),
@@ -269,9 +283,23 @@ report += ['', 'Purchases: %d in all; the least a house held after paying was %s
 print('\n'.join(report))
 
 failures = []
-base_rate = per_flight(flights_by['base'], lambda r: int(r['destroyed']))
-if base_rate >= 0.5:
-    failures.append('base: %.2f buildings destroyed per flight; the reproduction expects under 0.5' % base_rate)
+
+
+def coverage(row):
+    return int(row['bombed_tiles']) / max(1, int(row['sight_tiles']))
+
+
+base_cover = sum(int(r['bombed_tiles']) for r in by_arm['base']) / max(1, sum(int(r['sight_tiles']) for r in by_arm['base']))
+if base_cover >= 0.5:
+    failures.append('base: %.0f%% of the enemy building tiles under the bomb sight got a bomb; Stefan\'s report '
+                    '(planes over an enemy city drop nothing) is not reproduced' % (100 * base_cover))
+for row in by_arm['purchase']:
+    if int(row['sight_tiles']) == 0 or coverage(row) < 0.95:
+        failures.append('default rules: only %d of %d enemy building tiles under the bomb sight got a bomb on %s seed %s'
+                        % (int(row['bombed_tiles']), int(row['sight_tiles']), row['map'], row['seed']))
+    if int(row['destroyed']) * 2 >= int(row['buildings_start']):
+        failures.append('default rules: bombs destroyed %d of %d buildings on %s seed %s'
+                        % (int(row['destroyed']), int(row['buildings_start']), row['map'], row['seed']))
 if not all(diff > 0 for diff in results[('stick', 'Buildings destroyed per flight')][3]):
     failures.append('stick: not more buildings destroyed per flight than base in every game')
 if results[('runs', 'Flights that released a bomb, share')][0] < 0:

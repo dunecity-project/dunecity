@@ -87,6 +87,8 @@ public:
     DuneCity::CityAircraft::Intercept turretRocketIntercept(const Coord& missile) const;
     /// Bombs on board (CityAircraft::kBombLoad when full).
     Sint32 getBombs() const { return bombs; }
+    /// Bombs released since this object was created (diagnostics and logs; not saved).
+    Uint32 getBombsReleased() const { return bombsReleased; }
 
 private:
     Coord micropolisPosition() const;
@@ -117,17 +119,15 @@ private:
     /// City Plane Bombing Runs: aim the next leg across a random enemy building. False when
     /// no other team has a building left.
     bool pickBombingRun();
-    /// Bombs this plane carries and sprite ticks per regained bomb under the match rules.
-    static int bombLoad();
-    static int bombRearmTicks();
 
     Sint32 takeoffFrame;    ///< Micropolis frames 11..9, 0 once cruising
     Sint32 remainingTicks;  ///< Cruise budget; zero means an outward departure
-    Sint32 bombs;           ///< Bombs on board (saved from 9890)
+    Sint32 bombs;           ///< Aimed bombs on board; the stick does not use a rack (saved from 9890)
     Sint32 bombTimer;       ///< Sprite ticks towards the next bomb, 0 while full (saved from 9890)
     Coord  bombSightTile;   ///< Tile the bomb sight was over last cycle (saved from 9890)
     Sint32 stickGap;        ///< Bombs due since an enemy building was under the sight; above kStickTailBombs: no stick (saved from 9891)
     Sint32 stickPhase;      ///< The stick's clock towards its next bomb (saved from 9891)
+    Uint32 bombsReleased = 0;   ///< Diagnostics only, not saved and never read by the simulation
 };
 
 #endif // AMBIENTAIRPLANE_H

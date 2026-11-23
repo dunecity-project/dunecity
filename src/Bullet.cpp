@@ -290,8 +290,9 @@ case Bullet_LargeRocket: {
         } break;
 
         case Bullet_Bomb: {
-            // The city airplane's bomb (AmbientAirplane::dropBomb): the large shell's picture,
-            // falling slower than the plane flies and only going off where it was aimed.
+            // The city airplane's bomb (AmbientAirplane::dropBomb, dropStick): the large shell's
+            // picture, dropping back from the plane for CityAircraft::kBombFallCycles and only
+            // going off where it was aimed.
             damageRadius = TILESIZE/2;
             explodesAtGroundObjects = false;
             speed = DuneCity::CityAircraft::bombSpeed();
