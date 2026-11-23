@@ -50,10 +50,11 @@ constexpr int kSideMargin = 12;
 constexpr int kColumnsGap = 10;
 /// Narrowest the type column may become. Longer names keep their ellipsis.
 constexpr int kMinNameColumnWidth = 76;
-/// The two non-combat city aircraft and the two upgraded variants the player
-/// asked to keep out of the unit table.
+/// The traffic helicopter and the two upgraded variants the player asked to keep
+/// out of the unit table. The city airplane is listed since it bombs (Stefan,
+/// 2026-11-23: "include plane in the unit performance stats").
 constexpr int kHiddenUnitTypes[] = {
-    Unit_AmbientAirplane, Unit_AmbientHelicopter, Unit_RocketTrike, Unit_EliteLauncher
+    Unit_AmbientHelicopter, Unit_RocketTrike, Unit_EliteLauncher
 };
 
 /// True for a type the unit table never lists, whatever its counters say.

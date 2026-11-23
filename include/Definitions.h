@@ -227,7 +227,11 @@
 //       stickGap, stickPhase) after the bomb sight tile, and an Airport saves its plane
 //       purchase cooldown after the patrol counters. An Explosion may be the new Explosion_Bomb
 //       (14). Three more city plane rules are bits 5-7 of the MOD15 Trooper byte.
-#define SAVEGAMEVERSION     9891
+// 9892: The city airplane also saves whether it was bought (AmbientAirplane::bought) after the
+//       stick clock: the Airport's free plane is counted apart from bought planes.
+#define SAVEGAMEVERSION     9892
+/// First save whose city airplanes say whether they were bought.
+#define SAVEGAMEVERSION_CITY_PLANE_FREE 9892
 /// First save with the stick gap counter of a city airplane and an Airport's purchase cooldown.
 #define SAVEGAMEVERSION_CITY_PLANE_PURCHASE 9891
 /// First save whose city airplanes carry a bomb load and that may hold a Bullet_Bomb.

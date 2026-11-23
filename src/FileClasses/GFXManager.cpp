@@ -2096,6 +2096,16 @@ GFXManager::GFXManager() {
         if (airTex) smallDetailPicTex[Picture_Airport] = std::move(airTex);
         else        smallDetailPicTex[Picture_Airport] = extractSmallDetailPic("STARPORT.WSA");
 
+        // The city aircraft show their own sprite when selected, not the Carryall's and the
+        // Ornithopter's portraits (Stefan, 2026-11-23: "change the plane icon so it doesn't just
+        // look like an ornithopter when selected"). First cell of each sheet: heading east.
+        auto planeTex = makeStructDetailPic(ObjPic_CityAirplane, 3 * D2_TILESIZE, 3 * D2_TILESIZE);
+        if (planeTex) smallDetailPicTex[Picture_CityAirplane] = std::move(planeTex);
+        else          smallDetailPicTex[Picture_CityAirplane] = extractSmallDetailPic("CARRYALL.WSA");
+        auto copterTex = makeStructDetailPic(ObjPic_CityHelicopter, 2 * D2_TILESIZE, 2 * D2_TILESIZE);
+        if (copterTex) smallDetailPicTex[Picture_CityHelicopter] = std::move(copterTex);
+        else           smallDetailPicTex[Picture_CityHelicopter] = extractSmallDetailPic("ORNI.WSA");
+
         // Park: a 3x2 patch of its own atlas cells (four woods, two fountains), as a player's
         // row of Micropolis park tiles would look, rather than one 16-pixel tile.
         if (SDL_Surface* parkAtlas = objPic[ObjPic_Park][HOUSE_HARKONNEN][0].get()) {

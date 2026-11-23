@@ -81,10 +81,21 @@ public:
     /// Every city airplane of the running game, in no particular order. Not saved: a
     /// plane enters in its constructor and leaves in its destructor.
     static const std::vector<AmbientAirplane*>& all();
+    /// Bought at an Airport (Airport::buyAirplane), as opposed to the Airport's free plane.
+    bool isBought() const { return bought; }
+    void setBought(bool value) { bought = value; }
+    /// Living free planes of `house` in the air: the Airport's free roll waits for none.
+    static int freePlanes(const House* house);
     /// Flight per game cycle in quarter world units times 16 (CityAircraft::intercept).
     Coord velocity16() const;
     /// Where a turret rocket leaving `missile` (quarter world units) now meets this plane.
     DuneCity::CityAircraft::Intercept turretRocketIntercept(const Coord& missile) const;
+    /// How far from its launch point a rocket of house `houseID` may chase a city airplane, in
+    /// quarter world units (CityAircraft::kRocketChaseRangeFactor x the Rocket Turret's range).
+    static int rocketChaseRange4(int houseID);
+    /// True when a turret rocket fired now from `launch` (world units) meets this plane no
+    /// farther than `range4` quarter world units from `launch`.
+    bool rocketCanMeet(const Coord& launch, int range4) const;
     /// Bombs on board (CityAircraft::kBombLoad when full).
     Sint32 getBombs() const { return bombs; }
     /// Bombs released since this object was created (diagnostics and logs; not saved).
@@ -127,6 +138,7 @@ private:
     Coord  bombSightTile;   ///< Tile the bomb sight was over last cycle (saved from 9890)
     Sint32 stickGap;        ///< Bombs due since an enemy building was under the sight; above kStickTailBombs: no stick (saved from 9891)
     Sint32 stickPhase;      ///< The stick's clock towards its next bomb (saved from 9891)
+    bool bought = false;        ///< bought at an Airport, not its free plane (saved from 9892)
     Uint32 bombsReleased = 0;   ///< Diagnostics only, not saved and never read by the simulation
 };
 

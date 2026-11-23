@@ -115,8 +115,11 @@ void Explosion::init()
         } break;
 
         case Explosion_Bomb: {
-            // The city airplane's stick bomb: the Ornithopter rocket's impact, drawn larger (blitToScreen).
-            graphic = pGFXManager->getObjPic(ObjPic_ExplosionSmall);
+            // The city airplane's stick bomb: one of the two large building explosions, by the
+            // tile it lands on (no random draw: a picture must not move the game's generator),
+            // drawn four tiles wide (blitToScreen).
+            graphic = pGFXManager->getObjPic((((position.x + position.y) / TILESIZE) & 1) != 0
+                                                 ? ObjPic_ExplosionLarge2 : ObjPic_ExplosionLarge1);
             numFrames = 5;
         } break;
 
@@ -218,11 +221,12 @@ void Explosion::blitToScreen() const
                                                 numFrames, 1,
                                                 HAlign::Center, VAlign::Center);
         if(explosionID == Explosion_Bomb) {
-            // Half again as large as the Ornithopter rocket's impact, about its centre.
-            dest.x -= dest.w / 4;
-            dest.y -= dest.h / 4;
-            dest.w += dest.w / 2;
-            dest.h += dest.h / 2;
+            // Four tiles wide and high, about the impact point.
+            const int side = world2zoomedWorld(4 * TILESIZE);
+            dest.x += (dest.w - side) / 2;
+            dest.y += (dest.h - side) / 2;
+            dest.w = side;
+            dest.h = side;
         }
         SDL_Rect source = calcSpriteSourceRect(graphic[currentZoomlevel], currentFrame, numFrames);
         SDL_RenderCopy(renderer, graphic[currentZoomlevel], &source, &dest);

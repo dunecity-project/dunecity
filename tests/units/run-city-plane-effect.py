@@ -293,8 +293,10 @@ report += ['Buildings destroyed over all runs with the stick: '
            + (', '.join('%s %d' % item for item in sorted(lost.items(), key=lambda item: -item[1])) or 'none') + '.', '']
 if not stick_destroyed[3] > 0:
     failures.append('stick: not more buildings destroyed than the aimed bombs, interval %+.3f to %+.3f' % stick_destroyed[3:5])
-if any(int(row['yard_lost']) or int(row['palace_lost']) for row in stick_on):
-    failures.append('stick: a Construction Yard or Palace fell to a single run')
+# Two hits of the heavy bomb destroy a Construction Yard (Stefan: "2 hits should be taking out
+# other buildings"), which one diagonal run can deliver; a Palace takes four and must stand.
+if any(int(row['palace_lost']) for row in stick_on):
+    failures.append('stick: a Palace fell to a single run')
 if max(int(row['destroyed']) for row in stick_on) >= 11:
     failures.append('stick: one run destroyed half the base')
 

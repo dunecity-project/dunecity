@@ -489,23 +489,28 @@ inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, k
 
 // ---------------------------------------------------------------------------
 // The stick (Stefan, 2026-11-23: "they should drop bombs like a b-52 does as they fly
-// over. using a ornithopter attack explosion but make it a bit bigger and deadlier").
-// Match rule GameOptionsClass::cityPlaneCarpetBombing, with cityPlaneBombing.
+// over"). Match rule GameOptionsClass::cityPlaneCarpetBombing, with cityPlaneBombing.
 //
-// A stick starts with a bomb the cycle an enemy building comes under the bomb sight
-// and releases another every 25/8 game cycles (kStickPhasePeriod / kStickPhaseStep):
-// half a tile of flight on an axis heading, so exactly two bombs a tile. It carries
-// on for kStickTailBombs more bombs (one tile) after the last building, so it runs
-// unbroken across a road between two zones; it never falls on a tile that holds a
-// building of the plane's own team.
-// Against the Ornithopter's rocket (Dune City ObjectData: 45 damage, Explosion_Small):
-// a stick bomb does kStickDamage = 60, a third more, and its impact is the same
-// explosion drawn half again as large (Explosion_Bomb). Two bombs a tile are 120 a
-// tile crossed: a 2x2 zone or Wind Trap (200) crossed through both tiles takes 240 and
-// is destroyed even with the hit point a repairing building regains between bombs
-// (the old rule's 2 x 100 left such a building at 1); a Rocket Turret (200, one tile)
-// takes 120 and stands; a Construction Yard (400, two tiles) keeps 160, a Refinery
-// (450, three tiles) 90, a Palace (1000, three tiles) 640.
+// The bomb (Stefan, 2026-11-23, after playing the first stick of 60-point bombs two a
+// tile with the Ornithopter rocket's explosion: "make a new bomb. the current
+// ornithopter one is too small - i want a big explosion. drop less frequently them but
+// they should do more damage. a direct hit in the middle of a residential for example
+// should destroy it and 2 hits should be taking out other buildings"):
+// - kStickDamage = 250 to the building the bomb lands on. One hit destroys every
+//   200-point building (zones, Wind Trap, turrets, Heavy Factory, Repair Yard, Silo,
+//   Wall); two destroy everything up to 500 (Barracks, Light Factory, Construction
+//   Yard, High-Tech Factory, House IX, Police Station, WOR, Refinery, Airport, Radar,
+//   Research Lab, Stadium, Starport); a Nuclear Plant (750) takes three and a Palace
+//   (1000) four.
+// - One bomb every 12.5 game cycles (kStickPhasePeriod / kStickPhaseStep): two tiles of
+//   flight on an axis heading, a quarter of the first stick's rate.
+// - A stick starts when an enemy building comes under the bomb sight; its first bomb is
+//   released kStickLeadCycles later, half a tile inside that building's edge, not on
+//   the edge itself. It carries on for kStickTailBombs more bombs after the last
+//   building (so it runs on across roads and gaps of up to two tiles in step); it never
+//   falls on a tile that holds a building of the plane's own team.
+// - Its impact is Explosion_Bomb: the large building explosion drawn four tiles wide,
+//   with the large explosion sound; the falling bomb is the Death Hand's rocket picture.
 // The rack does not empty (Stefan, 2026-11-23: "planes racks don't empty"): there is
 // no load and no rearm time under the stick rule. With a load, six bombs or twenty-four,
 // a plane in his games had nothing left for 85 to 89% of the time it was over an enemy
@@ -513,14 +518,17 @@ inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, k
 // ---------------------------------------------------------------------------
 
 /// Damage of one stick bomb to the building it lands on.
-inline constexpr int kStickDamage = 60;
+inline constexpr int kStickDamage = 250;
 /// Bombs the stick still releases after the last enemy building under the sight.
-inline constexpr int kStickTailBombs = 2;
+inline constexpr int kStickTailBombs = 1;
 /// The stick's clock: kStickPhaseStep is added every game cycle and a bomb is due each
-/// time kStickPhasePeriod is reached: one bomb per 3.125 cycles, 32 world units of an
-/// axis heading's 10.24 a cycle.
-inline constexpr int kStickPhaseStep = 8;
+/// time kStickPhasePeriod is reached: one bomb per 12.5 cycles, 128 world units (two
+/// tiles) of an axis heading's 10.24 a cycle.
+inline constexpr int kStickPhaseStep = 2;
 inline constexpr int kStickPhasePeriod = 25;
+/// Cycles from the sight entering the first building of a stick to its first bomb:
+/// 3 x 10.24 = 30.7 world units, half a tile inside the building.
+inline constexpr int kStickLeadCycles = 3;
 
 // ---------------------------------------------------------------------------
 // Bombing runs (match rule GameOptionsClass::cityPlaneBombingRuns). Each leg of the
@@ -534,15 +542,17 @@ inline constexpr int kRunOvershootTiles = 12;
 // ---------------------------------------------------------------------------
 // Buying a plane (Stefan, 2026-11-23: "allow the ai to spawn planes for 1500
 // credits"). Match rule GameOptionsClass::cityPlanePurchase. A powered Airport
-// launches a plane at once for kPlanePrice, and then not again for
-// kPurchaseCooldownMs. There is no limit on planes in the air (Stefan,
-// 2026-11-23: "no limit on planes in the air"; the first version stopped at
-// three per house). What bounds them is the cooldown and the length of a flight:
-// one Airport can have sold at most five planes that are still flying. The
-// Airport's free roll is unchanged: it still only launches for a house with no plane.
+// launches a plane at once for kPlanePrice while its house has fewer than
+// kMaxPlanesPerHouse in the air (Stefan, 2026-11-23: "i should be able to buy more
+// planes, up to 10"). There is no wait between purchases for a player: the first
+// version sold one plane a minute per Airport, and with flights of half a minute that
+// held him to one plane in the air. kPurchaseCooldownMs is now only QuantBot's own
+// pace (QuantBot::buyCityAirplanes): the measured one plane a minute per Airport.
+// The Airport's free roll is unchanged: it still only launches for a house with no plane.
 // ---------------------------------------------------------------------------
 
 inline constexpr int kPlanePrice = 1500;
+inline constexpr int kMaxPlanesPerHouse = 10;
 inline constexpr int kPurchaseCooldownMs = 60000;
 
 // ---------------------------------------------------------------------------
@@ -565,6 +575,14 @@ inline int64_t integerSqrt(int64_t value) {
     }
     return root;
 }
+
+/// A rocket chasing a city airplane goes off once it is this many times the Rocket Turret's
+/// WeaponRange from where it was fired: the turret's own reach against aircraft, 3 x 8 = 24
+/// tiles (Stefan, 2026-11-23: "missiles chasing a plane just keep going forever. there needs to
+/// be a distance cutoff"). A turret rocket is 1.13 times as fast as the plane, so one fired
+/// after a plane flying away followed it for nine times the gap between them. A Rocket Turret
+/// now only fires at a plane its rocket can meet inside this distance (RocketTurret::canAttack).
+inline constexpr int kRocketChaseRangeFactor = 3;
 
 struct Intercept {
     bool possible = false;  ///< false when the target is as fast as the missile

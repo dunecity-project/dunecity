@@ -126,8 +126,8 @@ SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
         case Unit_Trike:                    newPicID = Picture_Trike;               break;
         case Unit_Saboteur:                 newPicID = Picture_Saboteur;            break;
         case Unit_Sandworm:                 newPicID = Picture_Sandworm;            break;
-        case Unit_AmbientAirplane:          newPicID = Picture_Carryall;            break;
-        case Unit_AmbientHelicopter:        newPicID = Picture_Ornithopter;         break;
+        case Unit_AmbientAirplane:          newPicID = Picture_CityAirplane;        break;
+        case Unit_AmbientHelicopter:        newPicID = Picture_CityHelicopter;      break;
         case Unit_RocketTrike:              newPicID = Picture_RocketTrike;         break;
         case Unit_SonicTrike:               newPicID = Picture_SonicTrike;          break;
         case Unit_FlameTank:                newPicID = Picture_FlameTank;           break;

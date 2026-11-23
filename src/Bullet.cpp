@@ -290,15 +290,21 @@ case Bullet_LargeRocket: {
         } break;
 
         case Bullet_Bomb: {
-            // The city airplane's bomb (AmbientAirplane::dropBomb, dropStick): the large shell's
-            // picture, dropping back from the plane for CityAircraft::kBombFallCycles and only
-            // going off where it was aimed.
+            // The city airplane's bomb (AmbientAirplane::dropBomb, dropStick), dropping back from
+            // the plane for CityAircraft::kBombFallCycles and only going off where it was aimed.
+            // The stick's heavy bomb is the Death Hand's rocket picture, pointing along the
+            // plane's course; the aimed rule keeps the large shell.
             damageRadius = TILESIZE/2;
             explodesAtGroundObjects = false;
             speed = DuneCity::CityAircraft::bombSpeed();
             detonationTimer = -1;
-            numFrames = 1;
-            graphic = pGFXManager->getObjPic(ObjPic_Bullet_Large, houseID);
+            if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
+                numFrames = 16;
+                graphic = pGFXManager->getObjPic(ObjPic_Bullet_LargeRocket, houseID);
+            } else {
+                numFrames = 1;
+                graphic = pGFXManager->getObjPic(ObjPic_Bullet_Large, houseID);
+            }
         } break;
 
         case Bullet_SmallRocket: {
@@ -465,15 +471,26 @@ void Bullet::updateDynastyProjectile()
             const bool tracksTrooperTarget = liveTarget
                 && liveTarget->getHealth() > 0 && liveTarget->isAFlyingUnit();
             if(tracksTrooperTarget) destination = liveTarget->getCenterPoint();
+            // A rocket chasing a city airplane goes off once it is farther from where it was
+            // fired than a Rocket Turret reaches against aircraft; it used to follow a plane
+            // flying away across the whole map (CityAircraft::kRocketChaseRangeFactor).
+            const auto* chased = (tracksCityPlane || tracksTrooperTarget) ? target.getObjPointer() : nullptr;
+            const int chaseRange4 = (chased && chased->getItemID() == Unit_AmbientAirplane)
+                ? AmbientAirplane::rocketChaseRange4(owner->getHouseID()) : 0;
+            if(chaseRange4 > 0 && DynastyProjectile::distance(source*4, previous) > chaseRange4) {
+                destroy();
+                return;
+            }
             // City Plane Defence: a turret rocket flies to where it and the city airplane meet,
-            // solved again at every movement step, and does not go off before it gets there.
+            // solved again at every movement step, and does not go off before it gets there,
+            // as long as that point is inside the chase range.
             bool tracksPlane = false;
             Coord meetingPoint;
             if(tracksCityPlane) {
                 const auto* object = target.getObjPointer();
                 if(object && object->getItemID() == Unit_AmbientAirplane && object->getHealth() > 0) {
                     const auto meet = static_cast<const AmbientAirplane*>(object)->turretRocketIntercept(previous);
-                    if(meet.possible) {
+                    if(meet.possible && DynastyProjectile::distance(source*4, meet.point) <= chaseRange4) {
                         tracksPlane = true;
                         meetingPoint = meet.point;
                         destination = meet.point/4;
@@ -860,8 +877,8 @@ case Bullet_LargeRocket: {
                         currentGame->getGameCycleCount());
             }
             if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
-                // The stick: the Ornithopter rocket's impact, drawn half again as large.
-                soundPlayer->playSoundAt(Sound_ExplosionSmall, position/TILESIZE);
+                // The stick's heavy bomb: the large building explosion drawn four tiles wide.
+                soundPlayer->playSoundAt(Sound_ExplosionLarge, position/TILESIZE);
                 currentGame->getExplosionList().push_back(new Explosion(Explosion_Bomb,position,houseID));
             } else {
                 soundPlayer->playSoundAt(Sound_ExplosionMedium, position/TILESIZE);

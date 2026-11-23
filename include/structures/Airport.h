@@ -34,7 +34,7 @@ public:
 
 private:
     DuneCity::AirPatrolCycle patrol{getMaxSpawnTimer()};
-    Sint32 purchaseCooldown = 0;   ///< Cycles until the next purchase here (saved from 9891)
+    Sint32 purchaseCooldown = 0;   ///< Cycles since-purchase clock QuantBot paces itself by (saved from 9891)
     /// Puts a city airplane on the runway. Null when the unit could not be created.
     class AmbientAirplane* launchAirplane(bool bought);
     void init();

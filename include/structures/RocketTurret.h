@@ -55,6 +55,7 @@ private:
     /// City Plane Defence: the nearest enemy city airplane this turret may shoot at inside
     /// its aircraft reach (triple weapon range, as for an Ornithopter), or nullptr.
     const ObjectBase* cityPlaneInReach() const;
+    bool canMeetCityPlane(const ObjectBase* object) const;
 };
 
 #endif //ROCKETTURRET_H

@@ -79,6 +79,7 @@ AmbientAirplane* Airport::launchAirplane(bool bought) {
     // three tiles east of the airport tile, on the runway.
     Coord start = centre + Coord(3, 0);
     if (!currentGameMap->tileExists(start)) start = centre;
+    unit->setBought(bought);
     unit->deploy(start);
     unit->setGuardPoint(start);
     unit->doSetAttackMode(STOP);
@@ -99,16 +100,18 @@ AmbientAirplane* Airport::launchAirplane(bool bought) {
 bool Airport::canBuyAirplane() const {
     namespace CA = DuneCity::CityAircraft;
     return currentGame->getGameInitSettings().getGameOptions().cityPlanePurchase
-        && currentGame->isCitySimEnabled() && getHealth() > 0 && owner->hasPower() && purchaseCooldown <= 0
+        && currentGame->isCitySimEnabled() && getHealth() > 0 && owner->hasPower()
         && currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled
+        && owner->getNumItems(Unit_AmbientAirplane) < CA::kMaxPlanesPerHouse
         && owner->getCredits() >= CA::kPlanePrice;
 }
 
 /**
     Stefan, 2026-11-23: "allow the ai to spawn planes for 1500 credits". Match rule City Plane
     Purchase: the Airport launches a plane now instead of waiting for its free roll, also while
-    the house already has planes in the air, however many (Stefan, 2026-11-23: "no limit on
-    planes in the air"); the cooldown is the only limit besides the price. The same call serves a
+    the house already has planes in the air, up to CA::kMaxPlanesPerHouse (Stefan, 2026-11-23:
+    "i should be able to buy more planes, up to 10"). A player buys as fast as he can pay;
+    purchaseCooldown, started here, is only read by QuantBot as its own pace. The same call serves a
     human's Buy button (CMD_AIRPORT_BUY_AIRPLANE) and QuantBot (QuantBot::buyCityAirplanes).
 */
 bool Airport::buyAirplane() {
@@ -155,7 +158,10 @@ void Airport::updateCityAircraft() {
     namespace CA = DuneCity::CityAircraft;
 
     if (currentGame->randomGen.rand(0, CA::kAirplaneRandomMax) == 0) {
-        if (owner->getNumItems(Unit_AmbientAirplane) > 0) return;   // generatePlane(): already flying
+        // generatePlane(): already flying. Stefan, 2026-11-23: "the normal plane that respawns
+        // should be free": the free plane is counted apart from bought ones, so it comes back
+        // half a minute after the last free plane whatever the house has bought.
+        if (AmbientAirplane::freePlanes(owner) > 0) return;
         if (!currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled) return;
         launchAirplane(false);
         return;

@@ -9,7 +9,7 @@ map and seed are played in four states of the rules, each adding one to the last
 
     base      the build Stefan played (4cf0fd5c4): one aimed 100-point bomb per building tile
               from a rack of six, random waypoints, planes only from the Airport's free roll
-    stick     + City Plane Carpet Bombing (two 60-point bombs a tile, no rack)
+    stick     + City Plane Carpet Bombing (a 250-point bomb every two tiles, no rack)
     runs      + City Plane Bombing Runs
     purchase  + City Plane Purchase (all defaults)
 
@@ -22,7 +22,10 @@ and credits spent. Differences are paired by map and seed with a 95% bootstrap i
 The test requires, over the games played:
 - Stefan's report reproduced in the base arm: under half the enemy building tiles that come
   under a plane's bomb sight get a bomb ("the planes DO go over an enemy city" and drop nothing).
-- With the default rules at least 95% of those tiles get a bomb, in every game.
+- With the default rules at least 95% of the enemy buildings that stay under the bomb sight
+  for a bomb period (13 cycles, two tiles of flight) get a bomb, in every game. (The first
+  stick dropped two bombs a tile and this was measured per tile; the heavy bomb falls every
+  two tiles, so it is measured per building.)
 - The stick destroys more buildings per flight than the base arm in every game, and under half
   the buildings on the map in a game (some buildings, not all).
 - With runs no smaller a share of flights bombs than without.
@@ -156,6 +159,8 @@ def collect(out, games, cycles):
             key, flights=count, crossed_building=sum(int(r['crossed_building']) for r in rows),
             crossed_zone=sum(int(r['crossed_zone']) for r in rows), bombed=sum(int(r['bombs']) > 0 for r in rows),
             sight_tiles=sum(int(r['sight_tiles']) for r in rows), bombed_tiles=sum(int(r['bombed_tiles']) for r in rows),
+            sight_buildings=sum(int(r['sight_buildings']) for r in rows),
+            bombed_buildings=sum(int(r['bombed_buildings']) for r in rows),
             bombs=sum(int(r['bombs']) for r in rows), destroyed=sum(int(r['destroyed']) for r in rows),
             credits_destroyed=sum(int(r['credits']) for r in rows), shot_down=len(down), bought=len(bought),
             credits_spent=PRICE * len(bought),
@@ -224,6 +229,8 @@ def table(chosen_maps, title):
     add('Flights that released a bomb, %', lambda a: 100 * per_flight(fl[a], lambda r: int(r['bombs']) > 0), '%.0f')
     add('Enemy building tiles under the bomb sight per flight', lambda a: per_flight(fl[a], lambda r: int(r['sight_tiles'])), '%.1f')
     add('... of them that got a bomb, %', lambda a: 100 * sum(int(r['bombed_tiles']) for r in fl[a]) / max(1, sum(int(r['sight_tiles']) for r in fl[a])), '%.0f')
+    add('Enemy buildings under the bomb sight for two tiles of flight or more, per flight', lambda a: per_flight(fl[a], lambda r: int(r['sight_buildings'])), '%.1f')
+    add('... of them that got a bomb, %', lambda a: 100 * sum(int(r['bombed_buildings']) for r in fl[a]) / max(1, sum(int(r['sight_buildings']) for r in fl[a])), '%.0f')
     add('Bombs released per flight', lambda a: per_flight(fl[a], lambda r: int(r['bombs'])))
     add('Bombs that fell on a building, %', lambda a: 100 * sum(int(r['on_building']) for r in fl[a]) / max(1, sum(int(r['bombs']) for r in fl[a])), '%.0f')
     add('Buildings destroyed per flight', lambda a: per_flight(fl[a], lambda r: int(r['destroyed'])))
@@ -294,9 +301,9 @@ if base_cover >= 0.5:
     failures.append('base: %.0f%% of the enemy building tiles under the bomb sight got a bomb; Stefan\'s report '
                     '(planes over an enemy city drop nothing) is not reproduced' % (100 * base_cover))
 for row in by_arm['purchase']:
-    if int(row['sight_tiles']) == 0 or coverage(row) < 0.95:
-        failures.append('default rules: only %d of %d enemy building tiles under the bomb sight got a bomb on %s seed %s'
-                        % (int(row['bombed_tiles']), int(row['sight_tiles']), row['map'], row['seed']))
+    if int(row['sight_buildings']) == 0 or int(row['bombed_buildings']) < 0.95 * int(row['sight_buildings']):
+        failures.append('default rules: only %d of %d enemy buildings under the bomb sight got a bomb on %s seed %s'
+                        % (int(row['bombed_buildings']), int(row['sight_buildings']), row['map'], row['seed']))
     if int(row['destroyed']) * 2 >= int(row['buildings_start']):
         failures.append('default rules: bombs destroyed %d of %d buildings on %s seed %s'
                         % (int(row['destroyed']), int(row['buildings_start']), row['map'], row['seed']))

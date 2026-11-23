@@ -287,6 +287,8 @@ typedef enum {
     Picture_FastHarvester,
     Picture_Slowpost,
     Picture_Park,                  ///< DuneCity: Micropolis park portrait (park atlas cells)
+    Picture_CityAirplane,          ///< DuneCity: the city airplane's own sprite, heading east
+    Picture_CityHelicopter,        ///< DuneCity: the traffic helicopter's own sprite
     NUM_SMALLDETAILPICS
 } SmallDetailPics_Enum;
 

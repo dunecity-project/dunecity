@@ -84,11 +84,25 @@ bool RocketTurret::canAttack(const ObjectBase* object) const {
     if((object != nullptr)
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
         && (isOrnithopterUnit(object->getItemID()) || object->isVisible(getOwner()->getTeamID()))
-        && !AmbientAirplane::crashEndangers(*this, *object)) {
+        && !AmbientAirplane::crashEndangers(*this, *object)
+        && canMeetCityPlane(object)) {
         return true;
     } else {
         return false;
     }
+}
+
+/**
+    City Plane Defence: a rocket chasing a city airplane goes off 3 x WeaponRange from this
+    turret (Bullet::updateDynastyProjectile), so the turret only takes a plane its rocket can
+    meet inside that distance. A plane flying away is left to the turrets ahead of it, and this
+    one is free for another target. True for anything that is not a city airplane.
+*/
+bool RocketTurret::canMeetCityPlane(const ObjectBase* object) const {
+    if(object->getItemID() != Unit_AmbientAirplane
+       || !currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence) return true;
+    return static_cast<const AmbientAirplane*>(object)->rocketCanMeet(
+        getCenterPoint(), AmbientAirplane::rocketChaseRange4(owner->getHouseID()));
 }
 
 const ObjectBase* RocketTurret::findTarget() const {

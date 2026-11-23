@@ -25,7 +25,7 @@ protected:
         details.addWidget(&patrolLabel, (Sint32)55);
         // City Plane Purchase: launch a plane now for CityAircraft::kPlanePrice credits.
         buyButton.setText(_("Buy airplane") + std::string(" ") + std::to_string(DuneCity::CityAircraft::kPlanePrice));
-        buyButton.setTooltipText(_("Launch a city airplane now. One a minute per Airport."));
+        buyButton.setTooltipText(_("Launch a city airplane now. Up to ten in the air."));
         buyButton.setOnClick([id] {
             auto* airport = dynamic_cast<Airport*>(currentGame->getObjectManager().getObject(id));
             if (airport) airport->handleBuyAirplaneClick();
@@ -43,12 +43,11 @@ protected:
             const House* owner=airport->getOwner();
             const int flying=owner->getNumItems(Unit_AmbientAirplane);
             const bool purchase=currentGame->getGameInitSettings().getGameOptions().cityPlanePurchase;
-            const int wait=(airport->getPurchaseCooldown()*GAMESPEED_DEFAULT+999)/1000;
             patrolLabel.setText(_("City airplane")+std::string("\n")
                 +(!owner->hasPower() ? _("Needs power")
-                  : flying>0 ? std::to_string(flying)+_(" in flight") : _("Next flight soon"))
-                +(purchase && wait>0 ? std::string("\n")+_("Next purchase ")+std::to_string(wait/60)+":"
-                    +(wait%60<10?"0":"")+std::to_string(wait%60) : std::string()));
+                  : flying>0 ? std::to_string(flying)
+                      +(purchase ? "/"+std::to_string(DuneCity::CityAircraft::kMaxPlanesPerHouse) : std::string())
+                      +_(" in flight") : _("Next flight soon")));
             buyButton.setVisible(purchase);
             buyButton.setEnabled(purchase && currentGame->canControlHouse(owner) && airport->canBuyAirplane());
             cityStats.update(airport);

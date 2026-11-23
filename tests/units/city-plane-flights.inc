@@ -41,6 +41,7 @@
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 #include <map>
+#include <set>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -63,6 +64,9 @@ std::string env(const char* name) {
     return value;
 }
 
+/// One bomb of the stick every 12.5 cycles: a building under the sight this long gets one.
+constexpr int kBombPeriodCycles = 13;
+
 struct Flight {
     int house = -1;
     Uint32 first = 0, last = 0;
@@ -71,6 +75,12 @@ struct Flight {
     int lastHealth = 0;
     // The bomb sight: enemy building tiles that came under it, and those that got a bomb.
     int sightTiles = 0, bombedTiles = 0;
+    // Enemy buildings that stayed under the sight for a bomb period (13 cycles: two tiles of
+    // flight) or longer, and those of them a bomb was released at.
+    int sightBuildings = 0, bombedBuildings = 0;
+    Uint32 sightBuilding = NONE_ID;
+    int sightBuildingCycles = 0;
+    std::set<Uint32> bombedTargets;
     Coord sightTile = Coord::Invalid();
     bool sightTileEnemy = false, sightTileBombed = false;
     Uint32 released = 0;
@@ -224,6 +234,18 @@ int runCityPlaneFlights() {
                     }
                 }
                 if(bombedNow) flight.sightTileBombed = true;
+                // The building under the bomb sight: closed and counted when the sight leaves it.
+                Uint32 under = NONE_ID;
+                if(flight.sightTileEnemy) under = currentGameMap->getTile(tileAt)->getGroundObject()->getObjectID();
+                if(under != flight.sightBuilding) {
+                    if(flight.sightBuilding != NONE_ID && flight.sightBuildingCycles >= kBombPeriodCycles) {
+                        ++flight.sightBuildings;
+                        if(flight.bombedTargets.count(flight.sightBuilding)) ++flight.bombedBuildings;
+                    }
+                    flight.sightBuilding = under;
+                    flight.sightBuildingCycles = 0;
+                }
+                if(under != NONE_ID) ++flight.sightBuildingCycles;
             }
             const Coord at = plane->getCenterPoint();
             if(at.x < 0 || at.y < 0 || !currentGameMap->tileExists(at.x / TILESIZE, at.y / TILESIZE)) continue;
@@ -251,7 +273,7 @@ int runCityPlaneFlights() {
             now[bullet] = bomb;
             Flight& flight = flights[bomb.plane];
             ++flight.bombs;
-            if(target != nullptr) ++flight.onBuilding;
+            if(target != nullptr) { ++flight.onBuilding; flight.bombedTargets.insert(target->getObjectID()); }
         }
         for(const auto& [bullet, bomb] : falling) {
             if(now.count(bullet) || bomb.target == NONE_ID || bomb.before <= 0) continue;
@@ -278,11 +300,11 @@ int runCityPlaneFlights() {
     }
 
     std::ofstream flightsOut(out + "/flights.csv");
-    flightsOut << "object,house,first,last,crossed_building,crossed_zone,sight_tiles,bombed_tiles,bombs,on_building,damage,destroyed,credits,last_health\n";
+    flightsOut << "object,house,first,last,crossed_building,crossed_zone,sight_tiles,bombed_tiles,sight_buildings,bombed_buildings,bombs,on_building,damage,destroyed,credits,last_health\n";
     for(const auto& [object, flight] : flights) {
         flightsOut << object << ',' << flight.house << ',' << flight.first << ',' << flight.last << ','
                    << flight.crossedBuilding << ',' << flight.crossedZone << ',' << flight.sightTiles << ','
-                   << flight.bombedTiles << ',' << flight.bombs << ','
+                   << flight.bombedTiles << ',' << flight.sightBuildings << ',' << flight.bombedBuildings << ',' << flight.bombs << ','
                    << flight.onBuilding << ',' << flight.damage << ',' << flight.destroyed << ',' << flight.credits << ','
                    << flight.lastHealth << '\n';
     }

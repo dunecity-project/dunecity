@@ -78,6 +78,8 @@ AmbientAirplane::AmbientAirplane(InputStream& stream) : AirUnit(stream)
         stickGap = CA::kStickTailBombs + 1;
         stickPhase = 0;
     }
+    // A plane from an older save counts as the free one.
+    bought = currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_FREE && stream.readBool();
     // init() sets the cruise row; a save may be between take-off frames.
     if(takeoffFrame >= CA::kAirplaneLastTakeoffFrame && takeoffFrame <= CA::kAirplaneFirstTakeoffFrame) {
         drawnFrame = CA::airplaneTakeoffRow(takeoffFrame);
@@ -124,6 +126,7 @@ void AmbientAirplane::save(OutputStream& stream) const
     stream.writeSint32(bombSightTile.y);
     stream.writeSint32(stickGap);
     stream.writeSint32(stickPhase);
+    stream.writeBool(bought);
 }
 
 bool AmbientAirplane::canPass(int xPos, int yPos) const
@@ -502,6 +505,27 @@ CA::Intercept AmbientAirplane::turretRocketIntercept(const Coord& missile) const
     return CA::intercept(missile, Coord(lround(realX * 4), lround(realY * 4)), velocity.x, velocity.y, rocketSpeed16);
 }
 
+int AmbientAirplane::freePlanes(const House* house)
+{
+    int count = 0;
+    for(const AmbientAirplane* plane : all()) {
+        if(plane->getOwner() == house && !plane->isBought() && plane->getHealth() > 0) ++count;
+    }
+    return count;
+}
+
+int AmbientAirplane::rocketChaseRange4(int houseID)
+{
+    return currentGame->objectData.data[Structure_RocketTurret][houseID].weaponrange
+           * CA::kRocketChaseRangeFactor * TILESIZE * 4;
+}
+
+bool AmbientAirplane::rocketCanMeet(const Coord& launch, int range4) const
+{
+    const auto meet = turretRocketIntercept(launch * 4);
+    return meet.possible && DynastyProjectile::distance(launch * 4, meet.point) <= range4;
+}
+
 /**
     City Plane Bombing: the bomb sight is the point CA::kBombSightDistance
     ahead on the plane's course. Each time it enters a tile on which a building
@@ -520,14 +544,15 @@ Coord AmbientAirplane::bombSight() const
 }
 
 /**
-    City Plane Carpet Bombing: one game cycle of the stick. A stick starts with a bomb the
-    cycle a building of another team comes under the bomb sight, releases another every
-    25/8 cycles (two a tile on an axis heading) while one is under it, and CA::kStickTailBombs
-    more after the last. A bomb that falls due while the sight is over a building of the
-    plane's own team, or off the map, is not released. There is no rack to empty. A bomb
-    lands CA::kBombFallCycles later on the point the sight was on, damages the building that
-    point lies on and, by the ordinary splash rule, ground units of any side within a tile of
-    it; it never damages an aircraft (Map::damage).
+    City Plane Carpet Bombing: one game cycle of the stick. A stick starts when a building of
+    another team comes under the bomb sight: its first bomb is released CA::kStickLeadCycles
+    later (half a tile inside that building), then one every 12.5 cycles (two tiles on an axis
+    heading) while a building of another team is under the sight, and CA::kStickTailBombs more
+    after the last. A bomb that falls due while the sight is over a building of the plane's own
+    team, or off the map, is not released. There is no rack to empty. A bomb lands
+    CA::kBombFallCycles later on the point the sight was on, does CA::kStickDamage to the
+    building that point lies on and, by the ordinary splash rule, damages ground units of any
+    side within a tile of it; it never damages an aircraft (Map::damage).
 */
 void AmbientAirplane::dropStick(Uint32 gameCycle)
 {
@@ -547,10 +572,12 @@ void AmbientAirplane::dropStick(Uint32 gameCycle)
     const bool enemy = building != nullptr && !own;
     if(stickGap > CA::kStickTailBombs) {
         if(!enemy) return;                          // no stick, nothing to start one
-        stickPhase = CA::kStickPhasePeriod;         // a new stick: its first bomb is due now
-    } else {
-        stickPhase += CA::kStickPhaseStep;
+        // A new stick: its first bomb is due kStickLeadCycles from now, inside the building.
+        stickPhase = CA::kStickPhasePeriod - CA::kStickLeadCycles * CA::kStickPhaseStep;
+        stickGap = 0;
+        return;
     }
+    stickPhase += CA::kStickPhaseStep;
     if(enemy) stickGap = 0;
     if(stickPhase < CA::kStickPhasePeriod) return;
     stickPhase -= CA::kStickPhasePeriod;

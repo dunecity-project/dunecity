@@ -619,7 +619,8 @@ void checkAirport(const std::string& mapData) {
 void checkStick(const std::string& mapData) {
     std::vector<int> health;
     // One run each over a Wind Trap (200), a Rocket Turret (200, one tile), a Construction Yard
-    // (400), a Refinery (450) and a Palace (1000): 60 a bomb, two bombs a tile crossed.
+    // (400), a Refinery (450, three tiles) and a Palace (1000, three tiles): 250 a bomb, one bomb
+    // every two tiles, the first half a tile inside the building.
     for(const int item : {Structure_WindTrap, Structure_RocketTurret, Structure_ConstructionYard, Structure_Refinery,
                           Structure_Palace}) {
         const int dropped = flyRow(mapData, 3, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
@@ -629,20 +630,22 @@ void checkStick(const std::string& mapData) {
         }, health, true);
         const std::string name = getItemNameByID(item);
         record("stick_run", name + " bombs=" + std::to_string(dropped) + " health_after=" + std::to_string(health[0]));
-        const int expected = item == Structure_WindTrap ? 0 : item == Structure_RocketTurret ? 80
-                           : item == Structure_ConstructionYard ? 160 : item == Structure_Refinery ? 90 : 640;
+        // One hit destroys the 200-point buildings; the Construction Yard (two tiles) takes one
+        // hit, the Refinery and the Palace (three tiles) two.
+        const int expected = item == Structure_ConstructionYard ? 150 : item == Structure_Palace ? 500 : 0;
         require(health[0] == expected, "One stick over a " + name + " did not leave it at " + std::to_string(expected));
     }
 
-    // The stick runs on across a one-tile road between two buildings, and one tile past the last.
+    // The stick runs on in step across a one-tile road between two buildings: one bomb each, one
+    // on the road between them and one past the last.
     int dropped = flyRow(mapData, 3, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
         ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(28, row))->getObjectID());
         ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(31, row))->getObjectID());
     }, health, true);
     record("stick_gap", "two Wind Traps one tile apart: bombs=" + std::to_string(dropped) + " health_after="
                             + std::to_string(health[0]) + " and " + std::to_string(health[1]));
-    require(dropped == 12 && health[0] == 0 && health[1] == 0,
-            "The stick did not run unbroken over two Wind Traps a tile apart with twelve bombs");
+    require(dropped == 4 && health[0] == 0 && health[1] == 0,
+            "The stick did not run on over two Wind Traps a tile apart with four bombs");
 
     // Own and allied buildings: nothing is released over them, also not as the tail of a stick.
     dropped = flyRow(mapData, 4, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
@@ -657,16 +660,17 @@ void checkStick(const std::string& mapData) {
                                  + std::to_string(health[3]) + " allied_wall=" + std::to_string(health[4]));
     require(health[0] == 200 && health[1] == 200 && health[3] == 50 && health[4] == 50,
             "A stick bomb damaged the plane's own or an allied building");
-    require(dropped == 4 && health[2] == 0, "The enemy Wind Trap between own buildings did not get exactly its four bombs");
+    require(dropped == 1 && health[2] == 0, "The enemy Wind Trap between own buildings did not get exactly its one bomb");
 
-    // The rack does not empty: forty enemy walls in a row all fall, two bombs a tile and the tail.
+    // The rack does not empty: twenty enemy Wind Traps side by side (forty tiles) all fall, one
+    // bomb each and the tail.
     dropped = flyRow(mapData, 5, true, [&](Game& game, int row, std::vector<Uint32>& ids) {
-        for(int i = 0; i < 40; ++i)
-            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_Wall, Coord(14 + i, row))->getObjectID());
+        for(int i = 0; i < 20; ++i)
+            ids.push_back(place(game.getHouse(HOUSE_ATREIDES), Structure_WindTrap, Coord(14 + 2 * i, row))->getObjectID());
     }, health, true);
     const int standing = static_cast<int>(std::count_if(health.begin(), health.end(), [](int h) { return h > 0; }));
-    record("stick_rack", "walls=40 bombs=" + std::to_string(dropped) + " standing=" + std::to_string(standing));
-    require(dropped == 2 * 40 + CA::kStickTailBombs && standing == 0, "The stick stopped before the end of forty walls");
+    record("stick_rack", "wind_traps=20 bombs=" + std::to_string(dropped) + " standing=" + std::to_string(standing));
+    require(dropped == 20 + CA::kStickTailBombs && standing == 0, "The stick stopped before the end of twenty Wind Traps");
 
     // Units under the stick take the ordinary splash, whoever owns them: a tank on the road
     // between two enemy Wind Traps, once the defender's and once the plane's own.
@@ -751,30 +755,44 @@ void checkPurchase(const std::string& mapData) {
         // The owner's Buy button.
         Command(ownPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[0]->getObjectID()).executeCommand();
         require(planes() == 1 && owner->getCredits() == before - CA::kPlanePrice, "The Buy command did not launch one plane for 1500");
-        require(airports[0]->getPurchaseCooldown() == MILLI2CYCLES(CA::kPurchaseCooldownMs) && !airports[0]->canBuyAirplane(),
-                "An Airport may sell a second plane within a minute");
-        // No limit on planes in the air (Stefan, 2026-11-23): every Airport sells one, with three flying too.
-        require(airports[1]->buyAirplane() && airports[2]->buyAirplane() && planes() == 3,
-                "The other Airports did not sell the second and third plane");
-        require(airports[3]->canBuyAirplane() && airports[3]->buyAirplane() && planes() == 4,
-                "A house with three planes in the air could not buy a fourth");
-        const int afterFour = owner->getCredits();
-        require(afterFour == before - 4 * CA::kPlanePrice, "Four planes did not cost 6000");
-        // A minute later the first Airport is ready again, but not for a house that cannot pay.
-        for(int i = 0; i < MILLI2CYCLES(CA::kPurchaseCooldownMs); ++i) game->updateGameState();
-        require(airports[0]->getPurchaseCooldown() == 0, "The purchase cooldown did not run out in a minute");
+        // QuantBot paces itself by this clock; a player is not held by it.
+        require(airports[0]->getPurchaseCooldown() == MILLI2CYCLES(CA::kPurchaseCooldownMs),
+                "A purchase did not start the Airport's purchase clock");
+        // Stefan, 2026-11-23: "i should be able to buy more planes, up to 10". The same Airport sells
+        // the next nine at once, and no Airport sells an eleventh.
+        owner->startingCredits += 20000;
+        const int rich = owner->getCredits();
+        for(int i = 1; i < CA::kMaxPlanesPerHouse; ++i) {
+            require(airports[0]->canBuyAirplane(), "An Airport made a player wait before plane " + std::to_string(i + 1));
+            Command(ownPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[0]->getObjectID()).executeCommand();
+            require(planes() == i + 1, "The Buy command did not launch plane " + std::to_string(i + 1));
+        }
+        const int afterTen = owner->getCredits();
+        require(planes() == 10 && afterTen == rich - 9 * CA::kPlanePrice, "Ten planes did not cost 15000");
+        for(Airport* airport : airports)
+            require(!airport->canBuyAirplane() && !airport->buyAirplane(), "A house with ten planes in the air bought an eleventh");
+        Command(ownPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[1]->getObjectID()).executeCommand();
+        require(planes() == 10 && owner->getCredits() == afterTen, "The Buy command launched an eleventh plane");
+        // One plane fewer in the air: a house that cannot pay is refused, one that can buys again.
+        for(UnitBase* unit : unitList) {
+            if(unit->getItemID() == Unit_AmbientAirplane && unit->getOwner() == owner) {
+                static_cast<AmbientAirplane*>(unit)->leaveMap();
+                break;
+            }
+        }
+        for(int i = 0; i < 3 && planes() == 10; ++i) game->updateGameState();
         const int flying = planes();
+        require(flying < 10, "A plane that left the map still counts as in the air");
         owner->takeCredits(owner->getCredits() - (CA::kPlanePrice - 100));
-        require(owner->getCredits() < CA::kPlanePrice && !airports[0]->canBuyAirplane() && !airports[0]->buyAirplane()
+        require(owner->getCredits() < CA::kPlanePrice && !airports[2]->canBuyAirplane() && !airports[2]->buyAirplane()
                     && planes() == flying, "A house bought a plane it could not pay for");
         owner->startingCredits += CA::kPlanePrice;
-        const int rich = owner->getCredits();
-        require(airports[0]->buyAirplane() && planes() == flying + 1 && owner->getCredits() == rich - CA::kPlanePrice,
+        const int paid = owner->getCredits();
+        require(airports[2]->buyAirplane() && planes() == flying + 1 && owner->getCredits() == paid - CA::kPlanePrice,
                 "A house that could pay again could not buy a plane");
-        record("purchase", "rule=1 price=" + std::to_string(CA::kPlanePrice) + " four_planes_credits=" + std::to_string(before)
-                               + "->" + std::to_string(afterFour) + " planes_before_fifth=" + std::to_string(flying)
-                               + " fifth_bought=1 other_house_refused=1 cooldown_cycles="
-                               + std::to_string(MILLI2CYCLES(CA::kPurchaseCooldownMs)) + " unaffordable_refused=1");
+        record("purchase", "rule=1 price=" + std::to_string(CA::kPlanePrice) + " ten_planes_from_one_airport_at_once=1 nine_more_credits="
+                               + std::to_string(rich) + "->" + std::to_string(afterTen) + " eleventh_refused=1 other_house_refused=1"
+                               + " ai_pace_cycles=" + std::to_string(MILLI2CYCLES(CA::kPurchaseCooldownMs)) + " unaffordable_refused=1");
         game.reset();
         currentGame = nullptr;
     }
@@ -867,6 +885,90 @@ void checkFall(const std::string& mapData) {
                             "health after " + after + " unchanged; tank there " + std::to_string(tankBefore) + "->"
                             + std::to_string(tankAfter) + "; control rocket blast then takes the enemy plane to "
                             + std::to_string(lround(enemy->getHealth())));
+    game.reset();
+    currentGame = nullptr;
+}
+
+// Stefan, 2026-11-23: "missiles chasing a plane just keep going forever. there needs to be a
+// distance cutoff". A turret rocket is 1.13 times as fast as the plane, so after a plane flying
+// away it flew nine times the gap between them. Now it goes off once it is 3 x WeaponRange (24
+// tiles) from where it was fired, and a turret takes no plane it cannot meet inside that.
+void checkRocketChase(const std::string& mapData) {
+    const int row = 30;
+    const Coord launchTile(4, row);
+    const Coord launch(launchTile.x * TILESIZE + TILESIZE / 2, row * TILESIZE + TILESIZE / 2);
+    // One rocket from `launch` at a plane: how far from `launch` it got, in tenths of a tile.
+    struct Flight { int farthest10; int planeHealth; int cycles; };
+    const auto chase = [&](int rangeTiles, int planeX, int heading, int turnAfter) {
+        auto game = newGame(mapData, 14, Rules{true, false, false});
+        // The cut-off is 3 x the Rocket Turret's WeaponRange: the control arm sets a range no rocket reaches.
+        for(int h = 0; h < NUM_HOUSES; ++h)
+            game->objectData.data[Structure_RocketTurret][h].weaponrange = rangeTiles / CA::kRocketChaseRangeFactor;
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
+        auto* turret = place(owner, Structure_RocketTurret, launchTile);
+        static_cast<TurretBase*>(turret)->attackMode = STOP;   // the one rocket is fired by hand
+        for(int i = 0; i < 5; ++i) game->updateGameState();
+        auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), Coord(planeX, row),
+                          heading == RIGHT ? Coord(kMapSize + 20, row) : Coord(-20, row), heading);
+        const Uint32 planeID = plane->getObjectID();
+        Coord from = launch, at = plane->getCenterPoint();
+        bulletList.push_back(new Bullet(turret->getObjectID(), &from, &at, Bullet_TurretRocket, 30, true, plane));
+        Flight flight{0, 100, 0};
+        for(int tick = 0; tick < 900; ++tick) {
+            if(tick == turnAfter) {
+                auto* live = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(planeID));
+                require(live != nullptr, "The plane was gone before it turned away");
+                live->angle = FixPoint(static_cast<int>(RIGHT));
+                live->showHeading();
+                live->setFlightDestination(Coord(kMapSize + 20, row));
+            }
+            game->updateGameState();
+            bool flying = false;
+            for(const Bullet* bullet : bulletList) {
+                if(bullet->getBulletID() != Bullet_TurretRocket) continue;
+                flying = true;
+                const Coord position(lround(bullet->realX), lround(bullet->realY));
+                flight.farthest10 = std::max<int>(flight.farthest10, lround(distanceFrom(launch, position) * 10 / TILESIZE));
+            }
+            if(!flying) { flight.cycles = tick + 1; break; }
+        }
+        require(flight.cycles > 0, "A turret rocket was still flying after 900 cycles");
+        flight.planeHealth = healthOf(*game, planeID);
+        game.reset();
+        currentGame = nullptr;
+        return flight;
+    };
+    const int reach = 24;
+    // A plane five tiles away and flying away: the meeting point is 45 tiles off.
+    const Flight unlimited = chase(240, 9, RIGHT, -1);
+    const Flight away = chase(reach, 9, RIGHT, -1);
+    // A plane coming head-on from 26 tiles is met half-way; when it turns away after 20 cycles the rocket gives up.
+    const Flight headOn = chase(reach, 30, LEFT, -1);
+    const Flight turned = chase(reach, 30, LEFT, 20);
+    record("rocket_chase", "plane flying away from 5 tiles: without a cut-off the rocket flew " + std::to_string(unlimited.farthest10)
+                               + " tenths of a tile in " + std::to_string(unlimited.cycles) + " cycles (plane health "
+                               + std::to_string(unlimited.planeHealth) + "); with the 24-tile cut-off " + std::to_string(away.farthest10)
+                               + " in " + std::to_string(away.cycles) + " cycles; head-on from 26 tiles " + std::to_string(headOn.farthest10)
+                               + " (plane health " + std::to_string(headOn.planeHealth) + "); plane turning away after 20 cycles "
+                               + std::to_string(turned.farthest10) + " in " + std::to_string(turned.cycles) + " cycles");
+    require(unlimited.farthest10 > 400, "The control rocket did not chase the plane beyond forty tiles");
+    require(away.farthest10 <= reach * 10 + 6 && turned.farthest10 <= reach * 10 + 6,
+            "A rocket chasing a plane flew farther than 24 tiles from its turret");
+    require(headOn.planeHealth == 70 && headOn.farthest10 <= reach * 10, "A rocket no longer hits a plane coming head-on");
+
+    // The turret's side of the rule: it takes a plane it can meet inside 24 tiles and no other.
+    auto game = newGame(mapData, 15, Rules{true, false, false});
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
+    auto* turret = dynamic_cast<RocketTurret*>(place(owner, Structure_RocketTurret, launchTile));
+    auto* harkonnen = game->getHouse(HOUSE_HARKONNEN);
+    const bool near = turret->canAttack(fly(harkonnen, Coord(6, row), Coord(kMapSize + 20, row), RIGHT));
+    const bool far = turret->canAttack(fly(harkonnen, Coord(10, row), Coord(kMapSize + 20, row), RIGHT));
+    const bool coming = turret->canAttack(fly(harkonnen, Coord(26, row), Coord(-20, row), LEFT));
+    record("rocket_chase", "turret takes a plane flying away from 2 tiles=" + std::to_string(near) + " from 6 tiles="
+                               + std::to_string(far) + " coming head-on from 22 tiles=" + std::to_string(coming));
+    require(near && !far && coming, "A turret takes a plane its rocket cannot meet inside 24 tiles, or refuses one it can");
     game.reset();
     currentGame = nullptr;
 }
@@ -970,6 +1072,7 @@ int runCityPlaneEffect() {
     checkSavedBombLoad(mapData, true);
     checkAirport(mapData);
     checkHoldFire(mapData);
+    checkRocketChase(mapData);
     checkStick(mapData);
     checkRepairingBuilding(mapData);
     checkPurchase(mapData);
