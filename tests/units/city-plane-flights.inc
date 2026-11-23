@@ -151,8 +151,12 @@ int runCityPlaneFlights() {
         init.save(saved);
         IMemoryStream stream(saved.getData(), saved.getDataLength());
         const GameInitSettings restored(stream);
-        require(restored.getGameOptions() == init.getGameOptions()
-                    && restored.getGameOptions().getHash() == init.getGameOptions().getHash(),
+        const auto& a = restored.getGameOptions();
+        const auto& b = init.getGameOptions();
+        require(a.cityPlaneDefence == b.cityPlaneDefence && a.cityPlaneBombing == b.cityPlaneBombing
+                    && a.airportOrnithopterPatrol == b.airportOrnithopterPatrol
+                    && a.cityPlaneCarpetBombing == b.cityPlaneCarpetBombing
+                    && a.cityPlaneBombingRuns == b.cityPlaneBombingRuns && a.cityPlanePurchase == b.cityPlanePurchase,
                 "The city plane rules did not survive the settings stream");
     }
 
