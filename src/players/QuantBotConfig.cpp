@@ -370,6 +370,7 @@ QuantBotConfig::QuantBotConfig() {
     force.airliftFlankDrop = false;
     force.airliftRetreatLift = false;
     force.airliftRescue = false;
+    force.airliftFerry = false;
     force.airliftGroup = 6;
     force.airliftCarryalls = 0;
     force.airliftRescueHealth = 50;
@@ -892,6 +893,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "AirliftFlankDrop", force.airliftFlankDrop);
         iniFile.setBoolValue("Force Concentration", "AirliftRetreatLift", force.airliftRetreatLift);
         iniFile.setBoolValue("Force Concentration", "AirliftRescue", force.airliftRescue);
+        iniFile.setBoolValue("Force Concentration", "AirliftFerry", force.airliftFerry);
         iniFile.setIntValue("Force Concentration", "AirliftGroup", force.airliftGroup);
         iniFile.setIntValue("Force Concentration", "AirliftCarryalls", force.airliftCarryalls);
         iniFile.setIntValue("Force Concentration", "AirliftRescueHealth", force.airliftRescueHealth);
@@ -1244,6 +1246,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.airliftFlankDrop = iniFile.getBoolValue("Force Concentration", "AirliftFlankDrop", force.airliftFlankDrop);
     force.airliftRetreatLift = iniFile.getBoolValue("Force Concentration", "AirliftRetreatLift", force.airliftRetreatLift);
     force.airliftRescue = iniFile.getBoolValue("Force Concentration", "AirliftRescue", force.airliftRescue);
+    force.airliftFerry = iniFile.getBoolValue("Force Concentration", "AirliftFerry", force.airliftFerry);
     force.airliftGroup = std::clamp(iniFile.getIntValue("Force Concentration", "AirliftGroup", force.airliftGroup), 3, 12);
     force.airliftCarryalls = std::clamp(iniFile.getIntValue("Force Concentration", "AirliftCarryalls", force.airliftCarryalls), 0, 6);
     force.airliftRescueHealth = std::clamp(iniFile.getIntValue("Force Concentration", "AirliftRescueHealth", force.airliftRescueHealth), 0, 90);
@@ -1991,6 +1994,7 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.airliftFlankDrop) addNamed("airliftFlankDrop", force.airliftFlankDrop);
     if (force.airliftRetreatLift) addNamed("airliftRetreatLift", force.airliftRetreatLift);
     if (force.airliftRescue) addNamed("airliftRescue", force.airliftRescue);
+    if (force.airliftFerry) addNamed("airliftFerry", force.airliftFerry);
     if (force.airliftGroup != 6) addNamed("airliftGroup", force.airliftGroup);
     if (force.airliftCarryalls != 0) addNamed("airliftCarryalls", force.airliftCarryalls);
     if (force.airliftRescueHealth != 50) addNamed("airliftRescueHealth", force.airliftRescueHealth);

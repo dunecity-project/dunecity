@@ -21,6 +21,7 @@
 //   AirliftFlankDrop    the same, to one side of the enemy base
 //   AirliftRetreatLift  a wave outmatched where it stands is flown home, most valuable first
 //   AirliftRescue       a damaged or cut-off vehicle under enemy fire is flown home
+//   AirliftFerry        wave members far behind the wave's front are flown up to it
 // A Carryall carries one unit, so a drop is flown in sorties: each pass orders as many units as
 // there are free Carryalls. Every lift is the engine's own Carryall request (a forced move to
 // the drop point, then GroundUnit::requestCarryall), so pickup, flight and landing are the code
@@ -57,6 +58,8 @@ constexpr int kMinDropCarryalls = 1;   ///< Free Carryalls a drop needs before i
 constexpr int kRescueHomeTiles = 15;   ///< Nearer home than this a unit is not flown out.
 constexpr int kRescueAloneTiles = 6;   ///< No friendly fighter this close: the unit is cut off.
 constexpr int kRescueOrdersPerPass = 2;
+constexpr int kFerryGap = 25;          ///< Tiles behind the wave's front before a member is flown up.
+constexpr int kFerryMinWave = 6;       ///< A smaller wave has no front to speak of.
 
 int unitPrice(const UnitBase* unit) {
     return currentGame->objectData.data[unit->getItemID()][unit->getProductionHouseID()].price;
@@ -76,7 +79,8 @@ bool liftable(const UnitBase* unit, const House* house) {
 bool QuantBot::airliftActive() const {
     const auto& force = botConfig().force;
     return gameMode == GameMode::Custom
-        && (force.airliftRearDrop || force.airliftFlankDrop || force.airliftRetreatLift || force.airliftRescue);
+        && (force.airliftRearDrop || force.airliftFlankDrop || force.airliftRetreatLift || force.airliftRescue
+            || force.airliftFerry);
 }
 
 int QuantBot::airliftFreeCarryalls() const {
@@ -150,6 +154,8 @@ void QuantBot::trackAirliftJobs() {
                 if (airliftDrop.firstLanding == 0) airliftDrop.firstLanding = now;
                 ++it;
             } else {
+                // Flown up to the wave: it hunts on with it. Flown home: it keeps its Area Guard.
+                if (job.kind == AirliftKind::Ferry) doSetAttackMode(unit, HUNT);
                 it = airliftJobs.erase(it);
             }
             continue;
@@ -166,8 +172,9 @@ void QuantBot::trackAirliftJobs() {
             if (!rebooked) {
                 const_cast<GroundUnit*>(ground)->cancelCarryallPickup();
                 doMove2Pos(unit, unit->getLocation().x, unit->getLocation().y, false);
-                const bool strike = job.kind == AirliftKind::Rear || job.kind == AirliftKind::Flank;
-                doSetAttackMode(unit, strike ? HUNT : AREAGUARD);
+                const bool attacking = job.kind == AirliftKind::Rear || job.kind == AirliftKind::Flank
+                    || job.kind == AirliftKind::Ferry;
+                doSetAttackMode(unit, attacking ? HUNT : AREAGUARD);
                 ++airliftStats.cancelled;
                 it = airliftJobs.erase(it);
                 continue;
@@ -424,6 +431,51 @@ void QuantBot::updateAirliftRescue() {
     }
 }
 
+void QuantBot::updateAirliftFerry() {
+    // Concentration instead of a split: the wave's front is its third nearest the enemy base.
+    // A whole member 25 tiles or more farther back, and not in a fight of its own, is flown to
+    // the nearest ground out of enemy reach beside that front and hunts on from there.
+    if (!botConfig().force.airliftFerry) return;
+    if (customWave.launched == 0 || int(customWave.members.size()) < kFerryMinWave) return;
+    int free = airliftFreeCarryalls();
+    if (free <= 0) return;
+    const auto* front = getObject(customWave.front);
+    if (!front || !front->getOwner() || front->getOwner()->isNatives()
+        || front->getOwner()->getTeamID() == getHouse()->getTeamID()) return;
+    Coord target = findBaseCentre(front->getOwner()->getHouseID());
+    if (target.isInvalid()) target = front->getLocation();
+    if (target.isInvalid()) return;
+    struct Member { const UnitBase* unit; int distance; };
+    std::vector<Member> members;
+    for (const Uint32 id : customWave.members) {
+        if (airliftJobs.count(id)) continue;
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!unit || !unit->isAGroundUnit() || !unit->isActive() || unit->isPickedUp()) continue;
+        members.push_back({unit, blockDistance(unit->getLocation(), target).lround()});
+    }
+    if (int(members.size()) < kFerryMinWave) return;
+    std::sort(members.begin(), members.end(), [](const Member& a, const Member& b) {
+        return a.distance != b.distance ? a.distance < b.distance : a.unit->getObjectID() < b.unit->getObjectID();
+    });
+    const int van = std::max(2, int(members.size()) / 3);
+    int x = 0, y = 0;
+    for (int i = 0; i < van; ++i) { x += members[i].unit->getLocation().x; y += members[i].unit->getLocation().y; }
+    const int vanDistance = members[van - 1].distance;
+    const Coord point = huntPartyPoint(Coord(x / van, y / van), members.front().unit, true);
+    if (point.isInvalid() || !getMap().tileExists(point) || dangerAt(point) != 0) return;
+    for (auto it = members.rbegin(); it != members.rend() && free > 0; ++it) {
+        if (it->distance < vanDistance + kFerryGap) break;   // sorted: nobody nearer is behind either
+        const auto* unit = it->unit;
+        // Whole units only (a Carryall takes a damaged one to a Repair Yard instead), and none
+        // that is fighting where it stands.
+        if (!liftable(unit, getHouse()) || unit->getHealth() < unit->getMaxHealth()) continue;
+        if (dangerAt(unit->getLocation()) != 0 || blockDistance(unit->getLocation(), point) < kFerryGap) continue;
+        if (!orderAirlift(unit, point, AirliftKind::Ferry)) continue;
+        --free;
+        ++airliftStats.ferried;
+    }
+}
+
 void QuantBot::updateAirlift() {
     if (!airliftActive()) {
         // Switched off (a config change between a save and its reload): nothing stays held.
@@ -438,6 +490,7 @@ void QuantBot::updateAirlift() {
     updateAirliftRescue();
     updateAirliftRetreat();
     updateAirliftDrop();
+    updateAirliftFerry();
 }
 
 void QuantBot::saveAirlift(OutputStream& stream) const {
@@ -471,7 +524,7 @@ void QuantBot::loadAirlift(InputStream& stream) {
     const auto coord = [&]() { Coord v; v.x = stream.readSint32(); v.y = stream.readSint32(); return v; };
     const auto kind = [&]() {
         const Uint8 value = stream.readUint8();
-        if (value > static_cast<Uint8>(AirliftKind::Rescue)) throw std::runtime_error("Invalid airlift kind");
+        if (value > static_cast<Uint8>(AirliftKind::Ferry)) throw std::runtime_error("Invalid airlift kind");
         return static_cast<AirliftKind>(value);
     };
     const auto valid = [&](Coord p) { return p.isInvalid() || getMap().tileExists(p); };

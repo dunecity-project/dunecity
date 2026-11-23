@@ -15,12 +15,14 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
-FIRED = {'rear': 'airlift_rear', 'flank': 'airlift_flank', 'retreat': 'airlift_retreats', 'rescue': 'airlift_rescues'}
+FIRED = {'rear': 'airlift_rear', 'flank': 'airlift_flank', 'retreat': 'airlift_retreats', 'rescue': 'airlift_rescues',
+         'ferry': 'airlift_ferried'}
 COUNTS = ('airlift_rear', 'airlift_flank', 'airlift_retreats', 'airlift_retreat_units', 'airlift_rescues',
           'airlift_rescues_damaged', 'airlift_rescues_alone', 'airlift_strikes', 'airlift_ordered', 'airlift_lifted',
           'airlift_landed', 'airlift_lost', 'airlift_lost_waiting', 'airlift_cancelled', 'airlift_no_front',
           'airlift_no_trip', 'airlift_no_carryalls', 'airlift_no_group', 'airlift_no_point', 'airlift_defeat_passes',
-          'airlift_retreat_no_carryall', 'airlift_retreat_no_fighter', 'carryalls', 'carryalls_built', 'carryalls_lost',
+          'airlift_retreat_no_carryall', 'airlift_retreat_no_fighter', 'airlift_ferried', 'carryalls', 'carryalls_built',
+          'carryalls_lost',
           'kill_value', 'loss_value')
 
 

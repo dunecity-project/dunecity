@@ -61,7 +61,7 @@ FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recal
                 'airlift_strikes', 'airlift_ordered', 'airlift_lifted', 'airlift_landed', 'airlift_lost', 'airlift_lost_waiting',
                 'airlift_cancelled', 'carryalls', 'carryalls_built', 'carryalls_lost', 'airlift_no_front', 'airlift_no_trip', 'airlift_no_carryalls', 'airlift_no_group', 'airlift_no_point',
                 'airlift_defeat_passes', 'airlift_retreat_no_carryall', 'airlift_retreat_no_fighter', 'airlift_rescues_damaged',
-                'airlift_rescues_alone')
+                'airlift_rescues_alone', 'airlift_ferried')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                 'army_value', 'army_units', 'strategy') + PARTY_FIELDS + FORCE_FIELDS
 # The army value curve: each side's mobile armed value at these game minutes (the 5-minute

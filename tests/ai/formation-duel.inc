@@ -333,7 +333,7 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 "airlift_landed=%d airlift_lost=%d airlift_lost_waiting=%d airlift_cancelled=%d carryalls=%d carryalls_built=%d "
                 "carryalls_lost=%d airlift_no_front=%d airlift_no_trip=%d airlift_no_carryalls=%d airlift_no_group=%d "
                 "airlift_no_point=%d airlift_defeat_passes=%d airlift_retreat_no_carryall=%d airlift_retreat_no_fighter=%d "
-                "airlift_rescues_damaged=%d airlift_rescues_alone=%d strategy=%s",
+                "airlift_rescues_damaged=%d airlift_rescues_alone=%d airlift_ferried=%d strategy=%s",
                 side.house, side.label.c_str(), int(house->isAlive()), house->getKillValue(),
                 house->getLossValue(), house->getNumDestroyedStructures(), house->getNumDestroyedUnits(), structures, army, units,
                 stats.parties, stats.gathered, stats.gatherTimeouts, stats.releases, stats.reforms, stats.fallbacks,
@@ -350,7 +350,7 @@ inline void report(Game& game, const std::vector<Side>& sides) {
                 house->getNumItems(Unit_Carryall), house->getNumBuiltItems(Unit_Carryall), airlift.carryallsLost,
                 airlift.declinedFront, airlift.declinedTrip, airlift.declinedCarryalls, airlift.declinedGroup,
                 airlift.declinedPoint, airlift.defeatPasses, airlift.retreatNoCarryall, airlift.retreatNoFighter,
-                airlift.rescuesDamaged, airlift.rescuesAlone,
+                airlift.rescuesDamaged, airlift.rescuesAlone, airlift.ferried,
                 strategy.empty() ? "none" : strategy.c_str());
     }
     SDL_Log("FORMATION_DUEL_RESULT: winner=%d end_s=%.1f", alive == 1 ? winner : -1,

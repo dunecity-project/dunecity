@@ -280,6 +280,7 @@ struct QuantBotConfig {
         bool airliftFlankDrop;                 ///< Part of a launched wave is flown to one side of the enemy base.
         bool airliftRetreatLift;               ///< A wave outmatched where it stands is flown home, dearest first.
         bool airliftRescue;                    ///< A damaged or cut-off vehicle under fire is flown home.
+        bool airliftFerry;                     ///< Wave members far behind the wave's front are flown up to it.
         int airliftGroup;                      ///< Most units one rear/flank drop carries, 3-12 (default 6).
         int airliftCarryalls;                  ///< Carryalls built on top of the transport target, 0-6 (default 0).
         int airliftRescueHealth;               ///< Rescue a vehicle below this health percent, 0-90; 0 = never by damage (default 50).

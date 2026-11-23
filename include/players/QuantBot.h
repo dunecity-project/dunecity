@@ -1601,7 +1601,7 @@ private:
             || (!airliftJobs.empty() && airliftJobs.count(id));
     }
     // ---- Mass Carryall manoeuvres (QuantBotAirlift.cpp; docs/formations.md) ----
-    enum class AirliftKind : Uint8 { Rear, Flank, Retreat, Rescue };
+    enum class AirliftKind : Uint8 { Rear, Flank, Retreat, Rescue, Ferry };
     /// One unit under a lift order, from the order until it is set down (a rear or flank
     /// unit until its group strikes). Held like a split group: no rally or regroup orders.
     struct AirliftJob {
@@ -1629,7 +1629,8 @@ private:
             ordered = 0, lifted = 0, landed = 0, lostInLift = 0, lostWaiting = 0, cancelled = 0, carryallsLost = 0;
         /// Why a wave got no drop (every refused attempt, one a pass) and why a defeat got no lift.
         int declinedFront = 0, declinedTrip = 0, declinedCarryalls = 0, declinedGroup = 0, declinedPoint = 0,
-            defeatPasses = 0, retreatNoCarryall = 0, retreatNoFighter = 0, rescuesDamaged = 0, rescuesAlone = 0;
+            defeatPasses = 0, retreatNoCarryall = 0, retreatNoFighter = 0, rescuesDamaged = 0, rescuesAlone = 0,
+            ferried = 0;
     };
     enum class AirliftDecline : Uint8 { None, Front, Trip, Carryalls, Group, Point };
     AirliftStats airliftStats;
@@ -1643,6 +1644,7 @@ private:
     void updateAirliftDrop();
     void updateAirliftRetreat();
     void updateAirliftRescue();
+    void updateAirliftFerry();
     void updateAirlift();
     void saveAirlift(OutputStream& stream) const;
     void loadAirlift(InputStream& stream);
