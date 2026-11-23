@@ -415,7 +415,8 @@ TEST_CASE("Carryall manoeuvres default off and each switch is loaded saved and h
     const auto path = std::filesystem::temp_directory_path() / "quantbot-airlift-test.ini";
     std::set<std::string> hashes{defaults.getConfigHash()};
     for (const char* key : {"AirliftRearDrop=true", "AirliftFlankDrop=true", "AirliftRetreatLift=true",
-                            "AirliftRescue=true", "AirliftGroup=9", "AirliftCarryalls=3"}) {
+                            "AirliftRescue=true", "AirliftGroup=9", "AirliftCarryalls=3",
+                            "AirliftRescueHealth=25", "AirliftRescueCutOff=false"}) {
         {
             std::ofstream ini(path);
             ini << "[Force Concentration]\n" << key << '\n';
@@ -435,6 +436,8 @@ TEST_CASE("Carryall manoeuvres default off and each switch is loaded saved and h
         REQUIRE(restored.force.airliftRescue == loaded.force.airliftRescue);
         REQUIRE(restored.force.airliftGroup == loaded.force.airliftGroup);
         REQUIRE(restored.force.airliftCarryalls == loaded.force.airliftCarryalls);
+        REQUIRE(restored.force.airliftRescueHealth == loaded.force.airliftRescueHealth);
+        REQUIRE(restored.force.airliftRescueCutOff == loaded.force.airliftRescueCutOff);
     }
     {
         std::ofstream ini(path);

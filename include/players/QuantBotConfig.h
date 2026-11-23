@@ -282,6 +282,8 @@ struct QuantBotConfig {
         bool airliftRescue;                    ///< A damaged or cut-off vehicle under fire is flown home.
         int airliftGroup;                      ///< Most units one rear/flank drop carries, 3-12 (default 6).
         int airliftCarryalls;                  ///< Carryalls built on top of the transport target, 0-6 (default 0).
+        int airliftRescueHealth;               ///< Rescue a vehicle below this health percent, 0-90; 0 = never by damage (default 50).
+        bool airliftRescueCutOff;              ///< Rescue a vehicle with no friendly fighter near it (default on).
         /// Default-OFF city economy (docs/formations.md, "Economy: nuclear consolidation and palace districts").
         bool nuclearConsolidation;             ///< Nuclear Plants replace Wind Traps; the freed land is rebuilt.
         bool palaceDistricts;                  ///< A Palace funded first in every R/C district (else one Stadium).

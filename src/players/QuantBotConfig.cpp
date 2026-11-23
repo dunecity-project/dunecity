@@ -372,6 +372,8 @@ QuantBotConfig::QuantBotConfig() {
     force.airliftRescue = false;
     force.airliftGroup = 6;
     force.airliftCarryalls = 0;
+    force.airliftRescueHealth = 50;
+    force.airliftRescueCutOff = true;
     force.nuclearConsolidation = true;
     force.palaceDistricts = true;
     force.stadiumDistricts = true;
@@ -892,6 +894,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "AirliftRescue", force.airliftRescue);
         iniFile.setIntValue("Force Concentration", "AirliftGroup", force.airliftGroup);
         iniFile.setIntValue("Force Concentration", "AirliftCarryalls", force.airliftCarryalls);
+        iniFile.setIntValue("Force Concentration", "AirliftRescueHealth", force.airliftRescueHealth);
+        iniFile.setBoolValue("Force Concentration", "AirliftRescueCutOff", force.airliftRescueCutOff);
         iniFile.setBoolValue("Force Concentration", "NuclearConsolidation", force.nuclearConsolidation);
         iniFile.setBoolValue("Force Concentration", "PalaceDistricts", force.palaceDistricts);
         iniFile.setBoolValue("Force Concentration", "StadiumDistricts", force.stadiumDistricts);
@@ -1242,6 +1246,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.airliftRescue = iniFile.getBoolValue("Force Concentration", "AirliftRescue", force.airliftRescue);
     force.airliftGroup = std::clamp(iniFile.getIntValue("Force Concentration", "AirliftGroup", force.airliftGroup), 3, 12);
     force.airliftCarryalls = std::clamp(iniFile.getIntValue("Force Concentration", "AirliftCarryalls", force.airliftCarryalls), 0, 6);
+    force.airliftRescueHealth = std::clamp(iniFile.getIntValue("Force Concentration", "AirliftRescueHealth", force.airliftRescueHealth), 0, 90);
+    force.airliftRescueCutOff = iniFile.getBoolValue("Force Concentration", "AirliftRescueCutOff", force.airliftRescueCutOff);
     force.nuclearConsolidation = iniFile.getBoolValue("Force Concentration", "NuclearConsolidation", force.nuclearConsolidation);
     force.palaceDistricts = iniFile.getBoolValue("Force Concentration", "PalaceDistricts", force.palaceDistricts);
     force.stadiumDistricts = iniFile.getBoolValue("Force Concentration", "StadiumDistricts", force.stadiumDistricts);
@@ -1987,6 +1993,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.airliftRescue) addNamed("airliftRescue", force.airliftRescue);
     if (force.airliftGroup != 6) addNamed("airliftGroup", force.airliftGroup);
     if (force.airliftCarryalls != 0) addNamed("airliftCarryalls", force.airliftCarryalls);
+    if (force.airliftRescueHealth != 50) addNamed("airliftRescueHealth", force.airliftRescueHealth);
+    if (!force.airliftRescueCutOff) addNamed("airliftRescueCutOff", force.airliftRescueCutOff);
     if (force.nuclearConsolidation) addNamed("nuclearConsolidation", force.nuclearConsolidation);
     if (force.palaceDistricts) addNamed("palaceDistricts", force.palaceDistricts);
     if (force.stadiumDistricts) addNamed("stadiumDistricts", force.stadiumDistricts);

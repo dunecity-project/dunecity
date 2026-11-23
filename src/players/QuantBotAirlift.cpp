@@ -53,7 +53,7 @@ constexpr int kDropFarthest = 32;      ///< Farthest; beyond it the group would 
 constexpr int kStrikeWaveTiles = 18;   ///< The wave this close to the base: the landed group strikes with it.
 constexpr int kMinDropTrip = 30;       ///< A shorter trip is driven: the wave is there as soon.
 constexpr int kMinDropGroup = 3;       ///< Fewer units behind a base are fed to it one by one.
-constexpr int kMinDropCarryalls = 2;   ///< Free Carryalls a drop needs before it is planned.
+constexpr int kMinDropCarryalls = 1;   ///< Free Carryalls a drop needs before it is planned (it shuttles).
 constexpr int kRescueHomeTiles = 15;   ///< Nearer home than this a unit is not flown out.
 constexpr int kRescueAloneTiles = 6;   ///< No friendly fighter this close: the unit is cut off.
 constexpr int kRescueOrdersPerPass = 2;
@@ -195,7 +195,7 @@ QuantBot::AirliftDecline QuantBot::planAirliftDrop() {
     const int free = airliftFreeCarryalls();
     if (free < kMinDropCarryalls) return AirliftDecline::Carryalls;
 
-    // The strongest whole vehicles of the wave, at most a third of it: the wave stays the main
+    // The strongest whole vehicles of the wave, at most half of it: the wave stays the main
     // attack. Full health only - a Carryall takes anything damaged to a Repair Yard instead.
     std::vector<const UnitBase*> group;
     int waveVehicles = 0;
@@ -209,7 +209,7 @@ QuantBot::AirliftDecline QuantBot::planAirliftDrop() {
         const int pa = unitPrice(a), pb = unitPrice(b);
         return pa != pb ? pa > pb : a->getObjectID() < b->getObjectID();
     });
-    const int size = std::min({int(group.size()), std::max(0, force.airliftGroup), waveVehicles / 3});
+    const int size = std::min({int(group.size()), std::max(0, force.airliftGroup), waveVehicles / 2});
     if (size < kMinDropGroup) return AirliftDecline::Group;
 
     // Both on: rear and flank take turns, wave by wave.
@@ -383,9 +383,11 @@ void QuantBot::updateAirliftRetreat() {
 }
 
 void QuantBot::updateAirliftRescue() {
-    // One vehicle at a time: under observed enemy fire, away from home, and either below half
-    // health without a repair trip of its own or with no friendly fighter near it.
-    if (!botConfig().force.airliftRescue) return;
+    // One vehicle at a time: under observed enemy fire, away from home, and either below
+    // AirliftRescueHealth percent without a repair trip of its own or (AirliftRescueCutOff) with
+    // no friendly fighter near it.
+    const auto& force = botConfig().force;
+    if (!force.airliftRescue) return;
     int free = airliftFreeCarryalls();
     if (free <= 0) return;
     const Coord base = findBaseCentre(getHouse()->getHouseID());
@@ -397,9 +399,10 @@ void QuantBot::updateAirliftRescue() {
         if (!liftable(unit, getHouse()) || airliftJobs.count(unit->getObjectID())) continue;
         const Coord at = unit->getLocation();
         if (dangerAt(at) == 0 || blockDistance(at, base) < kRescueHomeTiles) continue;
-        const bool damaged = unit->getHealth() * 2 < unit->getMaxHealth();
-        bool alone = true;
-        if (!damaged) {
+        const bool damaged = force.airliftRescueHealth > 0
+            && unit->getHealth() * 100 < FixPoint(unit->getMaxHealth()) * force.airliftRescueHealth;
+        bool alone = force.airliftRescueCutOff;
+        if (!damaged && alone) {
             for (const auto* other : getUnitList()) {
                 if (other == unit || other->getOwner() != getHouse() || !mobileCombatItem(other->getItemID())
                     || !other->isActive() || other->isPickedUp()) continue;
