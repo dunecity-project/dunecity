@@ -1,3 +1,45 @@
+## 2026-11-24 - City planes: a small crash for shot-down planes, measured behind a switch; default unchanged
+
+Stefan, after his `OP.dls` game on 1.0.877 (four QuantBot Brutal, 192x192): "IT SEEMS LIKE MAYBE PLANES ARE A BIT
+OVERPOWERED?". In that game shot-down planes did 45% of all plane damage through their Death Hand crash (33 of
+45 planes shot down; Fremen's planes destroyed 1.34 credits per credit spent against 0.95 for its army; Ordos lost
+53% of everything it lost to planes). Analysis: `~/Documents/projects/outputs/op-save-20261124/analysis.md`.
+
+**The switch (`0abdd9bc7`).** `DUNECITY_TEST_PLANE_SMALL_CRASH=1` (experiment only, read once per process, never a
+match rule): a shot-down plane does one stick bomb's damage (250) within half a tile of where it falls, instead of
+the Death Hand impact (`AmbientAirplane::crash`, `smallCrash`). Same damager, credit and CITY_PLANE_CRASH logging.
+Without the variable the game is unchanged.
+
+**48 paired AWS games** (seeds 9101-9148, `rs160-dunecity` fully built start, four Brutal QuantBots, 45 minutes,
+`city-plane-b52-on.ini`; jobs `20261124T223920-job-d6981f` off, `20261124T223926-job-242be6` on; results
+`~/Documents/projects/outputs/op-save-20261124/small-crash/`, `report-off-on.md`):
+
+| A game | Death Hand crash (default) | Small crash |
+|---|---:|---:|
+| Buildings lost to planes, bombs and crashes | 254 | **211** (paired -43, -67 to -19) |
+| ... to crashes | 82 | 10 |
+| ... to bombs | 172 | 201 (+29, +9 to +49) |
+| Crash share of plane damage (credits) | 38% | 4% |
+| Credits destroyed a flight (a plane costs 1500) | 1,374 | 963 |
+| Flights / planes bought | 34.9 / 12.6 | 36.1 / 13.5 (not separable) |
+| Time-outs | 50% | 58% (+8 points, -6 to +23) |
+| Placement | | no house moved measurably |
+
+Bombs destroy more with the small crash because the buildings a crash used to flatten are still there for the next
+stick. No building of the plane's own side was lost to a crash in either arm. QuantBot kept buying planes.
+
+**Gates on `0abdd9bc7`** (switch off, AWS `20261124T223934-ctest-b6a575`): `quantbot_all_against_atreides`,
+`quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+`city_aircraft_probe`, `city_plane_flights`, `city_plane_effect` passed. Mini: `dunelegacy_tests` 1,547 passed,
+3 skipped (needs `DUNE_CITY_SOURCE_DIR` when run outside ctest).
+
+**Default left as is, for Stefan.** The Death Hand crash is his rule (2026-10-22, "the equivalent of a nuclear
+missile attack"). Making the small crash the default also needs the fixtures that rely on the Death Hand reworked:
+`natives-probe.inc` (a crash taking the last buildings of two houses at once, the chained crash, the deciding
+crash) and `city-plane-effect.inc` (`crash_credit`), then the nightly tier (`-L nightly -LE gui`) on AWS.
+`crashWouldHit` (used only with City Plane Defence off) still assumes the Death Hand reach. Not measured: the OP
+seed itself (192x192 is not a `vanilla-match.py` map), Metropolis stalemates, a human player.
+
 ## 2026-11-24 - Released 1.0.877 (v1.0.877, 22db4add0): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
 
 Live and verified 2026-11-24. Evidence log: `~/Documents/projects/outputs/release-1.0.877/gates.md` on the Mini.
