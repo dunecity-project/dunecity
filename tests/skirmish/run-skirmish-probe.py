@@ -39,6 +39,9 @@ Each runtime uses fresh leased profiles; failed scratch and all output logs rema
                screenshots); the choice is remembered and Spectate off seats the human again
   render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
                maps and of generated maps; --render-save adds the map a saved match started from
+  spectate-planes  Stefan's spectated 192x192 Random Skirmish of 2026-11-24 from his saved settings
+               (seed 262441038, four qBotBrutal, Game Speed 2, 2x zoom, 960x600): the first City
+               Airplane flies within five minutes and the renderer draws it (spectate-plane.png)
   civ-menu     Civilization Wars settings, remembered seed, generic multiplayer starts/lobby/wire rules
   civ-1v1      fixed kit, fifteen turrets/base (ten front), positive full-cost city income,
                original research deadline and at least ten game minutes with all QuantBot seats
@@ -86,7 +89,7 @@ out.mkdir(parents=True, exist_ok=True)
 cases = args.cases.split(',')
 known_cases = {'menu', 'mp-lobby', 'legacy-map', 'vanilla-1v1', 'allied-2v3', 'city-192', 'stefan-128',
                'partner-support', 'partner-quantbot', 'partner-fighter', 'spectate', 'render',
-               'civ-menu', 'civ-1v1', 'civ-2v2', 'civ-3v3', 'civ-research', 'city-park'}
+               'civ-menu', 'civ-1v1', 'civ-2v2', 'civ-3v3', 'civ-research', 'city-park', 'spectate-planes'}
 if not cases or any(case not in known_cases for case in cases):
     parser.error('--cases must name existing probe cases')
 if args.research_payment and cases != ['civ-research']:
@@ -176,10 +179,80 @@ problem = re.compile(r'invalid|occupied\s+(?:position|tile)|error|exception|fail
 # Pre-existing startup lines unrelated to the match (mod/asset discovery in an empty profile).
 startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORECASE)
 
+# Stefan's settings on the MacBook Air when he reported "planes now appear to be invisible"
+# (2026-11-24, 1.0.877 candidate): the zoom, his dunecity game options and the Random Skirmish
+# screen as he left it. The [Video] size comes from the case's size above.
+STEFAN_SPECTATED_VIDEO = 'Preferred Zoom Level = 1\nScaler = ScaleHD\n'
+STEFAN_SPECTATED_SKIRMISH = """Custom Game Mod = dunecity
+[Game Options dunecity]
+Game Speed = 2
+Concrete Required = false
+Fog of War = false
+Start with Explored Map = true
+City Effects = true
+Plan Building Sites = true
+Retry Planned Placement = true
+Shared Yard Queue = true
+Slow City Year = true
+Selling Buildings = true
+Shared Factory Queue = true
+Micropolis Land Value = true
+Mountain Scenery = true
+Unpowered Zones Vacate = true
+Trooper Anti-Air = true
+Starport Population = true
+Carryall Drop Default = 1
+Manual Carryall Drops = true
+Trooper Ornithopter Reach = true
+City Plane Defence = true
+City Plane Bombing = true
+Airport Ornithopter Patrol = false
+City Plane Carpet Bombing = true
+City Plane Bombing Runs = true
+City Plane Purchase = true
+Saboteur Hunt = true
+[Random Skirmish]
+Map Size = 192
+Spice = 0
+Symmetric = true
+Seed = 262441038
+Fixed Seed = true
+House = -1
+Credits = 20000
+Allies = 0
+Enemies = 3
+Enemies Allied = false
+Mode = 1
+Mod = dunecity
+Tech Level = 9
+Ally AI = qBotBrutal
+Ally Base = 4
+Ally Army = 5
+Ally City = 4
+Enemy AI = qBotBrutal
+Enemy Base = 5
+Enemy Army = 0
+Enemy City = 4
+Player AI = qBotBrutal
+Player Base = 5
+Player Army = 0
+Player City = 4
+Spectate = true
+Spectate AI = qBotBrutal
+Sandworms = 0
+Research Lab = true
+Sand Percent = 35
+Rock Percent = 55
+Mountain Percent = 10
+"""
+
+
 def run_cases(work):
     summary = []
     for case in cases:
         sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu', 'civ-research', 'civ-1v1', 'civ-2v2', 'civ-3v3') else ((1024, 768),)
+        if case == 'spectate-planes':
+            sizes = ((960, 600),)
         if selected_size and selected_size not in sizes:
             parser.error('--size is not an existing size for ' + case)
         payments = (args.research_payment,) if args.research_payment else ('off', 'on')
@@ -196,6 +269,9 @@ def run_cases(work):
             (profile / 'Dune City.ini').write_text(
                 f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\n'
                 f'Interface Height = {height}\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Skirmish tester\n')
+            if case == 'spectate-planes':
+                ini = (profile / 'Dune City.ini').read_text().replace('[General]\n', STEFAN_SPECTATED_VIDEO + '[General]\n', 1)
+                (profile / 'Dune City.ini').write_text(ini + STEFAN_SPECTATED_SKIRMISH)
             env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                        SKIRMISH_PROBE_OUT=str(case_out), SKIRMISH_PROBE_CASE=case, SKIRMISH_SOURCE_DIR=str(root))
             if payment is not None:

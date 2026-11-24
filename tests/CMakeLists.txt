@@ -1548,9 +1548,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(skirmish_probe_fixture PROPERTIES TIMEOUT 600 PROCESSORS 2
             FIXTURES_SETUP skirmish_native_fixture)
         foreach(case IN ITEMS menu mp-lobby legacy-map vanilla-1v1 allied-2v3 city-192 stefan-128
-                partner-support partner-quantbot partner-fighter spectate render city-park
+                partner-support partner-quantbot partner-fighter spectate spectate-planes render city-park
                 civ-menu civ-1v1 civ-2v2 civ-3v3 civ-research)
             set(sizes 1024x768)
+            if(case STREQUAL "spectate-planes")
+                # Stefan's window on the MacBook Air when he could not see the planes (2026-11-24).
+                set(sizes 960x600)
+            endif()
             set(prefix skirmish_generator_probe)
             if(case STREQUAL "menu" OR case MATCHES "^civ-")
                 set(sizes 640x480 1280x720)
