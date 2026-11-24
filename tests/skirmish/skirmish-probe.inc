@@ -689,9 +689,10 @@ void runSpectate() {
     and cities, seed 262441038, Game Speed 2, the 2x zoom, a 960x600 window. The match plays to
     its first City Airplane, which must fly within the five-minute opening and one Airport tick
     (CityAircraft::kFreePlaneMs), and follows it until it cruises. The game's own renderer then
-    draws the view centred on it twice, once with the plane moved off the screen: the plane
-    must change pixels where it flies (spectate-plane.png, spectate-plane-crop.png). The log
-    gives how long the plane takes to cross the view at his speed and at the default speed.
+    draws the view centred on it twice, once with the plane moved off the map: the plane must
+    change pixels where it flies and its white cross must change the radar (spectate-plane.png,
+    spectate-plane-crop.png, spectate-plane-radar.png). The log gives how long the plane takes
+    to cross the view at his speed and at the default speed.
 */
 void runSpectatePlanes() {
     namespace CA = DuneCity::CityAircraft;
@@ -758,19 +759,22 @@ void runSpectatePlanes() {
     const int screenY = screenborder->world2screenY(plane->getRealY());
     auto shown = draw();
     const FixPoint realX = plane->realX;
-    plane->realX = realX + FixPoint(4 * viewWidth);
+    plane->realX = FixPoint(-100 * TILESIZE);    // off the view and off the radar
     auto hidden = draw();
     plane->realX = realX;
     skirmishRequire(shown->w == hidden->w && shown->h == hidden->h && shown->format->format == hidden->format->format,
                     "The two views were read back differently");
     const int bytes = shown->format->BytesPerPixel;
-    int changed = 0, nearPlane = 0, left = shown->w, right = -1, top = shown->h, bottom = -1;
+    // Right of the map view is the sidebar with the radar: there the plane is its white cross.
+    const int boardRight = screenborder->screenRect.x + screenborder->screenRect.w;
+    int changed = 0, nearPlane = 0, onRadar = 0, left = shown->w, right = -1, top = shown->h, bottom = -1;
     for(int y = 0; y < shown->h; ++y) {
         const auto* a = static_cast<const Uint8*>(shown->pixels) + y * shown->pitch;
         const auto* b = static_cast<const Uint8*>(hidden->pixels) + y * hidden->pitch;
         for(int x = 0; x < shown->w; ++x) {
             if(std::memcmp(a + x * bytes, b + x * bytes, bytes) == 0) continue;
             ++changed;
+            if(x >= boardRight) { ++onRadar; continue; }
             left = std::min(left, x); right = std::max(right, x); top = std::min(top, y); bottom = std::max(bottom, y);
             if(std::abs(x - screenX) <= 64 && std::abs(y - screenY) <= 64) ++nearPlane;
         }
@@ -783,10 +787,16 @@ void runSpectatePlanes() {
         sdl2::surface_ptr part{SDL_CreateRGBSurfaceWithFormat(0, crop.w * 3, crop.h * 3, 32, SDL_PIXELFORMAT_RGBA32)};
         skirmishRequire(part != nullptr && SDL_BlitScaled(shown.get(), &crop, part.get(), nullptr) == 0, "Could not crop the plane");
         skirmishRequire(SavePNG(part.get(), probeOut("spectate-plane-crop.png").c_str()) == 0, "Could not write the crop");
+        SDL_Rect radar{boardRight, 0, shown->w - boardRight, std::min(150, shown->h)};
+        sdl2::surface_ptr side{SDL_CreateRGBSurfaceWithFormat(0, radar.w * 3, radar.h * 3, 32, SDL_PIXELFORMAT_RGBA32)};
+        skirmishRequire(side != nullptr && SDL_BlitScaled(shown.get(), &radar, side.get(), nullptr) == 0, "Could not crop the radar");
+        skirmishRequire(SavePNG(side.get(), probeOut("spectate-plane-radar.png").c_str()) == 0, "Could not write the radar crop");
     }
-    SDL_Log("SKIRMISH_PROBE: plane drawn at screen %d,%d: %d pixels changed, %d within 64 of it, box %d,%d-%d,%d; screenshot %s",
-            screenX, screenY, changed, nearPlane, left, top, right, bottom, path.c_str());
+    SDL_Log("SKIRMISH_PROBE: plane drawn at screen %d,%d: %d pixels changed, %d within 64 of it, box %d,%d-%d,%d, "
+            "%d on the radar; screenshot %s", screenX, screenY, changed, nearPlane, left, top, right, bottom, onRadar, path.c_str());
     skirmishRequire(nearPlane >= 150, "The cruising City Airplane is not visible in the rendered view");
+    // The cross is nine pixels; terrain under it may already be white in a few.
+    skirmishRequire(onRadar >= 5, "The cruising City Airplane is not marked on the radar");
     endMatch(game);
 }
 

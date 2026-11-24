@@ -27,6 +27,7 @@
 #include <ScreenBorder.h>
 #include <Tile.h>
 #include <SoundPlayer.h>
+#include <units/AmbientAirplane.h>
 
 #include <globals.h>
 
@@ -228,4 +229,40 @@ void RadarView::updateRadarSurface(int mapSizeX, int mapSizeY, const RadarScaleI
             *p = getTileColor(tileX, tileY);
         }
     }
+
+    // City Airplanes as white crosses, five pixels wide, over the tile colours (Stefan,
+    // 2026-11-24: "planes now appear to be invisible. can't see it on screen"). At Game Speed 2
+    // a plane crosses a 960x600 view in about a third of a second; on the radar it is in sight
+    // for its whole flight. As a tile colour it was one pixel in its house's colour, like any
+    // unit, and on a map wider than 128 tiles the radar skips columns and rows, so it was not
+    // drawn at all for part of its path. Drawing only: nothing here is read by the game.
+    const Uint32 planeColor = MapRGBA(radarSurface->format, COLOR_WHITE);
+    for(const AmbientAirplane* plane : AmbientAirplane::all()) {
+        if(!radarShowsCityPlane(plane)) continue;
+        const int centreX = static_cast<int>(std::floor(plane->getRealX().toFloat() / TILESIZE * scaleInfo.scale));
+        const int centreY = static_cast<int>(std::floor(plane->getRealY().toFloat() / TILESIZE * scaleInfo.scale));
+        for(int arm = -2; arm <= 2; ++arm) {
+            for(const auto [dx, dy] : {std::pair{arm, 0}, std::pair{0, arm}}) {
+                const int x = centreX + dx, y = centreY + dy;
+                if(x < 0 || y < 0 || x >= scaleInfo.scaledWidth || y >= scaleInfo.scaledHeight) continue;
+                *(reinterpret_cast<Uint32*>(reinterpret_cast<Uint8*>(radarSurface->pixels)
+                    + (scaleInfo.offsetY + y) * radarSurface->pitch) + scaleInfo.offsetX + x) = planeColor;
+            }
+        }
+    }
+}
+
+bool RadarView::radarShowsCityPlane(const AmbientAirplane* plane) const {
+    // The same plane the radar's tile colours would show (Tile::getRadarColor): every plane to an
+    // observer, a house's own team's planes always, others only with the radar on, where its
+    // team sees them and the ground below is explored and not fogged.
+    if(currentGame->isObserving()) return true;
+    if(pLocalHouse == nullptr) return false;
+    const int team = pLocalHouse->getTeamID();
+    if(plane->getOwner()->getTeamID() == team) return true;
+    if(currentRadarMode != RadarMode::RadarOn && currentRadarMode != RadarMode::AnimationRadarOff) return false;
+    const Coord at = plane->getLocation();
+    if(!currentGameMap->tileExists(at)) return false;
+    const Tile* tile = currentGameMap->getTile(at);
+    return plane->isVisible(team) && (debug || (tile->isExploredByTeam(team) && !tile->isFoggedByTeam(team)));
 }

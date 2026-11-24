@@ -41,7 +41,7 @@ Each runtime uses fresh leased profiles; failed scratch and all output logs rema
                maps and of generated maps; --render-save adds the map a saved match started from
   spectate-planes  Stefan's spectated 192x192 Random Skirmish of 2026-11-24 from his saved settings
                (seed 262441038, four qBotBrutal, Game Speed 2, 2x zoom, 960x600): the first City
-               Airplane flies within five minutes and the renderer draws it (spectate-plane.png)
+               Airplane flies within five minutes, the renderer draws it and the radar marks it
   civ-menu     Civilization Wars settings, remembered seed, generic multiplayer starts/lobby/wire rules
   civ-1v1      fixed kit, fifteen turrets/base (ten front), positive full-cost city income,
                original research deadline and at least ten game minutes with all QuantBot seats
@@ -184,6 +184,8 @@ startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORE
 # screen as he left it. The [Video] size comes from the case's size above.
 STEFAN_SPECTATED_VIDEO = 'Preferred Zoom Level = 1\nScaler = ScaleHD\n'
 STEFAN_SPECTATED_SKIRMISH = """Custom Game Mod = dunecity
+[Game Options]
+Game Speed = 2
 [Game Options dunecity]
 Game Speed = 2
 Concrete Required = false

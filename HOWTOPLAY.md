@@ -161,7 +161,9 @@ not order them, but you can buy more planes.
   shorten the wait. Nobody bombs in the first five minutes of a game: Airports that stand when
   the game begins charge first, and one you build in those minutes is ready when they are up. An
   Airport you build later has its free plane ready at once. Planes you have bought do not hold
-  the free one back. It takes off from the runway two tiles east of the Airport. A flight ends
+  the free one back. It takes off from the runway two tiles east of the Airport. The radar marks
+  every plane you can see with a small white cross for its whole flight, which is easier to
+  follow than the plane itself at a fast game speed. A flight ends
   when the plane is shot down or crosses the edge of the map, which a run towards a building
   near the edge soon makes it do: a plane that is not shot down is usually gone within half a
   minute to a minute. Human and computer players get the same plane.
