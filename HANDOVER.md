@@ -1,3 +1,28 @@
+## 2026-11-24 - Released 1.0.877 (v1.0.877, 22db4add0): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Live and verified 2026-11-24. Evidence log: `~/Documents/projects/outputs/release-1.0.877/gates.md` on the Mini.
+
+- **GitHub:** Build Dune Legacy run 45315989321 attempt 2, 08:02-08:35 UTC. Release v1.0.877 is Latest and non-draft, with 26 assets and SHA256SUMS. `release-automation.py verify v1.0.877 --live` passed: package hashes, updater signatures, browser artifact hashes, SourceForge defaults, website links and What's New.
+- **SourceForge:** sync run 45357525661 succeeded.
+- **Browser:** publish run 45357525703 and website deploy 45357799293 succeeded. In Chrome, dunelegacy.com/play reached the main menu showing "App v1.0.877".
+- **Website:** Deploy to Droplet 45357516874 succeeded.
+- **Android:** held. **TestFlight:** not part of this release.
+- **MacBook Air:** the published macOS zip is installed (notarized; executable sha256 1e94c119…). The dev build 1c1766b8d is kept as the backup.
+
+Why it took about five hours after the tag:
+
+1. The tag build failed in select-inputs. The qualification run 45307252716 never appeared in GitHub's `qualify-release.yml/runs?status=success` listing, though the unfiltered listing showed it. `reuse_qualification` searches only that filtered listing, so after two hours I re-qualified.
+2. A re-qualification on hosted macos-15 (45330318472) hit its 120-minute limit at 210/246 tests, all passing. The hosted fallback cannot finish the nightly tier.
+3. A dispatch from `integrate/feature-batch` (45345621057) was refused by the Mini at job set-up, because the runner binding's `control_ref` is `refs/heads/main`. Dispatch qualification from `main`.
+4. The run dispatched from `main` (45345834899) qualified on the Mini in 51 minutes. Re-running the failed jobs of the same tag run then worked. Nothing was retagged.
+
+Follow-ups:
+
+- `reuse_qualification` should fall back to the unfiltered listing (titles are only a discovery hint; the receipt establishes trust).
+- The hosted qualification fallback should be removed or given a tier it can finish.
+- The aws admission hold (`~/.local/state/dunecity-queue/admission-holds/aws.json`, owner claude 4f4f3963, from the release) is still in place. The workspace guard refuses to let an agent delete it; Stefan can remove it, since the queue's own 25 GB floor still protects aws.
+- Test builds installed on the Air must show the `dev` suffix (built with DUNECITY_RELEASE_BUILD=OFF), e.g. 1.0.877dev (Stefan, 2026-11-24).
+
 ## 2026-11-24 - "Invisible" city planes: they fly and draw; at Game Speed 2 they cross the view in a third of a second; the radar now marks them (in the 1.0.877 candidate)
 
 Stefan, testing `1c1766b8d` on the MacBook Air: "planes now appear to be invisible. can't see it on screen during
