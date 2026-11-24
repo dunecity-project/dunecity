@@ -1,3 +1,27 @@
+## 2026-11-25 - City planes: the small crash is the default, and anti-air always fires at planes
+
+Stefan, 2026-11-24: "Yes, make it default" (the small crash measured in the entry below). Stefan, 2026-11-25:
+turrets should always fire at planes, with no check on whether the crash would hit their own base.
+
+- **Small crash (`4da2dc216`).** A plane shot down does one stick bomb's damage (250, half a tile) on the tile it
+  falls on, in its owner's name; the shooter is credited the plane. `DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1`
+  (experiment only, never a match rule) restores the Death Hand impact.
+- **Always fire (`4d9cd7b10`).** `AmbientAirplane::crashEndangers` and `crashWouldHit` are gone, and with them the
+  hold in RocketTurret, Scoutpost, Launcher, EliteLauncher and Trooper `canAttack`. City Plane Defence keeps its
+  other parts (triple sight, the rocket that leads the plane).
+- **Tests.** `city_aircraft_probe` and `city_plane_effect` check that anti-air fires at a plane over its own
+  wall, with the killing shot, and at one flying onto the turret; the shot-down check expects the small crash.
+  `natives_probe`'s double wipe runs as its own case with the Death Hand switch.
+- **Verified.** Unit tests 1,547 passed / 3 skipped; `perf_regression` on the Mini passed (118 s, on
+  `4da2dc216`); AWS nightly `-L nightly -LE gui` on `4d9cd7b10`: 249 of 249 passed
+  (20261125T090444-ctest-35f8f8). Protocol 133 and the save format are unchanged. **Not verified:** the OP
+  192x192 map, Metropolis-size games and human play with the new rules.
+- **Next release notes:** "A city airplane that is shot down now crashes with one bomb's blast on its own tile
+  instead of a Death Hand impact. Anti-air always fires at enemy planes, over its own base too."
+- **Queue.** The first nightly (20261124T231606-ctest-ac6c79) stayed open nine hours: its two failed tests
+  waited for a retry on `aws`, which an admission hold kept from ever starting. Fixed in the runner
+  (`~/.local/share/dunecity-runner` `7df3848`): a failed test is final when no other host can take the retry.
+
 ## 2026-11-24 - City planes: a small crash for shot-down planes, measured behind a switch; default unchanged
 
 Stefan, after his `OP.dls` game on 1.0.877 (four QuantBot Brutal, 192x192): "IT SEEMS LIKE MAYBE PLANES ARE A BIT
