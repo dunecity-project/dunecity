@@ -1648,8 +1648,14 @@ void checkAntiAirSparesOwnSide() {
     cityRequire(turret->canAttack(overOwner), "the turret spares a plane over its owner's own side");
 
     // In flight: seven tiles north, flying south straight at the turret, the
-    // plane is over the turret by the time a rocket gets there. Flying north it
-    // is not.
+    // plane is about four tiles on (plane speed over the rocket's, ~0.56) by the
+    // time a rocket gets there: the Death Hand would reach the turret from there.
+    // The small crash would not, so a Harkonnen wall stands at the meeting point,
+    // three tiles from where the plane is now. Flying north it is not over either.
+    if(small) {
+        cityRequire(enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x, turretAt.y - 4, true, true) != nullptr,
+                    "could not place the wall at the meeting point");
+    }
     auto* inbound = hover(turretAt + Coord(0, -7), DOWN, true);
     cityRequire(!turret->canAttack(inbound), "the turret shoots a plane that is flying onto it");
     auto* outbound = hover(turretAt + Coord(0, -7), UP, true);
