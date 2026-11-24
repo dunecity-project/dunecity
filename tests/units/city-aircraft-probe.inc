@@ -1629,12 +1629,15 @@ void checkAntiAirSparesOwnSide() {
     auto* clear = hover(turretAt + Coord(6, 0), RIGHT, false);
     cityRequire(turret->canAttack(clear), "the turret may not shoot a plane over open ground");
     cityRequire(launcher->canAttack(clear), "the launcher may not shoot a plane over open ground");
-    // A Harkonnen wall three tiles east of it is beyond every blast centre: still fair game.
-    auto* farWall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 9, turretAt.y, true, true);
+    // The small crash (the game) is one blast on the plane's tile; the Death Hand (experiment switch)
+    // reaches two tiles out, its (128, 0) centre.
+    const bool small = AmbientAirplane::smallCrash();
+    // A Harkonnen wall beyond every blast centre (the next tile east, or three tiles out): still fair game.
+    auto* farWall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + (small ? 7 : 9), turretAt.y, true, true);
     cityRequire(farWall != nullptr, "could not place the out-of-reach wall");
     cityRequire(turret->canAttack(clear), "the turret holds fire over a wall the blast cannot reach");
-    // A Harkonnen wall two tiles east, under the blast's (128, 0) centre: it would land on its own side.
-    auto* wall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 8, turretAt.y, true, true);
+    // A Harkonnen wall under a blast centre (the plane's own tile, or two tiles east): it would land on its own side.
+    auto* wall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + (small ? 6 : 8), turretAt.y, true, true);
     cityRequire(wall != nullptr, "could not place the own-side wall");
     cityRequire(!turret->canAttack(clear), "the turret shoots a plane down over its own wall");
     cityRequire(!launcher->canAttack(clear), "the launcher shoots a plane down over its own wall");
@@ -1651,8 +1654,9 @@ void checkAntiAirSparesOwnSide() {
     cityRequire(!turret->canAttack(inbound), "the turret shoots a plane that is flying onto it");
     auto* outbound = hover(turretAt + Coord(0, -7), UP, true);
     cityRequire(turret->canAttack(outbound), "the turret spares a plane that is flying away");
-    record("crash", "anti_air_spares_own_side=1 open_ground=fire wall_3_tiles=fire wall_2_tiles=hold"
-                    " owner_side=fire inbound=hold outbound=fire");
+    record("crash", std::string("anti_air_spares_own_side=1 open_ground=fire ")
+                        + (small ? "wall_1_tile=fire wall_under_plane=hold" : "wall_3_tiles=fire wall_2_tiles=hold")
+                        + " owner_side=fire inbound=hold outbound=fire");
     game.reset();
     currentGame = nullptr;
 }
@@ -1687,7 +1691,9 @@ void checkAntiAirIgnoresNatives() {
     plane->currentMaxSpeed = 0;
     cityRequire(turret->canAttack(plane), "the turret may not shoot a plane over open ground");
 
-    // Natives units under the blast: a trooper under the (128, 0) centre, a worm beside the plane.
+    // Natives units under the blast: a trooper under a blast centre (the plane's tile for the small
+    // crash, the Death Hand's (128, 0) centre with the experiment switch), a worm beside the plane.
+    const bool small = AmbientAirplane::smallCrash();
     const auto placeNative = [&](int itemID, const Coord& at) {
         if(itemID == Unit_Sandworm) currentGameMap->getTile(at.x, at.y)->setType(Terrain_Sand);
         UnitBase* unit = natives->placeUnit(itemID, at.x, at.y, true);
@@ -1696,7 +1702,7 @@ void checkAntiAirIgnoresNatives() {
         unit->setVisible(VIS_ALL, true);
         return unit;
     };
-    placeNative(Unit_Trooper, turretAt + Coord(8, 0));
+    placeNative(Unit_Trooper, turretAt + Coord(small ? 6 : 8, 0));
     placeNative(Unit_Sandworm, turretAt + Coord(6, 1));
     cityRequire(AmbientAirplane::crashEndangers(*turret, *plane) == false && turret->canAttack(plane),
                 "the turret holds fire over Natives units");
@@ -1708,9 +1714,22 @@ void checkAntiAirIgnoresNatives() {
     // A team-0 house (the Natives' team before 9873) is not their side either.
     enemy->teamID = 0;
     cityRequire(turret->canAttack(plane), "a team-0 house's turret holds fire over Natives units");
-    auto* wall = enemy->placeStructure(NONE_ID, Structure_Wall, turretAt.x + 6, turretAt.y - 2, true, true);
+    // Its wall under a blast centre: two tiles north of the plane for the Death Hand; for the small
+    // crash a second plane hovers over the wall, since the first one's tile holds the Natives trooper.
+    const Coord wallAt = turretAt + Coord(6, -2);
+    auto* wall = enemy->placeStructure(NONE_ID, Structure_Wall, wallAt.x, wallAt.y, true, true);
     cityRequire(wall != nullptr, "could not place the team-0 house's wall");
-    cityRequire(!turret->canAttack(plane), "a team-0 house's turret shoots a plane down over its own wall");
+    AmbientAirplane* overWall = plane;
+    if(small) {
+        overWall = dynamic_cast<AmbientAirplane*>(owner->createUnit(Unit_AmbientAirplane, true));
+        cityRequire(overWall != nullptr, "could not create the plane over the team-0 wall");
+        overWall->deploy(wallAt);
+        overWall->setVisible(VIS_ALL, true);
+        overWall->angle = FixPoint(static_cast<int>(RIGHT));
+        overWall->drawnAngle = static_cast<Sint8>(RIGHT);
+        overWall->currentMaxSpeed = 0;
+    }
+    cityRequire(!turret->canAttack(overWall), "a team-0 house's turret shoots a plane down over its own wall");
     record("crash", "anti_air_natives=1 turret_over_natives=fire natives_over_natives=fire"
                     " team0_over_natives=fire team0_own_wall=hold");
     game.reset();

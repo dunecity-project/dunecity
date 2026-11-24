@@ -1222,7 +1222,9 @@ void checkHoldFire(const std::string& mapData) {
         for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
         const Coord at(30, 30);
         auto* turret = dynamic_cast<RocketTurret*>(place(owner, Structure_RocketTurret, at));
-        place(owner, Structure_Wall, at + Coord(8, 0));
+        // The wall under a blast centre: the plane's own tile for the small crash (the game), two
+        // tiles east for the Death Hand (DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1).
+        place(owner, Structure_Wall, at + Coord(AmbientAirplane::smallCrash() ? 6 : 8, 0));
         auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), at + Coord(6, 0), at + Coord(60, 0), RIGHT);
         plane->currentMaxSpeed = 0; // held in place over the wall's blast reach, as city_aircraft_probe does
         const bool full = turret->canAttack(plane);
