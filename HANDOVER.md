@@ -1,3 +1,37 @@
+## 2026-11-24 - "Invisible" city planes: they fly and draw; at Game Speed 2 they cross the view in a third of a second; the radar now marks them (in the 1.0.877 candidate)
+
+Stefan, testing `1c1766b8d` on the MacBook Air: "planes now appear to be invisible. can't see it on screen during
+testing on mba". Commits `a117ff9c6` (probe), `8a4d817c2` (radar marker, probe requires it, player guide).
+
+**Cause, from his own files** (read over SSH, nothing run on the Air): his `Dune City.log` has 13 City Airplane
+launches (the first four at cycle 19,032, 5.08 game minutes), 70 buildings bombed and planes shot down over the
+watched house's base. So the planes flew. He was spectating (Random Skirmish `Spectate = true`, 192x192, four
+qBotBrutal, seed 262441038) with the global `[Game Options] Game Speed = 2`, the fastest setting, set during the
+match (the ini was written at 11:48:44). The live match ran 143,541 cycles in 282 s, 509 a second, eight times the
+default. A plane flies 10.24 world units a cycle: it crosses his 960x600 view (1,632 world units at the 2x zoom)
+in 159 cycles, 0.32 s at that speed (2.55 s at the default), and is shot down within about 0.4 s of reaching a
+city. With the five-minute clock a house launches once every 37 s of real time at that speed; with the two-minute
+clock he had played before it was two and a half times as often. Nothing in `5d2e19fca..1c1766b8d` touches drawing.
+
+**The render, reproduced on the Mini.** New probe case `skirmish_generator_probe_spectate-planes_960x600` starts his
+match from his saved settings through the Random Skirmish screen: the same launches on the same cycle as his log,
+the plane drawn by the game's renderer (1,740 pixels where it flies, against the same view with the plane moved
+off the map). Pictures: `../outputs/city-planes-20261124/visible/` (`spectate-plane.png`, `-crop.png`, `-radar.png`).
+
+**Fix (drawing only, no rule, save or simulation change).** On the radar a plane was a tile colour: one pixel in its
+house's colour like any unit, and a 192-tile map on the 128-pixel radar skips every third column and row, so for
+a third of its path it was not drawn at all. `RadarView::updateRadarSurface` now draws every plane the viewer can
+see as a white cross five pixels wide (all planes to an observer; others under the rules of the radar's tile
+colours, `radarShowsCityPlane`). A plane crossing the 192 map stays on the radar for about 2.3 s of real time at
+Game Speed 2. The probe requires the cross (9 pixels changed on the radar; 0 is what the old radar gives, since
+moving the plane does not change its tile's colour) and the first plane within five minutes and one Airport tick.
+
+**Tests on `8a4d817c2`.** AWS `aws-mel2` `20261124T120006-ctest-380e8a`: the four AI gates and the three plane probes, 7 of 7 passed. Mini: `perf_regression` passed (122 s); the new probe passed on `build-int` at Game Speed 2. The headless nightly tier `20261124T120009-ctest-5c2257` was still running at this commit.
+
+**Not verified.** Not seen on the Air's real screen by an agent; the packaged static build was not rendered (the
+probe links the Mini's `build-int`). The main view is unchanged: at Game Speed 2 a plane there is still a third of
+a second; at the default speed it is two and a half seconds.
+
 ## 2026-11-24 - City planes nerfed for the opening: free plane every five minutes, none in the first five; AirThreatTurrets measured and left off (in the 1.0.877 candidate)
 
 Stefan, after playing `5d2e19fca`: "i just tried the game and the planes seem overpowered. on skirmish with fully
