@@ -26,7 +26,6 @@
 #include <Explosion.h>
 #include <ScreenBorder.h>
 #include <SoundPlayer.h>
-#include <units/AmbientAirplane.h>
 
 Launcher::Launcher(House* newOwner) : TrackedUnit(newOwner) {
     Launcher::init();
@@ -105,8 +104,7 @@ void Launcher::destroy() {
 bool Launcher::canAttack(const ObjectBase* object) const {
     return ((object != nullptr)
             && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
-            && object->isVisible(getOwner()->getTeamID())
-            && !AmbientAirplane::crashEndangers(*this, *object));
+            && object->isVisible(getOwner()->getTeamID()));
 }
 
 void Launcher::playAttackSound() {

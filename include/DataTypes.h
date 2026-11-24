@@ -503,10 +503,9 @@ public:
         bool        trooperOrnithopterReach = true;
         /// Rocket Turrets fight the city airplane (Unit_AmbientAirplane) as they fight an
         /// Ornithopter: seen at triple range, taken the cycle it comes into reach, and shot at with
-        /// a rocket that flies to where the plane will be. Anti-air only holds the shot that could
-        /// bring the plane down while its crash would land on the shooter's own side. Off is the
-        /// rule up to 1.0.876 (AmbientAirplane::crashEndangers holds every shot, the plane is an
-        /// ordinary target and the rocket aims at where it was). INI key only.
+        /// a rocket that flies to where the plane will be. Off is the rule up to 1.0.876 (the plane
+        /// is an ordinary target and the rocket aims at where it was). On or off, anti-air never
+        /// holds fire for where the crash lands (Stefan, 2026-11-25). INI key only.
         bool        cityPlaneDefence = true;
         /// A cruising city airplane drops bombs on enemy buildings under its course
         /// (AmbientAirplane::dropBombs, CityAircraft::kBomb*). Off is the unarmed plane up to

@@ -1213,8 +1213,9 @@ void checkPictures(const std::string& mapData) {
     }
 }
 
-// The off state is the game up to 1.0.876: a turret holds every shot at a plane over its own wall
-// and sees it only inside weapon range. On, it fires the shots that cannot bring it down.
+// Stefan, 2026-11-25: turrets always fire at planes, without checking whether the crash would hit
+// their own base. With City Plane Defence on or off a turret fires at an enemy plane over its own wall,
+// at full health and with the shot that brings it down onto that wall.
 void checkHoldFire(const std::string& mapData) {
     for(const bool defence : {false, true}) {
         auto game = newGame(mapData, 8, Rules{defence, false, false});
@@ -1222,22 +1223,15 @@ void checkHoldFire(const std::string& mapData) {
         for(int i = 0; i < 3; ++i) place(owner, Structure_WindTrap, Coord(2, 2 + 3 * i));
         const Coord at(30, 30);
         auto* turret = dynamic_cast<RocketTurret*>(place(owner, Structure_RocketTurret, at));
-        // The wall under a blast centre: the plane's own tile for the small crash (the game), two
-        // tiles east for the Death Hand (DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1).
-        place(owner, Structure_Wall, at + Coord(AmbientAirplane::smallCrash() ? 6 : 8, 0));
+        place(owner, Structure_Wall, at + Coord(6, 0));
         auto* plane = fly(game->getHouse(HOUSE_HARKONNEN), at + Coord(6, 0), at + Coord(60, 0), RIGHT);
-        plane->currentMaxSpeed = 0; // held in place over the wall's blast reach, as city_aircraft_probe does
+        plane->currentMaxSpeed = 0; // held in place over the turret's own wall
         const bool full = turret->canAttack(plane);
         plane->setHealth(turret->rocketDamage());
         const bool last = turret->canAttack(plane);
         record("hold_fire", "defence=" + std::to_string(defence) + " full_health_shot=" + std::to_string(full)
                                 + " killing_shot=" + std::to_string(last));
-        // Stefan, 2026-11-23: "yes they can crash it in their own city". With the rule on nothing is
-        // held; with it off (the game up to 1.0.876) every shot over the turret's own wall is.
-        require(last == defence, defence ? "A turret still holds the shot that brings the plane down onto its own wall"
-                                         : "With City Plane Defence off a turret fires the killing shot over its own wall");
-        require(full == defence, defence ? "A turret holds a shot that cannot bring the plane down"
-                                         : "With City Plane Defence off a turret fires at a plane over its own wall");
+        require(full && last, "A turret holds fire at an enemy plane over its own wall");
         game.reset();
         currentGame = nullptr;
     }
@@ -1328,7 +1322,6 @@ void replaySave(const std::string& path, int cycles) {
                 ++p;
                 if(!turret->getOwner()->hasPower()) ++up;
                 else if(turret->canAttack(plane)) ++m;
-                else if(AmbientAirplane::crashEndangers(*turret, *plane)) ++hc;
                 else if(!turret->canMeetCityPlane(plane)) ++hr;
                 else ++ot;
             }
@@ -1341,7 +1334,6 @@ void replaySave(const std::string& path, int cycles) {
                 if(distanceFrom(unit->getCenterPoint(), plane->getCenterPoint()) > range) continue;
                 ++lp;
                 if(unit->canAttack(plane)) ++lm;
-                else if(AmbientAirplane::crashEndangers(*unit, *plane)) ++lc;
                 else ++lo;
             }
         }

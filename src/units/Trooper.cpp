@@ -26,7 +26,6 @@
 #include <House.h>
 #include <mod/ModManager.h>
 #include <SoundPlayer.h>
-#include <units/AmbientAirplane.h>
 #include <Game.h>
 #include <Map.h>
 #include <SpatialGrid.h>
@@ -89,8 +88,7 @@ void Trooper::setProductionHouseID(int houseID) {
 bool Trooper::canAttack(const ObjectBase* object) const {
     if ((object != nullptr)
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || (object->getItemID() == Unit_Sandworm))
-        && object->isVisible(getOwner()->getTeamID())
-        && !AmbientAirplane::crashEndangers(*this, *object))
+        && object->isVisible(getOwner()->getTeamID()))
     {
         return true;
     }

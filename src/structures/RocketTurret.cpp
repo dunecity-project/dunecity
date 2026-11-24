@@ -84,7 +84,6 @@ bool RocketTurret::canAttack(const ObjectBase* object) const {
     if((object != nullptr)
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
         && (isOrnithopterUnit(object->getItemID()) || object->isVisible(getOwner()->getTeamID()))
-        && !AmbientAirplane::crashEndangers(*this, *object)
         && canMeetCityPlane(object)) {
         return true;
     } else {

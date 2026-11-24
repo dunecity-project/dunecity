@@ -23,7 +23,6 @@
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
-#include <units/AmbientAirplane.h>
 #include <units/UnitBase.h>
 
 #include <algorithm>
@@ -85,8 +84,7 @@ bool Scoutpost::canAttack(const ObjectBase* object) const {
 
     return object != nullptr
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
-        && object->isVisible(getOwner()->getTeamID())
-        && !AmbientAirplane::crashEndangers(*this, *object);
+        && object->isVisible(getOwner()->getTeamID());
 }
 
 ObjectInterface* Scoutpost::getInterfaceContainer() {

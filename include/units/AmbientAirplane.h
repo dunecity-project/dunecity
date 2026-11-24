@@ -23,9 +23,9 @@
  * that lie under its course (dropBomb, CityAircraft::kBomb*); it never leaves
  * its course for one.  It is an ordinary air unit in every other respect, so hostile
  * anti-air can see it, shoot it and destroy it - and a plane brought down by
- * damage crashes with one bomb's blast on the tile it falls on (crash()).  With
- * City Plane Defence off, anti-air holds its fire while that blast would land on
- * its own side (crashEndangers()).  A plane that flies off the map ends without a blast.
+ * damage crashes with one bomb's blast on the tile it falls on (crash()).  Anti-air
+ * fires at it wherever it is, over its own base too.  A plane that flies off the
+ * map ends without a blast.
  *
  * The original's airplane-to-aircraft collision explosions are deliberately
  * not ported: they are part of Micropolis's disaster system.
@@ -48,22 +48,6 @@ public:
     void deploy(const Coord& newLocation) override;
     void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                       const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
-
-    /**
-        Anti-air rule for the canAttack() of every weapon that can hit aircraft:
-        true when `target` is a city airplane and shooting it down would set its
-        crash blast off over `attacker`'s own team - where the plane is now, or
-        where it will be by the time a missile fired now reaches it. Natives
-        objects (worms, crime troopers) are nobody's own team, not even the
-        Natives' own: a blast over them never holds anyone's fire.
-
-        With the match rule City Plane Defence (default on) only the shot that
-        could bring the plane down is held: one that, with the shots already on
-        their way to it, could take its last hit points. A Rocket Turret, whose
-        rocket flies to the meeting point, is then only held while the crash at
-        that point would land on its own side.
-    */
-    static bool crashEndangers(const ObjectBase& attacker, const ObjectBase& target);
 
     /// Start the original take-off run (frames 11 -> 10 -> 9 -> cruise east).
     void beginTakeoff();
@@ -150,9 +134,6 @@ private:
     /// Shot down: the crash at the plane (smallCrash: one bomb on its tile, or a Death Hand with the
     /// experiment switch), dealt in the name of the plane's owner; `shooterOwner` is credited the plane.
     void crash(Uint32 shooterID, House* shooterOwner, const DeviationReward::Provenance& provenance);
-    /// True when the crash blast anywhere between `from` and `to` world units
-    /// ahead on the plane's course would reach an object of team `teamID`.
-    bool crashWouldHit(int teamID, FixPoint from, FixPoint to) const;
     /// City Plane Bombing: one bomb when the bomb sight enters a tile of an enemy building.
     void dropBomb(Uint32 gameCycle);
     /// City Plane Carpet Bombing: one game cycle of the stick (CityAircraft::kStick*).

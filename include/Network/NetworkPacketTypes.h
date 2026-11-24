@@ -299,7 +299,8 @@
 //     and moves at the sixteen-heading speeds; a plane shot down crashes with a Death Hand impact
 //     credited to its shooter (AmbientAirplane::crash -> Bullet::detonateDeathHand); RocketTurret,
 //     Launcher, EliteLauncher, Trooper and Scoutpost hold fire while that blast would land on their
-//     own team (AmbientAirplane::crashEndangers). No saved state change.
+//     own team (AmbientAirplane::crashEndangers, removed 2026-11-25: anti-air always fires).
+//     No saved state change.
 // 93: The Natives house (feat/natives-house, unreleased on its own): a new house slot,
 //     HOUSE_NATIVES = 12 (NUM_HOUSES 13, team 0, no players), owns every sandworm and every city
 //     crime trooper; worms no longer count for or are controlled by the house a map names, crime
