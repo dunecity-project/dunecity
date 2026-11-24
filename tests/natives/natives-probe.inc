@@ -528,7 +528,7 @@ void runSave9868() {
 
 // ---------------------------------------------------------------------------------------------
 // Release 1.0.852 feature interactions: the Natives house against the spectated game end, the
-// city airplane's Death Hand crash, match analytics, campaign win/lose and lockstep peers.
+// city airplane's crash, match analytics, campaign win/lose and lockstep peers.
 // ---------------------------------------------------------------------------------------------
 
 /// Destroys every object of @a house except @a keep, round after round (destroyed buildings can
@@ -685,8 +685,11 @@ Coord mapCentre() { return Coord(currentGameMap->getSizeX() / 2, currentGameMap-
 
 /// Spectated DuneCity free-for-all (the view's house and three QuantBots): the deciding blow comes
 /// from the Natives - a crime trooper kills the last unit, a crime trooper brings down a city
-/// airplane whose Death Hand takes the last building, the same crash takes both last teams at once.
-void runSpectatedInteractions() {
+/// airplane whose crash takes the last building. With @a doubleWipe (case spectated-double-wipe,
+/// run with DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1) one Death Hand crash takes both last teams at
+/// once: since 2026-11-24 a crash in the game hits only the tile it falls on, so one crash cannot
+/// take two houses' last buildings, but the simultaneous end it decides is still the game's rule.
+void runSpectatedInteractions(bool doubleWipe) {
     const Params p = skirmishParams("dunecity", 3, true);
     const Result result = generateFor(p);
     std::vector<int> enemies;
@@ -702,6 +705,10 @@ void runSpectatedInteractions() {
         eliminate(*game, enemies[0]);
         nRequire(!game->finished, "The spectated game ended with two houses left");
     };
+    nRequire(AmbientAirplane::smallCrash() != doubleWipe,
+             doubleWipe ? "The double wipe needs DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1"
+                        : "DUNECITY_TEST_PLANE_DEATH_HAND_CRASH is set for the game's own crash");
+    if(!doubleWipe) {
     {
         // A crime trooper kills the last unit of the second-to-last house.
         std::unique_ptr<Game> game;
@@ -729,7 +736,7 @@ void runSpectatedInteractions() {
         ObjectBase* last = lastStand(*game, loser, Structure_WindTrap, mapCentre());
         stripTo(*game, enemies[1], {last->getObjectID()});
         runCycles(*game, 60);      // the stripped buildings' explosions die down first
-        last->setHealth(20);       // the crash's Death Hand takes it; nothing else does meanwhile
+        last->setHealth(20);       // the crash, on its footprint, takes it; nothing else does meanwhile
         AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(enemies[2]), last->getLocation() + Coord(1, 1));
         plane->setHealth(10);      // two trooper rockets bring it down
         const Uint32 planeID = plane->getObjectID();
@@ -752,6 +759,8 @@ void runSpectatedInteractions() {
         expectWatchedEnd(*game, "spectated plane crash", decided, enemies[2]);
         expectAnalytics(*game, "spectated plane crash", enemies[2]);
         nEnd(game);
+    }
+    return;
     }
     {
         // The crash takes the last building of both remaining houses: nobody has won, and the
@@ -869,7 +878,8 @@ void runCampaignInteractions() {
         // shoot. The first has taken damage already (two trooper rockets bring it down), so the
         // troopers need not outlast the base defence that turns on them.
         AmbientAirplane* plane = hoveringPlane(*game, enemy, target->getLocation() + Coord(1, 1));
-        AmbientAirplane* second = hoveringPlane(*game, enemy, target->getLocation() + Coord(2, 1));
+        // On the same tile: the crash reaches half a tile (AmbientAirplane::crash).
+        AmbientAirplane* second = hoveringPlane(*game, enemy, target->getLocation() + Coord(1, 1));
         plane->setHealth(10);
         const Uint32 planeID = plane->getObjectID(), secondID = second->getObjectID();
         House* nativesHouse = game->getOrCreateNativesHouse();
@@ -908,7 +918,7 @@ void runCampaignInteractions() {
         nRequire(!game->finished, "The mission ended before its deciding crash");
         ObjectBase* building = lastStand(*game, game->getHouse(last), Structure_WindTrap, mapCentre());
         stripTo(*game, last, {building->getObjectID()});
-        building->setHealth(20);   // the crash's Death Hand takes it; nothing else does meanwhile
+        building->setHealth(20);   // the crash, on its footprint, takes it; nothing else does meanwhile
         AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(playerFalls ? static_cast<int>(HOUSE_ATREIDES) : enemies.back()),
                                                building->getLocation() + Coord(1, 1));
         plane->setHealth(10);      // two trooper rockets bring it down
@@ -1162,7 +1172,8 @@ int runNativesProbe() {
     else if(kind == "crime") runCrime();
     else if(kind == "winlose") runWinLose();
     else if(kind == "save9868") runSave9868();
-    else if(kind == "spectated-interactions") runSpectatedInteractions();
+    else if(kind == "spectated-interactions") runSpectatedInteractions(false);
+    else if(kind == "spectated-double-wipe") runSpectatedInteractions(true);
     else if(kind == "played-interactions") runPlayedInteractions();
     else if(kind == "campaign-interactions") runCampaignInteractions();
     else if(kind == "lockstep-interactions") runLockstepInteractions();

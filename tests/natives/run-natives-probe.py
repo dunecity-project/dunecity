@@ -62,7 +62,7 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
 parser.add_argument('--output-dir', type=Path, required=True)
 parser.add_argument('--cases', default='maps,crime,winlose,save9868,followup,spectated-interactions,'
-                    'played-interactions,campaign-interactions,lockstep-interactions')
+                    'spectated-double-wipe,played-interactions,campaign-interactions,lockstep-interactions')
 parser.add_argument('--baseline', action='store_true', help='Link against a tree without the Natives house; make-save only')
 parser.add_argument('--keep', action='store_true', help='Keep the profiles and the probe executable')
 args = parser.parse_args()
@@ -132,6 +132,10 @@ for case in args.cases.split(','):
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                NATIVES_PROBE_OUT=str(out), NATIVES_PROBE_CASE=case, NATIVES_SOURCE_DIR=str(root),
                NATIVES_SAVE_9868=str(fixture))
+    if case == 'spectated-double-wipe':
+        # One crash taking two houses' last buildings needs the Death Hand crash of 2026-10-22; the
+        # game's own crash (2026-11-24) hits one tile.
+        env['DUNECITY_TEST_PLANE_DEATH_HAND_CRASH'] = '1'
     logpath = out / f'run-{case}.log'
     with logpath.open('w') as log:
         result = subprocess.run([str(binary), '--window', '--showlog'], cwd=work, env=env, stdout=log,

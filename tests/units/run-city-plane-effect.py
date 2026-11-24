@@ -250,7 +250,8 @@ for name, text in (('engaged', 'passes engaged'), ('damage', 'damage to the plan
     if not overall[name][3] > 0:
         failures.append('defence: %s did not improve, interval %+.3f to %+.3f' % ((text,) + overall[name][3:5]))
 # Since 2026-11-23 nothing holds its fire for the crash (Stefan: "yes they can crash it in their own
-# city"), so a plane shot down over the base costs the defender a Death Hand's blast there. The
+# city"), so a plane shot down over the base costs the defender its crash there (a Death Hand's
+# blast until 2026-11-24, one bomb on the tile it falls on since). The
 # bound is no longer "next to nothing" (under 5 hit points and 0.02 buildings a pass) but "less
 # than the bombing it stops": one stick over the same base destroys 1.76 buildings a run.
 if overall['own'][1] >= 100 or overall['lost'][1] >= 0.3:

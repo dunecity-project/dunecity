@@ -352,16 +352,18 @@ void AmbientAirplane::handleDamage(int damage, Uint32 damagerID, House* damagerO
 }
 
 /**
-    Stefan, 2026-10-22: "when the plane gets shot down it should make the
-    equivalent of a nuclear missile attack".
-
-    The plane crashes where it was hit with exactly a Death Hand impact: the
-    Palace missile's own Bullet::detonateDeathHand(), its damage
-    (DynastyProjectile::deathHandDamage), blast centres, radius, explosions and
-    sound. As with the Palace, whoever fired is the damager: the house that
-    brought the plane down is credited with everything the blast destroys, and
-    the blast spares nobody - its own side, the plane's owner and other aircraft
-    alike. Damage with no owning house is credited to the plane's owner.
+    The plane crashes where it was hit with one stick bomb's damage (stickDamage(),
+    250) within half a tile: the building or units on the tile it falls on, and
+    nothing around it. Stefan, 2026-11-24, after his OP.dls game ("planes are a bit
+    overpowered"): there shot-down planes did 45% of all plane damage, because from
+    2026-10-22 ("when the plane gets shot down it should make the equivalent of a
+    nuclear missile attack") the crash was a whole Death Hand impact. Over 48 paired
+    AI games the small crash took buildings lost to planes from 254 to 211 a game and
+    the crash's share of plane damage from 38% to 4% (HANDOVER.md, 2026-11-24).
+    DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1 (experiment only) restores the Death Hand:
+    Bullet::detonateDeathHand(), the Palace missile's own damage, centres and radius.
+    The blast spares nobody - its own side, the plane's owner and other aircraft
+    alike.
 
     It runs inside the damage pass that killed the plane. That is safe: the plane
     is already at zero health, so the blast's own pass over it returns at once
@@ -395,7 +397,7 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     // and after for one log line per crash (tests/ai/city-plane-report.py).
     struct Standing { Uint32 id; bool enemy; int price; int health; int owner; };
     std::vector<Standing> standing;
-    constexpr int reach = 2 * TILESIZE + Bullet::deathHandBlastRadius;
+    const int reach = small ? TILESIZE : 2 * TILESIZE + Bullet::deathHandBlastRadius;
     for(const StructureBase* structure : structureList) {
         if(structure->getHealth() <= 0) continue;
         const Coord topLeft = structure->getLocation() * TILESIZE;
@@ -455,7 +457,8 @@ bool AmbientAirplane::crashWouldHit(int teamID, FixPoint near, FixPoint far) con
     // Every own-side object a blast centre could reach: the farthest centre is
     // two tiles out on either axis, and a unit is hit within the blast radius of one.
     // Natives objects are never own-side (crashEndangers).
-    constexpr int spread = 2 * TILESIZE + Bullet::deathHandBlastRadius;
+    const bool small = smallCrash();
+    const int spread = small ? TILESIZE : 2 * TILESIZE + Bullet::deathHandBlastRadius;
     const int mapW = currentGameMap->getSizeX(), mapH = currentGameMap->getSizeY();
     const int minX = std::max(0, (std::min(from.x, to.x) - spread) / TILESIZE);
     const int maxX = std::min(mapW - 1, (std::max(from.x, to.x) + spread) / TILESIZE);
@@ -485,11 +488,14 @@ bool AmbientAirplane::crashWouldHit(int teamID, FixPoint near, FixPoint far) con
     // Map::damage for a Death Hand centre: a structure is hit when the centre
     // lies on its footprint, a unit when it is within the blast radius by
     // Dynasty's distance. Centres off the map are skipped, as detonateDeathHand does.
+    // The small crash (smallCrash) is one centre, the crash point, of half a tile.
+    const int centres = small ? 1 : DynastyProjectile::deathHandBlastCentres;
+    const int radius = small ? TILESIZE / 2 : Bullet::deathHandBlastRadius;
     for(int step = 0; step <= steps; ++step) {
         const Coord crashAt(from.x + (to.x - from.x) * step / steps, from.y + (to.y - from.y) * step / steps);
-        for(int i = 0; i < DynastyProjectile::deathHandBlastCentres; ++i) {
-            const Coord centre(crashAt.x + DynastyProjectile::deathHandBlastX[i],
-                               crashAt.y + DynastyProjectile::deathHandBlastY[i]);
+        for(int i = 0; i < centres; ++i) {
+            const Coord centre = small ? crashAt : Coord(crashAt.x + DynastyProjectile::deathHandBlastX[i],
+                                                         crashAt.y + DynastyProjectile::deathHandBlastY[i]);
             if(centre.x < 0 || centre.y < 0 || centre.x >= mapW * TILESIZE || centre.y >= mapH * TILESIZE) continue;
             for(Uint32 id : ownIDs) {
                 const ObjectBase* object = currentGame->getObjectManager().getObject(id);
@@ -499,8 +505,7 @@ bool AmbientAirplane::crashWouldHit(int teamID, FixPoint near, FixPoint far) con
                     const Coord bottomRight = topLeft + structure->getStructureSize() * TILESIZE;
                     if(centre.x >= topLeft.x && centre.y >= topLeft.y && centre.x < bottomRight.x && centre.y < bottomRight.y)
                         return true;
-                } else if(DynastyProjectile::distance(object->getCenterPoint() * 4, centre * 4) / 4
-                          < Bullet::deathHandBlastRadius) {
+                } else if(DynastyProjectile::distance(object->getCenterPoint() * 4, centre * 4) / 4 < radius) {
                     return true;
                 }
             }
@@ -660,8 +665,8 @@ int AmbientAirplane::stickDamage()
 bool AmbientAirplane::smallCrash()
 {
     static const bool small = [] {
-        const char* text = std::getenv("DUNECITY_TEST_PLANE_SMALL_CRASH");
-        return text != nullptr && std::atoi(text) != 0;
+        const char* text = std::getenv("DUNECITY_TEST_PLANE_DEATH_HAND_CRASH");
+        return text == nullptr || std::atoi(text) == 0;
     }();
     return small;
 }

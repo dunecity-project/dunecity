@@ -17,7 +17,7 @@ void runStrategicSiteProbe(Game& game) {
         "Siting fixture lost the Palace prerequisites");
 
     // The physical no-site condition set up below has to last the six minutes. City planes
-    // undo it: a plane's bombs, and since 1.0.877 its crash when it is shot down (a Death Hand
+    // undo it: a plane's bombs, and in 1.0.877 its crash when it is shot down (a Death Hand
     // blast; 16 to 22 crashes in this fixture's six minutes, up to five buildings each), destroy
     // lots, and every destroyed lot is bare rock again. The legacy arm then found a Palace site
     // in its second minute, placed two Palaces and never starved. This test is about siting, so

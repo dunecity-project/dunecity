@@ -839,10 +839,10 @@ void checkEnemyAirDefence() {
         tank->doSetAttackMode(STOP);
 
         // Hold the aircraft still so the kill is a damage test, not a chase. The
-        // airplane crashes with a Death Hand's blast, which the turret will not
-        // set off over itself (AmbientAirplane::crashEndangers): the blast centres
-        // reach two tiles, so it is shot down four tiles out, inside the turret's
-        // view range and clear of the blast.
+        // airplane's crash blast (one bomb, half a tile; a Death Hand's, reaching
+        // two tiles, with DUNECITY_TEST_PLANE_DEATH_HAND_CRASH) is one the turret
+        // will not set off over itself (AmbientAirplane::crashEndangers), so it is
+        // shot down four tiles out, inside the turret's view range and clear of either.
         game->objectData.data[item][HOUSE_ATREIDES].maxspeed = 0;
         auto* aircraft = dynamic_cast<AirUnit*>(owner->createUnit(item, true));
         cityRequire(aircraft != nullptr, "could not create the city aircraft");
@@ -1447,6 +1447,7 @@ void checkShotDownPlaneDetonates() {
     const BlastOutcome crash = runBlastFixture(true, Coord());
     const BlastOutcome deathHand = runBlastFixture(false, crash.centre);
     record("crash", "crash_centre=" + std::to_string(crash.centre.x) + ',' + std::to_string(crash.centre.y)
+                  + " small_crash=" + std::to_string(AmbientAirplane::smallCrash() ? 1 : 0)
                   + " crash_health=" + joinHealth(crash.health)
                   + " death_hand_health=" + joinHealth(deathHand.health)
                   + " crash_kills=" + std::to_string(crash.shooterUnitKills) + '+'
@@ -1456,14 +1457,24 @@ void checkShotDownPlaneDetonates() {
                   + " crash_explosions=" + std::to_string(crash.newExplosions)
                   + " death_hand_explosions=" + std::to_string(deathHand.newExplosions));
 
+    // Stefan, 2026-11-24 (after OP.dls): a shot-down plane crashes with one bomb on the tile it
+    // falls on, not a Death Hand. Every witness stands two tiles or more from the crash: the
+    // Death Hand reference reaches some of them, the crash none. With
+    // DUNECITY_TEST_PLANE_DEATH_HAND_CRASH the crash must still be exactly the Death Hand.
+    const bool small = AmbientAirplane::smallCrash();
     int damaged = 0;
     for(size_t i = 0; i < deathHand.health.size(); ++i) {
         const BlastWitness& witness = kBlastWitnesses[i];
         const std::string where = "witness " + std::to_string(i) + " at offset ("
             + std::to_string(witness.dx) + ',' + std::to_string(witness.dy) + ")";
-        cityRequire(crash.health[i] == deathHand.health[i],
-                    where + " has " + std::to_string(crash.health[i]) + " HP after the crash but "
-                    + std::to_string(deathHand.health[i]) + " after a Death Hand on the same spot");
+        if(small)
+            cityRequire(crash.health[i] == crash.full[i],
+                        where + " has " + std::to_string(crash.health[i]) + " of " + std::to_string(crash.full[i])
+                        + " HP after the small crash, which reaches half a tile");
+        else
+            cityRequire(crash.health[i] == deathHand.health[i],
+                        where + " has " + std::to_string(crash.health[i]) + " HP after the crash but "
+                        + std::to_string(deathHand.health[i]) + " after a Death Hand on the same spot");
         if(std::max(std::abs(witness.dx), std::abs(witness.dy)) >= 6)
             cityRequire(deathHand.health[i] == deathHand.full[i],
                         where + " is outside the Death Hand's reach but was damaged");
@@ -1477,17 +1488,22 @@ void checkShotDownPlaneDetonates() {
     // shooter was credited what the blast destroyed, as a Death Hand's owner is.
     cityRequire(crash.shooterUnitKills == 1, "the shooter is credited more than the plane it shot down");
     cityRequire(crash.shooterStructureKills == 0, "the shooter is credited the buildings the crash destroyed");
-    // Seventeen blast centres, one large explosion each (all inside the map here).
+    // Seventeen blast centres, one large explosion each (all inside the map here); the small
+    // crash makes one.
     cityRequire(deathHand.newExplosions == 17, "the Death Hand reference did not explode at 17 centres");
-    cityRequire(crash.newExplosions >= deathHand.newExplosions,
-                "the crash did not produce the Death Hand's explosions");
+    if(small)
+        cityRequire(crash.newExplosions >= 1 && crash.newExplosions < deathHand.newExplosions,
+                    "the small crash made " + std::to_string(crash.newExplosions) + " explosions");
+    else
+        cityRequire(crash.newExplosions >= deathHand.newExplosions,
+                    "the crash did not produce the Death Hand's explosions");
 }
 
 /// Release 1.0.851 cross-check of the city airplane against the Natives house:
-/// a plane shot down over Natives worms and crime troopers hits them exactly as
-/// a Death Hand on the same spot does, and everything it destroys is credited
-/// to the house that brought the plane down (here Harkonnen, not the Natives
-/// and not the plane's owner).
+/// Natives worms and crime troopers two tiles or more from a shot-down plane
+/// come through its small crash untouched, though a Death Hand on the same spot
+/// reaches them (with DUNECITY_TEST_PLANE_DEATH_HAND_CRASH the crash hits them
+/// exactly as that Death Hand does). The shooter is credited the plane alone.
 const std::vector<BlastWitness> kNativesBlastWitnesses = {
     {2, 0, Unit_Trooper},   {0, -2, Unit_Trooper},  {-2, 1, Unit_Trooper}, {1, 3, Unit_Trooper},
     {0, 2, Unit_Sandworm},  {-3, -1, Unit_Sandworm},
@@ -1506,6 +1522,10 @@ void checkShotDownPlaneOverNatives() {
         const BlastWitness& witness = kNativesBlastWitnesses[i];
         const std::string where = "Natives witness " + std::to_string(i) + " at offset ("
             + std::to_string(witness.dx) + ',' + std::to_string(witness.dy) + ")";
+        if(AmbientAirplane::smallCrash()) {
+            cityRequire(crash.health[i] == crash.full[i], where + " was damaged by the small crash, which reaches half a tile");
+            continue;
+        }
         cityRequire(crash.health[i] == deathHand.health[i],
                     where + " has " + std::to_string(crash.health[i]) + " HP after the crash but "
                     + std::to_string(deathHand.health[i]) + " after a Death Hand on the same spot");

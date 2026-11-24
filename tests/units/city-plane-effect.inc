@@ -773,7 +773,8 @@ void checkBuildingSplash(const std::string& mapData) {
 // Stefan, 2026-11-23: "does the damage dealt include damage when it crashes? it has a nuclear
 // missile effect so that should be counted". A plane brought down over enemy buildings: the
 // crash is the plane's damage, credited to its owner's City Airplane record, not to the house
-// that shot it down.
+// that shot it down. Since 2026-11-24 the crash is one bomb on the tile it falls on (the Wind
+// Trap under the plane), no longer a Death Hand over all four.
 void checkCrashCredit(const std::string& mapData) {
     auto game = newGame(mapData, 20, Rules{true, false, false});
     auto* defender = game->getHouse(HOUSE_ATREIDES);

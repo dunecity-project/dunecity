@@ -155,7 +155,7 @@ void seFeatures(Game& game, Uint32 cycle) {
     if(cycle == shootAt) {
         seRequire(last && !plane && !game.finished && game.soleSurvivingTeam() == 0,
                   "match decided before the aircraft attack");
-        last->setHealth(20);  // As in natives-probe: only the airplane's Death Hand can take it.
+        last->setHealth(20);  // As in natives-probe: only the airplane's crash, on its footprint, can take it.
         plane = dynamic_cast<AmbientAirplane*>(game.getHouse(se.winner)->createUnit(Unit_AmbientAirplane, true));
         seRequire(plane != nullptr, "could not deploy a real city airplane");
         plane->deploy(last->getLocation() + Coord(1, 1));

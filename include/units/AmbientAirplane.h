@@ -23,9 +23,9 @@
  * that lie under its course (dropBomb, CityAircraft::kBomb*); it never leaves
  * its course for one.  It is an ordinary air unit in every other respect, so hostile
  * anti-air can see it, shoot it and destroy it - and a plane brought down by
- * damage crashes with the effect of a Death Hand impact (crash()).  Anti-air
- * holds its fire while that blast would land on its own side
- * (crashEndangers()).  A plane that flies off the map ends without a blast.
+ * damage crashes with one bomb's blast on the tile it falls on (crash()).  With
+ * City Plane Defence off, anti-air holds its fire while that blast would land on
+ * its own side (crashEndangers()).  A plane that flies off the map ends without a blast.
  *
  * The original's airplane-to-aircraft collision explosions are deliberately
  * not ported: they are part of Micropolis's disaster system.
@@ -116,10 +116,10 @@ public:
     static void applyBalance(ObjectData& data);
     /// Damage of one stick bomb: CityAircraft::kStickDamage, or DUNECITY_TEST_BOMB_DAMAGE.
     static int stickDamage();
-    /// False in the game: a plane that is shot down lands a Death Hand impact (crash()). Balance
-    /// experiment only, read once per process and never a match rule (Stefan, 2026-11-24, after
-    /// OP.dls, where shot-down crashes did 45% of all plane damage): DUNECITY_TEST_PLANE_SMALL_CRASH=1
-    /// makes the crash one stick bomb on the tile the plane falls on instead.
+    /// True in the game: a plane that is shot down does one stick bomb's damage on the tile it
+    /// falls on (crash(); Stefan, 2026-11-24, after OP.dls, where shot-down Death Hand crashes did
+    /// 45% of all plane damage). Balance experiment only, read once per process and never a match
+    /// rule: DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1 restores the Death Hand impact of 2026-10-22.
     static bool smallCrash();
     /// The most a stick bomb landing on `aim` (world units) would do to one building or ground
     /// unit of another team (0: nothing in its blast). `hit` receives that object.
@@ -147,7 +147,8 @@ private:
     void leaveMap();
     /// Draw the cruise heading: the nearest of the sixteen sheet headings.
     void showHeading();
-    /// Shot down: a Death Hand impact at the plane, credited to `shooterOwner`.
+    /// Shot down: the crash at the plane (smallCrash: one bomb on its tile, or a Death Hand with the
+    /// experiment switch), dealt in the name of the plane's owner; `shooterOwner` is credited the plane.
     void crash(Uint32 shooterID, House* shooterOwner, const DeviationReward::Provenance& provenance);
     /// True when the crash blast anywhere between `from` and `to` world units
     /// ahead on the plane's course would reach an object of team `teamID`.
