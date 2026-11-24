@@ -116,6 +116,11 @@ public:
     static void applyBalance(ObjectData& data);
     /// Damage of one stick bomb: CityAircraft::kStickDamage, or DUNECITY_TEST_BOMB_DAMAGE.
     static int stickDamage();
+    /// False in the game: a plane that is shot down lands a Death Hand impact (crash()). Balance
+    /// experiment only, read once per process and never a match rule (Stefan, 2026-11-24, after
+    /// OP.dls, where shot-down crashes did 45% of all plane damage): DUNECITY_TEST_PLANE_SMALL_CRASH=1
+    /// makes the crash one stick bomb on the tile the plane falls on instead.
+    static bool smallCrash();
     /// The most a stick bomb landing on `aim` (world units) would do to one building or ground
     /// unit of another team (0: nothing in its blast). `hit` receives that object.
     int bombEffectAt(const Coord& aim, const ObjectBase** hit = nullptr) const;

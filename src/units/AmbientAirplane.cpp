@@ -8,6 +8,8 @@
 #include <House.h>
 #include <Map.h>
 #include <ScreenBorder.h>
+#include <SoundPlayer.h>
+#include <Explosion.h>
 #include <Game.h>
 #include <Tile.h>
 #include <structures/RocketTurret.h>
@@ -372,9 +374,10 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
 {
     House* const credited = shooterOwner != nullptr ? shooterOwner : getOwner();
     const Coord at = getCenterPoint();
-    SDL_Log("City airplane of house %d shot down at %d,%d by house %d (cycle %u): Death Hand impact",
+    const bool small = smallCrash();
+    SDL_Log("City airplane of house %d shot down at %d,%d by house %d (cycle %u): %s",
             getOwner()->getHouseID(), at.x / TILESIZE, at.y / TILESIZE, credited->getHouseID(),
-            currentGame->getGameCycleCount());
+            currentGame->getGameCycleCount(), small ? "small crash" : "Death Hand impact");
     const ObjectBase* shooter = currentGame->getObjectManager().getObject(shooterID);
     SDL_Log("CITY_PLANE_DOWN: house=%d object=%u killer_house=%d killer_item=%d released=%d cycle=%u",
             getOwner()->getHouseID(), objectID, credited->getHouseID(), shooter ? shooter->getItemID() : -1,
@@ -403,8 +406,18 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
                             currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price,
                             static_cast<int>(lround(structure->getHealth())), structure->getOwner()->getHouseID()});
     }
-    Bullet::detonateDeathHand(objectID, getOwner(), at, DynastyProjectile::deathHandDamage, false,
-                              DeviationReward::liveProvenance(this, getOwner()), shake);
+    if(small) {
+        // One stick bomb's damage within half a tile: the building or units on the tile it falls
+        // on, nothing around it. Same damager, credit and measurement as the Death Hand impact.
+        soundPlayer->playSoundAt(Sound_ExplosionLarge, at);
+        currentGameMap->damage(objectID, getOwner(), at, Bullet_LargeRocket, stickDamage(), TILESIZE / 2, false,
+                               true, NONE_ID, DeviationReward::liveProvenance(this, getOwner()));
+        currentGame->getExplosionList().push_back(new Explosion(Explosion_Large1, at, getOwner()->getHouseID()));
+        if(shake) screenborder->shakeScreen(22);
+    } else {
+        Bullet::detonateDeathHand(objectID, getOwner(), at, DynastyProjectile::deathHandDamage, false,
+                                  DeviationReward::liveProvenance(this, getOwner()), shake);
+    }
     int enemyDestroyed = 0, enemyCredits = 0, enemyHitPoints = 0, ownDestroyed = 0, ownCredits = 0;
     for(const Standing& before : standing) {
         const ObjectBase* object = currentGame->getObjectManager().getObject(before.id);
@@ -642,6 +655,15 @@ int AmbientAirplane::stickDamage()
         return value > 0 ? value : CA::kStickDamage;
     }();
     return damage;
+}
+
+bool AmbientAirplane::smallCrash()
+{
+    static const bool small = [] {
+        const char* text = std::getenv("DUNECITY_TEST_PLANE_SMALL_CRASH");
+        return text != nullptr && std::atoi(text) != 0;
+    }();
+    return small;
 }
 
 bool AmbientAirplane::rocketsHitPlanes()
