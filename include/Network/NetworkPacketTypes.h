@@ -449,7 +449,11 @@
 //      Also in 133 (still unreleased): CMD_HOUSE_REPAIR_RETURN, appended after
 //      CMD_AIRPORT_BUY_AIRPLANE, switches whether the issuer's Repair Yards have repaired units
 //      flown back to where they were picked up (House::repairReturnEnabled, save format 9893).
-#define NETWORK_PROTOCOL_VERSION            133
+// 134: A city airplane that is shot down crashes with one stick bomb's damage on its own tile
+//      (AmbientAirplane::smallCrash) instead of a Death Hand impact, and anti-air always fires at
+//      an enemy plane: the hold on a shot that could bring it down onto its own side is gone.
+//      A 133 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            134
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
