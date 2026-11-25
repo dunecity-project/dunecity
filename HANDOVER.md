@@ -1,3 +1,23 @@
+## 2026-11-25 - Released 1.0.878 (v1.0.878, 1bda52dd0): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Stefan: "Release 1.0.878". The small plane crash and always-firing anti-air (entry below), network protocol 134,
+save format 9898 unchanged. Evidence log: `~/Documents/projects/outputs/release-1.0.878/gates.md` on the Mini.
+
+- **Qualification:** integration CI 45519638257 passed first time; qualification 45521326471 on the Mini
+  (00:51-01:42 UTC); `reuse-qualification` found it without `--run-id`.
+- **GitHub:** tag pushed 01:43 UTC; Build Dune Legacy run 45527827421 succeeded at the first attempt
+  (select-inputs passed, release 02:23 UTC). Release v1.0.878 is Latest and non-draft.
+- **SourceForge:** sync run 45532645509 succeeded. **Browser:** publish run 45532645583 and website deploy
+  45532783978 succeeded; in Chrome, dunelegacy.com/play reached the main menu showing "App v1.0.878".
+- **Live verify:** `release-automation.py verify v1.0.878 --live` passed (package hashes, updater signatures,
+  browser artifact hashes, SourceForge defaults, website links and What's New). Reservation completed and
+  research resumed.
+- **Android:** held. **TestFlight:** not part of this release.
+- **MacBook Air:** the published macOS zip (sha256 d1f090cf..., matches SHA256SUMS; Notarized Developer ID) is in
+  `/Applications/dunecity.app`, executable 37c73630...; 1.0.877 kept as the backup.
+- The Mini pointer was at the left edge (0,1018); `CentrePointer.app` moved it to 960,540 this time (no Screen
+  Sharing connection was open), so the tag build did not wait for Stefan.
+
 ## 2026-11-25 - City planes: the small crash is the default, and anti-air always fires at planes
 
 Stefan, 2026-11-24: "Yes, make it default" (the small crash measured in the entry below). Stefan, 2026-11-25:
