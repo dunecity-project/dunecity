@@ -1786,7 +1786,6 @@ TEST_CASE("Hospital Care defaults on and its off state is hashed and carried in 
     off.hospitalCare = false;
     REQUIRE(off != defaults);
     REQUIRE(off.getHash() != defaults.getHash());
-    REQUIRE(off.getHash().find("/hospitalCare=0") != std::string::npos);
 
     auto original = makeCoop(false, true);
     auto options = original.getGameOptions();

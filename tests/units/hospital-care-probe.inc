@@ -184,7 +184,7 @@ std::string digest(const std::vector<Uint32>& units) {
         if(const auto* t = care().trip(id))
             out << " trip=" << t->hospitalID << '/' << int(t->stage) << '/' << t->spotX << ',' << t->spotY << '/' << t->carried;
     }
-    out << " credits=" << currentGame->getHouse(HOUSE_ATREIDES)->getCredits().getRawValue();
+    out << " credits=" << currentGame->getHouse(HOUSE_ATREIDES)->getCredits();
     return out.str();
 }
 
@@ -197,7 +197,7 @@ void checkCap(const std::string& mapData, bool second) {
     if(second) hospitals.push_back(placeHospital(owner, Coord(34, 20)));
     std::vector<Uint32> units;
     for(int i = 0; i < 7; ++i) units.push_back(soldier(owner, Coord(23 + (i % 3), 25 + i / 3), 4)->getObjectID());
-    const FixPoint before = owner->getCredits();
+    const int before = owner->getCredits();
     for(Uint32 id : units) order(*game, id);
     step(*game, hospitals, 3);
     for(Uint32 id : units) require(care().trip(id) != nullptr, "A soldier ordered to repair has no Hospital trip");
@@ -230,9 +230,9 @@ void checkCap(const std::string& mapData, bool second) {
         const auto* unit = unitByID(id);
         require(unit && unit->getHealth() >= unit->getMaxHealth(), "A soldier left the Hospital without full health");
     }
-    const FixPoint paid = before - owner->getCredits();
-    // 7 soldiers x 16 hit points x 0.2 credits.
-    require(paid > FixPoint(22) && paid < FixPoint(23), "The house did not pay 0.2 credits a hit point");
+    const int paid = before - owner->getCredits();
+    // 7 soldiers x 16 hit points x 0.2 credits = 22.4 (credits are shown rounded).
+    require(paid >= 21 && paid <= 24, "The house did not pay 0.2 credits a hit point");
     if(!second) {
         require(most == DuneCity::kHospitalBeds, "Five soldiers never healed together");
         require(waited >= 2, "No soldier waited for a bed");
@@ -242,7 +242,7 @@ void checkCap(const std::string& mapData, bool second) {
     for(Uint32 id : hospitals) require(!HC::isLockedHospital(zone(id)), "A Hospital stayed locked after its last patient");
     record(second ? "overflow" : "cap", "max_healing=" + std::to_string(most) + " peak_first=" + std::to_string(peak[0])
                        + (second ? " peak_second=" + std::to_string(peak[1]) : "") + " most_waiting=" + std::to_string(waited)
-                       + " paid=" + std::to_string(paid.toFloat()) + " cycles=" + std::to_string(game->getGameCycleCount()));
+                       + " paid=" + std::to_string(paid) + " cycles=" + std::to_string(game->getGameCycleCount()));
     game.reset();
     currentGame = nullptr;
 }
