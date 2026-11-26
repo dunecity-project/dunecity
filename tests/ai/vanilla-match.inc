@@ -59,6 +59,19 @@ inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std:
     params.mod = mod;
     params.techLevel = 9;
     params.startSide = SkirmishGenerator::Side{"", BaseSize::Fortress, 5, city ? 4 : 0};
+    // Test-only start overrides (vanilla-match.py --env): BALANCE_SKIRMISH_BASE 0-5 (None = an MCV,
+    // Outpost = a Construction Yard ... Fortress), BALANCE_SKIRMISH_ARMY 0-6, BALANCE_SKIRMISH_CITY 0-5.
+    // Unset, the start is Stefan's Fortress with a 20,000-credit army and a 40,000 city.
+    auto startLevel = [](const char* name, int low, int high, int fallback) {
+        const char* text = std::getenv(name);
+        if (!text) return fallback;
+        const int value = std::atoi(text);
+        if (value < low || value > high) throw std::runtime_error(std::string("Invalid ") + name);
+        return value;
+    };
+    params.startSide.base = static_cast<BaseSize>(startLevel("BALANCE_SKIRMISH_BASE", 0, 5, int(BaseSize::Fortress)));
+    params.startSide.army = startLevel("BALANCE_SKIRMISH_ARMY", 0, 6, params.startSide.army);
+    params.startSide.city = startLevel("BALANCE_SKIRMISH_CITY", 0, city ? 5 : 0, params.startSide.city);
     if (genome) {
         const INIFile inputs(std::string(std::getenv("BALANCE_GENOME_PHASE_DIR")) + "/schedule.ini");
         const int base = inputs.getIntValue("Map", "base", 5);
