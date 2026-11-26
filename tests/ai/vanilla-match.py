@@ -126,12 +126,13 @@ PLANE_EVENTS = (('CITY_PLANE_LAUNCHED:', 'launched'), ('CITY_PLANE_BOMB:', 'bomb
                 ('CITY_AIR_DEFENCE:', 'air_defence'), ('CITY_PLANE_CRASH:', 'crash'),
                 ('CITY_PLANE_CRASH_KILL:', 'crash_kill'), ('CITY_FIRST_BOMB:', 'first_bomb'),
                 ('CITY_HOUSE_OUT:', 'house_out'), ('CITY_AIRPORT_COVER:', 'airport_cover'),
-                ('CITY_PLANE_NEAR_AIRPORT:', 'near_airport'), ('CITY_AIRPORT_GUARD:', 'airport_guard'))
+                ('CITY_PLANE_NEAR_AIRPORT:', 'near_airport'), ('CITY_AIRPORT_GUARD:', 'airport_guard'),
+                ('CITY_PLANE_UNIT_KILL:', 'unit_kill'), ('CITY_PLANE_LEFT:', 'left'))
 PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name', 'price', 'killer_house',
                 'killer_item', 'bombs', 'released', 'bought', 'cycle', 'enemy_destroyed', 'enemy_credits', 'enemy_hp',
                 'own_destroyed', 'own_credits', 'own_rocket_turrets', 'threat', 'rocket_turrets', 'gun_turrets',
                 'structures_lost', 'item', 'x', 'y', 'airport', 'airport_house', 'airport_dist', 'stage', 'dist',
-                'ring', 'reach', 'gun_turrets', 'powered', 'health', 'turret_at')
+                'ring', 'reach', 'gun_turrets', 'powered', 'health', 'turret_at', 'own', 'source')
 PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()

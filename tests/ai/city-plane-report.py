@@ -19,6 +19,10 @@ length and each house's placement score (tests/ai/match_score.py). The paired di
 is per game (same map, seed and sides) with a 95% bootstrap interval. Every house plays the same
 rules, so a house's placement score can only show whether the rules favour one seat; a match
 diverges from its pair after the first changed shot, so pairing removes the map and the start.
+
+Then, for each arm whose logs carry per-flight kills (from 2026-11-26), the economics of its flights:
+value destroyed per flight and per game against the 1500 price, buildings and units apart, by house and
+by game minute (tests/ai/city_plane_economics.py, which also runs on one tag alone).
 """
 import argparse
 import csv
@@ -30,6 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import match_score  # noqa: E402
+import city_plane_economics  # noqa: E402
 
 PAIR = ('difficulty', 'map', 'seed', 'sides')
 HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
@@ -170,6 +175,16 @@ for pair in pairs:
 if targets:
     report += ['', 'Buildings destroyed by bombs: '
                + ', '.join('%s %d' % item for item in sorted(targets.items(), key=lambda item: -item[1])) + '.']
+
+# Economics of the flights, each arm on the games played in both.
+plane_rows = read('planes.csv')
+for tag, label in ((args.off, args.off_label), (args.on, args.on_label)):
+    flights, _, has_objects = city_plane_economics.flights_of(plane_rows, tag)
+    if not has_objects:
+        continue
+    keys = {(tag,) + pair for pair in pairs}
+    flights = [f for f in flights if f.game in keys]
+    report += [''] + city_plane_economics.report(flights, keys, 'Economics, %s (%s)' % (label, tag))
 
 text = '\n'.join(report) + '\n'
 print(text)

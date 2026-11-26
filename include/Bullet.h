@@ -28,6 +28,8 @@
 #include <misc/OutputStream.h>
 #include <fixmath/FixPoint.h>
 
+#include <vector>
+
 // forward declarations
 class House;
 
@@ -65,6 +67,17 @@ public:
     */
     static void detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impact, int damage, bool air,
                                   const DeviationReward::Provenance& provenance, bool shake = true);
+
+    /// Match log only (tests/ai/city_plane_economics.py): a living ground unit of any team noted
+    /// before a city airplane's bomb or crash goes off, to see afterwards whether it was destroyed.
+    struct WatchedUnit { Uint32 id; int house; int team; int item; int price; };
+    /// The living ground units whose centre lies within `reach` world units (on each axis) of `at`.
+    static std::vector<WatchedUnit> watchGroundUnits(const Coord& at, int reach);
+    /// One CITY_PLANE_UNIT_KILL line per watched unit the blast destroyed: the plane (`planeID`,
+    /// also when it is already gone), the unit's owner, type and price, own=1 for the plane's own
+    /// team, and `source` ("bomb" or "crash"). Reads only; never changes the game.
+    static void logCityPlaneUnitKills(const std::vector<WatchedUnit>& watched, Uint32 planeID, int planeHouse,
+                                      int planeTeam, const char* source);
 
     inline int getBulletID() const { return bulletID; }
     /// The object this shot was fired at, if it still exists.

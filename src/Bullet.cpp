@@ -923,15 +923,19 @@ case Bullet_LargeRocket: {
                 inReach.push_back({structure->getObjectID(), structure->getOwner()->getHouseID(), static_cast<int>(structure->getItemID()),
                                    currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price});
             }
+            // The ground units the blast can reach, any team (CITY_PLANE_UNIT_KILL).
+            const auto units = watchGroundUnits(position, damageRadius + TILESIZE);
             currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
             for(const InReach& before : inReach) {
                 const ObjectBase* hit = currentGame->getObjectManager().getObject(before.id);
                 if(hit != nullptr && hit->getHealth() > 0) continue;
                 std::string name = getItemNameByID(before.item);
                 std::replace(name.begin(), name.end(), ' ', '_');
-                SDL_Log("CITY_PLANE_KILL: house=%d target_house=%d target_item=%d target_name=%s price=%d cycle=%u",
-                        houseID, before.house, before.item, name.c_str(), before.price, currentGame->getGameCycleCount());
+                SDL_Log("CITY_PLANE_KILL: house=%d object=%u target_house=%d target_item=%d target_name=%s price=%d cycle=%u",
+                        houseID, shooterID, before.house, before.item, name.c_str(), before.price,
+                        currentGame->getGameCycleCount());
             }
+            logCityPlaneUnitKills(units, shooterID, houseID, owner->getTeamID(), "bomb");
             if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
                 // The stick's heavy bomb: the large building explosion drawn four tiles wide.
                 soundPlayer->playSoundAt(Sound_ExplosionLarge, position/TILESIZE);
@@ -953,6 +957,34 @@ case Bullet_LargeRocket: {
 
     bulletList.remove(this);
     delete this;
+}
+
+std::vector<Bullet::WatchedUnit> Bullet::watchGroundUnits(const Coord& at, int reach)
+{
+    std::vector<WatchedUnit> watched;
+    for(const UnitBase* unit : unitList) {
+        if(unit->getHealth() <= 0 || unit->isAFlyingUnit() || !unit->isActive()) continue;
+        const Coord centre = unit->getCenterPoint();
+        if(std::abs(centre.x - at.x) > reach || std::abs(centre.y - at.y) > reach) continue;
+        watched.push_back({unit->getObjectID(), unit->getOwner()->getHouseID(), unit->getOwner()->getTeamID(),
+                           static_cast<int>(unit->getItemID()),
+                           currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price});
+    }
+    return watched;
+}
+
+void Bullet::logCityPlaneUnitKills(const std::vector<WatchedUnit>& watched, Uint32 planeID, int planeHouse,
+                                   int planeTeam, const char* source)
+{
+    for(const WatchedUnit& before : watched) {
+        const ObjectBase* unit = currentGame->getObjectManager().getObject(before.id);
+        if(unit != nullptr && unit->getHealth() > 0) continue;
+        std::string name = getItemNameByID(before.item);
+        std::replace(name.begin(), name.end(), ' ', '_');
+        SDL_Log("CITY_PLANE_UNIT_KILL: house=%d object=%u target_house=%d target_item=%d target_name=%s price=%d "
+                "own=%d source=%s cycle=%u", planeHouse, planeID, before.house, before.item, name.c_str(), before.price,
+                before.team == planeTeam ? 1 : 0, source, currentGame->getGameCycleCount());
+    }
 }
 
 void Bullet::detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impact, int damage, bool air,

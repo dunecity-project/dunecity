@@ -12,6 +12,7 @@
 #include <Explosion.h>
 #include <Game.h>
 #include <Tile.h>
+#include <sand.h>
 #include <structures/RocketTurret.h>
 #include <structures/StructureBase.h>
 #include <dunecity/CityAircraftPolicy.h>
@@ -341,6 +342,9 @@ void AmbientAirplane::beginDeparture()
 void AmbientAirplane::leaveMap()
 {
     // Original: `sprite->frame = 0` — off the map, gone, no explosion.
+    // Match log: the flight ended without being shot down (tests/ai/city_plane_economics.py).
+    SDL_Log("CITY_PLANE_LEFT: house=%d object=%u released=%d cycle=%u", getOwner()->getHouseID(), objectID,
+            static_cast<int>(bombsReleased), currentGame->getGameCycleCount());
     setVisible(VIS_ALL, false);
     destroy();
 }
@@ -441,7 +445,7 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     // owner: the Stats window's City Airplane row and QuantBot's record of whether its planes
     // pay (CityAircraft::purchasePays) include it. The buildings in reach are measured before
     // and after for one log line per crash (tests/ai/city-plane-report.py).
-    struct Standing { Uint32 id; bool enemy; int price; int health; int owner; };
+    struct Standing { Uint32 id; bool enemy; int price; int health; int owner; int item; };
     std::vector<Standing> standing;
     const int reach = small ? TILESIZE : 2 * TILESIZE + Bullet::deathHandBlastRadius;
     for(const StructureBase* structure : structureList) {
@@ -452,8 +456,12 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
            || at.y >= bottomRight.y + reach) continue;
         standing.push_back({structure->getObjectID(), structure->getOwner()->getTeamID() != getOwner()->getTeamID(),
                             currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price,
-                            static_cast<int>(lround(structure->getHealth())), structure->getOwner()->getHouseID()});
+                            static_cast<int>(lround(structure->getHealth())), structure->getOwner()->getHouseID(),
+                            static_cast<int>(structure->getItemID())});
     }
+    // The ground units in reach, for CITY_PLANE_UNIT_KILL (Stefan, 2026-11-26: "how many units or
+    // buildings they destroy (and total value) vs their cost").
+    const auto units = Bullet::watchGroundUnits(at, reach);
     if(small) {
         // One stick bomb's damage within half a tile: the building or units on the tile it falls
         // on, nothing around it. Same damager, credit and measurement as the Death Hand impact.
@@ -476,8 +484,11 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
                 ++enemyDestroyed; enemyCredits += before.price;
                 // One line per building of another team the crash destroys, with its owner, for
                 // the match tables (CITY_PLANE_KILL is the same for a bomb).
-                SDL_Log("CITY_PLANE_CRASH_KILL: house=%d target_house=%d price=%d cycle=%u", getOwner()->getHouseID(),
-                        before.owner, before.price, currentGame->getGameCycleCount());
+                std::string name = getItemNameByID(before.item);
+                std::replace(name.begin(), name.end(), ' ', '_');
+                SDL_Log("CITY_PLANE_CRASH_KILL: house=%d object=%u target_house=%d target_item=%d target_name=%s "
+                        "price=%d cycle=%u", getOwner()->getHouseID(), objectID, before.owner, before.item, name.c_str(),
+                        before.price, currentGame->getGameCycleCount());
             }
         } else if(after <= 0) {
             ++ownDestroyed;
@@ -488,6 +499,7 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
             "own_destroyed=%d own_credits=%d cycle=%u",
             getOwner()->getHouseID(), objectID, credited->getHouseID(), enemyDestroyed, enemyCredits, enemyHitPoints,
             ownDestroyed, ownCredits, currentGame->getGameCycleCount());
+    Bullet::logCityPlaneUnitKills(units, objectID, getOwner()->getHouseID(), getOwner()->getTeamID(), "crash");
 }
 
 Coord AmbientAirplane::velocity16() const
