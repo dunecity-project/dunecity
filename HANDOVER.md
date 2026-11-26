@@ -1,3 +1,53 @@
+## 2026-11-27 - QuantBot may build right up to enemy buildings (protocol 141)
+
+Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings". Commit `8cf652a47`, test
+follow-ups `8384aefba`, `f5747bdce`, `13cf7cd7e`, `244b89029`. Evidence:
+`~/Documents/projects/outputs/enemy-border-20261127/` (`new`, `old`, `mixed`; `tests/ai/enemy-gap-report.py`).
+
+- **The engine never stopped it.** `House::placeStructure` / `Map::okayToPlaceStructure` ask only for free rock
+  (no city zone, no unit unless ignored) within build range of the house's own tiles; enemy buildings next door
+  are legal. Left alone.
+- **QuantBot rules that kept it away, and what changed** (`TacticalSafetyPolicy::enemyBorderTileScore`,
+  `ordinarySiteUnderFireAllowed`):
+  - `findPlaceLocation` charged -10 for every enemy building tile on a site's border ring (the mirror of +10
+    for an own one). **Now 0.**
+  - Tactical danger (`refreshTacticalDanger`: 100 for each visible enemy unit or structure that can attack, the
+    Palace excepted, over its weapon range + 2) refused any site with danger > 0, until a finished building
+    had been held 60 s (`867b03c5f`). **Now light fire (one weapon, danger <= 100) is a fallback taken after
+    every safe site, least threatened first; heavy fire (two weapons or more) keeps the 60 s rule.** Reactors
+    keep their own fire rule. A search pass stops early only on a safe site, a protected repair site is picked
+    among safe sites, a safe redevelopment site outranks a light-fire one. Turrets and walls never had the
+    danger rule.
+- **Kept, as site preferences, not spacing bans:** factories and the Nuclear Plant prefer the rear
+  (`rearScore`, the enemy-clearance rank); -100 for an enemy unit on a site's border; own recent losses
+  (`nearRecentStructureLoss`, loss risk); the city side rule (-30 a side touching any building, own or enemy);
+  the special searches (`findPalaceDistrictSite`, `findRedevelopmentSite`, the prepared-foundation substitute)
+  still require danger 0. `placeYardStructure` re-searches a planned site that came under any fire.
+- **On by default, no menu switch.** QuantBot Config.ini `BuildUpToEnemy` (hashed only when off) and play style
+  `@old-enemy-spacing` exist for experiment arms only. **Protocol 141**; save format unchanged.
+- **Measurement.** Each placed building logs `AI_PLACED` (clear tiles to the nearest enemy building);
+  `vanilla-match.py` writes `placements.csv`. Stefan's setup: `rs160-dunecity`, four Brutal QuantBots, seeds
+  9101-9148, 45 min, AWS, source `97a8d5816` (= `8cf652a47` before the air-defense probe commit).
+  - Self-play, 48 games each arm, per arm buildings (not slabs or roads) / city lots: new 18,591 / 34,688,
+    old 18,459 / 34,047 (96.8 v 96.1 buildings a house-game). Median gap to the nearest enemy building 47 tiles
+    in both: on this map bases stay far apart and build range limits growth. Touching an enemy building:
+    buildings 9 v 4, lots 12 v 6; within 2 tiles 30 v 12 and 61 v 32; within 5 tiles 58 v 46 and 184 v 95.
+    Lots placed under light fire 778 v 7. Time-outs 27 v 29 of 48.
+  - Mixed (old and new spacing in the same games, 288 games): placement score -0.104 v -0.100, difference
+    -0.004 (95% -0.09..+0.08), level; time-out share 40% v 42%. Touching: buildings 12 v 8, lots 17 v 14.
+- **Tests.** `quantbot_enemy_border_site` (nightly, headless): with one candidate site, an enemy Wind Trap on
+  its corner, the old spacing scores exactly 10 a trap tile below the new one; light fire over every site is
+  taken (refused by the old spacing), a safe site beats a better-scored light-fire one, heavy fire is refused.
+  Unit tests in `QuantBotStrategyTestCase.cpp` (policy values, config default, round trip, hash).
+- **Gates.** Four AI gates on `8cf652a47` (AWS `20261127T004231-ctest-8a3576`): 4 of 4 passed.
+  Nightly `-L nightly -LE gui` on `8384aefba` (AWS `20261127T005512-ctest-b448c0`): 241 of 252; the 11
+  failures were this probe's first fixture (rebuilt since), seven genome/sweep contracts missing the new key
+  (registry entry `13cf7cd7e`; all seven pass there, `20261127T011801-ctest-569e44`) and the three
+  air-defense probes (fixture fixed by `30758f6cd`; pass at `13cf7cd7e`). `perf_regression` on the Mini at
+  `f5747bdce`: passed (102 s).
+  The probe at `244b89029` with `quantbot_held_site_threat`: 2 of 2 passed (`20261127T012326-ctest-8ac381`).
+  Not pushed: the release coordinator ships the batch as 1.0.880.
+
 ## 2026-11-27 - City planes: a shot-down plane explodes as three of its bombs (City Plane Crash Bombs, protocol 139)
 
 Stefan, 2026-11-26: "make planes blow up as 3 of their bombs when they die, current explosion too small". Commits
