@@ -1086,8 +1086,17 @@ void runAirDefenseProbe(Game& game) {
             };
             // Fixture sizing only: the smallest army value whose infantry share has
             // room for one Trooper and no room for a second of either offer. The
-            // assertions below count actual orders, not this arithmetic.
-            const int cityInfantryPercent=10;     // Brutal
+            // assertions below count actual orders, not this arithmetic. The share
+            // is measured like a unit-mix slot (no fixed difficulty quota since
+            // protocol 138), so the fixture reads the share this house's pass
+            // actually uses; with no combat yet it does not depend on the army value.
+            setCityCredits(200000);
+            clearCityQueues();cityPass(100000);
+            const int cityInfantryPercent=bot->getAllocationSnapshot().infantryQuotaBps/100;
+            clearCityQueues();
+            SDL_Log("AIR_DEFENSE_DIAG: city_infantry_share_percent=%d",cityInfantryPercent);
+            require(cityInfantryPercent>0 && cityInfantryPercent<100,
+                "The city fixture house has no measurable infantry share to size the quota from");
             auto admits=[&](int64_t owned,int64_t army,int64_t value) {
                 return (owned+value)*100 <= (army+value)*cityInfantryPercent;
             };
