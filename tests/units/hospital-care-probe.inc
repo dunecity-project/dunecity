@@ -221,8 +221,10 @@ void checkCap(const std::string& mapData, bool second) {
                 ++waitingNow;
                 require(beside(zone(t.hospitalID), unitByID(id)->getLocation()), "A waiting soldier is not beside its Hospital");
             }
-            if(t.stage == HospitalTrip::Stage::Healing)
+            if(t.stage == HospitalTrip::Stage::Healing) {
                 require(beside(zone(t.hospitalID), unitByID(id)->getLocation()), "A healing soldier is not beside its Hospital");
+                require(unitByID(id)->getAttackMode() == HOLD, "A healing soldier does not hold its bed");
+            }
         }
         waited = std::max(waited, waitingNow);
         everyoneDone = care().trips().empty();
@@ -231,6 +233,7 @@ void checkCap(const std::string& mapData, bool second) {
     for(Uint32 id : units) {
         const auto* unit = unitByID(id);
         require(unit && unit->getHealth() >= unit->getMaxHealth(), "A soldier left the Hospital without full health");
+        require(unit->getAttackMode() == GUARD, "A healed soldier did not get its Guard mode back");
     }
     const int paid = before - owner->getCredits();
     // 7 soldiers x 16 hit points x 0.2 credits = 22.4 (credits are shown rounded).

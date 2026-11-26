@@ -307,6 +307,12 @@ void update() {
         if(care->patients(trip.hospitalID) < kHospitalBeds) {
             trip.stage = HospitalTrip::Stage::Healing;
             if(unit->getDestination() != unit->getLocation()) unit->doMove2Pos(unit->getLocation(), false);
+            // Hold the bed: fire at enemies in range, never chase off it (measured: in Guard a
+            // healing soldier left its bed after a median 44 cycles, at 42% health). A Carryall
+            // request left over from the walk is no mode to return to.
+            const ATTACKMODE mode = unit->getAttackMode();
+            trip.priorMode = static_cast<uint8_t>((mode == HOLD || mode == CARRYALLREQUESTED) ? GUARD : mode);
+            unit->doSetAttackMode(HOLD);
         } else {
             trip.stage = HospitalTrip::Stage::Waiting;
             if((cycle + unitID) % kHospitalRecheckCycles == 0) {
@@ -317,6 +323,11 @@ void update() {
     }
     for(const auto& [id, why] : ended) {
         const auto* t = care->trip(id);
+        // A soldier leaving its bed gets back the mode it had (a player's order already chose one).
+        if(auto* left = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(id))) {
+            if(t && t->priorMode != 0xff && left->getAttackMode() == HOLD && left->getHealth() > 0)
+                left->doSetAttackMode(static_cast<ATTACKMODE>(t->priorMode));
+        }
         logEvent(std::string(why) == "healed" ? "healed" : "ended",
                  currentGame->getObjectManager().getObject(id) ? dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(id)) : nullptr,
                  id, t ? t->hospitalID : 0, why);

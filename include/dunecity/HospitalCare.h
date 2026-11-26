@@ -84,10 +84,14 @@ struct HospitalTrip {
     bool carried = false;            ///< Seen inside a Carryall since the last walking order.
     uint32_t startCycle = 0;         ///< Cycle of the dispatch or of the last step closer.
     int16_t bestDistance = 0x7fff;   ///< Closest the walk has come, in tiles (stall detection).
+    /// The attack mode a healing soldier had before it held its bed (HOLD while healing, so it fires
+    /// from the bed but does not chase off it); restored when the trip ends. 0xff: not healing yet.
+    uint8_t priorMode = 0xff;
 
     bool operator==(const HospitalTrip& o) const {
         return hospitalID == o.hospitalID && spotX == o.spotX && spotY == o.spotY && stage == o.stage
-            && carried == o.carried && startCycle == o.startCycle && bestDistance == o.bestDistance;
+            && carried == o.carried && startCycle == o.startCycle && bestDistance == o.bestDistance
+            && priorMode == o.priorMode;
     }
 };
 
@@ -146,6 +150,7 @@ public:
             stream.writeBool(t.carried);
             stream.writeUint32(t.startCycle);
             stream.writeSint16(t.bestDistance);
+            stream.writeUint8(t.priorMode);
         }
     }
 
@@ -160,7 +165,7 @@ public:
             overlays_.emplace_back(zone, overlay);
         }
         const Uint32 tripCount = stream.readUint32();
-        stream.requireReadableElements(tripCount, 20);
+        stream.requireReadableElements(tripCount, 21);
         for(Uint32 i = 0; i < tripCount; ++i) {
             const Uint32 unit = stream.readUint32();
             HospitalTrip t;
@@ -173,6 +178,7 @@ public:
             t.carried = stream.readBool();
             t.startCycle = stream.readUint32();
             t.bestDistance = stream.readSint16();
+            t.priorMode = stream.readUint8();
             trips_[unit] = t;
         }
     }
