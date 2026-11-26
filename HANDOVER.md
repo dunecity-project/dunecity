@@ -1,3 +1,20 @@
+## 2026-11-26 - Released 1.0.879 (v1.0.879, 82b5dbc05): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Stefan: "Release 1.0.879". The held-building yard fix (protocol 135), French voices launch crash (#129) and the
+Linux render-driver fallback (#120); save format 9898 unchanged. Evidence log:
+`~/Documents/projects/outputs/release-1.0.879/gates.md` on the Mini. Not in it: `cb2e156fc` and later commits.
+
+- **Qualification:** integration CI 45767568090 passed first time; qualification 45769556905 on the Mini
+  (06:38-07:30 UTC); `reuse-qualification` found it without `--run-id`.
+- **GitHub:** tag pushed 07:31 UTC; Build Dune Legacy run 45775943770 succeeded at the first attempt (release
+  08:06 UTC). Release v1.0.879 is Latest and non-draft, 25 assets.
+- **SourceForge:** sync run 45780454034 succeeded. **Browser:** publish run 45780453892 and website deploys
+  45780444983 and 45780640119 succeeded; in Chrome, dunelegacy.com/play reached the main menu showing "App v1.0.879".
+- **Live verify:** `release-automation.py verify v1.0.879 --live` passed. Reservation completed and research resumed.
+- **Android:** held. **TestFlight:** not part of this release.
+- **MacBook Air:** the published macOS zip (sha256 fe9adc5a..., matches SHA256SUMS; Notarized Developer ID) is in
+  `/Applications/dunecity.app`, executable 05d46ef7...; 1.0.878 kept as the backup.
+
 ## 2026-11-26 - An Airport built in the first five minutes launches its free plane at once (after 1.0.879)
 
 Stefan, 2026-11-26: "make a plane spawn when an airport is built, not the first one after 5 mins".
