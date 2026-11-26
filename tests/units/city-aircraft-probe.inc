@@ -1908,6 +1908,10 @@ int runCityAircraftProbe() {
     settings.gameOptions.cityPlaneCarpetBombing = false;
     settings.gameOptions.cityPlaneBombingRuns = false;
     settings.gameOptions.cityPlanePurchase = false;
+    // Protocol 137: one free plane per Airport would break the Micropolis singleton this probe checks
+    // (checkAirportLaunch); city_plane_effect checks both rules (checkFreePerAirport, checkBuildTime).
+    settings.gameOptions.cityPlaneBuildTime = false;
+    settings.gameOptions.cityPlaneFreePerAirport = false;
     std::ifstream map(PROBE_MAP_PATH);
     gMapData.assign((std::istreambuf_iterator<char>(map)), std::istreambuf_iterator<char>());
     cityRequire(!gMapData.empty(), "fixture map is empty");
