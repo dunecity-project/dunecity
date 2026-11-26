@@ -1034,6 +1034,15 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/battery-clearance-probe)
         set_tests_properties(quantbot_battery_clearance PROPERTIES TIMEOUT 180 PROCESSORS 2)
+        # NuclearConsolidation keeps its Wind Traps while the base has room to build (Stefan,
+        # 2026-11-27): the production planCityEconomyProjects() retires one per pass only when
+        # the rock survey says the base is low on building room, the one with most lots first.
+        dunecity_add_test(headless nightly NAME quantbot_wind_trap_retirement COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --wind-trap-probe --repeatable
+            --level 9 --mod dunecity
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/wind-trap-retirement-probe)
+        set_tests_properties(quantbot_wind_trap_retirement PROPERTIES TIMEOUT 180 PROCESSORS 2)
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): Stefan's
         # "All against Atreides" setup played to the end - vanilla, Atreides QuantBot Brutal
         # (local spectator) against four AI Player (hard) houses, his Game Options (unit and

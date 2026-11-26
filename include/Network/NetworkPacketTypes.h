@@ -479,7 +479,11 @@
 //      reach) is taken after every safe site instead of refused (TacticalSafetyPolicy::
 //      enemyBorderTileScore, ordinarySiteUnderFireAllowed). AI placement differs, so a 140 peer
 //      would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            141
+// 142: QuantBot's NuclearConsolidation retires a Wind Trap only while its base is low on building
+//      room (Stefan, 2026-11-27): built out, or fewer than kWindTrapRetireFreeRock free rock tiles
+//      (ForceConcentrationPolicy::windTrapRetirementRoomLow). AI demolition differs, so a 141 peer
+//      would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            142
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

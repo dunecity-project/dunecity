@@ -65,6 +65,7 @@
 #include "wave-formation-probe.inc"
 #include "blob-wave-probe.inc"
 #include "force-concentration-probe.inc"
+#include "wind-trap-retirement-probe.inc"
 #include "spice-bloom-probe.inc"
 #include "formation-duel.inc"
 #include "probe-digest.inc"
@@ -480,6 +481,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_FORCE_PROBE")) {
         runForceConcentrationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_WIND_TRAP_PROBE")) {
+        runWindTrapRetirementProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_SPICE_BLOOM_PROBE")) {

@@ -437,6 +437,8 @@ parser.add_argument('--blob-wave-probe', action='store_true',
                     help='Verify QuantBot hunt parties (WaveFormation Blob) gather, march, release, reform and fall back')
 parser.add_argument('--force-probe', action='store_true',
                     help='Verify the QuantBot force-concentration defaults: focus fire, converging on a fight, 60%% waves')
+parser.add_argument('--wind-trap-probe', action='store_true',
+                    help='Verify QuantBot retires Wind Traps for a reactor only when its base is low on building room')
 parser.add_argument('--spice-bloom-probe', action='store_true',
                     help='Verify SpiceBloomHarvest: the cheapest idle ranged unit bursts an open bloom, a wasteful one is skipped')
 parser.add_argument('--strategy-probe', action='store_true',
@@ -1071,6 +1073,7 @@ if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
 if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
 if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
 if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
+if args.wind_trap_probe: env['BALANCE_WIND_TRAP_PROBE'] = '1'
 if args.spice_bloom_probe: env['BALANCE_SPICE_BLOOM_PROBE'] = '1'
 # Play styles (label suffix @style, docs/ai-play-styles.md) are read from here by the probe.
 env['BALANCE_STYLE_DIR'] = str(root / 'tests/ai/play-styles')

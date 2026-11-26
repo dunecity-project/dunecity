@@ -366,6 +366,15 @@ constexpr int kConsolidateWindTraps = 10;   // 3 (tried 2026-11-21): -1.03 in Br
 /// ... and always keeps this many: a Wind Trap is the prerequisite of the Nuclear Plant (and of the
 /// refinery, radar and factories), so retiring the last one makes the next reactor unbuildable.
 constexpr int kKeepWindTraps = 2;
+/// ... and only when the base is low on building room (Stefan, 2026-11-27: "windtraps being destroyed
+/// should only be when the ai is low on free building space. if it has space it should keep the
+/// windtraps, not blow them up"). Low on room is what the rock survey already measures: the base is
+/// built out (fewer than QuantBotColonisationPolicy::kCrampedFootprints free 2x2 footprints, or no
+/// site for a production building), or fewer than this many free rock tiles in its build range.
+constexpr int kWindTrapRetireFreeRock = 48;
+inline bool windTrapRetirementRoomLow(bool builtOut, int freeRock) {
+    return builtOut || freeRock < kWindTrapRetireFreeRock;
+}
 /// PalaceDistricts: every R+C district gets a Palace (R+C tax and +40 land value within
 /// kPalaceReachTiles) where one can be built; a house that cannot build one yet gets one Stadium
 /// (the same +40, tech 4; only one: "palaces are more efficient otherwise") -

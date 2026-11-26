@@ -1416,7 +1416,9 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         // covers demand plus the city power reserve and one more Wind Trap of margin.
         const bool spare = produced - windOutput - required
             >= int64_t(std::max(pass.cityPowerReserve, pass.rocketPowerBuffer)) + pass.committedPowerDemand + windOutput;
-        if (traps > Force::kKeepWindTraps && getHouse()->getNumItems(Structure_NuclearPlant) > 0 && spare) {
+        // Only for room: a base with room to build keeps its Wind Traps (windTrapRetirementRoomLow).
+        const bool roomLow = Force::windTrapRetirementRoomLow(baseBuiltOut(), availableBaseRock);
+        if (traps > Force::kKeepWindTraps && getHouse()->getNumItems(Structure_NuclearPlant) > 0 && spare && roomLow) {
             std::vector<Coord> lots;
             for (const auto* structure : getStructureList())
                 if (structure->getOwner() == getHouse() && structure->getHealth() > 0
