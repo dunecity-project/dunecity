@@ -8,6 +8,7 @@
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 #include <mod/ModManager.h>
+#include <misc/DuneCityCampaign.h>
 #include <Network/GameInitSettingsPolicy.h>
 
 #include <vector>
@@ -921,6 +922,23 @@ TEST_CASE("Campaign start levels choose the first scenario and retain campaign p
 TEST_CASE("Invalid campaign start levels fail before loading a scenario", "[campaign]") {
     const int level = GENERATE(-1, 0, 10, 22);
     REQUIRE_THROWS_AS(GameInitSettings(HOUSE_ATREIDES, SettingsClass::GameOptionsClass{}, level), std::invalid_argument);
+}
+
+// Stefan, 2026-11-26: the DuneCity Campaign started at Mission 10 as a full campaign crashed the game
+// ("Campaign level must be between 1 and 9"): the menu mapped the mission through an original level.
+TEST_CASE("Every DuneCity campaign mission starts as a campaign and as a single mission", "[campaign][dunecity]") {
+    const int mission = GENERATE(range(1, DuneCityCampaign::kMissions + 1));
+    for(const bool single : {false, true}) {
+        CAPTURE(mission, single);
+        const GameInitSettings init = GameInitSettings::duneCityCampaign(mission, single, SettingsClass::GameOptionsClass{});
+        REQUIRE(init.isDuneCityCampaign());
+        REQUIRE(init.getGameType() == (single ? GameType::Skirmish : GameType::Campaign));
+        REQUIRE(init.getHouseID() == DuneCityCampaign::kHouse);
+        REQUIRE(init.getMission() == mission);
+        REQUIRE(init.getFilename() == DuneCityCampaign::scenarioFilename(mission));
+    }
+    REQUIRE_THROWS_AS(GameInitSettings::duneCityCampaign(DuneCityCampaign::kMissions + 1, false,
+                                                         SettingsClass::GameOptionsClass{}), std::invalid_argument);
 }
 
 TEST_CASE("Workshop revisions survive game settings and checkpoint copies", "[workshop][network][save]") {

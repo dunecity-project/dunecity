@@ -250,6 +250,11 @@ public:
     bool isDuneCityCampaign() const;
     /// Switches a campaign to DuneCity campaign mission `mission` (1..10) as Atreides.
     void useDuneCityCampaign(int mission);
+    /// The DuneCity campaign from `mission` (1..10) as the DuneCity Campaign screen starts it: the whole
+    /// campaign, or that mission alone. Never maps the mission through an original campaign level, which
+    /// has no counterpart for Mission 10.
+    static GameInitSettings duneCityCampaign(int mission, bool singleMission,
+                                             const SettingsClass::GameOptionsClass& gameOptions);
     inline const std::string& getFiledata() const { return filedata; };
     inline const std::string& getServername() const { return servername; };
     GameInitSettings networkSnapshot(const std::string& data) const {

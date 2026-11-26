@@ -952,6 +952,15 @@ void GameInitSettings::useDuneCityCampaign(int newMission) {
     filename = DuneCityCampaign::scenarioFilename(newMission);
 }
 
+GameInitSettings GameInitSettings::duneCityCampaign(int mission, bool singleMission,
+                                                    const SettingsClass::GameOptionsClass& gameOptions) {
+    // Built on the first original mission, then switched: the mission number is the DuneCity one.
+    GameInitSettings init = singleMission ? GameInitSettings(DuneCityCampaign::kHouse, 1, gameOptions)
+                                          : GameInitSettings(DuneCityCampaign::kHouse, gameOptions, 1);
+    init.useDuneCityCampaign(mission);
+    return init;
+}
+
 void GameInitSettings::useReworkedMaps() {
     if(!isScenarioGameType(gameType)) {
         THROW(std::invalid_argument, "GameInitSettings::useReworkedMaps(): only campaign missions have reworked maps.");

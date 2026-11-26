@@ -184,8 +184,11 @@ int runCampaignBalanceProbe() {
     }
     // The campaign menu's Maps: Reworked (docs/reworked-campaign.md), in either campaign mode.
     if(std::getenv("BALANCE_REWORKED")) init.useReworkedMaps();
-    // The campaign menu's Maps: DuneCity (docs/city-campaign.md): DCITY_M?? as Atreides.
-    if(std::getenv("BALANCE_CITY_CAMPAIGN")) init.useDuneCityCampaign(requestedMission ? std::atoi(requestedMission) : 1);
+    // The DuneCity Campaign screen (docs/city-campaign.md): DCITY_M?? as Atreides, built the way the
+    // menu builds it, so a mission the original levels cannot express (10) is covered too.
+    if(std::getenv("BALANCE_CITY_CAMPAIGN"))
+        init = GameInitSettings::duneCityCampaign(requestedMission ? std::atoi(requestedMission) : 1,
+                                                  campaignMode=="single", settings.gameOptions);
     // A balance variant of that mission's map (scenario-matrix --city-strength).
     if(const char* variant = std::getenv("BALANCE_CITY_CAMPAIGN_MAP")) {
         std::ifstream file(variant);
