@@ -470,12 +470,10 @@
 // 139: Match rule City Plane Crash Bombs, default on, as bit 4 of the MOD18 city rules byte (set
 //      when off): a shot-down plane explodes as three of its bombs, two tiles apart along its
 //      heading (AmbientAirplane::crash). A 138 peer refuses the byte. Save format unchanged.
-// 140: Saboteurs hunt as in Dune II: the enemy building with the highest value / distance
-//      anywhere their house has seen (Saboteur::findTarget, sabotageValue), vehicles only when no
-//      such building is left. The charge's lethal hit goes through ObjectBase::handleDamage, so the
-//      kill and hit points are credited to the Saboteur and the AI hears of what it destroyed, and
-//      a Saboteur that blew up its target is no longer counted as lost. A 139 peer would desync.
-//      Save format unchanged.
+// 140: A Saboteur's charge is a hit through ObjectBase::handleDamage, so its kill and hit points
+//      are credited to the Saboteur (Stats screen, kill counts, the AI's onHostile* callbacks), and
+//      a Saboteur that blew up its target is no longer counted as lost (House::decrementUnits).
+//      A 139 peer would desync. Save format unchanged.
 // 141: QuantBot may build right up to enemy buildings (Stefan, 2026-11-27): an enemy building on a
 //      site's border no longer lowers its score, and a site under light enemy fire (one weapon's
 //      reach) is taken after every safe site instead of refused (TacticalSafetyPolicy::

@@ -358,6 +358,9 @@ def run_one(args, scratch, index):
     if options: env['BALANCE_GAME_OPTIONS'] = str(options)
     env.setdefault('BALANCE_DIGEST_CYCLES', '750')
     if args.render_every: env['BALANCE_PERF_RENDER_EVERY'] = str(args.render_every)
+    if args.saboteur_shots:
+        Path(args.saboteur_shots).mkdir(parents=True, exist_ok=True)
+        env['BALANCE_PERF_SABOTEUR_SHOTS'] = str(Path(args.saboteur_shots).resolve())
     if args.csv: env['BALANCE_PERF_CSV'] = str(Path(args.csv).resolve()) + ('' if args.repeat == 1 else '.%d' % index)
     if args.motion_csv:
         env['BALANCE_PERF_MOTION_CSV'] = str(Path(args.motion_csv).resolve()) + ('' if args.repeat == 1 else '.%d' % index)
@@ -467,6 +470,7 @@ def main():
     parser.add_argument('--minutes', type=float, default=10.0, help='Game minutes to measure')
     parser.add_argument('--frame-cycles', type=int, default=10)
     parser.add_argument('--render-every', type=int, default=0, help='Render a frame every N cycles (0 = no rendering)')
+    parser.add_argument('--saboteur-shots', type=Path, help='Write what a spectator sees of Saboteurs as PNG frames into this folder')
     parser.add_argument('--mainloop', action='store_true',
                         help='Run the interactive main loop (engine frame pacing at the options\' game speed) headless')
     parser.add_argument('--rendered', action='store_true',
