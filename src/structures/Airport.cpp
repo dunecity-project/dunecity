@@ -89,6 +89,12 @@ int Airport::planeBuildCycles(int houseID) {
     return static_cast<int>(int64_t(DuneCity::CityAircraft::planePrice()) * orni.buildtime * 15 / orni.price);
 }
 
+int Airport::getPlaneBuildPercent() const {
+    const int total = planeBuildCycles(owner->getHouseID());
+    if (!isBuildingPlane() || total <= 0) return 0;
+    return std::clamp(100 - static_cast<int>(int64_t(purchaseCooldown) * 100 / total), 0, 99);
+}
+
 void Airport::init() {
     itemID = Structure_Airport;
     owner->incrementStructures(itemID);

@@ -66,6 +66,10 @@ public:
     static int planeBuildCycles(int houseID);
     /// True while this Airport is building a bought plane (planeBuildTime()).
     bool isBuildingPlane() const { return planeBuildTime() && purchaseCooldown > 0; }
+    /// Percent of the bought plane built so far (0 when none is building), for the Airport panel.
+    int getPlaneBuildPercent() const;
+    /// Game cycles until the plane being built is ready (0 when none is building).
+    int getPlaneBuildRemaining() const { return isBuildingPlane() ? purchaseCooldown : 0; }
     /// Airports of `house` building a plane now (0 without planeBuildTime()).
     static int buildingPlanes(const House* house);
     /// True for a 3x3 Airport (see the class comment), false for the ordinary 4x4 one.
