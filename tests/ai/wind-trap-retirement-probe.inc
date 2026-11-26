@@ -67,7 +67,7 @@ void runWindTrapRetirementProbe(Game& game) {
         require(structure && structure->getItemID()==Uint32(item),"Fixture placement failed");
         return structure->getObjectID();
     };
-    // Three reactors: enough power to spare once the map's own Wind Traps are gone (phase 3).
+    // Three reactors to start with; phase 3 adds more if it needs them.
     for(const Coord at:{Coord(0,0),Coord(0,5),Coord(4,5)}) place(Structure_NuclearPlant,at.x,at.y);
     std::vector<Uint32> traps;
     for(const int dx:{4,7,10,13}) traps.push_back(place(Structure_WindTrap,dx,0));
@@ -141,6 +141,23 @@ void runWindTrapRetirementProbe(Game& game) {
         for(size_t i=2;i<others.size();++i)
             if(auto* structure=dynamic_cast<StructureBase*>(game.getObjectManager().getObject(others[i])))
                 structure->destroy();
+        // A reactor's output here is not its nominal 2,000 (10,133 with three and the map's 70 Wind
+        // Traps), so more go on free rock until the house has power to spare for this phase.
+        for(int added=0;added<12 && !spare();++added) {
+            Coord site=Coord::Invalid();
+            for(int y=0;y+3<=map.getSizeY() && !site.isValid();++y)
+                for(int x=0;x+3<=map.getSizeX() && !site.isValid();++x) {
+                    bool free=true;
+                    for(int dy=0;dy<3 && free;++dy) for(int dx=0;dx<3 && free;++dx) {
+                        const auto* tile=map.getTile(x+dx,y+dy);
+                        free=tile->isRock() && !tile->isMountain() && !tile->hasAnObject() && !tile->hasCityZone();
+                    }
+                    if(free) site=Coord(x,y);
+                }
+            require(site.isValid(),"No free rock for another fixture reactor");
+            auto* reactor=house->placeStructure(NONE_ID,Structure_NuclearPlant,site.x,site.y,true,true);
+            require(reactor && reactor->getItemID()==Structure_NuclearPlant,"Fixture reactor placement failed");
+        }
         SDL_Log("WIND_TRAP_PROBE: cleared to wind_traps=%d produced=%lld required=%lld",
             house->getNumItems(Structure_WindTrap),(long long)house->getProducedPower(),
             (long long)house->getPowerRequirement());
