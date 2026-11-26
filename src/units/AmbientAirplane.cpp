@@ -406,7 +406,8 @@ void AmbientAirplane::handleDamage(int damage, Uint32 damagerID, House* damagerO
     (CityAircraft::kCrashBombs, crashBombOffset). Each is a Bullet_Bomb burst through
     Map::damage with stickDamage() and the bomb's own radius and splash: a direct hit on
     any building, splash on other teams' buildings, a tile and a half against ground
-    units of any side under City Plane Carpet Bombing. With the rule off the plane
+    units of any side under City Plane Carpet Bombing; and, as the one-bomb crash
+    does, aircraft within half a tile of a burst. With the rule off the plane
     crashes where it was hit with one stick bomb's damage (stickDamage(),
     250) within half a tile: the building or units on the tile it falls on, and
     nothing around it. Stefan, 2026-11-24, after his OP.dls game ("planes are a bit
@@ -490,10 +491,32 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
         // House::noteBombHit: a crash is not a raid the defender answers). Same damager, credit and
         // measurement as below.
         soundPlayer->playSoundAt(Sound_ExplosionLarge, at);
+        // A bomb never hits an aircraft (Map::damage), but the crash spares nobody, as the one-bomb
+        // crash did: an aircraft within half a tile of a burst takes the bomb's damage, halved for
+        // every quarter tile off it (the Dynasty air rule the one-bomb crash's Bullet_LargeRocket
+        // has). A plane brought down so crashes in its turn (natives_probe, "the chained crash").
+        // Gathered before the bursts, in unitList order, so the order of damage is deterministic.
+        std::vector<Uint32> aircraft;
+        for(const UnitBase* unit : unitList) {
+            if(unit != this && unit->isAFlyingUnit() && unit->getHealth() > 0 && unit->getItemID() != Unit_Frigate)
+                aircraft.push_back(unit->getObjectID());
+        }
         for(const Coord& point : bursts) {
             currentGameMap->damage(objectID, getOwner(), point, Bullet_Bomb, stickDamage(), bombRadius, false, true,
                                    NONE_ID, DeviationReward::liveProvenance(this, getOwner()));
             currentGame->getExplosionList().push_back(new Explosion(Explosion_Bomb, point, getOwner()->getHouseID()));
+        }
+        for(const Uint32 id : aircraft) {
+            ObjectBase* air = currentGame->getObjectManager().getObject(id);
+            if(air == nullptr || air->getHealth() <= 0) continue;
+            int nearest = -1;
+            for(const Coord& point : bursts) {
+                const int distance = DynastyProjectile::distance(air->getCenterPoint() * 4, point * 4) / 4;
+                if(nearest < 0 || distance < nearest) nearest = distance;
+            }
+            if(nearest < 0 || nearest >= TILESIZE / 2) continue;
+            air->handleDamage(stickDamage() >> (nearest / (TILESIZE / 4)), objectID, getOwner(),
+                              DeviationReward::liveProvenance(this, getOwner()));
         }
         if(shake) screenborder->shakeScreen(22);
     } else if(small) {

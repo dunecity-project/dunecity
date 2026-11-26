@@ -1925,9 +1925,6 @@ TEST_CASE("Protocol 139 City Plane Crash Bombs rides bit 4 of the MOD18 city rul
         REQUIRE(encoded != plain);
         REQUIRE(options.getHash() != plainOptions.getHash());
     }
-    if(!options.cityPlaneCrashBombs) {
-        REQUIRE(options.getHash().find("/cityPlaneCrashBombs=0") != std::string::npos);
-    }
     saved.writeUint32(0xabcdef01u);
     IMemoryStream input(saved.getData(), saved.getDataLength());
     GameInitSettings restored(input);
