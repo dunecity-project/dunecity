@@ -309,7 +309,7 @@ struct QuantBotConfig {
         bool airRaidTurrets;                   ///< Default on: while city airplanes bomb its buildings, Rocket Turrets spread through the city (QuantBotAirDefencePolicy.h).
         bool airThreatTurrets;                 ///< Default off (no fewer buildings bombed in 48 paired matches): the same turrets before the first bomb, once another team can bomb it; paid ahead of strategic and civic savings.
         bool extraAirports;                    ///< Default off: another Airport (up to 4) when its free planes would repay its price in 20 minutes (CityAircraft::extraAirportPays).
-        bool airportTurrets;                   ///< Default off: every own Airport keeps 4 Rocket Turrets within 5 tiles, refilled when lost (QuantBotAirDefencePolicy.h).
+        bool airportTurrets;                   ///< Default off (same Airports bombed, level placement in 288 mixed matches): every own Airport keeps 4 Rocket Turrets within 5 tiles, refilled when lost (QuantBotAirDefencePolicy.h).
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

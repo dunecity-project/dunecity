@@ -1,3 +1,67 @@
+## 2026-11-26 - Airports and Rocket Turrets: measured in Stefan's case; AirportTurrets built, measured and left off
+
+Stefan, 2026-11-26: "also airports need decent rocket turret defenses". Commits `3c6e011ba` (switch, logging),
+`df791bc07` (report, play style). Evidence: `~/Documents/projects/outputs/airport-turrets-20261126/` (`report.md`).
+Protocol and save format unchanged; the switch is off, so the game plays as before.
+
+**What QuantBot did before.** No turret rule looked at Airports. The core and perimeter rules ring the yard,
+factories, refineries and the ground front; AirRaidTurrets spreads turrets through the city after bombs land;
+AirThreatTurrets (off) does the same before the first bomb; PalaceTurrets (off) guards Palaces. A city plane picks
+its runs from every enemy building (`AmbientAirplane::pickBombingRun`), so nothing aims it at an Airport either.
+
+**Stefan's case, measured** (48 games, seeds 9101-9148, `rs160-dunecity` fully built start, four Brutal QuantBots,
+45 minutes, `city-plane-b52-on.ini`, AWS, source `5f87e77d3`). Each house starts with its Airport and 8 Rocket
+Turrets. At minute 1 the median Airport has 1 Rocket Turret within 5 tiles (74 of 192 Airports none, 5% four or
+more), and 7 that reach a plane over it (16 tiles). The other rules raise the ring to a median of 3 by minute 10
+(42% with four or more) and 4 by minute 20 (65%). Of 955 enemy plane approaches to an Airport (within 16 tiles),
+62% were shot down before they reached it and 11% reached it; of those, 55% were shot down near it afterwards.
+Bombs destroyed 1.10 Airports a game (of 4).
+
+**AirportTurrets ([Force Concentration], default off; `DUNECITY_TEST_AIRPORT_TURRETS=0/1` for match arms).** Every
+own Airport keeps 4 Rocket Turrets, standing and queued, within 5 tiles of its footprint, spread round it
+(farthest from the own turrets, then nearest the Airport); a lost one is ordered again. One order a build pass,
+from cash beyond the economy's reserve, never saved for; a Wind Trap first when the turret could not be powered.
+City games with City Plane Bombing only (`QuantBotAirDefencePolicy.h`, `findAirportGuardSite`).
+
+| 48 paired self-play games, every house off or on | Off | On | Paired on - off (95%) |
+|---|---:|---:|---:|
+| Airports with 4+ ring turrets, minute 5 / 10 / 20 | 11 / 42 / 65% | 49 / 88 / 93% | |
+| Enemy approaches shot down before reaching an Airport | 62% | 64% | +2.0 points (-3.4 to +7.5) |
+| ... reached it and shot down near it afterwards | 55% | 73% | +0.65 a game (+0.17 to +1.17) |
+| ... reached it and got away, a game | 0.96 | 0.67 | -0.29 (-0.60 to +0.02) |
+| Bombs on Airports a game | 3.90 | 4.75 | +0.85 (-0.50 to +2.23) |
+| Airports destroyed by bombs a game | 1.10 | 1.04 | -0.06 (-0.50 to +0.38) |
+| Buildings lost to planes a game | 207 | 221 | +14 (-11 to +40) |
+| Flights shot down | 88.6% | 88.8% | +0.1 points |
+| Ring turrets ordered / credits, a game (four houses) | 0 / 0 | 12.1 / 3,031 | |
+| Time-outs | 54% | 56% | +2 points (-12 to +17) |
+
+**Placement** (`tests/ai/match_score.py`): 288 mixed games on the same seeds, `--ffa default,default@airport-turrets`
+(two houses each, every balanced assignment): `default@airport-turrets` -0.106, `default` -0.074, paired -0.032
+(-0.111 to +0.055), level; 49% time-outs, alive at a time-out 45% / 46%. Airports lost to bombs 0.50 / 0.54 a game,
+buildings lost to planes 110 / 115 a game (two houses each); 1,528 ring credits a game. Self-play seats moved by
+-0.05 to +0.03, none measurably.
+
+**Left off.** The ring fills and kills more of the planes that reach the Airport, but after they have bombed: the
+Airports lost are the same, as AirThreatTurrets found for the city (a plane drops its stick before more turrets
+bring it down). Not a default under the rule (interval not above 0; point estimate negative) at about 750 credits
+a house. What would keep Airports standing lies on the plane's or the Airport's side (Airport hit points, the
+Airport firing itself, turrets that come with it); Stefan has not asked for those, and they were not built.
+
+**New match logs (diagnostics only).** `CITY_AIRPORT_COVER` (once a game minute per Airport: ring and plane-reach
+Rocket Turrets of its team, Gun Turrets in the ring, power, health), `CITY_PLANE_NEAR_AIRPORT` (a plane's first
+approach to and first pass over each enemy Airport), `CITY_AIRPORT_GUARD` (each order and its price), and
+`x y airport airport_house airport_dist` on `CITY_PLANE_DOWN`. `vanilla-match.py` writes them to `planes.csv`;
+`tests/ai/airport-turrets-report.py` reads them.
+
+**Verified on `5f87e77d3`.** AWS: the four AI gates with `city_aircraft_probe`, `city_plane_effect` and
+`city_plane_flights`, 7 of 7 passed (`20261126T192443-ctest-8b6179`); the headless nightly tier
+(`-L nightly -LE gui`), 251 of 251 passed (`20261126T192447-ctest-b0d659`). Mini `build-int`: `dunelegacy_tests`
+and `genome_registry_contract` passed; `perf_regression` passed (115 s, run by the tech-level session on the same
+commit). `city_plane_flights` failed once on aws-mel2 before passing on aws: `run.log` held a byte that is not
+UTF-8 and `run-city-plane-flights.py` reads it as UTF-8 (`read_text()`); the same probe passed on aws-mel2 in the
+nightly at the same commit. Harness follow-up: read the log with `errors='replace'`.
+
 ## 2026-11-26 - City planes: economics measured; build time, a free plane per Airport and ExtraAirports behind switches (no default changed)
 
 Stefan: "for airplanes we really want to see how many units or buildings they destroy (and total value) vs their

@@ -48,7 +48,7 @@ parser.add_argument('--results', type=Path, nargs='+', required=True)
 parser.add_argument('--off', default='airport-off')
 parser.add_argument('--on', default='airport-on')
 parser.add_argument('--mixed', help='Tag of the mixed arm (default v %s)' % ON_LABEL)
-parser.add_argument('--minutes', default='1,5,10,20,30,45', help='Ring table minutes')
+parser.add_argument('--minutes', default='1,5,10,20,30,40', help='Ring table minutes')
 parser.add_argument('--output', type=Path)
 args = parser.parse_args()
 
