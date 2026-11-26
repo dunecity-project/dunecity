@@ -236,9 +236,9 @@ inline int measuredInfantryBps(const Weights& slotScores, const Slots& available
     if (sharpened == 0) return 0;
     return static_cast<int>(std::min<int64_t>(kMeasuredInfantryCapBps, own * 10000 / sharpened));
 }
-/// The infantry quota in per cent from measuredInfantryBps: rounded, at least 1 (the WOR and Barracks
-/// still field a few to keep measuring them).
-constexpr int measuredInfantryPercent(int bps) { return std::max(1, (bps + 50) / 100); }
+/// The infantry quota in per cent from measuredInfantryBps, rounded. Like a slot it can reach 0; the
+/// mean-score prior (blendWithPrior) keeps an infantry type with little evidence from vanishing.
+constexpr int measuredInfantryPercent(int bps) { return std::max(0, (bps + 50) / 100); }
 
 /// Minimum mobile AA value share while visible hostile aircraft justify it.
 /// This role budget is a tactical heuristic, not an optimal battle ratio.

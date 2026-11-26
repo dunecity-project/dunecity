@@ -4207,8 +4207,9 @@ TEST_CASE("Infantry share: infantry is one more slot of the mix, no fixed quota"
     // Unavailable slots do not count; the share is capped like a slot.
     Mix::Slots none{};
     REQUIRE(Mix::measuredInfantryBps(scores, none, 1000000, 1, 100000) == Mix::kMeasuredInfantryCapBps);
-    // The quota in per cent: rounded, never 0.
-    REQUIRE(Mix::measuredInfantryPercent(0) == 1);
+    // The quota in per cent: rounded; like a slot it may be 0.
+    REQUIRE(Mix::measuredInfantryPercent(0) == 0);
+    REQUIRE(Mix::measuredInfantryPercent(49) == 0);
     REQUIRE(Mix::measuredInfantryPercent(349) == 3);
     REQUIRE(Mix::measuredInfantryPercent(350) == 4);
     // Before the mix learns: an untested type's share of the starting mix (its weights as scores).

@@ -464,7 +464,10 @@
 //      (each Airport has its own free plane on its own five-minute clock). QuantBot's ExtraAirports
 //      is on. A 136 peer refuses the byte. Save format 9899 (an Airport's purchase clock from an
 //      older save is cleared, so it does not finish building a plane that was never ordered).
-#define NETWORK_PROTOCOL_VERSION            137
+// 138: QuantBot's infantry share of the army's value is measured like a unit-mix slot
+//      (UnitMixPolicy::measuredInfantryBps) instead of the fixed 18/15/12/10% difficulty quota, so
+//      AI production differs. A 137 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            138
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

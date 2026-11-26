@@ -1,3 +1,25 @@
+## 2026-11-26 - Troopers: no fixed infantry share; infantry is measured like every other unit (protocol 138)
+
+Stefan, 2026-11-26: "i want it on - i never wanted a 10% rule for troopers", then "ok so i don't want a 10%
+trooper. ever. i want it to be a performance based ratio like other units. no need to test". Supersedes the
+switch in the entry below. Commits `938eae7c7` and the protocol 138 commit after it.
+
+- **Gone:** the fixed infantry quota per difficulty (Easy/Defend 18%, Medium 15%, Hard 12%, Brutal 10%, from
+  1.0.529), the TrooperMeasuredShare switch, its `DUNECITY_TEST_TROOPER_MEASURED_SHARE` override and play style.
+  There is no option or fallback.
+- **Now, every difficulty:** infantry is one more slot of the unit mix (`UnitMixPolicy::measuredInfantryBps`,
+  `QuantBot::planUnitMix`), scored and shared exactly as the ten vehicle slots are: performance score (credits
+  destroyed per credit lost, one price of prior), blended with the mean slot score while its evidence is thin
+  (`exploredScores`), sharpened (share^1.5), capped at 80%, and like a slot it may reach 0. Before the mix
+  learns, it takes an untested type's share of the configured starting mix (about 12-16% with full factories,
+  up to a third with only light vehicles). The score is the infantry the house buys: Troopers and their squads
+  once it can field them, else the Barracks soldiers; soldiers that walk out of destroyed buildings do not count.
+  An Infantry strategy keeps its own share; the Trooper anti-air floor (TrooperSupport) is unchanged. The House
+  Stats window's Trooper % shows the measured share.
+- **Protocol 138** (AI production differs; a 137 peer would desync). Save format unchanged.
+- **Not measured, at Stefan's word.** The earlier switch measurement (entry below) only covered the learning
+  phase with the old opening quota. Gates: the four AWS AI gates on this commit, results below.
+
 ## 2026-11-26 - City planes: a free plane per Airport and plane build time are the rules; QuantBot builds Airports, more when rich (protocol 137, save 9899)
 
 Stefan, 2026-11-26, after the economics entry below: "you get a free plane per airport. you need to think that
