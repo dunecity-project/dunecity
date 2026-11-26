@@ -251,16 +251,22 @@ void Saboteur::blitToScreen() {
     const int x = screenborder->world2screenX(realX);
     const int y = screenborder->world2screenY(realY);
     if(const ObjectBase* pTarget = target.getObjPointer()) {
+        // Two pixels wide in the owner's colour over a dark shadow.
         const Coord to = pTarget->getClosestCenterPoint(location);
-        renderDrawLine(renderer, x, y, screenborder->world2screenX(to.x), screenborder->world2screenY(to.y), color);
+        const int tx = screenborder->world2screenX(to.x), ty = screenborder->world2screenY(to.y);
+        renderDrawLine(renderer, x + 1, y + 2, tx + 1, ty + 2, COLOR_BLACK);
+        renderDrawLine(renderer, x, y, tx, ty, color);
+        renderDrawLine(renderer, x + 1, y, tx + 1, ty, color);
+        renderDrawLine(renderer, x, y + 1, tx, ty + 1, color);
     }
-    // A ring two thirds of a tile across that breathes over 0.6 s, with a dark edge so it shows
-    // on sand, rock and city alike.
+    // A ring about a tile across that breathes over 0.6 s: three pixels of the owner's colour
+    // between dark edges, so it shows on sand, rock and city alike.
     const int pulse = static_cast<int>((SDL_GetTicks() / 100) % 6);
-    const int half = world2zoomedWorld(TILESIZE / 3) + (pulse < 3 ? pulse : 6 - pulse);
+    const int half = world2zoomedWorld(TILESIZE / 2) + 2 * (pulse < 3 ? pulse : 6 - pulse);
     renderDrawRect(renderer, x - half - 1, y - half - 1, x + half + 1, y + half + 1, COLOR_BLACK);
-    renderDrawRect(renderer, x - half, y - half, x + half, y + half, color);
-    renderDrawRect(renderer, x - half + 1, y - half + 1, x + half - 1, y + half - 1, color);
+    for(int inset = 0; inset < 3; ++inset)
+        renderDrawRect(renderer, x - half + inset, y - half + inset, x + half - inset, y + half - inset, color);
+    renderDrawRect(renderer, x - half + 3, y - half + 3, x + half - 3, y + half - 3, COLOR_BLACK);
 }
 
 void Saboteur::deploy(const Coord& newLocation) {
