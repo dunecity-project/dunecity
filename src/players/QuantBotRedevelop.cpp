@@ -288,16 +288,27 @@ bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, i
 
 void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     const auto& force = botConfig().force;
-    if (!pass.citySimEnabled || gameMode != GameMode::Custom || pass.redevelopmentSearched
-        || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
-        || pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid()) return;
     const Uint32 cycle = getGameCycleCount();
     namespace R = RedevelopmentPolicy;
+    const bool relocateWindow = force.pollutionRelocation && inWindow(cycle, R::kRelocatePeriodMs, R::kRelocateWindowMs);
+    const bool parkWindow = (force.roadLaneParks || force.lotParks) && inWindow(cycle, R::kParkSearchPeriodMs, R::kParkSearchWindowMs);
+    if (!relocateWindow && !parkWindow) return;
+    if (!pass.citySimEnabled || gameMode != GameMode::Custom || pass.redevelopmentSearched
+        || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
+        || pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid()) {
+        // Why a window passed without a search (only inside the windows, so a few records a period).
+        if (!pass.redevelopmentSearched)
+            traceDecision("redevelopment_gate", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+                .set("item", yardTurn.itemID).set("rule", yardTurn.structureRule ? yardTurn.structureRule : "")
+                .set("skip", yardTurn.skipRemainingStructureLogic).set("defending", pass.defendingEconomy)
+                .set("air", pass.airEngaged).set("ground", pass.groundThreatAsset.isValid())
+                .set("custom", gameMode == GameMode::Custom).set("money", pass.money));
+        return;
+    }
 
     // PollutionRelocation: at most one Industrial zone a period, ordered at its new site and
     // demolished at its old one in the same turn (as the yard's other redevelopment does).
-    if (force.pollutionRelocation && inWindow(cycle, R::kRelocatePeriodMs, R::kRelocateWindowMs)
-        && !pass.orderedThisTick.count(Structure_ZoneIndustrial)
+    if (relocateWindow && !pass.orderedThisTick.count(Structure_ZoneIndustrial)
         && campaignAvailableToBuild(turn.pBuilder, Structure_ZoneIndustrial)) {
         pass.redevelopmentSearched = true;
         const auto& state = currentGame->getCitySimulation()->getHouseState(getHouse()->getHouseID());
@@ -305,7 +316,12 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
         Uint32 zoneID = NONE_ID;
         Coord site = Coord::Invalid();
         int harm = 0, newHarm = 0;
-        if (state.indValve >= 0 && pass.money >= 2 * price && findPollutionRelocation(zoneID, site, harm, newHarm)) {
+        const bool found = state.indValve >= 0 && pass.money >= 2 * price
+            && findPollutionRelocation(zoneID, site, harm, newHarm);
+        traceDecision("pollution_relocation_search", AITelemetry::Record().set("valve", state.indValve)
+            .set("money", pass.money).set("price", price).set("zone", zoneID).set("harm", harm)
+            .set("new_harm", newHarm).set("site_valid", site.isValid()).set("found", found));
+        if (found) {
             auto* zone = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(zoneID));
             if (zone && zone->getOwner() == getHouse()) {
                 const Coord old = zone->getLocation();
@@ -325,8 +341,8 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
         }
     }
 
-    if (!force.roadLaneParks && !force.lotParks) return;
-    if (!inWindow(cycle, R::kParkSearchPeriodMs, R::kParkSearchWindowMs) || pass.orderedThisTick.count(Structure_Park)
+    if (!parkWindow) return;
+    if (pass.orderedThisTick.count(Structure_Park)
         || !campaignAvailableToBuild(turn.pBuilder, Structure_Park)) return;
     // One park at a time: the next is chosen against the terrain the last one added.
     if (pass.itemCount[Structure_Park] != getHouse()->getNumItems(Structure_Park)) return;

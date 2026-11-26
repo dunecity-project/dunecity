@@ -201,5 +201,7 @@ inline void run(Game& game, Uint32 end) {
         if (game.getGameCycleCount() >= next) { report(game, "periodic"); next += step; }
     }
     report(game, "end");
+    SDL_Log("CAMPAIGN_BALANCE_RESULT: level=1 seed=%u attack_percent=100 partner=hard enemy=hard cycle=%u outcome=land_value_audit",
+            game.getGameInitSettings().getRandomSeed(), game.getGameCycleCount());
 }
 } // namespace LandValueAudit

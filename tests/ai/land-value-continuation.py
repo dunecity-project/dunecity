@@ -118,6 +118,9 @@ def play(args, scratch, binary, key):
     log = run / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
     (results / (arm + '-runner.log')).write_text(process.stdout[-20000:] + process.stderr[-20000:])
+    for events in (run / 'profile').rglob('events.jsonl'):
+        with events.open('rb') as source, gzip.open(results / (arm + '-events.jsonl.gz'), 'wb') as dest:
+            shutil.copyfileobj(source, dest)
     rows = []
     for line in lines:
         if 'LAND_VALUE_AUDIT:' in line:
