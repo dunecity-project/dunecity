@@ -1,3 +1,65 @@
+## 2026-11-26 - City planes: a free plane per Airport and plane build time are the rules; QuantBot builds Airports, more when rich (protocol 137, save 9899)
+
+Stefan, 2026-11-26, after the economics entry below: "you get a free plane per airport. you need to think that
+the free plane alone gets you free damage. you also need to think about the games i showed you - if an ai has a
+lot of money planes win games. they abliterate the enemy", with "make buying planes take time" standing.
+Commits `15e4a5ece` (rules, AI, tests), `cb4860e4c` and `f34f14340` (test fixes). Evidence:
+`~/Documents/projects/outputs/plane-rules-137-20261126/` (`summary-arms.md`, `report-rs160.md`).
+
+- **City Plane Free Per Airport** (match rule, default on): each Airport has its own free plane on its own five-
+  minute clock; off is one free plane in the air per house, as up to 136.
+- **City Plane Build Time** (match rule, default on): a bought plane is paid at the order and launched when its
+  Airport has built it, one at a time: the factory rule at the Ornithopter's rate, 1500 / 600 x 96 x 15 = 3,600
+  cycles, 57.6 s. Off, it launches at once.
+- Both are INI keys ("City Plane Free Per Airport", "City Plane Build Time"), hashed and streamed only when off
+  (bits 2-3 of the MOD18 city rules byte), so a default setup's stream and options hash are unchanged; a 136 peer
+  refuses the byte. **Protocol 137. Save 9899**: an older save's Airport purchase clock is cleared on load so it
+  does not finish a plane that was never ordered. `DUNECITY_TEST_FREE_PLANE_PER_AIRPORT` and
+  `DUNECITY_TEST_PLANE_BUILD_TIME` (0/1) remain experiment overrides (used for save continuations).
+- **QuantBot ExtraAirports on** (config hash of the default unchanged): another Airport, up to 4, when its free
+  planes and, with every Airport building, its production repay 5,000 within 20 minutes
+  (`CityAircraft::extraAirportPays`); a rich house (`richBuys` beyond the Airport's price) with every Airport
+  building orders more, up to 8 (`kMaxAirportsPerRichHouse`), whatever the payback. Logs `CITY_AIRPORT_EXTRA`
+  (`rich=`).
+- **Tests.** `city_plane_effect`: `checkBuildTime` (3,600 cycles, paid at the order, two Airports build two at
+  once) and `checkFreePerAirport` (three Airports, three free planes by 5:10; one with the rule off); its older
+  checks and `city_aircraft_probe` (the Micropolis singleton) pin both rules off. `CoopGameSettingsTestCase`
+  round-trips both bits. Game options `city-plane-136.ini` / `city-plane-137.ini`; vanilla-match
+  `BALANCE_EXTRA_CREDITS=house:credits|all:credits` for rich starts.
+
+**OFF (136) against ON (137)**, same build `15e4a5ece`, `rs160-dunecity`, four Brutal QuantBots:
+
+| Arm | Games | Flights | Free | Bought | Extra Airports | Enemy value destroyed | Shot down | Winner (house: games) | Ends, min (mean) | Time-outs |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|
+| Ordinary, 45 min, 136 | 48 | 35.2 | 22.6 | 12.6 | 0 | 46,826 | 89% | 0:13 1:4 2:3 5:2 | 41.3 | 54% |
+| Ordinary, 45 min, 137 | 48 | 29.5 | 23.4 | 6.1 | 0.92 | 41,925 | 91% | 0:15 1:4 2:3 5:2 | 41.0 | 50% |
+| Harkonnen +150,000, 60 min, 136 | 24 | 58.4 | 0.3 | 58.1 | 0 | 156,453 | 51% | 0:24 | 4.5 | 0% |
+| Harkonnen +150,000, 60 min, 137 | 24 | 38.8 | 11.1 | 27.8 | 6.62 | 111,109 | 53% | 0:24 | 8.1 | 0% |
+| All +100,000, 60 min, 136 | 24 | 54.6 | 0.6 | 54.0 | 0 | 204,314 | 58% | 0:2 1:4 2:2 5:5 | 37.9 | 45% |
+| All +100,000, 60 min, 137 | 24 | 106.2 | 55.5 | 50.7 | 23.67 | 243,365 | 86% | 0:8 1:2 2:1 5:4 | 44.2 | 37% |
+
+(per game; jobs `20261126T203013-job-f5b8c7`, `-c135c3`, `-9be453`, `-05ebe8`, `-c5da1a`, `-dfc1e6`.)
+
+- **Ordinary game:** half the bought planes (-5.46, -7.79 to -3.38), 15 fewer buildings bombed (-24.3 to -6.1);
+  time-outs -4 points (-12 to +4), eliminations +0.04, length -0.3 min: no measured change in outcome.
+- **A rich house still wins with planes, deliberately and more slowly.** Under 136 a house given 150,000 bought
+  31 planes in the first game minute, destroyed 255 buildings that minute and had the three others out by 4.5
+  minutes. Under 137 it builds Airports (6.6 extra a game, up to its 8) and turns them into 28 planes and 11 free
+  ones; it still wins all 24, by 8.1 minutes. The defenders shoot down about half its planes either way.
+- **When every house is rich**, 137 gives each about six Airports and twice the flights, and the turrets, given the
+  minutes the build time buys, shoot down 86% instead of 58%. Under 136 the four wiped each other's cities in the
+  first minute.
+
+**Gates** at `f34f14340`: AWS `-L nightly -LE gui` (the four AI gates included) `20261126T212839-ctest-d66b7d`
+passed 251/251 (`quantbot_all_against_atreides`, `_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+`city_plane_effect`, `city_plane_flights`, `city_aircraft_probe` among them); at `15e4a5ece` everything passed but `city_aircraft_probe` (the singleton check, fixed in `f34f14340`)
+and `dunelegacy_tests` (the old bit-2 refusal, fixed in `cb4860e4c`). Mini: `dunelegacy_tests` 1,560 passed,
+`perf_regression` passed at `15e4a5ece` and at `f34f14340` (118 s).
+
+**Next release notes:** "Every Airport now has its own free plane every five minutes, and a bought plane takes
+about a minute to build at its Airport, one at a time: more Airports, more planes. The AI builds extra Airports
+when its planes pay, and many when it is rich. Multiplayer protocol 137."
+
 ## 2026-11-26 - Troopers: the fixed infantry quota explained; TrooperMeasuredShare built, measured and left off
 
 Stefan, 2026-11-26, on his House Stats window (Brutal, Trooper x0.7, "Trooper %: infantry cap" 10.00): "why do
