@@ -130,6 +130,14 @@ WORM_ROW_FIELDS = KEY + ('event',) + WORM_FIELDS
 # reordered, stalled).
 HOSPITAL_FIELDS = ('house', 'object', 'item', 'hp', 'max_hp', 'hospital', 'why', 'cycle')
 HOSPITAL_ROW_FIELDS = KEY + ('event',) + HOSPITAL_FIELDS
+# Rocket Turrets at the front (include/players/TurretFrontPolicy.h): every city house's turret count,
+# upkeep and population every two minutes (ledger), each front order (front: rule front_reinforce,
+# turret_creep or turret_advance) and each rear turret retired (retire). tests/ai/turret-front-report.py.
+TURRET_EVENTS = (('TURRET_LEDGER:', 'ledger'), ('TURRET_FRONT:', 'front'), ('TURRET_RETIRE:', 'retire'))
+TURRET_FIELDS = ('house', 'rocket_turrets', 'gun_turrets', 'police_stations', 'funding', 'turret_upkeep_milli_per_min',
+                 'credits', 'population', 'rule', 'x', 'y', 'cost', 'cover', 'goal', 'attack_value', 'forward', 'edge',
+                 'army_lead', 'object', 'enemy_dist', 'sold', 'refund', 'standing', 'keep', 'cycle')
+TURRET_ROW_FIELDS = KEY + ('event', 'label') + TURRET_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on
 # patrol, and a plane an Airport sold (tests/ai/city-plane-report.py).
@@ -213,6 +221,11 @@ def map_path(name):
     if name in MAPS:
         return MAP_DIR / MAPS[name]
     for path in MAP_DIR.glob('*.ini'):
+        if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
+            return path
+    # A custom-game map shipped among the single-player maps, e.g. 3waysplit (Stefan's 3P 192x192
+    # city game, 2026-11-27): the same file-stem rule.
+    for path in (root / 'data/maps/singleplayer').glob('*.ini'):
         if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
             return path
     raise SystemExit(f'Unknown map {name}')
@@ -444,6 +457,17 @@ def play(args, scratch, binary, key):
             hospital.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
                              **{f: data.get(f, '') for f in HOSPITAL_FIELDS}})
     append(results / 'hospital.csv', HOSPITAL_ROW_FIELDS, hospital)
+    turrets = []
+    for l in lines:
+        for marker, event in TURRET_EVENTS:
+            if marker in l:
+                data = parse(l, marker)
+                number = int(data.get('house', -1))
+                turrets.append({**dict(zip(KEY, key)), 'event': event, 'label': label_of.get(number, ''),
+                                **{f: data.get(f, '') for f in TURRET_FIELDS}})
+                if number in numbers:
+                    turrets[-1]['house'] = numbers[number]
+    append(results / 'turrets.csv', TURRET_ROW_FIELDS, turrets)
     planes = []
     for l in lines:
         for marker, event in PLANE_EVENTS:

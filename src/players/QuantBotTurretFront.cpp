@@ -81,10 +81,10 @@ void QuantBot::logTurretLedger(Uint32 now) {
     const long long upkeep = (long long)rockets
         * TurretFrontPolicy::upkeepMilliPerMinute(funding, DuneCity::cyclesPerCityYear());
     SDL_Log("TURRET_LEDGER: house=%d rocket_turrets=%d gun_turrets=%d police_stations=%d funding=%d "
-            "turret_upkeep_milli_per_min=%lld credits=%d cycle=%u",
+            "turret_upkeep_milli_per_min=%lld credits=%d population=%d cycle=%u",
             houseID, rockets, getHouse()->getNumItems(Structure_GunTurret),
             getHouse()->getNumItems(Structure_PoliceStation), funding, upkeep,
-            int(getHouse()->getCredits()), now);
+            int(getHouse()->getCredits()), sim->getHouseState(houseID).getTotalPop(), now);
 }
 
 void QuantBot::planTurretFront(BuildPass& pass) {
