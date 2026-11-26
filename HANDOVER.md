@@ -18,7 +18,9 @@ switch in the entry below. Commits `938eae7c7` and the protocol 138 commit after
   Stats window's Trooper % shows the measured share.
 - **Protocol 138** (AI production differs; a 137 peer would desync). Save format unchanged.
 - **Not measured, at Stefan's word.** The earlier switch measurement (entry below) only covered the learning
-  phase with the old opening quota. Gates: the four AWS AI gates on this commit, results below.
+  phase with the old opening quota. Gates on `9d57d5e68` (AWS `20261126T221043-ctest-3ac0ea`): `quantbot_scenario_matrix`,
+  `quantbot_ffa_army_deploys`, `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, 4 of 4
+  passed. Not run at Stefan's word: the nightly tier, `perf_regression`, the unit tests (staging CI runs them).
 
 ## 2026-11-26 - City planes: a free plane per Airport and plane build time are the rules; QuantBot builds Airports, more when rich (protocol 137, save 9899)
 
