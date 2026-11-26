@@ -2207,6 +2207,22 @@ private:
     /// of the first own Airport, by object id, short of its ring; invalid when every Airport has
     /// its ring or no tile is legal. \a airport and \a ring receive that Airport and its count.
     Coord findAirportGuardSite(Uint32* airport = nullptr, int* ring = nullptr, int* unguarded = nullptr);
+    /// ExtraAirports (default off; CityAircraft::extraAirportPays). This build pass's plan, scratch
+    /// refilled by planExtraAirport every pass from the house's own plane record; nothing is saved.
+    struct ExtraAirportPlan {
+        bool active = false;          ///< switch on and another Airport would repay its price
+        bool ordered = false;         ///< a yard took the Airport this pass
+        int airports = 0;             ///< own Airports, standing and queued
+        int flightsEnded = 0;         ///< own plane flights that have ended
+        int64_t valuePerFlight = 0;   ///< combat record of the plane over its ended flights, credits
+        int reserve = 0;              ///< cash that must remain after paying
+    } extraAirportPlan;
+    /// ExtraAirports switch, with the experiment-only DUNECITY_TEST_EXTRA_AIRPORTS override.
+    bool extraAirportsEnabled() const;
+    void planExtraAirport(BuildPass& pass);
+    /// One more Airport per pass across all yards while extraAirportPlan is active: from spare cash
+    /// only, never saved for, with power to run it and a site for it.
+    void chooseYardExtraAirport(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
     /// MassHold: health-weighted value of our live (Rocket Turrets: powered) turrets within
     /// kMassTurretSupportTiles of \a building.
     int64_t turretSupportNear(const ObjectBase* building) const;

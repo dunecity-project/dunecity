@@ -601,6 +601,16 @@ inline constexpr int kRunOvershootTiles = 12;
 // ---------------------------------------------------------------------------
 
 inline constexpr int kPlanePrice = 1500;
+/// The price an Airport charges: kPlanePrice, or the experiment-only DUNECITY_TEST_PLANE_PRICE
+/// (100 to 100,000; read once per process and never a match rule) for balance arms in one build.
+inline int planePrice() {
+    static const int price = [] {
+        const char* text = std::getenv("DUNECITY_TEST_PLANE_PRICE");
+        const int value = text != nullptr ? std::atoi(text) : 0;
+        return value >= 100 && value <= 100000 ? value : kPlanePrice;
+    }();
+    return price;
+}
 inline constexpr int kMaxPlanesPerHouse = 10;
 inline constexpr int kPurchaseCooldownMs = 60000;
 /// The free plane's clock: five minutes (Stefan, 2026-11-24, after playing the two-minute clock:
@@ -617,8 +627,8 @@ inline constexpr int kFreePlaneMs = 300000;
 /// Flights of its own that must have ended before a computer player judges whether planes pay.
 inline constexpr int kPurchaseEvidenceFlights = 1;
 /// True when a house's planes have so far destroyed at least their price per ended flight.
-inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
-    return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(kPlanePrice) * flightsEnded;
+inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded, int price = kPlanePrice) {
+    return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(price) * flightsEnded;
 }
 
 // The plane's performance score (Stefan, 2026-11-23: "also include planes in the performance
@@ -634,17 +644,18 @@ inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded) {
 // than half. The Stats window shows both numbers.
 inline constexpr int64_t kPlaneBuyScoreFloor = 500000;
 inline constexpr int64_t kPlaneBuyScoreCeiling = 1000000;
-inline constexpr int64_t planePerformanceScore(int64_t rewardMilli, int flightsEnded) {
+inline constexpr int64_t planePerformanceScore(int64_t rewardMilli, int flightsEnded, int price = kPlanePrice) {
     return (rewardMilli < 0 ? 0 : rewardMilli) * 1000000
-        / ((int64_t(flightsEnded < 0 ? 0 : flightsEnded) + 1) * kPlanePrice * 1000);
+        / ((int64_t(flightsEnded < 0 ? 0 : flightsEnded) + 1) * price * 1000);
 }
 inline constexpr int64_t planeBuyScore(int64_t armyScore) {
     return armyScore <= 0 || armyScore > kPlaneBuyScoreCeiling ? kPlaneBuyScoreCeiling
          : armyScore < kPlaneBuyScoreFloor ? kPlaneBuyScoreFloor : armyScore;
 }
-inline constexpr bool planeWorthBuying(int64_t rewardMilli, int flightsEnded, int64_t armyScore) {
+inline constexpr bool planeWorthBuying(int64_t rewardMilli, int flightsEnded, int64_t armyScore,
+                                       int price = kPlanePrice) {
     return flightsEnded >= kPurchaseEvidenceFlights
-        && planePerformanceScore(rewardMilli, flightsEnded) >= planeBuyScore(armyScore);
+        && planePerformanceScore(rewardMilli, flightsEnded, price) >= planeBuyScore(armyScore);
 }
 
 // Heaps of money (Stefan, 2026-11-23: "if the ai has heaps and heaps of money then spawning 10
@@ -657,6 +668,28 @@ inline constexpr bool planeWorthBuying(int64_t rewardMilli, int flightsEnded, in
 // planes and 455 buildings in six minutes: slow, costly, and the thing that moves a stalemate.
 inline constexpr int kRichSurplus = 2 * kMaxPlanesPerHouse * kPlanePrice;   // 30,000
 inline constexpr bool richBuys(int64_t surplus) { return surplus >= kRichSurplus; }
+
+// Another Airport (Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to
+// determine if it makes sense to buy more airports. more airports means more planes bombing so could
+// be useful. one off 5k which gets paid back in 16.5 minutes i believe"). QuantBot switch ExtraAirports,
+// default off. In the game an extra Airport earns nothing: the city counts one Airport (hasAirport),
+// a house has one free plane in the air whatever its Airports, and bought planes are capped at
+// kMaxPlanesPerHouse. Only under the experiment DUNECITY_TEST_FREE_PLANE_PER_AIRPORT (Airport::
+// freePlanePerAirport) does each Airport add a free plane every kFreePlaneMs; an extra Airport is then
+// worth what its free planes destroy. QuantBot builds one when its own planes' record says that pays
+// back the Airport's price within kAirportPaybackMinutes: value per ended flight (the house's combat
+// record of the plane: price x share of hit points removed, buildings and units, bombs and crashes)
+// times the free flights in that time. 5,000 over 20 minutes and a plane every five is 1,250 a flight.
+inline constexpr int kAirportPaybackMinutes = 20;
+/// Flights of its own that must have ended before a computer player judges another Airport.
+inline constexpr int kAirportEvidenceFlights = 3;
+/// Airports a computer player builds at most under ExtraAirports, the first one included.
+inline constexpr int kMaxAirportsPerHouse = 4;
+inline constexpr bool extraAirportPays(int64_t valuePerFlight, int flightsEnded, int64_t airportPrice,
+                                       int64_t freePlaneMs = kFreePlaneMs) {
+    return flightsEnded >= kAirportEvidenceFlights && freePlaneMs > 0
+        && valuePerFlight * kAirportPaybackMinutes * 60000 >= airportPrice * freePlaneMs;
+}
 
 // ---------------------------------------------------------------------------
 // Anti-air against the airplane (match rule GameOptionsClass::cityPlaneDefence).

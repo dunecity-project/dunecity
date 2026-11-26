@@ -46,6 +46,13 @@ public:
     /// Probes only: a shorter charge, so a few game minutes hold enough flights to measure
     /// bombing. 0 (always, in the game) is the five minutes.
     static inline int testFreePlaneCycles = 0;
+    /// Balance experiment only, read once per process and never a match rule:
+    /// DUNECITY_TEST_FREE_PLANE_PER_AIRPORT=1 gives each Airport its own free plane. A house then
+    /// has up to one free plane in the air per Airport, and a launch restarts only the clock of
+    /// the Airport that launched it. Without it (the game) a house has one free plane in the air
+    /// whatever its Airports, and a launch restarts every Airport's clock (Stefan, 2026-11-26:
+    /// "more airports means more planes bombing so could be useful", measured under this switch).
+    static bool freePlanePerAirport();
     /// True for a 3x3 Airport (see the class comment), false for the ordinary 4x4 one.
     bool isCompact() const { return compact; }
 

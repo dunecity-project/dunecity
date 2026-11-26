@@ -21,6 +21,8 @@
 #include "QuantBotInternal.h"
 #include <cstdlib>
 #include <players/QuantBotBuildPass.h>
+#include <structures/Airport.h>
+#include <dunecity/CityAircraftPolicy.h>
 #include <string_view>
 
 using QuantBotInternal::cityRoadImpact;
@@ -357,6 +359,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     if (airportGuardPlan.active) {
         // AirportTurrets (default off): a ring of Rocket Turrets round every own Airport.
         chooseYardAirportTurrets(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
+    if (extraAirportPlan.active) {
+        // ExtraAirports (default off): another Airport while its free planes would repay it.
+        chooseYardExtraAirport(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
     if (airRaidPlan.active) {
@@ -1240,6 +1247,69 @@ void QuantBot::chooseYardAirportTurrets(BuildPass& pass, BuilderTurn& turn, Yard
     yardTurn.crimeServiceSite = airportGuardPlan.site;
     yardTurn.structureRule = "airport_guard";
     yardTurn.skipRemainingStructureLogic = true;
+}
+
+bool QuantBot::extraAirportsEnabled() const {
+    // DUNECITY_TEST_EXTRA_AIRPORTS (0 or 1) is an experiment-only override for match arms in one
+    // build, read once per process and never a match rule.
+    static const int override = [] {
+        const char* text = std::getenv("DUNECITY_TEST_EXTRA_AIRPORTS");
+        return text != nullptr && (text[0] == '0' || text[0] == '1') ? text[0] - '0' : -1;
+    }();
+    return override >= 0 ? override == 1 : botConfig().force.extraAirports;
+}
+
+void QuantBot::planExtraAirport(BuildPass& pass) {
+    // ExtraAirports (off by default; CityAircraft::extraAirportPays). Stefan, 2026-11-26: "the
+    // airport economic value should be factored in by the ai to determine if it makes sense to buy
+    // more airports". An extra Airport is worth the free planes it adds; in the game it adds none
+    // (one free plane in the air per house), so the rule waits for an Airport that adds one
+    // (Airport::freePlanePerAirport). The first Airport is the city's civic (planCivicForYard).
+    namespace CA = DuneCity::CityAircraft;
+    extraAirportPlan = ExtraAirportPlan();
+    if (!extraAirportsEnabled() || !pass.citySimEnabled || !Airport::freePlanePerAirport()
+        || !currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing
+        || getHouse()->getNumItems(Structure_Airport) == 0
+        || pass.itemCount[Structure_Airport] > getHouse()->getNumItems(Structure_Airport)
+        || pass.itemCount[Structure_Airport] >= CA::kMaxAirportsPerHouse) return;
+    const int houseID = getHouse()->getHouseID();
+    if (!currentGame->objectData.data[Unit_AmbientAirplane][houseID].enabled) return;
+    extraAirportPlan.airports = pass.itemCount[Structure_Airport];
+    extraAirportPlan.flightsEnded = getHouse()->getNumLostItems(Unit_AmbientAirplane);
+    const int64_t rewardMilli = std::max<int64_t>(0, getHouse()->getCombatReward(Unit_AmbientAirplane).total());
+    extraAirportPlan.valuePerFlight = extraAirportPlan.flightsEnded > 0
+        ? rewardMilli / 1000 / extraAirportPlan.flightsEnded : 0;
+    const int64_t price = currentGame->objectData.data[Structure_Airport][houseID].price;
+    if (!CA::extraAirportPays(extraAirportPlan.valuePerFlight, extraAirportPlan.flightsEnded, price,
+                              int64_t(Airport::freePlaneCharge()) * GAMESPEED_DEFAULT)) return;
+    extraAirportPlan.reserve = std::max({pass.economyReserve, pass.strategicReserveCost, pass.civicReserveCost,
+                                         pass.cityWorkingReserve, ForceConcentrationPolicy::kSpareCashReserve});
+    extraAirportPlan.active = true;
+}
+
+void QuantBot::chooseYardExtraAirport(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    // One order per pass across all yards, after the Airport ring turrets; spare cash only.
+    if (!extraAirportPlan.active || extraAirportPlan.ordered || yardTurn.itemID != NONE_ID
+        || yardTurn.skipRemainingStructureLogic || pass.orderedThisTick.count(Structure_Airport)
+        || !campaignAvailableToBuild(turn.pBuilder, Structure_Airport)) return;
+    const int houseID = getHouse()->getHouseID();
+    const auto& data = currentGame->objectData.data[Structure_Airport][houseID];
+    const int cost = purchasePrice(turn.pBuilder, Structure_Airport);
+    if (pass.money < cost + extraAirportPlan.reserve) return;
+    if (data.power > getHouse()->getProducedPower() - getHouse()->getPowerRequirement()) return;
+    if (findPlaceLocation(Structure_Airport).isInvalid()) return;
+    extraAirportPlan.ordered = true;
+    yardTurn.itemID = Structure_Airport;
+    yardTurn.structureRule = "extra_airport";
+    yardTurn.skipRemainingStructureLogic = true;
+    traceDecision("extra_airport", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+        .set("airports", extraAirportPlan.airports).set("flights_ended", extraAirportPlan.flightsEnded)
+        .set("value_per_flight", extraAirportPlan.valuePerFlight).set("price", cost)
+        .set("money", pass.money).set("reserve", extraAirportPlan.reserve));
+    // One line per order for the match tables (tests/ai/city_plane_economics.py).
+    SDL_Log("CITY_AIRPORT_EXTRA: house=%d airports=%d flights_ended=%d value_per_flight=%lld price=%d cycle=%u",
+            houseID, extraAirportPlan.airports, extraAirportPlan.flightsEnded,
+            static_cast<long long>(extraAirportPlan.valuePerFlight), cost, getGameCycleCount());
 }
 
 void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {

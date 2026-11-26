@@ -392,6 +392,7 @@ QuantBotConfig::QuantBotConfig() {
     force.palaceDenseClearing = true;
     force.palaceTurrets = false;
     force.airRaidTurrets = true;   // Stefan, 2026-11-23: "also make the ai respond when being bombed by planes by having more turrets dispersed"
+    force.extraAirports = false;    // Stefan, 2026-11-26: "factored in by the ai to determine if it makes sense to buy more airports" (CityAircraftPolicy.h)
     force.airportTurrets = false;   // Stefan, 2026-11-26: "also airports need decent rocket turret defenses" (QuantBotAirDefencePolicy.h)
     force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
     force.vanillaCoreDefenceThreatBps = 5000;
@@ -929,6 +930,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "AirRaidTurrets", force.airRaidTurrets);
         iniFile.setBoolValue("Force Concentration", "AirThreatTurrets", force.airThreatTurrets);
         iniFile.setBoolValue("Force Concentration", "AirportTurrets", force.airportTurrets);
+        iniFile.setBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
         iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
         iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
         iniFile.setIntValue("Force Concentration", "VanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);
@@ -1294,6 +1296,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.airRaidTurrets = iniFile.getBoolValue("Force Concentration", "AirRaidTurrets", force.airRaidTurrets);
     force.airThreatTurrets = iniFile.getBoolValue("Force Concentration", "AirThreatTurrets", force.airThreatTurrets);
     force.airportTurrets = iniFile.getBoolValue("Force Concentration", "AirportTurrets", force.airportTurrets);
+    force.extraAirports = iniFile.getBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
     // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
     force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
         "Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps));
@@ -2056,6 +2059,7 @@ std::string QuantBotConfig::getConfigHash() const {
     // Off is the default and leaves every existing hash as it was; on is hashed.
     if (force.airThreatTurrets) addNamed("airThreatTurrets", force.airThreatTurrets);
     if (force.airportTurrets) addNamed("airportTurrets", force.airportTurrets);
+    if (force.extraAirports) addNamed("extraAirports", force.extraAirports);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
     addNamed("vanillaArmyCounters", force.vanillaArmyCounters);
     addNamed("vanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);

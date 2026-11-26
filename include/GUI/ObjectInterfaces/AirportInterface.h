@@ -25,7 +25,7 @@ protected:
         patrolLabel.setTextColor(COLOR_WHITE);
         details.addWidget(&patrolLabel, (Sint32)55);
         // City Plane Purchase: launch a plane now for CityAircraft::kPlanePrice credits.
-        buyButton.setText(_("Buy airplane") + std::string(" ") + std::to_string(DuneCity::CityAircraft::kPlanePrice));
+        buyButton.setText(_("Buy airplane") + std::string(" ") + std::to_string(DuneCity::CityAircraft::planePrice()));
         buyButton.setTooltipText(_("Launch a city airplane now. Up to ten in the air."));
         buyButton.setOnClick([id] {
             auto* airport = dynamic_cast<Airport*>(currentGame->getObjectManager().getObject(id));

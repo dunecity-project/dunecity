@@ -676,6 +676,12 @@ AirThreatTurrets=0
 # lost one is ordered again; one order a build pass, from cash beyond the economy's reserve, never
 # saved for. City games with City Plane Bombing only. 0 = off.
 AirportTurrets=0
+# Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
+# it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
+# destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes
+# (CityAircraft::extraAirportPays), from spare cash only. In the game an extra Airport adds no free
+# plane, so this only builds under the experiment DUNECITY_TEST_FREE_PLANE_PER_AIRPORT. 0 = off.
+ExtraAirports=0
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.

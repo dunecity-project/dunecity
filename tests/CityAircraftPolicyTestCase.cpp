@@ -482,6 +482,18 @@ TEST_CASE("A computer player with heaps of money buys planes that do not pay", "
     CHECK(richBuys(1000000));
 }
 
+TEST_CASE("Another Airport is built only when its free planes repay its price in 20 minutes", "[city][aircraft]") {
+    using namespace DuneCity::CityAircraft;
+    // 5,000 over 20 minutes with a free plane every five minutes: 1,250 a flight.
+    CHECK_FALSE(extraAirportPays(1000000, kAirportEvidenceFlights - 1, 5000));
+    CHECK(extraAirportPays(1250, kAirportEvidenceFlights, 5000));
+    CHECK_FALSE(extraAirportPays(1249, kAirportEvidenceFlights, 5000));
+    // A two-minute clock (an experiment) halves the bar's flights: 500 a flight.
+    CHECK(extraAirportPays(500, 10, 5000, 120000));
+    CHECK_FALSE(extraAirportPays(499, 10, 5000, 120000));
+    CHECK_FALSE(extraAirportPays(1000000, 10, 5000, 0));
+}
+
 TEST_CASE("The city airplane is scored like a unit and bought against the army's score", "[city][aircraft]") {
     using namespace DuneCity::CityAircraft;
     // Value destroyed (milli credits) per price of the flights that ended, plus one price of prior.

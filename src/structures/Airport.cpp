@@ -60,6 +60,14 @@ int Airport::freePlaneCharge() {
     return experiment > 0 ? experiment : MILLI2CYCLES(DuneCity::CityAircraft::kFreePlaneMs);
 }
 
+bool Airport::freePlanePerAirport() {
+    static const bool perAirport = [] {
+        const char* text = std::getenv("DUNECITY_TEST_FREE_PLANE_PER_AIRPORT");
+        return text != nullptr && std::atoi(text) == 1;
+    }();
+    return perAirport;
+}
+
 void Airport::init() {
     itemID = Structure_Airport;
     owner->incrementStructures(itemID);
@@ -137,7 +145,7 @@ bool Airport::canBuyAirplane() const {
         && currentGame->isCitySimEnabled() && getHealth() > 0 && owner->hasPower()
         && currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled
         && owner->getNumItems(Unit_AmbientAirplane) < CA::kMaxPlanesPerHouse
-        && owner->getCredits() >= CA::kPlanePrice;
+        && owner->getCredits() >= CA::planePrice();
 }
 
 /**
@@ -152,9 +160,9 @@ bool Airport::buyAirplane() {
     namespace CA = DuneCity::CityAircraft;
     if (!canBuyAirplane()) return false;
     if (launchAirplane(true) == nullptr) return false;
-    owner->takeCredits(CA::kPlanePrice);
+    owner->takeCredits(CA::planePrice());
     purchaseCooldown = MILLI2CYCLES(CA::kPurchaseCooldownMs);
-    SDL_Log("CITY_PLANE_BOUGHT: house=%d price=%d cycle=%u", owner->getHouseID(), CA::kPlanePrice,
+    SDL_Log("CITY_PLANE_BOUGHT: house=%d price=%d cycle=%u", owner->getHouseID(), CA::planePrice(),
             currentGame->getGameCycleCount());
     return true;
 }
@@ -197,9 +205,18 @@ void Airport::updateCityAircraft() {
     // the house has no free plane in the air. The launch restarts the clock of every Airport of
     // the house, so a second Airport does not shorten the wait. Micropolis rolled one in six
     // here (generatePlane()); that roll is gone, and with it one draw from the game's generator.
-    if (freePlaneTimer <= 0 && AmbientAirplane::freePlanes(owner) == 0
+    // Under the experiment DUNECITY_TEST_FREE_PLANE_PER_AIRPORT (freePlanePerAirport) each Airport
+    // has its own: one free plane in the air per Airport, and only the launching Airport's clock
+    // restarts.
+    const bool perAirport = freePlanePerAirport();
+    const int freeAllowed = perAirport ? owner->getNumItems(Structure_Airport) : 1;
+    if (freePlaneTimer <= 0 && AmbientAirplane::freePlanes(owner) < freeAllowed
         && currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled) {
         if (launchAirplane(false) != nullptr) {
+            if (perAirport) {
+                freePlaneTimer = freePlaneCharge();
+                return;
+            }
             for (StructureBase* structure : structureList) {
                 if (structure->getOwner() == owner && structure->getItemID() == Structure_Airport) {
                     static_cast<Airport*>(structure)->freePlaneTimer = freePlaneCharge();

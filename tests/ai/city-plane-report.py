@@ -184,7 +184,7 @@ for tag, label in ((args.off, args.off_label), (args.on, args.on_label)):
         continue
     keys = {(tag,) + pair for pair in pairs}
     flights = [f for f in flights if f.game in keys]
-    report += [''] + city_plane_economics.report(flights, keys, 'Economics, %s (%s)' % (label, tag))
+    report += [''] + city_plane_economics.report(flights, keys, 'Economics, %s (%s)' % (label, tag), plane_rows)
 
 text = '\n'.join(report) + '\n'
 print(text)

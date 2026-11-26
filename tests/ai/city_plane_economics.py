@@ -97,8 +97,12 @@ class Flight:
 def flights_of(rows, tag=None):
     """Flights by (game, object). Rows of games that have no object on their kill lines (logs from
     before 2026-11-26) give flights with no kills; check `has_objects`."""
+    global PLANE_PRICE
     flights, games = {}, set()
     has_objects = False
+    # The price the games charged (CITY_PLANE_BOUGHT; DUNECITY_TEST_PLANE_PRICE arms differ).
+    prices = {number(r.get('price')) for r in rows if r['event'] == 'bought' and (tag is None or r.get('tag') == tag)}
+    PLANE_PRICE = int(max(prices)) if prices else 1500
     for row in rows:
         if tag is not None and row.get('tag') != tag:
             continue
@@ -162,7 +166,7 @@ def flight_row(label, flights):
         pct(down, len(flights)))
 
 
-def report(flights, games, title):
+def report(flights, games, title, rows=()):
     lines = ['## %s' % title, '']
     if not flights:
         return lines + ['No city airplane flew in these games.', '']
@@ -221,6 +225,13 @@ def report(flights, games, title):
               'credit); %s counting the free planes too.' % (
                   fmt(sum(game_bought_value) / max(1, sum(game_bought))), fmt(spent),
                   sum(game_bought_value) / spent if spent else 0.0, fmt(sum(game_values) / max(1, sum(game_bought))))]
+
+    extra = [r for r in rows if r.get('event') == 'airport_extra'
+             and (r.get('tag', ''),) + tuple(r.get(k, '') for k in PAIR) in games]
+    if extra:
+        lines += ['', 'Extra Airports ordered (QuantBot ExtraAirports): %.2f a game; value per ended flight when '
+                  'ordered, median %s.' % (len(extra) / n_games,
+                                           fmt(statistics.median(number(r['value_per_flight']) for r in extra)))]
 
     # By house.
     lines += ['', '### By house', '',
@@ -299,7 +310,7 @@ def main():
             out += ['## %s' % tag, '', 'These logs predate per-flight kill lines (object= on CITY_PLANE_KILL); '
                     'no per-flight value can be computed.', '']
             continue
-        out += report(flights, games, tag)
+        out += report(flights, games, tag, rows)
     text = '\n'.join(out) + '\n'
     print(text)
     if args.output:

@@ -463,7 +463,7 @@ void HouseStatsWindow::refreshAllocation(const House* house) {
             row.name.setText(""); row.performance.setText(""); row.goal.setText("");
         } else {
             const int64_t score = DuneCity::CityAircraft::planePerformanceScore(
-                house->getCombatReward(Unit_AmbientAirplane).total(), flights);
+                house->getCombatReward(Unit_AmbientAirplane).total(), flights, DuneCity::CityAircraft::planePrice());
             row.name.setText(fitText(unitName(Unit_AmbientAirplane), kAllocationNameWidth - 4, 11));
             row.performance.setText(fmt::sprintf("x%.1f", static_cast<double>(score) / 1000000.0));
             if(buyScore <= 0) {

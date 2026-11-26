@@ -541,7 +541,8 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
     // The plane is scored as the army's unit types are and bought while it does at least what a
     // credit does in the army (CityAircraft::planeWorthBuying).
     cityPlaneBuyScore = CA::planeBuyScore(pass.armyPerformanceScore);
-    const bool pays = CA::planeWorthBuying(rewardMilli, flightsEnded, pass.armyPerformanceScore);
+    const int price = CA::planePrice();
+    const bool pays = CA::planeWorthBuying(rewardMilli, flightsEnded, pass.armyPerformanceScore, price);
     // Or heaps of money: it buys although single planes do not pay, to break up a massively
     // built city (CityAircraft::richBuys). Checked again at each Airport as the money goes.
     if (!pays && !CA::richBuys(int64_t(pass.money) - reserve)) return;
@@ -549,7 +550,7 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
     for (const StructureBase* structure : getStructureList()) {
         if (structure->getOwner() != getHouse() || structure->getItemID() != Structure_Airport) continue;
         const auto* airport = static_cast<const Airport*>(structure);
-        if (!airport->canBuyAirplane() || pass.money < CA::kPlanePrice + reserve) continue;
+        if (!airport->canBuyAirplane() || pass.money < price + reserve) continue;
         if (!checked) {
             checked = true;
             for (const StructureBase* other : getStructureList()) {
@@ -562,11 +563,11 @@ void QuantBot::buyCityAirplanes(BuildPass& pass) {
         if (!enemyBuilding) return;
         if (!pays && !CA::richBuys(int64_t(pass.money) - reserve)) break;
         if (!doBuyCityAirplane(airport)) continue;
-        pass.money -= CA::kPlanePrice;
+        pass.money -= price;
         traceDecision("city_airplane_bought", AITelemetry::Record().set("airport", airport->getObjectID())
-            .set("price", CA::kPlanePrice).set("spendable_after", pass.money).set("reserve", reserve)
+            .set("price", price).set("spendable_after", pass.money).set("reserve", reserve)
             .set("flights_ended", flightsEnded).set("destroyed_credits", destroyedCredits)
-            .set("pays", pays ? 1 : 0).set("plane_score", CA::planePerformanceScore(rewardMilli, flightsEnded))
+            .set("pays", pays ? 1 : 0).set("plane_score", CA::planePerformanceScore(rewardMilli, flightsEnded, price))
             .set("buy_score", cityPlaneBuyScore)
             .set("planes", getHouse()->getNumItems(Unit_AmbientAirplane)));
     }
@@ -607,6 +608,7 @@ void QuantBot::build(int militaryValue) {
     planPalaceTurrets(pass);
     planAirRaidDefence(pass);
     planAirportTurrets(pass);
+    planExtraAirport(pass);
     planCityResearchOrder(pass);
     planTechSavings(pass);
     planMissionObjectives(pass);
