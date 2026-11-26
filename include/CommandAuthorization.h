@@ -145,6 +145,7 @@ inline bool actsOnOwnedObject(CMDTYPE commandID) {
         case CMD_RESEARCH_TECH_LEVEL:
         case CMD_AIRPORT_BUY_AIRPLANE:
         case CMD_ZONE_EVACUATE:
+        case CMD_SANDWORM_SPICEBLOOM:
             return true;
 
         // No acting object: pause/resume and the sync probe carry only the issuer, the city

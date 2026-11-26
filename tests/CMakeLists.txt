@@ -1216,6 +1216,10 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-saboteur-effect-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/saboteur-effect-probe)
         set_tests_properties(saboteur_effect_probe PROPERTIES TIMEOUT 900 PROCESSORS 2)
+        dunecity_add_test(headless nightly NAME palace_worm_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-palace-worm-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/palace-worm-probe)
+        set_tests_properties(palace_worm_probe PROPERTIES TIMEOUT 900 PROCESSORS 2)
         # A unit the map starts with on a spice or special bloom loads alive and visible with the
         # Zone Garrisons: Soldiers and Troopers occupy own zones and take enemy ones with the capture
         # order, fire out, are shot out or evacuate, come out of a destroyed zone, and survive a save.

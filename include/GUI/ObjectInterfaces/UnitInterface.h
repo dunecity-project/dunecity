@@ -38,6 +38,7 @@
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/Devastator.h>
+#include <units/SandWorm.h>
 #include <mod/ModManager.h>
 
 class UnitInterface : public DefaultObjectInterface {
@@ -106,6 +107,13 @@ protected:
         destructButton.setVisible( (itemID == Unit_Devastator) );
         destructButton.setOnClick(std::bind(&UnitInterface::onDestruct, this));
 
+        // The Fremen Palace worm's Spice Bloom (Sandworm::doSpiceBloom): pick a spot, it bursts there.
+        spiceBloomButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Deploy)});
+        spiceBloomButton.setTooltipText(_("Spice Bloom: the worm goes to a spot on the sand and bursts into a spice field"));
+        spiceBloomButton.setToggleButton(true);
+        spiceBloomButton.setVisible(isPalaceWormObject(objectID));
+        spiceBloomButton.setOnClick([]() { currentGame->setCursorMode(Game::CursorMode_SpiceBloom); });
+
         healButton.setVisible(false);
         if(ModManager::instance().isTornieFamilyContentActive()) {
 
@@ -126,7 +134,7 @@ protected:
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
         actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
             &carryallDropButton, &captureButton, &returnButton, &deployButton,
-            &destructButton, &healButton, &sendToRepairButton});
+            &destructButton, &spiceBloomButton, &healButton, &sendToRepairButton});
         buttonVBox.addWidget(&actionBar);
 
         buttonVBox.addWidget(VSpacer::create(buttonGap));
@@ -334,6 +342,7 @@ protected:
         healButton.setVisible(pObject->canHeal());
         captureButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Capture);
         carryallDropButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_CarryallDrop);
+        spiceBloomButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_SpiceBloom);
         carryallDropButton.setVisible(currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops && pObject->getOwner()->hasCarryalls());
         sendToRepairButton.setVisible(pObject->getHealth() < pObject->getMaxHealth());
         actionBar.refresh();
@@ -370,6 +379,12 @@ protected:
     SymbolButton    healButton;
     SymbolButton    sendToRepairButton;
     SymbolButton    carryallDropButton;
+    SymbolButton    spiceBloomButton;
+
+    static bool isPalaceWormObject(Uint32 objectID) {
+        const auto* worm = dynamic_cast<const Sandworm*>(currentGame->getObjectManager().getObject(objectID));
+        return worm != nullptr && worm->isPalaceWorm();
+    }
 
     TextButton      guardButton;
     TextButton      areaGuardButton;

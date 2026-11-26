@@ -349,7 +349,9 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
         // A reinforcement worm's bite takes the whole tile but its summoner's side.
         const auto* worm = dynamic_cast<const Sandworm*>(currentGame->getObjectManager().getObject(damagerID));
         const bool family = ModManager::instance().isTornieFamilyContentActive();
-        const bool tameAttack = family && worm && worm->getItemID() == Unit_TameSandworm;
+        // A tame worm (Tornie) and the Fremen Palace worm never bite their own team.
+        const bool tameAttack = (family && worm && worm->getItemID() == Unit_TameSandworm)
+            || (worm && worm->isPalaceWorm());
         for(auto objectID : affectedGroundAndUndergroundUnits) {
             auto pObject = currentGame->getObjectManager().getObject(objectID);
             if(pObject

@@ -79,6 +79,11 @@ public:
     bool usesTornieMainRebelsRandomSpecial() const;
     TornieRebelsSpecialWeapon getTornieMainRebelsSpecialWeapon() const;
     bool usesTargetedSpecialWeapon() const;
+    /// The Fremen Palace calls a worm its house controls (match rule Fremen Palace Worm,
+    /// include/units/PalaceWormRules.h) instead of Fremen warriors.
+    bool usesPalaceWorm() const;
+    /// The house's Palace worm while one is out, else nullptr.
+    static class Sandworm* findPalaceWorm(const House* house);
     static int getSpecialWeaponCooldownForHouse(int houseID);
     int getMaxSpecialWeaponTimer() const {
         return getSpecialWeaponCooldownForHouse(getTechnologyHouseID());
@@ -89,6 +94,7 @@ protected:
     bool callLightVehicles();
     bool callOrnithopterStrike();
     bool spawnSaboteur();
+    bool summonPalaceWorm();
 
     /**
         Used for updating things that are specific to that particular structure. Is called from

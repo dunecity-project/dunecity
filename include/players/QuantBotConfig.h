@@ -312,6 +312,10 @@ struct QuantBotConfig {
         bool palaceDenseClearing;              ///< A Palace/Stadium site may demolish own R/C lots of any density.
         bool palaceTurrets;                    ///< Every Palace keeps a Rocket Turret (anti-air) within 5 tiles, never saved for.
         bool airRaidTurrets;                   ///< Default on: while city airplanes bomb its buildings, Rocket Turrets spread through the city (QuantBotAirDefencePolicy.h).
+        /// The Fremen Palace worm (match rule Fremen Palace Worm; QuantBot::managePalaceWorm): 0 bursts it
+        /// for spice near the refineries at once, 1 (default) hunts an enemy army on its sand and
+        /// bursts it for spice when there is none, 2 only hunts. Hashed only when not 1.
+        int palaceWorm;
         bool buildUpToEnemy;                   ///< Default on (protocol 141): a site may touch enemy buildings at no cost, and light enemy fire is a fallback site (TacticalSafetyPolicy::enemyBorderTileScore). Off only for experiment arms (play style @old-enemy-spacing).
         bool airThreatTurrets;                 ///< Default off (no fewer buildings bombed in 48 paired matches): the same turrets before the first bomb, once another team can bomb it; paid ahead of strategic and civic savings.
         bool extraAirports;                    ///< Default on: another Airport (up to 4) when its free planes and production would repay its price in 20 minutes, up to 8 for a rich house (CityAircraft::extraAirportPays, kMaxAirportsPerRichHouse).

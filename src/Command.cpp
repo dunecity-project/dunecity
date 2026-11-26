@@ -34,6 +34,7 @@
 
 #include <units/UnitBase.h>
 #include <units/GroundUnit.h>
+#include <units/SandWorm.h>
 #include <units/Carryall.h>
 #include <units/Devastator.h>
 #include <units/MCV.h>
@@ -457,6 +458,13 @@ case CMD_INFANTRY_CAPTURE: {
             auto* zone = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(parameter[0]));
             if(!mayActOnObject(playerID, commandID, parameter[0], zone)) return;
             zone->evacuateGarrison();
+        } break;
+
+        case CMD_SANDWORM_SPICEBLOOM: {
+            if(parameter.size() != 3) return;
+            auto* worm = dynamic_cast<Sandworm*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], worm)) return;
+            worm->doSpiceBloom((int) parameter[1], (int) parameter[2]);
         } break;
 
         case CMD_AIRPORT_BUY_AIRPLANE: {

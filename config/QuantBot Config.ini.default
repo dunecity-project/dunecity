@@ -668,6 +668,10 @@ AirRaidTurrets=1
 # (two weapons or more) still waits for a held finished building's minute. 0 = the spacing before 141
 # (play style @old-enemy-spacing, for experiment arms).
 BuildUpToEnemy=1
+# Stefan, 2026-11-27: the Fremen Palace calls a worm (match rule Fremen Palace Worm). 1: it hunts an enemy
+# army standing on its sand and bursts into spice near our refineries when there is none (or before it
+# would leave unused); 0: it bursts for spice at once; 2: it only hunts (play styles @palace-worm-0/-2).
+PalaceWorm=1
 # Stefan, 2026-11-24: "on skirmish with fully built base the ai doesn't build rocket turret defenes
 # and everyones base gets steamrolled by a plane". As soon as another team has an Airport or has
 # flown a city airplane (and bombing is on), a house spreads Rocket Turrets through its city by the

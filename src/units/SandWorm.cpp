@@ -31,7 +31,11 @@
 #include <misc/draw_util.h>
 
 #include <units/InfantryBase.h>
+#include <units/PalaceWormRules.h>
+#include <players/AIDecisionLog.h>
+#include <FileClasses/TextManager.h>
 
+#include <cstring>
 #include <limits>
 
 #define MAX_SANDWORMSLEEPTIME 50000
@@ -94,6 +98,12 @@ Sandworm::Sandworm(InputStream& stream, int unitType) : GroundUnit(stream) {
         respawnOrigin.x = stream.readSint32();
         respawnOrigin.y = stream.readSint32();
     }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_PALACE_WORM) {
+        palaceWorm = stream.readBool();
+        palaceWormCyclesLeft = stream.readSint32();
+        bloomTarget.x = stream.readSint32();
+        bloomTarget.y = stream.readSint32();
+    }
 }
 
 void Sandworm::init(int unitType) {
@@ -132,6 +142,117 @@ void Sandworm::save(OutputStream& stream) const {
     stream.writeSint32(summonerHouseID);
     stream.writeSint32(respawnOrigin.x);
     stream.writeSint32(respawnOrigin.y);
+    stream.writeBool(palaceWorm);
+    stream.writeSint32(palaceWormCyclesLeft);
+    stream.writeSint32(bloomTarget.x);
+    stream.writeSint32(bloomTarget.y);
+}
+
+Sandworm* Sandworm::createPalaceWorm(House* owner) {
+    // ObjectBase::createObject hands every Unit_Sandworm to the Natives; this one is the Palace's.
+    auto* worm = new Sandworm(owner);
+    worm->setObjectID(currentGame->getObjectManager().addObject(worm));
+    worm->palaceWorm = true;
+    worm->palaceWormCyclesLeft = MILLI2CYCLES(PalaceWorm::kLifetimeMs);
+    worm->respondable = true;
+    worm->doSetAttackMode(GUARD);
+    return worm;
+}
+
+void Sandworm::palaceWormLeave(const char* why) {
+    SDL_Log("PALACE_WORM: event=%s house=%d object=%u x=%d y=%d kills=%d cycles_left=%d cycle=%u", why,
+            owner->getHouseID(), objectID, location.x, location.y, kills, palaceWormCyclesLeft,
+            currentGame->getGameCycleCount());
+    if(AITelemetry::log().enabled())
+        AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "palace_worm_left",
+            AITelemetry::Record().set("worm", objectID).set("why", why).set("kills", kills)
+                .set("x", location.x).set("y", location.y));
+    palaceWormSpent = std::strcmp(why, "beaten") != 0;
+    destroy();
+}
+
+void Sandworm::palaceWormBurst() {
+    const Coord where = location;
+    const auto terrain = currentGameMap->chooseGeneratedSpiceTerrain();
+    currentGameMap->createSpiceField(where, PalaceWorm::kBloomRadius, true, terrain.first, terrain.second);
+    soundPlayer->playSoundAt(Sound_Bloom, where);
+    if(owner == pLocalHouse) soundPlayer->playVoice(BloomLocated, owner->getHouseID());
+    AITelemetry::log().account(owner->getHouseID(), "palace_worm_bloom", int64_t{1} << 32);
+    palaceWormLeave("bloom");
+}
+
+namespace {
+/// The sand tile nearest AIM (within PalaceWorm::kBloomSnapTiles, nearest first, then lowest y and x)
+/// that WORM can stand on and reach: passable to it and in its own sand region.
+Coord palaceWormBloomSpot(const Sandworm& worm, const Coord& aim) {
+    if(!currentGameMap->tileExists(worm.getLocation())) return Coord::Invalid();
+    const Uint32 region = currentGameMap->getTile(worm.getLocation())->getSandRegion();
+    Coord best = Coord::Invalid();
+    int bestDistance = std::numeric_limits<int>::max();
+    for(int dy = -PalaceWorm::kBloomSnapTiles; dy <= PalaceWorm::kBloomSnapTiles; ++dy) {
+        for(int dx = -PalaceWorm::kBloomSnapTiles; dx <= PalaceWorm::kBloomSnapTiles; ++dx) {
+            const Coord spot(aim.x + dx, aim.y + dy);
+            if(!worm.canPass(spot.x, spot.y)
+               || currentGameMap->getTile(spot)->getSandRegion() != region) continue;
+            const int distance = dx*dx + dy*dy;
+            if(distance > PalaceWorm::kBloomSnapTiles*PalaceWorm::kBloomSnapTiles) continue;
+            if(distance < bestDistance) {
+                bestDistance = distance;
+                best = spot;
+            }
+        }
+    }
+    return best;
+}
+} // namespace
+
+bool Sandworm::doSpiceBloom(int x, int y) {
+    if(!palaceWorm || !isActive() || !currentGameMap->tileExists(x, y)) return false;
+    const Coord spot = palaceWormBloomSpot(*this, Coord(x, y));
+    if(spot.isInvalid()) {
+        if(owner == pLocalHouse) currentGame->addToNewsTicker(_("The worm cannot reach that spot"));
+        return false;
+    }
+    GroundUnit::doMove2Pos(spot.x, spot.y, true);
+    bloomTarget = spot;
+    SDL_Log("PALACE_WORM: event=bloom_order house=%d object=%u x=%d y=%d aim_x=%d aim_y=%d cycle=%u",
+            owner->getHouseID(), objectID, spot.x, spot.y, x, y, currentGame->getGameCycleCount());
+    return true;
+}
+
+void Sandworm::handleSpiceBloomClick(int x, int y) {
+    if(!palaceWorm || !respondable) return;
+    currentGame->getCommandManager().addCommand(
+        Command(pLocalPlayer->getPlayerID(), CMD_SANDWORM_SPICEBLOOM, objectID, (Uint32) x, (Uint32) y));
+}
+
+bool Sandworm::handleSelectedSpiceBloomClick(int x, int y) {
+    Sandworm* responder = nullptr;
+    for(Uint32 objectID : currentGame->getSelectedList()) {
+        auto* worm = dynamic_cast<Sandworm*>(currentGame->getObjectManager().getObject(objectID));
+        if(worm != nullptr && worm->isPalaceWorm() && currentGame->canControlHouse(worm->getOwner())) {
+            worm->handleSpiceBloomClick(x, y);
+            responder = worm;
+        }
+    }
+    currentGame->setCursorMode(Game::CursorMode_Normal);
+    if(responder != nullptr) responder->playConfirmSound();
+    return responder != nullptr;
+}
+
+void Sandworm::doMove2Pos(int xPos, int yPos, bool bForced) {
+    bloomTarget.invalidate();
+    GroundUnit::doMove2Pos(xPos, yPos, bForced);
+}
+
+void Sandworm::doAttackObject(const ObjectBase* pTargetObject, bool bForced) {
+    bloomTarget.invalidate();
+    GroundUnit::doAttackObject(pTargetObject, bForced);
+}
+
+void Sandworm::doAttackPos(int xPos, int yPos, bool bForced) {
+    bloomTarget.invalidate();
+    GroundUnit::doAttackPos(xPos, yPos, bForced);
 }
 
 bool Sandworm::spares(const ObjectBase& object) const {
@@ -143,7 +264,7 @@ bool Sandworm::spares(const ObjectBase& object) const {
 void Sandworm::assignToMap(const Coord& pos) {
     if(currentGameMap->tileExists(pos)) {
         currentGameMap->getTile(pos)->assignUndergroundUnit(getObjectID());
-        if(itemID == Unit_TameSandworm && ModManager::instance().isTornieFamilyContentActive())
+        if((itemID == Unit_TameSandworm && ModManager::instance().isTornieFamilyContentActive()) || palaceWorm)
             currentGameMap->viewMap(owner->getHouseID(), pos, getViewRange());
         // do not unhide map cause this would give Fremen players an advantage
         // currentGameMap->viewMap(owner->getHouseID(), location, getViewRange());
@@ -165,7 +286,7 @@ bool Sandworm::attack() {
                 if(targetIsImmortal) {
                     // Sandworm dies trying to eat an immortal unit (chokes on it)
                     // Skip attack animation and immediately trigger sleep/die
-                    kills = 3; // Set to max so it triggers death/sleep
+                    kills = palaceWorm ? PalaceWorm::kMeals : 3; // Set to max so it triggers death/sleep
                     sleepOrDie();
                     return false;
                 }
@@ -189,7 +310,12 @@ void Sandworm::deploy(const Coord& newLocation) {
         respawnOrigin = newLocation;
     }
 
-    respondable = itemID == Unit_TameSandworm;
+    respondable = itemID == Unit_TameSandworm || palaceWorm;
+    if(palaceWorm && currentGameMap->tileExists(newLocation)) {
+        // Shimmer from the start, so its owner can find and select a worm that has not moved yet.
+        lastLocs[0] = lastLocs[1] = newLocation*TILESIZE + Coord(TILESIZE/2, TILESIZE/2);
+        shimmerOffsetIndex = 0;
+    }
 }
 
 void Sandworm::blitToScreen() {
@@ -267,6 +393,11 @@ void Sandworm::engageTarget() {
     if(isEating()) {
         return;
     }
+    if(bloomTarget.isValid()) {
+        // On its way to burst: nothing else matters.
+        if(target) setTarget(nullptr);
+        return;
+    }
 
     UnitBase::engageTarget();
 
@@ -285,8 +416,9 @@ void Sandworm::engageTarget() {
                 
                 case HUNT: {
                     // In HUNT mode, pursue more aggressively but still limited to view range
-                    // This allows counter-attacking units that damaged us
-                    maxDistance = getViewRange() * 2;
+                    // This allows counter-attacking units that damaged us. A Palace worm hunts
+                    // its whole sand region (canAttack keeps it there).
+                    maxDistance = palaceWorm ? FixPt_MAX : getViewRange() * 2;
                 } break;
 
                 case AREAGUARD: {
@@ -379,6 +511,17 @@ void Sandworm::setTarget(const ObjectBase* newTarget) {
 
 void Sandworm::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                                const DeviationReward::Provenance& provenance) {
+    if(palaceWorm) {
+        // Its owner's orders stand (no switch to Hunt, no forced chase); a worm in Guard or Hunt
+        // that is not on its way to burst turns on an enemy that shot it from the sand.
+        GroundUnit::handleDamage(damage, damagerID, damagerOwner, provenance);
+        if(damage > 0 && bloomTarget.isInvalid() && !target && (attackMode == GUARD || attackMode == HUNT
+           || attackMode == AREAGUARD || attackMode == AMBUSH)) {
+            const ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
+            if(pDamager != nullptr && canAttack(pDamager)) setTarget(pDamager);
+        }
+        return;
+    }
     // Switch to HUNT mode BEFORE calling parent so counter-attack logic works
     if(damage > 0) {
         doSetAttackMode(HUNT);
@@ -405,7 +548,28 @@ void Sandworm::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
 }
 
 bool Sandworm::update() {
-    if(itemID != Unit_TameSandworm && getHealth() <= getMaxHealth()/2) {
+    if(palaceWorm && isActive() && !currentGame->isGamePaused() && !currentGame->isGameFinished()) {
+        if(getHealth() <= getMaxHealth()/2) {
+            AchievementEvents::wormDefeated(this);
+            palaceWormLeave("beaten");
+            return false;
+        }
+        if(palaceWormCyclesLeft > 0) --palaceWormCyclesLeft;
+        if(!isEating()) {
+            // At the spot, or stopped beside it (another worm took the tile): burst here.
+            if(bloomTarget.isValid() && (location == bloomTarget
+               || (!moving && !justStoppedMoving && blockDistance(location, bloomTarget) <= 2))) {
+                palaceWormBurst();
+                return false;
+            }
+            if(palaceWormCyclesLeft <= 0) {
+                palaceWormLeave("expired");
+                return false;
+            }
+        }
+    }
+
+    if(itemID != Unit_TameSandworm && !palaceWorm && getHealth() <= getMaxHealth()/2) {
         AchievementEvents::wormDefeated(this);
         if(sleepOrDie() == false) {
             return false;
@@ -436,7 +600,12 @@ bool Sandworm::update() {
                 drawnFrame++;
                 if(drawnFrame >= 9) {
                     drawnFrame = INVALID;
-                    if(itemID != Unit_TameSandworm && kills >= 3) {
+                    if(palaceWorm) {
+                        if(kills >= PalaceWorm::kMeals) {
+                            palaceWormLeave("sated");
+                            return false;
+                        }
+                    } else if(itemID != Unit_TameSandworm && kills >= 3) {
                         if(sleepOrDie() == false) {
                             return false;
                         }
@@ -452,6 +621,13 @@ bool Sandworm::update() {
 
                             if(wasAlive && target && (target.getObjPointer()->isVisible(getOwner()->getTeamID()) == false)) {
                                 kills++;
+                                const ObjectBase* meal = target.getObjPointer();
+                                if(palaceWorm && meal != nullptr) {
+                                    SDL_Log("PALACE_WORM: event=ate house=%d object=%u x=%d y=%d kills=%d cycles_left=%d item=%d price=%d victim_house=%d cycle=%u",
+                                            owner->getHouseID(), objectID, location.x, location.y, kills, palaceWormCyclesLeft,
+                                            meal->getItemID(), currentGame->objectData.data[meal->getItemID()][meal->getOwner()->getHouseID() < NUM_HOUSES ? meal->getOwner()->getHouseID() : 0].price,
+                                            meal->getOwner()->getHouseID(), currentGame->getGameCycleCount());
+                                }
                             }
                         }
                     }
@@ -505,7 +681,7 @@ bool Sandworm::canAttack(const ObjectBase* object) const {
         && currentGameMap->tileExists(location)
         && object->isAGroundUnit()
         && !isSandwormUnit(object->getItemID())      // won't kill other sandworms
-        && (itemID != Unit_TameSandworm || object->getOwner()->getTeamID() != owner->getTeamID())
+        && ((itemID != Unit_TameSandworm && !palaceWorm) || object->getOwner()->getTeamID() != owner->getTeamID())
         && !spares(*object)                         // nor the side whose reinforcement it is
         //&& object->isVisible(getOwner()->getTeamID())
         //&& (object->getOwner()->getTeamID() != owner->getTeamID())
@@ -526,7 +702,7 @@ bool Sandworm::canPass(int xPos, int yPos) const {
 }
 
 const ObjectBase* Sandworm::findTarget() const {
-    if(isEating()) {
+    if(isEating() || bloomTarget.isValid()) {
         return nullptr;
     }
 
@@ -545,8 +721,9 @@ const ObjectBase* Sandworm::findTarget() const {
                 // In GUARD and AMBUSH modes, stay near guard point (view range)
                 return getViewRange();
             case HUNT:
-                // In HUNT mode (when damaged), search further to counter-attack
-                return getViewRange() * 2;
+                // In HUNT mode (when damaged), search further to counter-attack. A Palace
+                // worm's Hunt order seeks the whole sand region it is in.
+                return palaceWorm ? std::numeric_limits<int>::max() : getViewRange() * 2;
             case AREAGUARD:
                 return std::numeric_limits<int>::max();
             default:

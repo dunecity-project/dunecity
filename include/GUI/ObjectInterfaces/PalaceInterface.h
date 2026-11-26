@@ -134,6 +134,8 @@ protected:
                 picID = Picture_DeathHand;
             } else if(pPalace->usesLightVehicleCall()) {
                 picID = Picture_PalaceLightVehicles;
+            } else if(pPalace->usesPalaceWorm()) {
+                picID = Picture_Sandworm;
             } else switch(getHouseFallbackHouse(originalHouse)) {
                 case HOUSE_HARKONNEN:
                 case HOUSE_SARDAUKAR: {
@@ -164,7 +166,8 @@ protected:
             weaponProgressBar.setProgress(pPalace->getPercentComplete());
 
             weaponSelectButton.setVisible(pPalace->isSpecialWeaponReady());
-            weaponSelectButton.setTooltipText(pPalace->usesKleshmershNapalm() ? _("Napalm missile") : "");
+            weaponSelectButton.setTooltipText(pPalace->usesKleshmershNapalm() ? _("Napalm missile")
+                : pPalace->usesPalaceWorm() ? _("Call a sandworm: Hunt eats enemy units on sand, Spice Bloom bursts it into spice") : "");
 
             int level = static_cast<int>(pPalace->getCityOccupancy());
             if (level < 1) level = 1;

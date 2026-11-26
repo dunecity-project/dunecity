@@ -961,7 +961,8 @@ public:
         CursorMode_Placing,
         CursorMode_CityZone,
         CursorMode_CityRoad,
-        CursorMode_Patrol
+        CursorMode_Patrol,
+        CursorMode_SpiceBloom             ///< Picks where the selected Palace worm bursts (Sandworm::doSpiceBloom)
     };
 
     /// Player position orders that go through issuePositionOrder().

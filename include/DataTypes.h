@@ -348,6 +348,7 @@ public:
                     && (cityPlaneCrashBombs == goc.cityPlaneCrashBombs)
                     && (parksCountAsRoads == goc.parksCountAsRoads)
                     && (zoneGarrisons == goc.zoneGarrisons)
+                    && (fremenPalaceWorm == goc.fremenPalaceWorm)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -411,6 +412,7 @@ public:
             if(!cityPlaneCrashBombs) optStr += "/cityPlaneCrashBombs=0";
             if(!parksCountAsRoads) optStr += "/parksCountAsRoads=0";
             if(!zoneGarrisons) optStr += "/zoneGarrisons=0";
+            if(!fremenPalaceWorm) optStr += "/fremenPalaceWorm=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -567,6 +569,11 @@ public:
         /// (ZoneStructureGarrison.cpp, docs/zone-garrisons.md). Off, a zone is captured as any
         /// building is, as up to protocol 143. INI key only.
         bool        zoneGarrisons = true;
+        /// A Fremen Palace calls a sandworm its house controls instead of Fremen warriors (Stefan,
+        /// 2026-11-27: "i want freeman house to get a worm as its palace special"): Hunt eats enemy
+        /// units on its sand, Spice Bloom bursts it into a spice field (include/units/
+        /// PalaceWormRules.h). Off, the Fremen Palace calls warriors, as up to protocol 144. INI key only.
+        bool        fremenPalaceWorm = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

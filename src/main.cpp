@@ -1460,8 +1460,10 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.cityPlaneFreePerAirport = myINIFile.getBoolValue("Game Options", "City Plane Free Per Airport", true);
             settings.gameOptions.cityPlaneCrashBombs = myINIFile.getBoolValue("Game Options", "City Plane Crash Bombs", true);
             settings.gameOptions.zoneGarrisons = myINIFile.getBoolValue("Game Options", "Zone Garrisons", true);
+            settings.gameOptions.fremenPalaceWorm = myINIFile.getBoolValue("Game Options", "Fremen Palace Worm", true);
             settings.gameOptions.parksCountAsRoads = myINIFile.getBoolValue("Game Options", "Parks Count As Roads", true);
             settings.gameOptions.saboteurHunt = myINIFile.getBoolValue("Game Options", "Saboteur Hunt", true);
+            settings.gameOptions.hospitalCare = myINIFile.getBoolValue("Game Options", "Hospital Care", true);
             settings.gameOptions.starportPopulation = myINIFile.getBoolValue("Game Options", "Starport Population", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);

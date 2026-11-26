@@ -21,6 +21,7 @@
 #include "QuantBotInternal.h"
 
 #include <FormationOrders.h>
+#include <units/SandWorm.h>
 
 #include <tuple>
 
@@ -4912,6 +4913,11 @@ void QuantBot::retreatAllUnits() {
             if (pUnit->getItemID()==Unit_Saboteur) continue;
             if (ModManager::instance().isTornieFamilyContentActive() && pUnit->getAttackMode() == SABOTAGE) continue;
             if (pUnit->getOwner()==getHouse() && unitRole(pUnit, {UnitRole::Human}) != UnitRole::Free) continue;
+            // The Fremen Palace worm has a controller of its own; a wild worm has none here.
+            if (pUnit->getItemID()==Unit_Sandworm) {
+                if (pUnit->getOwner()==getHouse()) managePalaceWorm(static_cast<const Sandworm*>(pUnit));
+                continue;
+            }
             // A captured Devastator is worth exactly one thing, so arm it at the first scan
             // that sees it - ahead of kiting, campaign holds, rally, escort and every other
             // role early return that would otherwise keep deferring the order. Support mode

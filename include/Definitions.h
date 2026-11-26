@@ -254,7 +254,11 @@
 // 9900: Zone Garrisons: a Residential, Commercial or Industrial zone saves the soldiers inside it
 //       (object ids in the order they entered), its garrison's target and its search clock after
 //       its residential population. An older save's zones are empty.
-#define SAVEGAMEVERSION     9900
+// 9901: Fremen Palace Worm: a sandworm saves whether it is a Palace worm, its life left and its
+//       Spice Bloom target after its Civ Wars origin. An older save's worms are wild.
+#define SAVEGAMEVERSION     9901
+/// First save with a sandworm's Palace worm state (Fremen Palace Worm).
+#define SAVEGAMEVERSION_PALACE_WORM 9901
 /// First save with a zone's garrison (Zone Garrisons).
 #define SAVEGAMEVERSION_ZONE_GARRISON 9900
 /// First save whose Airport purchase clock is a plane's build (City Plane Build Time).

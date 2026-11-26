@@ -132,6 +132,10 @@ public:
     bool palaceExperimentScope() const;
     bool palaceWeaponDue() const;
     const ObjectBase* palaceValueTarget() const;
+    /// The Fremen Palace worm's orders each pass (src/players/QuantBotPalaceWorm.cpp).
+    void managePalaceWorm(const class Sandworm* worm);
+    /// Where the worm bursts for spice: near a refinery, most plain sand, away from enemies.
+    Coord palaceWormBloomSite(const class Sandworm* worm) const;
     void finishTelemetry() override;
     void onCombatReward(Uint32 attacker, Uint32 target, const CombatReward::Totals& reward) override;
     /**

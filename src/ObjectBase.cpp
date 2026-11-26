@@ -494,8 +494,8 @@ void ObjectBase::setTarget(const ObjectBase* newTarget) {
     const ObjectBase* pTarget = target.getObjPointer();
     targetFriendly = (pTarget != nullptr)
                      && (pTarget->getOwner()->getTeamID() == owner->getTeamID())
-                     && (getItemID() != Unit_Sandworm)
-                     && (pTarget->getItemID() != Unit_Sandworm);
+                     && !isWildSandworm()
+                     && !pTarget->isWildSandworm();
 }
 
 void ObjectBase::unassignFromMap(const Coord& location) const {
@@ -509,7 +509,13 @@ bool ObjectBase::canAttack(const ObjectBase* object) const {
     return canAttack()
         && (object != nullptr)
         && (object->isAStructure() || !object->isAFlyingUnit())
-        && (((object->getOwner()->getTeamID() != owner->getTeamID()) && object->isVisible(getOwner()->getTeamID())) || (object->getItemID() == Unit_Sandworm));
+        && (((object->getOwner()->getTeamID() != owner->getTeamID()) && object->isVisible(getOwner()->getTeamID())) || object->isWildSandworm());
+}
+
+bool ObjectBase::isWildSandworm() const {
+    // Every Unit_Sandworm belongs to the Natives (createObject) except the Fremen Palace worm,
+    // which belongs to the house whose Palace called it and is anyone else's enemy as usual.
+    return itemID == Unit_Sandworm && owner != nullptr && owner->isNatives();
 }
 
 bool ObjectBase::isOnScreen() const {

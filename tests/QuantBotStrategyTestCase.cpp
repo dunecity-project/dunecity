@@ -4185,6 +4185,28 @@ TEST_CASE("BuildUpToEnemy defaults on, round trips and hashes only when off", "[
     std::filesystem::remove(path);
 }
 
+TEST_CASE("PalaceWorm defaults to hunt-then-bloom, round trips, clamps and hashes only when not 1", "[ai][palace][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.palaceWorm == 1);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-palace-worm-test.ini";
+    for (const int level : {0, 2, 7}) {
+        {
+            std::ofstream file(path);
+            file << "[Force Concentration]\nPalaceWorm=" << level << "\n";
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.palaceWorm == std::clamp(level, 0, 2));
+        REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.palaceWorm == loaded.force.palaceWorm);
+        REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("AirThreatTurrets defaults off, round trips and hashes only when on", "[ai][air-raid][config]") {
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.airThreatTurrets);

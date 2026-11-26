@@ -83,7 +83,7 @@ bool Scoutpost::canAttack(const ObjectBase* object) const {
     }
 
     return object != nullptr
-        && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
+        && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->isWildSandworm())
         && object->isVisible(getOwner()->getTeamID());
 }
 

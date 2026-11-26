@@ -300,6 +300,7 @@ target_sources(dunecity
         players/QuantBotSaveLoad.cpp
         players/QuantBotColonisation.cpp
         players/QuantBotBuild.cpp
+        players/QuantBotPalaceWorm.cpp
         players/QuantBotBuildProducers.cpp
         players/QuantBotBuildYard.cpp
         players/QuantBotPlacement.cpp

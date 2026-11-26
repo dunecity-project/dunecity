@@ -33,6 +33,7 @@
 #include <structures/TurretBase.h>
 #include <structures/Scoutpost.h>
 #include <units/Saboteur.h>
+#include <units/SandWorm.h>
 #include <units/UnitBase.h>
 #include <FormationOrders.h>
 #include <units/GroundUnit.h>
@@ -398,6 +399,14 @@ Coord Player::findNuclearMissileTarget() const {
             .set("target_house", best->getOwner()->getHouseID()).set("chain_score", bestScore)
             .set("x", center.x / TILESIZE).set("y", center.y / TILESIZE));
     return Coord(center.x / TILESIZE, center.y / TILESIZE);
+}
+
+bool Player::doSpiceBloom(const Sandworm* worm, int x, int y) const {
+    if(worm->getOwner() == getHouse() && worm->isActive()) {
+        return const_cast<Sandworm*>(worm)->doSpiceBloom(x, y);
+    }
+    logWarn("The player '%s' tries to burst a worm it doesn't own or that is inactive!\n", playername.c_str());
+    return false;
 }
 
 void Player::doLaunchDeathhand(const Palace* pPalace, int x, int y) const {

@@ -115,6 +115,7 @@ std::mutex Game::performanceLogMutex;
 #include <structures/Scoutpost.h>
 #include <structures/ConstructionYard.h>
 #include <units/UnitBase.h>
+#include <units/SandWorm.h>
 #include <structures/BuilderBase.h>
 #include <structures/RepairYard.h>
 #include <structures/Palace.h>
@@ -1098,6 +1099,8 @@ int Game::retagSandwormsToNatives() {
     for(UnitBase* unit : unitList) {
         if(unit->getItemID() != Unit_Sandworm) continue;
         if(unit->getOwner()->isNatives() && unit->getOriginalHouseID() == HOUSE_NATIVES) continue;
+        // The Fremen Palace worm is its house's own (Sandworm::createPalaceWorm).
+        if(static_cast<const Sandworm*>(unit)->isPalaceWorm()) continue;
         unit->transferOwnership(getOrCreateNativesHouse());
         ++retagged;
     }
@@ -3361,6 +3364,14 @@ case CursorMode_Heal: {
 
                                     if(screenborder->isScreenCoordInsideMap(mouse->x, mouse->y) == true) {
                                         handleSelectedObjectsRequestCarryallDropClick(screenborder->screen2MapX(mouse->x), screenborder->screen2MapY(mouse->y));
+                                    }
+
+                                } break;
+
+                                case CursorMode_SpiceBloom: {
+
+                                    if(screenborder->isScreenCoordInsideMap(mouse->x, mouse->y) == true) {
+                                        Sandworm::handleSelectedSpiceBloomClick(screenborder->screen2MapX(mouse->x), screenborder->screen2MapY(mouse->y));
                                     }
 
                                 } break;
@@ -6423,6 +6434,11 @@ case CursorMode_Heal: {
 
                 case CursorMode_CarryallDrop: {
                     handleSelectedObjectsRequestCarryallDropClick(worldPosition.x / TILESIZE, worldPosition.y / TILESIZE);
+                    return false;
+                } break;
+
+                case CursorMode_SpiceBloom: {
+                    Sandworm::handleSelectedSpiceBloomClick(worldPosition.x / TILESIZE, worldPosition.y / TILESIZE);
                     return false;
                 } break;
 

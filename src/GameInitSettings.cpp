@@ -367,6 +367,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.damageLowersLandValue = false;
     // Zone Garrisons is on unless the stream carries the off bit (bit 5 of the city rules).
     gameOptions.zoneGarrisons = true;
+    // The Fremen Palace calls its worm unless the stream carries the off bit (bit 7 of the city rules).
+    gameOptions.fremenPalaceWorm = true;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
     gameOptions.trooperAntiAir = false;
@@ -508,8 +510,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     // vacancy without extending that unframed settings block:
                     // earlier MOD18 saves and protocol-112 packets read it off.
                     const Uint8 cityRules = stream.readUint8();
-                    if(cityRules & ~Uint8(127))
-                        throw std::runtime_error("Invalid city rules.");
+                    // Every bit of the byte is now a rule (bit 7, protocol 145: Fremen Palace Worm),
+                    // so no value is invalid.
                     gameOptions.mountainScenery = (cityRules & 1) != 0;
                     gameOptions.unpoweredZonesVacate = (cityRules & 2) != 0;
                     // Protocol 137: bits 2-3 are set when City Plane Build Time or City Plane Free Per
@@ -523,6 +525,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 }
                     // Protocol 144: bit 5 is set when Zone Garrisons is off.
                     gameOptions.zoneGarrisons = (cityRules & 32) == 0;
+                    // Protocol 145: bit 7 is set when Fremen Palace Worm is off.
+                    gameOptions.fremenPalaceWorm = (cityRules & 128) == 0;
             }
             if(hasTechnologyInstallments) {
                 gameOptions.technologyInstallments = stream.readBool();
@@ -743,7 +747,9 @@ void GameInitSettings::save(OutputStream& stream) const {
         // Bit 4 (protocol 139): City Plane Crash Bombs off.
         | (gameOptions.cityPlaneCrashBombs ? 0 : 16)
         // Bit 6: Parks Count As Roads off.
-        | (gameOptions.parksCountAsRoads ? 0 : 64));
+        | (gameOptions.parksCountAsRoads ? 0 : 64)
+        // Bit 7 (protocol 145): Fremen Palace Worm off.
+        | (gameOptions.fremenPalaceWorm ? 0 : 128));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
         // Bit 5 (protocol 144): Zone Garrisons off.
         | (gameOptions.zoneGarrisons ? 0 : 32)

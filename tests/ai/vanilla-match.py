@@ -119,6 +119,12 @@ SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehi
                    'orders', 'overwrites', 'refused', 'killer', 'killer_item', 'killer_house', 'target_dist', 'mode',
                    'order', 'caller', 'busy', 'from', 'to')
 SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
+# One row per Fremen Palace worm event the engine logs (match rule Fremen Palace Worm): summoned,
+# bloom_order, ate (one per meal, with the victim's item and price), and how it ended: bloom,
+# expired, sated or beaten.
+WORM_FIELDS = ('house', 'object', 'x', 'y', 'kills', 'cycles_left', 'item', 'price', 'victim_house', 'palace',
+               'aim_x', 'aim_y', 'cycle')
+WORM_ROW_FIELDS = KEY + ('event',) + WORM_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on
 # patrol, and a plane an Airport sold (tests/ai/city-plane-report.py).
@@ -419,6 +425,13 @@ def play(args, scratch, binary, key):
                 saboteurs.append({**dict(zip(KEY, key)), 'event': event,
                                   **{f: data.get(f, '') for f in SABOTEUR_FIELDS}})
     append(results / 'saboteurs.csv', SABOTEUR_ROW_FIELDS, saboteurs)
+    worms = []
+    for l in lines:
+        if 'PALACE_WORM:' in l:
+            data = parse(l, 'PALACE_WORM:')
+            worms.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
+                          **{f: data.get(f, '') for f in WORM_FIELDS}})
+    append(results / 'worms.csv', WORM_ROW_FIELDS, worms)
     planes = []
     for l in lines:
         for marker, event in PLANE_EVENTS:

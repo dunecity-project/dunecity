@@ -1613,13 +1613,14 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
-    SECTION("unknown MOD18 city-rule bits are refused") {
+    SECTION("every MOD18 city-rule bit is a rule: bit 7 turns Fremen Palace Worm off") {
         // Bits 2-3 are the protocol 137 city plane rules, bit 4 City Plane Crash Bombs (139), bit 5
-        // Zone Garrisons (144), bit 6 Parks Count As Roads (143); bit 7 is the first unknown one.
+        // Zone Garrisons (144), bit 6 Parks Count As Roads (143), bit 7 Fremen Palace Worm (145).
         auto bytes = encoded;
-        bytes.back() = static_cast<char>(128);
+        bytes.back() = static_cast<char>(static_cast<Uint8>(bytes.back()) | 128);
         IMemoryStream input(bytes.data(),bytes.size());
-        REQUIRE_THROWS(GameInitSettings(input));
+        GameInitSettings restored(input);
+        REQUIRE_FALSE(restored.getGameOptions().fremenPalaceWorm);
     }
     SECTION("unknown wire pace is refused instead of normalized") {
         auto bytes = encoded;
@@ -1950,6 +1951,38 @@ TEST_CASE("Protocol 143 Parks Count As Roads rides bit 6 of the MOD18 city rules
     const std::string encoded(saved.getData(), saved.getDataLength());
     if(options.parksCountAsRoads && options.cityPlaneCrashBombs) {
         // The default rule leaves the stream and the options hash as protocol 142 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
+TEST_CASE("Protocol 145 Fremen Palace Worm rides bit 7 of the MOD18 city rules byte, set only when off",
+          "[palace][worm][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.fremenPalaceWorm);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.fremenPalaceWorm);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.fremenPalaceWorm = GENERATE(true, false);
+    options.zoneGarrisons = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.fremenPalaceWorm && options.zoneGarrisons) {
+        // The default rule leaves the stream and the options hash as protocol 144 wrote them.
         REQUIRE(encoded == plain);
         REQUIRE(options.getHash() == plainOptions.getHash());
     } else {

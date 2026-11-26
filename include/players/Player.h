@@ -275,6 +275,8 @@ protected:
     */
     Coord findNuclearMissileTarget() const;
     void doLaunchDeathhand(const Palace* pPalace, int x, int y) const;
+    /// Spice Bloom order for the house's Fremen Palace worm (Sandworm::doSpiceBloom).
+    bool doSpiceBloom(const class Sandworm* worm, int x, int y) const;
 
     /**
         Attacks with turret pTurret the object pObject.

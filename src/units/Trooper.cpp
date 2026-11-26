@@ -87,7 +87,7 @@ void Trooper::setProductionHouseID(int houseID) {
 
 bool Trooper::canAttack(const ObjectBase* object) const {
     if ((object != nullptr)
-        && ((object->getOwner()->getTeamID() != owner->getTeamID()) || (object->getItemID() == Unit_Sandworm))
+        && ((object->getOwner()->getTeamID() != owner->getTeamID()) || (object->isWildSandworm()))
         && object->isVisible(getOwner()->getTeamID()))
     {
         return true;

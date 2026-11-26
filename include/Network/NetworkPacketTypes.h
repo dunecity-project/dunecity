@@ -490,7 +490,11 @@
 //      off): Soldiers and Troopers sent with the capture order occupy Residential, Commercial and
 //      Industrial zones, fire out, and take enemy zones nobody holds; CMD_ZONE_EVACUATE brings them
 //      out. Save format 9900 (a zone's garrison).
-#define NETWORK_PROTOCOL_VERSION            144
+// 145: match rule Fremen Palace Worm (default on, bit 7 of the MOD18 city rules byte, set only
+//      when off): a Fremen Palace calls a sandworm its house controls instead of Fremen warriors;
+//      CMD_SANDWORM_SPICEBLOOM bursts it into spice. A worm can belong to a player, so friendly fire
+//      and the bite follow its owner's team (ObjectBase::isWildSandworm). Save format 9901.
+#define NETWORK_PROTOCOL_VERSION            145
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
