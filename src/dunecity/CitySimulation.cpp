@@ -148,6 +148,11 @@ void CitySimulation::load(InputStream& stream) {
         milestones_[i] = stream.readBool();
     }
     if (loadedVersion >= 9825) loadCrimeUnrest(stream,crimeUnrestProgress_,loadedVersion);
+    // Hospitals heal infantry: trips and census overlays. An older save has none; its first
+    // census designates the Hospitals again.
+    hospitalCare_.clear();
+    if (loadedVersion >= SAVEGAMEVERSION_HOSPITAL_CARE) hospitalCare_.load(stream);
+    hospitalOverlaysPending_ = true;
 }
 
 void CitySimulation::save(OutputStream& stream) const {
@@ -170,6 +175,7 @@ void CitySimulation::save(OutputStream& stream) const {
         stream.writeBool(milestones_[i]);
     }
     saveCrimeUnrest(stream,crimeUnrestProgress_);
+    hospitalCare_.save(stream);
 }
 
 void CitySimulation::saveObserverRuntime(OutputStream& stream) const {
@@ -301,6 +307,8 @@ void HouseCityState::load(InputStream& stream) {
 
 void CitySimulation::advancePhase(uint32_t gameCycleCount) {
     if (!effectsEnabled_ || !initialized_) return;
+
+    runHospitalCare();
 
     // City clock — SimCity Classic-style. A year is 48 day-ticks; each
     // day ticks at gameCycleCount / cyclesPerCityDay(). Day ticks drive

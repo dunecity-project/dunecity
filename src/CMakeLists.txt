@@ -306,8 +306,8 @@ target_sources(dunecity
         players/QuantBotPlacement.cpp
         players/QuantBotParks.cpp
         players/QuantBotGarrison.cpp
-        players/QuantBotArmy.cpp
         players/QuantBotRedevelop.cpp
+        players/QuantBotArmy.cpp
         players/QuantBotBlob.cpp
         players/QuantBotAirlift.cpp
         players/QuantBotForce.cpp
@@ -456,6 +456,7 @@ target_sources(dunecity
         dunecity/CityScanner.cpp
         dunecity/CityBudget.cpp
         dunecity/CityEvaluation.cpp
+        dunecity/HospitalCare.cpp
 
         # misc
         misc/AnalyticsInstallID.cpp

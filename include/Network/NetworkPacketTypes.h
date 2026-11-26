@@ -494,7 +494,12 @@
 //      when off): a Fremen Palace calls a sandworm its house controls instead of Fremen warriors;
 //      CMD_SANDWORM_SPICEBLOOM bursts it into spice. A worm can belong to a player, so friendly fire
 //      and the bite follow its owner's team (ObjectBase::isWildSandworm). Save format 9901.
-#define NETWORK_PROTOCOL_VERSION            145
+// 146: match rule Hospital Care (default on, bit 6 of the MOD20 starting tech level byte, set only
+//      when off): wounded infantry sent for repair heal beside an own Hospital, five at a time, and
+//      a Hospital with a patient keeps its overlay; the civic overlays are now designated per house
+//      (they used the local player's counts). QuantBot switch HospitalInfantry (default off). A 145
+//      peer would desync. Save format 9902 (hospital trips and overlays).
+#define NETWORK_PROTOCOL_VERSION            146
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

@@ -146,6 +146,7 @@ target_sources(dunelegacy_tests
         SnapshotTransferTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/Network/SnapshotTransfer.cpp
         CoopGameSettingsTestCase.cpp
+        HospitalCareStateTestCase.cpp
         CustomGamePlayerPolicyTestCase.cpp
         EnemyDifficultyPolicyTestCase.cpp
         CampaignPlanTestCase.cpp
@@ -1180,6 +1181,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-repair-return-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/repair-return-probe)
         set_tests_properties(repair_return_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        # Hospitals heal infantry: five beds, the type lock and its release, Carryall delivery,
+        # the automatic rule and the match rule off, save/load (dunecity/HospitalCare.h).
+        dunecity_add_test(headless nightly NAME hospital_care_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-hospital-care-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/hospital-care-probe)
+        set_tests_properties(hospital_care_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)

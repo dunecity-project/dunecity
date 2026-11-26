@@ -1,4 +1,5 @@
 #include "QuantBotInternal.h"
+#include <dunecity/HospitalCare.h>
 #include <players/QuantBotCityPolicy.h>
 #include <players/HumanPlayer.h>
 #include <House.h>
@@ -317,6 +318,8 @@ bool QuantBot::reserveDamagedUnitForRepair(const UnitBase* unit) const {
     // A deviated unit is refused by our repair yards for as long as we hold it, so reserving it
     // has the same effect as reserving an aircraft: withdrawn from every order, never healed.
     if (!unit->isEligibleForRepair()) return false;
+    // HospitalInfantry: a soldier on a Hospital trip belongs to the trip until it is healed.
+    if (unit->isInfantry() && sendsInfantryToHospital() && DuneCity::HospitalCare::tripOf(unit)) return true;
     if (retreatPreserveActive() && !fighterOnly() && unit->isAGroundUnit() && !unit->isInfantry()
         && QuantBotInternal::mobileCombatItem(unit->getItemID()) && getHouse()->hasRepairYard()
         && !declinesUnfundedRepair(unit)) {

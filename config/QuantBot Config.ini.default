@@ -688,6 +688,12 @@ AirThreatTurrets=0
 # Default off: in 48 paired matches the ring filled (93% of Airports by minute 20 against 65%) but
 # bombs destroyed the same Airports (1.04 a game against 1.10); level on placement in 288 mixed games.
 AirportTurrets=0
+# Stefan, 2026-11-27: Hospitals heal infantry (match rule Hospital Care). With this on, a QuantBot
+# soldier below 60% health goes to the nearest own Hospital with a free bed (flown when a Carryall
+# is free and it is far), stays out of every order until healed, and the engine's automatic rule
+# (below half health, with Carryalls) applies to its infantry as to a human player's. 0 = off: AI
+# infantry are never sent to a Hospital.
+HospitalInfantry=0
 # Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
 # it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
 # destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes

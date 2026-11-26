@@ -1608,55 +1608,86 @@ void CitySimulation::runZoneGrowth() {
         hs.churchCount   = computeChurchCount(newRes);
     }
 
-    // Designate residential zones as hospitals/churches for rendering.
-    // Cap overlays: at most 1 hospital per 8 populated res zones and
-    // 1 church per 8 zones, so they appear as sparse civic landmarks
+    // Designate residential zones as hospitals/churches. Cap overlays: at most 1 hospital per 8
+    // populated res zones and 1 church per 8 zones, so they appear as sparse civic landmarks
     // rather than covering every zone. Spread evenly across zones.
+    //
+    // Each house's own counts place its own overlays. This used the local player's counts for
+    // every house, which differed between peers and spectators; Hospitals heal infantry now
+    // (dunecity/HospitalCare.h), so the designation is simulation state and must be the same
+    // everywhere. A Hospital a soldier is healing at, waiting at, walking or flying to stays a
+    // Hospital (HospitalCare::keepsHospital) and counts against its house's quota first.
     {
-        int populatedResZones = 0;
+        int populatedResZones[kMaxCityHouses] = {};
+        int hospRemain[kMaxCityHouses] = {};
+        int churRemain[kMaxCityHouses] = {};
+        int stride[kMaxCityHouses] = {};
+        int resIndex[kMaxCityHouses] = {};
+        auto ownerSlot = [](const StructureBase* s) {
+            const House* owner = s->getOwner();
+            const int h = owner ? owner->getHouseID() : -1;
+            return (h >= 0 && h < kMaxCityHouses) ? h : -1;
+        };
         for (const auto& n : nodes) {
-            auto* zone = dynamic_cast<ZoneStructure*>(n.pStruct);
-            if (!zone) continue;
-            if (n.role == CityRole::Residential && n.level > 0)
-                populatedResZones++;
+            if (!n.pZone) continue;
+            const int h = ownerSlot(n.pStruct);
+            if (h >= 0 && n.role == CityRole::Residential && n.level > 0)
+                populatedResZones[h]++;
+        }
+        for (int h = 0; h < kMaxCityHouses; ++h) {
+            const int maxHosp = std::max(1, populatedResZones[h] / 8);
+            const int maxChur = std::max(1, populatedResZones[h] / 8);
+            hospRemain[h] = std::min(houseState_[h].hospitalCount, maxHosp);
+            churRemain[h] = std::min(houseState_[h].churchCount, maxChur);
+        }
+        // Locked Hospitals first: they keep the overlay and use up the quota.
+        for (const auto& n : nodes) {
+            if (!n.pZone || n.role != CityRole::Residential) continue;
+            const int h = ownerSlot(n.pStruct);
+            if (h >= 0 && HospitalCare::keepsHospital(n.pZone) && hospRemain[h] > 0) --hospRemain[h];
+        }
+        for (int h = 0; h < kMaxCityHouses; ++h) {
+            // Spacing: place a hospital every N zones, a church offset halfway between
+            stride[h] = (hospRemain[h] + churRemain[h] > 0)
+                ? std::max(2, populatedResZones[h] / (hospRemain[h] + churRemain[h]))
+                : 0;
         }
 
-        int maxHosp = std::max(1, populatedResZones / 8);
-        int maxChur = std::max(1, populatedResZones / 8);
-        const int lhID = localHouseID();
-        int hospRemain = std::min(houseState_[lhID].hospitalCount, maxHosp);
-        int churRemain = std::min(houseState_[lhID].churchCount, maxChur);
-
-        // Spacing: place a hospital every N zones, a church offset halfway between
-        int stride = (hospRemain + churRemain > 0)
-            ? std::max(2, populatedResZones / (hospRemain + churRemain))
-            : 0;
-        int resIndex = 0;
-
+        HospitalCareState::Overlays overlays;
         for (const auto& n : nodes) {
-            auto* zone = dynamic_cast<ZoneStructure*>(n.pStruct);
+            auto* zone = n.pZone;
             if (!zone) continue;
-            if (n.role != CityRole::Residential) {
-                zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
-                continue;
-            }
-            if (n.level <= 0) {
-                zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
-                continue;
-            }
-
-            if (stride > 0 && hospRemain > 0 && (resIndex % stride == 0)) {
+            const int h = ownerSlot(n.pStruct);
+            if (n.role == CityRole::Residential && HospitalCare::keepsHospital(zone)) {
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
-                --hospRemain;
-            } else if (stride > 0 && churRemain > 0 && (resIndex % stride == stride / 2)) {
-                zone->setCivicOverlay(ZoneStructure::CivicOverlay::Church);
-                --churRemain;
-            } else {
+                if (n.level > 0 && h >= 0) resIndex[h]++;
+            } else if (h < 0 || n.role != CityRole::Residential || n.level <= 0) {
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
+            } else {
+                if (stride[h] > 0 && hospRemain[h] > 0 && (resIndex[h] % stride[h] == 0)) {
+                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
+                    --hospRemain[h];
+                } else if (stride[h] > 0 && churRemain[h] > 0 && (resIndex[h] % stride[h] == stride[h] / 2)) {
+                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::Church);
+                    --churRemain[h];
+                } else {
+                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
+                }
+                resIndex[h]++;
             }
-            resIndex++;
+            if (zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None)
+                overlays.emplace_back(zone->getObjectID(), static_cast<uint8_t>(zone->getCivicOverlay()));
         }
+        hospitalCare_.setOverlays(std::move(overlays));
     }
+}
+
+void CitySimulation::runHospitalCare() {
+    if (hospitalOverlaysPending_) {
+        hospitalOverlaysPending_ = false;
+        HospitalCare::applyLoadedOverlays();
+    }
+    HospitalCare::update();
 }
 
 void CitySimulation::decayGrowthRateMap() {

@@ -234,6 +234,9 @@ public:
     /// Off (docs/ai-roles.md): its human partner switched it off in game. It issues no orders,
     /// builds nothing and imposes none of its difficulty's house rules until switched back on.
     bool switchedOff() const { return role == AIRole::Off; }
+    /// HospitalInfantry on, the bot not switched off, and Hospital Care in a city game: its wounded
+    /// infantry go to Hospitals (dunecity/HospitalCare.h).
+    bool sendsInfantryToHospital() const;
     /// The in-game role switch (CMD_AI_SUPPORT_ROLE), run on every peer at the same cycle.
     /// Builder and Off stop the attack timer; a switch back to Both or Fighter restarts it the
     /// way a human-allied controller's timer starts. Queued production and given orders stay.
@@ -2148,10 +2151,6 @@ private:
     /// Zone Garrisons (ZoneGarrison switch; QuantBotGarrison.cpp): soldiers into own zones enemies
     /// close on, out again once quiet, and into empty enemy zones they pass. Stateless.
     void updateZoneGarrisons();
-    bool turretClustersActive() const;
-    int clusterTurretGoal() const;
-    /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.
-    int clusterTurrets() const;
     /// City redevelopment for land value (default off; QuantBotRedevelop.cpp, RedevelopmentPolicy.h):
     /// RoadLaneParks, LotParks and PollutionRelocation, each its own [Force Concentration] switch.
     void chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
@@ -2162,6 +2161,10 @@ private:
                           Coord skip = Coord::Invalid()) const;
     DuneCity::ParkTerrainPolicy plannedParkTerrain() const;
     bool parkKeepsPassage(int x, int y) const;
+    bool turretClustersActive() const;
+    int clusterTurretGoal() const;
+    /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.
+    int clusterTurrets() const;
     /// A legal Rocket Turret site beside the first core (yard, factories, refinery, port,
     /// repair yard, in that order) with fewer than kClusterPerCore turrets: packed next to
     /// the cluster's turrets, facing the observed front. One bounded window per core.

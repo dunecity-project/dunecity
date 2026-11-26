@@ -11,6 +11,7 @@
 #include <dunecity/CrimeUnrestPolicy.h>
 #include <dunecity/CityDemandNoticePolicy.h>
 #include <dunecity/ParkTerrainPolicy.h>
+#include <dunecity/HospitalCare.h>
 
 class InputStream;
 class OutputStream;
@@ -226,7 +227,12 @@ public:
     */
     CrimeTroops raiseCrimeTroopers(const StructureBase* origin, int requested);
 
+    /// Hospitals heal infantry: trips and census overlays (dunecity/HospitalCare.h); saved.
+    HospitalCareState& hospitalCare() { return hospitalCare_; }
+    const HospitalCareState& hospitalCare() const { return hospitalCare_; }
+
 private:
+    HospitalCareState hospitalCare_;
     bool initialized_ = false;
     bool milestones_[NUM_MILESTONES] = {};
     bool milestoneFirstZoneAchieved_ = false;
@@ -281,6 +287,11 @@ private:
 
     /// Decay growth rate map toward zero each scan tick.
     void decayGrowthRateMap();
+
+    /// Every cycle: Hospital trips, admissions and healing (HospitalCare::update); the first call
+    /// after a load puts the saved census overlays back on their zones. CityEffectsRuntime.cpp.
+    void runHospitalCare();
+    bool hospitalOverlaysPending_ = false; ///< Set by load(); not serialized.
 };
 
 } // namespace DuneCity

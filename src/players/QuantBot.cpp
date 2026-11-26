@@ -16,6 +16,7 @@
  */
 
 #include "QuantBotInternal.h"
+#include <dunecity/HospitalCare.h>
 
 using QuantBotInternal::mobileCombatItem;
 
@@ -1016,8 +1017,10 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
         const bool autonomousAttack = engineHuntAttack(pGroundUnit);
 		// Stop him dead in his tracks if he's going to rally point. An MCV keeps
 		// driving: a colonist halted under fire is the one that does not arrive.
+		// A soldier on its way to a Hospital keeps walking (HospitalInfantry).
 		if (!autonomousAttack && unitRole(pGroundUnit, {UnitRole::Human}) == UnitRole::Free && pGroundUnit->wasForced()
-			&& !QuantBotInternal::harvesterItem(pGroundUnit->getItemID()) && pGroundUnit->getItemID() != Unit_MCV) {
+			&& !QuantBotInternal::harvesterItem(pGroundUnit->getItemID()) && pGroundUnit->getItemID() != Unit_MCV
+			&& !DuneCity::HospitalCare::tripOf(pGroundUnit)) {
 			doMove2Pos(pGroundUnit,
 				pGroundUnit->getLocation().x,
 				pGroundUnit->getLocation().y,
@@ -1040,6 +1043,16 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
             }
             scrambleUnitsAndDefend(pDamager);
         }
+
+		// HospitalInfantry (city games): a soldier below 60% health goes to the nearest Hospital with
+		// a free bed, as a vehicle below 60% goes to a Repair Yard; the trip reserves it
+		// (reserveDamagedUnitForRepair) until it is healed.
+		if (sendsInfantryToHospital() && DuneCity::HospitalCare::canBeHealed(pGroundUnit)
+			&& unitRole(pGroundUnit, {UnitRole::Human}) == UnitRole::Free
+			&& pGroundUnit->getHealth() * 5 < pGroundUnit->getMaxHealth() * 3
+			&& !DuneCity::HospitalCare::tripOf(pGroundUnit)) {
+			doRepair(pGroundUnit);
+		}
 
 		if (QuantBotInternal::harvesterItem(pGroundUnit->getItemID())) {
 			// Always keep Harvesters away from harm
@@ -1299,6 +1312,10 @@ bool QuantBot::humanControls(const UnitBase* unit) const {
     const auto it = manualUnitOrders.find(unit->getObjectID());
     return it != manualUnitOrders.end() && (getGameCycleCount()-it->second < MILLI2CYCLES(120000)
         || unit->wasForced() || unit->isMoving() || unit->hasATarget());
+}
+
+bool QuantBot::sendsInfantryToHospital() const {
+    return botConfig().force.hospitalInfantry && !switchedOff() && DuneCity::HospitalCare::enabled();
 }
 
 QuantBot::UnitRole QuantBot::unitRole(const UnitBase* unit, UnitRoles among) const {

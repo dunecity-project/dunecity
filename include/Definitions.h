@@ -256,7 +256,13 @@
 //       its residential population. An older save's zones are empty.
 // 9901: Fremen Palace Worm: a sandworm saves whether it is a Palace worm, its life left and its
 //       Spice Bloom target after its Civ Wars origin. An older save's worms are wild.
-#define SAVEGAMEVERSION     9901
+// 9902: Hospitals heal infantry: the CitySimulation block ends with the hospital state
+//       (DuneCity::HospitalCareState): the census's civic overlays (zone id, Hospital or Church)
+//       and every soldier's Hospital trip (soldier, Hospital, tile, stage, carried, start cycle).
+//       An older save has none; its first census designates the overlays again.
+#define SAVEGAMEVERSION     9902
+/// First save with the Hospital trips and civic overlays (Hospital Care).
+#define SAVEGAMEVERSION_HOSPITAL_CARE 9902
 /// First save with a sandworm's Palace worm state (Fremen Palace Worm).
 #define SAVEGAMEVERSION_PALACE_WORM 9901
 /// First save with a zone's garrison (Zone Garrisons).

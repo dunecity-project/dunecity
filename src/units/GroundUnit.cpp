@@ -28,6 +28,7 @@
 #include <players/QuantBot.h>
 
 #include <structures/RepairYard.h>
+#include <dunecity/HospitalCare.h>
 #include <units/Carryall.h>
 #include <units/HarvesterHelpers.h>
 #include <units/UnitMovementPolicy.h>
@@ -129,6 +130,13 @@ void GroundUnit::checkPos() {
             });
         if (!unfunded) doRepair();
 
+    }
+
+    // Wounded infantry: the same rule for a Hospital (DuneCity; dunecity/HospitalCare.h). Looked at
+    // every kHospitalRecheckCycles, staggered by object ID.
+    if(isInfantry() && active && !pickedUp
+            && ((currentGame->getGameCycleCount() + getObjectID()) % DuneCity::kHospitalRecheckCycles) == 0) {
+        DuneCity::HospitalCare::considerAutomatic(this);
     }
 
 
@@ -417,6 +425,11 @@ void GroundUnit::doRepair() {
         // Central block for every explicit repair order: the sidebar/hotkey command
         // (CMD_UNIT_SENDTOREPAIR), every bot that asks a damaged unit to withdraw, and the
         // carryall that repairs badly damaged cargo on pickup all arrive here.
+        return;
+    }
+
+    // Infantry in a city game go to a Hospital; without one they fall back to a Repair Yard.
+    if(isInfantry() && DuneCity::HospitalCare::sendToHospital(this)) {
         return;
     }
 

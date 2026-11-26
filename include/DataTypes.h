@@ -335,6 +335,7 @@ public:
                     && (technologyInstallments == goc.technologyInstallments)
                     && (startTechLevel == goc.startTechLevel)
                     && (saboteurHunt == goc.saboteurHunt)
+                    && (hospitalCare == goc.hospitalCare)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (trooperOrnithopterReach == goc.trooperOrnithopterReach)
                     && (cityPlaneDefence == goc.cityPlaneDefence)
@@ -421,6 +422,7 @@ public:
             optStr += "/sellingBuildings=" + std::to_string(sellingBuildings);
             // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
             if(!saboteurHunt) optStr += "/saboteurHunt=0";
+            if(!hospitalCare) optStr += "/hospitalCare=0";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -505,6 +507,11 @@ public:
         /// army orders applied), kept so the two can be compared in one build
         /// (tests/units/run-saboteur-effect-probe.py). INI key "Saboteur Hunt" only.
         bool        saboteurHunt = true;
+        /// City games: Hospitals heal infantry (Stefan, 2026-11-27; dunecity/HospitalCare.h). A wounded
+        /// soldier sent for repair walks or is flown beside an own Hospital and heals there, five at a time;
+        /// a Hospital with a patient keeps its type. Off, infantry are sent to Repair Yards as up to
+        /// protocol 145. INI key only; bit 6 of the MOD20 byte, set when off.
+        bool        hospitalCare = true;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// Part of Trooper Anti-Air (so DuneCity content only): a rocket Trooper answers an

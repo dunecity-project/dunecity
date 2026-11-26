@@ -320,6 +320,7 @@ struct QuantBotConfig {
         bool airThreatTurrets;                 ///< Default off (no fewer buildings bombed in 48 paired matches): the same turrets before the first bomb, once another team can bomb it; paid ahead of strategic and civic savings.
         bool extraAirports;                    ///< Default on: another Airport (up to 4) when its free planes and production would repay its price in 20 minutes, up to 8 for a rich house (CityAircraft::extraAirportPays, kMaxAirportsPerRichHouse).
         bool airportTurrets;                   ///< Default off (same Airports bombed, level placement in 288 mixed matches): every own Airport keeps 4 Rocket Turrets within 5 tiles, refilled when lost (QuantBotAirDefencePolicy.h).
+        bool hospitalInfantry;                 ///< Default off until measured: wounded infantry go to a Hospital (match rule Hospital Care; dunecity/HospitalCare.h); a soldier on a trip is reserved until healed.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

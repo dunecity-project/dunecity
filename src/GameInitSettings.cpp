@@ -350,6 +350,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.startTechLevel = 0;
     // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
     gameOptions.saboteurHunt = true;
+    gameOptions.hospitalCare = true;
     // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
     gameOptions.trooperOrnithopterReach = true;
     // The city plane rules are the units' current rules too: a stream without their bits plays them.
@@ -364,11 +365,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.cityPlaneCrashBombs = true;
     // A Park counts as a road unless the stream carries the off bit (bit 6 of the city rules).
     gameOptions.parksCountAsRoads = true;
-    gameOptions.damageLowersLandValue = false;
     // Zone Garrisons is on unless the stream carries the off bit (bit 5 of the city rules).
     gameOptions.zoneGarrisons = true;
     // The Fremen Palace calls its worm unless the stream carries the off bit (bit 7 of the city rules).
     gameOptions.fremenPalaceWorm = true;
+    gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
     gameOptions.trooperAntiAir = false;
@@ -536,11 +537,13 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 // Bit 7 of the same byte is set when the Saboteur hunt is off, so a
                 // stream that plays the default rule is the byte MOD20 always was.
                 const Uint8 packed = stream.readUint8();
-                const Uint8 level = packed & 0x7F;
+                // Bit 6 (protocol 146) is set when Hospital Care is off; bits 4-5 are free.
+                const Uint8 level = packed & 0x3F;
                 if(level > 9)
                     throw std::runtime_error("Invalid starting tech level.");
                 gameOptions.startTechLevel = level;
                 gameOptions.saboteurHunt = (packed & 0x80) == 0;
+                gameOptions.hospitalCare = (packed & 0x40) == 0;
             }
         }
     } catch (InputStream::eof&) {
@@ -757,7 +760,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.
     // Bit 7: the Saboteur hunt is off (the default, on, leaves the byte as it was).
     stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)
-        | (gameOptions.saboteurHunt ? 0 : 0x80)));
+        | (gameOptions.saboteurHunt ? 0 : 0x80)
+        // Bit 6: Hospital Care is off (the default, on, leaves the byte as it was).
+        | (gameOptions.hospitalCare ? 0 : 0x40)));
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {
