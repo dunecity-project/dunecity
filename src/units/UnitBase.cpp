@@ -726,7 +726,7 @@ void UnitBase::destroy() {
     currentGameMap->removeObjectFromMap(getObjectID()); //no map point will reference now
     currentGame->getObjectManager().removeObject(objectID);
 
-    currentGame->getHouse(originalHouseID)->decrementUnits(itemID);
+    currentGame->getHouse(originalHouseID)->decrementUnits(itemID, lostWhenDestroyed());
 
     unitList.remove(this);
     currentGame->invalidateCarryallCandidateIds();

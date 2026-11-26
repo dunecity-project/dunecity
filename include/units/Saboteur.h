@@ -20,6 +20,8 @@
 
 #include <units/InfantryBase.h>
 
+class StructureBase;
+
 class Saboteur final : public InfantryBase
 {
 public:
@@ -40,15 +42,25 @@ public:
     bool canAttack(const ObjectBase* object) const override;
 
     /**
-        A Saboteur's own search takes the nearest thing it may blow up, enemy building or
-        vehicle alike (a vehicle is a ground unit that is neither infantry nor a sandworm, so
-        harvesters and MCVs count and aircraft do not; walls and parks come last). It is the
-        general search of every unit; the pick is remembered so that only it is replaced when
-        something nearer turns up on the way. An explicit order still sends it at anything
-        canAttack() accepts.
+        A Saboteur's own search. Hunting, it takes the enemy building with the highest
+        sabotageValue() / distance anywhere its house has seen, as Dune II's Saboteur does
+        (bestBuilding()), unless an enemy vehicle within kVehicleReach tiles scores higher
+        (vehicleValue() / distance). With no such building, or outside Hunt, it takes the
+        nearest thing it may blow up: a vehicle (a ground unit that is neither infantry nor a sandworm, so
+        harvesters and MCVs count and aircraft do not), walls and parks last. The pick is
+        remembered so that only it is replaced on the way. An explicit order still sends it at
+        anything canAttack() accepts.
         \return the target to sabotage, or nullptr
     */
     const ObjectBase* findTarget() const override;
+
+    /// Dune II's worth of a building of this type to a Saboteur (priorityBuild + priorityTarget);
+    /// 0 for walls and parks, which only the general search takes.
+    static int sabotageValue(int itemID);
+
+    /// Dune II's worth of a vehicle as a target (priorityBuild + priorityTarget), on the same
+    /// scale as sabotageValue().
+    static int vehicleValue(int itemID);
 
     void destroy() override;
 
@@ -77,8 +89,18 @@ protected:
     /// falls like any foot soldier; with the rule off it blows up however it ends, as before.
     bool fallsWhenDestroyed() const override;
 
+    /// A Saboteur that set its charge off is spent, not lost: it counts as a death in the
+    /// house's statistics only when it was destroyed without having sabotaged anything.
+    bool lostWhenDestroyed() const override { return !detonated; }
+
 private:
-    void takeNearerTargetWhenSeen();
+    void reconsiderOwnPick();
+    const StructureBase* bestBuilding() const;
+    const ObjectBase* bestVehicleNearby() const;
+    FixPoint sabotageScore(const ObjectBase* object) const;
+
+    static constexpr int kVehicleReach = 5;       ///< tiles within which a vehicle competes with buildings
+    static constexpr int kReconsiderCycles = 16;  ///< how often its own pick is weighed again
     void showTargetToOwner(const Coord& targetTile);
 
     bool detonated = false;     ///< Set as it blows up its target; never saved, it is gone that cycle.
@@ -90,6 +112,8 @@ private:
     Uint32 releasedCycle = 0;
     Sint32 loggedMode = HUNT;   ///< attack mode last written to the match log
     Uint16 modeChanges = 0;
+    Uint32 loggedTarget = NONE_ID;  ///< target last written to the match log
+    Uint16 targetChanges = 0;
     Uint16 armyOrders = 0;      ///< AI army orders addressed to it
     Uint16 armyOverwrites = 0;  ///< of those, applied while it had a target or was walking
     Uint16 armyRefused = 0;     ///< of those, refused

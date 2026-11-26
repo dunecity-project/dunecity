@@ -509,9 +509,10 @@ bool Palace::spawnSaboteur() {
 
     saboteur->deploy(spot);
 
-    // A released Saboteur goes for the nearest enemy vehicle on its own, whoever owns the
-    // Palace (Saboteur::findTarget()). A human owner can still order it somewhere else. With
-    // the match rule off (the rule up to 1.0.876) only an AI house's Saboteur hunts.
+    // A released Saboteur hunts on its own, whoever owns the Palace: the enemy building worth
+    // most for its distance, as in Dune II, else the nearest vehicle (Saboteur::findTarget()).
+    // A human owner can still order it somewhere else. With the match rule Saboteur Hunt off
+    // (the rule up to 1.0.876) only an AI house's Saboteur hunts.
     const bool hunts = getOwner()->isAI()
         || currentGame->getGameInitSettings().getGameOptions().saboteurHunt;
     if(hunts) saboteur->doSetAttackMode(HUNT);

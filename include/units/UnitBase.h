@@ -79,6 +79,10 @@ public:
     void cancelDeployment();
 
     void destroy() override;
+
+    /// Whether destroying this unit counts as a loss in its house's statistics
+    /// (House::decrementUnits). A Saboteur that blew up its target was spent, not lost.
+    virtual bool lostWhenDestroyed() const { return true; }
     /**
         Hands control of this unit to newOwner until the deviation timer runs out.
         \param  newOwner            the house taking control; the original house ends the deviation

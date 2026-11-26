@@ -1093,9 +1093,9 @@ bool House::isUnitLimitReached(int itemID) const {
 
 
 
-void House::decrementUnits(int itemID) {
+void House::decrementUnits(int itemID, bool lost) {
     numUnits--;
-    numItemLosses[itemID]++;
+    if(lost) numItemLosses[itemID]++;
 
     if(itemID == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
         && (itemID == Unit_FastHarvester || itemID == Unit_CapacityHarvester))) {

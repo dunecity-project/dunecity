@@ -1,5 +1,7 @@
-// A Palace-released Saboteur goes for the nearest thing it may blow up, enemy building or vehicle
-// alike, whoever owns the Palace.
+// A Palace-released Saboteur, whoever owns the Palace, goes for enemy buildings as Dune II's does:
+// the one worth most for its distance. A vehicle it meets within five tiles competes on the same
+// value / distance scale, and with no building left it takes the nearest vehicle. Its charge is
+// credited to it, and one that blew something up is not counted as lost.
 //
 // Up to 1.0.876 a human-owned Saboteur was released in Guard with a weapon range of 0 and never
 // moved, and a hunting one only blew up after it had stopped next to its target. Each case below
@@ -169,25 +171,78 @@ inline void nearestIsABuilding(const std::string& ownerClass) {
             f.label.c_str(), seconds);
 }
 
-/// The nearest of several vehicles is taken when it is nearer than every building.
-inline void nearestIsAVehicle(const std::string& ownerClass) {
-    Fixture f(ownerClass, "nearest-is-a-vehicle");
-    f.enemyStructure("Wind Trap 14 tiles north", Structure_WindTrap, 30, 14);
-    f.enemyStructure("Refinery 24 tiles south-west", Structure_Refinery, 10, 50);
-    f.enemyUnit("Soldier 6 tiles north", Unit_Soldier, 27, 24);
-    const auto* near = f.enemyUnit("Tank 8 tiles east", Unit_Tank, 40, 31);
-    f.enemyUnit("Quad 20 tiles south", Unit_Quad, 31, 52);
-    f.enemyUnit("Tank 22 tiles west", Unit_Tank, 8, 31);
+/// Dune II's rule: a hunting Saboteur goes for a building before a nearer vehicle that it would have
+/// to chase (beyond its 5-tile vehicle reach). Up to 1.0.880 it took the 8-tile Tank. Its charge is credited to the Saboteur (the hit points of the building on
+/// the Stats screen) and a Saboteur that blew something up is not counted as lost.
+inline void buildingBeforeNearerVehicle(const std::string& ownerClass) {
+    Fixture f(ownerClass, "building-before-nearer-vehicle");
+    const auto* factory = f.enemyStructure("Heavy Factory 13 tiles north", Structure_HeavyFactory, 30, 15);
+    f.enemyUnit("Tank 8 tiles east", Unit_Tank, 41, 31);
+    f.enemyUnit("Quad 9 tiles south", Unit_Quad, 31, 42);
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
-    const auto* expected = nearestVehicle(f.enemy, saboteur->getLocation());
-    require(expected == near, f.label + ": the fixture's nearest vehicle is not the 8-tile tank");
-    const Uint32 victimID = expected->getObjectID();
+    const Uint32 victimID = factory->getObjectID();
     f.game->updateGameState();
-    require(saboteur->getTarget() == expected, f.label + ": the released Saboteur did not pick the nearest vehicle");
+    require(saboteur->getTarget() == factory, f.label + ": the released Saboteur did not go for the building before the nearer vehicles out of its reach");
     const int seconds = f.runUntilGone(saboteurID, 120);
     f.requireOnlyVictim(saboteurID, victimID);
-    SDL_Log("SABOTEUR_TARGET_CASE: %s destroyed the nearest vehicle after %d s; the farther buildings and vehicles untouched",
+    const auto& reward = f.owner->getCombatReward(Unit_Saboteur);
+    require(reward.hpRemovedMilli > 0 && reward.damageMilli > 0,
+            f.label + ": the sabotage was not credited to the Saboteur (damage "
+            + std::to_string(reward.hpRemovedMilli / 1000) + ")");
+    require(f.owner->getNumLostItems(Unit_Saboteur) == 0,
+            f.label + ": a Saboteur that blew up its target was counted as lost");
+    SDL_Log("SABOTEUR_TARGET_CASE: %s destroyed the Heavy Factory after %d s, left the nearer Tank and Quad, credited %lld hit points, 0 lost",
+            f.label.c_str(), seconds, static_cast<long long>(reward.hpRemovedMilli / 1000));
+}
+
+/// Stefan, 2026-11-27: "make it like dynasty but allow them to also blow up vehicles". On its way
+/// to a distant building a Saboteur meets a Quad two tiles off: worth 120 / 2 against the Heavy
+/// Factory's 600 / 20, so it blows up the Quad, and the vehicle is credited to it as a kill.
+inline void vehicleMetOnTheWay(const std::string& ownerClass) {
+    Fixture f(ownerClass, "vehicle-met-on-the-way");
+    const auto* factory = f.enemyStructure("Heavy Factory 25 tiles north", Structure_HeavyFactory, 30, 3);
+    auto* saboteur = f.release();
+    const Uint32 saboteurID = saboteur->getObjectID();
+    f.game->updateGameState();
+    require(saboteur->getTarget() == factory, f.label + ": the released Saboteur did not start for the Heavy Factory");
+    const Coord released = saboteur->getLocation();
+    for(int cycle = 0; cycle < 2000 && f.alive(saboteurID)
+        && (blockDistance(released, saboteur->getLocation()) < 4 || saboteur->moving); ++cycle) {
+        f.game->updateGameState();
+    }
+    require(f.alive(saboteurID) && saboteur->getTarget() == factory, f.label + ": the Saboteur was not on its way to the Heavy Factory");
+    Coord beside = Coord::Invalid();
+    for(const Coord& offset : {Coord(2, 0), Coord(-2, 0), Coord(2, 1), Coord(-2, 1)}) {
+        const Coord tile = saboteur->getLocation() + offset;
+        if(beside.isInvalid() && currentGameMap->tileExists(tile) && !currentGameMap->getTile(tile)->hasAGroundObject()) {
+            beside = tile;
+        }
+    }
+    require(beside.isValid(), f.label + ": no free tile beside the Saboteur");
+    const auto* quad = f.enemyUnit("Quad met on the way", Unit_Quad, beside.x, beside.y);
+    const Uint32 victimID = quad->getObjectID();
+    const int seconds = f.runUntilGone(saboteurID, 120);
+    f.requireOnlyVictim(saboteurID, victimID);
+    require(f.owner->getCombatReward(Unit_Saboteur).kills == 1, f.label + ": the Quad was not credited to the Saboteur as a kill");
+    SDL_Log("SABOTEUR_TARGET_CASE: %s met a Quad on its way to the Heavy Factory and blew it up %d s later; the factory untouched",
+            f.label.c_str(), seconds);
+}
+
+/// A building's worth counts against its distance (value / distance, as Dune II): a Heavy Factory
+/// (600) 11 tiles off is taken before a Spice Silo (150) 4 tiles off.
+inline void valueBeforeNearness(const std::string& ownerClass) {
+    Fixture f(ownerClass, "value-before-nearness");
+    f.enemyStructure("Spice Silo 4 tiles south", Structure_Silo, 30, 37);
+    const auto* factory = f.enemyStructure("Heavy Factory 11 tiles east", Structure_HeavyFactory, 44, 30);
+    auto* saboteur = f.release();
+    const Uint32 saboteurID = saboteur->getObjectID();
+    const Uint32 victimID = factory->getObjectID();
+    f.game->updateGameState();
+    require(saboteur->getTarget() == factory, f.label + ": the Saboteur did not weigh the buildings' worth against distance");
+    const int seconds = f.runUntilGone(saboteurID, 120);
+    f.requireOnlyVictim(saboteurID, victimID);
+    SDL_Log("SABOTEUR_TARGET_CASE: %s destroyed the Heavy Factory after %d s; the nearer Silo untouched",
             f.label.c_str(), seconds);
 }
 
@@ -234,6 +289,11 @@ inline void workersAreVehicles(const std::string& ownerClass) {
     const Uint32 victimID = expected->getObjectID();
     const int seconds = f.runUntilGone(saboteurID, 120);
     f.requireOnlyVictim(saboteurID, victimID);
+    const auto& reward = f.owner->getCombatReward(Unit_Saboteur);
+    require(reward.kills == 1 && reward.hpRemovedMilli > 0,
+            f.label + ": the Harvester was not credited to the Saboteur as a kill");
+    require(f.owner->getNumLostItems(Unit_Saboteur) == 0,
+            f.label + ": a Saboteur that blew up its target was counted as lost");
     SDL_Log("SABOTEUR_TARGET_CASE: %s destroyed the Harvester after %d s; MCV and Tank untouched",
             f.label.c_str(), seconds);
 }
@@ -367,6 +427,8 @@ inline void shotSaboteurFalls(const std::string& ownerClass) {
     require(f.alive(tank->getObjectID()), f.label + ": the Tank was destroyed by a Saboteur that never reached it");
     require(f.game->getExplosionList().empty(), f.label + ": a shot Saboteur blew up as if it had sabotaged something");
     require(currentGameMap->getTile(where)->hasDeadUnits(), f.label + ": a shot Saboteur left no body");
+    require(f.owner->getNumLostItems(Unit_Saboteur) == 1 && f.owner->getCombatReward(Unit_Saboteur).hits == 0,
+            f.label + ": a shot Saboteur was not counted as lost, or was credited with a hit");
     SDL_Log("SABOTEUR_TARGET_CASE: %s was shot on the way and fell like a foot soldier, with no blast", f.label.c_str());
 }
 
@@ -378,7 +440,9 @@ int runSaboteurTargetProbe() {
     require(ModManager::instance().setActiveMod(mod), "missing fixture mod " + mod);
     for(const char* ownerClass : {"HumanPlayer", "qBotHard"}) {
         nearestIsABuilding(ownerClass);
-        nearestIsAVehicle(ownerClass);
+        buildingBeforeNearerVehicle(ownerClass);
+        valueBeforeNearness(ownerClass);
+        vehicleMetOnTheWay(ownerClass);
         nearerThingTurnsUp(ownerClass);
         workersAreVehicles(ownerClass);
         structureWithoutVehicles(ownerClass);
@@ -389,6 +453,6 @@ int runSaboteurTargetProbe() {
     }
     explicitOrderKept();
     areaGuardTakesNearest();
-    SDL_Log("SABOTEUR_TARGET_PROBE_PASS: mod=%s human and QuantBot owners, 20 cases", mod.c_str());
+    SDL_Log("SABOTEUR_TARGET_PROBE_PASS: mod=%s human and QuantBot owners, 24 cases", mod.c_str());
     return -1;
 }

@@ -330,7 +330,9 @@ public:
     void loadAirRaid(InputStream& stream);
 
     void incrementUnits(int itemID, bool addMilitaryValue = true);
-    void decrementUnits(int itemID);
+    /// A unit of this type is gone. LOST counts it in getNumLostItems(); a spent unit (a
+    /// Saboteur that blew up its target) leaves the house without being a loss.
+    void decrementUnits(int itemID, bool lost = true);
     void cancelCreatedUnit(int itemID);
     void incrementStructures(int itemID);
     void decrementStructures(int itemID, const Coord& location, bool recordLoss = true);

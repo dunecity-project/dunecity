@@ -28,6 +28,9 @@
 #include <ScreenBorder.h>
 #include <Explosion.h>
 #include <SoundPlayer.h>
+#include <structures/StructureBase.h>
+
+#include <algorithm>
 
 
 Saboteur::Saboteur(House* newOwner) : InfantryBase(newOwner)
@@ -139,7 +142,7 @@ void Saboteur::checkPos()
 bool Saboteur::update() {
     if(active && keepsOwnHunt()) {
         if(attackMode == HUNT) {
-            takeNearerTargetWhenSeen();
+            reconsiderOwnPick();
         } else if(attackMode == GUARD && releasedCycle != 0 && getOwner()->isAI() && !target && !moving
                   && (currentGame->getGameCycleCount() + getObjectID()) % MILLI2CYCLES(10*1000) == 0) {
             // An AI house's released Saboteur that dropped out of its hunt (a carryall that never
@@ -153,6 +156,22 @@ bool Saboteur::update() {
                     getObjectID(), loggedMode, attackMode, ageSeconds(releasedCycle), currentGame->getGameCycleCount());
         }
         loggedMode = attackMode;
+    }
+
+    if(active && releasedCycle != 0 && target.getObjectID() != loggedTarget) {
+        // What it goes for, each time that changes (the first eight), for the match logs.
+        loggedTarget = target.getObjectID();
+        if(targetChanges++ < 8) {
+            const ObjectBase* pTarget = target.getObjPointer();
+            SDL_Log("SABOTEUR_TARGET: house=%d object=%u at=%d,%d target_house=%d target_item=%d target_at=%d,%d "
+                    "dist=%d own=%d age_s=%d cycle=%u", getOwner()->getHouseID(), getObjectID(), location.x, location.y,
+                    pTarget != nullptr ? pTarget->getOwner()->getHouseID() : -1,
+                    pTarget != nullptr ? pTarget->getItemID() : -1,
+                    pTarget != nullptr ? pTarget->getLocation().x : -1, pTarget != nullptr ? pTarget->getLocation().y : -1,
+                    pTarget != nullptr ? blockDistance(location, pTarget->getClosestPoint(location)).lround() : -1,
+                    pTarget != nullptr && pTarget->getObjectID() == ownPick ? 1 : 0,
+                    ageSeconds(releasedCycle), currentGame->getGameCycleCount());
+        }
     }
 
     if(active && target.getObjPointer() != nullptr) {
@@ -197,7 +216,6 @@ bool Saboteur::update() {
                             currentGame->getGameCycleCount(), ageSeconds(releasedCycle),
                             armyOrders, armyOverwrites, armyRefused);
                     detonated = true;
-                    // Sabotage destroys directly, bypassing CombatReward's damage path.
                     if (AITelemetry::log().enabled()) {
                         const int price = currentGame->objectData.data[pObject->getItemID()][pObject->getProductionHouseID()].price;
                         const int64_t hpMilli = lround(pObject->getHealth()*1000);
@@ -207,7 +225,12 @@ bool Saboteur::update() {
                                 .set("hp_milli", hpMilli).set("damage_milli", hpMilli*price/std::max(1,pObject->getMaxHealth()))
                                 .set("destroyed_price", price).set("kills", 1));
                     }
-                    AchievementEvents::damage(pObject, getObjectID(), getOwner(), true);
+                    // The charge is a hit like any other: its lethal damage goes through the normal
+                    // damage path while this Saboteur still exists, so the kill and the hit points
+                    // are credited to the Saboteur (Stats screen, the house's kill count, the AI's
+                    // record of what it destroyed, achievements). Up to 1.0.880 the target was
+                    // destroyed directly and a Saboteur was never credited with anything.
+                    pObject->handleDamage(pObject->getHealth().lround() + 1, getObjectID(), getOwner());
                     destroy();
                     pObject->setHealth(0);
                     pObject->destroy();
@@ -244,11 +267,164 @@ bool Saboteur::canAttack(const ObjectBase* object) const {
 
 }
 
+int Saboteur::sabotageValue(int itemID) {
+    // Dune II's worth of a building to a Saboteur: priorityBuild + priorityTarget of its
+    // structure table (Dune Dynasty src/table/structureinfo.c). Buildings Dune II did not have
+    // take the value of the nearest Dune II counterpart. Walls and parks are worth nothing here:
+    // they are left to the general search, which takes them last.
+    switch(itemID) {
+        case Structure_HeavyFactory:
+        case Structure_RepairYard:          return 600;
+        case Structure_Palace:              return 400;
+        case Structure_ConstructionYard:
+        case Structure_WindTrap:
+        case Structure_Refinery:            return 300;
+        case Structure_Radar:               return 275;    // Outpost
+        case Structure_StarPort:            return 250;
+        case Structure_GunTurret:           return 225;    // Turret 75 + 150
+        case Structure_LightFactory:
+        case Structure_HighTechFactory:     return 200;
+        case Structure_RocketTurret:        return 175;    // R-Turret 100 + 75
+        case Structure_WOR:                 return 175;
+        case Structure_Silo:                return 150;
+        case Structure_Barracks:
+        case Structure_IX:                  return 100;
+        // DuneCity
+        case Structure_NuclearPlant:        return 300;    // power, as a Wind Trap
+        case Structure_Airport:             return 250;    // as a Starport
+        case Structure_ResearchLab:         return 200;    // as a Hi-Tech
+        case Structure_PoliceStation:
+        case Structure_Stadium:             return 100;
+        case Structure_ZoneResidential:
+        case Structure_ZoneCommercial:
+        case Structure_ZoneIndustrial:      return 50;
+        // Tornie family
+        case Structure_AdvancedWindTrap:
+        case Structure_AdvancedWindTrapMK2:
+        case Structure_AdvancedWindTrapMK3:
+        case Structure_Worfinery:
+        case Structure_Doublefinery:        return 300;
+        case Structure_TechCenter:
+        case Structure_LoveFactory:
+        case Structure_ChaosFactory:        return 200;
+        case Structure_Scoutpost:
+        case Structure_Flamepost:
+        case Structure_Chemipost:
+        case Structure_Slowpost:            return 225;    // as a Turret
+        case Structure_Wall:
+        case Structure_Park:                return 0;
+        default:                            return 100;
+    }
+}
+
+int Saboteur::vehicleValue(int itemID) {
+    // Dune II's worth of a unit as a target (priorityBuild + priorityTarget of its unit table),
+    // on the same scale as sabotageValue(). Vehicles Dune II did not have take the value of the
+    // nearest Dune II counterpart.
+    switch(itemID) {
+        case Unit_Devastator:           return 355;
+        case Unit_SiegeTank:
+        case Unit_EliteSiegeTank:
+        case Unit_ChemicalSiegeTank:    return 280;
+        case Unit_Launcher:
+        case Unit_EliteLauncher:        return 250;
+        case Unit_Deviator:             return 225;
+        case Unit_SonicTank:            return 190;
+        case Unit_Tank:
+        case Unit_FlameTank:
+        case Unit_RangedTank:
+        case Unit_SlowTank:             return 180;
+        case Unit_Harvester:
+        case Unit_RebelHarvester:
+        case Unit_FastHarvester:
+        case Unit_CapacityHarvester:
+        case Unit_MCV:                  return 160;
+        case Unit_Quad:
+        case Unit_FlameQuad:
+        case Unit_RaiderQuad:           return 120;
+        case Unit_RaiderTrike:
+        case Unit_RocketTrike:
+        case Unit_SonicTrike:           return 115;
+        case Unit_Trike:                return 100;
+        default:                        return 150;
+    }
+}
+
+const ObjectBase* Saboteur::bestVehicleNearby() const {
+    // Enemy vehicles it meets on the way: those within kVehicleReach tiles, scored like a
+    // building (value / distance). Any farther would be a chase after something that drives.
+    const ObjectBase* best = nullptr;
+    FixPoint bestScore = 0;
+    for(int y = location.y - kVehicleReach; y <= location.y + kVehicleReach; ++y) {
+        for(int x = location.x - kVehicleReach; x <= location.x + kVehicleReach; ++x) {
+            if(!currentGameMap->tileExists(x, y)) continue;
+            const Tile* tile = currentGameMap->getTile(x, y);
+            if(!tile->hasANonInfantryGroundObject()) continue;
+            const ObjectBase* object = tile->getNonInfantryGroundObject();
+            if(object == nullptr || !object->isAUnit() || !object->isActive() || !canAttack(object)) continue;
+            const FixPoint distance = blockDistance(location, object->getClosestPoint(location));
+            if(distance > kVehicleReach) continue;
+            const FixPoint score = FixPoint(vehicleValue(object->getItemID())) / std::max(FixPoint(1), distance);
+            if(best == nullptr || score > bestScore
+               || (score == bestScore && object->getObjectID() < best->getObjectID())) {
+                best = object;
+                bestScore = score;
+            }
+        }
+    }
+    return best;
+}
+
+const StructureBase* Saboteur::bestBuilding() const {
+    // Dune II's sabotage script (UNIT.EMC, action Sabotage) asks FindBestTarget in mode 4:
+    // buildings first, anywhere on the map, only those its house has seen, the one with the
+    // highest value / distance (Unit_FindBestTargetStructure, Unit_GetTargetStructurePriority);
+    // units only when no building is left. Lower object ID on a tie.
+    const StructureBase* best = nullptr;
+    FixPoint bestScore = 0;
+    for(const StructureBase* structure : structureList) {
+        const int value = sabotageValue(structure->getItemID());
+        if(value <= 0 || !structure->isActive() || !canAttack(structure)) continue;
+        const FixPoint distance = std::max(FixPoint(1), blockDistance(location, structure->getClosestPoint(location)));
+        const FixPoint score = FixPoint(value) / distance;
+        if(best == nullptr || score > bestScore
+           || (score == bestScore && structure->getObjectID() < best->getObjectID())) {
+            best = structure;
+            bestScore = score;
+        }
+    }
+    return best;
+}
+
+FixPoint Saboteur::sabotageScore(const ObjectBase* object) const {
+    const int value = object->isAStructure() ? sabotageValue(object->getItemID()) : vehicleValue(object->getItemID());
+    return FixPoint(value) / std::max(FixPoint(1), blockDistance(location, object->getClosestPoint(location)));
+}
+
 const ObjectBase* Saboteur::findTarget() const {
-    // Buildings and vehicles alike, whichever is nearest (walls and parks last): the general
-    // search over what canAttack() accepts. The pick is remembered so that only it, never a
-    // target the owner ordered, is replaced on the way (takeNearerTargetWhenSeen).
-    const ObjectBase* pick = InfantryBase::findTarget();
+    // Hunting (as every Palace releases it) it goes for enemy buildings the way Dune II's
+    // Saboteur does: the best one for its value and distance, anywhere its house has seen
+    // (bestBuilding). Stefan, 2026-11-27: "make it like dynasty but allow them to also blow up
+    // vehicles". So an enemy vehicle it meets on the way (within kVehicleReach tiles) competes
+    // on the same scale, value / distance, and wins only when it is near enough and worth
+    // enough: with a Heavy Factory (600) four tiles off (150), a Tank (180) beside it (180) is
+    // taken, a Trike (100) two tiles off (50) is not. A vehicle that drives out of reach is
+    // dropped for the building again, so it never chases. With no building left it takes the
+    // nearest vehicle anywhere.
+    // Outside Hunt (a guard mode its owner set) it takes the nearest thing canAttack()
+    // accepts, walls and parks last. Up to 1.0.880 it took whatever was nearest, so most went
+    // after vehicles that drove off or died under fire on the way.
+    // The pick is remembered so that only it, never a target the owner ordered, is replaced
+    // on the way (reconsiderOwnPick).
+    const ObjectBase* pick = nullptr;
+    if(attackMode == HUNT) {
+        pick = bestBuilding();
+        if(pick != nullptr) {
+            const ObjectBase* vehicle = bestVehicleNearby();
+            if(vehicle != nullptr && sabotageScore(vehicle) > sabotageScore(pick)) pick = vehicle;
+        }
+    }
+    if(pick == nullptr) pick = InfantryBase::findTarget();
     ownPick = pick != nullptr ? pick->getObjectID() : NONE_ID;
     return pick;
 }
@@ -264,12 +440,12 @@ bool Saboteur::fallsWhenDestroyed() const {
     return keepsOwnHunt() && !detonated;
 }
 
-void Saboteur::takeNearerTargetWhenSeen() {
-    // A Saboteur is invisible until an enemy object is within two tiles; from then on it is shot
-    // at. If something it can blow up is by then nearer than its pick (a vehicle that drove up,
-    // a building put down since), it takes that instead of walking on under fire. Only its own
-    // pick is replaced, never a target its owner ordered.
-    if((currentGame->getGameCycleCount() + getObjectID()) % 8 != 0) {
+void Saboteur::reconsiderOwnPick() {
+    // On the way it asks its own search again from where it stands, a few times a second: a
+    // vehicle it meets that is worth more for its distance, a building it walked up to or one
+    // put down since replaces its pick. Only its own pick is replaced, never a target its owner
+    // ordered.
+    if((currentGame->getGameCycleCount() + getObjectID()) % kReconsiderCycles != 0) {
         return;
     }
     const ObjectBase* current = target.getObjPointer();
@@ -288,19 +464,12 @@ void Saboteur::takeNearerTargetWhenSeen() {
     if(target.getObjectID() != ownPick) {
         return;
     }
-    bool seen = false;
-    for(int team = 0; team < NUM_TEAM_SLOTS; ++team) {
-        seen = seen || (team != getOwner()->getTeamID() && isVisible(team));
-    }
-    if(!seen) {
-        return;
-    }
-    const ObjectBase* nearest = InfantryBase::findTarget();    // the nearest structure or vehicle
-    if(nearest != nullptr && nearest != current
-       && blockDistance(location, nearest->getClosestPoint(location))
-          < blockDistance(location, current->getClosestPoint(location))) {
-        doAttackObject(nearest, true);
-        ownPick = nearest->getObjectID();
+    const Uint32 currentID = current->getObjectID();
+    const ObjectBase* best = findTarget();    // sets ownPick
+    if(best == nullptr) {
+        ownPick = currentID;
+    } else if(best != current) {
+        doAttackObject(best, true);
     }
 }
 
