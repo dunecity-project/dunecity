@@ -609,10 +609,10 @@ inline constexpr int kPurchaseCooldownMs = 60000;
 /// of 48 fully built four-house matches. It was two minutes for one day (2026-11-23), the Ordos
 /// Palace's five before that (the time to make a Saboteur), and first a one-in-six roll every
 /// five seconds, about half a minute.
-/// No house bombs in the first kFreePlaneMs of a game: an Airport that stands at the start
-/// charges first, and one built before that time has its plane ready at that time, not at once
-/// (Airport's constructor). Built later it has its plane ready at once, as Stefan asked on
-/// 2026-11-23 ("when you build an airport you should get one").
+/// An Airport that stands when the game begins charges for kFreePlaneMs first; one built during
+/// the game, in the first kFreePlaneMs too, has its plane ready at once (Airport::init; Stefan,
+/// 2026-11-23: "when you build an airport you should get one"; 2026-11-26: "make a plane spawn
+/// when an airport is built, not the first one after 5 mins").
 inline constexpr int kFreePlaneMs = 300000;
 /// Flights of its own that must have ended before a computer player judges whether planes pay.
 inline constexpr int kPurchaseEvidenceFlights = 1;

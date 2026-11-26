@@ -456,7 +456,9 @@
 // 135: A QuantBot yard holding a finished building with no safe site for a minute places it on
 //      the least threatened legal site instead of holding it (and every later order) for good;
 //      the wait is part of the observer checkpoint. A 134 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            135
+// 136: An Airport built during the game has its free plane ready at once, also in the first five
+//      minutes (Airport::init). A 135 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            136
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

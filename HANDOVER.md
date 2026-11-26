@@ -1,3 +1,19 @@
+## 2026-11-26 - An Airport built in the first five minutes launches its free plane at once (after 1.0.879)
+
+Stefan, 2026-11-26: "make a plane spawn when an airport is built, not the first one after 5 mins".
+Ends the opening hold of 2026-11-24 for built Airports. Protocol 136; save format unchanged.
+
+- **Before.** `Airport::init` set `freePlaneTimer = charge - min(cycle, charge)`: an Airport built at minute 2 waited
+  until minute 5 for its first free plane.
+- **Now.** `freePlaneTimer = cycle == 0 ? charge : 0`. An Airport placed during the game (any minute) is ready at once
+  and launches at its next five-second tick, when powered and the house has no free plane in the air. Only the map
+  loader places structures at cycle 0 (scenario maps, generated cities, Fortress bases), so a fully built start still
+  charges five minutes and nobody opens with every house bombing. The one-free-plane-in-the-air rule is unchanged, so
+  a second Airport does not launch while the first one's plane flies.
+- **Tests.** `city_plane_effect` `checkAirportBuiltPlane` now builds the Airport in the opening and requires the
+  plane ready and launched within ten seconds; `checkAirport` (a pre-placed Airport, two planes in eleven minutes)
+  and the spectate-planes probe (first plane by 5:05 on a Fortress start) are unchanged.
+
 ## 2026-11-26 - A finished building with no safe site no longer stalls its yard (acantplace.dls)
 
 Stefan's `acantplace.dls` (1.0.878, 4P 192x192 Metropolis, Dune City mod; spectating): Atreides' Construction
