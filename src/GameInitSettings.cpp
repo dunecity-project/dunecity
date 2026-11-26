@@ -361,6 +361,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.cityPlanePurchase = true;
     gameOptions.cityPlaneBuildTime = true;
     gameOptions.cityPlaneFreePerAirport = true;
+    gameOptions.cityPlaneCrashBombs = true;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -503,7 +504,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     // vacancy without extending that unframed settings block:
                     // earlier MOD18 saves and protocol-112 packets read it off.
                     const Uint8 cityRules = stream.readUint8();
-                    if(cityRules & ~Uint8(15))
+                    if(cityRules & ~Uint8(31))
                         throw std::runtime_error("Invalid city rules.");
                     gameOptions.mountainScenery = (cityRules & 1) != 0;
                     gameOptions.unpoweredZonesVacate = (cityRules & 2) != 0;
@@ -511,6 +512,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     // Airport is off, so a stream that plays the default rules is the byte it was.
                     gameOptions.cityPlaneBuildTime = (cityRules & 4) == 0;
                     gameOptions.cityPlaneFreePerAirport = (cityRules & 8) == 0;
+                    // Protocol 139: bit 4 is set when City Plane Crash Bombs is off.
+                    gameOptions.cityPlaneCrashBombs = (cityRules & 16) == 0;
                 }
             }
             if(hasTechnologyInstallments) {
@@ -728,7 +731,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeUint8((gameOptions.mountainScenery ? 1 : 0)
         | (gameOptions.unpoweredZonesVacate ? 2 : 0)
         // Bits 2-3 (protocol 137): City Plane Build Time off, City Plane Free Per Airport off.
-        | (gameOptions.cityPlaneBuildTime ? 0 : 4) | (gameOptions.cityPlaneFreePerAirport ? 0 : 8));
+        | (gameOptions.cityPlaneBuildTime ? 0 : 4) | (gameOptions.cityPlaneFreePerAirport ? 0 : 8)
+        // Bit 4 (protocol 139): City Plane Crash Bombs off.
+        | (gameOptions.cityPlaneCrashBombs ? 0 : 16));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
     stream.writeBool(gameOptions.technologyInstallments);
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.

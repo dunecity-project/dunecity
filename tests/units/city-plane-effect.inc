@@ -91,6 +91,9 @@ struct Rules {
     // their instant purchases and the one free plane a house (checkBuildTime, checkFreePerAirport).
     bool buildTime = false;       // City Plane Build Time
     bool freePerAirport = false;  // City Plane Free Per Airport
+    // Protocol 139's crash is off unless a check asks for it, so the crash checks written before it
+    // keep the one-bomb crash (checkCrashBombs).
+    bool crashBombs = false;      // City Plane Crash Bombs
 };
 
 // Atreides defends; Harkonnen owns the plane; Ordos is Harkonnen's ally.
@@ -103,6 +106,7 @@ std::unique_ptr<Game> newGame(const std::string& mapData, int seed, const Rules&
     options.cityPlanePurchase = rules.purchase;
     options.cityPlaneBuildTime = rules.buildTime;
     options.cityPlaneFreePerAirport = rules.freePerAirport;
+    options.cityPlaneCrashBombs = rules.crashBombs;
     // Every plane here flies a course the probe gives it, never a bombing run of its own choice.
     options.cityPlaneBombingRuns = false;
     options.immortalHumanPlayer = false;
@@ -805,6 +809,59 @@ void checkCrashCredit(const std::string& mapData) {
     currentGame = nullptr;
 }
 
+// Stefan, 2026-11-26: "make planes blow up as 3 of their bombs when they die, current explosion too
+// small". A plane flying east is shot down over a row of Gun Turrets one tile apart at x 28, 30, 32 and
+// 36. City Plane Crash Bombs: three bombs at x 28.5, 30.5 and 32.5 (two tiles apart along the heading),
+// each a stick bomb's 250 on the turret it lands on; the one at 36 is beyond them. Off: one bomb's
+// damage on the tile it falls on, the turret at 30 alone.
+void checkCrashBombs(const std::string& mapData) {
+    for(const bool on : {false, true}) {
+        Rules rules{true, false, false};
+        rules.carpet = true;
+        rules.crashBombs = on;
+        auto game = newGame(mapData, 21, rules);
+        auto* defender = game->getHouse(HOUSE_ATREIDES);
+        auto* raider = game->getHouse(HOUSE_HARKONNEN);
+        const int xs[] = {28, 30, 32, 36};
+        std::vector<Uint32> ids;
+        for(const int x : xs) {
+            auto* turret = place(defender, Structure_GunTurret, Coord(x, 30));
+            static_cast<TurretBase*>(turret)->attackMode = STOP;
+            ids.push_back(turret->getObjectID());
+        }
+        auto* shooter = place(defender, Structure_RocketTurret, Coord(40, 40));
+        static_cast<TurretBase*>(shooter)->attackMode = STOP;
+        auto* plane = fly(raider, Coord(30, 30), Coord(kMapSize + 20, 30), RIGHT);
+        plane->currentMaxSpeed = 0;
+        for(int i = 0; i < 2; ++i) game->updateGameState();
+        std::vector<int> before;
+        for(const Uint32 id : ids) before.push_back(healthOf(*game, id));
+        const size_t explosions = game->getExplosionList().size();
+        plane->handleDamage(1000, shooter->getObjectID(), defender, DeviationReward::liveProvenance(shooter, defender));
+        const size_t burst = game->getExplosionList().size() - explosions;
+        for(int i = 0; i < 5; ++i) game->updateGameState();
+        std::vector<int> lost;
+        std::string detail = on ? "rule on:" : "rule off:";
+        for(size_t i = 0; i < ids.size(); ++i) {
+            lost.push_back(before[i] - healthOf(*game, ids[i]));
+            detail += " x" + std::to_string(xs[i]) + " lost " + std::to_string(lost.back()) + " of " + std::to_string(before[i]);
+        }
+        record("crash_bombs", detail + "; explosions " + std::to_string(burst));
+        const auto fullHit = [&](size_t i) { return lost[i] >= std::min(before[i], CA::kStickDamage); };
+        require(fullHit(1), "The crash did not hit the turret under the plane");
+        require(lost[3] == 0, "The crash reached the turret four tiles beyond the plane");
+        if(on) {
+            require(fullHit(0) && fullHit(2), "City Plane Crash Bombs did not burst a bomb two tiles before and after the crash");
+            require(burst >= static_cast<size_t>(CA::kCrashBombs), "City Plane Crash Bombs did not draw three bomb explosions");
+        } else {
+            require(lost[0] == 0, "The one-bomb crash reached the turret two tiles behind the plane");
+            require(lost[2] < CA::kStickDamage, "The one-bomb crash did a full bomb's damage two tiles ahead");
+        }
+        game.reset();
+        currentGame = nullptr;
+    }
+}
+
 // Stefan, 2026-11-23: "also get planes to drop bombs on enemy units as well". Three enemy tanks in
 // a row in the open, no building near: the stick starts over them and its blast, a tile and a
 // half against units, hurts every one. The same three tanks of the plane's own side get no bomb.
@@ -1466,6 +1523,7 @@ int runCityPlaneEffect() {
     checkRepairingBuilding(mapData);
     checkBombsOnUnits(mapData);
     checkCrashCredit(mapData);
+    checkCrashBombs(mapData);
     checkBuildingSplash(mapData);
     checkPurchase(mapData);
     checkBuildTime(mapData);

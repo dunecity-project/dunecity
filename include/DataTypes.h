@@ -345,6 +345,7 @@ public:
                     && (cityPlanePurchase == goc.cityPlanePurchase)
                     && (cityPlaneBuildTime == goc.cityPlaneBuildTime)
                     && (cityPlaneFreePerAirport == goc.cityPlaneFreePerAirport)
+                    && (cityPlaneCrashBombs == goc.cityPlaneCrashBombs)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -405,6 +406,7 @@ public:
             if(!cityPlanePurchase) optStr += "/cityPlanePurchase=0";
             if(!cityPlaneBuildTime) optStr += "/cityPlaneBuildTime=0";
             if(!cityPlaneFreePerAirport) optStr += "/cityPlaneFreePerAirport=0";
+            if(!cityPlaneCrashBombs) optStr += "/cityPlaneCrashBombs=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -542,6 +544,11 @@ public:
         /// up to one free plane in the air per Airport, each on its own five-minute clock. Off, a house
         /// has one free plane in the air whatever its Airports, as up to protocol 136. INI key only.
         bool        cityPlaneFreePerAirport = true;
+        /// A plane that is shot down explodes as three of its own bombs, laid along its heading a
+        /// stick's spacing apart (Stefan, 2026-11-26: "make planes blow up as 3 of their bombs when
+        /// they die, current explosion too small"; AmbientAirplane::crash). Off, the crash is one stick
+        /// bomb's damage on the tile it falls on, as up to protocol 138. INI key only.
+        bool        cityPlaneCrashBombs = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

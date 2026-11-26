@@ -100,7 +100,8 @@ public:
     static void applyBalance(ObjectData& data);
     /// Damage of one stick bomb: CityAircraft::kStickDamage, or DUNECITY_TEST_BOMB_DAMAGE.
     static int stickDamage();
-    /// True in the game: a plane that is shot down does one stick bomb's damage on the tile it
+    /// True in the game: a plane that is shot down explodes as three of its bombs (match rule City
+    /// Plane Crash Bombs) or, with that rule off, does one stick bomb's damage on the tile it
     /// falls on (crash(); Stefan, 2026-11-24, after OP.dls, where shot-down Death Hand crashes did
     /// 45% of all plane damage). Balance experiment only, read once per process and never a match
     /// rule: DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1 restores the Death Hand impact of 2026-10-22.

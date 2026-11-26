@@ -1614,9 +1614,10 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
     SECTION("unknown MOD18 city-rule bits are refused") {
-        // Bits 2-3 are the protocol 137 city plane rules; bit 4 is the first unknown one.
+        // Bits 2-3 are the protocol 137 city plane rules, bit 4 City Plane Crash Bombs (139); bit 5
+        // is the first unknown one.
         auto bytes = encoded;
-        bytes.back() = static_cast<char>(16);
+        bytes.back() = static_cast<char>(32);
         IMemoryStream input(bytes.data(),bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
@@ -1896,5 +1897,40 @@ TEST_CASE("Protocol 137 city plane rules ride bits 2-3 of the MOD18 city rules b
     GameInitSettings restored(input);
     REQUIRE(restored.getGameOptions() == options);
     REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
+TEST_CASE("Protocol 139 City Plane Crash Bombs rides bit 4 of the MOD18 city rules byte, set only when off",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.cityPlaneCrashBombs);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.cityPlaneCrashBombs);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.cityPlaneCrashBombs = GENERATE(true, false);
+    options.cityPlaneFreePerAirport = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.cityPlaneCrashBombs && options.cityPlaneFreePerAirport) {
+        // The default rule leaves the stream and the options hash as protocol 138 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    if(!options.cityPlaneCrashBombs) {
+        REQUIRE(options.getHash().find("/cityPlaneCrashBombs=0") != std::string::npos);
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
     REQUIRE(input.readUint32() == 0xabcdef01u);
 }

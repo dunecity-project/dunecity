@@ -467,7 +467,10 @@
 // 138: QuantBot's infantry share of the army's value is measured like a unit-mix slot
 //      (UnitMixPolicy::measuredInfantryBps) instead of the fixed 18/15/12/10% difficulty quota, so
 //      AI production differs. A 137 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            138
+// 139: Match rule City Plane Crash Bombs, default on, as bit 4 of the MOD18 city rules byte (set
+//      when off): a shot-down plane explodes as three of its bombs, two tiles apart along its
+//      heading (AmbientAirplane::crash). A 138 peer refuses the byte. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            139
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

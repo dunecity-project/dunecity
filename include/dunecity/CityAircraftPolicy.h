@@ -526,6 +526,17 @@ inline constexpr int kStickTailBombs = 1;
 /// tiles) of an axis heading's 10.24 a cycle.
 inline constexpr int kStickPhaseStep = 2;
 inline constexpr int kStickPhasePeriod = 25;
+/// The crash (match rule GameOptionsClass::cityPlaneCrashBombs; Stefan, 2026-11-26: "make planes
+/// blow up as 3 of their bombs when they die, current explosion too small"): a plane that is shot
+/// down explodes as kCrashBombs of its own bombs, the middle one where it was hit and the others
+/// kCrashBombSpacingTiles before and after it along its heading, a stick's spacing (AmbientAirplane::crash).
+inline constexpr int kCrashBombs = 3;
+inline constexpr int kCrashBombSpacingTiles = 2;
+/// Where crash bomb `index` (0 .. kCrashBombs-1) bursts: `at` moved along the unit heading (dx, dy),
+/// given in parts of `scale`, by its place in the stick times `spacing` world units.
+inline constexpr int crashBombOffset(int index, int unit, int scale, int spacing) {
+    return (index - (kCrashBombs - 1) / 2) * spacing * unit / scale;
+}
 /// Enemy ground units start and carry a stick as buildings do (Stefan, 2026-11-23: "also get
 /// planes to drop bombs on enemy units as well"). Against units the heavy bomb's blast reaches
 /// kStickUnitBlastRadius, a tile and a half, the size its explosion is drawn: the full

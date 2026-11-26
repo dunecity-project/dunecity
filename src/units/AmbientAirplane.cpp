@@ -399,7 +399,15 @@ void AmbientAirplane::handleDamage(int damage, Uint32 damagerID, House* damagerO
 }
 
 /**
-    The plane crashes where it was hit with one stick bomb's damage (stickDamage(),
+    The plane explodes as three of its own bombs (match rule City Plane Crash Bombs,
+    default on; Stefan, 2026-11-26: "make planes blow up as 3 of their bombs when they
+    die, current explosion too small"): the middle one where it was hit, the others two
+    tiles before and after it along its heading, a stick's spacing
+    (CityAircraft::kCrashBombs, crashBombOffset). Each is a Bullet_Bomb burst through
+    Map::damage with stickDamage() and the bomb's own radius and splash: a direct hit on
+    any building, splash on other teams' buildings, a tile and a half against ground
+    units of any side under City Plane Carpet Bombing. With the rule off the plane
+    crashes where it was hit with one stick bomb's damage (stickDamage(),
     250) within half a tile: the building or units on the tile it falls on, and
     nothing around it. Stefan, 2026-11-24, after his OP.dls game ("planes are a bit
     overpowered"): there shot-down planes did 45% of all plane damage, because from
@@ -424,9 +432,11 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     House* const credited = shooterOwner != nullptr ? shooterOwner : getOwner();
     const Coord at = getCenterPoint();
     const bool small = smallCrash();
+    const SettingsClass::GameOptionsClass& options = currentGame->getGameInitSettings().getGameOptions();
+    const bool bombs3 = small && options.cityPlaneCrashBombs;
     SDL_Log("City airplane of house %d shot down at %d,%d by house %d (cycle %u): %s",
             getOwner()->getHouseID(), at.x / TILESIZE, at.y / TILESIZE, credited->getHouseID(),
-            currentGame->getGameCycleCount(), small ? "small crash" : "Death Hand impact");
+            currentGame->getGameCycleCount(), bombs3 ? "three bombs" : small ? "small crash" : "Death Hand impact");
     const ObjectBase* shooter = currentGame->getObjectManager().getObject(shooterID);
     int airportDist = -1;
     const AirportSpot* airport = nearestEnemyAirport(location, getOwner()->getTeamID(), &airportDist);
@@ -447,7 +457,20 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     // and after for one log line per crash (tests/ai/city-plane-report.py).
     struct Standing { Uint32 id; bool enemy; int price; int health; int owner; int item; };
     std::vector<Standing> standing;
-    const int reach = small ? TILESIZE : 2 * TILESIZE + Bullet::deathHandBlastRadius;
+    // The crash bombs' points and blast (the bomb's own: Bullet::init, Bullet_Bomb).
+    const int bombRadius = options.cityPlaneCarpetBombing ? CA::kStickUnitBlastTiles2 * TILESIZE / 2 : TILESIZE / 2;
+    const int spacing = CA::kCrashBombSpacingTiles * TILESIZE;
+    std::vector<Coord> bursts;
+    if(bombs3) {
+        const FixPoint angleRad = (angle * (FixPt_PI << 1)) / 8;
+        const int ux = lround(FixPoint::cos(angleRad) * 1024), uy = -lround(FixPoint::sin(angleRad) * 1024);
+        for(int i = 0; i < CA::kCrashBombs; ++i) {
+            const Coord point(at.x + CA::crashBombOffset(i, ux, 1024, spacing), at.y + CA::crashBombOffset(i, uy, 1024, spacing));
+            if(point.x >= 0 && point.y >= 0 && currentGameMap->tileExists(point.x / TILESIZE, point.y / TILESIZE))
+                bursts.push_back(point);
+        }
+    }
+    const int reach = bombs3 ? spacing + bombRadius + TILESIZE : small ? TILESIZE : 2 * TILESIZE + Bullet::deathHandBlastRadius;
     for(const StructureBase* structure : structureList) {
         if(structure->getHealth() <= 0) continue;
         const Coord topLeft = structure->getLocation() * TILESIZE;
@@ -462,7 +485,18 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
     // The ground units in reach, for CITY_PLANE_UNIT_KILL (Stefan, 2026-11-26: "how many units or
     // buildings they destroy (and total value) vs their cost").
     const auto units = Bullet::watchGroundUnits(at, reach);
-    if(small) {
+    if(bombs3) {
+        // Three of the plane's bombs at once, each as Bullet::destroy bursts a Bullet_Bomb (without
+        // House::noteBombHit: a crash is not a raid the defender answers). Same damager, credit and
+        // measurement as below.
+        soundPlayer->playSoundAt(Sound_ExplosionLarge, at);
+        for(const Coord& point : bursts) {
+            currentGameMap->damage(objectID, getOwner(), point, Bullet_Bomb, stickDamage(), bombRadius, false, true,
+                                   NONE_ID, DeviationReward::liveProvenance(this, getOwner()));
+            currentGame->getExplosionList().push_back(new Explosion(Explosion_Bomb, point, getOwner()->getHouseID()));
+        }
+        if(shake) screenborder->shakeScreen(22);
+    } else if(small) {
         // One stick bomb's damage within half a tile: the building or units on the tile it falls
         // on, nothing around it. Same damager, credit and measurement as the Death Hand impact.
         soundPlayer->playSoundAt(Sound_ExplosionLarge, at);

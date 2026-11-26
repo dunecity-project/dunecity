@@ -1912,6 +1912,9 @@ int runCityAircraftProbe() {
     // (checkAirportLaunch); city_plane_effect checks both rules (checkFreePerAirport, checkBuildTime).
     settings.gameOptions.cityPlaneBuildTime = false;
     settings.gameOptions.cityPlaneFreePerAirport = false;
+    // Protocol 139: the blast fixture compares the one-bomb crash with the Death Hand (witnesses two
+    // tiles away); city_plane_effect checks the three crash bombs (checkCrashBombs).
+    settings.gameOptions.cityPlaneCrashBombs = false;
     std::ifstream map(PROBE_MAP_PATH);
     gMapData.assign((std::istreambuf_iterator<char>(map)), std::istreambuf_iterator<char>());
     cityRequire(!gMapData.empty(), "fixture map is empty");
