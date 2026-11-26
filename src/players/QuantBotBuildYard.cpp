@@ -361,6 +361,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardAirportTurrets(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (turretFrontPlan.active) {
+        // FrontTurrets / TurretCreep / AdvancingTurrets (default off): a turret at the front.
+        chooseYardTurretFront(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     if (extraAirportPlan.active) {
         // ExtraAirports (default off): another Airport while its free planes would repay it.
         chooseYardExtraAirport(pass, turn, yardTurn);

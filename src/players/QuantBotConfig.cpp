@@ -398,6 +398,12 @@ QuantBotConfig::QuantBotConfig() {
     force.extraAirports = true;     // Stefan, 2026-11-26: "factored in by the ai to determine if it makes sense to buy more airports"; on with City Plane Free Per Airport (CityAircraftPolicy.h)
     force.airportTurrets = false;   // Stefan, 2026-11-26: "also airports need decent rocket turret defenses" (QuantBotAirDefencePolicy.h)
     force.hospitalInfantry = false; // Stefan, 2026-11-27: Hospitals heal infantry (dunecity/HospitalCare.h)
+    // Stefan, 2026-11-27: "houses should try use them offensively and also try increase the amount of
+    // them on front lines under attack" (TurretFrontPolicy.h). Off until measured.
+    force.frontTurrets = false;
+    force.advancingTurrets = false;
+    force.turretCreep = false;
+    force.rearTurretRetire = false;
     force.palaceWorm = 1;           // Stefan, 2026-11-27: the Fremen Palace worm hunts, else blooms near the base
     force.buildUpToEnemy = true;    // Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings"
     force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
@@ -943,6 +949,10 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "AirThreatTurrets", force.airThreatTurrets);
         iniFile.setBoolValue("Force Concentration", "AirportTurrets", force.airportTurrets);
         iniFile.setBoolValue("Force Concentration", "HospitalInfantry", force.hospitalInfantry);
+        iniFile.setBoolValue("Force Concentration", "FrontTurrets", force.frontTurrets);
+        iniFile.setBoolValue("Force Concentration", "AdvancingTurrets", force.advancingTurrets);
+        iniFile.setBoolValue("Force Concentration", "TurretCreep", force.turretCreep);
+        iniFile.setBoolValue("Force Concentration", "RearTurretRetire", force.rearTurretRetire);
         iniFile.setBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
         iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
         iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
@@ -1316,6 +1326,10 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.airThreatTurrets = iniFile.getBoolValue("Force Concentration", "AirThreatTurrets", force.airThreatTurrets);
     force.airportTurrets = iniFile.getBoolValue("Force Concentration", "AirportTurrets", force.airportTurrets);
     force.hospitalInfantry = iniFile.getBoolValue("Force Concentration", "HospitalInfantry", force.hospitalInfantry);
+    force.frontTurrets = iniFile.getBoolValue("Force Concentration", "FrontTurrets", force.frontTurrets);
+    force.advancingTurrets = iniFile.getBoolValue("Force Concentration", "AdvancingTurrets", force.advancingTurrets);
+    force.turretCreep = iniFile.getBoolValue("Force Concentration", "TurretCreep", force.turretCreep);
+    force.rearTurretRetire = iniFile.getBoolValue("Force Concentration", "RearTurretRetire", force.rearTurretRetire);
     force.extraAirports = iniFile.getBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
     // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
     force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
@@ -2087,6 +2101,10 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.airThreatTurrets) addNamed("airThreatTurrets", force.airThreatTurrets);
     if (force.airportTurrets) addNamed("airportTurrets", force.airportTurrets);
     if (force.hospitalInfantry) addNamed("hospitalInfantry", force.hospitalInfantry);
+    if (force.frontTurrets) addNamed("frontTurrets", force.frontTurrets);
+    if (force.advancingTurrets) addNamed("advancingTurrets", force.advancingTurrets);
+    if (force.turretCreep) addNamed("turretCreep", force.turretCreep);
+    if (force.rearTurretRetire) addNamed("rearTurretRetire", force.rearTurretRetire);
     // On is the default (protocol 137); only off is hashed, so the default config keeps its hash.
     if (!force.extraAirports) addNamed("extraAirports", force.extraAirports);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);

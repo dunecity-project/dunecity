@@ -165,6 +165,7 @@ target_sources(dunelegacy_tests
         CitySpritePolicyTestCase.cpp
         ParkTestCase.cpp
         CityAircraftPolicyTestCase.cpp
+        TurretFrontPolicyTestCase.cpp
         RendererSizeTestCase.cpp
         HotkeysTestCase.cpp
         CursorAppearanceTestCase.cpp

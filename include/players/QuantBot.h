@@ -2231,6 +2231,40 @@ private:
     /// of the first own Airport, by object id, short of its ring; invalid when every Airport has
     /// its ring or no tile is legal. \a airport and \a ring receive that Airport and its count.
     Coord findAirportGuardSite(Uint32* airport = nullptr, int* ring = nullptr, int* unguarded = nullptr);
+    /// Rocket Turrets at the front: FrontTurrets, AdvancingTurrets, TurretCreep and
+    /// RearTurretRetire (all default off; TurretFrontPolicy.h, QuantBotTurretFront.cpp). The site
+    /// comes from a scan every TurretFrontPolicy::kScanPeriodCycles and waits here for a yard;
+    /// nothing is saved, a loaded game scans on its first pass.
+    enum class TurretFrontMode { None, Reinforce, Creep, Advance };
+    struct TurretFrontPlan {
+        bool active = false;     ///< a site waits and this pass may order it
+        bool ordered = false;    ///< a yard took the turret (or its Wind Trap) this pass
+        int reserve = 0;         ///< cash that must remain after paying (threatReserve)
+        TurretFrontMode mode = TurretFrontMode::None;
+        Coord site = Coord::Invalid();
+        Coord anchor = Coord::Invalid();  ///< attacked building (a) or the base's enemy-facing edge (b)
+        int cover = 0;           ///< own turrets near the anchor at the scan
+        int goal = 0;            ///< cover wanted there
+        int attackValue = 0;     ///< (a) value of the attack served
+        int forward = 0;         ///< (c) own turrets already in range of enemy buildings
+        int edge = 0;            ///< (b) the edge's distance to the nearest enemy building
+        int armyLead = 0;        ///< (b) the army lead's distance to it
+    } turretFrontPlan;
+    Uint32 turretFrontScanCycle = std::numeric_limits<Uint32>::max();
+    Uint32 turretRetireBucket = std::numeric_limits<Uint32>::max();
+    Uint32 turretLedgerBucket = std::numeric_limits<Uint32>::max();
+    /// The four switches, each with an experiment-only DUNECITY_TEST_* override (0 or 1).
+    bool frontTurretsEnabled() const;
+    bool advancingTurretsEnabled() const;
+    bool turretCreepEnabled() const;
+    bool rearTurretRetireEnabled() const;
+    void planTurretFront(BuildPass& pass);
+    void scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bool creep, bool retireDue);
+    /// One Rocket Turret per pass across all yards at the waiting site, or the Wind Trap that
+    /// powers it; from cash beyond the economy's reserve only.
+    void chooseYardTurretFront(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// TURRET_LEDGER: every city house's turret count and upkeep, every two game minutes.
+    void logTurretLedger(Uint32 now);
     /// ExtraAirports (default off; CityAircraft::extraAirportPays). This build pass's plan, scratch
     /// refilled by planExtraAirport every pass from the house's own plane record; nothing is saved.
     struct ExtraAirportPlan {

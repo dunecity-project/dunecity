@@ -321,6 +321,11 @@ struct QuantBotConfig {
         bool extraAirports;                    ///< Default on: another Airport (up to 4) when its free planes and production would repay its price in 20 minutes, up to 8 for a rich house (CityAircraft::extraAirportPays, kMaxAirportsPerRichHouse).
         bool airportTurrets;                   ///< Default off (same Airports bombed, level placement in 288 mixed matches): every own Airport keeps 4 Rocket Turrets within 5 tiles, refilled when lost (QuantBotAirDefencePolicy.h).
         bool hospitalInfantry;                 ///< Default off until measured: wounded infantry go to a Hospital (match rule Hospital Care; dunecity/HospitalCare.h); a soldier on a trip is reserved until healed.
+        /// Rocket Turrets at the front (default off until measured; TurretFrontPolicy.h). Each is its own arm.
+        bool frontTurrets;                     ///< (a) An attacked building cluster gets turrets until its cover matches the attack.
+        bool advancingTurrets;                 ///< (b) A turret belt at the enemy-facing edge, moved forward behind the army.
+        bool turretCreep;                      ///< (c) Turrets within range of enemy buildings where at most one enemy turret reaches.
+        bool rearTurretRetire;                 ///< (d) Turrets far from every enemy are sold or demolished, cutting police upkeep.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

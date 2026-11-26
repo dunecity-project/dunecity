@@ -608,6 +608,7 @@ void QuantBot::build(int militaryValue) {
     planPalaceTurrets(pass);
     planAirRaidDefence(pass);
     planAirportTurrets(pass);
+    planTurretFront(pass);
     planExtraAirport(pass);
     planCityResearchOrder(pass);
     planTechSavings(pass);

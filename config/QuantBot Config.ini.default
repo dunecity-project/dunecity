@@ -694,6 +694,18 @@ AirportTurrets=0
 # (below half health, with Carryalls) applies to its infantry as to a human player's. 0 = off: AI
 # infantry are never sent to a Hospital.
 HospitalInfantry=0
+# Stefan, 2026-11-27: Rocket Turrets at the front (include/players/TurretFrontPolicy.h). All off
+# until measured. A Rocket Turret costs 15 credits a city year of police upkeep (7.5 a minute with
+# Slow City Year), so a turret pays only while something is in its range.
+# FrontTurrets: an attacked building cluster gets turrets until its cover matches the attack.
+FrontTurrets=0
+# AdvancingTurrets: a belt of turrets at the base's enemy-facing edge, moved forward behind the army.
+AdvancingTurrets=0
+# TurretCreep: turrets within range of enemy buildings where at most one enemy turret reaches.
+TurretCreep=0
+# RearTurretRetire: turrets far from every enemy are sold (demolished where selling is off), four
+# every two minutes, keeping the base's own coverage need.
+RearTurretRetire=0
 # Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
 # it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
 # destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes
