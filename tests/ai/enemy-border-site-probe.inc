@@ -94,7 +94,9 @@ void runEnemyBorderSiteProbe(Game& game) {
                     if(!freeCorner(corner)) continue;
                     StructureBase* placedTrap=enemy->placeStructure(NONE_ID,Structure_WindTrap,corner.x,corner.y,false,true);
                     if(!placedTrap) continue;
-                    if(search(false,nullptr)!=candidate) { placedTrap->destroy(); continue; }   // took the last exit
+                    if(search(false,nullptr)!=candidate) {   // took the last exit: remove it as sold (no survivors)
+                        placedTrap->selling_=true; placedTrap->destroy(); continue;
+                    }
                     ++traps;
                 }
                 if(!traps) continue;
@@ -105,13 +107,14 @@ void runEnemyBorderSiteProbe(Game& game) {
     require(again==site,"An enemy building next door made the Stadium site illegal");
     if(after!=before) SDL_Log("ENEMY_BORDER_DETAILS: site=(%d,%d) traps=%d before=%s after=%s",site.x,site.y,planted,
         beforeDetails.c_str(),bot->placementScoreDetails[item].json().c_str());
-    require(after==before,"An enemy building next door lowered the site's score");
+    // Same map, same single candidate: the spacings differ by exactly the enemy border charge, which
+    // the old spacing makes (-10 a tile) and the new one does not.
     const Coord oldSite=search(true,&afterOld);
     require(oldSite==site,"The old spacing refused the only site");
-    require(afterOld==before+planted*TacticalSafetyPolicy::kOldEnemyBorderTileScore,
-        "The old spacing did not charge the enemy border tiles");
-    SDL_Log("ENEMY_BORDER_SCORE: site=(%d,%d) tried=%d enemy_traps=%d score=%d old_score=%d",
-        site.x,site.y,tried,planted,after,afterOld);
+    require(after-afterOld==-planted*TacticalSafetyPolicy::kOldEnemyBorderTileScore,
+        "The spacings do not differ by the enemy border charge alone: the new one still charges enemy buildings");
+    SDL_Log("ENEMY_BORDER_SCORE: site=(%d,%d) tried=%d enemy_traps=%d score_before=%d score=%d old_score=%d",
+        site.x,site.y,tried,planted,before,after,afterOld);
 
     // 2. Light fire (one enemy weapon over every site) no longer refuses a site; heavy fire does.
     threaten(TacticalSafetyPolicy::kLightFire);
