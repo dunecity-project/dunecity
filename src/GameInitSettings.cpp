@@ -365,6 +365,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     // A Park counts as a road unless the stream carries the off bit (bit 6 of the city rules).
     gameOptions.parksCountAsRoads = true;
     gameOptions.damageLowersLandValue = false;
+    // Zone Garrisons is on unless the stream carries the off bit (bit 5 of the city rules).
+    gameOptions.zoneGarrisons = true;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
     gameOptions.trooperAntiAir = false;
@@ -519,6 +521,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     // Bit 6 is set when Parks Count As Roads is off.
                     gameOptions.parksCountAsRoads = (cityRules & 64) == 0;
                 }
+                    // Protocol 144: bit 5 is set when Zone Garrisons is off.
+                    gameOptions.zoneGarrisons = (cityRules & 32) == 0;
             }
             if(hasTechnologyInstallments) {
                 gameOptions.technologyInstallments = stream.readBool();
@@ -741,6 +745,8 @@ void GameInitSettings::save(OutputStream& stream) const {
         // Bit 6: Parks Count As Roads off.
         | (gameOptions.parksCountAsRoads ? 0 : 64));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
+        // Bit 5 (protocol 144): Zone Garrisons off.
+        | (gameOptions.zoneGarrisons ? 0 : 32)
     stream.writeBool(gameOptions.technologyInstallments);
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.
     // Bit 7: the Saboteur hunt is off (the default, on, leaves the byte as it was).

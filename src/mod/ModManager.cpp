@@ -1066,6 +1066,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "City Plane Build Time") result.cityPlaneBuildTime = parseBool(value);
             else if (key == "City Plane Free Per Airport") result.cityPlaneFreePerAirport = parseBool(value);
             else if (key == "City Plane Crash Bombs") result.cityPlaneCrashBombs = parseBool(value);
+            else if (key == "Zone Garrisons") result.zoneGarrisons = parseBool(value);
             else if (key == "Parks Count As Roads") result.parksCountAsRoads = parseBool(value);
             else if (key == "Saboteur Hunt") result.saboteurHunt = parseBool(value);
             else if (key == "Starport Population") result.starportPopulation = parseBool(value);

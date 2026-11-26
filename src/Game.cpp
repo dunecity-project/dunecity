@@ -579,6 +579,9 @@ void Game::reconcileTransportContainment() {
         if(const UnitBase* occupant = pStructure->getContainedRepairUnit()) {
             contained.insert(occupant->getObjectID());   // Already gated on an actual repair job.
         }
+        if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure)) {
+            for(const Uint32 occupantID : zone->getGarrison()) contained.insert(occupantID);   // Zone Garrisons
+        }
 
         const int houseID = pStructure->getOwner()->getHouseID();
         if(houseAnchor[houseID].isInvalid() && currentGameMap->tileExists(pStructure->getLocation())) {
@@ -7246,7 +7249,11 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
     }
 
     StructureBase* pStructure = dynamic_cast<StructureBase*>(pTile->getGroundObject());
-    if(pLocalHouse && (pStructure != nullptr) && (pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())) {
+    // Zone Garrisons: the local house's own zones take the capture order too (to occupy them).
+    const auto* pZone = dynamic_cast<const ZoneStructure*>(pStructure);
+    const bool ownZone = pLocalHouse && pZone != nullptr && ZoneStructure::garrisonsEnabled()
+        && pZone->getOwner() == pLocalHouse;
+    if(pLocalHouse && (pStructure != nullptr) && (ownZone || ((pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())))) {
         InfantryBase* pResponder = nullptr;
         const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
 

@@ -286,8 +286,13 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(parameter[1]));
-            const bool validIntent = pStructure != nullptr && pStructure->canBeCaptured()
-                && pStructure->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID();
+            const auto* pZone = dynamic_cast<const ZoneStructure*>(pStructure);
+            const bool validIntent = pZone != nullptr && ZoneStructure::garrisonsEnabled()
+                ? pInfantry->canCaptureStructures()
+                    && (pZone->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID()
+                        || pZone->mayEnterGarrison(pInfantry))
+                : pStructure != nullptr && pStructure->canBeCaptured()
+                    && pStructure->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID();
             if(validIntent) pInfantry->leaveHoldForOrder();
             pInfantry->leaveFormation();
             pInfantry->doCaptureStructure((int) parameter[1]);
@@ -445,6 +450,13 @@ case CMD_INFANTRY_CAPTURE: {
             auto* lab = dynamic_cast<ResearchLab*>(currentGame->getObjectManager().getObject(parameter[0]));
             if(!mayActOnObject(playerID, commandID, parameter[0], lab)) return;
             lab->getOwner()->startTechResearch(lab->getObjectID());
+        } break;
+
+        case CMD_ZONE_EVACUATE: {
+            if(parameter.size() != 1) return;
+            auto* zone = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], zone)) return;
+            zone->evacuateGarrison();
         } break;
 
         case CMD_AIRPORT_BUY_AIRPLANE: {

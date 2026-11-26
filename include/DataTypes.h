@@ -347,6 +347,7 @@ public:
                     && (cityPlaneFreePerAirport == goc.cityPlaneFreePerAirport)
                     && (cityPlaneCrashBombs == goc.cityPlaneCrashBombs)
                     && (parksCountAsRoads == goc.parksCountAsRoads)
+                    && (zoneGarrisons == goc.zoneGarrisons)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -409,6 +410,7 @@ public:
             if(!cityPlaneFreePerAirport) optStr += "/cityPlaneFreePerAirport=0";
             if(!cityPlaneCrashBombs) optStr += "/cityPlaneCrashBombs=0";
             if(!parksCountAsRoads) optStr += "/parksCountAsRoads=0";
+            if(!zoneGarrisons) optStr += "/zoneGarrisons=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -558,6 +560,13 @@ public:
         /// isRoadConnection, DuneCity::isTrafficConnector). Off, a Park is scenery only, as up to
         /// protocol 142. INI key only.
         bool        parksCountAsRoads = true;
+        /// City games: Soldiers and Troopers sent with the capture order occupy Residential,
+        /// Commercial and Industrial zones (Stefan, 2026-11-27: "i want infantry and troopers to be
+        /// able to occupy friendly and enemy R/I/C - using the capture command"). Inside they fire
+        /// out from behind sandbags; an enemy zone nobody holds becomes the occupier's house's
+        /// (ZoneStructureGarrison.cpp, docs/zone-garrisons.md). Off, a zone is captured as any
+        /// building is, as up to protocol 143. INI key only.
+        bool        zoneGarrisons = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

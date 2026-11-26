@@ -376,6 +376,20 @@ public:
     /// actual carrier cargo lists and structure occupant pointers.
     inline bool isPickedUp() const { return pickedUp; }
 
+    /// Zone Garrisons (docs/zone-garrisons.md): hides this soldier inside a zone as a Carryall's
+    /// cargo is hidden (off the map, inactive, unselectable, no orders). Its health, house and
+    /// weapon reload stay its own; ZoneStructure keeps the list and deploys it again.
+    void enterGarrison();
+    /// The capture target is a zone enemy soldiers hold: a capture order fires on it instead.
+    bool captureTargetHeld() const;
+    /// Fires this garrisoned soldier's weapon at TARGET from MUZZLE (world pixels, the zone's
+    /// centre), with the damage and Trooper short-range rules of attack(). FROMTILE is the zone
+    /// tile nearest the target. Returns false while reloading.
+    bool fireFromGarrison(const ObjectBase* target, const Coord& muzzle, const Coord& fromTile);
+    /// A hidden unit does not run update(), so its garrison ticks the reload clock.
+    void tickGarrisonWeapon() { if(primaryWeaponTimer > 0) --primaryWeaponTimer; }
+    bool garrisonWeaponReady() const { return numWeapons > 0 && primaryWeaponTimer == 0; }
+
     /**
         Updates this unit.
         \return true if this unit still exists, false if it was destroyed

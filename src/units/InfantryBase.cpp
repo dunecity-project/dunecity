@@ -35,6 +35,8 @@
 #include <structures/Refinery.h>
 #include <structures/RepairYard.h>
 #include <structures/WindTrap.h>
+#include <structures/ZoneStructure.h>
+#include <dunecity/ZoneGarrisonPolicy.h>
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/TrackedUnit.h>
@@ -134,6 +136,21 @@ void InfantryBase::doCaptureStructure(Uint32 targetStructureID) {
 }
 
 void InfantryBase::doCaptureStructure(const StructureBase* pStructure) {
+    // Zone Garrisons: an own zone with room is occupied; an enemy zone is entered and taken, or,
+    // while enemy soldiers hold it, fired on until they are gone (engageTarget).
+    if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
+       zone != nullptr && ZoneStructure::garrisonsEnabled() && canCaptureStructures()) {
+        const bool own = zone->getOwner()->getTeamID() == getOwner()->getTeamID();
+        if(own && !zone->mayEnterGarrison(this)) return;
+        // A soldier already beside the zone walks straight in.
+        if(!moving && location.isValid()
+           && blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance
+           && const_cast<ZoneStructure*>(zone)->enterGarrison(this)) return;
+        if(own) doMove2Object(zone);
+        else doAttackObject(zone, true);
+        doSetAttackMode(CAPTURE);
+        return;
+    }
 
     if((ModManager::instance().isTornieFamilyContentActive() && !canCaptureStructures())
        || (pStructure == nullptr) || (pStructure->canBeCaptured() == false)
@@ -250,6 +267,21 @@ void InfantryBase::checkPos() {
             }
         } else if(currentGameMap->getTile(location)->isSpecialBloom()){
             currentGameMap->getTile(location)->triggerSpecialBloom(getOwner());
+        }
+
+        // Zone Garrisons: a capture-ordered soldier beside its zone walks in (and an enemy zone
+        // nobody holds becomes its house's). A zone enemy soldiers hold is fired on instead.
+        if(attackMode == CAPTURE && ZoneStructure::garrisonsEnabled()) {
+            if(auto* zone = dynamic_cast<ZoneStructure*>(target.getObjPointer())) {
+                if(blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance) {
+                    if(zone->heldAgainst(this)) return;
+                    if(zone->enterGarrison(this)) return;
+                    // Full, or no longer ours to enter: the order ends here.
+                    setTarget(nullptr);
+                    doSetAttackMode(GUARD);
+                }
+                return;
+            }
         }
 
         //check to see if close enough to blow up target

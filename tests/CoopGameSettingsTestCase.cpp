@@ -1614,10 +1614,10 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
     SECTION("unknown MOD18 city-rule bits are refused") {
-        // Bits 2-3 are the protocol 137 city plane rules, bit 4 City Plane Crash Bombs (139); bit 5
-        // is the first unknown one.
+        // Bits 2-3 are the protocol 137 city plane rules, bit 4 City Plane Crash Bombs (139), bit 5
+        // Zone Garrisons (144), bit 6 Parks Count As Roads (143); bit 7 is the first unknown one.
         auto bytes = encoded;
-        bytes.back() = static_cast<char>(32);
+        bytes.back() = static_cast<char>(128);
         IMemoryStream input(bytes.data(),bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
@@ -1950,6 +1950,38 @@ TEST_CASE("Protocol 143 Parks Count As Roads rides bit 6 of the MOD18 city rules
     const std::string encoded(saved.getData(), saved.getDataLength());
     if(options.parksCountAsRoads && options.cityPlaneCrashBombs) {
         // The default rule leaves the stream and the options hash as protocol 142 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
+TEST_CASE("Protocol 144 Zone Garrisons rides bit 5 of the MOD18 city rules byte, set only when off",
+          "[city][garrison][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.zoneGarrisons);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.zoneGarrisons);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.zoneGarrisons = GENERATE(true, false);
+    options.parksCountAsRoads = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.zoneGarrisons && options.parksCountAsRoads) {
+        // The default rule leaves the stream and the options hash as protocol 143 wrote them.
         REQUIRE(encoded == plain);
         REQUIRE(options.getHash() == plainOptions.getHash());
     } else {

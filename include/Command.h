@@ -92,6 +92,7 @@ typedef enum {
     CMD_RESEARCH_TECH_LEVEL,          ///< RESEARCH_TECH_LEVEL(LAB_OBJECT_ID), next level for its owner
     CMD_AIRPORT_BUY_AIRPLANE,         ///< AIRPORT_BUY_AIRPLANE(AIRPORT_OBJECT_ID), match rule City Plane Purchase
     CMD_HOUSE_REPAIR_RETURN,          ///< HOUSE_REPAIR_RETURN(ENABLED), issuing player's house only: Repair Yards fly repaired units back
+    CMD_ZONE_EVACUATE,                ///< ZONE_EVACUATE(ZONE_OBJECT_ID): the soldiers garrisoning an own zone come out (Zone Garrisons)
 
     CMD_MAX
 } CMDTYPE;

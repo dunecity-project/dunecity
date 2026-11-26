@@ -818,6 +818,9 @@ void QuantBot::update() {
     updateCampaignWave();
 	checkAllUnits();
     // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
+    // Zone Garrisons (ZoneGarrison switch): soldiers into threatened own zones, out when quiet,
+    // and into empty enemy zones they pass (QuantBotGarrison.cpp).
+    updateZoneGarrisons();
     if (!fighterOnly()) keepPlannedSitesClear();
 
 	// Phased custom single-player handled the whole timer block on its own build

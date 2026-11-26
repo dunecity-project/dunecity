@@ -720,6 +720,10 @@ LauncherKiteExtraDistance=2
 # reachable spice, affordable units, income and pending cargo are all exhausted.
 # Manual orders, defence and saboteur ownership are unchanged; 0 keeps legacy holds.
 ExhaustedArmyDispatch=1
+# Zone Garrisons (match rule): Soldiers and Troopers garrison own city zones that enemies close on
+# (7 tiles), come out when none is within 11, and take empty enemy zones within 5 tiles of them.
+# 0 = QuantBot never uses garrisons. docs/zone-garrisons.md has the OFF/ON evidence.
+ZoneGarrison=0
 # Experimental fixed fleet ratios; no effect unless the master switch is on.
 # Reachable remaining spice is shared across the originally occupied houses.
 # Existing assets and accepted orders are never removed.

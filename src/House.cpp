@@ -1239,6 +1239,9 @@ void House::transformStructure(int oldItemID, int newItemID) {
 
 
 void House::noteDamageLocation(ObjectBase* pObject, int damage, Uint32 damagerID) {
+    // A soldier hit inside a garrisoned zone is hidden and takes no orders: its players hear of
+    // the hit on the zone itself (Zone Garrisons).
+    if(pObject != nullptr && pObject->isAUnit() && !pObject->isActive()) return;
     for(auto& pPlayer : players) {
         pPlayer->onDamage(pObject, damage, damagerID);
     }

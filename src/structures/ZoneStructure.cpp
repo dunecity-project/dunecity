@@ -58,6 +58,7 @@ void ZoneStructure::setLocation(int xPos, int yPos) {
 }
 
 void ZoneStructure::updateStructureSpecificStuff() {
+    if (!garrison_.empty()) updateGarrison();
     // Stable site variants select among all original models. Industrial
     // animation uses prebuilt phases and does not consume simulation randomness.
     if (!currentGameMap) return;
@@ -125,6 +126,12 @@ void ZoneStructure::updateStructureSpecificStuff() {
 }
 
 void ZoneStructure::blitToScreen() {
+    drawZoneImage();
+    // Zone Garrisons: sandbags around a held zone, over the lot and under its health bar.
+    if(!fogged && !garrison_.empty()) drawGarrisonSandbags();
+}
+
+void ZoneStructure::drawZoneImage() {
     // A Dune2 Compact replaces the SimCity zone cell; it is not an overlay.
     // Drawing StructureBase first leaves the native coloured R/C/I lot visible
     // through every transparent Compact pixel. Prefer the manifest draw as the
@@ -207,8 +214,14 @@ ZoneStructure::ZoneStructure(InputStream& stream)
     // the saved zone never re-renders its building sprite after reload.
     structureSize = Coord(2, 2);
     zoneType_ = static_cast<DuneCity::ZoneType>(stream.readUint8());
-    residentialPopulation_ = DuneCity::ResidentialPopulation::read(stream,
-        currentGame ? currentGame->getLoadedSavegameVersion() : SAVEGAMEVERSION);
+    const int savegameVersion = currentGame ? currentGame->getLoadedSavegameVersion() : SAVEGAMEVERSION;
+    residentialPopulation_ = DuneCity::ResidentialPopulation::read(stream, savegameVersion);
+    if (savegameVersion >= SAVEGAMEVERSION_ZONE_GARRISON) {
+        const auto occupants = stream.readUint32Vector();
+        garrison_.assign(occupants.begin(), occupants.end());
+        garrisonTargetID_ = stream.readUint32();
+        garrisonSearchTimer_ = stream.readSint32();
+    }
 }
 
 int ZoneStructure::getResidentialPopulation() const {
@@ -259,6 +272,9 @@ void ZoneStructure::save(OutputStream& stream) const {
     StructureBase::save(stream);
     stream.writeUint8(static_cast<uint8_t>(zoneType_));
     DuneCity::ResidentialPopulation::write(stream,getResidentialPopulation());
+    stream.writeUint32Vector(garrison_);
+    stream.writeUint32(garrisonTargetID_);
+    stream.writeSint32(garrisonSearchTimer_);
 }
 
 bool ZoneStructure::canBePlacedAt(int x, int y, bool torch) const {
@@ -320,12 +336,15 @@ void ZoneStructure::clearZoneState() {
 }
 
 void ZoneStructure::destroy() {
+    // The soldiers inside come out of the ruin; any with no free tile around die in it.
+    evacuateGarrison(true);
     clearZoneState();
     StructureBase::destroy();
 }
 
 void ZoneStructure::demolish() {
     demolishedByOwner_ = true;
+    evacuateGarrison(true);
     const Coord pos = getLocation();
     const auto* sim = currentGame->getCitySimulation();
     AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1,

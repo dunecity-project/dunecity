@@ -18,6 +18,7 @@
 
 #include <units/UnitBase.h>
 #include <units/Trooper.h>
+#include <structures/ZoneStructure.h>
 #include <Achievements/AchievementEvents.h>
 #include <mod/ModManager.h>
 #include <mod/RadarResearch.h>
@@ -981,7 +982,7 @@ void UnitBase::engageTarget() {
             // we are going to the repair yard
             // => we do not need to change the destination
             targetAngle = INVALID;
-        } else if(attackMode == CAPTURE
+        } else if((attackMode == CAPTURE && !captureTargetHeld())
                   || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
             // we want to capture the target building
             setDestination(targetLocation);
@@ -1654,6 +1655,11 @@ bool UnitBase::isOrderExecutable(const UnitOrder& order) const {
 
         case UnitOrderType::Capture: {
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(order.targetID));
+            if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
+               zone != nullptr && ZoneStructure::garrisonsEnabled()) {
+                return dynamic_cast<const InfantryBase*>(this) != nullptr && canCaptureStructures()
+                    && (zone->getOwner()->getTeamID() != owner->getTeamID() || zone->mayEnterGarrison(this));
+            }
             return dynamic_cast<const InfantryBase*>(this) != nullptr
                 && (!ModManager::instance().isTornieFamilyContentActive() || canCaptureStructures())
                 && pStructure != nullptr
@@ -2233,6 +2239,59 @@ void UnitBase::setPickedUp(UnitBase* newCarrier) {
     setVisible(VIS_ALL, false);
 
     clearPath();
+}
+
+bool UnitBase::captureTargetHeld() const {
+    const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
+    return zone != nullptr && zone->heldAgainst(this);
+}
+
+void UnitBase::enterGarrison() {
+    clearOrderQueue();
+    cancelCarryallPickup();
+    // The same hiding a Carryall's lift does; no carrier, so no target is kept.
+    setPickedUp(nullptr);
+    setTarget(nullptr);
+    attackPos.invalidate();
+    attackMode = GUARD;
+    destination.invalidate();
+}
+
+bool UnitBase::fireFromGarrison(const ObjectBase* pObject, const Coord& muzzle, const Coord& fromTile) {
+    if(pObject == nullptr || !garrisonWeaponReady()) return false;
+    Coord centerPoint = muzzle;
+    Coord targetCenterPoint = pObject->getClosestCenterPoint(fromTile);
+    const bool bAirBullet = pObject->isAFlyingUnit();
+    int currentBulletType = bulletType;
+    Sint32 currentWeaponDamage = currentGame->objectData.data[itemID][getProductionHouseID()].weapondamage;
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        currentWeaponDamage = owner->radarAttackDamage(itemID, currentWeaponDamage);
+    }
+    // As attack(): a Trooper uses its gun up close and loses a quarter of its rocket's damage further out.
+    if(getItemID() == Unit_Trooper && !bAirBullet
+       && (!ModManager::instance().isTornieFamilyContentActive() || currentBulletType != Bullet_Flame)) {
+        if(distanceFrom(centerPoint, targetCenterPoint) <= 2*TILESIZE) {
+            currentBulletType = Bullet_ShellSmall;
+        } else {
+            currentWeaponDamage -= currentWeaponDamage/4;
+        }
+    }
+    if(ModManager::instance().isTornieFamilyContentActive()
+       && (getItemID() == Unit_Trooper || getItemID() == Unit_FlameTrooper)
+       && currentBulletType == Bullet_Flame) {
+        currentWeaponDamage = static_cast<Trooper*>(this)->flameWeaponDamage(currentWeaponDamage);
+    }
+    bulletList.push_back(new Bullet(objectID, &centerPoint, &targetCenterPoint, currentBulletType,
+                                    currentWeaponDamage, bAirBullet, pObject));
+    currentGameMap->viewMap(pObject->getOwner()->getHouseID(), fromTile, 2);
+    lastFiredBulletType = currentBulletType;
+    if(currentGameMap->tileExists(fromTile)) {
+        // playAttackSound() plays at the unit's own (hidden) location.
+        soundPlayer->playSoundAt(lastFiredBulletType == Bullet_ShellSmall || getItemID() == Unit_Soldier
+                                     ? Sound_Gun : Sound_RocketSmall, fromTile);
+    }
+    primaryWeaponTimer = getWeaponReloadTime();
+    return true;
 }
 
 FixPoint UnitBase::getMovementSpeedFactor() const {

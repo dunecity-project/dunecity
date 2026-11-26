@@ -577,6 +577,7 @@ QuantBotConfig::QuantBotConfig() {
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
     force.simpleTechSavings = false;
+    force.zoneGarrison = false;  // Stefan, 2026-11-27: "AI can also garasion its own buildings defensively"
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
     force.exhaustedArmyDispatch = true;
     force.mediumClassic = 0; // Regression807 diagnostic: 1.0.807 Custom Medium economy (1) / army (2).
@@ -1119,6 +1120,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
+        iniFile.setBoolValue("Force Concentration", "ZoneGarrison", force.zoneGarrison);
         iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
         iniFile.setIntValue("Force Concentration", "MediumClassic", force.mediumClassic);
 
@@ -1525,6 +1527,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
     force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
+    force.zoneGarrison = iniFile.getBoolValue("Force Concentration", "ZoneGarrison", force.zoneGarrison);
     force.exhaustedArmyDispatch = iniFile.getBoolValue(
         "Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
     force.mediumClassic = std::clamp(iniFile.getIntValue(
@@ -2267,6 +2270,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);
     addNamed("mediumClassic", force.mediumClassic);
+    if (force.zoneGarrison) addNamed("zoneGarrison", force.zoneGarrison);
     configStr += "|/FORCE|";
     addNamed("civWarsStrategy", civWarsStrategy);
     addNamed("originalCampaignAI", originalCampaignAI);

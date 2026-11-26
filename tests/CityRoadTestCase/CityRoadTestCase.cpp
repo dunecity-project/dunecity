@@ -75,7 +75,8 @@ TEST_CASE("CityRoad: All DuneCity commands are contiguous after CMD_TEST_SYNC", 
     REQUIRE(CMD_RESEARCH_TECH_LEVEL == CMD_AI_SUPPORT_ROLE + 1);
     REQUIRE(CMD_AIRPORT_BUY_AIRPLANE == CMD_RESEARCH_TECH_LEVEL + 1);
     REQUIRE(CMD_HOUSE_REPAIR_RETURN == CMD_AIRPORT_BUY_AIRPLANE + 1);
-    REQUIRE(CMD_MAX == CMD_HOUSE_REPAIR_RETURN + 1);
+    REQUIRE(CMD_ZONE_EVACUATE == CMD_HOUSE_REPAIR_RETURN + 1);
+    REQUIRE(CMD_MAX == CMD_ZONE_EVACUATE + 1);
 }
 
 // =============================================================================

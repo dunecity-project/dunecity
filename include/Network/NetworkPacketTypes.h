@@ -486,7 +486,11 @@
 // 143: match rule Parks Count As Roads (default on, bit 6 of the MOD18 city rules byte, set only
 //      when off): a Park is a road connection for city traffic and zone access (Tile::
 //      isRoadConnection). Zone growth differs, so a 142 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            143
+// 144: match rule Zone Garrisons (default on, bit 5 of the MOD18 city rules byte, set only when
+//      off): Soldiers and Troopers sent with the capture order occupy Residential, Commercial and
+//      Industrial zones, fire out, and take enemy zones nobody holds; CMD_ZONE_EVACUATE brings them
+//      out. Save format 9900 (a zone's garrison).
+#define NETWORK_PROTOCOL_VERSION            144
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

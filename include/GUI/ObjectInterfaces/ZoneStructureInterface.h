@@ -29,6 +29,7 @@
 #include <Tile.h>
 #include <structures/ZoneStructure.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/ZoneGarrisonPolicy.h>
 
 #include <GUI/Label.h>
 #include <GUI/TextButton.h>
@@ -67,6 +68,21 @@ protected:
         poweredLabel.setTextFontSize(14);
         poweredLabel.setTextColor(color, COLOR_TRANSPARENT);
         textVBox.addWidget(&poweredLabel, (Sint32)24);
+
+        // Zone Garrisons: how many soldiers hold the zone, and the order to bring them out.
+        garrisonLabel.setTextFontSize(14);
+        garrisonLabel.setTextColor(color, COLOR_TRANSPARENT);
+        garrisonLabel.setVisible(false);
+        textVBox.addWidget(&garrisonLabel, (Sint32)24);
+        evacuateButton.setText(_("Evacuate"));
+        evacuateButton.setTooltipText(_("The soldiers garrisoning this zone come out beside it."));
+        evacuateButton.setOnClick([id = objectID] {
+            if (currentGame && pLocalPlayer)
+                currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(),
+                    CMD_ZONE_EVACUATE, static_cast<Uint32>(id)));
+        });
+        evacuateButton.setVisible(false);
+        textVBox.addWidget(&evacuateButton, (Sint32)24);
 
         cityStats_.attachTo(textVBox, color, /*isZone=*/true);
 
@@ -133,6 +149,14 @@ protected:
         const bool powered = pZone->hasCityPower();
         poweredLabel.setText(std::string(" ") + (powered ? _("Powered") : _("UNPOWERED")));
 
+        const bool garrisoned = pZone->isGarrisoned();
+        garrisonLabel.setVisible(garrisoned);
+        if (garrisoned)
+            garrisonLabel.setText(" " + _("Garrison") + ": " + std::to_string(pZone->getGarrisonSize())
+                                  + "/" + std::to_string(DuneCity::ZoneGarrison::kCapacity));
+        evacuateButton.setVisible(garrisoned);
+        evacuateButton.setEnabled(garrisoned && currentGame->canControlHouse(pZone->getOwner()));
+
         cityStats_.update(pZone);
 
         return DefaultStructureInterface::update();
@@ -154,6 +178,8 @@ private:
     Label   zoneNameLabel;
     Label   densityLabel;
     Label   poweredLabel;
+    Label   garrisonLabel;
+    TextButton evacuateButton;
 
     CityStatsBox cityStats_;
 };

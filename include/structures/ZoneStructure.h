@@ -22,9 +22,12 @@
 #include <dunecity/CityConstants.h>
 #include <FileClasses/GFXManager.h>
 
+#include <vector>
+
 // Forward declarations
 class House;
 class Game;
+class UnitBase;
 
 /// A base class for city zone structures (Residential, Commercial, Industrial)
 class ZoneStructure : public StructureBase {
@@ -76,7 +79,41 @@ public:
     /// sprite tracks growth and changes in neighbourhood quality.
     void updateStructureSpecificStuff() override;
 
+    // --- Zone Garrisons (docs/zone-garrisons.md; ZoneStructureGarrison.cpp) ---
+    /// The match rule is on for this game.
+    static bool garrisonsEnabled();
+    bool isGarrisoned() const { return !garrison_.empty(); }
+    int getGarrisonSize() const { return static_cast<int>(garrison_.size()); }
+    /// Occupants in the order they entered; the first takes the cover damage.
+    const std::vector<Uint32>& getGarrison() const { return garrison_; }
+    /// The house whose soldiers are inside, or nullptr when empty.
+    const House* getGarrisonHouse() const;
+    /// May UNIT walk in now (own zone with room, or an enemy zone nobody holds)?
+    bool mayEnterGarrison(const UnitBase* unit) const;
+    /// Enemy soldiers hold this zone against UNIT: a capture order fires on it instead.
+    bool heldAgainst(const UnitBase* unit) const;
+    /// Puts UNIT inside; an enemy zone becomes UNIT's house's. False when refused.
+    bool enterGarrison(UnitBase* unit);
+    /// Deploys the occupants beside the zone. Returns how many came out. DESTROYING kills
+    /// those with no free tile around; otherwise they stay inside.
+    int evacuateGarrison(bool destroying = false);
+    /// Hands the zone, its tiles, power draw and counts to NEWOWNER; city state stays.
+    void transferOwnership(House* newOwner);
+
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
+
 private:
+    void drawZoneImage();
+    void updateGarrison();
+    void dropDeadOccupants();
+    const ObjectBase* findGarrisonTarget(int range) const;
+    void drawGarrisonSandbags() const;
+
+    std::vector<Uint32> garrison_;          ///< saved from SAVEGAMEVERSION_ZONE_GARRISON
+    Uint32 garrisonTargetID_ = NONE_ID;     ///< saved
+    Sint32 garrisonSearchTimer_ = 0;        ///< saved
+
     DuneCity::ZoneType zoneType_;  // The type of zone this structure represents
     uint8_t residentialPopulation_ = 0;
     int registeredZonePower_ = 0;  // Power last reported into the House pool.

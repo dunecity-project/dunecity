@@ -2141,6 +2141,9 @@ private:
     /// blocks of our R/C lots (at least ParkDistrictPolicy::kMinGain; open ground before roads that
     /// can be spared); invalid when none.  gain receives that land value.
     Coord findParkDistrictSite(int* gain = nullptr);
+    /// Zone Garrisons (ZoneGarrison switch; QuantBotGarrison.cpp): soldiers into own zones enemies
+    /// close on, out again once quiet, and into empty enemy zones they pass. Stateless.
+    void updateZoneGarrisons();
     bool turretClustersActive() const;
     int clusterTurretGoal() const;
     /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.

@@ -251,7 +251,12 @@
 //       it has not been bombed.
 // 9899: City Plane Build Time: an Airport's saved purchase clock is the build of a bought plane.
 //       An older save's clock followed a plane already launched and is cleared on load.
-#define SAVEGAMEVERSION     9899
+// 9900: Zone Garrisons: a Residential, Commercial or Industrial zone saves the soldiers inside it
+//       (object ids in the order they entered), its garrison's target and its search clock after
+//       its residential population. An older save's zones are empty.
+#define SAVEGAMEVERSION     9900
+/// First save with a zone's garrison (Zone Garrisons).
+#define SAVEGAMEVERSION_ZONE_GARRISON 9900
 /// First save whose Airport purchase clock is a plane's build (City Plane Build Time).
 #define SAVEGAMEVERSION_CITY_PLANE_BUILD_TIME 9899
 /// First save with a House's record of bomb hits and its air raid turret orders.
