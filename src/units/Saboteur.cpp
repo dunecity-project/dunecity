@@ -28,6 +28,9 @@
 #include <ScreenBorder.h>
 #include <Explosion.h>
 #include <SoundPlayer.h>
+#include <misc/draw_util.h>
+#include <mmath.h>
+#include <sand.h>
 
 
 Saboteur::Saboteur(House* newOwner) : InfantryBase(newOwner)
@@ -241,6 +244,25 @@ bool Saboteur::update() {
     return InfantryBase::update();
 }
 
+void Saboteur::blitToScreen() {
+    InfantryBase::blitToScreen();
+    if(currentGame == nullptr || !currentGame->isObserving()) return;
+    const Uint32 color = getHouseRadarColor(static_cast<HOUSETYPE>(getOwner()->getHouseID()));
+    const int x = screenborder->world2screenX(realX);
+    const int y = screenborder->world2screenY(realY);
+    if(const ObjectBase* pTarget = target.getObjPointer()) {
+        const Coord to = pTarget->getClosestCenterPoint(location);
+        renderDrawLine(renderer, x, y, screenborder->world2screenX(to.x), screenborder->world2screenY(to.y), color);
+    }
+    // A ring two thirds of a tile across that breathes over 0.6 s, with a dark edge so it shows
+    // on sand, rock and city alike.
+    const int pulse = static_cast<int>((SDL_GetTicks() / 100) % 6);
+    const int half = world2zoomedWorld(TILESIZE / 3) + (pulse < 3 ? pulse : 6 - pulse);
+    renderDrawRect(renderer, x - half - 1, y - half - 1, x + half + 1, y + half + 1, COLOR_BLACK);
+    renderDrawRect(renderer, x - half, y - half, x + half, y + half, color);
+    renderDrawRect(renderer, x - half + 1, y - half + 1, x + half - 1, y + half - 1, color);
+}
+
 void Saboteur::deploy(const Coord& newLocation) {
     UnitBase::deploy(newLocation);
 
@@ -352,6 +374,12 @@ void Saboteur::destroy()
     // With the rule on only the charge going off is a blast. A Saboteur that was shot blew up in
     // the same way, which looked as if it had sabotaged nothing at all; it now falls like any
     // foot soldier (InfantryBase::destroy).
+    if(detonated) {
+        // Its charge going off is a building-sized blast, as Dune II's saboteur explosion is; a
+        // medium blast was the same small flash as any light unit dying, and could not be told
+        // from one (Stefan, 2026-11-27: the blast was not to be seen). Same random draw as before.
+        explosionID = explosionID == Explosion_Medium1 ? Explosion_Large1 : Explosion_Large2;
+    }
     if(!fallsWhenDestroyed()) {
         currentGame->getExplosionList().push_back(new Explosion(explosionID, realPos, owner->getHouseID()));
 

@@ -37,6 +37,14 @@ public:
     bool update() override;
 
     void deploy(const Coord& newLocation) override;
+
+    /**
+        Draws the Saboteur. A spectator (Game::isObserving) also gets a pulsing ring in its
+        owner's colour round it and a line to what it is going for: drawn as an infantry sprite
+        it is a few grey pixels in a city, and Stefan could not see Saboteurs at all while
+        watching (2026-11-27). Drawing only; nothing here is read by the game.
+    */
+    void blitToScreen() override;
     bool canAttack(const ObjectBase* object) const override;
 
     /**

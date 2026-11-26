@@ -28,6 +28,8 @@
 #include <Tile.h>
 #include <SoundPlayer.h>
 #include <units/AmbientAirplane.h>
+#include <units/UnitBase.h>
+#include <sand.h>
 
 #include <globals.h>
 
@@ -247,6 +249,29 @@ void RadarView::updateRadarSurface(int mapSizeX, int mapSizeY, const RadarScaleI
                 if(x < 0 || y < 0 || x >= scaleInfo.scaledWidth || y >= scaleInfo.scaledHeight) continue;
                 *(reinterpret_cast<Uint32*>(reinterpret_cast<Uint8*>(radarSurface->pixels)
                     + (scaleInfo.offsetY + y) * radarSurface->pitch) + scaleInfo.offsetX + x) = planeColor;
+            }
+        }
+    }
+
+    // Saboteurs as crosses (x), five pixels wide, in their owner's colour with a white centre, for
+    // a spectator only (Stefan, 2026-11-27: watching, he could not see Saboteurs at all). As a tile
+    // colour a Saboteur was one pixel, often skipped on a map wider than 128 tiles. Drawing only.
+    if(currentGame->isObserving()) {
+        const Uint32 centreColor = MapRGBA(radarSurface->format, COLOR_WHITE);
+        for(const UnitBase* unit : unitList) {
+            if(unit->getItemID() != Unit_Saboteur || !unit->isActive()) continue;
+            const Uint32 color = MapRGBA(radarSurface->format,
+                getHouseRadarColor(static_cast<HOUSETYPE>(unit->getOwner()->getHouseID())));
+            const int centreX = static_cast<int>(std::floor(unit->getRealX().toFloat() / TILESIZE * scaleInfo.scale));
+            const int centreY = static_cast<int>(std::floor(unit->getRealY().toFloat() / TILESIZE * scaleInfo.scale));
+            for(int arm = -2; arm <= 2; ++arm) {
+                for(const auto [dx, dy] : {std::pair{arm, arm}, std::pair{arm, -arm}}) {
+                    const int x = centreX + dx, y = centreY + dy;
+                    if(x < 0 || y < 0 || x >= scaleInfo.scaledWidth || y >= scaleInfo.scaledHeight) continue;
+                    *(reinterpret_cast<Uint32*>(reinterpret_cast<Uint8*>(radarSurface->pixels)
+                        + (scaleInfo.offsetY + y) * radarSurface->pitch) + scaleInfo.offsetX + x)
+                        = arm == 0 ? centreColor : color;
+                }
             }
         }
     }
