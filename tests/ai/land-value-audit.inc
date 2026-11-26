@@ -121,9 +121,19 @@ inline void report(Game& game, const char* phase) {
                 lot.polluterTiles += std::max(std::abs(p.x - lot.x), std::abs(p.y - lot.y)) <= DuneCity::kPollutionRadius;
         // Road tiles of this house and those in a 2x2 all-road square (a two-lane strip).
         int roads = 0, doubled = 0;
+        // As QuantBot::findLaneParkSite: the house's road tiles, or unowned road beside its buildings.
         auto ownRoad = [&](int x, int y) {
-            return x >= 0 && y >= 0 && x < w && y < h && currentGameMap->getTile(x, y)->isRoad()
-                && currentGameMap->getTile(x, y)->getOwner() == hid;
+            if (x < 0 || y < 0 || x >= w || y >= h) return false;
+            const Tile* tile = currentGameMap->getTile(x, y);
+            if (!tile->isRoad()) return false;
+            if (tile->getOwner() == hid) return true;
+            if (tile->getOwner() >= 0) return false;
+            for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+                if (x + dx < 0 || y + dy < 0 || x + dx >= w || y + dy >= h) continue;
+                const auto* o = currentGameMap->getTile(x + dx, y + dy)->getNonInfantryGroundObject();
+                if (o && o->isAStructure() && o->getOwner() == house) return true;
+            }
+            return false;
         };
         for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
             if (!ownRoad(x, y)) continue;

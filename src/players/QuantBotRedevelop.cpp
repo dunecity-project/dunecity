@@ -125,10 +125,22 @@ Coord QuantBot::findLaneParkSite(int* gainOut) {
             for (int x = std::max(0, o.x - r); x <= std::min(w - 1, o.x + size.x - 1 + r); ++x)
                 near[size_t(y) * w + x] = 1;
     }
+    // A road is ours when its tile is, or when it is unowned rock (the auto-paved ring keeps the
+    // ground's owner, and bare rock has none) beside one of our buildings.
+    auto ownBuildingAt = [&](int x, int y) {
+        if (!map.tileExists(x, y)) return false;
+        const auto* object = map.getTile(x, y)->getNonInfantryGroundObject();
+        return object && object->isAStructure() && object->getOwner() == getHouse();
+    };
     auto ownRoad = [&](int x, int y) {
         if (!map.tileExists(x, y)) return false;
         const Tile* tile = map.getTile(x, y);
-        return tile->isRoad() && tile->getOwner() == houseID && !tile->hasAGroundObject();
+        if (!tile->isRoad() || tile->hasAGroundObject()) return false;
+        if (tile->getOwner() == houseID) return true;
+        if (tile->getOwner() >= 0) return false;
+        for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx)
+            if (ownBuildingAt(x + dx, y + dy)) return true;
+        return false;
     };
     auto spareLane = [&](int x, int y) {
         for (int oy = -1; oy <= 0; ++oy) for (int ox = -1; ox <= 0; ++ox)
