@@ -1,3 +1,28 @@
+## 2026-11-26 - A finished building with no safe site no longer stalls its yard (acantplace.dls)
+
+Stefan's `acantplace.dls` (1.0.878, 4P 192x192 Metropolis, Dune City mod; spectating): Atreides' Construction
+Yard showed "PLACE IT" on a Stadium indefinitely.
+
+- **Cause.** Atreides borders enemy cities with about 1,500 visible Rocket Turrets; each stamps tactical danger
+  10 tiles round it. `findPlaceLocation` rejects any site with danger > 0, so on load 780 of 846 legal Stadium
+  sites were threat-rejected and the other 66 failed ground access. `placeYardStructure` holds a finished
+  building until a legal site exists, so the yard held the Stadium (and therefore built nothing else).
+  Headless continuation of the save: held 26 game minutes, 0 Atreides buildings placed in the first 15.
+- **Fix (`867b03c5f`).** `QuantBot::heldWithoutSiteSince` records when a yard first held a finished building
+  for want of a site. After `kHeldThreatGrace` (60 s) the search runs with `placementToleratesThreat`: threatened
+  sites are accepted and the least threatened wins, bypassing `placementCache`; a planned site blocked only by
+  danger is kept. Reactors (own cancel-and-refund rule), roads and slabs are excluded. The map is part of the
+  observer checkpoint (`saveObserverRuntime`); a disk load starts the wait again. **Protocol 135**, save 9898
+  unchanged.
+- **Result on the save:** Stadium placed after 1.0 game minute on a site with one threat stamp (danger 100);
+  17 Atreides placements in the first 15 minutes; only the Stadium needed the tolerant search.
+- **Tests.** New `quantbot_held_site_threat` (headless nightly, `tests/ai/held-site-threat-probe.inc`): danger on
+  every tile, the Stadium is held inside the grace, then placed away from the most threatened site.
+  Mini `build-int`: `dunelegacy_tests` and `perf_regression` passed. AWS `-L nightly -LE gui` at `03159401a`:
+  job `20261126T151240-ctest-fa9a7d` passed 251/251 (the four AI gates and the new probe included).
+- **Next release notes:** "AI: a finished building is no longer held forever when enemy turrets cover every
+  site in its base; after a minute it is placed on the safest site available. Multiplayer protocol 135."
+
 ## 2026-11-26 - French voices no longer crash the game at launch on FWORMY.VOC (#129)
 
 Issue #129 (macOS, 1.0.876/877, French player): the game quit at start with `io_error`
