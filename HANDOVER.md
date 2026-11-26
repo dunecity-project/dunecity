@@ -1,3 +1,69 @@
+## 2026-11-27 - Saboteurs: kills credited, spectators see them (sab.dls; unreleased, protocol 140)
+
+Stefan's `sab.dls` (1.0.880 staging, 4P 192x192 Metropolis, four QuantBot Brutal, spectating): "saboteurs are
+still broken ... they are supposed to go blow things up". His Stats screen for Ordos: Saboteur 9 active, 0 kills,
+97 deaths, 0 damage. Then: "no they can kill vehicles as well not just buildings i just couldnt see them doing it".
+
+- **They were blowing things up.** His own game log on the Air has a `SABOTEUR_*` line per Saboteur. Up to the
+  screenshot (cycle 96233) Ordos released 106: 62 blew something up (`SABOTEUR_HIT`, 50 vehicles and 42 buildings
+  over the whole session) and 35 were shot. 62 + 35 = 97, the "deaths".
+- **Cause 1, the Stats screen.** The charge destroyed its target directly (`setHealth(0); destroy()`), bypassing
+  `ObjectBase::handleDamage`, so the Saboteur was never credited a kill or a hit point (`House::addCombatReward`,
+  `informHasKilled`, the AI's `onHostileUnitKilled` / `onHostileStructureDestroyed`), and its own `destroy()` went
+  through `UnitBase::destroy -> House::decrementUnits`, counting each detonation as a loss. Now the lethal hit goes
+  through `handleDamage` while the Saboteur still exists, and a Saboteur that set its charge off is not counted as
+  lost (`UnitBase::lostWhenDestroyed`, `House::decrementUnits(itemID, lost)`). Kills count units only, as for every
+  type; a building shows in Damage.
+- **Cause 2, spectating.** Frames rendered from his save as a spectator (`game-perf.py --saboteur-shots DIR`, new;
+  it centres the view on a live Saboteur every 64 cycles and writes the rendered frame, three more where one
+  vanished): the Saboteur is drawn, but as a few grey pixels among city blocks, and its charge went off as a medium
+  explosion, the same flash as any light unit dying. Now, for a spectator only (`Game::isObserving`): a ring about a
+  tile across, three pixels of the owner's radar colour between dark edges, pulsing over 0.6 s, and a two-pixel line
+  to its target (`Saboteur::blitToScreen`); on the radar a five-pixel black square with a white inside and the
+  owner's colour in the middle (`RadarView::updateRadarSurface`; an x in the owner's colour vanished on its own
+  territory, `0b1f4d9b8` -> `192e01002`). For everyone, a detonation is a large explosion (Dune II's saboteur blast
+  is its own big explosion; same random draw). Drawing only. Frames before/after:
+  `~/Documents/projects/outputs/saboteur-effect-20261127/spectator-frames/`.
+- **Target rule: unchanged from 1.0.880** (nearest enemy building or vehicle, Saboteur Hunt). Dune Dynasty / Dune II,
+  for the record: the sabotage script (DUNE.PAK `UNIT.EMC`, unit type 6, action 9, decoded) loops
+  `Delay(120); SetTarget(FindBestTarget(4)); SetDestination(target)` until the target is an enemy; mode 4 takes the
+  enemy *building* with the highest (priorityBuild + priorityTarget) / distance anywhere its house has seen (Heavy
+  Factory and Repair 600, Palace 400, Yard/Windtrap/Refinery 300 ...), units only with no building left; it detonates
+  by walking into the building (`Structure_Damage(s, 500)`) or onto the unit's tile (500-damage explosion). That rule
+  was committed in `e66e1af1b` (with vehicles within 5 tiles competing on the same value / distance scale, at
+  Stefan's "make it like dynasty but allow them to also blow up vehicles") and reverted in `e13b42b63` at his
+  correction above. Its 48-game AWS comparison against 1.0.880 (Brutal FFA, rs160-dunecity/vanilla, seeds
+  9101-9124; `~/Documents/projects/outputs/saboteur-effect-20261127/`): structures 91 -> 163, vehicles 653 -> 502,
+  value destroyed 262,175 -> 271,125 (no difference), lost unused 191 -> 299, time-outs 25.0% -> 35.4%.
+- **sab.dls before / after** (same window, cycles 98298-122719: Stefan's own 1.0.880 game after the save, against a
+  headless continuation of the save with the fix; `run-campaign-balance.py --load-save --save-profile`, the two
+  workshop revisions copied from the Air): Ordos released 38 / 36, blew up 25 (18 buildings, 7 vehicles) / 29 (24,
+  5); Mercenary 39 / 39, 20 (15, 5) / 23 (20, 3). Same rule, so the same behaviour. Stats at the end of the
+  continuation (minute 42), Ordos Saboteur: hits 64 (every `SABOTEUR_HIT` of the continuation), kills 15, damage
+  12,153 hit points, deaths 148 = the 106 counted at the save (67 detonations + 39 shot, the old count) + 42 shot
+  since; it showed 0 hits / 0 damage at the save. Mercenary: 55 hits, 19 kills, 8,252 hit points.
+- **Tests.** `saboteur_target_probe`: the nearest-building and nearest-vehicle cases require the credit (a vehicle:
+  1 kill and its hit points; a building: its hit points) and no loss; a shot Saboteur is one loss and no hit. On the
+  pre-fix source it fails (AWS job `20261127T011005-ctest-996850`, side ref `refs/ai-recovery/saboteur-credit-probe-on-prefix`:
+  "the sabotage was not credited to the Saboteur (kills 0, damage 0)"). A new `SABOTEUR_TARGET` log line records each
+  target a released Saboteur takes.
+- **Commits:** `e66e1af1b` (credit + Dune II rule), `e13b42b63` (rule back to 1.0.880, credit kept, probe),
+  `0b1f4d9b8` and `192e01002` (spectator markers, large blast). Logs of every Saboteur line, both games:
+  `~/Documents/projects/outputs/saboteur-effect-20261127/sab-dls/`.
+- **Protocol 140** (the credit runs the AI callbacks and changes the house's loss counts; a 139 peer would desync).
+  Save format unchanged.
+- **Gates.** AWS job `20261127T004645-ctest-a686c8` at `e13b42b63`: the four AI gates, both Saboteur probes and
+  `dunelegacy_tests` passed. AWS nightly tier (`-L nightly -LE gui`) at `244b89029` (all four Saboteur commits plus
+  other sessions'): job `20261127T012533-ctest-d4cebe`, 252/253 passed; the one failure is the new
+  `quantbot_wind_trap_retirement` of the Wind Trap commit (probe binary exits 1 on Linux; reported to that session).
+  Mini `perf_regression` passed at `db1a02b5d` (103.3 s).
+- **Next release notes:** "Saboteurs: what they blow up now counts on the Stats screen (kills and damage), and one
+  that blew something up is no longer counted as a death. Spectators see every Saboteur, marked in its owner's
+  colour with a line to its target and on the minimap, and its charge goes off as a large explosion.
+  Multiplayer protocol 140."
+- **Not verified:** a windowed game on a real display (frames are the dummy driver's software renderer); a human
+  player's own Saboteur on the Stats screen in a real match (the probe covers the credit for a human owner).
+
 ## 2026-11-27 - QuantBot keeps its Wind Traps while its base has room to build (protocol 142)
 
 Stefan, 2026-11-27: "windtraps being destroyed should only be when the ai is low on free building space. if it
