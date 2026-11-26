@@ -58,6 +58,56 @@ void scan(DuneCity::CitySimulation& sim, const DuneCity::CityMapLayer<uint16_t>&
     sim.runEffectsScans();
 }
 
+/// Parks Count As Roads (match rule, default on; Stefan, 2026-11-27: "count a park as a road (without
+/// the movement bonus)"). One of the player's lots keeps a single perimeter tile that could carry its
+/// road; a Park takes that tile. With the rule on the city's traffic still finds the lot's road
+/// (zone access), the tile is a road connection, and units get no road speed there; off, the lot
+/// has no road.
+void runRoadAccessCheck(Game& game, int houseID) {
+    House* house = game.getHouse(houseID);
+    auto* sim = game.getCitySimulation();
+    skirmishRequire(house && sim, "Road-access check needs the player's house and the city");
+    skirmishRequire(game.getGameInitSettings().getGameOptions().parksCountAsRoads, "Parks Count As Roads is not the default");
+    auto perimeter = [](Coord lot) {
+        std::vector<Coord> tiles;
+        for(int dy = -1; dy <= 2; ++dy) for(int dx = -1; dx <= 2; ++dx)
+            if(dx < 0 || dx > 1 || dy < 0 || dy > 1) tiles.push_back(Coord(lot.x + dx, lot.y + dy));
+        return tiles;
+    };
+    Coord lot = Coord::Invalid(), site = Coord::Invalid();
+    for(const StructureBase* s : structureList) {
+        if(!ownLot(s, house) || lot.isValid()) continue;
+        for(const Coord p : perimeter(s->getLocation())) {
+            if(!currentGameMap->tileExists(p.x, p.y)) continue;
+            const Tile* tile = currentGameMap->getTile(p.x, p.y);
+            if(tile->isRoad() && !tile->hasAGroundObject() && !tile->hasANonInfantryGroundObject()
+               && !tile->hasInfantry()) { lot = s->getLocation(); site = p; break; }
+        }
+    }
+    skirmishRequire(site.isValid(), "No player lot has a free road tile on its perimeter");
+    for(const Coord p : perimeter(lot))
+        if(currentGameMap->tileExists(p.x, p.y)) currentGameMap->getTile(p.x, p.y)->setRoad(false);
+    skirmishRequire(house->placeStructure(NONE_ID, Structure_Park, site.x, site.y, false, true) != nullptr,
+                    "Could not place the Park on the lot's last road tile");
+    const Tile* parkTile = currentGameMap->getTile(site.x, site.y);
+    auto lotHasRoad = [&]() {
+        DuneCity::TrafficSimulation traffic;
+        traffic.init(sim);
+        int rx = -1, ry = -1;
+        return traffic.findPerimeterRoad(lot.x, lot.y, rx, ry) && rx == site.x && ry == site.y;
+    };
+    skirmishRequire(parkTile->isParkRoad() && parkTile->isRoadConnection(), "With the rule on, the Park is not a road connection");
+    skirmishRequire(!parkTile->isRoad(), "The Park tile kept the road flag that gives units road speed");
+    skirmishRequire(lotHasRoad(), "With the rule on, city traffic found no road for the lot beside the Park");
+    auto& options = const_cast<SettingsClass::GameOptionsClass&>(game.getGameInitSettings().getGameOptions());
+    options.parksCountAsRoads = false;
+    const bool offConnection = parkTile->isRoadConnection(), offRoad = lotHasRoad();
+    options.parksCountAsRoads = true;
+    skirmishRequire(!offConnection && !offRoad, "With the rule off, the Park still gave the lot road access");
+    SDL_Log("SKIRMISH_PROBE: park road access lot=(%d,%d) park=(%d,%d) on=1 off=0 unit_road=0",
+            lot.x, lot.y, site.x, site.y);
+}
+
 void runParkProbe() {
     const Params params = caseParams("city-park");
     skirmishRequire(RandomSkirmish::activateMod(params.mod), "Case mod did not activate");
@@ -198,6 +248,7 @@ void runParkProbe() {
     skirmishRequire(nearLots == parks, "A QuantBot park stands away from its R/C lots");
     skirmishRequire(parks <= ParkDistrictPolicy::parkCap(lots), "QuantBot planted more parks than its lots allow");
     captureGame(*reloaded, "ingame-ai-park", firstPark);
+    runRoadAccessCheck(*reloaded, houseID);
     endMatch(reloaded);
 }
 

@@ -1931,3 +1931,35 @@ TEST_CASE("Protocol 139 City Plane Crash Bombs rides bit 4 of the MOD18 city rul
     REQUIRE(restored.getGameOptions() == options);
     REQUIRE(input.readUint32() == 0xabcdef01u);
 }
+
+TEST_CASE("Protocol 143 Parks Count As Roads rides bit 6 of the MOD18 city rules byte, set only when off",
+          "[city][park][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.parksCountAsRoads);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.parksCountAsRoads);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.parksCountAsRoads = GENERATE(true, false);
+    options.cityPlaneCrashBombs = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.parksCountAsRoads && options.cityPlaneCrashBombs) {
+        // The default rule leaves the stream and the options hash as protocol 142 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}

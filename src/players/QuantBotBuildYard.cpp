@@ -382,6 +382,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardParkDistrict(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (botConfig().force.roadLaneParks || botConfig().force.lotParks || botConfig().force.pollutionRelocation) {
+        // City redevelopment for land value (default off; QuantBotRedevelop.cpp).
+        chooseYardRedevelopment(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     // Duel plans spend the opening grant differently, after real power/air
     // emergencies but before optional city growth, imports and repair support.
     const int duelPlan = duelOpeningPlan();

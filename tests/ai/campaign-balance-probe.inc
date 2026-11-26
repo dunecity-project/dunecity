@@ -17,6 +17,7 @@
 
 #include "starport-economy-probe.inc"
 #include "city-placement-probe.inc"
+#include "land-value-audit.inc"
 #include "controls-probe.inc"
 #include "stats-ui-probe.inc"
 #include "sourceforge-regressions-probe.inc"
@@ -586,6 +587,11 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_FACTORY_CONTINUATION")) {
         runFactoryContinuation(*game, minutes);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_LAND_VALUE_AUDIT")) {
+        LandValueAudit::run(*game, MILLI2CYCLES(minutes * 60000));
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }

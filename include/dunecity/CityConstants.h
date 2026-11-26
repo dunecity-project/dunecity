@@ -30,8 +30,11 @@ inline bool shouldEnableLoadedCityEffects(bool hasCitySimulation) {
     return hasCitySimulation;
 }
 
-inline bool isTrafficConnector(bool road, Uint32 item) {
-    return road || item == Structure_RocketTurret;
+/// A city road connection: a road tile, a Rocket Turret on one, or (match rule Parks Count As
+/// Roads, default on) a Park. Only the city simulation reads this; unit road speed reads the
+/// tile's own road flag, so a Park gives no movement bonus.
+inline bool isTrafficConnector(bool road, Uint32 item, bool parksCountAsRoads = false) {
+    return road || item == Structure_RocketTurret || (parksCountAsRoads && item == Structure_Park);
 }
 
 inline bool isCityZoneStructure(int itemID) {

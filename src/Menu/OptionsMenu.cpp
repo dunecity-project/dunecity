@@ -927,6 +927,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "City Plane Build Time", settings.gameOptions.cityPlaneBuildTime);
     myINIFile.setBoolValue("Game Options", "City Plane Free Per Airport", settings.gameOptions.cityPlaneFreePerAirport);
     myINIFile.setBoolValue("Game Options", "City Plane Crash Bombs", settings.gameOptions.cityPlaneCrashBombs);
+    myINIFile.setBoolValue("Game Options", "Parks Count As Roads", settings.gameOptions.parksCountAsRoads);
     myINIFile.setBoolValue("Game Options", "Saboteur Hunt", settings.gameOptions.saboteurHunt);
     myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);

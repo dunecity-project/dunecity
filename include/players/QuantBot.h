@@ -45,6 +45,7 @@ class Harvester;
 #include <players/UnitMixPolicy.h>
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
+#include <dunecity/ParkTerrainPolicy.h>
 
 #include <DataTypes.h>
 #include <algorithm>
@@ -2144,6 +2145,16 @@ private:
     int clusterTurretGoal() const;
     /// Our live or reserved turrets within kClusterReachTiles of one of our core buildings.
     int clusterTurrets() const;
+    /// City redevelopment for land value (default off; QuantBotRedevelop.cpp, RedevelopmentPolicy.h):
+    /// RoadLaneParks, LotParks and PollutionRelocation, each its own [Force Concentration] switch.
+    void chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    Coord findLaneParkSite(int* gain = nullptr);
+    Coord findLotParkSite(int* gain = nullptr, bool* lotCleared = nullptr);
+    bool findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, int& newHarm);
+    int parkSourceLotGain(const DuneCity::ParkTerrainPolicy& terrain, int cx, int cy, int strength,
+                          Coord skip = Coord::Invalid()) const;
+    DuneCity::ParkTerrainPolicy plannedParkTerrain() const;
+    bool parkKeepsPassage(int x, int y) const;
     /// A legal Rocket Turret site beside the first core (yard, factories, refinery, port,
     /// repair yard, in that order) with fewer than kClusterPerCore turrets: packed next to
     /// the cluster's turrets, facing the observed front. One bounded window per core.

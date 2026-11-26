@@ -483,7 +483,10 @@
 //      room (Stefan, 2026-11-27): built out, or fewer than kWindTrapRetireFreeRock free rock tiles
 //      (ForceConcentrationPolicy::windTrapRetirementRoomLow). AI demolition differs, so a 141 peer
 //      would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            142
+// 143: match rule Parks Count As Roads (default on, bit 6 of the MOD18 city rules byte, set only
+//      when off): a Park is a road connection for city traffic and zone access (Tile::
+//      isRoadConnection). Zone growth differs, so a 142 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            143
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

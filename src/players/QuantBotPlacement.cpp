@@ -92,7 +92,7 @@ bool tileKeepsFrontage(const Map& map, int tx, int ty, int x, int y, int w, int 
 	if (!map.tileExists(tx, ty)) return false;
 	if (tx >= x && tx < x + w && ty >= y && ty < y + h) return false;
 	const Tile* t = map.getTile(tx, ty);
-	if (t->isRoad()) return true;
+	if (t->isRoad() || t->isParkRoad()) return true;
 	return !t->hasAStructure() && !t->hasCityZone() && !t->isMountain()
 		&& !t->hasAGroundObject() && DuneCity::isCityZoneTerrain(t->getType());
 }
@@ -504,7 +504,9 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
     auto* sim = currentGame->isCitySimEnabled() ? currentGame->getCitySimulation() : nullptr;
     // PalaceDistricts (default off): a Palace or Stadium may displace own low-density lots of any land value.
     const bool palace = (item == Structure_Palace || item == Structure_Stadium) && botConfig().force.palaceDistricts;
-    if (!sim || (!palace && item != Structure_HeavyFactory && item != Structure_NuclearPlant && item != Structure_WindTrap)) return false;
+    // LotParks (default off): a Park may clear one cheap own R/C lot (QuantBotRedevelop.cpp).
+    const bool lotPark = item == Structure_Park && botConfig().force.lotParks;
+    if (!sim || (!palace && !lotPark && item != Structure_HeavyFactory && item != Structure_NuclearPlant && item != Structure_WindTrap)) return false;
     const Coord size = getStructureSize(item);
     bool range = false;
     for (int y=pos.y; y<pos.y+size.y; ++y) for (int x=pos.x; x<pos.x+size.x; ++x) {
@@ -517,7 +519,9 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
         if (!zone || zone->getOwner() != getHouse()) return false;
         const Coord z = zone->getLocation();
         if (zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None) return false;
-        if (palace ? getMap().getTile(z.x,z.y)->getCityZoneDensity() > ForceConcentrationPolicy::kPalaceClearDensity
+        if (lotPark ? sim->getLandValueMap().worldGet(z.x,z.y) > RedevelopmentPolicy::kLotParkMaxValue
+                      || getMap().getTile(z.x,z.y)->getCityZoneDensity() > RedevelopmentPolicy::kLotParkMaxDensity
+                   : palace ? getMap().getTile(z.x,z.y)->getCityZoneDensity() > ForceConcentrationPolicy::kPalaceClearDensity
                          && !botConfig().force.palaceDenseClearing
                    : sim->getLandValueMap().worldGet(z.x,z.y) > 64) return false;
         if (std::find(zones.begin(),zones.end(),zone->getObjectID()) == zones.end()) zones.push_back(zone->getObjectID());

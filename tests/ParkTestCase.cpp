@@ -11,6 +11,7 @@
 #include <dunecity/CitySpritePolicy.h>
 #include <dunecity/ParkTerrainPolicy.h>
 #include <players/ParkDistrictPolicy.h>
+#include <players/RedevelopmentPolicy.h>
 #include <players/QuantBotConfig.h>
 #include <FileClasses/lodepng.h>
 
@@ -62,6 +63,19 @@ TEST_CASE("Park: a +15 park-terrain source that does not develop its block", "[c
     CHECK(terrain.valueAt(9, 7) == 1);
     CHECK(terrain.valueAt(12, 7) == 0);
     CHECK(terrain.marginalGain(8, 8, getParkLandValueBonus(Structure_Park), 6, 6) == 8);
+}
+
+TEST_CASE("Park: a road connection for the city only while Parks Count As Roads is on", "[city][park][roads]") {
+    // The rule (default on) makes a Park a traffic connector: zone access and city trips.
+    REQUIRE(isTrafficConnector(false, Structure_Park, true));
+    REQUIRE_FALSE(isTrafficConnector(false, Structure_Park, false));
+    // Nothing else changes: roads and Rocket Turrets connect either way, other buildings never.
+    for (bool rule : {false, true}) {
+        CHECK(isTrafficConnector(true, NONE_ID, rule));
+        CHECK(isTrafficConnector(false, Structure_RocketTurret, rule));
+        for (int item : {Structure_Wall, Structure_GunTurret, Structure_ZoneResidential, Structure_Palace, Structure_Stadium})
+            CHECK_FALSE(isTrafficConnector(false, item, rule));
+    }
 }
 
 TEST_CASE("Park: frames follow the site (woods or fountain), never the random generator", "[city][park][sprites]") {
@@ -149,4 +163,52 @@ TEST_CASE("ParkDistricts: default off and outside the native config hash", "[ai]
     REQUIRE(parks.getConfigHash() != native.getConfigHash());
     parks.force.parkDistricts = false;
     REQUIRE(parks.getConfigHash() == native.getConfigHash());
+}
+
+TEST_CASE("Redevelopment: a spare lane is parked only while every path through it stays open", "[ai][park][roads]") {
+    using RedevelopmentPolicy::ringKeepsPassage;
+    // Ring order N, NE, E, SE, S, SW, W, NW.
+    const bool all[8] = {true, true, true, true, true, true, true, true};
+    CHECK(ringKeepsPassage(all));
+    // One lane of a two-lane east-west strip: the tile's south row (SE, S, SW) and its own row
+    // continue; north is a lot. Blocking it leaves W -> SW -> S -> SE -> E open.
+    const bool laneEdge[8] = {false, false, true, true, true, true, true, false};
+    CHECK(ringKeepsPassage(laneEdge));
+    // A one-lane road: only W and E open. Blocking it cuts the road.
+    const bool oneLane[8] = {false, false, true, false, false, false, true, false};
+    CHECK_FALSE(ringKeepsPassage(oneLane));
+    // A dead end needs no passage through it.
+    const bool deadEnd[8] = {false, false, false, false, false, false, true, false};
+    CHECK(ringKeepsPassage(deadEnd));
+    // Diagonal neighbours alone do not join two sides.
+    const bool corner[8] = {true, false, false, false, true, false, false, false};
+    CHECK_FALSE(ringKeepsPassage(corner));
+    const bool joined[8] = {true, true, true, false, false, false, false, false};
+    CHECK(ringKeepsPassage(joined));
+}
+
+TEST_CASE("Redevelopment: pollution harm, relocation and lot-park thresholds", "[ai][park][pollution]") {
+    using namespace RedevelopmentPolicy;
+    CHECK(pollutionHarm(50, 0, 5) == 50);
+    CHECK(pollutionHarm(50, 2, 5) == 30);
+    CHECK(pollutionHarm(50, 5, 5) == 0);
+    CHECK(pollutionHarm(0, 0, 5) == 0);
+    CHECK(relocationPays(kRelocateMinHarm, kRelocateMinHarm / 2));
+    CHECK_FALSE(relocationPays(kRelocateMinHarm - 1, 0));
+    CHECK_FALSE(relocationPays(100, 51));
+    CHECK(kLotParkMaxValue == 64);
+    CHECK(kLotParkSources * kParkLandValueBonus == 60);
+}
+
+TEST_CASE("Redevelopment switches: default off and outside the native config hash", "[ai][park][config]") {
+    QuantBotConfig native;
+    REQUIRE_FALSE(native.force.roadLaneParks);
+    REQUIRE_FALSE(native.force.lotParks);
+    REQUIRE_FALSE(native.force.pollutionRelocation);
+    for (bool QuantBotConfig::ForceSettings::*flag : {&QuantBotConfig::ForceSettings::roadLaneParks,
+             &QuantBotConfig::ForceSettings::lotParks, &QuantBotConfig::ForceSettings::pollutionRelocation}) {
+        QuantBotConfig arm = native;
+        arm.force.*flag = true;
+        CHECK(arm.getConfigHash() != native.getConfigHash());
+    }
 }

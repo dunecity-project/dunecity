@@ -388,6 +388,9 @@ QuantBotConfig::QuantBotConfig() {
     force.palaceDistricts = true;
     force.stadiumDistricts = true;
     force.parkDistricts = false;
+    force.roadLaneParks = false;
+    force.lotParks = false;
+    force.pollutionRelocation = false;
     force.landmarkAnchoring = true;
     force.palaceDenseClearing = true;
     force.palaceTurrets = false;
@@ -926,6 +929,9 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "StadiumDistricts", force.stadiumDistricts);
         iniFile.setBoolValue("Force Concentration", "ParkDistricts", force.parkDistricts);
         iniFile.setBoolValue("Force Concentration", "LandmarkAnchoring", force.landmarkAnchoring);
+        iniFile.setBoolValue("Force Concentration", "RoadLaneParks", force.roadLaneParks);
+        iniFile.setBoolValue("Force Concentration", "LotParks", force.lotParks);
+        iniFile.setBoolValue("Force Concentration", "PollutionRelocation", force.pollutionRelocation);
         iniFile.setBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
         iniFile.setBoolValue("Force Concentration", "PalaceTurrets", force.palaceTurrets);
         iniFile.setBoolValue("Force Concentration", "AirRaidTurrets", force.airRaidTurrets);
@@ -1294,6 +1300,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.parkDistricts = iniFile.getBoolValue("Force Concentration", "ParkDistricts", force.parkDistricts);
     force.landmarkAnchoring = iniFile.getBoolValue("Force Concentration", "LandmarkAnchoring", force.landmarkAnchoring);
     force.palaceDenseClearing = iniFile.getBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
+    force.roadLaneParks = iniFile.getBoolValue("Force Concentration", "RoadLaneParks", force.roadLaneParks);
+    force.lotParks = iniFile.getBoolValue("Force Concentration", "LotParks", force.lotParks);
+    force.pollutionRelocation = iniFile.getBoolValue("Force Concentration", "PollutionRelocation", force.pollutionRelocation);
     force.palaceTurrets = iniFile.getBoolValue("Force Concentration", "PalaceTurrets", force.palaceTurrets);
     force.airRaidTurrets = iniFile.getBoolValue("Force Concentration", "AirRaidTurrets", force.airRaidTurrets);
     force.buildUpToEnemy = iniFile.getBoolValue("Force Concentration", "BuildUpToEnemy", force.buildUpToEnemy);
@@ -2057,6 +2066,9 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.landmarkAnchoring) addNamed("landmarkAnchoring", force.landmarkAnchoring);
     if (force.palaceDenseClearing) addNamed("palaceDenseClearing", force.palaceDenseClearing);
     if (force.palaceTurrets) addNamed("palaceTurrets", force.palaceTurrets);
+    if (force.roadLaneParks) addNamed("roadLaneParks", force.roadLaneParks);
+    if (force.lotParks) addNamed("lotParks", force.lotParks);
+    if (force.pollutionRelocation) addNamed("pollutionRelocation", force.pollutionRelocation);
     // On is the default and leaves every existing hash as it was; off is hashed.
     if (!force.airRaidTurrets) addNamed("airRaidTurrets", force.airRaidTurrets);
     // On is the default (protocol 141); only off is hashed, so the default config keeps its hash.

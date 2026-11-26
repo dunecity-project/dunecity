@@ -186,6 +186,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "City Plane Build Time", options.cityPlaneBuildTime);
     config.setBoolValue(section, "City Plane Free Per Airport", options.cityPlaneFreePerAirport);
     config.setBoolValue(section, "City Plane Crash Bombs", options.cityPlaneCrashBombs);
+    config.setBoolValue(section, "Parks Count As Roads", options.parksCountAsRoads);
     config.setBoolValue(section, "Saboteur Hunt", options.saboteurHunt);
     config.setBoolValue(section, "Starport Population", options.starportPopulation);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
@@ -263,6 +264,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("City Plane Build Time", options.cityPlaneBuildTime);
     readBool("City Plane Free Per Airport", options.cityPlaneFreePerAirport);
     readBool("City Plane Crash Bombs", options.cityPlaneCrashBombs);
+    readBool("Parks Count As Roads", options.parksCountAsRoads);
     readBool("Saboteur Hunt", options.saboteurHunt);
     readBool("Starport Population", options.starportPopulation);
     readBool("Allied Control", options.alliedControl);

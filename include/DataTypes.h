@@ -346,6 +346,7 @@ public:
                     && (cityPlaneBuildTime == goc.cityPlaneBuildTime)
                     && (cityPlaneFreePerAirport == goc.cityPlaneFreePerAirport)
                     && (cityPlaneCrashBombs == goc.cityPlaneCrashBombs)
+                    && (parksCountAsRoads == goc.parksCountAsRoads)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -407,6 +408,7 @@ public:
             if(!cityPlaneBuildTime) optStr += "/cityPlaneBuildTime=0";
             if(!cityPlaneFreePerAirport) optStr += "/cityPlaneFreePerAirport=0";
             if(!cityPlaneCrashBombs) optStr += "/cityPlaneCrashBombs=0";
+            if(!parksCountAsRoads) optStr += "/parksCountAsRoads=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -549,6 +551,13 @@ public:
         /// they die, current explosion too small"; AmbientAirplane::crash). Off, the crash is one stick
         /// bomb's damage on the tile it falls on, as up to protocol 138. INI key only.
         bool        cityPlaneCrashBombs = true;
+        /// City games: a Park is a road for the city simulation (Stefan, 2026-11-27: "count a park
+        /// as a road (without the movement bonus) as a way to also increase value"). A lot beside
+        /// a Park has road access for zone growth, and city traffic may cross Parks; units get no
+        /// road speed on a Park, and a Park still blocks them as any building does (Tile::
+        /// isRoadConnection, DuneCity::isTrafficConnector). Off, a Park is scenery only, as up to
+        /// protocol 142. INI key only.
+        bool        parksCountAsRoads = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

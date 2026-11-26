@@ -88,7 +88,8 @@ GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect'
                'enemy_difficulty', 'helper_style', 'ai_configs', 'setup_identity', 'objectives') + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
-                'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
+                'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills', 'credits', 'population',
+                'land_value')
 SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', 'team', 'alive', 'credits',
                  'army_value', 'army_units', 'harvesters', 'structures', 'factories', 'kill_value', 'loss_value',
                  'power', 'need', 'population', 'tax', 'demand', 'built', 'structures_lost', 'base_hp', 'yards',
@@ -896,7 +897,8 @@ def play(args, scratch, binary, game):
                            'sortie_minutes': h['sortie_minutes'],
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
                            'drawn': int(p.drawn) if p else '', 'start': h.get('start', ''),
-                           'crush_kills': h.get('crush_kills', '')})
+                           'crush_kills': h.get('crush_kills', ''), 'credits': h.get('credits', ''),
+                           'population': h.get('population', ''), 'land_value': h.get('land_value', '')})
     samples = {}
     for line in lines:
         for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_LANDMARKS:'):

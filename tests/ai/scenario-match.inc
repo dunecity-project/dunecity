@@ -366,14 +366,17 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         const HouseTrack& track = tracks[house->getHouseID()];
         const int population = city && game.isCitySimEnabled() && city->isInitialized()
             ? city->getHouseState(house->getHouseID()).getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier : -1;
+        // Average land value of the house's developed property (-1 outside a city game).
+        const int landValue = city && game.isCitySimEnabled() && city->isInitialized()
+            ? city->getHouseState(house->getHouseID()).avgLandValue : -1;
         SDL_Log("SCENARIO_HOUSE: house=%d team=%d players=%s alive=%d eliminated_s=%.1f credits=%d kill_value=%d "
                 "loss_value=%d structures_destroyed=%d units_destroyed=%d structures=%d army_value=%d army_units=%d "
-                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d population=%d",
+                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d population=%d land_value=%d",
                 house->getHouseID(), house->getTeamID(), classesOf(house).c_str(), int(house->isAlive()),
                 track.eliminated ? FormationWaveMeasure::seconds(track.eliminated) : -1.0, house->getCredits(),
                 house->getKillValue(), house->getLossValue(), house->getNumDestroyedStructures(),
                 house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes,
-                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()), population);
+                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()), population, landValue);
     }
     std::string outcome;
     int winnerTeam = winner;

@@ -29,6 +29,7 @@
 #include <units/UnitBase.h>
 #include <units/InfantryBase.h>
 #include <dunecity/CitySimulation.h>
+#include <dunecity/TrafficSimulation.h>
 #include <GameInterface.h>
 #include <GUI/ObjectInterfaces/ResearchLabInterface.h>
 #include <dunecity/CityConstants.h>

@@ -1,0 +1,346 @@
+/*
+ *  This file is part of Dune Legacy.
+ *
+ *  Dune Legacy is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Dune Legacy is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Dune Legacy.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+// QuantBot city redevelopment for land value (Stefan, 2026-11-27: "the AI could benefit from
+// demolishing and rebuilding to either remove pollution from an area ... or by adding in more
+// palaces or parks ... it has lots of 2 lane roads which is a waste"). Three switches, each its
+// own arm, all default off ([Force Concentration]; docs/formations.md "Redevelopment for land
+// value"; RedevelopmentPolicy.h):
+//   RoadLaneParks        a Park on the spare lane of a two-lane road strip (a road tile in a 2x2
+//                        square of own road), where it raises our R/C land value, while a lane
+//                        and every unit path through the tile stay open;
+//   LotParks             a low-value own R/C lot cleared for parks that raise its neighbours'
+//                        land value, then its remaining tiles planted;
+//   PollutionRelocation  an Industrial zone whose pollution costs our R/C lots land value
+//                        rebuilt where the house's own Industrial siting puts it, when that site
+//                        costs at most half as much.
+// Everything here is derived from the map each time (no saved state): searches run in short
+// game-time windows, so they cost a few scans a period rather than one per yard pass.
+
+#include "QuantBotInternal.h"
+#include <players/QuantBotBuildPass.h>
+#include <players/ParkDistrictPolicy.h>
+
+using QuantBotInternal::cityRoadImpact;
+using QuantBotInternal::wouldLandlockNeighbouringZone;
+
+namespace {
+bool inWindow(Uint32 cycle, int periodMs, int windowMs) {
+    return cycle % MILLI2CYCLES(periodMs) < MILLI2CYCLES(windowMs);
+}
+
+bool ownLot(const StructureBase* s, const House* house) {
+    return s->getOwner() == house && s->getHealth() > 0
+        && (s->getItemID() == Structure_ZoneResidential || s->getItemID() == Structure_ZoneCommercial);
+}
+
+int centreDistance(Coord a, Coord sa, Coord b, Coord sb) {
+    // Doubled centres keep 2x2 and odd footprints exact in integers.
+    const int ax = 2 * a.x + sa.x, ay = 2 * a.y + sa.y, bx = 2 * b.x + sb.x, by = 2 * b.y + sb.y;
+    return std::max(std::abs(ax - bx), std::abs(ay - by)) / 2;
+}
+} // namespace
+
+/// Land value a park-terrain source of \a strength at (cx, cy) adds to the blocks of our R/C lots
+/// (each block capped at the land-value ceiling), skipping the lot at \a skip.
+int QuantBot::parkSourceLotGain(const DuneCity::ParkTerrainPolicy& terrain, int cx, int cy, int strength,
+                                Coord skip) const {
+    const auto* sim = currentGame->getCitySimulation();
+    const auto& landValue = sim->getLandValueMap();
+    const int bs = std::max(1, landValue.getBlockSize());
+    constexpr int tb = DuneCity::kParkTerrainBlockSize;
+    const int w = getMap().getSizeX(), h = getMap().getSizeY();
+    const int sx = cx / tb, sy = cy / tb;
+    // A source moves its own terrain block and the four next to it.
+    const int x0 = std::max(0, (sx - 1) * tb), x1 = std::min(w - 1, (sx + 2) * tb - 1);
+    const int y0 = std::max(0, (sy - 1) * tb), y1 = std::min(h - 1, (sy + 2) * tb - 1);
+    std::set<std::pair<int, int>> blocks;
+    for (const auto* s : getStructureList()) {
+        if (!ownLot(s, getHouse()) || s->getLocation() == skip) continue;
+        const Coord o = s->getLocation(), size = s->getStructureSize();
+        if (o.x + size.x - 1 < x0 || o.x > x1 || o.y + size.y - 1 < y0 || o.y > y1) continue;
+        for (int y = std::max(y0, o.y); y <= std::min(y1, o.y + size.y - 1); ++y)
+            for (int x = std::max(x0, o.x); x <= std::min(x1, o.x + size.x - 1); ++x)
+                blocks.insert({x / bs, y / bs});
+    }
+    int gain = 0;
+    for (const auto& [bx, by] : blocks)
+        gain += ParkDistrictPolicy::blockGain(landValue.get(bx, by),
+            terrain.marginalGain(cx, cy, strength, bx * bs, by * bs, bs));
+    return gain;
+}
+
+/// The last scan's park terrain plus the park-terrain buildings our yards have reserved.
+DuneCity::ParkTerrainPolicy QuantBot::plannedParkTerrain() const {
+    auto terrain = currentGame->getCitySimulation()->getParkTerrain();
+    for (const auto& entry : reservedStructures) {
+        if (!DuneCity::usesParkTerrain(entry.second.item)) continue;
+        terrain.addSource(entry.second.location.x, entry.second.location.y,
+                          DuneCity::getParkLandValueBonus(entry.second.item));
+    }
+    return terrain;
+}
+
+/// Whether a Park at (x, y) keeps every unit path and every road path that crossed the tile.
+bool QuantBot::parkKeepsPassage(int x, int y) const {
+    static const int DX[8] = {0, 1, 1, 1, 0, -1, -1, -1}, DY[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+    bool open[8], road[8];
+    for (int i = 0; i < 8; ++i) {
+        const int nx = x + DX[i], ny = y + DY[i];
+        const Tile* tile = getMap().tileExists(nx, ny) ? getMap().getTile(nx, ny) : nullptr;
+        open[i] = tile && !tile->isMountain() && !tile->hasAStructure() && !overlapsReservedStructure(nx, ny, 1, 1);
+        road[i] = tile && tile->isRoad();
+    }
+    return RedevelopmentPolicy::ringKeepsPassage(open) && RedevelopmentPolicy::ringKeepsPassage(road);
+}
+
+/// RoadLaneParks: the spare-lane road tile where a Park adds the most land value to our R/C lots.
+Coord QuantBot::findLaneParkSite(int* gainOut) {
+    if (gainOut) *gainOut = 0;
+    AITelemetry::PerformanceScope perfScope("ai.findLaneParkSite", getGameCycleCount(), getHouse()->getHouseID());
+    const Map& map = getMap();
+    const int w = map.getSizeX(), h = map.getSizeY(), houseID = getHouse()->getHouseID();
+    const auto terrain = plannedParkTerrain();
+    // Tiles near our R/C lots (a park reaches two terrain blocks).
+    std::vector<uint8_t> near(size_t(w) * h, 0);
+    const int r = ParkDistrictPolicy::kLotReach;
+    for (const auto* s : getStructureList()) {
+        if (!ownLot(s, getHouse())) continue;
+        const Coord o = s->getLocation(), size = s->getStructureSize();
+        for (int y = std::max(0, o.y - r); y <= std::min(h - 1, o.y + size.y - 1 + r); ++y)
+            for (int x = std::max(0, o.x - r); x <= std::min(w - 1, o.x + size.x - 1 + r); ++x)
+                near[size_t(y) * w + x] = 1;
+    }
+    auto ownRoad = [&](int x, int y) {
+        if (!map.tileExists(x, y)) return false;
+        const Tile* tile = map.getTile(x, y);
+        return tile->isRoad() && tile->getOwner() == houseID && !tile->hasAGroundObject();
+    };
+    auto spareLane = [&](int x, int y) {
+        for (int oy = -1; oy <= 0; ++oy) for (int ox = -1; ox <= 0; ++ox)
+            if (ownRoad(x + ox, y + oy) && ownRoad(x + ox + 1, y + oy) && ownRoad(x + ox, y + oy + 1)
+                && ownRoad(x + ox + 1, y + oy + 1)) return true;
+        return false;
+    };
+    // Gain depends only on the terrain block; score each block once.
+    constexpr int tb = DuneCity::kParkTerrainBlockSize;
+    std::map<std::pair<int, int>, int> blockGain;
+    struct Candidate { int gain, x, y; };
+    std::vector<Candidate> candidates;
+    int lanes = 0;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            if (!near[size_t(y) * w + x] || !ownRoad(x, y) || !spareLane(x, y)) continue;
+            ++lanes;
+            const auto key = std::make_pair(x / tb, y / tb);
+            auto it = blockGain.find(key);
+            if (it == blockGain.end())
+                it = blockGain.emplace(key, parkSourceLotGain(terrain, x, y, DuneCity::kParkLandValueBonus)).first;
+            if (it->second >= ParkDistrictPolicy::kMinGain) candidates.push_back({it->second, x, y});
+        }
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [](const Candidate& a, const Candidate& b) { return a.gain > b.gain; });
+    constexpr size_t kChecked = 48;
+    Coord best = Coord::Invalid();
+    int bestGain = 0, checked = 0;
+    for (size_t i = 0; i < candidates.size() && i < kChecked && !best.isValid(); ++i) {
+        const auto& c = candidates[i];
+        ++checked;
+        if (overlapsReservedStructure(c.x, c.y, 1, 1) || !placeableAmongOwnUnits(c.x, c.y, 1, 1, Structure_Park)
+            || dangerAt(Coord(c.x, c.y)) > 0 || !parkKeepsPassage(c.x, c.y)
+            || !cityRoadImpact(map, c.x, c.y, 1, 1, Structure_Park).preservesConnections
+            || wouldLandlockNeighbouringZone(map, houseID, c.x, c.y, 1, 1, nullptr)
+            || !preservesGroundAccess(Structure_Park, Coord(c.x, c.y))) continue;
+        best = Coord(c.x, c.y);
+        bestGain = c.gain;
+    }
+    if (gainOut) *gainOut = bestGain;
+    traceDecision("lane_park_site", AITelemetry::Record().set("valid", best.isValid()).set("x", best.x)
+        .set("y", best.y).set("gain", bestGain).set("lanes", lanes).set("candidates", int(candidates.size()))
+        .set("checked", checked));
+    return best;
+}
+
+/// LotParks: first a free tile of a lot already being turned into parks (beside one of our Parks,
+/// not road, adding land value); else the cheapest own R/C lot whose parks would add the most
+/// land value to the house's other lots. \a lotCleared is set when the site is a standing lot.
+Coord QuantBot::findLotParkSite(int* gainOut, bool* lotCleared) {
+    if (gainOut) *gainOut = 0;
+    if (lotCleared) *lotCleared = false;
+    AITelemetry::PerformanceScope perfScope("ai.findLotParkSite", getGameCycleCount(), getHouse()->getHouseID());
+    namespace R = RedevelopmentPolicy;
+    const Map& map = getMap();
+    auto* sim = currentGame->getCitySimulation();
+    const auto terrain = plannedParkTerrain();
+    // Fill: the tiles left of a cleared lot.
+    std::vector<Coord> parks;
+    for (const auto* s : getStructureList())
+        if (s->getOwner() == getHouse() && s->getItemID() == Structure_Park) parks.push_back(s->getLocation());
+    for (const auto& entry : reservedStructures)
+        if (entry.second.item == Structure_Park) parks.push_back(entry.second.location);
+    Coord fill = Coord::Invalid();
+    int fillGain = 0;
+    for (const Coord p : parks)
+        for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+            const int x = p.x + dx, y = p.y + dy;
+            if ((dx == 0 && dy == 0) || !map.tileExists(x, y)) continue;
+            const Tile* tile = map.getTile(x, y);
+            if (tile->isRoad() || tile->hasAGroundObject() || tile->hasCityZone()
+                || !DuneCity::isCityZoneTerrain(tile->getType()) || overlapsReservedStructure(x, y, 1, 1)) continue;
+            const int gain = parkSourceLotGain(terrain, x, y, DuneCity::kParkLandValueBonus);
+            if (gain <= fillGain || gain < ParkDistrictPolicy::kMinGain) continue;
+            if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_Park) || dangerAt(Coord(x, y)) > 0
+                || !parkKeepsPassage(x, y) || !preservesGroundAccess(Structure_Park, Coord(x, y))) continue;
+            fill = Coord(x, y);
+            fillGain = gain;
+        }
+    if (fill.isValid()) {
+        if (gainOut) *gainOut = fillGain;
+        traceDecision("lot_park_site", AITelemetry::Record().set("valid", true).set("fill", true)
+            .set("x", fill.x).set("y", fill.y).set("gain", fillGain));
+        return fill;
+    }
+    // Clear: the low-value lot whose four parks add the most to the other lots.
+    Coord best = Coord::Invalid();
+    int bestGain = 0, candidates = 0, bestValue = 0;
+    for (const auto* s : getStructureList()) {
+        if (!ownLot(s, getHouse())) continue;
+        const auto* zone = dynamic_cast<const ZoneStructure*>(s);
+        if (!zone || zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None) continue;
+        const Coord o = s->getLocation();
+        const int value = sim->getLandValueMap().worldGet(o.x, o.y);
+        const int density = map.getTile(o.x, o.y)->getCityZoneDensity();
+        if (value > R::kLotParkMaxValue || density > R::kLotParkMaxDensity) continue;
+        ++candidates;
+        const int gain = parkSourceLotGain(terrain, o.x, o.y, R::kLotParkSources * DuneCity::kParkLandValueBonus, o);
+        if (gain < R::kLotParkMinGain || gain <= bestGain) continue;
+        if (overlapsReservedStructure(o.x, o.y, 2, 2) || dangerAt(o, Coord(2, 2)) > 0) continue;
+        best = o;
+        bestGain = gain;
+        bestValue = value;
+    }
+    if (gainOut) *gainOut = bestGain;
+    if (lotCleared) *lotCleared = best.isValid();
+    traceDecision("lot_park_site", AITelemetry::Record().set("valid", best.isValid()).set("fill", false)
+        .set("x", best.x).set("y", best.y).set("gain", bestGain).set("land_value", bestValue)
+        .set("candidates", candidates));
+    return best;
+}
+
+/// PollutionRelocation: the own Industrial zone whose pollution costs our R/C lots the most, and
+/// where the house's own Industrial siting would put it instead.
+bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, int& newHarm) {
+    AITelemetry::PerformanceScope perfScope("ai.findPollutionRelocation", getGameCycleCount(), getHouse()->getHouseID());
+    zoneID = NONE_ID; site = Coord::Invalid(); harm = newHarm = 0;
+    const Map& map = getMap();
+    std::vector<std::pair<Coord, Coord>> lots;
+    for (const auto* s : getStructureList())
+        if (ownLot(s, getHouse())) lots.push_back({s->getLocation(), s->getStructureSize()});
+    auto harmAt = [&](Coord pos, Coord size, int emission, Coord skip) {
+        int total = 0;
+        for (const auto& [o, lotSize] : lots) {
+            if (o == skip) continue;
+            total += RedevelopmentPolicy::pollutionHarm(emission, centreDistance(pos, size, o, lotSize),
+                                                        DuneCity::kPollutionRadius);
+        }
+        return total;
+    };
+    int emission = 0;
+    for (const auto* s : getStructureList()) {
+        if (s->getOwner() != getHouse() || s->getHealth() <= 0 || s->getItemID() != Structure_ZoneIndustrial) continue;
+        const Coord o = s->getLocation();
+        const int e = DuneCity::getPollutionEmission(Structure_ZoneIndustrial, map.getTile(o.x, o.y)->getCityZoneDensity());
+        const int h = harmAt(o, s->getStructureSize(), e, Coord::Invalid());
+        if (h > harm) { harm = h; zoneID = s->getObjectID(); emission = e; }
+    }
+    if (zoneID == NONE_ID || harm < RedevelopmentPolicy::kRelocateMinHarm) return false;
+    site = findPlaceLocation(Structure_ZoneIndustrial);
+    if (!site.isValid()) return false;
+    newHarm = harmAt(site, getStructureSize(Structure_ZoneIndustrial), emission, Coord::Invalid());
+    return RedevelopmentPolicy::relocationPays(harm, newHarm);
+}
+
+void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    const auto& force = botConfig().force;
+    if (!pass.citySimEnabled || gameMode != GameMode::Custom || pass.redevelopmentSearched
+        || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
+        || pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid()) return;
+    const Uint32 cycle = getGameCycleCount();
+    namespace R = RedevelopmentPolicy;
+
+    // PollutionRelocation: at most one Industrial zone a period, ordered at its new site and
+    // demolished at its old one in the same turn (as the yard's other redevelopment does).
+    if (force.pollutionRelocation && inWindow(cycle, R::kRelocatePeriodMs, R::kRelocateWindowMs)
+        && !pass.orderedThisTick.count(Structure_ZoneIndustrial)
+        && campaignAvailableToBuild(turn.pBuilder, Structure_ZoneIndustrial)) {
+        pass.redevelopmentSearched = true;
+        const auto& state = currentGame->getCitySimulation()->getHouseState(getHouse()->getHouseID());
+        const int price = purchasePrice(turn.pBuilder, Structure_ZoneIndustrial);
+        Uint32 zoneID = NONE_ID;
+        Coord site = Coord::Invalid();
+        int harm = 0, newHarm = 0;
+        if (state.indValve >= 0 && pass.money >= 2 * price && findPollutionRelocation(zoneID, site, harm, newHarm)) {
+            auto* zone = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(zoneID));
+            if (zone && zone->getOwner() == getHouse()) {
+                const Coord old = zone->getLocation();
+                traceDecision("pollution_relocation", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+                    .set("zone", zoneID).set("from_x", old.x).set("from_y", old.y).set("x", site.x).set("y", site.y)
+                    .set("harm", harm).set("new_harm", newHarm).set("density", getMap().getTile(old.x, old.y)->getCityZoneDensity())
+                    .set("money", pass.money));
+                pass.itemCount[Structure_ZoneIndustrial]--;
+                zone->demolish();
+                placementCache.erase(Structure_ZoneIndustrial);
+                yardTurn.itemID = Structure_ZoneIndustrial;
+                yardTurn.crimeServiceSite = site;
+                yardTurn.structureRule = "pollution_relocation";
+                yardTurn.skipRemainingStructureLogic = true;
+                return;
+            }
+        }
+    }
+
+    if (!force.roadLaneParks && !force.lotParks) return;
+    if (!inWindow(cycle, R::kParkSearchPeriodMs, R::kParkSearchWindowMs) || pass.orderedThisTick.count(Structure_Park)
+        || !campaignAvailableToBuild(turn.pBuilder, Structure_Park)) return;
+    // One park at a time: the next is chosen against the terrain the last one added.
+    if (pass.itemCount[Structure_Park] != getHouse()->getNumItems(Structure_Park)) return;
+    const int price = currentGame->objectData.data[Structure_Park][getHouse()->getHouseID()].price;
+    if (pass.money < price) return;
+    pass.redevelopmentSearched = true;
+    int gain = 0;
+    Coord site = Coord::Invalid();
+    const char* rule = nullptr;
+    if (force.lotParks) {
+        bool cleared = false;
+        site = findLotParkSite(&gain, &cleared);
+        // Clearing a lot gives up its tax: only with money in hand beyond the park itself.
+        if (site.isValid() && cleared && pass.money < 2000) site = Coord::Invalid();
+        if (site.isValid()) rule = cleared ? "lot_park_clear" : "lot_park_fill";
+    }
+    if (!site.isValid() && force.roadLaneParks) {
+        site = findLaneParkSite(&gain);
+        if (site.isValid()) rule = "lane_park";
+    }
+    if (!site.isValid()) return;
+    // A cleared lot is demolished when the order is accepted (QuantBot::redevelopmentZones).
+    yardTurn.itemID = Structure_Park;
+    yardTurn.crimeServiceSite = site;
+    yardTurn.structureRule = rule;
+    yardTurn.skipRemainingStructureLogic = true;
+    traceDecision("redevelopment_park", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+        .set("rule", rule).set("x", site.x).set("y", site.y).set("gain", gain).set("money", pass.money));
+}

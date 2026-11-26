@@ -510,6 +510,10 @@ public:
         if (r) { destroyedStructureTile = DestroyedStructure_None; damage.clear(); deadUnits.clear(); }
     }
     bool isRoadConnection() const;
+    /// A Park on this tile, while the match rule Parks Count As Roads is on: a road for the city
+    /// simulation's zone access and traffic, never for unit movement.
+    bool isParkRoad() const;
+    static bool parksCountAsRoads();
     bool hasCityZone() const noexcept { return cityZoneType_ != DuneCity::ZoneType::None; }
 
 

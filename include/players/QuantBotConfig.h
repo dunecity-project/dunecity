@@ -303,6 +303,11 @@ struct QuantBotConfig {
         bool palaceDistricts;                  ///< A Palace funded first in every R/C district (else one Stadium).
         bool stadiumDistricts;                 ///< While no Palace can be built, every district gets a Stadium.
         bool parkDistricts;                    ///< Micropolis parks where they raise our R/C land value (ParkDistrictPolicy).
+        /// City redevelopment (default off; docs/formations.md "Redevelopment for land value",
+        /// QuantBotRedevelop.cpp, RedevelopmentPolicy.h). Each is its own arm.
+        bool roadLaneParks;                    ///< Parks on the spare lane of two-lane road strips, paths kept.
+        bool lotParks;                         ///< A low-value own R/C lot cleared for parks that lift its neighbours.
+        bool pollutionRelocation;              ///< An Industrial zone polluting our R/C lots rebuilt away from them.
         bool landmarkAnchoring;                ///< R/C lots fill a landmark's reach, industry stays out; sites count room.
         bool palaceDenseClearing;              ///< A Palace/Stadium site may demolish own R/C lots of any density.
         bool palaceTurrets;                    ///< Every Palace keeps a Rocket Turret (anti-air) within 5 tiles, never saved for.

@@ -266,6 +266,8 @@ struct QuantBot::BuildPass {
     // from building the same thing. Zones and turrets are excluded (want multiples).
     std::set<Uint32> orderedThisTick{};
     bool roadMaintenanceAttempted{};
+    /// RoadLaneParks / LotParks / PollutionRelocation: one redevelopment search per pass.
+    bool redevelopmentSearched{};
     bool defendingEconomy{};
     bool campaignThreatProduction{};
     // CampaignHelperFactoryFirst: support house below its army floor still lacks a Heavy Factory.
