@@ -1,3 +1,56 @@
+## 2026-11-27 - City planes: a shot-down plane explodes as three of its bombs (City Plane Crash Bombs, protocol 139)
+
+Stefan, 2026-11-26: "make planes blow up as 3 of their bombs when they die, current explosion too small". Commits
+`6d2dd896e` (rule, crash, tests) and `b94ecd3c0` (aircraft in reach; round-trip test). Evidence:
+`~/Documents/projects/outputs/plane-crash-139-20261127/` (`summary.md`, `economics.md`).
+
+- **City Plane Crash Bombs** (match rule, default on): `AmbientAirplane::crash` bursts three `Bullet_Bomb` blasts
+  through `Map::damage`, the middle one where the plane was hit and the others two tiles before and after it along
+  its heading, a stick's spacing (`CityAircraft::kCrashBombs`, `kCrashBombSpacingTiles`, `crashBombOffset`). Each
+  is the plane's own bomb: `stickDamage()` (250) on the building it lands on, the bomb's splash on other teams'
+  buildings and its tile and a half against ground units under City Plane Carpet Bombing, drawn as
+  `Explosion_Bomb`. A bomb never hits an aircraft, but the crash still spares nobody, as before: an aircraft within
+  half a tile of a burst takes the bomb's damage under the one-bomb crash's Dynasty air rule, so a plane hovering
+  over a crash still goes down with it (`natives_probe`, "the chained crash"). It does not call
+  `House::noteBombHit`: a crash is not a raid the defender answers. Off, the crash is one bomb's damage on its tile,
+  as in 1.0.880. `DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1` still overrides both.
+- INI key "City Plane Crash Bombs"; bit 4 of the MOD18 city rules byte (accepted mask now `~31`), hashed and
+  streamed only when off, so a default setup's stream and options hash are unchanged; a 138 peer refuses the byte.
+  **Protocol 139**; save format unchanged (no new saved state). The saboteur fix after it is 140.
+- **Tests.** `city_plane_effect` `checkCrashBombs`: Gun Turrets at x 28, 30, 32 and 36 under a plane shot down
+  over x 30 flying east; with the rule on, the three under the bombs take a full bomb and the one at 36 nothing;
+  off, only the one at 30. Its older crash checks keep the rule off (`Rules::crashBombs`), and
+  `city_aircraft_probe` pins it off for its one-bomb against Death Hand fixture. `CoopGameSettingsTestCase`
+  round-trips the bit. Game options `city-plane-crash-off.ini` / `city-plane-crash-on.ini`.
+
+**OFF (1.0.880) against ON**, build `6d2dd896e`, `rs160-dunecity`, four Brutal QuantBots, seeds 9101-9148, 45
+minutes, per game, paired (jobs `20261127T000755-job-a5a9af`, `-000802-job-3dcae1`):
+
+| Measure | OFF | ON | Difference (95% interval) |
+|---|---:|---:|---|
+| Planes shot down | 27.3 | 26.8 | -0.5 (-2.6 to +1.6) |
+| Enemy buildings destroyed by crashes | 7.9 | 37.5 | +29.5 (+26.1 to +33.0) |
+| ... their value | 1,116 | 5,450 | +4,334 (+3,492 to +5,176) |
+| Enemy units destroyed by crashes | 0.4 | 7.4 | +7.0 (+5.5 to +8.6) |
+| Own buildings destroyed by own crashes | 0 | 0 | 0 |
+| Enemy value destroyed by planes, all sources | 43,382 | 49,675 | |
+| Crash share of plane value | 3% | 13% | |
+| Bought planes' return per credit | 0.67 | 0.80 | |
+| Time-outs | 24/48 | 21/48 | |
+
+Crashes now destroy about 4.7 times the buildings a game (1.40 a crash against 0.29). Games end as before
+(winners 0:16 1:4 2:3 5:1 against 0:17 1:4 2:2 5:4; mean end 40.7 against 40.5 minutes).
+
+**Gates.** AWS at `b94ecd3c0` (`20261127T004319-ctest-69ef4c`): the four AI gates, `dunelegacy_tests`,
+`natives_probe`, `city_plane_effect` (crash_bombs on: Gun Turrets at 28, 30 and 32 lost 200 of 200, at 36 none,
+three explosions; off: only 30), `city_aircraft_probe` and `city_plane_flights`, 9 of 9 passed. The nightly at
+`6d2dd896e` (`20261127T000807-ctest-07557d`) found the wrong hash assertion and the chained crash, both fixed in
+`b94ecd3c0`, and the air-defense probe failure that was already in 2f9f0812d (fixed in `0da919e96`). The full
+nightly and `perf_regression` at the release tip run with the 1.0.880 release.
+
+**Next release notes:** "A plane that is shot down now explodes as three of its bombs along its path, so a crash
+over a city takes out several buildings."
+
 ## 2026-11-26 - Troopers: no fixed infantry share; infantry is measured like every other unit (protocol 138)
 
 Stefan, 2026-11-26: "i want it on - i never wanted a 10% rule for troopers", then "ok so i don't want a 10%
