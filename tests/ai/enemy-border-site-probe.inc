@@ -67,9 +67,21 @@ void runEnemyBorderSiteProbe(Game& game) {
         bool road=false;   // placing on a road clears it, which would change the site's road terms
         for(int dy=0;dy<trap.y;++dy) for(int dx=0;dx<trap.x;++dx) road|=currentGameMap->getTile(corner.x+dx,corner.y+dy)->isRoad();
         if(road) continue;
-        if(enemy->placeStructure(NONE_ID,Structure_WindTrap,corner.x,corner.y,false,true)) ++planted;
+        StructureBase* placedTrap=enemy->placeStructure(NONE_ID,Structure_WindTrap,corner.x,corner.y,false,true);
+        if(!placedTrap) continue;
+        // A trap that makes the site itself illegal (its corner was the detour for a road the
+        // Stadium covers, or the site's ground exit) tests nothing about the score: take it away.
+        bot->clearPlacementCache();
+        if(bot->findPlaceLocation(item)!=site) {
+            SDL_Log("ENEMY_BORDER_SKIP: corner=(%d,%d) moved=(%d,%d) access=%d details=%s",corner.x,corner.y,
+                bot->placementCache[item].x,bot->placementCache[item].y,
+                int(bot->preservesGroundAccess(item,site)),bot->placementScoreDetails[item].json().c_str());
+            placedTrap->destroy();
+            continue;
+        }
+        ++planted;
     }
-    require(planted>0,"No enemy Wind Trap fits on a corner of the Stadium site");
+    require(planted>0,"No enemy Wind Trap on a corner of the Stadium site leaves the site legal");
     int after=0,afterOld=0;
     const Coord again=search(false,&after);
     require(again==site,"An enemy building next door moved the Stadium off its best site");
