@@ -1267,7 +1267,8 @@ void QuantBot::planExtraAirport(BuildPass& pass) {
     // (Airport::freePlanePerAirport). The first Airport is the city's civic (planCivicForYard).
     namespace CA = DuneCity::CityAircraft;
     extraAirportPlan = ExtraAirportPlan();
-    if (!extraAirportsEnabled() || !pass.citySimEnabled || !Airport::freePlanePerAirport()
+    if (!extraAirportsEnabled() || !pass.citySimEnabled
+        || (!Airport::freePlanePerAirport() && !Airport::planeBuildTime())
         || !currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing
         || getHouse()->getNumItems(Structure_Airport) == 0
         || pass.itemCount[Structure_Airport] > getHouse()->getNumItems(Structure_Airport)
@@ -1280,8 +1281,15 @@ void QuantBot::planExtraAirport(BuildPass& pass) {
     extraAirportPlan.valuePerFlight = extraAirportPlan.flightsEnded > 0
         ? rewardMilli / 1000 / extraAirportPlan.flightsEnded : 0;
     const int64_t price = currentGame->objectData.data[Structure_Airport][houseID].price;
-    if (!CA::extraAirportPays(extraAirportPlan.valuePerFlight, extraAirportPlan.flightsEnded, price,
-                              int64_t(Airport::freePlaneCharge()) * GAMESPEED_DEFAULT)) return;
+    const int64_t freeMs = Airport::freePlanePerAirport() ? int64_t(Airport::freePlaneCharge()) * GAMESPEED_DEFAULT : 0;
+    // A production line counts only while every Airport is building: the house wants more planes
+    // than its Airports turn out.
+    const bool linesFull = Airport::planeBuildTime()
+        && Airport::buildingPlanes(getHouse()) >= getHouse()->getNumItems(Structure_Airport);
+    const int64_t buildMs = linesFull ? int64_t(Airport::planeBuildCycles(houseID)) * GAMESPEED_DEFAULT : 0;
+    if (freeMs == 0 && buildMs == 0) return;
+    if (!CA::extraAirportPays(extraAirportPlan.valuePerFlight, extraAirportPlan.flightsEnded, price, freeMs,
+                              CA::planePrice(), buildMs)) return;
     extraAirportPlan.reserve = std::max({pass.economyReserve, pass.strategicReserveCost, pass.civicReserveCost,
                                          pass.cityWorkingReserve, ForceConcentrationPolicy::kSpareCashReserve});
     extraAirportPlan.active = true;

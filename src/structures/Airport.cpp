@@ -68,6 +68,21 @@ bool Airport::freePlanePerAirport() {
     return perAirport;
 }
 
+bool Airport::planeBuildTime() {
+    static const bool enabled = [] {
+        const char* text = std::getenv("DUNECITY_TEST_PLANE_BUILD_TIME");
+        return text != nullptr && std::atoi(text) == 1;
+    }();
+    return enabled;
+}
+
+int Airport::planeBuildCycles(int houseID) {
+    if (!planeBuildTime()) return 0;
+    const auto& orni = currentGame->objectData.data[Unit_Ornithopter][houseID];
+    if (orni.price <= 0 || orni.buildtime <= 0) return MILLI2CYCLES(60000);
+    return static_cast<int>(int64_t(DuneCity::CityAircraft::planePrice()) * orni.buildtime * 15 / orni.price);
+}
+
 void Airport::init() {
     itemID = Structure_Airport;
     owner->incrementStructures(itemID);
@@ -144,8 +159,19 @@ bool Airport::canBuyAirplane() const {
     return currentGame->getGameInitSettings().getGameOptions().cityPlanePurchase
         && currentGame->isCitySimEnabled() && getHealth() > 0 && owner->hasPower()
         && currentGame->objectData.data[Unit_AmbientAirplane][owner->getHouseID()].enabled
-        && owner->getNumItems(Unit_AmbientAirplane) < CA::kMaxPlanesPerHouse
-        && owner->getCredits() >= CA::planePrice();
+        && owner->getNumItems(Unit_AmbientAirplane) + buildingPlanes(owner) < CA::kMaxPlanesPerHouse
+        && owner->getCredits() >= CA::planePrice()
+        && !isBuildingPlane();
+}
+
+int Airport::buildingPlanes(const House* house) {
+    if (!planeBuildTime()) return 0;
+    int building = 0;
+    for (const StructureBase* structure : structureList) {
+        if (structure->getOwner() == house && structure->getItemID() == Structure_Airport
+            && static_cast<const Airport*>(structure)->isBuildingPlane()) ++building;
+    }
+    return building;
 }
 
 /**
@@ -159,6 +185,14 @@ bool Airport::canBuyAirplane() const {
 bool Airport::buyAirplane() {
     namespace CA = DuneCity::CityAircraft;
     if (!canBuyAirplane()) return false;
+    if (planeBuildTime()) {
+        // Paid now, launched when built (updateStructureSpecificStuff); the clock is the build.
+        owner->takeCredits(CA::planePrice());
+        purchaseCooldown = std::max(1, planeBuildCycles(owner->getHouseID()));
+        SDL_Log("CITY_PLANE_BOUGHT: house=%d price=%d build_cycles=%d airport=%u cycle=%u", owner->getHouseID(),
+                CA::planePrice(), purchaseCooldown, objectID, currentGame->getGameCycleCount());
+        return true;
+    }
     if (launchAirplane(true) == nullptr) return false;
     owner->takeCredits(CA::planePrice());
     purchaseCooldown = MILLI2CYCLES(CA::kPurchaseCooldownMs);
@@ -274,7 +308,11 @@ void Airport::logCover() const {
 void Airport::updateStructureSpecificStuff() {
     firstAnimFrame = lastAnimFrame = curAnimFrame =
         DuneCity::CitySprites::poweredFrame(currentGame->getGameCycleCount(), owner->hasPower());
-    if (purchaseCooldown > 0) --purchaseCooldown;
+    if (purchaseCooldown > 0 && --purchaseCooldown == 0 && planeBuildTime() && getHealth() > 0
+        && currentGame->isCitySimEnabled()) {
+        // DUNECITY_TEST_PLANE_BUILD_TIME: the bought plane is built.
+        launchAirplane(true);
+    }
     if (freePlaneTimer > 0) --freePlaneTimer;
     if (!currentGame->isCitySimEnabled() || getHealth() <= 0) return;
     if (currentGame->getGameCycleCount() % MILLI2CYCLES(5000) == 0) updateCityAircraft();

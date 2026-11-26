@@ -4257,6 +4257,9 @@ void Game::runMainLoop() {
 
     } while (!bQuitGame && !finishedLevel);
 
+    // Match log: what each house's unit and building types destroyed against what they cost.
+    for(const auto& entry : house) if(entry) entry->logUnitEconomy("end");
+
     // The host's game has run its last cycle (won, lost, or quit). Spectators that are behind get
     // the rest of it now, past their replay window, and acknowledge the end; the host waits for
     // that, at most a few seconds, before anything can close the session. A spectator then plays

@@ -53,6 +53,23 @@ public:
     /// whatever its Airports, and a launch restarts every Airport's clock (Stefan, 2026-11-26:
     /// "more airports means more planes bombing so could be useful", measured under this switch).
     static bool freePlanePerAirport();
+    /// Balance experiment only, read once per process and never a match rule:
+    /// DUNECITY_TEST_PLANE_BUILD_TIME=1 makes a bought plane take build time (Stefan, 2026-11-26:
+    /// "make buying planes take time - so however long it takes for 1500 credits worth of unit by
+    /// default it takes that long. so the ai will want more airports to increase its build rate").
+    /// The Airport takes the price at the order and launches the plane planeBuildCycles() later,
+    /// one plane at a time, so N Airports build N times as fast. The free plane is unchanged.
+    static bool planeBuildTime();
+    /// Game cycles a bought plane takes under planeBuildTime() (0 without it): the factory rule
+    /// (BuilderBase::updateProductionProgress pays price / (BuildTime x 15) a cycle, so an item takes
+    /// BuildTime x 15 cycles) applied to the plane's price at the rate of the house's Ornithopter,
+    /// the other aircraft: 1500 / 600 x 96 x 15 = 3,600 cycles, 57.6 s. Heavy Factory units spend
+    /// at the same rate (Siege Tank, Launcher) or close to it.
+    static int planeBuildCycles(int houseID);
+    /// True while this Airport is building a bought plane (planeBuildTime()).
+    bool isBuildingPlane() const { return planeBuildTime() && purchaseCooldown > 0; }
+    /// Airports of `house` building a plane now (0 without planeBuildTime()).
+    static int buildingPlanes(const House* house);
     /// True for a 3x3 Airport (see the class comment), false for the ordinary 4x4 one.
     bool isCompact() const { return compact; }
 

@@ -157,6 +157,10 @@ public:
     inline Sint32 getNumItemDamageInflicted(int itemID) const { return numItemDamageInflicted[itemID]; }
     const CombatReward::Totals& getCombatReward(int itemID) const { return combatRewards[itemID]; }
     void addCombatReward(Uint32 itemID, const CombatReward::Totals& reward);
+    /// Match log only: one UNIT_ECONOMY line per unit or structure type this house has built,
+    /// lost or scored with (built, lost, price, the combat record's damage value and kills), to
+    /// set what each type destroyed beside what it cost (tests/ai/unit-economy-report.py).
+    void logUnitEconomy(const char* phase) const;
     /// Scale of the learning bonus for destroying one of this house's units of \a itemID,
     /// read from this house's own measured record with that type. O(1), no scan.
     int killBonusPermilleForOwnType(int itemID, int price) const;

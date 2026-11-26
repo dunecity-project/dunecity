@@ -680,7 +680,9 @@ AirportTurrets=0
 # it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
 # destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes
 # (CityAircraft::extraAirportPays), from spare cash only. In the game an extra Airport adds no free
-# plane, so this only builds under the experiment DUNECITY_TEST_FREE_PLANE_PER_AIRPORT. 0 = off.
+# plane and no production, so this only builds under the experiments DUNECITY_TEST_FREE_PLANE_PER_AIRPORT
+# (a free plane per Airport) or DUNECITY_TEST_PLANE_BUILD_TIME (each Airport builds one bought plane at
+# a time; counted while every Airport is busy). 0 = off.
 ExtraAirports=0
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1

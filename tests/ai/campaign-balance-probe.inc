@@ -605,6 +605,8 @@ int runCampaignBalanceProbe() {
         SDL_Log("ASSET_STARTUP: phase=probe_setup ms=%lld", setupMs);
     const auto loopStart = ProbeDigest::Clock::now();
     const Uint32 firstCycle = game->getGameCycleCount();
+    // A save's unit economy as loaded, to subtract from its end (tests/ai/unit-economy-report.py).
+    if (loadSave) for (int h = 0; h < NUM_HOUSES; ++h) if (const House* house = game->getHouse(h)) house->logUnitEconomy("loaded");
     if (civWars) {
         outcome = CivWarsMatch::run(*game, end);
     } else if (duel) {
@@ -717,6 +719,7 @@ int runCampaignBalanceProbe() {
             DuneCityAudit::sample(*game);
     }
     if (outcome.empty()) outcome = game->finished ? (game->won ? "won" : "lost") : "time_limit";
+    for (int h = 0; h < NUM_HOUSES; ++h) if (const House* house = game->getHouse(h)) house->logUnitEconomy("probe_end");
     {
         const long long loopMs = ProbeDigest::millisecondsSince(loopStart);
         const Uint32 cycles = game->getGameCycleCount() - firstCycle;

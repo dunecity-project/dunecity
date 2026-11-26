@@ -193,6 +193,7 @@ inline void run(Game& game, Uint32 end, const std::vector<FormationDuel::Side>& 
     recordEliminations(game, state);
     EliminationMatch::sample(game, true);
     if (state.genome.enabled) genomeSample(game);
+    for (int h = 0; h < NUM_HOUSES; ++h) if (const House* house = game.getHouse(h)) house->logUnitEconomy("match_end");
     FormationDuel::report(game, sides);
 }
 

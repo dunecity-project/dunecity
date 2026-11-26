@@ -492,6 +492,13 @@ TEST_CASE("Another Airport is built only when its free planes repay its price in
     CHECK(extraAirportPays(500, 10, 5000, 120000));
     CHECK_FALSE(extraAirportPays(499, 10, 5000, 120000));
     CHECK_FALSE(extraAirportPays(1000000, 10, 5000, 0));
+    // A production line alone (no free plane, 57.6 s a plane at 1,500): (v - 1500) x 20.8 >= 5,000.
+    CHECK(extraAirportPays(1740, 10, 5000, 0, 1500, 57600));
+    CHECK_FALSE(extraAirportPays(1739, 10, 5000, 0, 1500, 57600));
+    CHECK_FALSE(extraAirportPays(1500, 10, 5000, 0, 1500, 57600));   // a plane that only repays itself
+    // Both: the free plane's 1,000 x 4 plus the line's 100 x 20.8 is 6,083.
+    CHECK(extraAirportPays(1000, 10, 5000, 300000, 900, 57600));
+    CHECK_FALSE(extraAirportPays(900, 10, 5000, 300000, 1500, 57600));   // 900 x 4 = 3,600, no margin
 }
 
 TEST_CASE("The city airplane is scored like a unit and bought against the army's score", "[city][aircraft]") {

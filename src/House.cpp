@@ -1312,6 +1312,22 @@ void House::informHasDamaged(Uint32 itemID, Uint32 damage) {
 }
 
 
+void House::logUnitEconomy(const char* phase) const {
+    for(int item = 0; item < Num_ItemID; ++item) {
+        const auto& reward = combatRewards[item];
+        if(numItemBuilt[item] == 0 && numItemLosses[item] == 0 && reward.total() == 0) continue;
+        std::string name;
+        try { name = getItemNameByID(item); } catch(const std::exception&) { name = "item_" + std::to_string(item); }
+        std::replace(name.begin(), name.end(), ' ', '_');
+        SDL_Log("UNIT_ECONOMY: phase=%s house=%d item=%d name=%s price=%d built=%d lost=%d damage_value=%lld "
+                "kill_bonus=%lld kills=%llu hits=%llu cycle=%u", phase, houseID, item, name.c_str(),
+                currentGame->objectData.data[item][houseID].price, numItemBuilt[item], numItemLosses[item],
+                static_cast<long long>(reward.damageMilli / 1000), static_cast<long long>(reward.killBonusMilli / 1000),
+                static_cast<unsigned long long>(reward.kills), static_cast<unsigned long long>(reward.hits),
+                currentGame->getGameCycleCount());
+    }
+}
+
 void House::addCombatReward(Uint32 itemID, const CombatReward::Totals& reward) {
     if (itemID >= Num_ItemID) return;
     auto& total = combatRewards[itemID];

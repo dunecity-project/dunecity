@@ -676,19 +676,32 @@ inline constexpr bool richBuys(int64_t surplus) { return surplus >= kRichSurplus
 // a house has one free plane in the air whatever its Airports, and bought planes are capped at
 // kMaxPlanesPerHouse. Only under the experiment DUNECITY_TEST_FREE_PLANE_PER_AIRPORT (Airport::
 // freePlanePerAirport) does each Airport add a free plane every kFreePlaneMs; an extra Airport is then
-// worth what its free planes destroy. QuantBot builds one when its own planes' record says that pays
-// back the Airport's price within kAirportPaybackMinutes: value per ended flight (the house's combat
-// record of the plane: price x share of hit points removed, buildings and units, bombs and crashes)
-// times the free flights in that time. 5,000 over 20 minutes and a plane every five is 1,250 a flight.
+// worth what its free planes destroy. Under DUNECITY_TEST_PLANE_BUILD_TIME (Airport::planeBuildTime;
+// Stefan, 2026-11-26: "so the ai will want more airports to increase its build rate") each Airport also
+// builds one bought plane at a time, so an extra Airport is a second production line, worth what a
+// bought plane destroys beyond its price for every plane it can build. QuantBot builds one when its own
+// planes' record says that pays back the Airport's price within kAirportPaybackMinutes: value per ended
+// flight v (the house's combat record of the plane: price x share of hit points removed, buildings and
+// units, bombs and crashes) times the free flights in that time, plus (v - plane price) times the planes
+// built in that time. 5,000 over 20 minutes and a free plane every five is 1,250 a flight; a line alone
+// (57.6 s a plane) needs v of 1,740 at a 1,500 price.
 inline constexpr int kAirportPaybackMinutes = 20;
 /// Flights of its own that must have ended before a computer player judges another Airport.
 inline constexpr int kAirportEvidenceFlights = 3;
 /// Airports a computer player builds at most under ExtraAirports, the first one included.
 inline constexpr int kMaxAirportsPerHouse = 4;
+/// `freePlaneMs`: an extra Airport's free plane every that many ms (0: it adds none). `buildMs`: the
+/// time it takes to build a bought plane of `planePrice` (0: planes are not built, they launch at once).
 inline constexpr bool extraAirportPays(int64_t valuePerFlight, int flightsEnded, int64_t airportPrice,
-                                       int64_t freePlaneMs = kFreePlaneMs) {
-    return flightsEnded >= kAirportEvidenceFlights && freePlaneMs > 0
-        && valuePerFlight * kAirportPaybackMinutes * 60000 >= airportPrice * freePlaneMs;
+                                       int64_t freePlaneMs = kFreePlaneMs, int64_t planePrice = kPlanePrice,
+                                       int64_t buildMs = 0) {
+    const int64_t horizon = int64_t(kAirportPaybackMinutes) * 60000;
+    const int64_t margin = valuePerFlight > planePrice ? valuePerFlight - planePrice : 0;
+    const bool free = freePlaneMs > 0, built = buildMs > 0;
+    const int64_t gain = free && built ? horizon * (valuePerFlight * buildMs + margin * freePlaneMs)
+                       : free ? horizon * valuePerFlight : built ? horizon * margin : 0;
+    const int64_t cost = airportPrice * (free ? freePlaneMs : 1) * (built ? buildMs : 1);
+    return flightsEnded >= kAirportEvidenceFlights && (free || built) && gain >= cost;
 }
 
 // ---------------------------------------------------------------------------

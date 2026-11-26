@@ -134,8 +134,13 @@ PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name',
                 'own_destroyed', 'own_credits', 'own_rocket_turrets', 'threat', 'rocket_turrets', 'gun_turrets',
                 'structures_lost', 'item', 'x', 'y', 'airport', 'airport_house', 'airport_dist', 'stage', 'dist',
                 'ring', 'reach', 'powered', 'health', 'turret_at', 'own', 'source', 'airports',
-                'flights_ended', 'value_per_flight')
+                'flights_ended', 'value_per_flight', 'build_cycles')
 PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
+# One row per house and unit/structure type at the end of a game (UNIT_ECONOMY, House::logUnitEconomy):
+# built, lost, price and the combat record's damage value, for tests/ai/unit-economy-report.py.
+UNIT_ECONOMY_FIELDS = ('phase', 'house', 'item', 'name', 'price', 'built', 'lost', 'damage_value', 'kill_bonus',
+                       'kills', 'hits', 'cycle')
+UNIT_ECONOMY_ROW_FIELDS = KEY + UNIT_ECONOMY_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
 
@@ -408,6 +413,12 @@ def play(args, scratch, binary, key):
                 planes.append({**dict(zip(KEY, key)), 'event': event,
                                **{f: data.get(f, '') for f in PLANE_FIELDS}})
     append(results / 'planes.csv', PLANE_ROW_FIELDS, planes)
+    economy = []
+    for l in lines:
+        if 'UNIT_ECONOMY:' in l:
+            data = parse(l, 'UNIT_ECONOMY:')
+            economy.append({**dict(zip(KEY, key)), **{f: data.get(f, '') for f in UNIT_ECONOMY_FIELDS}})
+    append(results / 'units.csv', UNIT_ECONOMY_ROW_FIELDS, economy)
     append(results / 'houses.csv', HOUSE_ROW_FIELDS, house_rows)
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)
