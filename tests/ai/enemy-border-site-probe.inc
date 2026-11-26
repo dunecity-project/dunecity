@@ -70,6 +70,7 @@ void runEnemyBorderSiteProbe(Game& game) {
     const Coord yardAt=yard->getLocation();
     Coord site=Coord::Invalid();
     int before=0,after=0,afterOld=0,planted=0,tried=0;
+    std::string beforeDetails;
     for(int radius=0;radius<=24 && site.isInvalid();++radius)
         for(int y=yardAt.y-radius;y<=yardAt.y+radius && site.isInvalid();++y)
             for(int x=yardAt.x-radius;x<=yardAt.x+radius && site.isInvalid();++x) {
@@ -85,6 +86,7 @@ void runEnemyBorderSiteProbe(Game& game) {
                 mask(candidate);
                 int score=0,oldScore=0;
                 if(search(false,&score)!=candidate) continue;   // not a legal site
+                const std::string details=bot->placementScoreDetails[item].json();
                 ++tried;
                 require(search(true,&oldScore)==candidate && oldScore==score,"Spacings differ before any enemy building");
                 int traps=0;
@@ -96,11 +98,13 @@ void runEnemyBorderSiteProbe(Game& game) {
                     ++traps;
                 }
                 if(!traps) continue;
-                site=candidate; before=score; planted=traps;
+                site=candidate; before=score; planted=traps; beforeDetails=details;
             }
     require(site.isValid(),"No open Stadium site near the yard takes an enemy Wind Trap on a corner");
     const Coord again=search(false,&after);
     require(again==site,"An enemy building next door made the Stadium site illegal");
+    if(after!=before) SDL_Log("ENEMY_BORDER_DETAILS: site=(%d,%d) traps=%d before=%s after=%s",site.x,site.y,planted,
+        beforeDetails.c_str(),bot->placementScoreDetails[item].json().c_str());
     require(after==before,"An enemy building next door lowered the site's score");
     const Coord oldSite=search(true,&afterOld);
     require(oldSite==site,"The old spacing refused the only site");
