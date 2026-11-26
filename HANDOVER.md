@@ -1,3 +1,79 @@
+## 2026-11-26 - City planes: economics measured; build time, a free plane per Airport and ExtraAirports behind switches (no default changed)
+
+Stefan: "for airplanes we really want to see how many units or buildings they destroy (and total value) vs their
+cost (1500) to see if they make economic sense"; then "the airport economic value should be factored in by the ai
+to determine if it makes sense to buy more airports", "make buying planes take time - so however long it takes for
+1500 credits worth of unit by default it takes that long", and after `planeswin.dls` "city airplanes did way more
+damage than any other unit by a wide margin". Evidence: `~/Documents/projects/outputs/plane-economics-20261126/`
+(`summary.md`, `report-base-*.md`, `base-unit-economy.md`) and `.../planes-economics-20261126/planeswin/`.
+
+- **Logging (`9a8efe680`, `0963ba80b`).** Bomb and crash kills name the plane (`object=`); new `CITY_PLANE_UNIT_KILL`
+  (units, own team flagged), `CITY_PLANE_LEFT`, and `UNIT_ECONOMY` per house and type (built, lost, price,
+  combat-record damage value, kills; `kind=unit|structure`) at the end of real games, matches and save
+  continuations. Reports: `tests/ai/city_plane_economics.py` (per flight, from launch to end; value = build price
+  of enemy objects destroyed, a zone at its 100 build price, partial damage not counted), appended per arm by
+  `city-plane-report.py`; `tests/ai/unit-economy-report.py` (every type, value per credit spent and lost).
+- **Switches (`b9b3bc0f8`, `6c85576dd`), all experiment-only env, defaults unchanged, save format unchanged:**
+  `DUNECITY_TEST_PLANE_PRICE`; `DUNECITY_TEST_FREE_PLANE_PER_AIRPORT=1` (a free plane per Airport, its own clock);
+  `DUNECITY_TEST_PLANE_BUILD_TIME=1` (a bought plane is paid at the order and launched when built, one at a time
+  per Airport; build time is the factory rule, an item takes BuildTime x 15 cycles, at the house's Ornithopter
+  rate: 1500 / 600 x 96 x 15 = 3,600 cycles, 57.6 s; the saved purchase clock is the timer); QuantBot
+  `ExtraAirports` (off; `DUNECITY_TEST_EXTRA_AIRPORTS`): another Airport, up to 4, from spare cash, when free planes
+  or (with build time, all Airports busy) the margin of bought planes repays 5,000 in 20 minutes
+  (`CityAircraft::extraAirportPays`, unit-tested).
+- **Airport premise.** Airport 5,000, power 40, no upkeep. Stefan's 16.5 minutes is 5,000 / (one 1,500 plane every
+  five minutes). In the game a second Airport adds nothing: the city counts one (`hasAirport`), one free plane per
+  house is in the air and a launch restarts every Airport's clock, bought planes are capped at 10. QuantBot builds
+  exactly one, as the commercial civic.
+
+**Economics, 48 AWS games** (`rs160-dunecity`, four Brutal QuantBots, 45 min, `city-plane-b52-on.ini`, seeds
+9101-9148, `6c85576dd`; job `20261126T192341-job-65189d`):
+
+| Per flight | Flights | Mean value | Median | Repay 1,500 | Buildings | Units | Shot down |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Free | 1,084 | 1,551 | 1,050 | 36% | 6.90 | 2.66 | 95% |
+| Bought | 605 | **936** | 700 | 19% | 4.06 | 1.31 | 77% |
+
+A game: 35.2 flights, 12.6 bought (18,906 spent), 46,826 enemy value destroyed (11,796 by bought planes, **0.62
+credits back per credit**), 207 buildings and 76 units. Crashes 3% of the value. Minutes 0-10: 3,169 a flight;
+30-45: 883. Per credit spent by type (combat record, a plane flight priced 1,500 as if bought): Siege Tank 2.34,
+Sonic Tank 2.32, Quad 2.18, Rocket Turret 2.01, Launcher 1.91, Tank 1.75, **City airplane 1.61**, Devastator 1.45,
+Ornithopter 0.77. Bought planes are below break-even and planes are mid-field, not above it.
+
+**OFF/ON, same seeds and build** (jobs `-f0b4ba` buildair, `-85afe1` buildonly, `-8c6ad6` freeair; all-on
+`20261126T193504-allon-e6dcc8` by another session, build time + ExtraAirports + AirportTurrets):
+
+| Against base, a game | Build time | Build time + ExtraAirports | Free plane per Airport + ExtraAirports | All on |
+|---|---:|---:|---:|---:|
+| Planes bought | -6.75 (-9.65 to -4.08) | -5.31 (-7.69 to -3.21) | +0.15 | -3.54 (-8.58 to +2.17) |
+| Buildings lost to bombs | -24.6 (-38.0 to -11.9) | -17.5 (-26.8 to -7.8) | +1.5 | -10.4 (-33.4 to +13.7) |
+| Extra Airports | 0 | 0.88 | 0.04 | 0.81 |
+| Time-outs (base 54%) | -2 points | -4 points | 0 | +10 points (-4 to +25) |
+| Houses eliminated (base 2.00) | +0.02 | +0.04 | 0 | -0.38 (-0.73 to -0.04) |
+
+Placement by seat moves nowhere that the rules could explain (every house plays the same rules). Build time removes
+half the bought planes and costs no measurable outcome. ExtraAirports buys Airports that do not pay: it judges
+by the house's combat record per ended flight (about 2,400, free flights and partial damage included), while a
+bought plane destroys 936; QuantBot's plane purchase uses the same optimistic record.
+
+**planeswin.dls** (Stefan's Air, 1.0.878, 192x192, four QuantBots; saved at minute 206.5, the game ends at 209.7).
+Harkonnen bought 882 planes from minute 122 (837 by minute 206.5), up to 29 a minute, from one Airport, as a rich house
+(`CityAircraft::richBuys`). To minute 206.5 its planes did 1.12M damage value, 17.9% of its total and its largest
+type, at 0.86 per credit lost (Launcher 1.84, Siege Tank 1.45, Devastator 1.42, Tank 0.96, Ornithopter 0.65):
+volume, not strength. Continuation on the Mini: OFF Harkonnen wins at 209.7 after buying 68 more; build time +
+ExtraAirports, and all on, Harkonnen wins at 212.8 after buying 6, keeping 356,816 credits.
+Over the whole game (`planeswin/analysis.md`, `timeline.md`): Harkonnen's city outgrew the rest from minute 80
+(1,207 zones at the end); from minute 122 its credits sat at the 30,000 rich-buy line and everything above became
+planes (25 per ten minutes, rising to 211), their damage rising from 12k to 237k per ten minutes. Sardaukar (out
+at 186) and Mercenary (200) lost 12% and 16% of their buildings' value to planes; Fremen, the last rival, 32%,
+most of it in its last 30 minutes. A rich house's planes finished the game.
+
+**Stefan's decision (2026-11-26):** "you get a free plane per airport. you need to think that the free plane alone
+gets you free damage ... if an ai has a lot of money planes win games". So: a free plane per Airport and plane
+build time become match rules, on by default; QuantBot builds extra Airports (ExtraAirports on), valued on their
+free planes' damage and, for a rich house, as production lines; no stat nerf. That change, its OFF/ON evidence
+(rs160 and a rich start) and its gates follow in a later entry. Nothing above changed a default.
+
 ## 2026-11-26 - Released 1.0.879 (v1.0.879, 82b5dbc05): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
 
 Stefan: "Release 1.0.879". The held-building yard fix (protocol 135), French voices launch crash (#129) and the

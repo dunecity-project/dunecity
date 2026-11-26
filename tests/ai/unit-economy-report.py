@@ -12,9 +12,10 @@ only what happened after the load counts.
 
 Damage value is the house's combat record of the type (House::getCombatReward): the price of every enemy
 object it hit times the share of hit points it removed, summed; kill bonus is apart. Spent is built x price
-(the unit data price of the house; Starport discounts and upgrades are not seen). City airplanes are spent
-bought x the price charged (CITY_PLANE_BOUGHT); free planes cost nothing, so per credit spent counts only
-bought planes' cost against all planes' damage, and per flight is given too.
+(the unit data price of the house; Starport discounts and upgrades are not seen). City airplanes are priced
+per flight, free ones included, at the price charged (CITY_PLANE_BOUGHT; 1500): "as if bought", so a plane
+compares with a unit built for the same money; what was actually spent on planes is in the notes. A vanilla
+match logs both match_end and probe_end; one phase is taken per game (match_end, else probe_end, else end).
 
   python3 tests/ai/unit-economy-report.py --results DIR [DIR ...] [--tag TAG] [--output report.md]
   python3 tests/ai/unit-economy-report.py --log run.log [--output report.md]
@@ -86,6 +87,21 @@ def parse_log(path):
     return rows, bought, launched
 
 
+def one_phase(rows):
+    """One end-of-game phase per game: match_end, else probe_end, else end."""
+    by_game = defaultdict(list)
+    for row in rows:
+        by_game[tuple(row.get(k, '') for k in ('difficulty', 'map', 'seed', 'sides'))].append(row)
+    kept = []
+    for game_rows in by_game.values():
+        for phase in ('match_end', 'probe_end', 'end'):
+            chosen = [r for r in game_rows if r.get('phase') == phase]
+            if chosen:
+                kept += chosen
+                break
+    return kept
+
+
 def table(rows, bought_rows, flights, games):
     by_type = defaultdict(lambda: defaultdict(float))
     for row in rows:
@@ -103,8 +119,9 @@ def table(rows, bought_rows, flights, games):
         if t['damage_value'] <= 0 and t['built'] <= 0:
             continue
         if name == PLANE:
-            spent = plane_spent
-            lost_cost = t['lost'] * (plane_spent / plane_bought if plane_bought else 1500)
+            price = plane_spent / plane_bought if plane_bought else 1500
+            spent = flights * price
+            lost_cost = t['lost'] * price
         else:
             spent = t['built'] * t['price']
             lost_cost = t['lost'] * t['price']
@@ -114,7 +131,7 @@ def table(rows, bought_rows, flights, games):
         kind = '' if t['unit'] else ' (building)'
         label = name.replace('_', ' ') + kind
         if name == PLANE:
-            label = 'City airplane (%d bought, %d flights)' % (plane_bought, flights)
+            label = 'City airplane (%d flights, %d bought; per flight as if bought)' % (flights, plane_bought)
         lines.append('| %s | %d | %d | %s | %s | %d | %s | %s | %s |' % (
             label, t['built'], t['lost'], '{:,.0f}'.format(spent), '{:,.0f}'.format(t['damage_value']), t['kills'],
             '%.2f' % (t['damage_value'] / spent) if spent > 0 else '-',
@@ -123,10 +140,10 @@ def table(rows, bought_rows, flights, games):
     plane = by_type.get(PLANE)
     notes = []
     if plane and flights:
-        notes.append('City airplanes: %s damage value a flight; %s a bought plane against its %s.' % (
-            '{:,.0f}'.format(plane['damage_value'] / flights),
-            '{:,.0f}'.format(plane['damage_value'] / plane_bought) if plane_bought else '-',
-            '{:,.0f}'.format(plane_spent / plane_bought) if plane_bought else '-'))
+        notes.append('City airplanes: %s damage value a flight against a price of %s; %d of %d flights bought, %s spent.'
+                     % ('{:,.0f}'.format(plane['damage_value'] / flights),
+                        '{:,.0f}'.format(plane_spent / plane_bought) if plane_bought else '1,500',
+                        plane_bought, flights, '{:,.0f}'.format(plane_spent)))
     army = [(n, t, s) for n, t, s, _ in ranked if t['unit'] and n != PLANE and s > 0]
     if army:
         spent = sum(s for _, _, s in army)
@@ -155,7 +172,7 @@ def main():
         tags = args.tag or sorted({r['tag'] for r in games})
         for tag in tags:
             n_games = sum(1 for r in games if r['tag'] == tag)
-            rows = [r for r in units if r['tag'] == tag and r.get('phase') in ('match_end', 'end', 'probe_end')]
+            rows = one_phase([r for r in units if r['tag'] == tag])
             bought = [r for r in planes if r['tag'] == tag and r['event'] == 'bought']
             flights = sum(1 for r in planes if r['tag'] == tag and r['event'] == 'launched')
             lines, notes = table(rows, bought, flights, n_games)
