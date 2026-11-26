@@ -154,11 +154,14 @@ void SinglePlayerMenu::runCampaign(bool showLobby, bool duneCity) {
     const auto* partner = PlayerFactory::getByPlayerClass(partnerClass);
     const bool supportSelected = (partner != nullptr) && (!HouseChoiceMenu::isOnline() || (!showLobby && OnlineModPolicy::approved()));
 
-    GameInitSettings init = HouseChoiceMenu::isSingleMission()
+    // The DuneCity campaign's missions are not the original campaign's levels: its Mission 10 has no
+    // level, and mapping it through one threw before the game began (Stefan, 2026-11-26).
+    GameInitSettings init = HouseChoiceMenu::isDuneCityCampaign()
+        ? GameInitSettings::duneCityCampaign(HouseChoiceMenu::getStartLevel(), HouseChoiceMenu::isSingleMission(), gameOptions)
+        : HouseChoiceMenu::isSingleMission()
         ? GameInitSettings((HOUSETYPE) player, HouseChoiceMenu::getStartLevel(), gameOptions)
         : GameInitSettings((HOUSETYPE) player, gameOptions, HouseChoiceMenu::getStartLevel());
-    if(HouseChoiceMenu::isDuneCityCampaign()) init.useDuneCityCampaign(HouseChoiceMenu::getStartLevel());
-    else if(HouseChoiceMenu::isReworkedMaps()) init.useReworkedMaps();
+    if(!HouseChoiceMenu::isDuneCityCampaign() && HouseChoiceMenu::isReworkedMaps()) init.useReworkedMaps();
     const auto campaignSkin = GameInitSettings::sanitizeGraphicsSkin(HouseChoiceMenu::getCampaignSkin());
     init.setCampaignGraphicsSkin(campaignSkin);
     if(supportSelected) {
