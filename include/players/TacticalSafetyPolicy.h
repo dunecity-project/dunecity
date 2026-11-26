@@ -107,6 +107,28 @@ inline auto reactorSiteRank(int threat, int loss, int enemyClearance, bool blast
 inline bool reactorPlacementAllowed(int item, bool clearance) {
     return item == Structure_NuclearPlant || clearance;
 }
+// Building up to the enemy (protocol 141; Stefan, 2026-11-27: "also allow ai to build buildings
+// right up to enemy buildings"). The engine lets a player put a building against an enemy one;
+// QuantBot now may too.
+//  - An enemy building on a site's border no longer costs the site anything (it was -10 a tile,
+//    the mirror of the +10 an own building gives), so a base can grow right up to the enemy's.
+//  - Tactical danger counts 100 for each observed enemy weapon whose reach (range + 2) covers the
+//    footprint. Light fire, one weapon, no longer refuses a site: such a site is taken after every
+//    safe site, least threatened first. Heavy fire, two weapons or more, is still refused until a
+//    finished building has been held QuantBot::kHeldThreatGrace (placementToleratesThreat).
+// oldSpacing (QuantBot Config.ini BuildUpToEnemy=false, play style @old-enemy-spacing; experiment
+// arms only) restores the rules before 141.
+constexpr int kLightFire = 100;
+constexpr int kOldEnemyBorderTileScore = -10;
+inline int enemyBorderTileScore(bool oldSpacing) {
+    return oldSpacing ? kOldEnemyBorderTileScore : 0;
+}
+// Whether an ordinary (not held) search may take a site under this much tactical danger.
+// Reactors keep their own fire rule (reactorSiteRank) and never take a threatened site here.
+inline bool ordinarySiteUnderFireAllowed(int danger, int item, bool oldSpacing) {
+    if (danger <= 0) return true;
+    return !oldSpacing && item != Structure_NuclearPlant && danger <= kLightFire;
+}
 inline int lossStrength(unsigned age, unsigned lifetime) {
     if (!lifetime || age >= lifetime) return 0;
     return 1 + 100 * (lifetime-age) / lifetime;

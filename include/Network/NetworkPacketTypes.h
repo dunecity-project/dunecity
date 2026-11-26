@@ -476,7 +476,12 @@
 //      kill and hit points are credited to the Saboteur and the AI hears of what it destroyed, and
 //      a Saboteur that blew up its target is no longer counted as lost. A 139 peer would desync.
 //      Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            140
+// 141: QuantBot may build right up to enemy buildings (Stefan, 2026-11-27): an enemy building on a
+//      site's border no longer lowers its score, and a site under light enemy fire (one weapon's
+//      reach) is taken after every safe site instead of refused (TacticalSafetyPolicy::
+//      enemyBorderTileScore, ordinarySiteUnderFireAllowed). AI placement differs, so a 140 peer
+//      would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            141
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

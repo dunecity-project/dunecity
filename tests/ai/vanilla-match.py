@@ -42,7 +42,8 @@ army stands each minute (FFA_ARMY_SAMPLE: inside or outside its base, per QuantB
 bundle or perimeter, the outnumbered verdict) to army.csv, its waves to waves.csv and the
 composition per unit-mix slot every 10 game minutes and at the end (value built, lost and
 standing, combat reward; docs/ai-play-styles.md, section 8) to mix.csv and every Saboteur's release,
-sabotage or loss to saboteurs.csv; the run directory is
+sabotage or loss to saboteurs.csv, every building a QuantBot placed (with the gap to the nearest
+enemy building) to placements.csv; the run directory is
 deleted straight away and games already in games.csv are skipped. --report prints the tables
 used in docs/formations.md, scored by tests/ai/match_score.py (placement score, time-outs
 negative, verdict on the paired difference; --scoring legacy for the old rule).
@@ -136,6 +137,11 @@ PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name',
                 'ring', 'reach', 'powered', 'health', 'turret_at', 'own', 'source', 'airports',
                 'flights_ended', 'value_per_flight', 'build_cycles')
 PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
+# One row per building a QuantBot placed (not slabs or roads): the clear tiles to the nearest enemy
+# building (enemy_gap 0 = touching, -1 = none standing), the tactical danger on the site and
+# whether a held building took it (protocol 141, "build right up to enemy buildings").
+PLACED_FIELDS = ('house', 'item', 'x', 'y', 'enemy_gap', 'enemy_item', 'threat', 'tolerated', 'old_spacing', 'cycle')
+PLACED_ROW_FIELDS = KEY + ('label',) + PLACED_FIELDS
 # One row per house and unit/structure type at the end of a game (UNIT_ECONOMY, House::logUnitEconomy):
 # built, lost, price and the combat record's damage value, for tests/ai/unit-economy-report.py.
 UNIT_ECONOMY_FIELDS = ('phase', 'house', 'item', 'name', 'kind', 'price', 'built', 'lost', 'damage_value', 'kill_bonus',
@@ -413,6 +419,16 @@ def play(args, scratch, binary, key):
                 planes.append({**dict(zip(KEY, key)), 'event': event,
                                **{f: data.get(f, '') for f in PLANE_FIELDS}})
     append(results / 'planes.csv', PLANE_ROW_FIELDS, planes)
+    placements = []
+    for l in lines:
+        if 'AI_PLACED:' in l:
+            data = parse(l, 'AI_PLACED:')
+            number = int(data['house'])
+            placements.append({**dict(zip(KEY, key)), 'label': label_of.get(number, ''),
+                               **{f: data.get(f, '') for f in PLACED_FIELDS}})
+            if number in numbers:
+                placements[-1]['house'] = numbers[number]
+    append(results / 'placements.csv', PLACED_ROW_FIELDS, placements)
     economy = []
     for l in lines:
         if 'UNIT_ECONOMY:' in l:

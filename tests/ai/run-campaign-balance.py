@@ -384,6 +384,9 @@ parser.add_argument('--reactor-safety-probe', action='store_true')
 parser.add_argument('--held-site-threat-probe', action='store_true',
                     help='Verify that a finished building held a minute with no safe site goes to the '
                          'least threatened legal site instead of blocking its yard')
+parser.add_argument('--enemy-border-site-probe', action='store_true',
+                    help='Verify that QuantBot may build right up to enemy buildings (protocol 141): an '
+                         'enemy building on the border costs nothing, light fire is a fallback site')
 parser.add_argument('--degradation-probe', action='store_true',
                     help='Verify Dynasty-aligned power damage, foundation decay and their save state')
 parser.add_argument('--radar-probe', action='store_true')
@@ -1042,6 +1045,7 @@ if args.civic_priority_probe: env['BALANCE_CIVIC_PRIORITY_ONLY'] = '1'
 if args.nuclear_probe or args.reactor_safety_probe: env['BALANCE_NUCLEAR_PROBE'] = '1'
 if args.reactor_safety_probe: env['BALANCE_REACTOR_SAFETY_PROBE'] = '1'
 if args.held_site_threat_probe: env['BALANCE_HELD_SITE_THREAT_PROBE'] = '1'
+if args.enemy_border_site_probe: env['BALANCE_ENEMY_BORDER_SITE_PROBE'] = '1'
 if args.degradation_probe: env['BALANCE_DEGRADATION_PROBE'] = '1'
 if args.radar_probe: env['BALANCE_RADAR_PROBE'] = '1'
 if args.army_probe: env['BALANCE_ARMY_PROBE'] = '1'

@@ -662,6 +662,12 @@ MoreRocketTurrets=0
 # Turrets. At most 2 a minute, 8 a raid and 24 Rocket Turrets in all; bought only from cash above
 # the build pass's largest reserve plus 500, and only when the house can power it. 0 = off.
 AirRaidTurrets=1
+# Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings". 1 (protocol 141):
+# an enemy building on a site's border costs the site nothing (it was -10 a tile), and a site under
+# light enemy fire (one weapon's reach) is taken after every safe site instead of refused; heavy fire
+# (two weapons or more) still waits for a held finished building's minute. 0 = the spacing before 141
+# (play style @old-enemy-spacing, for experiment arms).
+BuildUpToEnemy=1
 # Stefan, 2026-11-24: "on skirmish with fully built base the ai doesn't build rocket turret defenes
 # and everyones base gets steamrolled by a plane". As soon as another team has an Airport or has
 # flown a city airplane (and bombing is on), a house spreads Rocket Turrets through its city by the

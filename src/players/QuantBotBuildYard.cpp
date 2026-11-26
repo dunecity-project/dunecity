@@ -4171,6 +4171,26 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
             if (!placed && itemToBePlaced == Structure_Road) yardTurn.placeLocations->push_front(location);
             traceDecision("placement_result", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y).set("success", placed));
+            if (placed && itemToBePlaced != Structure_Slab1 && itemToBePlaced != Structure_Slab4
+                && itemToBePlaced != Structure_Road) {
+                // How close the base grows to the enemy's (protocol 141): clear tiles between the new
+                // footprint and the nearest enemy building (0 = touching, -1 = none standing).
+                // vanilla-match.py collects these lines into placements.csv.
+                const Coord span = getStructureSize(itemToBePlaced);
+                int enemyGap = -1, enemyItem = -1;
+                for (const auto* structure : getStructureList()) {
+                    if (!structure->getOwner() || structure->getHealth() <= 0
+                        || structure->getOwner()->getTeamID() == getHouse()->getTeamID()) continue;
+                    const Coord at = structure->getLocation(), size = structure->getStructureSize();
+                    const int gap = CityPlacementPolicy::footprintDistance(location.x, location.y, span.x, span.y,
+                        at.x, at.y, size.x, size.y) - 1;
+                    if (enemyGap < 0 || gap < enemyGap) { enemyGap = gap; enemyItem = structure->getItemID(); }
+                }
+                SDL_Log("AI_PLACED: house=%d item=%d x=%d y=%d enemy_gap=%d enemy_item=%d threat=%d tolerated=%d "
+                    "old_spacing=%d cycle=%u", houseID, int(itemToBePlaced), location.x, location.y, enemyGap,
+                    enemyItem, dangerAt(location, span), int(threatTolerant),
+                    int(usesOldEnemySpacing()), getGameCycleCount());
+            }
             if (itemToBePlaced != Structure_Slab1 && itemToBePlaced != Structure_Slab4) {
                 if (placed) { reservedStructures.erase(planningBuilder); heldWithoutSiteSince.erase(yardID); }
                 else { reservedStructures[planningBuilder] = {itemToBePlaced, location};

@@ -871,6 +871,9 @@ private:
     /// Set only around a held building's site search: threatened sites are accepted, least
     /// threatened first, and the search bypasses placementCache.
     bool placementToleratesThreat = false;
+    /// Probe-only: the enemy spacing before protocol 141, as BuildUpToEnemy=false gives it.
+    bool oldEnemySpacing = false;
+    bool usesOldEnemySpacing() const { return oldEnemySpacing || !botConfig().force.buildUpToEnemy; }
     Uint32 lastSafetyTrace = std::numeric_limits<Uint32>::max();
     struct HarvesterSafety { Uint32 nextCheck = 0, retreatUntil = 0; Coord lastLocation = Coord::Invalid(), plannedDestination = Coord::Invalid(); bool controlled = false; };
     std::map<Uint32, HarvesterSafety> harvesterSafety;

@@ -394,6 +394,7 @@ QuantBotConfig::QuantBotConfig() {
     force.airRaidTurrets = true;   // Stefan, 2026-11-23: "also make the ai respond when being bombed by planes by having more turrets dispersed"
     force.extraAirports = true;     // Stefan, 2026-11-26: "factored in by the ai to determine if it makes sense to buy more airports"; on with City Plane Free Per Airport (CityAircraftPolicy.h)
     force.airportTurrets = false;   // Stefan, 2026-11-26: "also airports need decent rocket turret defenses" (QuantBotAirDefencePolicy.h)
+    force.buildUpToEnemy = true;    // Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings"
     force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
     force.vanillaCoreDefenceThreatBps = 5000;
     force.vanillaArmyCounters = true;  // counters50-S5, default since protocol 119
@@ -928,6 +929,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
         iniFile.setBoolValue("Force Concentration", "PalaceTurrets", force.palaceTurrets);
         iniFile.setBoolValue("Force Concentration", "AirRaidTurrets", force.airRaidTurrets);
+        iniFile.setBoolValue("Force Concentration", "BuildUpToEnemy", force.buildUpToEnemy);
         iniFile.setBoolValue("Force Concentration", "AirThreatTurrets", force.airThreatTurrets);
         iniFile.setBoolValue("Force Concentration", "AirportTurrets", force.airportTurrets);
         iniFile.setBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
@@ -1294,6 +1296,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.palaceDenseClearing = iniFile.getBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
     force.palaceTurrets = iniFile.getBoolValue("Force Concentration", "PalaceTurrets", force.palaceTurrets);
     force.airRaidTurrets = iniFile.getBoolValue("Force Concentration", "AirRaidTurrets", force.airRaidTurrets);
+    force.buildUpToEnemy = iniFile.getBoolValue("Force Concentration", "BuildUpToEnemy", force.buildUpToEnemy);
     force.airThreatTurrets = iniFile.getBoolValue("Force Concentration", "AirThreatTurrets", force.airThreatTurrets);
     force.airportTurrets = iniFile.getBoolValue("Force Concentration", "AirportTurrets", force.airportTurrets);
     force.extraAirports = iniFile.getBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
@@ -2056,6 +2059,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.palaceTurrets) addNamed("palaceTurrets", force.palaceTurrets);
     // On is the default and leaves every existing hash as it was; off is hashed.
     if (!force.airRaidTurrets) addNamed("airRaidTurrets", force.airRaidTurrets);
+    // On is the default (protocol 141); only off is hashed, so the default config keeps its hash.
+    if (!force.buildUpToEnemy) addNamed("buildUpToEnemy", force.buildUpToEnemy);
     // Off is the default and leaves every existing hash as it was; on is hashed.
     if (force.airThreatTurrets) addNamed("airThreatTurrets", force.airThreatTurrets);
     if (force.airportTurrets) addNamed("airportTurrets", force.airportTurrets);

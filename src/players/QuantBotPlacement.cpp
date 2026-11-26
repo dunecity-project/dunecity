@@ -724,6 +724,14 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     auto bestReactorRank = TacticalSafetyPolicy::reactorSiteRank(100000,100000,-1,false,0,std::numeric_limits<int>::min());
     int candidates = 0, threatRejected = 0, blastRejected = 0, lossRejected = 0;
     int bestThreat = std::numeric_limits<int>::max();
+    // Protocol 141 (TacticalSafetyPolicy::ordinarySiteUnderFireAllowed): an ordinary search may
+    // take a site under light fire, after every safe one; the old spacing refuses any fire.
+    const bool oldSpacing = usesOldEnemySpacing();
+    const bool rankThreat = placementToleratesThreat || !oldSpacing;
+    // A pass may stop early only once it holds a safe site (or any site, when threats are tolerated).
+    auto bestSettled = [&] {
+        return bestLocation.isValid() && (placementToleratesThreat || bestThreat <= 0);
+    };
 
 	bool itemIsBuilder = (itemID == Structure_HeavyFactory
 		|| itemID == Structure_RepairYard
@@ -1067,10 +1075,10 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
     for (int searchPass=0; searchPass<3; ++searchPass) {
         if (searchPass==1) {
-            if (bestLocation.isValid() && itemID != Structure_NuclearPlant && !(spreadVsDeathHand && !bestSpread)) break;
+            if (bestSettled() && itemID != Structure_NuclearPlant && !(spreadVsDeathHand && !bestSpread)) break;
             startX=0; startY=0; endX=mapW-newSizeX; endY=mapH-newSizeY;
         }
-        if (searchPass==2 && ((bestLocation.isValid() && !(spreadVsDeathHand && !bestSpread)) || !roadingFallbackItem)) break;
+        if (searchPass==2 && ((bestSettled() && !(spreadVsDeathHand && !bestSpread)) || !roadingFallbackItem)) break;
         // Only the road-layout preferences are dropped. Engine placement, ground
         // egress, reservations, blast clearance and threat rules still decide.
         const bool relaxRoading = searchPass==2;
@@ -1155,10 +1163,15 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                     && nearRecentStructureLoss(placeLocationX, placeLocationY, newSizeX, newSizeY)) { ++lossRejected; continue; }
                 // A finished building that has found no safe site for kHeldThreatGrace accepts
                 // threatened ground (placementToleratesThreat): the least threatened site wins below.
+                // Otherwise light fire (one enemy weapon) is a fallback after every safe site and
+                // heavy fire is refused (protocol 141).
                 int siteThreat = 0;
                 if (itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall) {
                     siteThreat = dangerAt(Coord(placeLocationX, placeLocationY), Coord(newSizeX, newSizeY));
-                    if (siteThreat > 0 && !placementToleratesThreat) { ++threatRejected; continue; }
+                    if (!placementToleratesThreat
+                        && !TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(siteThreat, itemID, oldSpacing)) {
+                        ++threatRejected; continue;
+                    }
                     if (siteThreat > 0) ++threatRejected;
                     if (!TacticalSafetyPolicy::reactorPlacementAllowed(itemID, clearsReactorAt(placeLocationX, placeLocationY))) { ++blastRejected; continue; }
                 }
@@ -1195,7 +1208,9 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 				for (int j = placeLocationY - 1; j <= placeLocationEndY; j++) {
 					if (getMap().tileExists(i, j) && (getMap().getSizeX() > i) && (0 <= i) && (getMap().getSizeY() > j) && (0 <= j)) {
 					if (getMap().getTile(i, j)->hasAStructure()) {
-						// Favor being near our buildings, avoid enemy buildings
+						// Favor being near our buildings. An enemy building next door costs
+						// nothing since protocol 141 (it was -10 a tile): a base may grow
+						// right up to the enemy's, as a player's may.
 						if (getMap().getTile(i, j)->getOwner() == getHouse()->getHouseID()) {
 							adjacentFriendlyStructureTiles++;
 							locationScore += cityZonePlacement ? 0 : 10;  // compact bases only; lots keep frontage instead
@@ -1224,7 +1239,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 							}
 						}
 						else {
-							locationScore -= 10;
+							locationScore += TacticalSafetyPolicy::enemyBorderTileScore(oldSpacing);
 						}
 					}
 					else if (!getMap().getTile(i, j)->isRock() && !getMap().getTile(i, j)->hasPreparedFoundation()) {
@@ -1647,7 +1662,9 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 				// Pick this location if it has the best score. force.spreadVsDeathHand: a site
 				// spaced from the other critical buildings outranks every unspaced one.
                 const bool spread = spreadVsDeathHand && spreadFromDeathHandSites(placeLocationX, placeLocationY);
-                if (protectedRepair) {
+                // A protected repair site is chosen among safe sites; a site under light fire is
+                // left to the ordinary least-threatened pick below.
+                if (protectedRepair && (placementToleratesThreat || siteThreat <= 0)) {
                     const int64_t depth = frontDepth
                         - (int64_t(2*placeLocationX + newSizeX - 2*baseCenter.x)*threatDX
                             + int64_t(2*placeLocationY + newSizeY - 2*baseCenter.y)*threatDY);
@@ -1666,7 +1683,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                     repairSites.push_back({Coord(placeLocationX, placeLocationY), spread, shielded, depth,
                         lossRisk == 0, infill, siteTier, locationScore, relaxRoading, repairQuality});
                 }
-				if (placementToleratesThreat && siteThreat != bestThreat ? siteThreat < bestThreat
+				if (rankThreat && siteThreat != bestThreat ? siteThreat < bestThreat
                     : spreadVsDeathHand && spread != bestSpread ? spread
                     : itemID == Structure_NuclearPlant ? reactorRank > bestReactorRank
                     : factoryPlacement ? factoryRank > bestFactoryRank
@@ -1723,13 +1740,19 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     if (spreadVsDeathHand)
         bestQuality.set("death_hand_spread",bestSpread ? 1 : 0)
             .set("death_hand_sites",static_cast<int>(deathHandSites.size()));
-    if (bestLocation.isInvalid()) {
-        bestLocation = findRedevelopmentSite(itemID);
-        if (bestLocation.isValid()) { bestQuality.set("redevelopment",1); roadingRelaxed=false; }
+    // A safe redevelopment site outranks an ordinary site under light fire.
+    const bool bestUnderFire = !protectedPick && !placementToleratesThreat && bestLocation.isValid()
+        && bestThreat > 0 && bestThreat != std::numeric_limits<int>::max();
+    if (bestLocation.isInvalid() || bestUnderFire) {
+        const Coord redevelopment = findRedevelopmentSite(itemID);
+        if (redevelopment.isValid()) {
+            bestLocation = redevelopment; bestThreat = 0;
+            bestQuality.set("redevelopment",1); roadingRelaxed=false;
+        }
     }
 	if (!placementToleratesThreat) placementCache[itemID] = bestLocation;
-    if (placementToleratesThreat) bestQuality.set("threat_tolerated",1)
-        .set("site_threat",bestLocation.isValid() && bestThreat != std::numeric_limits<int>::max() ? bestThreat : 0);
+    if (placementToleratesThreat) bestQuality.set("threat_tolerated",1);
+    bestQuality.set("site_threat",bestLocation.isValid() && bestThreat != std::numeric_limits<int>::max() ? bestThreat : 0);
     bestQuality.set("roading_relaxed",roadingRelaxed)
         .set("legal_candidates",candidates).set("threat_rejections",threatRejected)
         .set("blast_rejections",blastRejected).set("recent_loss_rejections",lossRejected)

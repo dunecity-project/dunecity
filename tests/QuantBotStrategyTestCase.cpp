@@ -4150,6 +4150,41 @@ TEST_CASE("AirThreatTurrets: a baseline before the first bomb, one a minute up t
     REQUIRE(std::string_view(Air::holdName(Air::Hold::ThreatCap)) == "threat_cap");
 }
 
+TEST_CASE("BuildUpToEnemy: an enemy building next door is free, light fire is a fallback", "[ai][placement][policy]") {
+    // Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings" (protocol 141).
+    REQUIRE(TacticalSafetyPolicy::enemyBorderTileScore(false) == 0);
+    REQUIRE(TacticalSafetyPolicy::enemyBorderTileScore(true) == -10);   // the spacing before 141
+    for (const int item : {Structure_WindTrap, Structure_Stadium, Structure_HeavyFactory, Structure_Refinery}) {
+        REQUIRE(TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(0, item, false));
+        REQUIRE(TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(TacticalSafetyPolicy::kLightFire, item, false));
+        REQUIRE_FALSE(TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(2 * TacticalSafetyPolicy::kLightFire, item, false));
+        REQUIRE_FALSE(TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(TacticalSafetyPolicy::kLightFire, item, true));
+        REQUIRE(TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(0, item, true));
+    }
+    // A reactor keeps its own fire rule.
+    REQUIRE_FALSE(TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(TacticalSafetyPolicy::kLightFire, Structure_NuclearPlant, false));
+}
+
+TEST_CASE("BuildUpToEnemy defaults on, round trips and hashes only when off", "[ai][placement][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE(defaults.force.buildUpToEnemy);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-build-up-to-enemy-test.ini";
+    {
+        std::ofstream file(path);
+        file << "[Force Concentration]\nBuildUpToEnemy=false\n";
+    }
+    QuantBotConfig loaded;
+    REQUIRE(loaded.applyOverrides(path.string()));
+    REQUIRE_FALSE(loaded.force.buildUpToEnemy);
+    REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(loaded.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE_FALSE(restored.force.buildUpToEnemy);
+    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("AirThreatTurrets defaults off, round trips and hashes only when on", "[ai][air-raid][config]") {
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.airThreatTurrets);
