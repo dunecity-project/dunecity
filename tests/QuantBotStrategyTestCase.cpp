@@ -4188,6 +4188,51 @@ TEST_CASE("AirportTurrets: four Rocket Turrets in a five-tile ring, spread round
     REQUIRE(Air::airportGuardSiteScore(Air::kNoTurret, 3) == Air::airportGuardSiteScore(Air::kAirportGuardSpreadCapTiles, 3));
 }
 
+TEST_CASE("TrooperMeasuredShare: the infantry share follows the Trooper's score as one more slot", "[ai][unit-mix][policy]") {
+    namespace Mix = UnitMixPolicy;
+    Mix::Slots available{};
+    Mix::Weights scores{};
+    for (size_t i = 0; i < 4; ++i) { available[i] = true; scores[i] = 1000000; }
+    // A Trooper scoring like each of four slots, with plenty of evidence, takes a fifth.
+    const int even = Mix::measuredInfantryBps(scores, available, 1000000, int64_t(1) << 40, 100000);
+    REQUIRE(even >= 1990);
+    REQUIRE(even <= 2010);
+    // A weaker Trooper takes less than its plain share (sharpened), a stronger one more.
+    const int weak = Mix::measuredInfantryBps(scores, available, 500000, int64_t(1) << 40, 100000);
+    const int strong = Mix::measuredInfantryBps(scores, available, 2000000, int64_t(1) << 40, 100000);
+    REQUIRE(weak < 1000);
+    REQUIRE(strong > 3000);
+    // Without evidence the Trooper scores the mean slot.
+    REQUIRE(Mix::measuredInfantryBps(scores, available, 0, 0, 100000) == even);
+    // Unavailable slots do not count; the share is capped like a slot.
+    Mix::Slots none{};
+    REQUIRE(Mix::measuredInfantryBps(scores, none, 1000000, 1, 100000) == Mix::kMeasuredInfantryCapBps);
+    // The quota in per cent: rounded, never 0.
+    REQUIRE(Mix::measuredInfantryPercent(0) == 1);
+    REQUIRE(Mix::measuredInfantryPercent(349) == 3);
+    REQUIRE(Mix::measuredInfantryPercent(350) == 4);
+}
+
+TEST_CASE("TrooperMeasuredShare defaults off, round trips and hashes only when on", "[ai][unit-mix][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.trooperMeasuredShare);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-trooper-measured-share-test.ini";
+    {
+        std::ofstream file(path);
+        file << "[Force Concentration]\nTrooperMeasuredShare=true\n";
+    }
+    QuantBotConfig loaded;
+    REQUIRE(loaded.applyOverrides(path.string()));
+    REQUIRE(loaded.force.trooperMeasuredShare);
+    REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(loaded.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.trooperMeasuredShare);
+    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("AirportTurrets defaults off, round trips and hashes only when on", "[ai][air-raid][config]") {
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.airportTurrets);

@@ -3127,6 +3127,28 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     allocationSnapshot.learning = pass.learningUnitMix;
     allocationSnapshot.militaryValue = pass.militaryValue;
     allocationSnapshot.antiAirFloorBps = launcherFloorAuthorised ? launcherFloorBps : 0;
+    // TrooperMeasuredShare (default off; UnitMixPolicy::measuredInfantryBps): once the mix is
+    // learning, the infantry share follows the Trooper's measured score instead of the fixed
+    // difficulty quota. An Infantry strategy keeps its own share. DUNECITY_TEST_TROOPER_MEASURED_SHARE
+    // (0 or 1) is an experiment-only override for match arms in one build, read once per process.
+    static const int measuredShareOverride = [] {
+        const char* text = std::getenv("DUNECITY_TEST_TROOPER_MEASURED_SHARE");
+        return text != nullptr && (text[0] == '0' || text[0] == '1') ? text[0] - '0' : -1;
+    }();
+    const bool measuredShare = measuredShareOverride >= 0 ? measuredShareOverride == 1
+        : botConfig().force.trooperMeasuredShare;
+    if (measuredShare && pass.learningUnitMix
+        && !(pass.strategyMixProfile && pass.strategyMixProfile->infantryPercent > 0)) {
+        const auto& trooper = data[Unit_Trooper][houseID];
+        if (trooper.enabled && trooper.price > 0 && trooper.techLevel <= getHouse()->getTechLevel()) {
+            const int64_t reward = getHouse()->getCombatReward(Unit_Trooper).total();
+            const int64_t loss = int64_t(getHouse()->getNumLostItems(Unit_Trooper)) * trooper.price * 1000;
+            const int64_t score = UnitMixPolicy::performanceScore(reward, loss, trooper.price * 1000);
+            const int bps = UnitMixPolicy::measuredInfantryBps(scores, available, score,
+                                                                std::max<int64_t>(0, reward) + loss, int64_t(trooper.price) * 1000);
+            pass.infantryPercent = UnitMixPolicy::measuredInfantryPercent(bps);
+        }
+    }
     allocationSnapshot.infantryQuotaBps = pass.infantryPercent * 100;
     const int rawOrnithopterBps = rawMix[kOrnithopterSlot];
     pass.tankPercent = FixPoint(pass.unitMix[0])/10000;

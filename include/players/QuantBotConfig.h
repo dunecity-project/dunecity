@@ -842,6 +842,9 @@ struct QuantBotConfig {
         /// armour and escorts, using existing infantry shares/economy reserves.
         /// Default ON at Stefan's direction despite unproven acceptance; see HANDOVER.
         bool trooperSupport;
+        /// Default off: the infantry share follows the Trooper's measured score once the mix is
+        /// learning, instead of the fixed 18/15/12/10% difficulty quota (UnitMixPolicy::measuredInfantryBps).
+        bool trooperMeasuredShare;
         /// Stateless existing-composition/technology experiment, default OFF.
         /// Current paired outcome audits reject adoption; see HANDOVER.
         bool simpleTechSavings;

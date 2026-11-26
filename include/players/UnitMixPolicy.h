@@ -205,6 +205,40 @@ inline Mix allocate(const Weights& scores, const Weights& defaults, bool learnin
     if (vanilla) cap(kOrnithopterSlot,2500);
     return result;
 }
+/// TrooperMeasuredShare (default off). Stefan, 2026-11-26: "why do troopers have a fixed 10% ratio ??
+/// i never asked for that". The infantry share of the army's value was a fixed quota per difficulty
+/// (18/15/12/10%, DuneCity 1.0.529). With the switch it is the Trooper's measured score taken as one
+/// more slot of the mix: the score blended with the mean slot score as exploredScores blends a little
+/// tested type, then sharpened (share^1.5, sharpenScores) and normalised with the slots' \a slotScores.
+/// Capped like a slot (allocate: 8000). 0 when no slot and no Trooper has a score.
+constexpr int kMeasuredInfantryCapBps = 8000;
+inline int measuredInfantryBps(const Weights& slotScores, const Slots& available, int64_t trooperScore,
+                               int64_t trooperEvidence, int64_t trooperPriceMilli) {
+    int64_t prior = 0, count = 0;
+    for (size_t i = 0; i < kSlots; ++i) if (available[i] && slotScores[i] > 0) { prior += slotScores[i]; ++count; }
+    prior = count ? prior / count : 1000000;
+    const int64_t trooper = std::max<int64_t>(0, blendWithPrior(trooperScore, std::max<int64_t>(0, trooperEvidence),
+                                                                 prior, std::max<int64_t>(1, trooperPriceMilli) * 4));
+    std::array<int64_t, kSlots + 1> all{};
+    for (size_t i = 0; i < kSlots; ++i) all[i] = available[i] ? std::max<int64_t>(0, slotScores[i]) : 0;
+    all[kSlots] = trooper;
+    int64_t total = 0;
+    for (const int64_t value : all) total += value;
+    if (total == 0) return 0;
+    int64_t sharpened = 0, own = 0;
+    for (size_t i = 0; i < all.size(); ++i) {
+        const int64_t share = all[i] * 10000 / total;
+        const int64_t weight = share * int64_t(integerSqrt(uint64_t(share) * 1000000));
+        sharpened += weight;
+        if (i == kSlots) own = weight;
+    }
+    if (sharpened == 0) return 0;
+    return static_cast<int>(std::min<int64_t>(kMeasuredInfantryCapBps, own * 10000 / sharpened));
+}
+/// The infantry quota in per cent from measuredInfantryBps: rounded, at least 1 (the WOR still
+/// fields a few Troopers to keep measuring them).
+constexpr int measuredInfantryPercent(int bps) { return std::max(1, (bps + 50) / 100); }
+
 /// Minimum mobile AA value share while visible hostile aircraft justify it.
 /// This role budget is a tactical heuristic, not an optimal battle ratio.
 constexpr int kMobileAntiAirFloorBps = 2000;

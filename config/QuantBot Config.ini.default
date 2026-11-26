@@ -704,6 +704,11 @@ FundedClassicProduction=1
 # Six standing; reactive air floor up to18. Infantry strategy retains its existing quota.
 # ON at Stefan's direction despite unproven adoption/Starport acceptance; see HANDOVER.
 TrooperSupport=1
+# Stefan, 2026-11-26: "why do troopers have a fixed 10% ratio ?? i never asked for that". Once the
+# unit mix is learning, the infantry share of the army's value follows the Trooper's measured score
+# (taken as one more slot of the mix) instead of the fixed difficulty quota (Easy 18%, Medium 15%,
+# Hard 12%, Brutal 10%). An Infantry strategy keeps its own share. 0 = the fixed quota.
+TrooperMeasuredShare=0
 # Stateless existing-composition/technology experiment; paired outcomes rejected adoption.
 # Default OFF. No saved budget, save-format change or protocol change.
 SimpleTechSavings=0
