@@ -70,9 +70,9 @@ constexpr int kHospitalHealCostTenths = 2;
 constexpr int kHospitalAutoHealthPercent = 50;
 /// The automatic rule and a waiting soldier look again every this many cycles.
 constexpr int kHospitalRecheckCycles = 32;
-/// A trip that has not reached its Hospital after this many cycles (3 game minutes at the default
-/// speed) without being carried is abandoned: the route is blocked.
-constexpr uint32_t kHospitalTripTimeoutCycles = 11250;
+/// A walk that has come no closer to its Hospital for this many cycles (one game minute at the
+/// default speed) is abandoned: the route is blocked. A Soldier needs about 300 cycles a tile.
+constexpr uint32_t kHospitalTripStallCycles = 3750;
 
 /// One soldier's claim on a Hospital.
 struct HospitalTrip {
@@ -82,11 +82,12 @@ struct HospitalTrip {
     int16_t spotX = -1, spotY = -1;   ///< The tile beside the Hospital it walks or is flown to.
     Stage stage = Stage::Travelling;
     bool carried = false;            ///< Seen inside a Carryall since the last walking order.
-    uint32_t startCycle = 0;         ///< Cycle of the dispatch (timeout of a blocked walk).
+    uint32_t startCycle = 0;         ///< Cycle of the dispatch or of the last step closer.
+    int16_t bestDistance = 0x7fff;   ///< Closest the walk has come, in tiles (stall detection).
 
     bool operator==(const HospitalTrip& o) const {
         return hospitalID == o.hospitalID && spotX == o.spotX && spotY == o.spotY && stage == o.stage
-            && carried == o.carried && startCycle == o.startCycle;
+            && carried == o.carried && startCycle == o.startCycle && bestDistance == o.bestDistance;
     }
 };
 
@@ -144,6 +145,7 @@ public:
             stream.writeUint8(static_cast<Uint8>(t.stage));
             stream.writeBool(t.carried);
             stream.writeUint32(t.startCycle);
+            stream.writeSint16(t.bestDistance);
         }
     }
 
@@ -158,7 +160,7 @@ public:
             overlays_.emplace_back(zone, overlay);
         }
         const Uint32 tripCount = stream.readUint32();
-        stream.requireReadableElements(tripCount, 18);
+        stream.requireReadableElements(tripCount, 20);
         for(Uint32 i = 0; i < tripCount; ++i) {
             const Uint32 unit = stream.readUint32();
             HospitalTrip t;
@@ -170,6 +172,7 @@ public:
             t.stage = static_cast<HospitalTrip::Stage>(stage);
             t.carried = stream.readBool();
             t.startCycle = stream.readUint32();
+            t.bestDistance = stream.readSint16();
             trips_[unit] = t;
         }
     }

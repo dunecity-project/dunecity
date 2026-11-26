@@ -256,6 +256,7 @@ void update() {
             // Just set down by the Carryall (which may drop beside the spot, not on it).
             trip.carried = false;
             trip.startCycle = cycle;
+            trip.bestDistance = 0x7fff;
             if(!besideZone(zone, unit->getLocation())) { unit->doMove2Pos(spot, true); continue; }
         } else if(unit->getDestination() != spot && !besideZone(zone, unit->getLocation())) {
             ended.push_back(unitID);   // ordered somewhere else
@@ -263,7 +264,13 @@ void update() {
         }
 
         if(!besideZone(zone, unit->getLocation())) {
-            if(cycle - trip.startCycle > kHospitalTripTimeoutCycles) ended.push_back(unitID);
+            const int distance = blockDistanceApprox(unit->getLocation(), zone->getClosestPoint(unit->getLocation()));
+            if(distance < trip.bestDistance) {
+                trip.bestDistance = static_cast<int16_t>(distance);
+                trip.startCycle = cycle;
+            } else if(cycle - trip.startCycle > kHospitalTripStallCycles) {
+                ended.push_back(unitID);
+            }
             continue;
         }
 

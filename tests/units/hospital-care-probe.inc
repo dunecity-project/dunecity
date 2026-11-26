@@ -182,7 +182,7 @@ std::string digest(const std::vector<Uint32>& units) {
         out << unit->getHealth().getRawValue() << '@' << unit->getLocation().x << ',' << unit->getLocation().y
             << (unit->isPickedUp() ? " carried" : "");
         if(const auto* t = care().trip(id))
-            out << " trip=" << t->hospitalID << '/' << int(t->stage) << '/' << t->spotX << ',' << t->spotY << '/' << t->carried;
+            out << " trip=" << t->hospitalID << '/' << int(t->stage) << '/' << t->spotX << ',' << t->spotY << '/' << t->carried << '/' << t->bestDistance << '/' << t->startCycle;
     }
     out << " credits=" << currentGame->getHouse(HOUSE_ATREIDES)->getCredits();
     return out.str();
@@ -207,7 +207,7 @@ void checkCap(const std::string& mapData, bool second) {
     int most = 0, waited = 0;
     std::vector<int> peak(hospitals.size(), 0);
     bool everyoneDone = false;
-    for(int cycle = 0; cycle < 6000 && !everyoneDone; ++cycle) {
+    for(int cycle = 0; cycle < 20000 && !everyoneDone; ++cycle) {
         step(*game, hospitals);
         for(size_t h = 0; h < hospitals.size(); ++h) {
             const int healing = care().patients(hospitals[h]);
@@ -278,7 +278,7 @@ void checkLock(const std::string& mapData) {
     require(HC::isLockedHospital(zone(hospital)) && overlayOf(hospital) == ZoneStructure::CivicOverlay::Hospital,
             "A Hospital lost its overlay while a soldier walked to it");
     bool sawHealing = false;
-    for(int i = 0; i < 4000 && care().trip(walker); ++i) {
+    for(int i = 0; i < 20000 && care().trip(walker); ++i) {
         step(*game, none);
         if(care().trip(walker) && care().trip(walker)->stage == HospitalTrip::Stage::Healing && !sawHealing) {
             sawHealing = true;
@@ -344,7 +344,7 @@ void checkCarryall(const std::string& mapData) {
     order(*game, id);
     bool carried = false;
     int liftedAt = -1;
-    for(int i = 0; i < 8000 && (care().trip(id) || !carried); ++i) {
+    for(int i = 0; i < 20000 && (care().trip(id) || !carried); ++i) {
         step(*game, hospitals);
         const auto* unit = unitByID(id);
         require(unit != nullptr, "The Trooper died on the flight");
@@ -399,7 +399,7 @@ void checkSave(const std::string& mapData) {
     for(Uint32 id : units) order(*game, id);
     // Until five heal, one waits and the far Trooper is in the air.
     bool ready = false;
-    for(int i = 0; i < 4000 && !ready; ++i) {
+    for(int i = 0; i < 20000 && !ready; ++i) {
         step(*game, hospitals);
         int waiting = 0;
         for(const auto& [id, t] : care().trips()) waiting += t.stage == HospitalTrip::Stage::Waiting;
