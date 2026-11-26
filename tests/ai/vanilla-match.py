@@ -138,7 +138,7 @@ PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name',
 PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
 # One row per house and unit/structure type at the end of a game (UNIT_ECONOMY, House::logUnitEconomy):
 # built, lost, price and the combat record's damage value, for tests/ai/unit-economy-report.py.
-UNIT_ECONOMY_FIELDS = ('phase', 'house', 'item', 'name', 'price', 'built', 'lost', 'damage_value', 'kill_bonus',
+UNIT_ECONOMY_FIELDS = ('phase', 'house', 'item', 'name', 'kind', 'price', 'built', 'lost', 'damage_value', 'kill_bonus',
                        'kills', 'hits', 'cycle')
 UNIT_ECONOMY_ROW_FIELDS = KEY + UNIT_ECONOMY_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'

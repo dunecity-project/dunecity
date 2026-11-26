@@ -27,10 +27,18 @@ from collections import defaultdict
 from pathlib import Path
 
 PLANE = 'Ambient_Airplane'
-UNIT_NAMES = {'Carryall', 'Devastator', 'Deviator', 'Frigate', 'Harvester', 'Launcher', 'Elite_Launcher', 'MCV',
-              'Ornithopter', 'Quad', 'Raider_Trike', 'Rocket_Trike', 'Saboteur', 'Sandworm', 'Siege_Tank', 'Soldier',
-              'Sonic_Tank', 'Tank', 'Trike', 'Trooper', 'Troopers', 'Infantry', 'Ambient_Airplane',
-              'Ambient_Helicopter', 'Special', 'Fremen', 'Sardaukar', 'Tame_Sandworm'}
+# Rows carry kind=unit|structure from 2026-11-26; older rows fall back to the engine's unit names
+# (getItemNameByID, spaces as underscores).
+UNIT_NAMES = {'Carryall', 'Chemical_Carryall', 'Devastator', 'Deviator', 'Frigate', 'Harvester', 'Launcher', 'MCV',
+              "'Thopter", 'Quad', 'Raider_Trike', 'Siege_Tank', 'Sonic_Tank', 'Tank', 'Trike', 'Saboteur', 'Sandworm',
+              'Soldier', 'Trooper', 'Special', 'Infantry', 'Troopers', 'Infantry5', 'Troopers5', 'Elite_Ornithopter',
+              'Raider_Quad', 'Ranged_Tank', 'Slow_Tank', 'Capacity_Harvester', 'Fast_Harvester', 'Tame_Sandworm',
+              'Flame_Quad', 'Gas_Infantry', 'Flame_Trooper', 'Ambient_Airplane', 'Ambient_Helicopter', 'Rocket_Trike',
+              'Sonic_Trike', 'Flame_Tank', 'Elite_Launcher', 'Elite_Siege_Tank', 'Chemical_Siege_Tank', 'Harvestank'}
+
+
+def is_unit(row):
+    return row.get('kind') == 'unit' if row.get('kind') else row['name'] in UNIT_NAMES
 
 
 def read(folders, name):
@@ -83,6 +91,7 @@ def table(rows, bought_rows, flights, games):
     for row in rows:
         t = by_type[row['name']]
         t['price'] = num(row['price'])
+        t['unit'] = 1.0 if is_unit(row) else 0.0
         for field in ('built', 'lost', 'damage_value', 'kill_bonus', 'kills'):
             t[field] += num(row[field])
     plane_spent = sum(num(r.get('price')) for r in bought_rows)
@@ -102,7 +111,7 @@ def table(rows, bought_rows, flights, games):
         ranked.append((name, t, spent, lost_cost))
     ranked.sort(key=lambda item: -item[1]['damage_value'])
     for name, t, spent, lost_cost in ranked:
-        kind = '' if name in UNIT_NAMES else ' (building)'
+        kind = '' if t['unit'] else ' (building)'
         label = name.replace('_', ' ') + kind
         if name == PLANE:
             label = 'City airplane (%d bought, %d flights)' % (plane_bought, flights)
@@ -118,7 +127,7 @@ def table(rows, bought_rows, flights, games):
             '{:,.0f}'.format(plane['damage_value'] / flights),
             '{:,.0f}'.format(plane['damage_value'] / plane_bought) if plane_bought else '-',
             '{:,.0f}'.format(plane_spent / plane_bought) if plane_bought else '-'))
-    army = [(n, t, s) for n, t, s, _ in ranked if n in UNIT_NAMES and n != PLANE and s > 0]
+    army = [(n, t, s) for n, t, s, _ in ranked if t['unit'] and n != PLANE and s > 0]
     if army:
         spent = sum(s for _, _, s in army)
         value = sum(t['damage_value'] for _, t, _ in army)
