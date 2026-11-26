@@ -3619,8 +3619,27 @@ void QuantBot::useSpareYardCapacity(BuildPass& pass, BuilderTurn& turn, YardTurn
 
 bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
     int houseID = getHouse()->getHouseID();
+    const Uint32 yardID = turn.pBuilder->getObjectID();
+    if (!turn.pBuilder->isWaitingToPlace()) heldWithoutSiteSince.erase(yardID);
     if (turn.pBuilder->isWaitingToPlace()) {
         Uint32 itemToBePlaced = turn.pBuilder->getCurrentProducedItem();
+        // A finished building held for want of a safe site for kHeldThreatGrace takes the least
+        // threatened legal site instead: enemy turrets in range of the whole base do not leave.
+        // Reactors keep their own safety rule (cancelled and refunded below), roads and slabs
+        // their own ground rules.
+        const auto held = heldWithoutSiteSince.find(yardID);
+        const bool threatTolerant = held != heldWithoutSiteSince.end()
+            && getGameCycleCount() - held->second >= kHeldThreatGrace
+            && itemToBePlaced != Structure_NuclearPlant && itemToBePlaced != Structure_Road
+            && itemToBePlaced != Structure_Slab1 && itemToBePlaced != Structure_Slab4;
+        auto searchSite = [&](Uint32 item) {
+            if (!threatTolerant) return findPlaceLocation(item);
+            placementToleratesThreat = true;
+            const Coord site = findPlaceLocation(item);
+            placementToleratesThreat = false;
+            return site;
+        };
+        auto noteHeld = [&]() { heldWithoutSiteSince.emplace(yardID, getGameCycleCount()); };
         logDebug("PRODUCTION: CY waiting to place itemID: %d, credits: %d, queued locations: %zu", itemToBePlaced, pass.money, yardTurn.placeLocations->size());
         Coord location;
         bool placementIssueHandled = false;
@@ -3722,7 +3741,8 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                     || itemToBePlaced == Structure_Wall || itemToBePlaced == Structure_Road
                     || itemToBePlaced == Structure_Slab1 || itemToBePlaced == Structure_Slab4
                     || (!nearRecentStructureLoss(location.x, location.y, itemsize.x, itemsize.y)
-                        && dangerAt(location,itemsize) == 0 && TacticalSafetyPolicy::reactorPlacementAllowed(itemToBePlaced,reactorClearance(itemToBePlaced,location))))) {
+                        && (threatTolerant || dangerAt(location,itemsize) == 0)
+                        && TacticalSafetyPolicy::reactorPlacementAllowed(itemToBePlaced,reactorClearance(itemToBePlaced,location))))) {
                 yardTurn.placeLocations->pop_front();
                 logDebug("PRODUCTION: Using pre-stored location (%d,%d) for itemID: %d", location.x, location.y, itemToBePlaced);
             } else if (itemToBePlaced == Structure_Road) {
@@ -3789,9 +3809,10 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                 yardTurn.placeLocations->pop_front();
                 placementCache.erase(itemToBePlaced);
                 location = (itemToBePlaced == Structure_RocketTurret || itemToBePlaced == Structure_GunTurret)
-                    ? findEffectiveTurretPlaceLocation(itemToBePlaced) : findPlaceLocation(itemToBePlaced);
+                    ? findEffectiveTurretPlaceLocation(itemToBePlaced) : searchSite(itemToBePlaced);
                 if (location.isInvalid()) {
                     yardTurn.placeLocations->push_front(oldSite);
+                    noteHeld();
                     if (pass.emitStatsLog) tracePlacementIssue("placement_deferred", "planned_site_blocked", oldSite);
                 } else {
                     tracePlacementIssue("placement_replan", "planned_site_blocked", oldSite);
@@ -3817,7 +3838,7 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                 location = findEffectiveTurretPlaceLocation(itemToBePlaced);
             } else {
                 // For other structures, use normal method that favors adjacency
-                location = findPlaceLocation(itemToBePlaced);
+                location = searchSite(itemToBePlaced);
             }
         }
 
@@ -3970,7 +3991,9 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         }
         if (location.isValid()) {
             traceDecision("placement_request", AITelemetry::Record().set("builder", yardTurn.pConstYard->getObjectID())
-                .set("item", itemToBePlaced).set("x", location.x).set("y", location.y));
+                .set("item", itemToBePlaced).set("x", location.x).set("y", location.y)
+                .set("threat_tolerated", threatTolerant).set("site_threat", dangerAt(location, getStructureSize(itemToBePlaced)))
+                .set("held_cycles", held != heldWithoutSiteSince.end() ? getGameCycleCount() - held->second : 0));
             const bool placed = doPlaceStructure(yardTurn.pConstYard, location.x, location.y);
             // A road retry keeps its place ahead of the remaining
             // queue; do not accidentally consume the next plan.
@@ -3978,7 +4001,7 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
             traceDecision("placement_result", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y).set("success", placed));
             if (itemToBePlaced != Structure_Slab1 && itemToBePlaced != Structure_Slab4) {
-                if (placed) reservedStructures.erase(planningBuilder);
+                if (placed) { reservedStructures.erase(planningBuilder); heldWithoutSiteSince.erase(yardID); }
                 else { reservedStructures[planningBuilder] = {itemToBePlaced, location};
                     if (yardTurn.placeLocations->empty()) yardTurn.placeLocations->push_front(location); }
             }
@@ -3986,6 +4009,7 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
             logDebug("PRODUCTION: Placed structure itemID: %d at (%d,%d)", itemToBePlaced, location.x, location.y);
         }
         else if (!placementIssueHandled) {
+            noteHeld();
             if (pass.emitStatsLog) logDebug("PRODUCTION: Holding finished item %d until a legal site is available; search=%s",
                 itemToBePlaced, placementScoreDetails[itemToBePlaced].json().c_str());
             if (pass.emitStatsLog) tracePlacementIssue("placement_deferred", "no_dynamic_site", location);

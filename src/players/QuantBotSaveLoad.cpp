@@ -481,6 +481,9 @@ void QuantBot::saveObserverRuntime(OutputStream& s) const {
     }
     s.writeUint32(repairPressureYard);
     s.writeUint32(repairPressureSince);
+    // Protocol 135: how long each yard has held a finished building with no safe site.
+    s.writeUint32(heldWithoutSiteSince.size());
+    for(const auto& e : heldWithoutSiteSince) { s.writeUint32(e.first); s.writeUint32(e.second); }
 }
 
 void QuantBot::loadObserverRuntime(InputStream& s) {
@@ -538,4 +541,6 @@ void QuantBot::loadObserverRuntime(InputStream& s) {
     }
     repairPressureYard = s.readUint32();
     repairPressureSince = s.readUint32();
+    heldWithoutSiteSince.clear();
+    for(Uint32 n=count(); n; --n) { const auto id=s.readUint32(); heldWithoutSiteSince[id]=s.readUint32(); }
 }

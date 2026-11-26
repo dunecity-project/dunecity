@@ -861,6 +861,16 @@ private:
     // Transient scratch, not an inter-pass cache or supplemental save field.
     std::vector<GroundTurretContact> visibleGroundTurretThreats;
     Uint32 dangerUpdated = std::numeric_limits<Uint32>::max();
+    /// A finished building no safe site could take: the yard (builder ID) and the cycle it was
+    /// first held for want of one. After kHeldThreatGrace the yard searches with
+    /// placementToleratesThreat, so a base inside enemy turret range (Stefan's acantplace.dls:
+    /// a Stadium held for 26 minutes, the yard building nothing else) is not stalled for good.
+    /// Network checkpoint state (saveObserverRuntime); a disk load starts the wait again.
+    std::map<Uint32, Uint32> heldWithoutSiteSince;
+    static constexpr Uint32 kHeldThreatGrace = MILLI2CYCLES(60000);
+    /// Set only around a held building's site search: threatened sites are accepted, least
+    /// threatened first, and the search bypasses placementCache.
+    bool placementToleratesThreat = false;
     Uint32 lastSafetyTrace = std::numeric_limits<Uint32>::max();
     struct HarvesterSafety { Uint32 nextCheck = 0, retreatUntil = 0; Coord lastLocation = Coord::Invalid(), plannedDestination = Coord::Invalid(); bool controlled = false; };
     std::map<Uint32, HarvesterSafety> harvesterSafety;

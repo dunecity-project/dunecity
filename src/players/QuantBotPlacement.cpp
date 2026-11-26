@@ -697,8 +697,9 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     // ParkDistricts (default off): a Park is only ever placed where it raises our R/C land value.
     if (itemID == Structure_Park) return findParkDistrictSite();
 	// Check per-build-cycle cache first
+	// A threat-tolerant search (a held finished building) neither reads nor writes the cache.
 	auto cacheIt = placementCache.find(itemID);
-	if (cacheIt != placementCache.end()) {
+	if (!placementToleratesThreat && cacheIt != placementCache.end()) {
         AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),"ai.placement_cache_hit",1,itemID,false);
 		return cacheIt->second;
 	}
@@ -722,6 +723,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     bool haveBestSite = false;
     auto bestReactorRank = TacticalSafetyPolicy::reactorSiteRank(100000,100000,-1,false,0,std::numeric_limits<int>::min());
     int candidates = 0, threatRejected = 0, blastRejected = 0, lossRejected = 0;
+    int bestThreat = std::numeric_limits<int>::max();
 
 	bool itemIsBuilder = (itemID == Structure_HeavyFactory
 		|| itemID == Structure_RepairYard
@@ -1151,8 +1153,13 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 if (itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall
                     && itemID != Structure_NuclearPlant
                     && nearRecentStructureLoss(placeLocationX, placeLocationY, newSizeX, newSizeY)) { ++lossRejected; continue; }
+                // A finished building that has found no safe site for kHeldThreatGrace accepts
+                // threatened ground (placementToleratesThreat): the least threatened site wins below.
+                int siteThreat = 0;
                 if (itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall) {
-                    if (dangerAt(Coord(placeLocationX, placeLocationY), Coord(newSizeX, newSizeY)) > 0) { ++threatRejected; continue; }
+                    siteThreat = dangerAt(Coord(placeLocationX, placeLocationY), Coord(newSizeX, newSizeY));
+                    if (siteThreat > 0 && !placementToleratesThreat) { ++threatRejected; continue; }
+                    if (siteThreat > 0) ++threatRejected;
                     if (!TacticalSafetyPolicy::reactorPlacementAllowed(itemID, clearsReactorAt(placeLocationX, placeLocationY))) { ++blastRejected; continue; }
                 }
                 const auto roads = cityRoadImpact(getMap(), placeLocationX, placeLocationY, newSizeX, newSizeY, itemID);
@@ -1659,12 +1666,14 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                     repairSites.push_back({Coord(placeLocationX, placeLocationY), spread, shielded, depth,
                         lossRisk == 0, infill, siteTier, locationScore, relaxRoading, repairQuality});
                 }
-				if (spreadVsDeathHand && spread != bestSpread ? spread
+				if (placementToleratesThreat && siteThreat != bestThreat ? siteThreat < bestThreat
+                    : spreadVsDeathHand && spread != bestSpread ? spread
                     : itemID == Structure_NuclearPlant ? reactorRank > bestReactorRank
                     : factoryPlacement ? factoryRank > bestFactoryRank
                     : CityPlacementPolicy::preferCitySite(lossRisk==0,infill,siteTier,locationScore,
                         bestSafe,bestInfill,bestSiteTier,bestLocationScore)) {
                     bestSpread = spread;
+                    bestThreat = siteThreat;
                     bestReactorRank = reactorRank;
                     bestFactoryRank = factoryRank;
                     bestSiteTier = siteTier;
@@ -1718,7 +1727,9 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         bestLocation = findRedevelopmentSite(itemID);
         if (bestLocation.isValid()) { bestQuality.set("redevelopment",1); roadingRelaxed=false; }
     }
-	placementCache[itemID] = bestLocation;
+	if (!placementToleratesThreat) placementCache[itemID] = bestLocation;
+    if (placementToleratesThreat) bestQuality.set("threat_tolerated",1)
+        .set("site_threat",bestLocation.isValid() && bestThreat != std::numeric_limits<int>::max() ? bestThreat : 0);
     bestQuality.set("roading_relaxed",roadingRelaxed)
         .set("legal_candidates",candidates).set("threat_rejections",threatRejected)
         .set("blast_rejections",blastRejected).set("recent_loss_rejections",lossRejected)

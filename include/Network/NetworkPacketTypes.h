@@ -453,7 +453,10 @@
 //      (AmbientAirplane::smallCrash) instead of a Death Hand impact, and anti-air always fires at
 //      an enemy plane: the hold on a shot that could bring it down onto its own side is gone.
 //      A 133 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            134
+// 135: A QuantBot yard holding a finished building with no safe site for a minute places it on
+//      the least threatened legal site instead of holding it (and every later order) for good;
+//      the wait is part of the observer checkpoint. A 134 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            135
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
