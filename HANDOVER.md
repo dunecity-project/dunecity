@@ -1,3 +1,23 @@
+## 2026-11-26 - French voices no longer crash the game at launch on FWORMY.VOC (#129)
+
+Issue #129 (macOS, 1.0.876/877, French player): the game quit at start with `io_error`
+"FileManager.cpp:383: Cannot find 'FWORMY.VOC'!" (the `/Users/stefan/actions-runner-dunecity/...` path in the
+message is only `__FILE__` from the Mini build runner).
+
+- **Cause (`af59bacd0`).** Reproduced headless on the 1.0.878 build with `Language = fr`, vanilla mod. The data
+  directory (macOS app Resources) ships 30-byte stand-in VOCs from the Tornie voice set, `FWORMY.VOC` among them,
+  since 1.0.522; `FRENCH.PAK` has no `FWORMY.VOC`. `FileManager::exists()` counted the stand-in, `openFile()`
+  skips tiny VOC placeholders, found nothing else and threw from `SFXManager::loadNonEnglishVoice("F")`, whose
+  non-Tornie wormsign branch had no try/catch. Every mod was affected, not only Tornie.
+- **Fix.** The placeholder rule is in `include/FileClasses/VocPlaceholder.h`; `openFile()`, `exists()` and
+  `existsInPak()` all use it. The wormsign line loads "Warning" and adds "Wormsign" only when it can, for every
+  mod, so French says "Warning" alone. German is unchanged (`GERMAN.PAK` has both halves, no loose G stand-ins).
+- **Tests.** `tests/VocPlaceholderTestCase.cpp` (`[filemanager][voc]`, ctest `voc_placeholder_tests`).
+  `dunelegacy_tests` in `build-int`: 1,476 passed / 2 skipped. Headless launches on the new build reached the
+  main menu for French with vanilla, Tornie, TornieLite, Jericho and Dune2R, and German with vanilla and Tornie.
+  **Not verified:** a packaged macOS build, Windows/Linux packages, or hearing the voice in a game.
+- **Next release notes:** "Fixed a crash at start-up when the language is set to French."
+
 ## 2026-11-26 - Linux renderer start-up tries each driver and logs why it failed (#120)
 
 Issue #120 (Linux Mint, NVIDIA 595 open driver, 1.0.864 AppImage): quit after "Setting video mode..." with
