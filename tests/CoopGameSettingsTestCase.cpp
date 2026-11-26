@@ -1614,8 +1614,9 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
     SECTION("unknown MOD18 city-rule bits are refused") {
+        // Bits 2-3 are the protocol 137 city plane rules; bit 4 is the first unknown one.
         auto bytes = encoded;
-        bytes.back() = static_cast<char>(4);
+        bytes.back() = static_cast<char>(16);
         IMemoryStream input(bytes.data(),bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
