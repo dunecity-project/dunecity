@@ -1112,6 +1112,20 @@ void runAirDefenseProbe(Game& game) {
                 && !admits(firstValue,oneTrooperArmy+1+firstValue,cheapestValue))
                 ++oneTrooperArmy;
             const int roomyArmy=oneTrooperArmy*4;
+            // The share follows the fixture's producers (vehicle slots lower it), so a
+            // section that changes them sizes its roomy army again: four times the
+            // smallest army with room for one Trooper at the share its pass uses.
+            auto roomyArmyNow=[&] {
+                clearCityQueues();cityPass(roomyArmy);
+                const int percent=bot->getAllocationSnapshot().infantryQuotaBps/100;
+                clearCityQueues();
+                require(percent>0 && percent<100,
+                    "The city fixture has no measurable infantry share to size its army from");
+                int army=0;
+                while(army<2000000 && int64_t(firstValue)*100>int64_t(army+firstValue)*percent) ++army;
+                SDL_Log("AIR_DEFENSE_DIAG: city_roomy_army share=%d army=%d",percent,army*4);
+                return army*4;
+            };
             setCityCredits(200000);
 
             // No air at all, then an aircraft the house cannot see: neither is a
@@ -1200,12 +1214,20 @@ void runAirDefenseProbe(Game& game) {
                 require(cityFactory->isAvailableToBuild(Unit_Launcher),
                     "The city fixture factory cannot build launchers, so the floor proves nothing");
                 structureList.push_back(cityFactory);
-                clearCityQueues();
-                while(cityFactory->getProductionQueueSize()>0)
-                    cityFactory->doCancelItem(cityFactory->getCurrentProducedItem());
-                cityPass(roomyArmy);
-                SDL_Log("AIR_DEFENSE_DIAG: city_launcher_floor_bps=%d troop_orders=%d",
-                    bot->lastUnitMixBps[2],troopOrders());
+                auto clearFactory=[&] {
+                    while(cityFactory->getProductionQueueSize()>0)
+                        cityFactory->doCancelItem(cityFactory->getCurrentProducedItem());
+                };
+                // Vehicle slots are now available, so the measured infantry share is
+                // smaller than in the WOR-only fixture above. Size this army from the
+                // share the pass uses here: roomy, four times the smallest army with
+                // room for one Trooper.
+                clearFactory();
+                const int launcherArmy=roomyArmyNow();
+                clearFactory();
+                cityPass(launcherArmy);
+                SDL_Log("AIR_DEFENSE_DIAG: city_launcher_floor_bps=%d troop_orders=%d army=%d",
+                    bot->lastUnitMixBps[2],troopOrders(),launcherArmy);
                 require(bot->lastUnitMixBps[2]>=UnitMixPolicy::kMobileAntiAirFloorBps,
                     "City rocket infantry weakened the mobile anti-air launcher floor");
                 require(troopOrders()>0,
@@ -1252,12 +1274,13 @@ void runAirDefenseProbe(Game& game) {
                 auto& squadSpec=game.objectData.data[Unit_Troopers][owner->getHouseID()];
                 const bool savedTrooperEnabled=trooperSpec.enabled;
                 const bool savedSquadEnabled=squadSpec.enabled;
+                const int worArmy=roomyArmyNow();
                 cityRaider->setVisible(owner->getTeamID(),false);
-                clearCityQueues();cityPass(roomyArmy);
+                clearCityQueues();cityPass(worArmy);
                 require(!yardOrdersWor(),"A city founded a WOR for an aircraft it cannot see");
                 cityRaider->setVisible(owner->getTeamID(),true);
                 trooperSpec.enabled=false;squadSpec.enabled=false;
-                clearCityQueues();cityPass(roomyArmy);
+                clearCityQueues();cityPass(worArmy);
                 require(!yardOrdersWor(),
                     "A city founded a WOR with no enabled troop content to make in it");
                 trooperSpec.enabled=savedTrooperEnabled;squadSpec.enabled=savedSquadEnabled;
@@ -1272,7 +1295,7 @@ void runAirDefenseProbe(Game& game) {
                     "The WOR fixture needs an absent troop prerequisite");
                 trooperSpec.prerequisiteStructuresSet.set(missingTroopPrerequisite);
                 squadSpec.prerequisiteStructuresSet.set(missingTroopPrerequisite);
-                clearCityQueues();cityPass(roomyArmy);
+                clearCityQueues();cityPass(worArmy);
                 require(!yardOrdersWor(),
                     "A city founded a WOR whose troops lack another required building");
                 trooperSpec.prerequisiteStructuresSet=savedTroopPrerequisites;
@@ -1281,7 +1304,7 @@ void runAirDefenseProbe(Game& game) {
                 clearCityQueues();
                 bool founded=false;
                 for(int pass=0;pass<6 && !founded;++pass) {
-                    cityPass(roomyArmy);
+                    cityPass(worArmy);
                     founded=yardOrdersWor();
                     if(!founded) clearCityQueues();
                 }
