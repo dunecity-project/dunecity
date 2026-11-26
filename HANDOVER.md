@@ -1,3 +1,25 @@
+## 2026-11-26 - Linux renderer start-up tries each driver and logs why it failed (#120)
+
+Issue #120 (Linux Mint, NVIDIA 595 open driver, 1.0.864 AppImage): quit after "Setting video mode..." with
+`SDL_CreateRenderer failed: Couldn't find matching render driver`.
+
+- **Already fixed in 1.0.865** (`677e075d2`): desktop OpenGL is compiled into the Linux SDL again and Linux falls
+  back to software. Rechecked the published 1.0.878 AppImage: its binary has `opengl`, `opengles2`, `opengles`
+  and `software`, and it bundles no libGL/libEGL/libGLX (only libdbus), so the system NVIDIA/Mesa GL is used.
+  No packaging change was needed.
+- **This batch (`20c055ac4`).** SDL's `-1` search hides each backend's own error. `createStartupRenderer` now
+  walks the drivers by index: `SDL_RENDER_DRIVER` first, then accelerated drivers with target textures in SDL's
+  order, then software (Linux/dummy only, as before). Each miss is logged (`Render driver X failed: ...`); if all
+  fail, a message box shows the errors (with the `SDL_RENDER_DRIVER=software` hint on Linux). Other platforms keep
+  their acceleration requirement. `RendererFallbackOrderTestCase.cpp` in `dunelegacy_tests` checks the order
+  headlessly; the Linux `renderer_initialization` test's expected error text was updated.
+- **Verified.** macOS `build-int` at `af59bacd0`: ctest `dunelegacy_tests` passed (1,476 cases, 0 failed); the Linux `renderer_initialization` cases passed
+  against the new header on macOS with the dummy video driver (Homebrew SDL). **Not verified:** a real Linux
+  NVIDIA desktop (none available); Linux CI (build-linux, test-linux) runs on push.
+- **Issue reply** asks the reporter to try 1.0.878 normally and with `SDL_RENDER_DRIVER=software`.
+- **Next release notes:** "Linux: if the graphics renderer cannot start, the game now tries each available
+  renderer in turn, logs why each failed, and shows an error instead of closing silently."
+
 ## 2026-11-25 - Released 1.0.878 (v1.0.878, 1bda52dd0): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
 
 Stefan: "Release 1.0.878". The small plane crash and always-firing anti-air (entry below), network protocol 134,
