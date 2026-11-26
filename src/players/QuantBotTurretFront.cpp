@@ -50,6 +50,29 @@ bool anchorItem(Uint32 item) {
         && !DuneCity::isCityZoneStructure(item);
 }
 
+/// Experiment-only integer overrides of the moving line's shape (DUNECITY_TEST_BELT_GOAL,
+/// DUNECITY_TEST_BELT_STANDOFF, DUNECITY_TEST_BELT_BEHIND_ARMY), read once per process; never a
+/// match rule. Without them the TurretFrontPolicy constants apply.
+int envInt(const char* name, int fallback, int low, int high) {
+    const char* text = std::getenv(name);
+    if (text == nullptr || *text == '\0') return fallback;
+    char* end = nullptr;
+    const long value = std::strtol(text, &end, 10);
+    return end != nullptr && *end == '\0' ? int(std::clamp<long>(value, low, high)) : fallback;
+}
+int beltGoal() {
+    static const int value = envInt("DUNECITY_TEST_BELT_GOAL", TurretFrontPolicy::kBeltGoal, 1, 30);
+    return value;
+}
+int beltStandoff() {
+    static const int value = envInt("DUNECITY_TEST_BELT_STANDOFF", TurretFrontPolicy::kBeltEnemyStandoff, 1, 60);
+    return value;
+}
+int beltBehindArmy() {
+    static const int value = envInt("DUNECITY_TEST_BELT_BEHIND_ARMY", TurretFrontPolicy::kBehindArmyTiles, 0, 30);
+    return value;
+}
+
 } // namespace
 
 // Experiment-only overrides for match arms in one build (0 or 1), read once per process and never
@@ -298,7 +321,7 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
             lead.push_back(distAt(unit->getLocation().x, unit->getLocation().y));
         }
         turretFrontPlan.edge = edge;
-        if (int(lead.size()) >= TF::kArmyLeadRank && edge > TF::kBeltEnemyStandoff) {
+        if (int(lead.size()) >= TF::kArmyLeadRank && edge > beltStandoff()) {
             std::nth_element(lead.begin(), lead.begin() + (TF::kArmyLeadRank - 1), lead.end());
             const int armyLead = lead[TF::kArmyLeadRank - 1];
             turretFrontPlan.armyLead = armyLead;
@@ -315,8 +338,8 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
                         for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
                             const int d = distAt(x, y);
                             // Forward progress, or a sideways tile while the belt is still short.
-                            if (d > edge || (d == edge && belt >= TF::kBeltGoal)) continue;
-                            if (d < TF::kBeltEnemyStandoff || !TF::behindArmy(d, armyLead)) continue;
+                            if (d > edge || (d == edge && belt >= beltGoal())) continue;
+                            if (d < beltStandoff() || d < armyLead + beltBehindArmy()) continue;
                             const int score = TF::advanceSiteScore(d, edge, nearestOwnTurret(x, y));
                             if (score <= bestScore || !legal(x, y)) continue;
                             bestScore = score; best = Coord(x, y);
@@ -327,7 +350,7 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
                     turretFrontPlan.mode = TurretFrontMode::Advance;
                     turretFrontPlan.anchor = edgeAnchor;
                     turretFrontPlan.cover = belt;
-                    turretFrontPlan.goal = TF::kBeltGoal;
+                    turretFrontPlan.goal = beltGoal();
                 }
             }
         }
