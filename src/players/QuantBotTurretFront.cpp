@@ -18,6 +18,7 @@
 // Nothing here is saved: a loaded game scans again on its first pass.
 
 #include "QuantBotInternal.h"
+#include <players/QuantBotBuildPass.h>
 #include <players/TurretFrontPolicy.h>
 #include <players/RocketTurretPolicy.h>
 #include <players/FrontBatteryPolicy.h>
@@ -29,6 +30,9 @@
 #include <cstdlib>
 #include <limits>
 #include <vector>
+
+using QuantBotInternal::cityRoadImpact;
+using QuantBotInternal::wouldLandlockNeighbouringZone;
 
 namespace {
 
