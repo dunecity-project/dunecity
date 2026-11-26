@@ -522,11 +522,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     gameOptions.cityPlaneCrashBombs = (cityRules & 16) == 0;
                     // Bit 6 is set when Parks Count As Roads is off.
                     gameOptions.parksCountAsRoads = (cityRules & 64) == 0;
-                }
                     // Protocol 144: bit 5 is set when Zone Garrisons is off.
                     gameOptions.zoneGarrisons = (cityRules & 32) == 0;
                     // Protocol 145: bit 7 is set when Fremen Palace Worm is off.
                     gameOptions.fremenPalaceWorm = (cityRules & 128) == 0;
+                }
             }
             if(hasTechnologyInstallments) {
                 gameOptions.technologyInstallments = stream.readBool();
@@ -746,13 +746,13 @@ void GameInitSettings::save(OutputStream& stream) const {
         | (gameOptions.cityPlaneBuildTime ? 0 : 4) | (gameOptions.cityPlaneFreePerAirport ? 0 : 8)
         // Bit 4 (protocol 139): City Plane Crash Bombs off.
         | (gameOptions.cityPlaneCrashBombs ? 0 : 16)
+        // Bit 5 (protocol 144): Zone Garrisons off.
+        | (gameOptions.zoneGarrisons ? 0 : 32)
         // Bit 6: Parks Count As Roads off.
         | (gameOptions.parksCountAsRoads ? 0 : 64)
         // Bit 7 (protocol 145): Fremen Palace Worm off.
         | (gameOptions.fremenPalaceWorm ? 0 : 128));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
-        // Bit 5 (protocol 144): Zone Garrisons off.
-        | (gameOptions.zoneGarrisons ? 0 : 32)
     stream.writeBool(gameOptions.technologyInstallments);
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.
     // Bit 7: the Saboteur hunt is off (the default, on, leaves the byte as it was).

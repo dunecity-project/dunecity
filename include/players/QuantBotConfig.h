@@ -852,13 +852,13 @@ struct QuantBotConfig {
         /// armour and escorts, using existing infantry shares/economy reserves.
         /// Default ON at Stefan's direction despite unproven acceptance; see HANDOVER.
         bool trooperSupport;
+        /// Zone Garrisons (match rule): Soldiers and Troopers into own zones enemies close on, out when
+        /// quiet, and into empty enemy zones they pass (QuantBotGarrison.cpp). Off unless measured.
+        bool zoneGarrison;
         /// Stateless existing-composition/technology experiment, default OFF.
         /// Current paired outcome audits reject adoption; see HANDOVER.
         bool simpleTechSavings;
         /// Extra tiles in a launcher spacing step and its Hunt stand-off (0 = legacy).
-        /// Zone Garrisons (match rule): Soldiers and Troopers into own zones enemies close on, out when
-        /// quiet, and into empty enemy zones they pass (QuantBotGarrison.cpp). Off unless measured.
-        bool zoneGarrison;
         /// Clamped to 0..2; other units keep their existing retreat distance.
         int launcherKiteExtraDistance;
         /// Default on: Custom noncampaign armies can dispatch without rebuild-only
