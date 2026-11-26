@@ -1837,7 +1837,13 @@ Wind Traps, 4 and 2 reactors and no Palace (the leader 124 Wind Traps, 2 Palaces
   Wind Traps are demolished, most lots around them first, while the rest covers demand, the city power
   reserve, the turret power buffer, the committed demand and one more Wind Trap - always keeping 2: a
   Wind Trap is the prerequisite of the reactor and of almost every other building (factories,
-  refinery, radar, turrets, Police Station, Stadium, Airport).
+  refinery, radar, turrets, Police Station, Stadium, Airport). Since protocol 142 (Stefan,
+  2026-11-27: "if it has space it should keep the windtraps, not blow them up") a Wind Trap is
+  retired only while the base is low on building room: built out (fewer than 4 free 2x2 footprints,
+  or no site for a production building) or fewer than 48 free rock tiles in build range
+  (`ForceConcentrationPolicy::windTrapRetirementRoomLow`). Before it, a Construction Yard start on
+  the 4P 160x160 DuneCity map retired 30 a game, every one with at least 202 free rock tiles; HANDOVER
+  2026-11-27 has the measurement.
 - `PalaceDistricts`: one Palace per 30 R+C lots (1-4; 1 with Only One Palace) is the project,
   funded ahead of units, sited where most R+C lots no palace reaches yet stand within 8 tiles (at least
   12); own lots of density at most 1 in its footprint are demolished through redevelopment.

@@ -1,3 +1,53 @@
+## 2026-11-27 - QuantBot keeps its Wind Traps while its base has room to build (protocol 142)
+
+Stefan, 2026-11-27: "windtraps being destroyed should only be when the ai is low on free building space. if it
+has space it should keep the windtraps, not blow them up". Commits `b3f7cb075` (measurement only), `895fe60e1`
+(test-only start overrides), `afc49f278` (rule, probe, protocol 142), `b901f7d1e` (probe fixture). Evidence:
+`~/Documents/projects/outputs/windtrap-room-20261127/`.
+
+- **The one trigger.** QuantBot removes its own Wind Traps in one place only: NuclearConsolidation
+  (`planCityEconomyProjects`, default on since 2026-11-21, city skirmish games). With a reactor standing, more
+  than 2 Wind Traps and power to spare after one more goes, it demolished one per build pass, the one with
+  most own lots within 6 tiles, without asking whether it needed the ground. Nothing else in QuantBot sells or
+  demolishes a Wind Trap (the other demolitions are R/C/I lots).
+- **Measured** (new `WIND_TRAP_RETIRED` line and per-minute `QUANTBOT_ROOM` sample; `vanilla-match.py` writes
+  `windtraps.csv` and `room.csv`), four Brutal QuantBots, seeds 9101-9148:
+  - Stefan's `rs160-dunecity` (Fortress, 45 min): **0 retirements** in 48 games. Houses start with 2 reactors
+    and 1 Wind Trap and never own more than 3; free rock in build range never below 1,061 tiles.
+  - The same map from a Construction Yard (`--env BALANCE_SKIRMISH_BASE=1 BALANCE_SKIRMISH_ARMY=0
+    BALANCE_SKIRMISH_CITY=0`, 60 min): **1,450 retirements**, 30 a game, 191 of 192 houses (median 8, up to
+    14), from minute 7 (median 14). Every one with room: free rock 202-1,229 tiles (median 342), 4 free
+    footprints, never built out. Bases are built out only after minute 40 (8 of 104 houses at 60).
+- **Rule** (`ForceConcentrationPolicy::windTrapRetirementRoomLow`): retire only while the base is low on room
+  as the rock survey already measures it - built out (`baseBuiltOut()`: fewer than 4 free 2x2 footprints or
+  no site for a production building, the colonisation line) or fewer than `kWindTrapRetireFreeRock` = 48 free
+  rock tiles in build range (the line `rockExpansionNeeded` uses). When low, the choice is unchanged (most
+  lots first, never below 2). The reactor project and the generator choice are unchanged. Default, no switch.
+- **Before/after** (parent `0b1f4d9b8` against `afc49f278`, same seeds):
+
+| Setup | Arm | Retired / game | Wind Traps held at 15 / 30 / 60 min | Produced - required power at 30 min | Short of power at 30 min | Buildings placed / game | Time-outs |
+|---|---|---:|---|---:|---:|---:|---:|
+| CY start, 60 min | before | 30.2 | 4.27 / 1.77 / 1.36 | 2,091 | 5 of 192 | 1,411 | 26 of 48 |
+| CY start, 60 min | after | 1.8 (all built out) | 8.97 / 8.69 / 5.69 | 2,400 | 3 of 192 | 1,311 | 21 of 48 |
+| rs160 Fortress, 45 min | before = after | 0 | identical samples | identical | identical | 1,058 | 25 of 48 |
+
+  CY start, paired by house: army value -238 at minute 15 ([-323, -151]), -321 at 20 ([-732, +89]), -941 at
+  30 ([-2,113, +279]); structures +5 (the kept Wind Traps); credits level; reactors level (0.71 / 0.73 at 15).
+  Games ended with one house left 22 -> 27, eliminations per game 1.88 -> 2.15.
+- **Test:** `quantbot_wind_trap_retirement` (headless nightly) drives the production
+  `planCityEconomyProjects()`: with room nothing goes over repeated passes; each low-room reason (few
+  footprints, no production site, free rock below 48) retires one, most lots first; down to 2 and never below.
+  On the old rule it fails at the first pass with room (70 -> 69; `refs/ai-recovery/windtrap-probe-old-rule`,
+  AWS `20261127T005749-ctest-a0d665`).
+- **Protocol 142** (AI demolition differs; a 141 peer would desync). Save format unchanged.
+- **Gates** at `afc49f278`: AWS `-L nightly -LE gui` `20261127T011946-ctest-7cb607` 251 of 253 passed,
+  including `quantbot_all_against_atreides`, `_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`.
+  Failed: `quantbot_wind_trap_retirement` (its floor phase ran out of power: a reactor gives about 1,100 here;
+  every earlier phase passed; fixed in `b901f7d1e`, which passes on AWS `20261127T014423-ctest-cbe82a`) and `quantbot_enemy_border_site` (the
+  protocol 141 session's probe, under repair there; unrelated to retirement). Mini `perf_regression` passed at
+  `afc49f278` (CPU mean 0.035/0.250, house p99 0.074/1.000, house max 2.450/10.000, eight-house CPU p99
+  1.357/1.600, frame CPU p99 4.181/5.500, main-loop frame p99 4.524/8.000, menu other 0.002/0.300).
+
 ## 2026-11-27 - QuantBot may build right up to enemy buildings (protocol 141)
 
 Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings". Commit `8cf652a47`, test
