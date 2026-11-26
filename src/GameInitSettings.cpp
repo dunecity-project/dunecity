@@ -351,6 +351,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
     gameOptions.saboteurHunt = true;
     gameOptions.hospitalCare = true;
+    gameOptions.turretsTargetUnitsOnly = true;
     // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
     gameOptions.trooperOrnithopterReach = true;
     // The city plane rules are the units' current rules too: a stream without their bits plays them.
@@ -537,13 +538,15 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 // Bit 7 of the same byte is set when the Saboteur hunt is off, so a
                 // stream that plays the default rule is the byte MOD20 always was.
                 const Uint8 packed = stream.readUint8();
-                // Bit 6 (protocol 146) is set when Hospital Care is off; bits 4-5 are free.
-                const Uint8 level = packed & 0x3F;
+                // Bit 6 (protocol 146) is set when Hospital Care is off, bit 5 (protocol 147)
+                // when Turrets Target Units Only is off; bit 4 is free.
+                const Uint8 level = packed & 0x1F;
                 if(level > 9)
                     throw std::runtime_error("Invalid starting tech level.");
                 gameOptions.startTechLevel = level;
                 gameOptions.saboteurHunt = (packed & 0x80) == 0;
                 gameOptions.hospitalCare = (packed & 0x40) == 0;
+                gameOptions.turretsTargetUnitsOnly = (packed & 0x20) == 0;
             }
         }
     } catch (InputStream::eof&) {
@@ -762,7 +765,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)
         | (gameOptions.saboteurHunt ? 0 : 0x80)
         // Bit 6: Hospital Care is off (the default, on, leaves the byte as it was).
-        | (gameOptions.hospitalCare ? 0 : 0x40)));
+        | (gameOptions.hospitalCare ? 0 : 0x40)
+        // Bit 5 (protocol 147): Turrets Target Units Only is off.
+        | (gameOptions.turretsTargetUnitsOnly ? 0 : 0x20)));
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

@@ -1464,6 +1464,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.parksCountAsRoads = myINIFile.getBoolValue("Game Options", "Parks Count As Roads", true);
             settings.gameOptions.saboteurHunt = myINIFile.getBoolValue("Game Options", "Saboteur Hunt", true);
             settings.gameOptions.hospitalCare = myINIFile.getBoolValue("Game Options", "Hospital Care", true);
+            settings.gameOptions.turretsTargetUnitsOnly = myINIFile.getBoolValue("Game Options", "Turrets Target Units Only", true);
             settings.gameOptions.starportPopulation = myINIFile.getBoolValue("Game Options", "Starport Population", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);

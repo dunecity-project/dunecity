@@ -336,6 +336,7 @@ public:
                     && (startTechLevel == goc.startTechLevel)
                     && (saboteurHunt == goc.saboteurHunt)
                     && (hospitalCare == goc.hospitalCare)
+                    && (turretsTargetUnitsOnly == goc.turretsTargetUnitsOnly)
                     && (trooperAntiAir == goc.trooperAntiAir)
                     && (trooperOrnithopterReach == goc.trooperOrnithopterReach)
                     && (cityPlaneDefence == goc.cityPlaneDefence)
@@ -423,6 +424,7 @@ public:
             // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
             if(!saboteurHunt) optStr += "/saboteurHunt=0";
             if(!hospitalCare) optStr += "/hospitalCare=0";
+            if(!turretsTargetUnitsOnly) optStr += "/turretsTargetUnitsOnly=0";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -512,6 +514,13 @@ public:
         /// a Hospital with a patient keeps its type. Off, infantry are sent to Repair Yards as up to
         /// protocol 145. INI key only; bit 6 of the MOD20 byte, set when off.
         bool        hospitalCare = true;
+        /// Rocket and Gun Turrets fire on units only, never on buildings or city zones, as in the
+        /// original game, whose turret script searched units alone (Stefan, 2026-11-27: "rocket turrets
+        /// cannot fire on enemy buildings - this did not happenin the original - only on units. make
+        /// this default behaviour", then "same with gun turrets"). Off, turrets also fire on buildings
+        /// as up to protocol 146. INI key "Turrets Target Units Only"; bit 5 of the MOD20 byte, set
+        /// when off.
+        bool        turretsTargetUnitsOnly = true;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
         /// Part of Trooper Anti-Air (so DuneCity content only): a rocket Trooper answers an

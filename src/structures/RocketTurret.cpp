@@ -81,7 +81,7 @@ void RocketTurret::updateStructureSpecificStuff() {
 }
 
 bool RocketTurret::canAttack(const ObjectBase* object) const {
-    if((object != nullptr)
+    if((object != nullptr) && targetAllowed(object)
         && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->isWildSandworm())
         && (isOrnithopterUnit(object->getItemID()) || object->isVisible(getOwner()->getTeamID()))
         && canMeetCityPlane(object)) {

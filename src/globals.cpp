@@ -191,6 +191,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Parks Count As Roads", options.parksCountAsRoads);
     config.setBoolValue(section, "Saboteur Hunt", options.saboteurHunt);
     config.setBoolValue(section, "Hospital Care", options.hospitalCare);
+    config.setBoolValue(section, "Turrets Target Units Only", options.turretsTargetUnitsOnly);
     config.setBoolValue(section, "Starport Population", options.starportPopulation);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
     config.setBoolValue(section, "Allied Building", options.alliedBuilding);
@@ -272,6 +273,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Parks Count As Roads", options.parksCountAsRoads);
     readBool("Saboteur Hunt", options.saboteurHunt);
     readBool("Hospital Care", options.hospitalCare);
+    readBool("Turrets Target Units Only", options.turretsTargetUnitsOnly);
     readBool("Starport Population", options.starportPopulation);
     readBool("Allied Control", options.alliedControl);
     readBool("Allied Building", options.alliedBuilding);

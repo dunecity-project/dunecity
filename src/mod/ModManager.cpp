@@ -1071,6 +1071,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Parks Count As Roads") result.parksCountAsRoads = parseBool(value);
             else if (key == "Saboteur Hunt") result.saboteurHunt = parseBool(value);
             else if (key == "Hospital Care") result.hospitalCare = parseBool(value);
+            else if (key == "Turrets Target Units Only") result.turretsTargetUnitsOnly = parseBool(value);
             else if (key == "Starport Population") result.starportPopulation = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);

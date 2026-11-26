@@ -37,6 +37,14 @@ public:
 
     void save(OutputStream& stream) const override;
 
+    using ObjectBase::canAttack;
+    /// ObjectBase::canAttack, and never a building or city zone while the match rule Turrets
+    /// Target Units Only is on (the default; the original game's turrets searched units alone).
+    /// That covers the turret's own search, its retaliation and a player's attack order.
+    bool canAttack(const ObjectBase* object) const override;
+    /// Turrets Target Units Only: may a turret take \a object as a target at all?
+    static bool targetAllowed(const ObjectBase* object);
+
     virtual void handleActionCommand(int xPos, int yPos);
 
     /**
