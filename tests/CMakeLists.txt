@@ -890,6 +890,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR}
             --output-dir ${CMAKE_BINARY_DIR}/civic-priority-probe)
         set_tests_properties(quantbot_civic_priority PROPERTIES TIMEOUT 300 PROCESSORS 2)
+        dunecity_add_test(headless nightly NAME quantbot_held_site_threat COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --held-site-threat-probe
+            --repeatable --level 9 --mod dunecity --concrete-required
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/4P - 192x192 - DuneCity.ini"
+            --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/held-site-threat-probe)
+        set_tests_properties(quantbot_held_site_threat PROPERTIES TIMEOUT 300 PROCESSORS 2)
         foreach(no_spice_map IN ITEMS dunecity low-cash)
             dunecity_add_test(headless nightly NAME quantbot_no_spice_income_${no_spice_map} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-no-spice-city-progress.py

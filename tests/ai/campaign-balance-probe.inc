@@ -44,6 +44,7 @@
 #include "campaign-stats-probe.inc"
 #include "campaign-pressure-probe.inc"
 #include "campaign-nuclear-probe.inc"
+#include "held-site-threat-probe.inc"
 #include "campaign-defence-probe.inc"
 #include "campaign-pacing-probe.inc"
 #include "campaign-repair-probe.inc"
@@ -491,6 +492,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_RADAR_PROBE")) {
         runRadarPowerProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_HELD_SITE_THREAT_PROBE")) {
+        runHeldSiteThreatProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_NUCLEAR_PROBE")) {
