@@ -147,6 +147,14 @@ PLACED_ROW_FIELDS = KEY + ('label',) + PLACED_FIELDS
 UNIT_ECONOMY_FIELDS = ('phase', 'house', 'item', 'name', 'kind', 'price', 'built', 'lost', 'damage_value', 'kill_bonus',
                        'kills', 'hits', 'cycle')
 UNIT_ECONOMY_ROW_FIELDS = KEY + UNIT_ECONOMY_FIELDS
+# Each QuantBot house's power stock and building room once a game minute (QUANTBOT_ROOM), and every Wind
+# Trap it retired with the room it had then (WIND_TRAP_RETIRED): room.csv and windtraps.csv.
+ROOM_FIELDS = ('minute', 'house', 'wind_traps', 'nuclear', 'zones', 'free_rock', 'footprints', 'room_blocked',
+               'built_out', 'produced', 'required')
+ROOM_ROW_FIELDS = KEY + ROOM_FIELDS
+WIND_TRAP_FIELDS = ('house', 'object', 'cycle', 'wind_traps', 'nuclear', 'lots_near', 'free_rock', 'footprints',
+                    'room_blocked', 'built_out', 'produced', 'required')
+WIND_TRAP_ROW_FIELDS = KEY + WIND_TRAP_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
 
@@ -429,6 +437,12 @@ def play(args, scratch, binary, key):
             if number in numbers:
                 placements[-1]['house'] = numbers[number]
     append(results / 'placements.csv', PLACED_ROW_FIELDS, placements)
+    for marker, name, fields, row_fields in (('QUANTBOT_ROOM:', 'room.csv', ROOM_FIELDS, ROOM_ROW_FIELDS),
+                                             ('WIND_TRAP_RETIRED:', 'windtraps.csv', WIND_TRAP_FIELDS,
+                                              WIND_TRAP_ROW_FIELDS)):
+        rows = [{**dict(zip(KEY, key)), **{f: data.get(f, '') for f in fields}}
+                for data in (parse(l, marker) for l in lines if marker in l)]
+        append(results / name, row_fields, rows)
     economy = []
     for l in lines:
         if 'UNIT_ECONOMY:' in l:

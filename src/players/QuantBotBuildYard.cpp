@@ -1436,7 +1436,15 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
                 const Coord at = trap->getLocation();
                 traceDecision("wind_trap_retired", AITelemetry::Record().set("object", chosen).set("x", at.x)
                     .set("y", at.y).set("lots_near", best).set("produced", int(produced)).set("required", int(required))
-                    .set("reserve", pass.cityPowerReserve).set("wind_traps", traps));
+                    .set("reserve", pass.cityPowerReserve).set("wind_traps", traps)
+                    .set("free_rock", availableBaseRock).set("free_footprints", availableBaseFootprints)
+                    .set("production_room_blocked", baseProductionRoomBlocked).set("built_out", baseBuiltOut()));
+                // The room the base had left when it gave up a Wind Trap (vanilla-match.py windtraps.csv).
+                SDL_Log("WIND_TRAP_RETIRED: house=%d object=%u cycle=%u wind_traps=%d nuclear=%d lots_near=%d "
+                        "free_rock=%d footprints=%d room_blocked=%d built_out=%d produced=%lld required=%lld",
+                    getHouse()->getHouseID(), chosen, getGameCycleCount(), traps,
+                    getHouse()->getNumItems(Structure_NuclearPlant), best, availableBaseRock, availableBaseFootprints,
+                    int(baseProductionRoomBlocked), int(baseBuiltOut()), (long long)produced, (long long)required);
                 trap->demolish();
                 pass.itemCount[Structure_WindTrap]--;
             }
