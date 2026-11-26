@@ -393,10 +393,16 @@ void checkSave(const std::string& mapData) {
     House* owner = game->getHouse(HOUSE_ATREIDES);
     const std::vector<Uint32> hospitals{placeHospital(owner, Coord(20, 20))};
     parkCarryall(owner, Coord(24, 18));
+    // The far Trooper is ordered first; once its Carryall has it, six soldiers beside the Hospital.
+    const Uint32 trooper = soldier(owner, Coord(50, 50), 3, Unit_Trooper)->getObjectID();
+    order(*game, trooper);
+    for(int i = 0; i < 20000 && !(unitByID(trooper) && unitByID(trooper)->isPickedUp()); ++i) step(*game, hospitals);
+    require(unitByID(trooper) && unitByID(trooper)->isPickedUp(), "The save fixture's Trooper was never lifted");
     std::vector<Uint32> units;
-    for(int i = 0; i < 6; ++i) units.push_back(soldier(owner, Coord(23 + (i % 3), 24 + i / 3), 3)->getObjectID());
-    units.push_back(soldier(owner, Coord(50, 50), 3, Unit_Trooper)->getObjectID());
-    for(Uint32 id : units) order(*game, id);
+    const Coord around[6] = {Coord(19, 22), Coord(20, 22), Coord(21, 22), Coord(22, 22), Coord(22, 21), Coord(22, 20)};
+    for(int i = 0; i < 6; ++i) units.push_back(soldier(owner, around[i], 1)->getObjectID());
+    units.push_back(trooper);
+    for(int i = 0; i < 6; ++i) order(*game, units[i]);
     // Until five heal, one waits and the far Trooper is in the air.
     bool ready = false;
     for(int i = 0; i < 20000 && !ready; ++i) {
