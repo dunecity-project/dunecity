@@ -392,7 +392,7 @@ QuantBotConfig::QuantBotConfig() {
     force.palaceDenseClearing = true;
     force.palaceTurrets = false;
     force.airRaidTurrets = true;   // Stefan, 2026-11-23: "also make the ai respond when being bombed by planes by having more turrets dispersed"
-    force.extraAirports = false;    // Stefan, 2026-11-26: "factored in by the ai to determine if it makes sense to buy more airports" (CityAircraftPolicy.h)
+    force.extraAirports = true;     // Stefan, 2026-11-26: "factored in by the ai to determine if it makes sense to buy more airports"; on with City Plane Free Per Airport (CityAircraftPolicy.h)
     force.airportTurrets = false;   // Stefan, 2026-11-26: "also airports need decent rocket turret defenses" (QuantBotAirDefencePolicy.h)
     force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
     force.vanillaCoreDefenceThreatBps = 5000;
@@ -2059,7 +2059,8 @@ std::string QuantBotConfig::getConfigHash() const {
     // Off is the default and leaves every existing hash as it was; on is hashed.
     if (force.airThreatTurrets) addNamed("airThreatTurrets", force.airThreatTurrets);
     if (force.airportTurrets) addNamed("airportTurrets", force.airportTurrets);
-    if (force.extraAirports) addNamed("extraAirports", force.extraAirports);
+    // On is the default (protocol 137); only off is hashed, so the default config keeps its hash.
+    if (!force.extraAirports) addNamed("extraAirports", force.extraAirports);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
     addNamed("vanillaArmyCounters", force.vanillaArmyCounters);
     addNamed("vanillaArmyCounterBlendBps", force.vanillaArmyCounterBlendBps);

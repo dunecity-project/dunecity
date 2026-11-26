@@ -87,6 +87,10 @@ struct Rules {
     bool patrol;
     bool carpet = false;    // City Plane Carpet Bombing: the stick instead of one aimed bomb a tile
     bool purchase = false;  // City Plane Purchase
+    // Protocol 137's rules are off unless a check asks for them, so the checks written for 136 keep
+    // their instant purchases and the one free plane a house (checkBuildTime, checkFreePerAirport).
+    bool buildTime = false;       // City Plane Build Time
+    bool freePerAirport = false;  // City Plane Free Per Airport
 };
 
 // Atreides defends; Harkonnen owns the plane; Ordos is Harkonnen's ally.
@@ -97,6 +101,8 @@ std::unique_ptr<Game> newGame(const std::string& mapData, int seed, const Rules&
     options.airportOrnithopterPatrol = rules.patrol;
     options.cityPlaneCarpetBombing = rules.carpet;
     options.cityPlanePurchase = rules.purchase;
+    options.cityPlaneBuildTime = rules.buildTime;
+    options.cityPlaneFreePerAirport = rules.freePerAirport;
     // Every plane here flies a course the probe gives it, never a bombing run of its own choice.
     options.cityPlaneBombingRuns = false;
     options.immortalHumanPlayer = false;
@@ -935,6 +941,70 @@ void checkPurchase(const std::string& mapData) {
     }
 }
 
+// Stefan, 2026-11-26: "make buying planes take time - so however long it takes for 1500 credits
+// worth of unit by default it takes that long. so the ai will want more airports to increase its
+// build rate". City Plane Build Time: the price is paid at the order, the plane launches when its
+// Airport has built it (Airport::planeBuildCycles: 1500 / 600 x 96 x 15 = 3,600 cycles), one at a
+// time per Airport, so two Airports build two at once.
+void checkBuildTime(const std::string& mapData) {
+    auto game = newGame(mapData, 23, Rules{true, true, false, true, true, true, false});
+    auto* owner = game->getHouse(HOUSE_ATREIDES);
+    for(int i = 0; i < 8; ++i) place(owner, Structure_WindTrap, Coord(2 + 3 * (i / 4), 2 + 3 * (i % 4)));
+    std::vector<Airport*> airports;
+    for(int i = 0; i < 2; ++i) {
+        airports.push_back(dynamic_cast<Airport*>(place(owner, Structure_Airport, Coord(20, 10 + 6 * i))));
+        require(airports.back() != nullptr, "Could not place an Airport");
+    }
+    owner->startingCredits += 10000;
+    const auto planes = [&] { return owner->getNumItems(Unit_AmbientAirplane); };
+    const int build = Airport::planeBuildCycles(HOUSE_ATREIDES);
+    require(build == 3600, "A bought plane does not take the build time of 1500 credits of Ornithopters (3,600 cycles): "
+                               + std::to_string(build));
+    const int before = owner->getCredits();
+    const Uint32 ownPlayer = owner->getPlayerList().front()->getPlayerID();
+    Command(ownPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[0]->getObjectID()).executeCommand();
+    require(planes() == 0 && owner->getCredits() == before - CA::kPlanePrice && airports[0]->isBuildingPlane(),
+            "An order did not pay and start building instead of launching at once");
+    require(!airports[0]->canBuyAirplane() && airports[1]->canBuyAirplane(),
+            "An Airport took a second order while building, or a second Airport could not build");
+    Command(ownPlayer, CMD_AIRPORT_BUY_AIRPLANE, airports[1]->getObjectID()).executeCommand();
+    require(Airport::buildingPlanes(owner) == 2, "Two Airports are not building two planes");
+    for(int cycle = 1; cycle < build; ++cycle) game->updateGameState();
+    require(planes() == 0, "A plane launched before it was built");
+    for(int cycle = 0; cycle < 2 && planes() < 2; ++cycle) game->updateGameState();
+    require(planes() == 2 && Airport::buildingPlanes(owner) == 0 && airports[0]->canBuyAirplane(),
+            "The two built planes did not launch together and free their Airports");
+    record("build_time", "rule=1 build_cycles=" + std::to_string(build) + " two_airports_two_planes=1 paid_at_order=1");
+    game.reset();
+    currentGame = nullptr;
+}
+
+// Stefan, 2026-11-26: "you get a free plane per airport". City Plane Free Per Airport: three Airports
+// that stand at the start each launch their free plane at five minutes; off, the house has one.
+void checkFreePerAirport(const std::string& mapData) {
+    for(const bool perAirport : {false, true}) {
+        auto game = newGame(mapData, 29, Rules{true, true, false, true, false, false, perAirport});
+        auto* owner = game->getHouse(HOUSE_ATREIDES);
+        for(int i = 0; i < 8; ++i) place(owner, Structure_WindTrap, Coord(2 + 3 * (i / 4), 2 + 3 * (i % 4)));
+        for(int i = 0; i < 3; ++i)
+            require(place(owner, Structure_Airport, Coord(20, 10 + 6 * i)) != nullptr, "Could not place an Airport");
+        require(game->getGameCycleCount() == 0 && owner->hasPower(), "The Airports do not stand powered at the start");
+        std::vector<Uint32> seen;
+        for(int cycle = 0; cycle < MILLI2CYCLES(5 * 60 * 1000 + 10000); ++cycle) {
+            game->updateGameState();
+            for(const AmbientAirplane* plane : AmbientAirplane::all())
+                if(plane->getOwner() == owner && std::find(seen.begin(), seen.end(), plane->getObjectID()) == seen.end())
+                    seen.push_back(plane->getObjectID());
+        }
+        record("free_per_airport", "rule=" + std::to_string(perAirport) + " airports=3 free_planes_by_5:10="
+                                       + std::to_string(seen.size()));
+        require(int(seen.size()) == (perAirport ? 3 : 1), perAirport ? "Three Airports did not launch three free planes"
+                                                                     : "Without the rule a house launched more than one free plane");
+        game.reset();
+        currentGame = nullptr;
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // checks: the fall, and a plane's own bombs
 // ---------------------------------------------------------------------------------------------
@@ -1398,6 +1468,8 @@ int runCityPlaneEffect() {
     checkCrashCredit(mapData);
     checkBuildingSplash(mapData);
     checkPurchase(mapData);
+    checkBuildTime(mapData);
+    checkFreePerAirport(mapData);
     checkPictures(mapData);
     checkFall(mapData);
     gChecks.close();

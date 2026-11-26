@@ -2216,6 +2216,7 @@ private:
         int flightsEnded = 0;         ///< own plane flights that have ended
         int64_t valuePerFlight = 0;   ///< combat record of the plane over its ended flights, credits
         int reserve = 0;              ///< cash that must remain after paying
+        bool rich = false;            ///< ordered as a rich house's production line, not on payback
     } extraAirportPlan;
     /// ExtraAirports switch, with the experiment-only DUNECITY_TEST_EXTRA_AIRPORTS override.
     bool extraAirportsEnabled() const;

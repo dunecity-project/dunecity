@@ -458,7 +458,13 @@
 //      the wait is part of the observer checkpoint. A 134 peer would desync. Save format unchanged.
 // 136: An Airport built during the game has its free plane ready at once, also in the first five
 //      minutes (Airport::init). A 135 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            136
+// 137: Two city plane rules, default on, as bits 2-3 of the MOD18 city rules byte (set when off):
+//      City Plane Build Time (a bought plane is paid at the order and launched when its Airport has
+//      built it, one at a time, 57.6 s; Airport::planeBuildCycles) and City Plane Free Per Airport
+//      (each Airport has its own free plane on its own five-minute clock). QuantBot's ExtraAirports
+//      is on. A 136 peer refuses the byte. Save format 9899 (an Airport's purchase clock from an
+//      older save is cleared, so it does not finish building a plane that was never ordered).
+#define NETWORK_PROTOCOL_VERSION            137
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

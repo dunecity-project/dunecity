@@ -1,3 +1,4 @@
+#include <sstream>
 // Included only by campaign-balance-probe.inc (run-campaign-balance.py --match-sides, driven by
 // tests/ai/vanilla-match.py).
 //
@@ -153,7 +154,30 @@ inline bool tick(Game& game, State& state) {
     return FormationDuel::decided(game, state.sides);
 }
 
+/// BALANCE_EXTRA_CREDITS ("house:credits,..." or "all:credits"; tests only): a rich start, credits added
+/// to the named houses' starting credits before the first cycle (Stefan, 2026-11-26: "if an ai has a lot
+/// of money planes win games"; the city plane rules measured where plane spam matters).
+inline void addExtraCredits(Game& game) {
+    const char* text = std::getenv("BALANCE_EXTRA_CREDITS");
+    if (!text) return;
+    std::stringstream list(text);
+    std::string item;
+    while (std::getline(list, item, ',')) {
+        const auto colon = item.find(':');
+        if (colon == std::string::npos) throw std::runtime_error("BALANCE_EXTRA_CREDITS wants house:credits");
+        const std::string who = item.substr(0, colon);
+        const int credits = std::stoi(item.substr(colon + 1));
+        for (int h = 0; h < NUM_HOUSES; ++h) {
+            House* house = game.getHouse(h);
+            if (!house || house->isNatives() || (who != "all" && std::stoi(who) != h)) continue;
+            house->startingCredits += credits;
+            SDL_Log("VANILLA_MATCH_EXTRA_CREDITS: house=%d credits=%d", h, credits);
+        }
+    }
+}
+
 inline void run(Game& game, Uint32 end, const std::vector<FormationDuel::Side>& sides) {
+    addExtraCredits(game);
     State state{sides, {}, {}};
     FormationDuel::applyShapes(game, sides);
     state.genome = FormationDuel::loadGenomePhases(game, sides);

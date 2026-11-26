@@ -359,6 +359,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.cityPlaneCarpetBombing = true;
     gameOptions.cityPlaneBombingRuns = true;
     gameOptions.cityPlanePurchase = true;
+    gameOptions.cityPlaneBuildTime = true;
+    gameOptions.cityPlaneFreePerAirport = true;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -501,10 +503,14 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     // vacancy without extending that unframed settings block:
                     // earlier MOD18 saves and protocol-112 packets read it off.
                     const Uint8 cityRules = stream.readUint8();
-                    if(cityRules & ~Uint8(3))
+                    if(cityRules & ~Uint8(15))
                         throw std::runtime_error("Invalid city rules.");
                     gameOptions.mountainScenery = (cityRules & 1) != 0;
                     gameOptions.unpoweredZonesVacate = (cityRules & 2) != 0;
+                    // Protocol 137: bits 2-3 are set when City Plane Build Time or City Plane Free Per
+                    // Airport is off, so a stream that plays the default rules is the byte it was.
+                    gameOptions.cityPlaneBuildTime = (cityRules & 4) == 0;
+                    gameOptions.cityPlaneFreePerAirport = (cityRules & 8) == 0;
                 }
             }
             if(hasTechnologyInstallments) {
@@ -720,7 +726,9 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeUint32(static_cast<Uint32>(gameOptions.researchPace));
     stream.writeBool(gameOptions.damageLowersLandValue);
     stream.writeUint8((gameOptions.mountainScenery ? 1 : 0)
-        | (gameOptions.unpoweredZonesVacate ? 2 : 0));
+        | (gameOptions.unpoweredZonesVacate ? 2 : 0)
+        // Bits 2-3 (protocol 137): City Plane Build Time off, City Plane Free Per Airport off.
+        | (gameOptions.cityPlaneBuildTime ? 0 : 4) | (gameOptions.cityPlaneFreePerAirport ? 0 : 8));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
     stream.writeBool(gameOptions.technologyInstallments);
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.

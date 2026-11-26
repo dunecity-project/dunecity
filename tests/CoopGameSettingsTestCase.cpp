@@ -1861,3 +1861,39 @@ TEST_CASE("Choosing an authored support faction never replaces a family campaign
     REQUIRE(context->slots[2].faction == HOUSE_HARKONNEN);
     REQUIRE(context->slots[1].house != context->slots[2].house);
 }
+
+TEST_CASE("Protocol 137 city plane rules ride bits 2-3 of the MOD18 city rules byte, set only when off",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.cityPlaneBuildTime);
+    REQUIRE(defaults.cityPlaneFreePerAirport);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.cityPlaneBuildTime);
+    REQUIRE(plainOptions.cityPlaneFreePerAirport);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.cityPlaneBuildTime = GENERATE(true, false);
+    options.cityPlaneFreePerAirport = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.cityPlaneBuildTime && options.cityPlaneFreePerAirport) {
+        // The default rules leave the stream and the options hash as protocol 136 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options != plainOptions);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}

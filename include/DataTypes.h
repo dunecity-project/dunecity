@@ -343,6 +343,8 @@ public:
                     && (cityPlaneCarpetBombing == goc.cityPlaneCarpetBombing)
                     && (cityPlaneBombingRuns == goc.cityPlaneBombingRuns)
                     && (cityPlanePurchase == goc.cityPlanePurchase)
+                    && (cityPlaneBuildTime == goc.cityPlaneBuildTime)
+                    && (cityPlaneFreePerAirport == goc.cityPlaneFreePerAirport)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -401,6 +403,8 @@ public:
             if(!cityPlaneCarpetBombing) optStr += "/cityPlaneCarpetBombing=0";
             if(!cityPlaneBombingRuns) optStr += "/cityPlaneBombingRuns=0";
             if(!cityPlanePurchase) optStr += "/cityPlanePurchase=0";
+            if(!cityPlaneBuildTime) optStr += "/cityPlaneBuildTime=0";
+            if(!cityPlaneFreePerAirport) optStr += "/cityPlaneFreePerAirport=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
@@ -528,6 +532,16 @@ public:
         /// (QuantBot::buyCityAirplanes). Off, planes only come from the Airport's free roll.
         /// INI key only.
         bool        cityPlanePurchase = true;
+        /// A bought plane takes build time (Stefan, 2026-11-26: "make buying planes take time - so
+        /// however long it takes for 1500 credits worth of unit by default it takes that long"): the
+        /// Airport takes the price at the order and launches the plane when built, one at a time, so
+        /// more Airports build more (Airport::planeBuildCycles, 57.6 s). Off, a bought plane launches at
+        /// once, as up to protocol 136. INI key only.
+        bool        cityPlaneBuildTime = true;
+        /// Each Airport has its own free plane (Stefan, 2026-11-26: "you get a free plane per airport"):
+        /// up to one free plane in the air per Airport, each on its own five-minute clock. Off, a house
+        /// has one free plane in the air whatever its Airports, as up to protocol 136. INI key only.
+        bool        cityPlaneFreePerAirport = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

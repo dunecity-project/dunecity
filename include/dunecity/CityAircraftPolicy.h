@@ -671,25 +671,29 @@ inline constexpr bool richBuys(int64_t surplus) { return surplus >= kRichSurplus
 
 // Another Airport (Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to
 // determine if it makes sense to buy more airports. more airports means more planes bombing so could
-// be useful. one off 5k which gets paid back in 16.5 minutes i believe"). QuantBot switch ExtraAirports,
-// default off. In the game an extra Airport earns nothing: the city counts one Airport (hasAirport),
-// a house has one free plane in the air whatever its Airports, and bought planes are capped at
-// kMaxPlanesPerHouse. Only under the experiment DUNECITY_TEST_FREE_PLANE_PER_AIRPORT (Airport::
-// freePlanePerAirport) does each Airport add a free plane every kFreePlaneMs; an extra Airport is then
-// worth what its free planes destroy. Under DUNECITY_TEST_PLANE_BUILD_TIME (Airport::planeBuildTime;
-// Stefan, 2026-11-26: "so the ai will want more airports to increase its build rate") each Airport also
-// builds one bought plane at a time, so an extra Airport is a second production line, worth what a
-// bought plane destroys beyond its price for every plane it can build. QuantBot builds one when its own
-// planes' record says that pays back the Airport's price within kAirportPaybackMinutes: value per ended
-// flight v (the house's combat record of the plane: price x share of hit points removed, buildings and
-// units, bombs and crashes) times the free flights in that time, plus (v - plane price) times the planes
-// built in that time. 5,000 over 20 minutes and a free plane every five is 1,250 a flight; a line alone
+// be useful. one off 5k which gets paid back in 16.5 minutes i believe"; then "you get a free plane per
+// airport. you need to think that the free plane alone gets you free damage"). QuantBot switch
+// ExtraAirports, default on (protocol 137). The city counts one Airport (hasAirport), but under the
+// match rules City Plane Free Per Airport (Airport::freePlanePerAirport) and City Plane Build Time
+// (Airport::planeBuildTime) each Airport adds a free plane every kFreePlaneMs and builds one bought
+// plane at a time, so an extra Airport is worth what its free planes destroy and, while every Airport
+// is building, a production line worth what a bought plane destroys beyond its price for every plane it
+// can build. QuantBot builds one when its own planes' record says that pays back the Airport's price
+// within kAirportPaybackMinutes: value per ended flight v (the house's combat record of the plane: price
+// x share of hit points removed, buildings and units, bombs and crashes) times the free flights in that
+// time, plus (v - plane price) times the planes built in that time. 5,000 over 20 minutes and a free
+// plane every five is 1,250 a flight; a line alone
 // (57.6 s a plane) needs v of 1,740 at a 1,500 price.
 inline constexpr int kAirportPaybackMinutes = 20;
 /// Flights of its own that must have ended before a computer player judges another Airport.
 inline constexpr int kAirportEvidenceFlights = 3;
-/// Airports a computer player builds at most under ExtraAirports, the first one included.
+/// Airports a computer player builds at most under ExtraAirports on their payback, the first included.
 inline constexpr int kMaxAirportsPerHouse = 4;
+/// A rich house (richBuys) whose Airports are all building planes builds more whatever their payback,
+/// up to this many (Stefan, 2026-11-26: "if an ai has a lot of money planes win games. they abliterate
+/// the enemy"): in planeswin.dls the rich Harkonnen turned its surplus into 882 planes from one Airport
+/// and they finished the last rival. With build time each Airport is one production line.
+inline constexpr int kMaxAirportsPerRichHouse = 8;
 /// `freePlaneMs`: an extra Airport's free plane every that many ms (0: it adds none). `buildMs`: the
 /// time it takes to build a bought plane of `planePrice` (0: planes are not built, they launch at once).
 inline constexpr bool extraAirportPays(int64_t valuePerFlight, int flightsEnded, int64_t airportPrice,

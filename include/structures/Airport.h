@@ -46,19 +46,17 @@ public:
     /// Probes only: a shorter charge, so a few game minutes hold enough flights to measure
     /// bombing. 0 (always, in the game) is the five minutes.
     static inline int testFreePlaneCycles = 0;
-    /// Balance experiment only, read once per process and never a match rule:
-    /// DUNECITY_TEST_FREE_PLANE_PER_AIRPORT=1 gives each Airport its own free plane. A house then
-    /// has up to one free plane in the air per Airport, and a launch restarts only the clock of
-    /// the Airport that launched it. Without it (the game) a house has one free plane in the air
-    /// whatever its Airports, and a launch restarts every Airport's clock (Stefan, 2026-11-26:
-    /// "more airports means more planes bombing so could be useful", measured under this switch).
+    /// Match rule City Plane Free Per Airport (default on; Stefan, 2026-11-26: "you get a free plane
+    /// per airport"): a house has up to one free plane in the air per Airport, and a launch restarts
+    /// only the clock of the Airport that launched it. Off, one free plane in the air per house and a
+    /// launch restarts every Airport's clock. DUNECITY_TEST_FREE_PLANE_PER_AIRPORT=0/1 overrides it
+    /// for experiments (read once per process, never a match rule).
     static bool freePlanePerAirport();
-    /// Balance experiment only, read once per process and never a match rule:
-    /// DUNECITY_TEST_PLANE_BUILD_TIME=1 makes a bought plane take build time (Stefan, 2026-11-26:
-    /// "make buying planes take time - so however long it takes for 1500 credits worth of unit by
-    /// default it takes that long. so the ai will want more airports to increase its build rate").
-    /// The Airport takes the price at the order and launches the plane planeBuildCycles() later,
-    /// one plane at a time, so N Airports build N times as fast. The free plane is unchanged.
+    /// Match rule City Plane Build Time (default on; Stefan, 2026-11-26: "make buying planes take
+    /// time - so however long it takes for 1500 credits worth of unit by default it takes that long.
+    /// so the ai will want more airports to increase its build rate"). The Airport takes the price at
+    /// the order and launches the plane planeBuildCycles() later, one plane at a time, so N Airports
+    /// build N times as fast. DUNECITY_TEST_PLANE_BUILD_TIME=0/1 overrides it for experiments.
     static bool planeBuildTime();
     /// Game cycles a bought plane takes under planeBuildTime() (0 without it): the factory rule
     /// (BuilderBase::updateProductionProgress pays price / (BuildTime x 15) a cycle, so an item takes

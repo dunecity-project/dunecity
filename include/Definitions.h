@@ -249,7 +249,11 @@
 //       tiles with their cycles, and the count and clock of the Rocket Turrets its QuantBot
 //       ordered against the raid (AirRaidTurrets). A house from an older save has no record:
 //       it has not been bombed.
-#define SAVEGAMEVERSION     9898
+// 9899: City Plane Build Time: an Airport's saved purchase clock is the build of a bought plane.
+//       An older save's clock followed a plane already launched and is cleared on load.
+#define SAVEGAMEVERSION     9899
+/// First save whose Airport purchase clock is a plane's build (City Plane Build Time).
+#define SAVEGAMEVERSION_CITY_PLANE_BUILD_TIME 9899
 /// First save with a House's record of bomb hits and its air raid turret orders.
 #define SAVEGAMEVERSION_AIR_RAID_RECORD 9898
 /// First save with an Airport's free plane clock.

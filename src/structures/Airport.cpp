@@ -37,6 +37,9 @@ Airport::Airport(InputStream& stream) : StructureBase(stream) {
     }
     if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_CITY_PLANE_PURCHASE) {
         purchaseCooldown = std::max(0, stream.readSint32());
+        // Before City Plane Build Time the clock only followed a purchase that had already launched
+        // its plane; under the rule it is the build of the next one, so an older save starts idle.
+        if (currentGame->getLoadedSavegameVersion() < SAVEGAMEVERSION_CITY_PLANE_BUILD_TIME) purchaseCooldown = 0;
     }
     // An Airport from a save older than the 4x4 Airport is compact: its tiles in that save hold
     // a 3x3 claim. init() ran before this was known, so the footprint is set again here.
@@ -60,20 +63,23 @@ int Airport::freePlaneCharge() {
     return experiment > 0 ? experiment : MILLI2CYCLES(DuneCity::CityAircraft::kFreePlaneMs);
 }
 
+// The match rules, with an experiment-only override (0 or 1, read once per process, never part of
+// the rules) for the planeswin.dls continuations, whose saved options cannot be edited.
+static int experimentOverride(const char* name) {
+    const char* text = std::getenv(name);
+    return text != nullptr && (text[0] == '0' || text[0] == '1') ? text[0] - '0' : -1;
+}
+
 bool Airport::freePlanePerAirport() {
-    static const bool perAirport = [] {
-        const char* text = std::getenv("DUNECITY_TEST_FREE_PLANE_PER_AIRPORT");
-        return text != nullptr && std::atoi(text) == 1;
-    }();
-    return perAirport;
+    static const int override = experimentOverride("DUNECITY_TEST_FREE_PLANE_PER_AIRPORT");
+    if (override >= 0) return override == 1;
+    return currentGame != nullptr && currentGame->getGameInitSettings().getGameOptions().cityPlaneFreePerAirport;
 }
 
 bool Airport::planeBuildTime() {
-    static const bool enabled = [] {
-        const char* text = std::getenv("DUNECITY_TEST_PLANE_BUILD_TIME");
-        return text != nullptr && std::atoi(text) == 1;
-    }();
-    return enabled;
+    static const int override = experimentOverride("DUNECITY_TEST_PLANE_BUILD_TIME");
+    if (override >= 0) return override == 1;
+    return currentGame != nullptr && currentGame->getGameInitSettings().getGameOptions().cityPlaneBuildTime;
 }
 
 int Airport::planeBuildCycles(int houseID) {
