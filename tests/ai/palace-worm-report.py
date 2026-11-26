@@ -27,7 +27,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import match_score  # noqa: E402
 
-PAIR = ('difficulty', 'map', 'seed', 'sides')
+# Arms may differ only in a play style the label carries (default@palace-worm-0), so the sides are
+# not part of the pairing key; every arm plays the same houses in the same slots.
+PAIR = ('difficulty', 'map', 'seed')
 HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
 FREMEN = HOUSE_NUMBERS['fremen']
 ENDINGS = ('bloom', 'expired', 'sated', 'beaten')

@@ -11,8 +11,8 @@
 //    and the kills are credited to the Fremen house (Stats: Sandworm kills, the Tanks' kills);
 //  - spice bloom: it bursts into a spice field where it was sent (a spot on rock moves to the
 //    nearest sand within reach, one deep in the rock is refused), and is not counted as lost;
-//  - life: it leaves after three minutes, or sated after six meals, and neither is a loss; beaten
-//    to half health it leaves and that is a loss;
+//  - life: it leaves after three minutes (bursting where it is if it was on its way to a bloom), or
+//    sated after six meals, and none of these is a loss; beaten to half health it leaves, a loss;
 //  - QuantBot: hunts an enemy on its sand, and with none bursts for spice near its refinery;
 //  - save/load: a worm on its way to burst is still Fremen's, with its life and its order;
 //  - the rule off (and Atreides with it on): the Palace calls Fremen warriors as before.
@@ -238,6 +238,21 @@ inline void life() {
         f.runUntil(wormID, 4, [&] { return !f.alive(wormID); });
         require(!f.alive(wormID) && f.owner->getNumLostItems(Unit_Sandworm) == 0, f.label + ": the worm outlived its life or was lost");
         SDL_Log("PALACE_WORM_CASE: %s left after %d s, not lost", f.label.c_str(), PalaceWorm::kLifetimeMs / 1000);
+    }
+    {
+        // Its time runs out on the way to burst: it bursts where it is.
+        Fixture f("HumanPlayer", "expires-on-the-way");
+        Sandworm* worm = f.release();
+        const Uint32 wormID = worm->getObjectID();
+        require(worm->doSpiceBloom(60, 60), f.label + ": bloom order refused");
+        worm->palaceWormCyclesLeft = MILLI2CYCLES(2000);
+        for(int i = 0; i < MILLI2CYCLES(1000); ++i) f.game->updateGameState();
+        const Coord near = worm->getLocation();
+        f.runUntil(wormID, 3, [&] { return !f.alive(wormID); });
+        require(!f.alive(wormID) && f.spiceTilesAround(near, PalaceWorm::kBloomRadius + 2) >= 30
+                && f.owner->getNumLostItems(Unit_Sandworm) == 0,
+                f.label + ": a worm out of time on its way to burst did not burst where it was");
+        SDL_Log("PALACE_WORM_CASE: %s ran out of time on the way and burst near %d,%d", f.label.c_str(), near.x, near.y);
     }
     {
         Fixture f("HumanPlayer", "sated");

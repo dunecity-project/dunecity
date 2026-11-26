@@ -517,16 +517,22 @@ bool Palace::summonPalaceWorm() {
     }
     const Coord centre = getLocation() + Coord(getStructureSize().x/2, getStructureSize().y/2);
     const int maxRing = std::max(currentGameMap->getSizeX(), currentGameMap->getSizeY());
+    // Ring by ring outwards; the nearest by straight-line distance wins (then lowest y and x). A
+    // tile in ring r is at least r away, so the search ends once r*r passes the best found.
     Coord spot = Coord::Invalid();
-    for(int ring = 1; ring <= maxRing && spot.isInvalid(); ++ring) {
-        for(int y = centre.y - ring; y <= centre.y + ring && spot.isInvalid(); ++y) {
+    int best = std::numeric_limits<int>::max();
+    for(int ring = 1; ring <= maxRing && ring*ring <= best; ++ring) {
+        for(int y = centre.y - ring; y <= centre.y + ring; ++y) {
             for(int x = centre.x - ring; x <= centre.x + ring; ++x) {
                 if(std::max(std::abs(x - centre.x), std::abs(y - centre.y)) != ring) continue;
                 if(!currentGameMap->tileExists(x, y)) continue;
                 const Tile* tile = currentGameMap->getTile(x, y);
                 if(tile->isRock() || tile->hasAnUndergroundUnit() || tile->hasAGroundObject()) continue;
-                spot = Coord(x, y);
-                break;
+                const int distance = (x - centre.x)*(x - centre.x) + (y - centre.y)*(y - centre.y);
+                if(distance < best || (distance == best && (y < spot.y || (y == spot.y && x < spot.x)))) {
+                    best = distance;
+                    spot = Coord(x, y);
+                }
             }
         }
     }

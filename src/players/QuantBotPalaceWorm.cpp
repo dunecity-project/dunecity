@@ -35,9 +35,11 @@ namespace {
 constexpr int kPreyCluster = 3;          ///< Tiles around a prey unit whose other prey adds to its value
 constexpr int kMinPreyValue = 250;       ///< Credits: below this the worm is worth more as spice
 constexpr int kBloomSearch = 14;         ///< Tiles around a refinery searched for a bloom site
+constexpr int kBloomSearchFar = 30;      ///< ... and, with no site that near, this far (every third tile)
 constexpr int kBloomEnemyClearance = 8;  ///< No bloom site this near an enemy ground unit
-constexpr int kBloomMarginMs = 15000;    ///< Life kept in hand for the trip to the bloom site
-constexpr int kLateBloomMs = 60000;      ///< From here on a hunting worm checks its way back to spice
+constexpr int kBloomMarginMs = 20000;    ///< Life kept in hand for the trip to the bloom site
+constexpr int kLateBloomMs = 90000;      ///< From here on a hunting worm checks its way back to spice
+constexpr int kPathFactor = 2;           ///< Sand paths wind: the trip home takes up to twice the straight line
 
 /// Game cycles the worm needs to cover DISTANCE tiles on sand (Sandworm::getTerrainDifficulty).
 Sint32 travelCycles(const Sandworm& worm, int distance) {
@@ -83,10 +85,13 @@ Coord QuantBot::palaceWormBloomSite(const Sandworm* worm) const {
 
     Coord best = Coord::Invalid();
     int bestScore = 0;
+    // Near the refineries first (every second tile); only with nothing there, further out (every
+    // third), which keeps the search to a few hundred sites a refinery.
+    for(const auto& [reach, step] : {std::pair<int, int>{kBloomSearch, 2}, std::pair<int, int>{kBloomSearchFar, 3}}) {
+    if(best.isValid()) break;
     for(const Coord& anchor : anchors) {
-        // Every second tile keeps the search to a few hundred sites a refinery.
-        for(int dy = -kBloomSearch; dy <= kBloomSearch; dy += 2) {
-            for(int dx = -kBloomSearch; dx <= kBloomSearch; dx += 2) {
+        for(int dy = -reach; dy <= reach; dy += step) {
+            for(int dx = -reach; dx <= reach; dx += step) {
                 const Coord spot(anchor.x + dx, anchor.y + dy);
                 if(!worm->canPass(spot.x, spot.y) || currentGameMap->getTile(spot)->getSandRegion() != region) continue;
                 if(std::any_of(enemies.begin(), enemies.end(), [&](const Coord& enemy) {
@@ -102,6 +107,7 @@ Coord QuantBot::palaceWormBloomSite(const Sandworm* worm) const {
             }
         }
     }
+    }
     return best;
 }
 
@@ -114,7 +120,7 @@ void QuantBot::managePalaceWorm(const Sandworm* worm) {
     // Near the end of its life a hunting worm (level 1) turns back for the bloom site while it can.
     if(level == 1 && cyclesLeft < MILLI2CYCLES(kLateBloomMs)) {
         const Coord site = palaceWormBloomSite(worm);
-        if(site.isValid() && travelCycles(*worm, blockDistance(worm->getLocation(), site).lround())
+        if(site.isValid() && kPathFactor * travelCycles(*worm, blockDistance(worm->getLocation(), site).lround())
                                  + MILLI2CYCLES(kBloomMarginMs) >= cyclesLeft) {
             traceDecision("palace_worm_bloom", AITelemetry::Record().set("worm", worm->getObjectID())
                 .set("x", site.x).set("y", site.y).set("gain", bloomGain(site)).set("kills", worm->getKills())
@@ -174,7 +180,7 @@ void QuantBot::managePalaceWorm(const Sandworm* worm) {
         return;
     }
     const int distance = blockDistance(worm->getLocation(), site).lround();
-    const bool hurry = travelCycles(*worm, distance) + MILLI2CYCLES(kBloomMarginMs) >= cyclesLeft;
+    const bool hurry = kPathFactor * travelCycles(*worm, distance) + MILLI2CYCLES(kBloomMarginMs) >= cyclesLeft;
     traceDecision("palace_worm_bloom", AITelemetry::Record().set("worm", worm->getObjectID())
         .set("x", site.x).set("y", site.y).set("gain", bloomGain(site)).set("kills", worm->getKills())
         .set("cycles_left", cyclesLeft).set("hurry", hurry ? 1 : 0).set("level", level));

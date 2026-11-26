@@ -16,7 +16,8 @@
     - One worm a house at a time (kMaxPerHouse). A second Palace that charges while the worm is out
       keeps its charge until the worm is gone. With a 3-minute life and a 5-minute charge one Palace
       never meets this limit.
-    - Life: kLifetimeMs, 3 game minutes, then it dives and is gone (no spice). Long enough to cross
+    - Life: kLifetimeMs, 3 game minutes, then it dives and is gone (no spice), unless it is on its
+      way to a Spice Bloom: then it bursts where it is. Long enough to cross
       a 128-tile map at its speed (about 2.5 tiles a second) and eat; short enough that a Fremen
       house has a worm out 60% of the time with one Palace, not always.
     - Meals: kMeals, 6, then it dives sated. A wild worm sleeps after 3; the Palace worm is the

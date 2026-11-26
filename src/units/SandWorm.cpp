@@ -563,7 +563,9 @@ bool Sandworm::update() {
                 return false;
             }
             if(palaceWormCyclesLeft <= 0) {
-                palaceWormLeave("expired");
+                // Its time is up on the way to burst: it bursts where it is, not for nothing.
+                if(bloomTarget.isValid()) palaceWormBurst();
+                else palaceWormLeave("expired");
                 return false;
             }
         }
