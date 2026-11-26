@@ -125,6 +125,11 @@ SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
 WORM_FIELDS = ('house', 'object', 'x', 'y', 'kills', 'cycles_left', 'item', 'price', 'victim_house', 'palace',
                'aim_x', 'aim_y', 'cycle')
 WORM_ROW_FIELDS = KEY + ('event',) + WORM_FIELDS
+# One row per Hospital trip event (match rule Hospital Care, dunecity/HospitalCare.h): a soldier
+# sent (why: order, auto, redirect), healed, or ended early (why: lost, hospital_lost, left_bed,
+# reordered, stalled).
+HOSPITAL_FIELDS = ('house', 'object', 'item', 'hp', 'max_hp', 'hospital', 'why', 'cycle')
+HOSPITAL_ROW_FIELDS = KEY + ('event',) + HOSPITAL_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on
 # patrol, and a plane an Airport sold (tests/ai/city-plane-report.py).
@@ -432,6 +437,13 @@ def play(args, scratch, binary, key):
             worms.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
                           **{f: data.get(f, '') for f in WORM_FIELDS}})
     append(results / 'worms.csv', WORM_ROW_FIELDS, worms)
+    hospital = []
+    for l in lines:
+        if 'HOSPITAL_CARE:' in l:
+            data = parse(l, 'HOSPITAL_CARE:')
+            hospital.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
+                             **{f: data.get(f, '') for f in HOSPITAL_FIELDS}})
+    append(results / 'hospital.csv', HOSPITAL_ROW_FIELDS, hospital)
     planes = []
     for l in lines:
         for marker, event in PLANE_EVENTS:

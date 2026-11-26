@@ -35,6 +35,10 @@
 #include <units/GroundUnit.h>
 #include <units/UnitOrderQueue.h>
 
+#include <SDL2/SDL_log.h>
+
+#include <string>
+
 namespace DuneCity {
 namespace HospitalCare {
 
@@ -115,7 +119,15 @@ void travel(GroundUnit* unit, const Coord& spot) {
     }
 }
 
-bool dispatch(HospitalCareState& care, GroundUnit* unit, ZoneStructure* zone) {
+/// One line per trip event for match logs (tests/ai/vanilla-match.py, hospital.csv).
+void logEvent(const char* event, const UnitBase* unit, Uint32 unitID, Uint32 hospitalID, const char* why) {
+    SDL_Log("HOSPITAL_CARE: event=%s house=%d object=%u item=%d hp=%d max_hp=%d hospital=%u why=%s cycle=%u",
+            event, unit ? unit->getOwner()->getHouseID() : -1, unitID, unit ? int(unit->getItemID()) : -1,
+            unit ? unit->getHealth().lround() : 0, unit ? unit->getMaxHealth() : 0, hospitalID, why,
+            currentGame->getGameCycleCount());
+}
+
+bool dispatch(HospitalCareState& care, GroundUnit* unit, ZoneStructure* zone, const char* why) {
     const Coord spot = chooseSpot(care, zone, unit->getLocation());
     if(spot.isInvalid()) return false;
     HospitalTrip trip;
@@ -125,6 +137,7 @@ bool dispatch(HospitalCareState& care, GroundUnit* unit, ZoneStructure* zone) {
     trip.startCycle = currentGame->getGameCycleCount();
     // Recorded before the orders: a Carryall booked by them may pick the soldier up at once.
     care.setTrip(unit->getObjectID(), trip);
+    logEvent("sent", unit, unit->getObjectID(), trip.hospitalID, why);
     if(besideZone(zone, unit->getLocation())) {
         unit->doMove2Pos(unit->getLocation(), false);
     } else {
@@ -186,7 +199,7 @@ bool sendToHospital(GroundUnit* unit) {
         care.cancel(unit->getObjectID());
     }
     ZoneStructure* zone = chooseHospital(care, unit, 0, false);
-    return zone && dispatch(care, unit, zone);
+    return zone && dispatch(care, unit, zone, "order");
 }
 
 void considerAutomatic(GroundUnit* unit) {
@@ -199,7 +212,7 @@ void considerAutomatic(GroundUnit* unit) {
     if(!owner->hasCarryalls() || !ownerSendsAutomatically(owner)) return;
     auto& care = *state();
     if(care.trip(unit->getObjectID())) return;
-    if(ZoneStructure* zone = chooseHospital(care, unit, 0, false)) dispatch(care, unit, zone);
+    if(ZoneStructure* zone = chooseHospital(care, unit, 0, false)) dispatch(care, unit, zone, "auto");
 }
 
 bool keepsHospital(const ZoneStructure* zone) {
@@ -241,13 +254,13 @@ void update() {
     const FixPoint cost = FixPoint(kHospitalHealCostTenths) / 10;
 
     // Ordered by soldier ID, so admission to a contested bed is the same on every peer.
-    std::vector<Uint32> ended;
+    std::vector<std::pair<Uint32, const char*>> ended;  // (soldier, why)
     std::vector<std::pair<Uint32, Uint32>> redirect;  // (soldier, new Hospital)
     for(auto& [unitID, trip] : care->trips()) {
         auto* unit = dynamic_cast<GroundUnit*>(currentGame->getObjectManager().getObject(unitID));
-        if(!unit || unit->getHealth() <= 0 || !canBeHealed(unit)) { ended.push_back(unitID); continue; }
+        if(!unit || unit->getHealth() <= 0 || !canBeHealed(unit)) { ended.emplace_back(unitID, "lost"); continue; }
         ZoneStructure* zone = zoneByID(trip.hospitalID);
-        if(!usableZone(zone, unit->getOwner())) { ended.push_back(unitID); continue; }
+        if(!usableZone(zone, unit->getOwner())) { ended.emplace_back(unitID, "hospital_lost"); continue; }
         const Coord spot(trip.spotX, trip.spotY);
 
         if(trip.stage == HospitalTrip::Stage::Healing) {
@@ -255,13 +268,13 @@ void update() {
             if(unit->isPickedUp() || unit->isAwaitingPickup() || !besideZone(zone, unit->getLocation())
                 || (unit->getDestination().isValid() && !besideZone(zone, unit->getDestination())
                     && unit->getDestination() != unit->getLocation())) {
-                ended.push_back(unitID);
+                ended.emplace_back(unitID, "left_bed");
                 continue;
             }
             if(healTick) {
                 if(unit->getOwner()->takeCredits(cost) > 0) unit->addHealth();
             }
-            if(unit->getHealth() >= unit->getMaxHealth()) ended.push_back(unitID);
+            if(unit->getHealth() >= unit->getMaxHealth()) ended.emplace_back(unitID, "healed");
             continue;
         }
 
@@ -275,7 +288,7 @@ void update() {
             trip.bestDistance = 0x7fff;
             if(!besideZone(zone, unit->getLocation())) { unit->doMove2Pos(spot, true); continue; }
         } else if(unit->getDestination() != spot && !besideZone(zone, unit->getLocation())) {
-            ended.push_back(unitID);   // ordered somewhere else
+            ended.emplace_back(unitID, "reordered");
             continue;
         }
 
@@ -285,7 +298,7 @@ void update() {
                 trip.bestDistance = static_cast<int16_t>(distance);
                 trip.startCycle = cycle;
             } else if(cycle - trip.startCycle > kHospitalTripStallCycles) {
-                ended.push_back(unitID);
+                ended.emplace_back(unitID, "stalled");
             }
             continue;
         }
@@ -302,13 +315,19 @@ void update() {
             }
         }
     }
-    for(Uint32 id : ended) care->cancel(id);
+    for(const auto& [id, why] : ended) {
+        const auto* t = care->trip(id);
+        logEvent(std::string(why) == "healed" ? "healed" : "ended",
+                 currentGame->getObjectManager().getObject(id) ? dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(id)) : nullptr,
+                 id, t ? t->hospitalID : 0, why);
+        care->cancel(id);
+    }
     for(const auto& [unitID, hospitalID] : redirect) {
         auto* unit = dynamic_cast<GroundUnit*>(currentGame->getObjectManager().getObject(unitID));
         ZoneStructure* zone = zoneByID(hospitalID);
         if(!unit || !zone) continue;
         care->cancel(unitID);
-        dispatch(*care, unit, zone);
+        dispatch(*care, unit, zone, "redirect");
     }
 }
 
