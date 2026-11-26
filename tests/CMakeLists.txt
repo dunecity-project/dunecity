@@ -251,6 +251,8 @@ target_sources(dunelegacy_tests
         NeutralHouseTestCase/NeutralHouseTestCase.cpp
         Dune2RAssetManagerTestCase/Dune2RAssetManagerTestCase.cpp
         PakfileConcurrentReadTestCase/PakfileConcurrentReadTestCase.cpp
+        # Issue #129: exists() and openFile() share the tiny-VOC placeholder rule.
+        VocPlaceholderTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/Pakfile.cpp
         EnhancedAtlasCacheTestCase/EnhancedAtlasCacheTestCase.cpp
         EnhancedBuildingGeometryTestCase/EnhancedBuildingGeometryTestCase.cpp
@@ -368,6 +370,7 @@ if(APPLE)
         ENVIRONMENT "DUNECITY_RENDERER_TEST_GPU=1;DUNE2R_GPU_TEST=1;DUNE_CITY_SOURCE_DIR=${CMAKE_SOURCE_DIR}")
 endif()
 dunecity_add_test(headless integration NAME pak_concurrent_read_tests COMMAND dunelegacy_tests "[pak][threading]")
+dunecity_add_test(headless integration NAME voc_placeholder_tests COMMAND dunelegacy_tests "[filemanager][voc]")
 dunecity_add_test(headless integration NAME lobby_authorization_tests COMMAND dunelegacy_tests "[lobby][security][authorization]")
 dunecity_add_test(headless integration NAME direct_transport_tests COMMAND dunelegacy_tests "[direct]")
 # Local revision store: snapshots, pinning, verified imports and retired sharing-queue cleanup.
