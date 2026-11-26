@@ -1,3 +1,46 @@
+## 2026-11-26 - Troopers: the fixed infantry quota explained; TrooperMeasuredShare built, measured and left off
+
+Stefan, 2026-11-26, on his House Stats window (Brutal, Trooper x0.7, "Trooper %: infantry cap" 10.00): "why do
+troopers have a fixed 10% ratio ?? i never asked for that". Commit `7b2981581`. Evidence:
+`~/Documents/projects/outputs/trooper-share-20261126/` (`report-trooper.md`, `trooper_report.py`).
+
+**Where the 10% came from.** `QuantBot::planUnitMix` sets `pass.infantryPercent` per difficulty: Easy and Defend
+18%, Medium 15%, Hard 12%, Brutal 10% (`QuantBotBuild.cpp`). It came in with DuneCity 1.0.529 (`b3148b960`,
+2026-08-23, "diversify QuantBot unit production"); the original Dune Legacy QuantBot built no infantry. Nobody
+measured it. It is both a cap and a target: the WOR and Barracks build infantry while infantry is under that share
+of the army's value (`QuantBotBuildProducers.cpp`), and the Trooper reserve fills up to it. Only an Infantry
+strategy replaces it. The ten vehicle slots get their share from their measured score; the Trooper did not.
+
+**TrooperMeasuredShare ([Force Concentration], default off; `DUNECITY_TEST_TROOPER_MEASURED_SHARE=0/1`; play style
+`trooper-measured-share`).** Once the mix is learning, the infantry share is the Trooper's score taken as one more
+slot of the mix (`UnitMixPolicy::measuredInfantryBps`): blended with the mean slot score while its evidence is thin
+(as `exploredScores` does), sharpened like the slots (share^1.5), capped at 80% like a slot and never below 1%.
+The Trooper support floor against aircraft and an Infantry strategy's share are unchanged. In Stefan's screenshot
+(Trooper x0.7 among slots x0.5-x1.9) it gives about 5%.
+
+**Measured** (AWS, source `7b2981581`, four Brutal QuantBots, 45 minutes, Stefan's game options):
+
+| `rs160-dunecity`, 48 paired self-play games | Off | On | Paired (95%) |
+|---|---:|---:|---:|
+| Troopers lost a game (4 houses) | 1,055 | 1,036 | -19 (-42 to +4) |
+| Trooper damage value a game | 100,550 | 98,505 | -2,045 (-4,676 to +446) |
+| Trooper damage per credit lost | 0.99 | 0.98 | |
+| Time-outs | 50% | 50% | +0 (-8 to +8 points) |
+
+Placement (`match_score.py`), half the houses each, every balanced assignment: `rs160-dunecity` 288 games,
+`default@trooper-measured-share` -0.101 against `default` -0.084, paired -0.017 (-0.098 to +0.065), level, 50%
+time-outs; `rs160-vanilla` 144 games, paired +0.000 (-0.135 to +0.134), level, 8% time-outs (Troopers lost 16.8 a
+game either way: on this map the quota hardly binds). Why so little changed: at the end of a city game the measured
+share is about 7% (median; quartiles 5-10%, from `units.csv`), close to the 10% it replaces.
+
+**Left off** under the default rule (interval not above 0). Nothing is worse either, so turning it on is Stefan's
+call: it removes a number nobody chose at no measurable cost. Not measured: Hard, Medium, Easy (their fixed quota is
+higher, 12-18%, so the switch would move them further), campaigns, `/weak`.
+
+**Verified.** Mini `build-int`: `dunelegacy_tests` (two new cases, 17 assertions) and `genome_registry_contract`
+passed. The AWS nightly tier with the four AI gates runs on the tip that carries this commit (the plane economics
+session's protocol 137 re-run), and staging is pushed only after it passes.
+
 ## 2026-11-26 - Airports and Rocket Turrets: measured in Stefan's case; AirportTurrets built, measured and left off
 
 Stefan, 2026-11-26: "also airports need decent rocket turret defenses". Commits `3c6e011ba` (switch, logging),
