@@ -64,9 +64,12 @@ TEST_CASE("TurretFront: the four rules", "[ai][turret-front][policy]") {
     REQUIRE(TF::creepSiteScore(40, 0, 2) > TF::creepSiteScore(40, 1, 2));
     REQUIRE(TF::creepSiteScore(50, 1, 2) > TF::creepSiteScore(10, 0, 2));
     // (d) rear only far from enemy buildings and contacts; four a review above the keep.
-    REQUIRE(TF::rearTurret(28, 0));
-    REQUIRE_FALSE(TF::rearTurret(27, 0));
-    REQUIRE_FALSE(TF::rearTurret(40, 300));
+    REQUIRE(TF::rearTurret(28, 5, 0));
+    REQUIRE_FALSE(TF::rearTurret(27, 5, 0));
+    REQUIRE_FALSE(TF::rearTurret(40, 5, 300));
+    // On a big map the whole base is far from the enemy: only 16+ tiles behind its edge retires.
+    REQUIRE_FALSE(TF::rearTurret(90, 80, 0));
+    REQUIRE(TF::rearTurret(96, 80, 0));
     REQUIRE(TF::retireAllowance(100, 20) == 4);
     REQUIRE(TF::retireAllowance(22, 20) == 2);
     REQUIRE(TF::retireAllowance(14, 3) == 2);   // the floor of twelve

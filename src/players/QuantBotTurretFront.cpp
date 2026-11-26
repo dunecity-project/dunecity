@@ -102,8 +102,10 @@ void QuantBot::planTurretFront(BuildPass& pass) {
     if (!turret.enabled || turret.techLevel > getHouse()->getTechLevel()) return;
 
     const bool retireDue = retire && now / TF::kRetirePeriodCycles != turretRetireBucket;
-    const bool scanDue = turretFrontScanCycle == std::numeric_limits<Uint32>::max()
-        || now < turretFrontScanCycle || now - turretFrontScanCycle >= TF::kScanPeriodCycles;
+    // Retirement alone needs only its own two-minute review, not the eight-second scan.
+    const bool scanDue = (reinforce || advance || creep)
+        && (turretFrontScanCycle == std::numeric_limits<Uint32>::max()
+            || now < turretFrontScanCycle || now - turretFrontScanCycle >= TF::kScanPeriodCycles);
     if (scanDue || retireDue) {
         turretFrontScanCycle = now;
         scanTurretFront(pass, reinforce, advance, creep, retireDue);
@@ -245,6 +247,9 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
         return da != db ? da < db : index(a.x, a.y) < index(b.x, b.y);
     });
 
+    // The base's enemy-facing edge: its own building nearest an enemy building.
+    const int edge = anchors.empty() ? TF::kDistanceCap : distAt(anchors.front().x, anchors.front().y);
+
     // (c) TurretCreep: in range of enemy buildings, where at most one enemy turret reaches.
     if (creep && buildUp && enemyKnown && turretFrontPlan.site.isInvalid()) {
         int forward = 0;
@@ -281,7 +286,6 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
     // (b) AdvancingTurrets: a belt at the enemy-facing edge, moved forward behind the army.
     if (advance && buildUp && enemyKnown && turretFrontPlan.site.isInvalid() && !anchors.empty()) {
         const Coord edgeAnchor = anchors.front();
-        const int edge = distAt(edgeAnchor.x, edgeAnchor.y);
         std::vector<int> lead;
         for (const UnitBase* unit : getUnitList()) {
             if (unit->getOwner() != getHouse() || !unit->isActive() || unit->getHealth() <= 0
@@ -339,7 +343,7 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
             std::vector<Candidate> rear;
             for (const auto& own : ownTurrets) {
                 const int d = distAt(own.at.x, own.at.y);
-                if (!TF::rearTurret(d, contactSum.around(own.at.x, own.at.y, TF::kRearQuietTiles))) continue;
+                if (!TF::rearTurret(d, edge, contactSum.around(own.at.x, own.at.y, TF::kRearQuietTiles))) continue;
                 bool kept = false;
                 for (const Coord k : keepers)
                     if (TF::tileDistance(k.x, k.y, own.at.x, own.at.y) <= TF::kKeepNearTiles) { kept = true; break; }

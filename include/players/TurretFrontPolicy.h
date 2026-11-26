@@ -26,8 +26,10 @@
         a belt of turrets is kept at that edge and extended toward the enemy, staying behind the
         army. Each turret extends the build range, so the belt moves forward with the army.
     (c) TurretCreep: turrets placed within range of enemy buildings, where few enemy turrets reach.
-    (d) RearTurretRetire: turrets far from every enemy building and contact are sold (demolished
-        where selling is off), a few at a time, keeping the base's own coverage need.
+    (d) RearTurretRetire: turrets deep behind the base's enemy-facing edge and far from every enemy
+        building and contact are sold (demolished where selling is off), a few at a time, keeping the
+        base's own coverage need. With (b) it is the moving line: the belt goes forward and the
+        turrets it leaves behind stop drawing upkeep.
 
     Everything here is integer and geometric: Chebyshev distances on the tile grid and box counts.
 */
@@ -176,8 +178,11 @@ inline int creepSiteScore(int64_t enemyTilesInRange, int enemyTurretsInReach, in
 
 /// The retirement review runs once per two game minutes.
 constexpr uint32_t kRetirePeriodCycles = 7500;
-/// A turret this far from every enemy building is in the rear...
+/// A turret is in the rear at least this far from every enemy building, and at least
+/// kRearBehindEdgeTiles farther from them than the house's own enemy-facing edge (on a big map the
+/// whole base starts far from the enemy; only what stands deep behind the base's front retires)...
 constexpr int kRearEnemyTiles = 28;
+constexpr int kRearBehindEdgeTiles = 16;
 /// ...when no visible enemy unit is within this many tiles of it either.
 constexpr int kRearQuietTiles = 16;
 /// Turrets within this many tiles of an own Airport or Palace are its air cover and stay.
@@ -188,8 +193,8 @@ constexpr int kRetirePerReview = 4;
 constexpr uint32_t kBombQuietCycles = 3 * 3750;
 /// The house always keeps at least its own coverage need, and never fewer than this.
 constexpr int kKeepFloor = 12;
-inline bool rearTurret(int enemyDistance, int64_t contactsNear) {
-    return enemyDistance >= kRearEnemyTiles && contactsNear == 0;
+inline bool rearTurret(int enemyDistance, int edge, int64_t contactsNear) {
+    return enemyDistance >= std::max(kRearEnemyTiles, edge + kRearBehindEdgeTiles) && contactsNear == 0;
 }
 inline int retireAllowance(int standing, int keep) {
     return std::clamp(standing - std::max(keep, kKeepFloor), 0, kRetirePerReview);
