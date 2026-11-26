@@ -4188,7 +4188,7 @@ TEST_CASE("AirportTurrets: four Rocket Turrets in a five-tile ring, spread round
     REQUIRE(Air::airportGuardSiteScore(Air::kNoTurret, 3) == Air::airportGuardSiteScore(Air::kAirportGuardSpreadCapTiles, 3));
 }
 
-TEST_CASE("TrooperMeasuredShare: the infantry share follows the Trooper's score as one more slot", "[ai][unit-mix][policy]") {
+TEST_CASE("Infantry share: infantry is one more slot of the mix, no fixed quota", "[ai][unit-mix][policy]") {
     namespace Mix = UnitMixPolicy;
     Mix::Slots available{};
     Mix::Weights scores{};
@@ -4211,26 +4211,12 @@ TEST_CASE("TrooperMeasuredShare: the infantry share follows the Trooper's score 
     REQUIRE(Mix::measuredInfantryPercent(0) == 1);
     REQUIRE(Mix::measuredInfantryPercent(349) == 3);
     REQUIRE(Mix::measuredInfantryPercent(350) == 4);
-}
-
-TEST_CASE("TrooperMeasuredShare defaults off, round trips and hashes only when on", "[ai][unit-mix][config]") {
-    const QuantBotConfig defaults;
-    REQUIRE_FALSE(defaults.force.trooperMeasuredShare);
-    const auto path = std::filesystem::temp_directory_path() / "quantbot-trooper-measured-share-test.ini";
-    {
-        std::ofstream file(path);
-        file << "[Force Concentration]\nTrooperMeasuredShare=true\n";
-    }
-    QuantBotConfig loaded;
-    REQUIRE(loaded.applyOverrides(path.string()));
-    REQUIRE(loaded.force.trooperMeasuredShare);
-    REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
-    REQUIRE(loaded.save(path.string()));
-    QuantBotConfig restored;
-    REQUIRE(restored.applyOverrides(path.string()));
-    REQUIRE(restored.force.trooperMeasuredShare);
-    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
-    std::filesystem::remove(path);
+    // Before the mix learns: an untested type's share of the starting mix (its weights as scores).
+    Mix::Weights start{};
+    Mix::Slots light{};
+    light[Mix::kFirstLightSlot] = light[Mix::kQuadSlot] = true;
+    start[Mix::kFirstLightSlot] = start[Mix::kQuadSlot] = 5000;
+    REQUIRE(Mix::measuredInfantryBps(start, light, 0, 0, 100000) == 3333);
 }
 
 TEST_CASE("AirportTurrets defaults off, round trips and hashes only when on", "[ai][air-raid][config]") {

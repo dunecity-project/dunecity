@@ -572,7 +572,6 @@ QuantBotConfig::QuantBotConfig() {
     force.siloFillPercent = 0;
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
-    force.trooperMeasuredShare = false;   // Stefan, 2026-11-26: "why do troopers have a fixed 10% ratio ??"
     force.simpleTechSavings = false;
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
     force.exhaustedArmyDispatch = true;
@@ -1110,7 +1109,6 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "SiloFillPercent", force.siloFillPercent);
         iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
-        iniFile.setBoolValue("Force Concentration", "TrooperMeasuredShare", force.trooperMeasuredShare);
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
         iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
@@ -1512,7 +1510,6 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     if (siloFill == 0 || siloFill == 80 || siloFill == 90) force.siloFillPercent = siloFill;
     force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
-    force.trooperMeasuredShare = iniFile.getBoolValue("Force Concentration", "TrooperMeasuredShare", force.trooperMeasuredShare);
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
     force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
@@ -2249,7 +2246,6 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.siloFillPercent) addNamed("siloFillPercent", force.siloFillPercent);
     addNamed("fundedClassicProduction", force.fundedClassicProduction);
     addNamed("trooperSupport", force.trooperSupport);
-    if (force.trooperMeasuredShare) addNamed("trooperMeasuredShare", force.trooperMeasuredShare);
     addNamed("simpleTechSavings", force.simpleTechSavings);
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);

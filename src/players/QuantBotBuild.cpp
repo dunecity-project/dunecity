@@ -2972,23 +2972,9 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     auto& data = currentGame->objectData.data;
     pass.trooperSupport = gameMode == GameMode::Custom && botConfig().force.trooperSupport
         && ModManager::instance().isDuneCityContentActive();
-    // Infantry retains its separate difficulty quota. Vehicle openings use
-    // the current technology and actual production availability below.
-    pass.infantryPercent = 10;
-    switch (difficulty) {
-        case Difficulty::Defend:
-        case Difficulty::Easy:
-            pass.infantryPercent = 18;
-            break;
-        case Difficulty::Medium:
-            pass.infantryPercent = 15;
-            break;
-        case Difficulty::Hard:
-            pass.infantryPercent = 12;
-            break;
-        case Difficulty::Brutal:
-            break;
-    }
+    // The infantry share is set with the mix below (measured, like a slot); vehicle openings use
+    // the current technology and actual production availability.
+    pass.infantryPercent = 0;
     // An Infantry mix strategy fields its own share on foot (docs/ai-play-styles.md, "Strategies").
     pass.strategyMixProfile = strategyMix();
     if (pass.strategyMixProfile && pass.strategyMixProfile->infantryPercent > 0) pass.infantryPercent = pass.strategyMixProfile->infantryPercent;
@@ -3127,27 +3113,37 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     allocationSnapshot.learning = pass.learningUnitMix;
     allocationSnapshot.militaryValue = pass.militaryValue;
     allocationSnapshot.antiAirFloorBps = launcherFloorAuthorised ? launcherFloorBps : 0;
-    // TrooperMeasuredShare (default off; UnitMixPolicy::measuredInfantryBps): once the mix is
-    // learning, the infantry share follows the Trooper's measured score instead of the fixed
-    // difficulty quota. An Infantry strategy keeps its own share. DUNECITY_TEST_TROOPER_MEASURED_SHARE
-    // (0 or 1) is an experiment-only override for match arms in one build, read once per process.
-    static const int measuredShareOverride = [] {
-        const char* text = std::getenv("DUNECITY_TEST_TROOPER_MEASURED_SHARE");
-        return text != nullptr && (text[0] == '0' || text[0] == '1') ? text[0] - '0' : -1;
-    }();
-    const bool measuredShare = measuredShareOverride >= 0 ? measuredShareOverride == 1
-        : botConfig().force.trooperMeasuredShare;
-    if (measuredShare && pass.learningUnitMix
-        && !(pass.strategyMixProfile && pass.strategyMixProfile->infantryPercent > 0)) {
+    // The infantry share of the army's value (Stefan, 2026-11-26: "i want it on - i never wanted a 10%
+    // rule for troopers"; the fixed 18/15/12/10% difficulty quota is gone). Infantry is one more slot
+    // of the mix (UnitMixPolicy::measuredInfantryBps): once the mix is learning, its measured score
+    // (the infantry the house buys) against the slots' scores; before that, an
+    // untested type's share of the starting mix (the mean of its weights, as exploredScores gives an
+    // untested slot). An Infantry strategy keeps its own share.
+    if (!(pass.strategyMixProfile && pass.strategyMixProfile->infantryPercent > 0)) {
         const auto& trooper = data[Unit_Trooper][houseID];
-        if (trooper.enabled && trooper.price > 0 && trooper.techLevel <= getHouse()->getTechLevel()) {
-            const int64_t reward = getHouse()->getCombatReward(Unit_Trooper).total();
-            const int64_t loss = int64_t(getHouse()->getNumLostItems(Unit_Trooper)) * trooper.price * 1000;
-            const int64_t score = UnitMixPolicy::performanceScore(reward, loss, trooper.price * 1000);
-            const int bps = UnitMixPolicy::measuredInfantryBps(scores, available, score,
-                                                                std::max<int64_t>(0, reward) + loss, int64_t(trooper.price) * 1000);
-            pass.infantryPercent = UnitMixPolicy::measuredInfantryPercent(bps);
+        const bool trooperFielded = trooper.enabled && trooper.price > 0 && trooper.techLevel <= getHouse()->getTechLevel();
+        const int infantryPrice = std::max(1, trooperFielded ? trooper.price : data[Unit_Soldier][houseID].price);
+        int bps = 0;
+        if (pass.learningUnitMix) {
+            // The types the house buys: Troopers and their squads once it can field them, the
+            // Barracks' foot soldiers before that. A Soldier that walks out of a destroyed building
+            // was never bought, so its losses do not count against the Trooper.
+            int64_t reward = 0, loss = 0;
+            static constexpr std::array<Uint32, 3> troopers{Unit_Trooper, Unit_Troopers, Unit_Troopers5};
+            static constexpr std::array<Uint32, 5> soldiers{Unit_Soldier, Unit_Infantry, Unit_Infantry5,
+                                                            Unit_GasInfantry, Unit_FlameTrooper};
+            const auto add = [&](Uint32 item) {
+                reward += std::max<int64_t>(0, getHouse()->getCombatReward(item).total());
+                loss += int64_t(getHouse()->getNumLostItems(item)) * std::max(0, data[item][houseID].price) * 1000;
+            };
+            if (trooperFielded) for (const Uint32 item : troopers) add(item);
+            else for (const Uint32 item : soldiers) add(item);
+            const int64_t score = UnitMixPolicy::performanceScore(reward, loss, int64_t(infantryPrice) * 1000);
+            bps = UnitMixPolicy::measuredInfantryBps(scores, available, score, reward + loss, int64_t(infantryPrice) * 1000);
+        } else {
+            bps = UnitMixPolicy::measuredInfantryBps(defaults, available, 0, 0, int64_t(infantryPrice) * 1000);
         }
+        pass.infantryPercent = UnitMixPolicy::measuredInfantryPercent(bps);
     }
     allocationSnapshot.infantryQuotaBps = pass.infantryPercent * 100;
     const int rawOrnithopterBps = rawMix[kOrnithopterSlot];

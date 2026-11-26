@@ -271,7 +271,9 @@ light-raider evasion, but skips the proactive ranged spacing and non-Easy
 damage-response rotation. Campaign Easy/Medium suppress that damage-triggered
 manual vehicle repair; other structure/RETREAT repair paths still exist.
 Medium+ adds proactive spacing; Hard/Brutal have offensive air targets.
-Infantry quotas are 18%/15%/12%/10%. Most targeting, factory planning,
+Infantry quotas were 18%/15%/12%/10% (Easy to Brutal) until 2026-11-26; the infantry
+share is now measured like a unit-mix slot for every difficulty (`UnitMixPolicy::measuredInfantryBps`).
+Most targeting, factory planning,
 Starport economy decisions and local defense planning are shared. Some legacy
 settings (`structureDefenders`, `harvesterDefenders`, `ornithopterAttackThreshold`)
 are loaded but not referenced by the current QuantBot implementation. No further

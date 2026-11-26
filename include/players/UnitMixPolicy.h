@@ -205,12 +205,13 @@ inline Mix allocate(const Weights& scores, const Weights& defaults, bool learnin
     if (vanilla) cap(kOrnithopterSlot,2500);
     return result;
 }
-/// TrooperMeasuredShare (default off). Stefan, 2026-11-26: "why do troopers have a fixed 10% ratio ??
-/// i never asked for that". The infantry share of the army's value was a fixed quota per difficulty
-/// (18/15/12/10%, DuneCity 1.0.529). With the switch it is the Trooper's measured score taken as one
-/// more slot of the mix: the score blended with the mean slot score as exploredScores blends a little
-/// tested type, then sharpened (share^1.5, sharpenScores) and normalised with the slots' \a slotScores.
-/// Capped like a slot (allocate: 8000). 0 when no slot and no Trooper has a score.
+/// The infantry share of the army's value. Stefan, 2026-11-26: "why do troopers have a fixed 10% ratio
+/// ?? i never asked for that", then "i want it on - i never wanted a 10% rule for troopers". It was a
+/// fixed quota per difficulty (18/15/12/10%, DuneCity 1.0.529); now infantry is one more slot of the
+/// mix: its score blended with the mean slot score as exploredScores blends a little tested type,
+/// then sharpened (share^1.5, sharpenScores) and normalised with the slots' \a slotScores (the
+/// starting mix's weights before the mix learns). Capped like a slot (allocate: 8000). 0 when no slot
+/// and no infantry has a score.
 constexpr int kMeasuredInfantryCapBps = 8000;
 inline int measuredInfantryBps(const Weights& slotScores, const Slots& available, int64_t trooperScore,
                                int64_t trooperEvidence, int64_t trooperPriceMilli) {
@@ -235,8 +236,8 @@ inline int measuredInfantryBps(const Weights& slotScores, const Slots& available
     if (sharpened == 0) return 0;
     return static_cast<int>(std::min<int64_t>(kMeasuredInfantryCapBps, own * 10000 / sharpened));
 }
-/// The infantry quota in per cent from measuredInfantryBps: rounded, at least 1 (the WOR still
-/// fields a few Troopers to keep measuring them).
+/// The infantry quota in per cent from measuredInfantryBps: rounded, at least 1 (the WOR and Barracks
+/// still field a few to keep measuring them).
 constexpr int measuredInfantryPercent(int bps) { return std::max(1, (bps + 50) / 100); }
 
 /// Minimum mobile AA value share while visible hostile aircraft justify it.
