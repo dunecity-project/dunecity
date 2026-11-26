@@ -196,7 +196,9 @@ void checkCap(const std::string& mapData, bool second) {
     std::vector<Uint32> hospitals{placeHospital(owner, Coord(20, 20))};
     if(second) hospitals.push_back(placeHospital(owner, Coord(34, 20)));
     std::vector<Uint32> units;
-    for(int i = 0; i < 7; ++i) units.push_back(soldier(owner, Coord(23 + (i % 3), 25 + i / 3), 4)->getObjectID());
+    // Seven soldiers on the tiles round the first Hospital, so they all arrive at once.
+    const Coord around[7] = {Coord(19, 22), Coord(20, 22), Coord(21, 22), Coord(22, 22), Coord(22, 21), Coord(22, 20), Coord(19, 21)};
+    for(int i = 0; i < 7; ++i) units.push_back(soldier(owner, around[i], 4)->getObjectID());
     const int before = owner->getCredits();
     for(Uint32 id : units) order(*game, id);
     step(*game, hospitals, 3);
@@ -233,6 +235,7 @@ void checkCap(const std::string& mapData, bool second) {
     const int paid = before - owner->getCredits();
     // 7 soldiers x 16 hit points x 0.2 credits = 22.4 (credits are shown rounded).
     require(paid >= 21 && paid <= 24, "The house did not pay 0.2 credits a hit point");
+    SDL_Log("HOSPITAL_CARE_PROBE_DIAG: most=%d waited=%d paid=%d", most, waited, paid);
     if(!second) {
         require(most == DuneCity::kHospitalBeds, "Five soldiers never healed together");
         require(waited >= 2, "No soldier waited for a bed");
