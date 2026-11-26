@@ -132,7 +132,7 @@ PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name',
                 'killer_item', 'bombs', 'released', 'bought', 'cycle', 'enemy_destroyed', 'enemy_credits', 'enemy_hp',
                 'own_destroyed', 'own_credits', 'own_rocket_turrets', 'threat', 'rocket_turrets', 'gun_turrets',
                 'structures_lost', 'item', 'x', 'y', 'airport', 'airport_house', 'airport_dist', 'stage', 'dist',
-                'ring', 'reach', 'gun_turrets', 'powered', 'health', 'turret_at', 'own', 'source')
+                'ring', 'reach', 'powered', 'health', 'turret_at', 'own', 'source')
 PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
