@@ -49,49 +49,65 @@ void runEnemyBorderSiteProbe(Game& game) {
     };
     bot->planningBuilder=yard->getObjectID();
 
-    // 1. An enemy building on the border costs the site nothing. Put enemy Wind Traps on the
-    //    diagonals of the best site, each touching only a corner of its border ring: the side,
-    //    road and access rules see no change, only the -10 a tile before 141 would.
-    threaten(0);
-    int before=0,beforeOld=0;
-    const Coord site=search(false,&before);
-    require(site.isValid(),"Fixture has no safe Stadium site");
-    require(search(true,&beforeOld)==site && beforeOld==before,"Spacings differ before any enemy building");
+    // 1. An enemy building on the border costs the site nothing. Heavy fire everywhere but one
+    //    footprint leaves the search a single candidate, so the score compared is that site's.
+    //    Enemy Wind Traps go on the site's diagonals, each touching only a corner of its border
+    //    ring: sides, roads and access see no change, only the -10 a tile before 141 would.
+    //    The base is crowded, so candidates are tried outward from the yard until one has an
+    //    open ring that a corner trap leaves legal.
     const Coord trap=getStructureSize(Structure_WindTrap);
-    const Coord corners[4]={Coord(site.x-trap.x,site.y-trap.y),Coord(site.x+span.x,site.y-trap.y),
-                            Coord(site.x-trap.x,site.y+span.y),Coord(site.x+span.x,site.y+span.y)};
-    int planted=0;
-    for(const Coord corner:corners) {
+    auto mask=[&](Coord open){
+        threaten(2*TacticalSafetyPolicy::kLightFire);
+        for(int dy=0;dy<span.y;++dy) for(int dx=0;dx<span.x;++dx) bot->tacticalDanger[(open.y+dy)*width+open.x+dx]=0;
+    };
+    auto freeCorner=[&](Coord corner){
         if(!currentGameMap->okayToPlaceStructure(corner.x,corner.y,trap.x,trap.y,false,nullptr,false,Structure_WindTrap))
-            continue;
-        bool road=false;   // placing on a road clears it, which would change the site's road terms
-        for(int dy=0;dy<trap.y;++dy) for(int dx=0;dx<trap.x;++dx) road|=currentGameMap->getTile(corner.x+dx,corner.y+dy)->isRoad();
-        if(road) continue;
-        StructureBase* placedTrap=enemy->placeStructure(NONE_ID,Structure_WindTrap,corner.x,corner.y,false,true);
-        if(!placedTrap) continue;
-        // A trap that makes the site itself illegal (its corner was the detour for a road the
-        // Stadium covers, or the site's ground exit) tests nothing about the score: take it away.
-        bot->clearPlacementCache();
-        if(bot->findPlaceLocation(item)!=site) {
-            SDL_Log("ENEMY_BORDER_SKIP: corner=(%d,%d) moved=(%d,%d) access=%d details=%s",corner.x,corner.y,
-                bot->placementCache[item].x,bot->placementCache[item].y,
-                int(bot->preservesGroundAccess(item,site)),bot->placementScoreDetails[item].json().c_str());
-            placedTrap->destroy();
-            continue;
-        }
-        ++planted;
-    }
-    require(planted>0,"No enemy Wind Trap on a corner of the Stadium site leaves the site legal");
-    int after=0,afterOld=0;
+            return false;
+        for(int dy=0;dy<trap.y;++dy) for(int dx=0;dx<trap.x;++dx)   // placing clears a road
+            if(currentGameMap->getTile(corner.x+dx,corner.y+dy)->isRoad()) return false;
+        return true;
+    };
+    const Coord yardAt=yard->getLocation();
+    Coord site=Coord::Invalid();
+    int before=0,after=0,afterOld=0,planted=0,tried=0;
+    for(int radius=0;radius<=24 && site.isInvalid();++radius)
+        for(int y=yardAt.y-radius;y<=yardAt.y+radius && site.isInvalid();++y)
+            for(int x=yardAt.x-radius;x<=yardAt.x+radius && site.isInvalid();++x) {
+                if(std::max(std::abs(x-yardAt.x),std::abs(y-yardAt.y))!=radius) continue;
+                if(x<0 || y<0 || x+span.x>width || y+span.y>height) continue;
+                if(!bot->placeableAmongOwnUnits(x,y,span.x,span.y,item)) continue;
+                const Coord candidate(x,y);
+                const Coord corners[4]={Coord(x-trap.x,y-trap.y),Coord(x+span.x,y-trap.y),
+                                        Coord(x-trap.x,y+span.y),Coord(x+span.x,y+span.y)};
+                bool anyCorner=false;
+                for(const Coord corner:corners) anyCorner|=freeCorner(corner);
+                if(!anyCorner) continue;
+                mask(candidate);
+                int score=0,oldScore=0;
+                if(search(false,&score)!=candidate) continue;   // not a legal site
+                ++tried;
+                require(search(true,&oldScore)==candidate && oldScore==score,"Spacings differ before any enemy building");
+                int traps=0;
+                for(const Coord corner:corners) {
+                    if(!freeCorner(corner)) continue;
+                    StructureBase* placedTrap=enemy->placeStructure(NONE_ID,Structure_WindTrap,corner.x,corner.y,false,true);
+                    if(!placedTrap) continue;
+                    if(search(false,nullptr)!=candidate) { placedTrap->destroy(); continue; }   // took the last exit
+                    ++traps;
+                }
+                if(!traps) continue;
+                site=candidate; before=score; planted=traps;
+            }
+    require(site.isValid(),"No open Stadium site near the yard takes an enemy Wind Trap on a corner");
     const Coord again=search(false,&after);
-    require(again==site,"An enemy building next door moved the Stadium off its best site");
+    require(again==site,"An enemy building next door made the Stadium site illegal");
     require(after==before,"An enemy building next door lowered the site's score");
     const Coord oldSite=search(true,&afterOld);
-    require(oldSite!=site || afterOld==before+planted*TacticalSafetyPolicy::kOldEnemyBorderTileScore,
+    require(oldSite==site,"The old spacing refused the only site");
+    require(afterOld==before+planted*TacticalSafetyPolicy::kOldEnemyBorderTileScore,
         "The old spacing did not charge the enemy border tiles");
-    require(oldSite!=site || afterOld<after,"The old spacing kept the score: the check cannot tell them apart");
-    SDL_Log("ENEMY_BORDER_SCORE: site=(%d,%d) enemy_traps=%d score=%d old_site=(%d,%d) old_score=%d",
-        site.x,site.y,planted,after,oldSite.x,oldSite.y,afterOld);
+    SDL_Log("ENEMY_BORDER_SCORE: site=(%d,%d) tried=%d enemy_traps=%d score=%d old_score=%d",
+        site.x,site.y,tried,planted,after,afterOld);
 
     // 2. Light fire (one enemy weapon over every site) no longer refuses a site; heavy fire does.
     threaten(TacticalSafetyPolicy::kLightFire);

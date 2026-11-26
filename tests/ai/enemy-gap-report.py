@@ -12,6 +12,7 @@ touching (gap 0) or within 2 and 5 tiles, and the share placed on a threatened s
 """
 import argparse
 import csv
+import gzip
 import statistics
 from collections import defaultdict
 from pathlib import Path
@@ -44,7 +45,11 @@ def main():
               'touching', 'within2', 'within5', 'threatened', 'tolerated')
     print('\t'.join(header))
     for results in args.results:
-        with (results / 'placements.csv').open(newline='') as handle:
+        path = results / 'placements.csv'
+        if not path.exists() and path.with_suffix('.csv.gz').exists():
+            path = path.with_suffix('.csv.gz')   # the queue compresses large result files
+        opener = gzip.open if path.suffix == '.gz' else open
+        with opener(path, 'rt', newline='') as handle:
             rows = list(csv.DictReader(handle))
         by_label = defaultdict(list)
         house_games = defaultdict(set)
