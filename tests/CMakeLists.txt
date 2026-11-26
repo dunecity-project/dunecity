@@ -128,6 +128,7 @@ target_sources(dunelegacy_tests
         OriginalCampaignPolicyTestCase.cpp
         OriginalTeamScriptTestCase.cpp
         VersionTestCase.cpp
+        RendererFallbackOrderTestCase.cpp
         SoundtrackPackTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/music/SoundtrackPack.cpp
         AchievementsTestCase/AchievementsTestCase.cpp

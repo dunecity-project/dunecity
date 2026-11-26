@@ -282,9 +282,19 @@ void setVideoMode(int displayIndex)
         exit(EXIT_FAILURE);
     }
     // Create renderer (VSync set separately for macOS compatibility)
+    // createStartupRenderer walks every compiled driver and logs each failure
+    // (issue #120); only when none works do we stop, and then say so on screen.
     renderer = createStartupRenderer(window);
     if (!renderer) {
-        fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
+        const std::string error = SDL_GetError();
+        fprintf(stderr, "SDL_CreateRenderer failed: %s\n", error.c_str());
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateRenderer failed: %s", error.c_str());
+        const std::string message = "DuneCity could not start its graphics renderer.\n\n" + error
+#if defined(__linux__) && !defined(__ANDROID__)
+            + "\n\nTry starting it with SDL_RENDER_DRIVER=software, and please report this with your log."
+#endif
+            ;
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity", message.c_str(), window);
         exit(EXIT_FAILURE);
     }
 
