@@ -215,12 +215,28 @@ void applyLoadedOverlays() {
     }
 }
 
+/// Every kHospitalRecheckCycles, while any house has a Hospital: the automatic rule for every
+/// soldier, in unit-list order (the same on every peer).
+static void considerEveryone(const HospitalCareState& care, Uint32 cycle) {
+    if(cycle % kHospitalRecheckCycles != 0) return;
+    const bool anyHospital = std::any_of(care.overlays().begin(), care.overlays().end(), [](const auto& entry) {
+        return entry.second == static_cast<uint8_t>(ZoneStructure::CivicOverlay::Hospital);
+    });
+    if(!anyHospital) return;
+    for(UnitBase* unit : unitList) {
+        if(unit->isInfantry() && unit->getHealth() * 100 < unit->getMaxHealth() * kHospitalAutoHealthPercent)
+            considerAutomatic(static_cast<GroundUnit*>(unit));
+    }
+}
+
 void update() {
     auto* care = state();
-    if(!care || care->trips().empty()) return;
+    if(!care) return;
     if(!currentGame->getGameInitSettings().getGameOptions().hospitalCare) { care->trips().clear(); return; }
-
     const Uint32 cycle = currentGame->getGameCycleCount();
+    considerEveryone(*care, cycle);
+    if(care->trips().empty()) return;
+
     const bool healTick = cycle % kHospitalHealIntervalCycles == 0;
     const FixPoint cost = FixPoint(kHospitalHealCostTenths) / 10;
 

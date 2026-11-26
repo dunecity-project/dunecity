@@ -211,7 +211,8 @@ bool canBeHealed(const UnitBase* unit);
 /// Yard. A soldier already on a trip keeps it (idempotent: a Carryall's pickup repeats the order).
 bool sendToHospital(GroundUnit* unit);
 
-/// The automatic rule, checked by GroundUnit::checkPos every kHospitalRecheckCycles: a soldier
+/// The automatic rule, checked by update() every kHospitalRecheckCycles for every soldier while
+/// its house has a Hospital (InfantryBase::checkPos does not run GroundUnit's): a soldier
 /// below half health whose owner allows it (a human house, or a QuantBot with HospitalInfantry
 /// on) and has Carryalls, as for vehicles and Repair Yards.
 void considerAutomatic(GroundUnit* unit);

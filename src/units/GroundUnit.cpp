@@ -132,13 +132,6 @@ void GroundUnit::checkPos() {
 
     }
 
-    // Wounded infantry: the same rule for a Hospital (DuneCity; dunecity/HospitalCare.h). Looked at
-    // every kHospitalRecheckCycles, staggered by object ID.
-    if(isInfantry() && active && !pickedUp
-            && ((currentGame->getGameCycleCount() + getObjectID()) % DuneCity::kHospitalRecheckCycles) == 0) {
-        DuneCity::HospitalCare::considerAutomatic(this);
-    }
-
 
     if(goingToRepairYard) {
         if(target.getObjPointer() == nullptr) {
