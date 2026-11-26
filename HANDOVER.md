@@ -1,3 +1,28 @@
+## 2026-11-27 - Released 1.0.880 (v1.0.880, 2c8c3deb1): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Stefan: "once all subagents finish deploy game" / "release game i mean". Everything since 1.0.879 in one release:
+a free plane per Airport, plane build time with the Airport build panel, crash bombs, QuantBot extra Airports,
+the measured infantry share, saboteur credit and spectator markers, building up to enemy buildings, Windtraps kept
+while the base has room, an Airport built in the opening launching its plane at once, and the DuneCity Campaign
+Mission 10 fix. Network protocol 142, save format 9899. Evidence log:
+`~/Documents/projects/outputs/release-1.0.880/gates.md` on the Mini.
+
+- **Candidates on the way.** cd80fe9c9 and 2f9f0812d were superseded: Stefan found the Airport panel still said
+  "Buy airplane" (2f9f0812d added Build airplane and a progress bar), then the AWS nightly caught three
+  air-defense probes still sized for the removed fixed infantry quota (fixed in 0da919e96 and 30758f6cd; the
+  infantry change had skipped the nightly on request). Lesson: an AI default change still runs the nightly tier.
+- **Gates at 8223904f0 (code of 2c8c3deb1):** AWS `-L nightly -LE gui` 253/253 (20261127T014707); Mini
+  perf_regression (117.8 s), dunelegacy_tests, genome_registry_contract; integration CI 45842884604; Mini
+  qualification 45844899338 (15:02-15:54 UTC).
+- **Tag build 45853938149:** attempt 1 failed only the packaged pointer gate ("Stationary fullscreen pointer lies
+  outside the logical viewport"): the Mini pointer sat at 0,1079. CentrePointer.app centred it; attempt 2 passed
+  (release 16:52 UTC). Check the Mini pointer before tagging.
+- **Channels:** SourceForge 45862743052, browser 45862743013, website deploys 45862730591 and 45862980431;
+  Chrome showed "App v1.0.880" at dunelegacy.com/play; `release-automation.py verify v1.0.880 --live` passed.
+  Reservation completed and research resumed. Android held; TestFlight not part of this release.
+- **MacBook Air:** the published notarized zip (sha256 7abad9c2...) is in `/Applications/dunecity.app`, executable
+  6c6cc32d...; published 1.0.879 kept as the backup.
+
 ## 2026-11-27 - Saboteurs: kills credited, spectators see them (sab.dls; unreleased, protocol 140)
 
 Stefan's `sab.dls` (1.0.880 staging, 4P 192x192 Metropolis, four QuantBot Brutal, spectating): "saboteurs are
