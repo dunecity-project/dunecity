@@ -78,6 +78,9 @@ private:
     void init();
     /// Micropolis doAirport(): launch the city airplane or traffic helicopter.
     void updateCityAircraft();
+    /// Match log, once a game minute: the Rocket Turrets of the owner's team in this Airport's
+    /// ring and in reach of a plane over it (CITY_AIRPORT_COVER; diagnostics only).
+    void logCover() const;
     void updateStructureSpecificStuff() override;
 };
 

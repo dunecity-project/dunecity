@@ -143,6 +143,10 @@ private:
     /// City Plane Bombing Runs: aim the next leg across a random enemy building. False when
     /// no other team has a building left.
     bool pickBombingRun();
+    /// Match log (diagnostics only): the first time this plane approaches and is over each enemy
+    /// Airport (CITY_PLANE_NEAR_AIRPORT). Runs when the plane enters a new tile.
+    void logAirportPasses();
+
 
     Sint32 takeoffFrame;    ///< Micropolis frames 11..9, 0 once cruising
     Sint32 remainingTicks;  ///< Cruise budget; zero means an outward departure
@@ -153,6 +157,8 @@ private:
     Sint32 stickPhase;      ///< The stick's clock towards its next bomb (saved from 9891)
     bool bought = false;        ///< bought at an Airport, not its free plane (saved from 9892)
     Uint32 bombsReleased = 0;   ///< Diagnostics only, not saved and never read by the simulation
+    Coord airportCheckTile = Coord::Invalid();   ///< Diagnostics only, not saved: tile of the last logAirportPasses
+    std::vector<std::pair<Uint32, Uint8>> airportsSeen;   ///< Diagnostics only, not saved: Airport id, 1 approached | 2 over
 };
 
 #endif // AMBIENTAIRPLANE_H

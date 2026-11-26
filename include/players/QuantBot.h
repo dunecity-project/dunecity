@@ -2182,6 +2182,31 @@ private:
     Coord findAirRaidTurretSite(int* uncovered = nullptr, bool* nearHit = nullptr);
     /// The order was accepted: the house's record, the decision trace and the match log line.
     void noteAirRaidTurretOrdered(BuildPass& pass, const BuilderTurn& turn, Coord site);
+    /// AirportTurrets (default off; QuantBotAirDefencePolicy.h). This build pass's plan, scratch
+    /// refilled by planAirportTurrets every pass: the ring counts come from the map and the
+    /// reservations, so nothing here needs saving.
+    struct AirportGuardPlan {
+        bool active = false;     ///< switch on, city game with bombing, an Airport short of its ring
+        bool searched = false;   ///< the site search has run this pass
+        bool ordered = false;    ///< a yard took the turret (or its Wind Trap) this pass
+        int reserve = 0;         ///< cash that must remain after paying (threatReserve)
+        int airports = 0;        ///< own Airports
+        int unguarded = 0;       ///< own Airports with fewer than kAirportGuardTurrets in their ring
+        int ring = 0;            ///< ring turrets of the Airport the site serves, at the search
+        int cost = 0;            ///< the chosen turret with its foundation
+        Uint32 airport = NONE_ID;   ///< the Airport the site serves
+        Coord site = Coord::Invalid();
+    } airportGuardPlan;
+    /// AirportTurrets switch, with the experiment-only DUNECITY_TEST_AIRPORT_TURRETS override.
+    bool airportTurretsEnabled() const;
+    void planAirportTurrets(BuildPass& pass);
+    /// One Rocket Turret per pass across all yards at the ring site, or the Wind Trap that powers
+    /// it; from cash beyond the economy's reserve only, the yard never saves for it.
+    void chooseYardAirportTurrets(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// A legal Rocket Turret tile in the ring (QuantBotAirDefencePolicy::kAirportGuardReachTiles)
+    /// of the first own Airport, by object id, short of its ring; invalid when every Airport has
+    /// its ring or no tile is legal. \a airport and \a ring receive that Airport and its count.
+    Coord findAirportGuardSite(Uint32* airport = nullptr, int* ring = nullptr, int* unguarded = nullptr);
     /// MassHold: health-weighted value of our live (Rocket Turrets: powered) turrets within
     /// kMassTurretSupportTiles of \a building.
     int64_t turretSupportNear(const ObjectBase* building) const;

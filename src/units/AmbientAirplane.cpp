@@ -23,6 +23,49 @@
 namespace CA = DuneCity::CityAircraft;
 
 namespace {
+// Diagnostics only (CITY_PLANE_NEAR_AIRPORT, the airport fields of CITY_PLANE_DOWN): where the
+// Airports are, rebuilt at most every 64 cycles so a plane entering a tile does not walk the
+// whole structure list. Nothing in the simulation reads it.
+struct AirportSpot { Uint32 id; int house; int team; Coord origin; Coord size; };
+const std::vector<AirportSpot>& airportSpots() {
+    static const Game* game = nullptr;
+    static Uint32 built = 0;
+    static std::vector<AirportSpot> spots;
+    const Uint32 now = currentGame->getGameCycleCount();
+    if (game != currentGame || now < built || now - built >= 64 || (now == 0 && built == 0)) {
+        game = currentGame;
+        built = now;
+        spots.clear();
+        for (const StructureBase* structure : structureList)
+            if (structure->getItemID() == Structure_Airport && structure->getHealth() > 0)
+                spots.push_back({structure->getObjectID(), structure->getOwner()->getHouseID(),
+                                 structure->getOwner()->getTeamID(), structure->getLocation(),
+                                 structure->getStructureSize()});
+    }
+    return spots;
+}
+int airportDistance(const Coord& tile, const AirportSpot& spot) {
+    const int dx = tile.x < spot.origin.x ? spot.origin.x - tile.x
+        : tile.x > spot.origin.x + spot.size.x - 1 ? tile.x - (spot.origin.x + spot.size.x - 1) : 0;
+    const int dy = tile.y < spot.origin.y ? spot.origin.y - tile.y
+        : tile.y > spot.origin.y + spot.size.y - 1 ? tile.y - (spot.origin.y + spot.size.y - 1) : 0;
+    return std::max(dx, dy);
+}
+/// The nearest Airport not on \a team, or nullptr; \a distance receives its footprint distance.
+const AirportSpot* nearestEnemyAirport(const Coord& tile, int team, int* distance) {
+    const AirportSpot* best = nullptr;
+    int bestDistance = 0;
+    for (const AirportSpot& spot : airportSpots()) {
+        if (spot.team == team) continue;
+        const int d = airportDistance(tile, spot);
+        if (best == nullptr || d < bestDistance) { best = &spot; bestDistance = d; }
+    }
+    if (distance) *distance = best ? bestDistance : -1;
+    return best;
+}
+} // namespace
+
+namespace {
 std::vector<AmbientAirplane*> cityAirplanes;
 }
 
@@ -381,9 +424,12 @@ void AmbientAirplane::crash(Uint32 shooterID, House* shooterOwner, const Deviati
             getOwner()->getHouseID(), at.x / TILESIZE, at.y / TILESIZE, credited->getHouseID(),
             currentGame->getGameCycleCount(), small ? "small crash" : "Death Hand impact");
     const ObjectBase* shooter = currentGame->getObjectManager().getObject(shooterID);
-    SDL_Log("CITY_PLANE_DOWN: house=%d object=%u killer_house=%d killer_item=%d released=%d cycle=%u",
+    int airportDist = -1;
+    const AirportSpot* airport = nearestEnemyAirport(location, getOwner()->getTeamID(), &airportDist);
+    SDL_Log("CITY_PLANE_DOWN: house=%d object=%u killer_house=%d killer_item=%d released=%d x=%d y=%d airport=%u airport_house=%d airport_dist=%d cycle=%u",
             getOwner()->getHouseID(), objectID, credited->getHouseID(), shooter ? shooter->getItemID() : -1,
-            static_cast<int>(bombsReleased),
+            static_cast<int>(bombsReleased), location.x, location.y, airport ? airport->id : 0u,
+            airport ? airport->house : -1, airportDist,
             currentGame->getGameCycleCount());
     // With City Plane Defence planes are shot down all over the map, about one a minute per
     // house in AI matches: only a crash on or near the screen shakes it. Presentation only.
@@ -698,6 +744,27 @@ void AmbientAirplane::dropBomb(Uint32 gameCycle)
             objectID, building->getOwner()->getHouseID(), building->getItemID(), gameCycle);
 }
 
+void AmbientAirplane::logAirportPasses()
+{
+    const int team = getOwner()->getTeamID();
+    for (const AirportSpot& spot : airportSpots()) {
+        if (spot.team == team) continue;
+        const int d = airportDistance(location, spot);
+        if (d > CA::kAirportApproachTiles) continue;
+        auto seen = std::find_if(airportsSeen.begin(), airportsSeen.end(),
+                                 [&](const auto& entry) { return entry.first == spot.id; });
+        if (seen == airportsSeen.end()) { airportsSeen.emplace_back(spot.id, 0); seen = airportsSeen.end() - 1; }
+        const Uint8 stage = d <= CA::kAirportOverTiles ? 2 : 1;
+        for (Uint8 bit = 1; bit <= stage; bit <<= 1) {
+            if (seen->second & bit) continue;
+            seen->second |= bit;
+            SDL_Log("CITY_PLANE_NEAR_AIRPORT: house=%d object=%u airport=%u airport_house=%d stage=%s dist=%d bombs=%u cycle=%u",
+                    getOwner()->getHouseID(), objectID, spot.id, spot.house, bit == 1 ? "approach" : "over", d,
+                    bombsReleased, currentGame->getGameCycleCount());
+        }
+    }
+}
+
 bool AmbientAirplane::update()
 {
     // Constant cruise speed — the original plane never slows for an approach.
@@ -708,6 +775,11 @@ bool AmbientAirplane::update()
     }
     if(!active) {
         return true;
+    }
+
+    if(location != airportCheckTile) {
+        airportCheckTile = location;
+        logAirportPasses();
     }
 
     const Uint32 gameCycle = currentGame->getGameCycleCount();

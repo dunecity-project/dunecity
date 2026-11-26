@@ -2584,6 +2584,74 @@ Coord QuantBot::findAirRaidTurretSite(int* uncovered, bool* nearHit) {
     return Coord::Invalid();
 }
 
+// AirportTurrets (off by default; QuantBotAirDefencePolicy.h). Stefan, 2026-11-26: "also
+// airports need decent rocket turret defenses". The own Airports in object-id order; the first
+// with fewer than kAirportGuardTurrets own Rocket Turrets (standing or reserved) in its ring gets
+// the ring tile farthest from every own Rocket Turret, then nearest the Airport. The legality
+// checks are the ones every turret search here uses. One bounded window per Airport.
+Coord QuantBot::findAirportGuardSite(Uint32* airport, int* ring, int* unguarded) {
+    AITelemetry::PerformanceScope perfScope("ai.findAirportGuardSite", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Air = QuantBotAirDefencePolicy;
+    if (airport) *airport = NONE_ID;
+    if (ring) *ring = 0;
+    if (unguarded) *unguarded = 0;
+    std::vector<Coord> turrets;
+    struct Port { Uint32 id; Coord origin, size; };
+    std::vector<Port> ports;
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        if (structure->getItemID() == Structure_RocketTurret) turrets.push_back(structure->getLocation());
+        else if (structure->getItemID() == Structure_Airport)
+            ports.push_back({structure->getObjectID(), structure->getLocation(), structure->getStructureSize()});
+    }
+    for (const auto& entry : reservedStructures)
+        if (entry.first != planningBuilder && entry.second.item == Structure_RocketTurret)
+            turrets.push_back(entry.second.location);
+    std::sort(ports.begin(), ports.end(), [](const Port& a, const Port& b) { return a.id < b.id; });
+    const int reach = Air::kAirportGuardReachTiles;
+    Coord found = Coord::Invalid();
+    for (const Port& port : ports) {
+        int have = 0;
+        for (const Coord turret : turrets)
+            have += int(Air::footprintDistance(turret.x, turret.y, port.origin.x, port.origin.y, port.size.x, port.size.y) <= reach);
+        if (Air::airportGuarded(have)) continue;
+        if (unguarded) ++*unguarded;
+        if (found.isValid()) continue;   // count the rest, search only the first
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        for (int y = std::max(0, port.origin.y - reach); y <= std::min(getMap().getSizeY() - 1, port.origin.y + port.size.y - 1 + reach); ++y) {
+            for (int x = std::max(0, port.origin.x - reach); x <= std::min(getMap().getSizeX() - 1, port.origin.x + port.size.x - 1 + reach); ++x) {
+                const int d = Air::footprintDistance(x, y, port.origin.x, port.origin.y, port.size.x, port.size.y);
+                if (d < 1 || d > reach) continue;
+                int nearest = Air::kNoTurret;
+                for (const Coord turret : turrets)
+                    nearest = std::min(nearest, Air::tileDistance(turret.x, turret.y, x, y));
+                if (!Air::airportGuardSpaced(nearest)) continue;
+                if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
+                if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
+                if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+                if (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
+                int passable = 0;
+                for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                    if ((!ox && !oy) || !getMap().tileExists(x + ox, y + oy)) continue;
+                    const Tile* tile = getMap().getTile(x + ox, y + oy);
+                    if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+                }
+                if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+                const int score = Air::airportGuardSiteScore(nearest, d);
+                if (score > bestScore) { bestScore = score; best = Coord(x, y); }
+            }
+        }
+        if (best.isValid()) {
+            found = best;
+            if (airport) *airport = port.id;
+            if (ring) *ring = have;
+        }
+    }
+    return found;
+}
+
 bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money, bool emergency,
                                          Uint32& selectedItem, Coord& selectedSite, bool landValueOnly, Uint32 requiredItem) {
     AITelemetry::PerformanceScope perfScope("ai.selectCityServiceInvestment", getGameCycleCount(), getHouse()->getHouseID());

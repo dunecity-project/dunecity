@@ -354,6 +354,11 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardTurretCluster(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (airportGuardPlan.active) {
+        // AirportTurrets (default off): a ring of Rocket Turrets round every own Airport.
+        chooseYardAirportTurrets(pass, turn, yardTurn);
+        releaseUnfundedChoice();
+    }
     if (airRaidPlan.active) {
         // AirRaidTurrets (default on): while city airplanes bomb the house, Rocket Turrets
         // spread through its city. Never set unless a bomb landed in the last three minutes.
@@ -1169,6 +1174,72 @@ void QuantBot::noteAirRaidTurretOrdered(BuildPass& pass, const BuilderTurn& turn
     // the standing ones, without this order.
     SDL_Log("CITY_AIR_DEFENCE: house=%d turret_at=%d/%d bombed_cycle=%u own_rocket_turrets=%d threat=%d cycle=%u",
             houseID, site.x, site.y, raid.lastHitCycle, standing, airRaidPlan.threat ? 1 : 0, now);
+}
+
+bool QuantBot::airportTurretsEnabled() const {
+    // DUNECITY_TEST_AIRPORT_TURRETS (0 or 1) is an experiment-only override for match arms in one
+    // build, read once per process and never a match rule.
+    static const int override = [] {
+        const char* text = std::getenv("DUNECITY_TEST_AIRPORT_TURRETS");
+        return text != nullptr && (text[0] == '0' || text[0] == '1') ? text[0] - '0' : -1;
+    }();
+    return override >= 0 ? override == 1 : botConfig().force.airportTurrets;
+}
+
+void QuantBot::planAirportTurrets(BuildPass& pass) {
+    // AirportTurrets (off by default; QuantBotAirDefencePolicy.h). Stefan, 2026-11-26: "also
+    // airports need decent rocket turret defenses". The cheap checks only; the site search runs
+    // once a yard is free and the turret is affordable (chooseYardAirportTurrets).
+    namespace Air = QuantBotAirDefencePolicy;
+    airportGuardPlan = AirportGuardPlan();
+    if (!airportTurretsEnabled() || !pass.citySimEnabled
+        || !currentGame->getGameInitSettings().getGameOptions().cityPlaneBombing
+        || getHouse()->getNumItems(Structure_Airport) == 0) return;
+    airportGuardPlan.airports = getHouse()->getNumItems(Structure_Airport);
+    airportGuardPlan.reserve = Air::threatReserve(pass.economyReserve);
+    airportGuardPlan.active = true;
+}
+
+void QuantBot::chooseYardAirportTurrets(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
+    namespace Air = QuantBotAirDefencePolicy;
+    // One order per pass across all yards, after power recovery and the essentials, ahead of
+    // the raid answer and of optional growth. Only a yard that can build the turret now.
+    if (!airportGuardPlan.active || airportGuardPlan.ordered || yardTurn.itemID != NONE_ID
+        || yardTurn.skipRemainingStructureLogic
+        || !campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)) return;
+    if (!airportGuardPlan.searched) {
+        airportGuardPlan.searched = true;
+        airportGuardPlan.site = findAirportGuardSite(&airportGuardPlan.airport, &airportGuardPlan.ring,
+                                                     &airportGuardPlan.unguarded);
+        if (airportGuardPlan.site.isInvalid() && pass.emitStatsLog)
+            traceDecision("airport_guard_hold", AITelemetry::Record()
+                .set("reason", airportGuardPlan.unguarded > 0 ? "no_site" : "guarded")
+                .set("airports", airportGuardPlan.airports).set("unguarded", airportGuardPlan.unguarded));
+    }
+    if (airportGuardPlan.site.isInvalid()) return;
+    if (!hasPowerBufferForTurret(pass)) {
+        // As the raid answer: no turret the house cannot power, one Wind Trap first.
+        if (!powerGenerationPending(pass) && campaignAvailableToBuild(turn.pBuilder, Structure_WindTrap)
+            && Air::affordable(pass.money, buildingCapitalCost(pass, Structure_WindTrap), airportGuardPlan.reserve)
+            && findPlaceLocation(Structure_WindTrap).isValid()) {
+            airportGuardPlan.ordered = true;
+            yardTurn.itemID = Structure_WindTrap;
+            yardTurn.structureRule = "airport_guard_power";
+            yardTurn.skipRemainingStructureLogic = true;
+        }
+        return;
+    }
+    if (!getHouse()->hasPower()) return;
+    int cost = purchasePrice(turn.pBuilder, Structure_RocketTurret);
+    for (const auto& slab : foundationOrders(turn.pBuilder, Structure_RocketTurret, airportGuardPlan.site))
+        cost += purchasePrice(turn.pBuilder, slab.item);
+    if (!Air::affordable(pass.money, cost, airportGuardPlan.reserve)) return;
+    airportGuardPlan.ordered = true;
+    airportGuardPlan.cost = cost;
+    yardTurn.itemID = Structure_RocketTurret;
+    yardTurn.crimeServiceSite = airportGuardPlan.site;
+    yardTurn.structureRule = "airport_guard";
+    yardTurn.skipRemainingStructureLogic = true;
 }
 
 void QuantBot::chooseYardTurretCluster(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -3538,6 +3609,20 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             if (yardTurn.itemID == Structure_RocketTurret && yardTurn.structureRule
                 && std::string_view(yardTurn.structureRule) == "air_raid_defence")
                 noteAirRaidTurretOrdered(pass, turn, selectedPlaceLocation);
+            // AirportTurrets: one line per order for the match tables (the turret's price with its
+            // foundation; for the Wind Trap that powers it, its price).
+            if (yardTurn.structureRule && (std::string_view(yardTurn.structureRule) == "airport_guard"
+                                           || std::string_view(yardTurn.structureRule) == "airport_guard_power")) {
+                const bool turret = yardTurn.itemID == Structure_RocketTurret;
+                SDL_Log("CITY_AIRPORT_GUARD: house=%d item=%d turret_at=%d/%d airport=%u ring=%d price=%d cycle=%u",
+                        getHouse()->getHouseID(), int(yardTurn.itemID), selectedPlaceLocation.x, selectedPlaceLocation.y,
+                        airportGuardPlan.airport, airportGuardPlan.ring,
+                        turret ? airportGuardPlan.cost : purchasePrice(turn.pBuilder, yardTurn.itemID), getGameCycleCount());
+                traceDecision("airport_guard_ordered", AITelemetry::Record().set("item", yardTurn.itemID)
+                    .set("x", selectedPlaceLocation.x).set("y", selectedPlaceLocation.y)
+                    .set("airport", airportGuardPlan.airport).set("ring", airportGuardPlan.ring)
+                    .set("unguarded", airportGuardPlan.unguarded).set("money", pass.money));
+            }
             if (yardTurn.placeLocations->empty()) yardTurn.placeLocations->push_back(selectedPlaceLocation);
             traceDecision("site_reserved", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", yardTurn.itemID).set("x", selectedPlaceLocation.x).set("y", selectedPlaceLocation.y));

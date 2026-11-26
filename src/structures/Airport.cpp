@@ -20,6 +20,7 @@
 #include <CommandManager.h>
 
 #include <algorithm>
+#include <mmath.h>
 
 Airport::Airport(House* newOwner) : StructureBase(newOwner) {
     compact = nextIsCompact;
@@ -224,6 +225,35 @@ void Airport::updateCityAircraft() {
             .set("x", centre.x).set("y", centre.y));
 }
 
+void Airport::logCover() const {
+    namespace CA = DuneCity::CityAircraft;
+    // Diagnostics only: one line a game minute per Airport for the match tables
+    // (tests/ai/airport-turrets-report.py). ring: Rocket Turrets of the owner's team within
+    // kAirportRingTiles of the footprint; reach: those that reach a plane over the Airport's
+    // centre (RocketTurret::cityPlaneInReach's distance rule); powered: they can fire (Rocket
+    // Turrets need power in this game, or the owner has it).
+    const Coord origin = getLocation();
+    const Coord centre = getCenterPoint();
+    int ring = 0, reach = 0, gun = 0;
+    for (const StructureBase* structure : structureList) {
+        if (structure->getHealth() <= 0 || structure->getOwner()->getTeamID() != owner->getTeamID()) continue;
+        const Coord at = structure->getLocation();
+        const int dx = at.x < origin.x ? origin.x - at.x : at.x > origin.x + structureSize.x - 1 ? at.x - (origin.x + structureSize.x - 1) : 0;
+        const int dy = at.y < origin.y ? origin.y - at.y : at.y > origin.y + structureSize.y - 1 ? at.y - (origin.y + structureSize.y - 1) : 0;
+        const bool inRing = std::max(dx, dy) <= CA::kAirportRingTiles;
+        if (structure->getItemID() == Structure_GunTurret) { gun += inRing; continue; }
+        if (structure->getItemID() != Structure_RocketTurret) continue;
+        ring += inRing;
+        const int range = currentGame->objectData.data[Structure_RocketTurret][structure->getOriginalHouseID()].weaponrange
+            * AmbientAirplane::turretReachFactor() * TILESIZE;
+        reach += distanceFrom(structure->getCenterPoint(), centre) <= range;
+    }
+    const bool powered = !currentGame->getGameInitSettings().getGameOptions().rocketTurretsNeedPower || owner->hasPower();
+    SDL_Log("CITY_AIRPORT_COVER: house=%d airport=%u x=%d y=%d ring=%d reach=%d gun_turrets=%d powered=%d health=%d cycle=%u",
+            owner->getHouseID(), objectID, origin.x, origin.y, ring, reach, gun, powered ? 1 : 0,
+            static_cast<int>(lround(getHealth())), currentGame->getGameCycleCount());
+}
+
 void Airport::updateStructureSpecificStuff() {
     firstAnimFrame = lastAnimFrame = curAnimFrame =
         DuneCity::CitySprites::poweredFrame(currentGame->getGameCycleCount(), owner->hasPower());
@@ -231,6 +261,7 @@ void Airport::updateStructureSpecificStuff() {
     if (freePlaneTimer > 0) --freePlaneTimer;
     if (!currentGame->isCitySimEnabled() || getHealth() <= 0) return;
     if (currentGame->getGameCycleCount() % MILLI2CYCLES(5000) == 0) updateCityAircraft();
+    if (currentGame->getGameCycleCount() % MILLI2CYCLES(60000) == 0) logCover();
     // Stefan, 2026-11-22: "remove ornithopter spawn from airports". The patrol only runs under
     // the match rule Airport Ornithopter Patrol (default off; on is the Airport up to 1.0.876).
     // Its timer and pair counter stay in the save and stand still while the rule is off.

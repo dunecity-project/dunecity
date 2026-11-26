@@ -4171,6 +4171,43 @@ TEST_CASE("AirThreatTurrets defaults off, round trips and hashes only when on", 
     std::filesystem::remove(path);
 }
 
+TEST_CASE("AirportTurrets: four Rocket Turrets in a five-tile ring, spread round the Airport", "[ai][air-raid][policy]") {
+    namespace Air = QuantBotAirDefencePolicy;
+    REQUIRE(Air::kAirportGuardTurrets == 4);
+    REQUIRE(Air::kAirportGuardReachTiles == 5);
+    REQUIRE_FALSE(Air::airportGuarded(Air::kAirportGuardTurrets - 1));
+    REQUIRE(Air::airportGuarded(Air::kAirportGuardTurrets));
+    // The ring stays within a turret's 16-tile reach on a plane over the far side of a 4x4 Airport.
+    REQUIRE(Air::kAirportGuardReachTiles + 3 <= 16);
+    REQUIRE_FALSE(Air::airportGuardSpaced(Air::kAirportGuardSpacingTiles - 1));
+    REQUIRE(Air::airportGuardSpaced(Air::kAirportGuardSpacingTiles));
+    REQUIRE(Air::airportGuardSpaced(Air::kNoTurret));
+    // Spread first: a tile farther from the own turrets wins over one nearer the Airport.
+    REQUIRE(Air::airportGuardSiteScore(6, 5) > Air::airportGuardSiteScore(5, 1));
+    REQUIRE(Air::airportGuardSiteScore(6, 1) > Air::airportGuardSiteScore(6, 2));
+    REQUIRE(Air::airportGuardSiteScore(Air::kNoTurret, 3) == Air::airportGuardSiteScore(Air::kAirportGuardSpreadCapTiles, 3));
+}
+
+TEST_CASE("AirportTurrets defaults off, round trips and hashes only when on", "[ai][air-raid][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.airportTurrets);
+    const auto path = std::filesystem::temp_directory_path() / "quantbot-airport-turrets-test.ini";
+    {
+        std::ofstream file(path);
+        file << "[Force Concentration]\nAirportTurrets=true\n";
+    }
+    QuantBotConfig loaded;
+    REQUIRE(loaded.applyOverrides(path.string()));
+    REQUIRE(loaded.force.airportTurrets);
+    REQUIRE(loaded.getConfigHash() != defaults.getConfigHash());
+    REQUIRE(loaded.save(path.string()));
+    QuantBotConfig restored;
+    REQUIRE(restored.applyOverrides(path.string()));
+    REQUIRE(restored.force.airportTurrets);
+    REQUIRE(restored.getConfigHash() == loaded.getConfigHash());
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("AirRaidTurrets defaults on, round trips and hashes only when off", "[ai][air-raid][config]") {
     const QuantBotConfig defaults;
     REQUIRE(defaults.force.airRaidTurrets);

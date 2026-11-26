@@ -232,6 +232,36 @@ constexpr Hold threatHold(bool threat, const RaidRecord& raid, uint32_t now, int
 /// What must remain after paying with AirThreatTurrets on: the economy's reserve alone.
 constexpr int threatReserve(int economyReserve) { return std::max(economyReserve, 0); }
 
+// --- AirportTurrets: a ring of Rocket Turrets round every Airport ------------------------
+//
+// Stefan, 2026-11-26: "also airports need decent rocket turret defenses". An Airport costs 5000
+// credits and is where the house's own planes come from. A city plane picks its bombing runs from
+// every building of the other teams, so nothing steers it to an Airport; what keeps one alive is
+// the Rocket Turrets that fire on a plane as it comes over it. With AirportTurrets
+// ([Force Concentration], off by default) a house keeps kAirportGuardTurrets Rocket Turrets,
+// standing and queued, within kAirportGuardReachTiles of each of its Airports' footprints, spread
+// round it, and orders a new one whenever one is lost. One order a build pass across all yards,
+// from cash beyond the economy's own reserve (threatReserve), never saved for. Only in city games
+// with City Plane Bombing on.
+
+/// Rocket Turrets (standing and queued) each Airport keeps in its ring.
+constexpr int kAirportGuardTurrets = 4;
+/// The ring: Chebyshev tiles from the Airport's footprint. A turret there reaches a plane over
+/// any part of the Airport (16 tiles) and covers its own side of the approach.
+constexpr int kAirportGuardReachTiles = 5;
+/// A new ring turret keeps at least three tiles from every own Rocket Turret.
+constexpr int kAirportGuardSpacingTiles = 3;
+/// Beyond this distance from the nearest own Rocket Turret a ring site is no better.
+constexpr int kAirportGuardSpreadCapTiles = 8;
+
+constexpr bool airportGuarded(int ringTurrets) { return ringTurrets >= kAirportGuardTurrets; }
+constexpr bool airportGuardSpaced(int nearestTurret) { return nearestTurret >= kAirportGuardSpacingTiles; }
+/// Which legal ring tile; the highest wins. Farthest from the own Rocket Turrets first (so the
+/// ring spreads round the Airport instead of stacking on one side), then nearest the Airport.
+constexpr int airportGuardSiteScore(int nearestTurret, int airportDistance) {
+    return std::min(nearestTurret, kAirportGuardSpreadCapTiles) * 100 - airportDistance;
+}
+
 } // namespace QuantBotAirDefencePolicy
 
 #endif

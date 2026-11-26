@@ -704,6 +704,17 @@ inline constexpr int kTurretPlaneReachFactor = 2;
 inline constexpr int kPlaneHitPoints = 150;
 inline constexpr int kPlaneHitPointsSeeded = 100;
 
+// Airport cover, diagnostics only (match logs CITY_AIRPORT_COVER and CITY_PLANE_NEAR_AIRPORT; Stefan,
+// 2026-11-26: "also airports need decent rocket turret defenses"). Chebyshev tiles from the
+// Airport's footprint. Nothing in the simulation reads these.
+/// A Rocket Turret this close to an Airport stands in its ring (QuantBot's AirportTurrets fills it).
+inline constexpr int kAirportRingTiles = 5;
+/// A plane this close to an enemy Airport is over it.
+inline constexpr int kAirportOverTiles = 1;
+/// A plane this close to an enemy Airport approaches it: a Rocket Turret's reach on a plane
+/// (WeaponRange 8 times kTurretPlaneReachFactor).
+inline constexpr int kAirportApproachTiles = 16;
+
 struct Intercept {
     bool possible = false;  ///< false when the target is as fast as the missile
     int cycles16 = 0;       ///< flight time in sixteenths of a game cycle

@@ -671,6 +671,11 @@ AirRaidTurrets=1
 # Default off: in 48 paired matches the houses ordered 21 such turrets a game instead of 1.6 and
 # lost the same buildings to bombs (+4 a game, -14 to +23).
 AirThreatTurrets=0
+# Stefan, 2026-11-26: "also airports need decent rocket turret defenses". Every own Airport keeps
+# 4 Rocket Turrets (standing and queued) within 5 tiles of its footprint, spread round it, and a
+# lost one is ordered again; one order a build pass, from cash beyond the economy's reserve, never
+# saved for. City games with City Plane Bombing only. 0 = off.
+AirportTurrets=0
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.
