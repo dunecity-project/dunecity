@@ -44,6 +44,8 @@ constexpr int kMinLowLots = 6;
 constexpr int kEffectDelayMs = 120000;
 /// A planned site whose Palace has not stood up by then is given up (and logged as expired).
 constexpr int kPlanExpiryMs = 300000;
+/// The effect counts as reached when the lots rose by this much with the Palace still standing.
+constexpr int kMinRise = 10;
 
 inline bool lowLot(int landValue) { return landValue <= kLowLandValue; }
 

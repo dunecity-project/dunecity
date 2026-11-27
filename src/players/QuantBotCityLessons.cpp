@@ -60,9 +60,10 @@ void QuantBot::applyCityLauncherArmy(BuildPass& pass) {
         vehicles += value;
         if (item == Unit_Launcher) launchers += value;
     }
-    SDL_Log("LAUNCHER_ARMY: house=%d applied=1 passes=%d launcher_bps=%d->%d ornithopter_bps=%d->%d launchers=%d "
+    // met=1: Launchers are at least half of the house's combat vehicle value (the activation registry's success).
+    SDL_Log("LAUNCHER_ARMY: house=%d applied=1 met=%d passes=%d launcher_bps=%d->%d ornithopter_bps=%d->%d launchers=%d "
             "ornithopters=%d launcher_value=%lld vehicle_value=%lld cycle=%u",
-            houseID, cityLessons.launcherArmyPasses, before[L::kLauncherSlot], pass.unitMix[L::kLauncherSlot],
+            houseID, int(vehicles > 0 && launchers * 2 >= vehicles), cityLessons.launcherArmyPasses, before[L::kLauncherSlot], pass.unitMix[L::kLauncherSlot],
             before[UnitMixPolicy::kOrnithopterSlot], pass.unitMix[UnitMixPolicy::kOrnithopterSlot],
             getHouse()->getNumItems(Unit_Launcher), getHouse()->getNumItems(Unit_Ornithopter),
             (long long)launchers, (long long)vehicles, getGameCycleCount());
@@ -117,9 +118,11 @@ void QuantBot::trackLowValuePalaces() {
     for (const auto* structure : getStructureList())
         palaceStands |= structure->getOwner() == getHouse() && structure->getHealth() > 0
             && structure->getItemID() == Structure_Palace && structure->getLocation() == watch.site;
-    SDL_Log("LOW_VALUE_PALACE: house=%d event=effect x=%d y=%d low_lots=%d lots_standing=%d lv_before=%d lv_after=%d "
-            "rise=%d palace_stands=%d cycle=%u", houseID, watch.site.x, watch.site.y, int(watch.lots.size()), standing,
-            watch.lvBefore, lv, lv - watch.lvBefore, int(palaceStands), now);
+    // met=1: the Palace still stands and the lots rose by kMinRise or more (the activation registry's success).
+    SDL_Log("LOW_VALUE_PALACE: house=%d event=effect met=%d x=%d y=%d low_lots=%d lots_standing=%d lv_before=%d lv_after=%d "
+            "rise=%d palace_stands=%d cycle=%u", houseID, int(palaceStands && lv - watch.lvBefore >= L::kMinRise),
+            watch.site.x, watch.site.y, int(watch.lots.size()), standing, watch.lvBefore, lv, lv - watch.lvBefore,
+            int(palaceStands), now);
     watch = {};
 }
 

@@ -23,7 +23,6 @@
 
 void runCityLessonsProbe(Game& game) {
     namespace L = CityLessonsPolicy;
-    constexpr int kMinRise = 10;
     auto require = [](bool ok, const char* why) {
         if (!ok) { SDL_Log("CITY_LESSONS_PROBE_FAIL: %s", why); throw std::runtime_error(why); }
     };
@@ -142,6 +141,6 @@ void runCityLessonsProbe(Game& game) {
     require(seen.planned, "ON never planned a low-value Palace");
     require(seen.placed, "ON's planned Palace never stood on its site");
     require(seen.effect, "ON's Palace effect was never read");
-    require(seen.lvAfter - seen.lvBefore >= kMinRise, "The low lots' land value did not rise after the Palace");
+    require(seen.lvAfter - seen.lvBefore >= L::kMinRise, "The low lots' land value did not rise after the Palace");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=city_lessons outcome=passed");
 }
