@@ -26,6 +26,7 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import activation  # noqa: E402
 import match_score  # noqa: E402
 
 HOUSE_NUMBERS = {'harkonnen': '0', 'atreides': '1', 'ordos': '2', 'fremen': '3', 'sardaukar': '4', 'mercenary': '5'}
@@ -160,11 +161,26 @@ def screen(records, base):
         losses = [r[5]['end_s'] / 60 for r in cy if r[4] == 0.0]
         pooled = [r[3] for r in mine]
         rows.append((statistics.mean(r[3] for r in cy) if cy else 0, name, fort, cy, pooled, wins, losses))
+    summaries = activation_summaries()
     for _, name, fort, cy, pooled, wins, losses in sorted(rows, reverse=True):
         c = compare(cy)
-        print(f'| {short(name)} | {cell(fort)} | {cell(cy)} | {c.verdict if c else ""} | '
+        print(f'| {short(name)} | {cell(fort)} | {cell(cy)} | {activation.verdict(name, c.verdict, summaries) if c else ""} | '
               f'{statistics.mean(pooled):.3f} | {100 * c.candidate_draws if c else 0:.0f}% | '
               f'{statistics.median(wins) if wins else 0:.1f} / {statistics.median(losses) if losses else 0:.1f} |')
+
+
+def activation_summaries():
+    """Activation of every CY arm (vanilla-match.py activation.csv): a style whose behaviour reached
+    its effect in fewer than half of its house-games is NOT TESTED (tests/ai/activation.py). Duel
+    (formation-duel.py) games record no activation events."""
+    houses, events = [], []
+    for directory in args.vanilla:
+        houses += [r for r in read(Path(directory) / 'houses.csv') if keep(r, args)]
+        events += [r for r in read(Path(directory) / 'activation.csv') if keep(r, args)]
+    summaries = activation.summarise(houses, events, activation.load_registry())
+    if summaries:
+        print('\n'.join(activation.table(summaries)) + '\n')
+    return summaries
 
 
 def matrix(records, labels):
