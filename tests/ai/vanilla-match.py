@@ -175,7 +175,7 @@ LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 
                  'launcher_value', 'vehicle_value', 'x', 'y', 'low_lots', 'lots_standing', 'lv_before', 'lv_now',
                  'lv_after', 'rise', 'palace_stands', 'palaces', 'credits', 'wait_s', 'met', 'enemy_tiles',
                  'turrets_ahead', 'lots', 'price', 'project_passes', 'pending_passes', 'saving_passes',
-                 'preempted_passes', 'ordered_passes', 'held_passes', 'reason', 'turrets', 'allowed_tiles', 'cycle')
+                 'preempted_passes', 'ordered_passes', 'held_passes', 'blocked', 'reason', 'turrets', 'allowed_tiles', 'cycle')
 LESSON_ROW_FIELDS = KEY + ('kind', 'label') + LESSON_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on

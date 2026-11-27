@@ -165,10 +165,10 @@ void QuantBot::trackPalaceWatch(CityLessonsState::PalaceWatch& watch, std::vecto
         } else if (now - watch.plannedCycle >= MILLI2CYCLES(L::kPlanExpiryMs)) {
             const int price = currentGame->objectData.data[Structure_Palace][houseID].price;
             SDL_Log("%s: house=%d event=expired x=%d y=%d low_lots=%d lv_before=%d credits=%d price=%d project_passes=%d "
-                    "pending_passes=%d saving_passes=%d preempted_passes=%d ordered_passes=%d held_passes=%d cycle=%u",
+                    "pending_passes=%d saving_passes=%d preempted_passes=%d ordered_passes=%d held_passes=%d blocked=%d cycle=%u",
                     tag, houseID, watch.site.x, watch.site.y, int(watch.lots.size()), watch.lvBefore,
                     bot.getHouse()->getCredits(), price, watch.projectPasses, watch.pendingPasses, watch.savingPasses,
-                    watch.preemptedPasses, watch.orderedPasses, watch.heldPasses, now);
+                    watch.preemptedPasses, watch.orderedPasses, watch.heldPasses, watch.blockedChecks, now);
             expired.emplace_back(watch.site, now);
             watch = {};
         }

@@ -4050,7 +4050,21 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                 // to clear (traffic on its road tiles) until the plan expires (CityLessonsPolicy::kPlanExpiryMs);
                 // then the watch ends and this Palace is placed by the ordinary search.
                 noteHeld();
-                if (auto* watch = lessonWatchAt(location)) ++watch->heldPasses;
+                if (auto* watch = lessonWatchAt(location)) {
+                    namespace L = CityLessonsPolicy;
+                    const Coord sz = getStructureSize(itemToBePlaced);
+                    ++watch->heldPasses;
+                    watch->blockedChecks |=
+                        (placeableAmongOwnUnits(location.x, location.y, sz.x, sz.y, itemToBePlaced) ? 0 : L::kBlockOwnUnits)
+                        | (cityRoadImpact(getMap(), location.x, location.y, sz.x, sz.y, itemToBePlaced).preservesConnections
+                            ? 0 : L::kBlockRoadConnections)
+                        | (overlapsReservedStructure(location.x, location.y, sz.x, sz.y) ? L::kBlockReserved : 0)
+                        | (preservesGroundAccess(itemToBePlaced, location) ? 0 : L::kBlockGroundAccess)
+                        | (nearRecentStructureLoss(location.x, location.y, sz.x, sz.y) ? L::kBlockRecentLoss : 0)
+                        | (threatTolerant || dangerAt(location, sz) == 0 ? 0 : L::kBlockDanger)
+                        | (TacticalSafetyPolicy::reactorPlacementAllowed(itemToBePlaced, reactorClearance(itemToBePlaced, location))
+                            ? 0 : L::kBlockReactor);
+                }
                 if (pass.emitStatsLog) tracePlacementIssue("placement_deferred", "lesson_palace_site_blocked", location);
                 location = Coord::Invalid();
                 placementIssueHandled = true;

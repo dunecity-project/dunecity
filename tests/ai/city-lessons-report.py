@@ -27,7 +27,9 @@ Acceptance against Stefan's save (analysis/acceptance-list.md), per arm:
   low-lot share m72  the house's low-value lots over its R/C lots at the last CITY_LOTS line by minute 72
                      (his 9%, target 20% or less; the AIs in his game 30-51%), and the mean land value
   expiry causes      over the expired plans, the build passes it was pending behind another Palace, held
-                     saving, pre-empted, ordered, and held off its site
+                     saving, pre-empted, ordered, and held off its site; and which placement checks
+                     the held ones failed (own units, road connections, reserved, ground access,
+                     recent loss, danger, reactor)
   front no site      FRONT_PALACE no_site lines by reason (turrets: fewer than 3; band: no tile 10-31 from
                      the enemy with turrets ahead; site: no buildable site there)
 An arm whose behaviour fired in fewer than half its house-games is NOT TESTED, whatever its score.
@@ -50,6 +52,9 @@ VEHICLE_SLOTS = 10
 LAUNCHER_SLOT, ORNITHOPTER_SLOT = 2, 6
 MIN_RISE = 10
 CYCLES_PER_MINUTE = 3750
+# CityLessonsPolicy::BlockCheck: the placement checks a held lesson Palace failed.
+BLOCK_CHECKS = ((1, 'own_units'), (2, 'road_connections'), (4, 'reserved'), (8, 'ground_access'),
+                (16, 'recent_loss'), (32, 'danger'), (64, 'reactor'))
 
 
 def rows(directory, name):
@@ -86,7 +91,8 @@ def collect(directories):
                                              planned=0, placed=0, expired=0, effects=[], front_planned=0,
                                              front_placed=0, front_survived=0, front_effects=0, front_enemy=[],
                                              fielded=[], by72=0, front_by72=0, lots72=None,
-                                             expiry=collections.Counter(), no_site=collections.Counter())
+                                             expiry=collections.Counter(), no_site=collections.Counter(),
+                                             blocked=collections.Counter())
     names = {v: k for k, v in HOUSE_NUMBERS.items()}
     for row in lessons:
         house = row['house'] if row['house'] in HOUSE_NUMBERS else names.get(int(number(row['house'], -1)), row['house'])
@@ -105,6 +111,8 @@ def collect(directories):
             for cause in ('pending', 'saving', 'preempted', 'ordered', 'held'):
                 m['expiry'][cause] += number(row.get(cause + '_passes'), 0) > 0
             m['expiry']['plans'] += 1
+            for bit, name in BLOCK_CHECKS:
+                m['blocked'][name] += int(number(row.get('blocked'), 0)) & bit != 0
         if row['event'] == 'no_site':
             m['no_site'][row.get('reason') or '?'] += 1
             continue
@@ -239,8 +247,8 @@ def main():
         out = [f'\n### Acceptance, {title}\n',
                '| arm | house-games | low-value Palaces by m72 (median, range) | >= 15 by m72 | front Palaces by m72 | '
                'low-lot share m72 (median) | <= 20% | mean land value m72 | expired plans: pending/saving/preempted/ordered/held | '
-               'front no site: turrets/band/site |',
-               '|---|---:|---|---:|---:|---:|---:|---:|---|---|']
+               'front no site: turrets/band/site | held plans blocked by |',
+               '|---|---:|---|---:|---:|---:|---:|---:|---|---|---|']
         chosen = [m for m in per.values() if select(m)]
         for label in sorted({m['label'] for m in chosen}, key=lambda l: (l != args.control, l)):
             members = [m for m in chosen if m['label'] == label]
@@ -250,13 +258,15 @@ def main():
             lv = [v for _, _, v in (m['lots72'] for m in members if m['lots72'])]
             ex = sum((m['expiry'] for m in members), collections.Counter())
             ns = sum((m['no_site'] for m in members), collections.Counter())
+            bl = sum((m['blocked'] for m in members), collections.Counter())
+            blocked = ', '.join(f'{name} {bl[name]}' for _, name in BLOCK_CHECKS if bl[name]) or '-'
             out.append(
                 f'| {label} | {n} | {statistics.median(by72):.1f} ({by72[0]}-{by72[-1]}) | {sum(b >= 15 for b in by72)}/{n} | '
                 f'{statistics.median(m["front_by72"] for m in members):.1f} | '
                 f'{(statistics.median(shares) if shares else float("nan")):.0%} | {sum(x <= 0.2 for x in shares)}/{len(shares)} | '
                 f'{(statistics.mean(lv) if lv else float("nan")):.0f} | '
                 f'{ex["plans"]}: {ex["pending"]}/{ex["saving"]}/{ex["preempted"]}/{ex["ordered"]}/{ex["held"]} | '
-                f'{ns["turrets"]}/{ns["band"]}/{ns["site"]} |')
+                f'{ns["turrets"]}/{ns["band"]}/{ns["site"]} | {blocked} |')
         return out
 
     out = ['# Lessons from Stefan\'s Metropolis save: score and activation', '',

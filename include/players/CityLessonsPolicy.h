@@ -50,6 +50,11 @@ constexpr int kMinRise = 10;
 /// the same site was planned and expired again (Metropolis 9444, Ordos at (26,59) twice).
 constexpr int kExpiredSiteMs = 600000;
 constexpr int kExpiredSiteTiles = 2;
+/// The placement checks a held lesson Palace failed (logged as blocked= at expiry).
+enum BlockCheck : int {
+    kBlockOwnUnits = 1, kBlockRoadConnections = 2, kBlockReserved = 4, kBlockGroundAccess = 8,
+    kBlockRecentLoss = 16, kBlockDanger = 32, kBlockReactor = 64
+};
 /// CITY_LOTS: each house's lots, low-value lots and mean land value are logged this often.
 constexpr int kLotsLogMs = 180000;
 

@@ -2181,6 +2181,8 @@ private:
             // first, the yard ordered it, and its finished Palace was held off a blocked site.
             int projectPasses = 0, pendingPasses = 0, savingPasses = 0, preemptedPasses = 0, orderedPasses = 0,
                 heldPasses = 0;
+            /// Which placement checks failed while held (OR over the held passes; CityLessonsPolicy::kBlock*).
+            int blockedChecks = 0;
         } palace, front;
         /// Placed Palaces whose effect is not read yet: the next plan does not wait for it (Stefan placed 19
         /// in 43 minutes; one plan at a time until the effect was read reached 8.5 by minute 72 at 86dcb77ea).
