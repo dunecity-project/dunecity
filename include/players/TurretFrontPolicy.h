@@ -230,10 +230,17 @@ constexpr int kDrillMinTiles = 4;
 /// A drill site may be within reach of at most this many enemy turrets: the mass stops at the
 /// edge of the enemy turrets' reach and trades with one at a time, as his did.
 constexpr int kDrillEnemyTurretTolerance = 1;
-/// A drill site: no further from the enemy than the edge, no nearer an enemy building than
-/// kDrillMinTiles, and within reach of at most kDrillEnemyTurretTolerance enemy turrets.
+/// The mass widens out to this far from an enemy building even behind its own tip. The drill's own
+/// turrets are anchors, so once its tip stood 4-6 tiles off, "no further than the edge" left a band
+/// two tiles deep and the mass stopped growing (buildings-on demonstration: no site for 25 of 48
+/// minutes). Stefan's new turrets stood a median 10-11 tiles from enemy buildings.
+constexpr int kDrillStandoffTiles = 12;
+/// A drill site: no further from the enemy than the edge or kDrillStandoffTiles, whichever is
+/// further, no nearer an enemy building than kDrillMinTiles, and within reach of at most
+/// kDrillEnemyTurretTolerance enemy turrets.
 inline bool drillSite(int site, int edge, int enemyTurretsInReach) {
-    return site >= kDrillMinTiles && site <= edge && enemyTurretsInReach <= kDrillEnemyTurretTolerance;
+    return site >= kDrillMinTiles && site <= std::max(edge, kDrillStandoffTiles)
+        && enemyTurretsInReach <= kDrillEnemyTurretTolerance;
 }
 /// Drill site score: nearer the enemy first, then the value the turret reaches (in hundreds of
 /// credits: enemy units always, enemy buildings when turrets may fire on them), then touching the
@@ -246,6 +253,10 @@ inline int drillSiteScore(int enemyDistance, int64_t targetValueInRange, int adj
 /// 3,200 credits on the mass; the economy's own reserve (threatReserve) starved the first drill
 /// (Stefan's save, house 0 alone on turret-drill: 128 waiting sites unpaid in 48 minutes).
 constexpr int kDrillReserveCredits = 1000;
+/// While a drill site waits, no factory spends the drill turret's price plus kDrillReserveCredits:
+/// Stefan let his army fall from 267 to 88 units while his turrets rose from 358 to 636; the first
+/// drill kept its army at about 200 and waited on funds for 126 sites.
+inline int drillFactoryHold(int turretPrice) { return turretPrice + kDrillReserveCredits; }
 
 // --- Following the orders ----------------------------------------------------------------------
 

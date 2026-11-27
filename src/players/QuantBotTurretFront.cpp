@@ -161,8 +161,10 @@ void QuantBot::planTurretFront(BuildPass& pass) {
         turretFrontPlan.active = true;
         turretFrontPlan.reserve = QuantBotAirDefencePolicy::threatReserve(pass.economyReserve);
         // The drill spends down to kDrillReserveCredits, as Stefan did, not to the economy's reserve.
-        if (turretFrontPlan.mode == TurretFrontMode::Drill)
+        if (turretFrontPlan.mode == TurretFrontMode::Drill) {
             turretFrontPlan.reserve = std::min(turretFrontPlan.reserve, TF::kDrillReserveCredits);
+            pass.turretDrillReserve = TF::drillFactoryHold(int(turret.price));
+        }
     }
 }
 

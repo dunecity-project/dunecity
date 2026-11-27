@@ -79,6 +79,11 @@ TEST_CASE("TurretFront: the four rules", "[ai][turret-front][policy]") {
     REQUIRE_FALSE(TF::drillSite(3, 20, 0));
     REQUIRE_FALSE(TF::drillSite(11, 20, 2));
     REQUIRE_FALSE(TF::drillSite(21, 20, 0));
+    REQUIRE(TF::drillSite(11, 5, 0));                                              // the mass widens behind its tip
+    REQUIRE(TF::drillSite(12, 5, 0));
+    REQUIRE_FALSE(TF::drillSite(13, 5, 0));                                        // but not past Stefan's stand-off
+    REQUIRE_FALSE(TF::drillSite(11, 5, 2));
+    REQUIRE(TF::drillFactoryHold(250) == 1250);
     REQUIRE(TF::drillSiteScore(9, 0, 0) > TF::drillSiteScore(12, 0, 4));          // nearer first, by 3 tiles
     REQUIRE(TF::drillSiteScore(10, 0, 3) > TF::drillSiteScore(9, 0, 0));          // touching 3 beats a tile nearer
     REQUIRE(TF::drillSiteScore(9, 0, 3) > TF::drillSiteScore(9, 0, 0));           // then the mass

@@ -303,6 +303,8 @@ struct QuantBot::BuildPass {
     int vanillaFfaWaveCapitalReserve{};
     /// TurretClusters (default off): a Rocket Turret's price while a cluster turret is wanted.
     int turretClusterReserve{};
+    /// TurretDrill (default off): what no factory spends while a drill site waits for its turret.
+    int turretDrillReserve{};
     bool turretClusterOrdered{};
     Coord turretClusterSite = Coord::Invalid();
     /// No yard can build a Rocket Turret yet: the reserve funds this yard's upgrade first.

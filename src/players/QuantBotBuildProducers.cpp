@@ -1170,9 +1170,11 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
         && cityHarvesterReplacementFloor(pass) > pass.itemCount[Unit_Harvester])
         protectedCash = std::max(protectedCash, harvesterInvestmentReserve(pass));
     // TurretClusters (default off): while a cluster turret is wanted no other producer spends
-    // its price, live threat production included - the turret is the defence.
+    // its price, live threat production included - the turret is the defence. TurretDrill
+    // (default off) holds the drill turret's price the same way while a drill site waits.
     if (producer != Structure_ConstructionYard)
-        protectedCash = std::max({protectedCash, pass.turretClusterReserve, pass.economyProjectReserve});
+        protectedCash = std::max({protectedCash, pass.turretClusterReserve, pass.economyProjectReserve,
+                                  pass.turretDrillReserve});
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;
 }
