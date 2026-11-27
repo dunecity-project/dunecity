@@ -1,3 +1,95 @@
+## 2026-11-28 - Zone Garrisons: Garrison button, no pulling soldiers away, Troopers reinforce, house-to-house switches; acceptance list and real-game test
+
+Stefan, 2026-11-27: "and sto the ai pulling soldiers away on their way in"; "also allow troopers to reinforce
+garrisons - they keep their weapns so troopers can hit air, attack with their missiles etc. we want to be
+fighting house to house basically"; "i cant garison my own buildings there no button. and the capture also
+doesn't work on my own"; "i ask you to try things. you say you do and it doesn't work ... you need more
+assertions". Commits `62481c681` (button, guards, switches, tests), `db2dd887b` and `7825a34bb` (every order
+accounted for), `a2ae13b7c` (front and chain without caps), `ea261f47d` and `b970eeb1c` (real-game test fixes). Rules: `docs/zone-garrisons.md`.
+Evidence: `~/Documents/projects/outputs/zone-garrison-h2h-20261127/`.
+
+**Correction to the entry below ("Zone Garrisons follow-up").** It says no build contained Zone Garrisons.
+That was wrong: `git tag --contains` found no tag, but staging build `staging-bcd28813a...` (bcd28813a has
+513531d5d) does contain it, staged on Stefan's Air. The Mini's `/Applications/DuneCity.app` (1.0.788) is not
+his. What Stefan tried in a game was 1.0.880, which has no garrison code. The Garrison button, the
+pulling-away fix and the capture fixes of this entry are in neither build.
+
+### Acceptance list (one assert each; real games: `zone_garrison_real_game`, three rs160-dunecity Brutal games, every switch on; player path: `zone_garrison_probe`, dummy driver)
+
+| Request | Observable fact, with its number | Test | Measured | Result |
+|---|---|---|---|---|
+| "occupy friendly ... R/I/C using the capture command" | the AI garrisons its own zones (≥1 defend order and ≥5 own-zone entries a game) | real_game A1 | defend orders a game 357 / 458 / 445; own-zone entries 506 / 1,092 / 1,159 | PASS |
+| | a player's Capture button and map click on an own zone puts the Soldier inside; panel 1/4; Evacuate brings it out | probe player_own_zone | passed | PASS |
+| "...and enemy ... it now is owned by the house that occupies it" | ≥3 enemy zones taken a game | real_game A2 | zones taken a game 53 / 43 / 19 | PASS |
+| | Soldier + Trooper, C key, click: zone taken, panel "(captured)" | probe player_take | passed | PASS |
+| "make infantry cost 30 credits" | the Barracks build list prices the Soldier at 30; every levy Soldier bought at 30 | probe price; real_game A3 | Barracks list 30; 585 levy Soldiers, all at 30 | PASS |
+| "evacuate ... when it gets below X% health (test different)" | garrisons leave below 60% (≥3 exits, all below 60%); X measured at 0/25/40/60 | probe low_health; real_game A4 | 165 low-health exits, all below 60%; 278 soldiers out | PASS |
+| "if the building explodes they are ejected but are damaged" | ≥1 zone destroyed with soldiers inside, soldiers out alive, hit points lost; probe 20→10 | probe destroyed; real_game A5 | 8 zones destroyed with soldiers inside, 9 out, 193 hp lost; probe 20 -> 10 | PASS |
+| "if units evacuate the building returns to its original owners control" | ≥1 captured zone handed back a game; probe: Evacuate, killed and low-health garrisons all hand back | probe return, player_take; real_game A6 | zones handed back a game 37 / 37 / 15 | PASS |
+| "the ai tries capuring undefended buildings" | raid orders every game, zones taken | real_game A7 | raid orders a game 39 / 5 / 1; 115 zones taken | PASS |
+| "mass spamming infantry to try capture buildings" | ≥10 levy Soldiers and ≥10 levy orders a game | real_game A8 | levy Soldiers a game 101 / 271 / 213; levy orders 218 / 428 / 415 | PASS |
+| "sto the ai pulling soldiers away on their way in" | ≤2% of orders end with no logged outcome; ≥85% of own-zone orders of living soldiers to standing zones go in (≤1.18 per entry) | real_game A9; probe no_pull | 6,940 orders: 2,872 in, 2,666 died on the way, 1,101 ended, 83 refused at the door, 100 walking at the end, 118 (1.7%) taken away; own-zone 2,760/2,953 (1.07 orders per entry); 4,573 other controllers' orders refused; probe: 9 orders refused | PASS |
+| "allow troopers to reinforce garrisons" | reinforce orders every game, ≥3 Troopers joining held zones, mixed garrisons | real_game A10; probe reinforce | reinforce orders a game 103 / 169 / 292; 1,165 Troopers joined held zones; 166 mixed garrisons | PASS |
+| "they keep their weapns so troopers can hit air, attack with their missiles" | ≥100 garrison shots, ≥1 at aircraft; probe: a garrisoned Trooper hits an Ornithopter and a tank | real_game A11; probe trooper_air, trooper_tank | 15,738 garrison shots, 2,657 at aircraft; probe: Ornithopter hit, tank hit (4 hp) | PASS |
+| "fighting house to house" | front orders and ≥5 chain orders every game | real_game A12 | front orders a game 308 / 717 / 622; chain orders 291 / 968 / 1,066 | PASS |
+| "i cant garison my own buildings there no button" | Garrison button (I) for Soldiers/Troopers, hidden for a tank and with the rule off; Garrison symbol over own/enemy zones, pointer over sand; click on own zone garrisons | probe garrison_button, garrison_button_rule_off | passed | PASS |
+| "the capture also doesn't work on my own" | Capture on an own zone garrisons it (button and C key); tooltip mentions zones | probe player_own_zone, garrison_button | passed | PASS |
+
+**Deviations** (caps and conditions not in the requests, none stopping the asked-for thing):
+- 4 soldiers a zone.
+- 6 capture orders a house a pass, all behaviours together.
+- The levy keeps 16 Soldiers and 300 credits.
+- A soldier gives up after 45 s without getting closer.
+- The front is our 4 zones nearest the enemy, 2 soldiers each.
+- The chain works the 2 nearest enemy zones at a time, with soldiers from within 40 tiles.
+- A9 was first written as "75% of all own-zone orders go in". That failed at 71% because 411 soldiers died under
+  fire on the way. It was restated to count only soldiers that lived and zones that stood; deaths are shown, not
+  counted as pulling away.
+- ZoneFrontGarrison (12-tile front) and ZoneCaptureChain (only from garrisoned zones) first had conditions that
+  stopped them. The harness gave both NOT TESTED (28% and 0% of house-games), and `a2ae13b7c` removed the
+  conditions.
+
+### Measured (rs160-dunecity, Brutal, 288 paired games each vs `default`, `vanilla-match.py --report` with activation)
+
+| Arm (play style) | Build | Fired / reached effect (of 576 house-games) | Score difference (95% CI) | Verdict |
+|---|---|---|---|---|
+| ZoneGarrison (`zone-garrison`) | `db2dd887b` | 100% / 100% | +0.005 (-0.08..+0.09) | level |
+| ZoneCaptureRaid (`zone-capture-raid`) | `db2dd887b` | 82% / 55% | -0.014 (-0.09..+0.07) | level |
+| ZoneCaptureLevy (`zone-capture-levy`) | `db2dd887b` | 99% / 53% | -0.039 (-0.12..+0.04) | level |
+| ZoneGarrisonReinforce (`zone-garrison-reinforce`, with ZoneGarrison) | `db2dd887b` | 99% / 100% | -0.013 (-0.09..+0.06) | level |
+| ZoneFrontGarrison (`zone-front-garrison`) | `db2dd887b` | 28% / 28% | -0.002 | NOT TESTED (12-tile cap) |
+| ZoneFrontGarrison | `a2ae13b7c` | 100% / 100% | +0.013 (-0.06..+0.09) | level |
+| ZoneCaptureChain (`zone-capture-chain`) | `db2dd887b` | 0% / 0% | +0.000 | NOT TESTED (garrisoned zones only) |
+| ZoneCaptureChain | `a2ae13b7c` | 94% / 74% | -0.051 (-0.13..+0.03) | level |
+| all six (`house-to-house`) | `db2dd887b` | 100% / 100% | +0.007 (-0.07..+0.08) | level |
+| all six (`house-to-house`) | `a2ae13b7c` | 100% / 100% | -0.033 (-0.11..+0.04) | level |
+
+The AI does the house-to-house fighting but does not win more for it. The chain sends soldiers up to 40 tiles
+into an enemy city: in the real-game test, 1,510 of its 2,325 orders ended with the soldier killed on the way and
+85 went in. The levy behaves the same way: 752 of 1,061 orders ended with the soldier killed on the way. Raid orders
+take zones but fire in only 82% of house-games and reach their effect in 55%.
+
+All switches stay **off**: no arm's 95% interval is above 0.
+
+### Gates
+
+- **At `7825a34bb`** (default QuantBot behaviour as at `b970eeb1c`; `a2ae13b7c` only changes code behind
+  switches that are off):
+  - the four AI gates: 4/4 (`20261128T005838-ctest-9443f7`);
+  - `perf_regression` on the Mini: 123.0 s (`20261128T005848-ctest-3c5963`);
+  - nightly `-L nightly -LE gui`: 260/264 (`20261128T005843-ctest-71868b`). The four failures:
+    - `quantbot_city_lessons`: the city-lessons session's "planned Palace never stood".
+    - `palace_worm_probe` and `palace_worm_real_game`: the worm session's work.
+    - `zone_garrison_real_game`: it checked a stale results folder left by an earlier run (0.21 s), fixed in
+      `b970eeb1c`.
+- **At `b970eeb1c`:** `zone_garrison_probe` 23/23 and `zone_garrison_real_game` 12/12, both passed
+  (`20261128T030329-ctest-47352a`).
+- **At `db2dd887b`:** `dunelegacy_tests` passed (`20261127T232655-ctest-f5d882`).
+
+### Not verified
+
+A person's mouse in a windowed game. The probe drives the same widgets and SDL events on the dummy driver.
+
 ## 2026-11-28 - Hospitals: slow, paced type changes; walk-in healing; infantry never use a Repair Yard (protocol 149, save 9904)
 
 Stefan, 2026-11-27: "also make buildings change type much slower, especially hospitals the building type keeps changing

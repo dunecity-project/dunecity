@@ -133,6 +133,57 @@ the army, defence and formation passes do not pull it away; one left in capture 
 to Area Guard. Decision log events: `zone_garrison_order` (why `defend` / `take`),
 `zone_garrison_release`, `zone_capture_levy_train`; engine events `zone_garrison_returned`, `zone_garrison_enter`, `zone_garrison_taken`, `zone_garrison_exit`.
 
+## Controls
+
+- **Capture** (C): a Soldier or Trooper sent at an own zone occupies it; at an enemy zone it takes it. With the rule
+  on in a city game the tooltip says so.
+- **Garrison** (I; Stefan, 2026-11-27: "i cant garison my own buildings there no button"): a button in the unit
+  and group panels whenever a Soldier or Trooper is selected in a city game with the rule on. Its cursor takes only
+  zones: own to occupy, enemy to take. Anywhere else the click is refused and the cursor stays open.
+- **Cursor hint:** the Capture and Garrison cursors show their symbol over a target the click would order the
+  selection at (an own or enemy zone, and for Capture an enemy building it can take). Elsewhere they show a plain
+  pointer. The Garrison icon is a house behind sandbags.
+- **Evacuate:** the zone panel's button, shown while the zone is garrisoned and enabled only for its owner.
+
+## No pulling soldiers away
+
+Stefan, 2026-11-27: "and sto the ai pulling soldiers away on their way in". A soldier on its way into a zone
+(capture order, zone target) refuses every AI controller's order except the garrison controller's own:
+- moves, hunts and attacks (attack waves, defence pulls, retreats, escorts, idle sweeps);
+- formation orders;
+- attack-mode changes;
+- repair trips;
+- Carryall requests.
+
+The match log counts the refusals (`ZONE_GARRISON: event=redirect_refused`, once per soldier per 30 s).
+`QuantBot::updateZoneGarrisons` ends the order itself when:
+- the zone is gone;
+- the zone is held by another house;
+- the soldier has not got closer for 45 s.
+
+Every order has a logged outcome:
+- `entered`;
+- `died_on_way`;
+- `refused_at_zone` (full or below the threshold on arrival);
+- `order_ended`.
+
+`zone_garrison_real_game` A9 pairs each order with its outcome.
+
+## House to house (QuantBot switches, default off)
+
+Stefan, 2026-11-27: "we want to be fighting house to house basically".
+- **ZoneGarrisonReinforce:** Troopers within 16 tiles fill a threatened garrison of ours (own or captured) up to
+  four.
+- **ZoneFrontGarrison:** our 4 zones nearest a visible enemy building (the front, however far) each get two
+  soldiers from within 20 tiles. Front garrisons are not released when the area is quiet.
+- **ZoneCaptureChain:** the 2 empty enemy zones nearest any zone we hold (own or captured), however far, each get a
+  soldier from within 40 tiles. Every zone taken becomes a new starting point, so the chain moves block by
+  block.
+
+Play styles: `zone-garrison-reinforce` (with ZoneGarrison), `zone-front-garrison`, `zone-capture-chain`, and
+`house-to-house` (all six switches). Each is registered in `tests/ai/activation-events.json` with its fire
+event (the order) and success event (the entry).
+
 ## Evidence
 
 `rs160-dunecity` (Stefan's 4P DuneCity free-for-all), four Brutal QuantBots, seeds 9101-9148, 45 minutes, AWS,
@@ -157,7 +208,7 @@ each, against `default`:
 | ZoneCaptureLevy | -0.106 | -0.079 | -0.027 (-0.11..+0.05) | 73 / 73 | 142/288 |
 | all three (threshold 60) | -0.097 | -0.106 | +0.009 (-0.07..+0.09) | 65 / 65 | 158/288 |
 
-All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start from nothing) and Metropolis: HANDOVER.md, "Zone Garrisons follow-up".
+All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start from nothing) and Metropolis: HANDOVER.md, "Zone Garrisons follow-up". The house-to-house switches, and every arm re-measured with activation rates, are in the HANDOVER entry "Zone Garrisons: Garrison button, ...".
 
 ## Tests
 
@@ -171,5 +222,17 @@ All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start
   selected as a click selects them, the unit panel's real Capture button (and the C key), a real SDL mouse click
   on the zone through `Game::doInput`, the zone panel's `Garrison: n/4` and `(captured)` text and its real
   Evacuate button; a full own zone, an ally's zone and a damaged zone refused; an enemy's Evacuate disabled.
+- The probe also covers:
+  - the Garrison button and the I key (shown for Soldiers, Troopers and mixed groups; hidden for a tank and with the
+    rule off; the cursor symbol; a click on sand refused; an own zone garrisoned; an enemy zone taken);
+  - reinforcement, with mixed own and captured garrisons;
+  - a garrisoned Trooper hitting an Ornithopter and a tank;
+  - no pulling away (nine other controllers' orders refused; the controller's own obeyed);
+  - the 30-credit Soldier in the Barracks build list.
+
+  23 cases in all.
+- `zone_garrison_real_game` (headless nightly; `tests/ai/run-zone-garrison-real-game.py`): three `rs160-dunecity`
+  Brutal games with every switch on (`house-to-house`), one ACCEPT line per request (A1-A12); HANDOVER.md has the
+  acceptance table.
 - `CoopGameSettingsTestCase`: protocol 144 bit 5 round trip and hash; bit 7 is the first unknown city rule.
 - `CityRoadTestCase`, `NetworkHardeningTestCase`: `CMD_ZONE_EVACUATE` is the last command and acts on an owned object.
