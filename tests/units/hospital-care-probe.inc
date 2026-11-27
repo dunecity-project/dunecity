@@ -494,6 +494,8 @@ void checkBotQuiet(const std::string& mapData) {
     record("bot_off", "HospitalInfantry off: a quiet soldier at 40% was not sent in 3000 cycles");
     off.reset();
     currentGame = nullptr;
+    pLocalHouse = nullptr;
+    pLocalPlayer = nullptr;
 }
 
 void checkSave(const std::string& mapData) {
@@ -557,6 +559,19 @@ void checkSave(const std::string& mapData) {
 }
 
 // --- The player's own path -------------------------------------------------------------------
+
+/// Ends a match the way the game does: the game (and its interface, which may hold a selection)
+/// goes while currentGame still points at it, then the globals are cleared.
+void finish(std::unique_ptr<Game>& game) {
+    if(game) {
+        game->unselectAll(game->selectedList);
+        game->selectedList.clear();
+    }
+    game.reset();
+    currentGame = nullptr;
+    pLocalHouse = nullptr;
+    pLocalPlayer = nullptr;
+}
 
 size_t commandCount(const Game& game) {
     size_t count = 0;
@@ -664,7 +679,7 @@ void checkUiRepair(const std::string& mapData) {
     require(yard->getNumBookings() == 0, "The Repair Yard was booked for a Soldier");
     record("ui_repair", "Repair button shown with its tooltip only when wounded; one click, one command; "
            "walked past the nearer Repair Yard to the Hospital and healed to full");
-    currentGame = nullptr;
+    finish(game);
 }
 
 void checkWalkIn(const std::string& mapData) {
@@ -738,7 +753,7 @@ void checkWalkIn(const std::string& mapData) {
     playUntil(*game, hospitals, 200, [] { return false; });
     require(!care().trip(saboteur), "A Saboteur was put on a Hospital trip");
     record("walkin_not", "no walk-in for a healthy Soldier, a move four tiles away, an enemy Hospital or a Saboteur");
-    currentGame = nullptr;
+    finish(game);
 
     // 5. Hospital Care off: the right-click is an ordinary move.
     auto off = newGame(mapData, 23, false);
@@ -753,7 +768,7 @@ void checkWalkIn(const std::string& mapData) {
     require(!care().trip(offSoldier->getObjectID()) && offSoldier->getHealth() < offSoldier->getMaxHealth(),
             "A soldier healed with Hospital Care off");
     record("walkin_rule_off", "with Hospital Care off a right-click on a Hospital is a plain move");
-    currentGame = nullptr;
+    finish(off);
 }
 
 void pressKey(Game& game, SDL_Keycode sym) {
@@ -788,8 +803,7 @@ void checkUiNoHospital(const std::string& mapData) {
             playUntil(*game, none, 200, [&] { return wounded->goingToRepairYard; });
             require(wounded->goingToRepairYard && yard->getNumBookings() == 1, "Rule off: the soldier did not book the Repair Yard");
             record("ui_no_hospital_rule_off", "Hospital Care off: the Repair button books the Repair Yard as before");
-            game.reset();
-            currentGame = nullptr;
+            finish(game);
             continue;
         }
         require(DuneCity::HospitalCare::repairButtonFor(wounded) == RepairButton::NeedsHospital, "A soldier with no Hospital is not 'needs a Hospital'");
@@ -830,8 +844,7 @@ void checkUiNoHospital(const std::string& mapData) {
         record("ui_no_hospital", "no Hospital: button disabled with 'Needs a Hospital', button, R hotkey and right-click "
                "on the Repair Yard left the soldier where it stood and the yard unbooked; Saboteur 'cannot be healed'; "
                "with a Hospital the button heals");
-        game.reset();
-        currentGame = nullptr;
+        finish(game);
     }
     settings.hotkeys = savedHotkeys;
 }
@@ -889,8 +902,7 @@ void checkUiBeds(const std::string& mapData) {
     }
     record("ui_beds", "seven soldiers, one click on the group's Heal button: five healed at once, "
            + std::to_string(maxWaiting) + " waited, the Hospital stayed locked, all left at full health");
-    game.reset();
-    currentGame = nullptr;
+    finish(game);
 }
 
 void checkUiCarryall(const std::string& mapData) {
@@ -918,8 +930,7 @@ void checkUiCarryall(const std::string& mapData) {
     require(!care().trip(id) && trooper->getHealth() == trooper->getMaxHealth() && beside(zone(hospitals[0]), trooper->getLocation()),
             "The flown Trooper was not healed beside the Hospital");
     record("ui_carryall", "the Repair button for a Trooper 35 tiles away: lifted by the Carryall, healed beside the Hospital");
-    game.reset();
-    currentGame = nullptr;
+    finish(game);
 }
 
 // --- A real game: the bundled Metropolis map --------------------------------------------------
@@ -1217,8 +1228,7 @@ void checkMetropolis() {
            + " Hospitals made and " + std::to_string(removes) + " removed over all four cities, every change paced; "
            "the healing Hospital stood throughout");
     settings.hotkeys = savedHotkeys;
-    game.reset();
-    currentGame = nullptr;
+    finish(game);
 }
 
 /// A populated city, no fixture help: the census alone designates and keeps the overlays.
@@ -1340,7 +1350,7 @@ void checkPacing(const std::string& mapData) {
     record("pacing", "300 city days, " + std::to_string(populationChanges) + " zone population changes: 3 Hospitals made "
            "a quarter year apart and kept on their zones, 2 removed after 4 city years a year apart, never two changes a census; "
            + std::to_string(patientVisits) + " patient visits kept the first Hospital through days 185-205");
-    currentGame = nullptr;
+    finish(game);
 }
 
 } // namespace HospitalCareProbe
