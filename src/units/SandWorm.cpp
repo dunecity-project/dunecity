@@ -552,7 +552,8 @@ void Sandworm::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
 }
 
 bool Sandworm::update() {
-    if(palaceWorm && isActive() && !currentGame->isGamePaused() && !currentGame->isGameFinished()) {
+    // update() runs once per game cycle of a running game, so this counts game time.
+    if(palaceWorm && isActive()) {
         if(getHealth() <= getMaxHealth()/2) {
             AchievementEvents::wormDefeated(this);
             palaceWormLeave("beaten");
