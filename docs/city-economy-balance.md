@@ -124,6 +124,19 @@ with their own `ObjectData.ini` (Tornie, the community presets) have no `[Park]`
 the Park stays disabled there until one is added. QuantBot builds parks only with the default-off
 `ParkDistricts` switch (docs/formations.md, "Parks in the districts").
 
+**Parks Count As Roads** (match rule, default on; bit 6 of the MOD18 city rules byte, set only
+when off; protocol 143; INI key `Parks Count As Roads`). Stefan, 2026-11-27: "count a park as a
+road (without the movement bonus) as a way to also increase value". A Park is a road connection
+for the city simulation (`Tile::isRoadConnection`, `DuneCity::isTrafficConnector`): a lot whose
+only frontage is a Park still finds its perimeter road, city trips may cross Parks, and road
+art joins onto them, as it already did for a Rocket Turret on a road. Units read the tile's own
+road flag, so a Park gives no road speed, and it still blocks them like any building. QuantBot's
+lot frontage check counts a Park road too. A Park still adds terrain, not development, so a
+spare road lane turned into a Park raises its neighbours' land value without losing the lots'
+road access. Tests: `ParkTestCase` (connector with and without the rule), `CoopGameSettingsTestCase`
+(protocol 143 bit and options hash), and the `city-park` skirmish probe, which gives a lot a
+Park on its last road tile and checks traffic access on (and none off) and no unit road flag.
+
 ### Unpowered zones (match rule `Unpowered Zones Vacate`, default on; MOD18, protocol 112)
 
 R/C/I lots use their owner's produced/required power, with positive generation required even
