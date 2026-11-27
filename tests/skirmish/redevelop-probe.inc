@@ -275,7 +275,7 @@ int polluterDistance(const House* house, Coord site) {
     return nearest;
 }
 
-Separation separationRun(const std::string& save, Uint32 item, bool on, int zones) {
+Separation separationRun(const std::string& save, Uint32 item, bool on, int zones, bool crowded = false) {
     auto game = load(save);
     Bot b = findBot(*game);
     Switches switches;
@@ -283,6 +283,18 @@ Separation separationRun(const std::string& save, Uint32 item, bool on, int zone
     configure(b.bot, switches);
     game->winFlags = game->loseFlags = 0;
     Separation out;
+    if (crowded) {
+        // A grown city: every free 2x2 site clear of the other side is taken (reserved as
+        // concrete by builders that do not exist), so only ground near it is left.
+        Uint32 fake = 4000000000u;
+        const int w = currentGameMap->getSizeX(), h = currentGameMap->getSizeY();
+        for (int y = 0; y + 1 < h; y += 2)
+            for (int x = 0; x + 1 < w; x += 2) {
+                const Coord site(x, y);
+                const int distance = item == Structure_ZoneIndustrial ? homeDistance(b.house, site) : polluterDistance(b.house, site);
+                if (!R::industryTooCloseToHomes(distance)) b.bot->reservedStructures[fake++] = {Structure_Slab4, site};
+            }
+    }
     const int level = DuneCity::getStructureMaxLevel(Structure_ZoneIndustrial);
     std::vector<Uint32> ids;
     for (int k = 0; k < zones; ++k) {
@@ -299,7 +311,8 @@ Separation separationRun(const std::string& save, Uint32 item, bool on, int zone
         }
         out.near += R::industryTooCloseToHomes(distance);
         ++out.placed;
-        SDL_Log("SKIRMISH_PROBE: redevelop separation item=%u on=%d zone=(%d,%d) distance=%d", item, on, site.x, site.y, distance);
+        SDL_Log("SKIRMISH_PROBE: redevelop separation item=%u on=%d crowded=%d zone=(%d,%d) distance=%d", item, on, crowded,
+                site.x, site.y, distance);
     }
     const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(2 * 60 * 1000);
     while (game->getGameCycleCount() < end) {
@@ -436,28 +449,26 @@ void runRedevelopProbe() {
     // The switch matters when that ground runs out, as in a grown city, so each arm grows the
     // industry: it asks the bot's own siting for an Industrial site 40 times, building
     // each (at full density), then plays two minutes and reads the homes.
-    const Separation sepOff = separationRun(save, Structure_ZoneIndustrial, false, 40);
-    const Separation sepOn = separationRun(save, Structure_ZoneIndustrial, true, 40);
-    SDL_Log("SKIRMISH_PROBE: redevelop industry separation placed on=%d off=%d near_homes on=%d off=%d home_pollution on=%.1f off=%.1f "
-            "home_land_value on=%.1f off=%.1f", sepOn.placed, sepOff.placed, sepOn.near, sepOff.near, sepOn.pollution,
-            sepOff.pollution, sepOn.landValue, sepOff.landValue);
-    expect(sepOn.placed >= 20, "IndustrySeparation: the siting found too few Industrial sites");
-    expect(sepOn.near == 0, "IndustrySeparation: an Industrial zone was sited within 5 tiles of a home");
-    expect(sepOff.near >= 1, "IndustrySeparation: OFF never sited an Industrial zone near a home, so the test proves nothing");
-    expect(sepOn.pollution < sepOff.pollution, "IndustrySeparation: the homes are no cleaner than OFF");
-    expect(sepOn.landValue > sepOff.landValue, "IndustrySeparation: the homes end with no more land value than OFF");
-
-    // HomeSeparation: the same with 16 new Residential lots against the bot's polluters.
-    const Separation homeOff = separationRun(save, Structure_ZoneResidential, false, 16);
-    const Separation homeOn = separationRun(save, Structure_ZoneResidential, true, 16);
-    SDL_Log("SKIRMISH_PROBE: redevelop home separation placed on=%d off=%d near_polluters on=%d off=%d home_pollution on=%.1f off=%.1f "
-            "home_land_value on=%.1f off=%.1f", homeOn.placed, homeOff.placed, homeOn.near, homeOff.near, homeOn.pollution,
-            homeOff.pollution, homeOn.landValue, homeOff.landValue);
-    expect(homeOn.placed >= 8, "HomeSeparation: the siting found too few Residential sites");
-    expect(homeOn.near == 0, "HomeSeparation: a Residential lot was sited within 5 tiles of a polluter");
-    expect(homeOff.near >= 1, "HomeSeparation: OFF never sited a Residential lot near a polluter, so the test proves nothing");
-    expect(homeOn.pollution < homeOff.pollution, "HomeSeparation: the homes are no cleaner than OFF");
-    expect(homeOn.landValue > homeOff.landValue, "HomeSeparation: the homes end with no more land value than OFF");
+    // Open ground: the ordinary siting already keeps the two apart (40 of 40 Industrial zones and
+    // 16 of 16 homes beyond 5 tiles with the switches off, 2026-11-27); ON must not do worse.
+    for (const Uint32 item : {Uint32(Structure_ZoneIndustrial), Uint32(Structure_ZoneResidential)}) {
+        const bool industry = item == Structure_ZoneIndustrial;
+        const char* name = industry ? "IndustrySeparation" : "HomeSeparation";
+        const int zones = industry ? 40 : 16;
+        const Separation openOff = separationRun(save, item, false, zones), openOn = separationRun(save, item, true, zones);
+        // Crowded: only ground near the other side is left. OFF builds there, ON must not.
+        const Separation crowdOff = separationRun(save, item, false, 8, true), crowdOn = separationRun(save, item, true, 8, true);
+        SDL_Log("SKIRMISH_PROBE: redevelop %s open placed on=%d off=%d near on=%d off=%d land_value on=%.1f off=%.1f | "
+                "crowded placed on=%d off=%d near on=%d off=%d home_pollution on=%.1f off=%.1f home_land_value on=%.1f off=%.1f",
+                name, openOn.placed, openOff.placed, openOn.near, openOff.near, openOn.landValue, openOff.landValue,
+                crowdOn.placed, crowdOff.placed, crowdOn.near, crowdOff.near, crowdOn.pollution, crowdOff.pollution,
+                crowdOn.landValue, crowdOff.landValue);
+        expect(openOn.placed * 2 >= zones, std::string(name) + ": on open ground the siting found too few sites");
+        expect(openOn.near == 0 && crowdOn.near == 0, std::string(name) + ": a site within 5 tiles of the other side");
+        expect(crowdOff.near >= 1, std::string(name) + ": crowded OFF never built near the other side, so the test proves nothing");
+        expect(crowdOn.pollution < crowdOff.pollution, std::string(name) + ": crowded, the homes are no cleaner than OFF");
+        expect(crowdOn.landValue > crowdOff.landValue, std::string(name) + ": crowded, the homes end with no more land value than OFF");
+    }
 
     std::string all;
     for (const auto& f : failures) all += (all.empty() ? "" : "; ") + f;
