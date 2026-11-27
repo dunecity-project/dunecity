@@ -65,11 +65,6 @@ int beltGoal() {
     static const int value = envInt("DUNECITY_TEST_BELT_GOAL", TurretFrontPolicy::kBeltGoal, 1, 30);
     return value;
 }
-const char* turretFrontRule(QuantBot::TurretFrontMode mode) {
-    return mode == QuantBot::TurretFrontMode::Reinforce ? "front_reinforce"
-        : mode == QuantBot::TurretFrontMode::Creep ? "turret_creep"
-        : mode == QuantBot::TurretFrontMode::Drill ? "turret_drill" : "turret_advance";
-}
 int beltStandoff() {
     static const int value = envInt("DUNECITY_TEST_BELT_STANDOFF", TurretFrontPolicy::kBeltEnemyStandoff, 1, 60);
     return value;
@@ -99,6 +94,12 @@ bool QuantBot::rearTurretRetireEnabled() const {
     static const int override = envSwitch("DUNECITY_TEST_REAR_TURRET_RETIRE");
     return override >= 0 ? override == 1 : botConfig().force.rearTurretRetire;
 }
+const char* QuantBot::turretFrontRule(TurretFrontMode mode) {
+    return mode == TurretFrontMode::Reinforce ? "front_reinforce"
+        : mode == TurretFrontMode::Creep ? "turret_creep"
+        : mode == TurretFrontMode::Drill ? "turret_drill" : "turret_advance";
+}
+
 bool QuantBot::turretDrillEnabled() const {
     static const int override = envSwitch("DUNECITY_TEST_TURRET_DRILL");
     return override >= 0 ? override == 1 : botConfig().force.turretDrill;

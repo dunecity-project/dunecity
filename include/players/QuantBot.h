@@ -2321,6 +2321,8 @@ private:
     bool turretDrilling = false;                              ///< (e) the last scan found a drill site
     int turretRetired = 0;                                    ///< (d) turrets sold or demolished
     void trackTurretFrontOrders(Uint32 now);
+    /// The TURRET_FRONT rule name of an order's mode (front_reinforce, turret_creep, ...).
+    static const char* turretFrontRule(TurretFrontMode mode);
     void logTurretFrontState(Uint32 now);
     /// The four switches, each with an experiment-only DUNECITY_TEST_* override (0 or 1).
     bool frontTurretsEnabled() const;
