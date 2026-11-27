@@ -128,14 +128,37 @@ accept('A8 the AI trains a levy of cheap Soldiers and walks them into enemy zone
        f'levy Soldiers per game {[Counter(r["seed"] for r in levy)[s] for s in seeds]}, '
        f'levy orders per game {count("order", "levy")}')
 
-orders = sum(count('order'))
+# Every order paired with what became of it: the soldier went in, died on the way, was refused at the
+# door (zone full or below the threshold on arrival), the controller ended it (zone gone, held by
+# another house, no progress), or it was still walking when the game ended. An order with none of
+# these before the soldier's next order is one something else took the soldier away from.
+outcomes = Counter()
+by_why = defaultdict(Counter)
+events = defaultdict(list)   # (seed, unit) -> [(cycle, event)]
+for r in rows:
+    if r['event'] in ('order', 'entered', 'died_on_way', 'refused_at_zone', 'order_ended') and r.get('unit'):
+        events[(r['seed'], r['unit'])].append((int(r['cycle'] or 0), r['event'], r.get('why', '')))
+for key, seq in events.items():
+    seq.sort()
+    for i, (cycle, event, why) in enumerate(seq):
+        if event != 'order':
+            continue
+        nxt = next((e for c, e, w in seq[i + 1:] if c >= cycle), None)
+        result = {'entered': 'entered', 'died_on_way': 'died on the way', 'refused_at_zone': 'refused at the door',
+                  'order_ended': 'ended by the controller', 'order': 'taken away', None: 'walking at the end'}[nxt]
+        outcomes[result] += 1
+        by_why[why][result] += 1
+orders = sum(outcomes.values())
 refused = sum(count('redirect_refused'))
-ended = Counter(r['why'] for r in rows if r['event'] == 'order_ended')
+taken_away = outcomes['taken away']
+own = sum(by_why[w][o] for w in ('defend', 'front', 'reinforce') for o in by_why[w])
+own_in = sum(by_why[w]['entered'] for w in ('defend', 'front', 'reinforce'))
 per_entry = orders / max(1, len(entered))
-accept('A9 no other controller pulls a soldier away on its way in (orders per entry close to 1)',
-       refused >= 1 and per_entry <= 1.3,
-       f'{orders} orders for {len(entered)} entries ({per_entry:.2f} per entry); {refused} other controllers\' '
-       f'orders refused; orders ended {dict(ended)}')
+accept('A9 no other controller pulls a soldier away on its way in',
+       refused >= 1 and taken_away <= 0.02 * orders and own_in >= 0.75 * own,
+       f'{orders} orders: {dict(outcomes)}; {taken_away} taken away; own-zone orders {own_in}/{own} went in; '
+       f'{refused} other controllers\' orders refused; {per_entry:.2f} orders per entry '
+       f'(by behaviour: { {w: dict(c) for w, c in by_why.items()} })')
 
 reinforce = count('order', 'reinforce')
 joined = [r for r in entered if r['item'] == TROOPER and int(r['occupants'] or 0) >= 2]

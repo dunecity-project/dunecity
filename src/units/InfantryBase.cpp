@@ -253,6 +253,10 @@ void InfantryBase::checkPos() {
                && !zone->heldAgainst(this)) {
                 if(zone->enterGarrison(this)) return;
                 // Full, too damaged, or no longer ours to enter: the order ends here.
+                SDL_Log("ZONE_GARRISON: event=refused_at_zone house=%d unit=%u item=%d zone=%u occupants=%d health=%d max_health=%d zone_house=%d cycle=%u",
+                        owner->getHouseID(), objectID, itemID, zone->getObjectID(), zone->getGarrisonSize(),
+                        zone->getHealth().lround(), zone->getMaxHealth(), zone->getOwner()->getHouseID(),
+                        currentGame->getGameCycleCount());
                 setTarget(nullptr);
                 doSetAttackMode(GUARD);
                 return;
@@ -517,6 +521,13 @@ void InfantryBase::checkPos() {
 }
 
 void InfantryBase::destroy() {
+    // Zone Garrisons: a soldier killed on its way into a zone (the match log accounts for every order).
+    if(attackMode == CAPTURE && ZoneStructure::garrisonsEnabled()) {
+        if(const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer())) {
+            SDL_Log("ZONE_GARRISON: event=died_on_way house=%d unit=%u item=%d zone=%u cycle=%u",
+                    owner->getHouseID(), objectID, itemID, zone->getObjectID(), currentGame->getGameCycleCount());
+        }
+    }
     if(currentGameMap->tileExists(location) && isVisible()) {
         Tile* pTile = currentGameMap->getTile(location);
 

@@ -161,11 +161,12 @@ TEST_CASE("Unavailable actions fall through to the action that accepts Shift", "
 
 TEST_CASE("A rebound action answers only to its new key", "[hotkeys]") {
     auto bindings = Hotkeys::Bindings::defaults();
-    auto result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_i, 0});
+    // Semicolon is free by default (I became Garrison's in the Zone Garrisons follow-up).
+    auto result = Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_SEMICOLON, 0});
     REQUIRE(result.outcome == Hotkeys::AssignOutcome::Assigned);
     REQUIRE_FALSE(result.displaced);
     REQUIRE_FALSE(pressed(bindings, SDLK_e));
-    REQUIRE(pressed(bindings, SDLK_i) == Action::Guard);
+    REQUIRE(pressed(bindings, SDLK_SEMICOLON) == Action::Guard);
     REQUIRE(pressed(bindings, SDLK_x) == Action::AreaGuard);
 
     // Taking a key from another action leaves that action unbound rather than sharing it.
@@ -174,7 +175,7 @@ TEST_CASE("A rebound action answers only to its new key", "[hotkeys]") {
     REQUIRE(result.displaced == Action::NextConstructionYard);
     REQUIRE_FALSE(bindings.get(Action::NextConstructionYard).bound());
     REQUIRE(pressed(bindings, SDLK_g) == Action::Guard);
-    REQUIRE_FALSE(pressed(bindings, SDLK_i));
+    REQUIRE_FALSE(pressed(bindings, SDLK_SEMICOLON));
     REQUIRE(bindings.conflicts().empty());
 
     REQUIRE(Hotkeys::assign(bindings, Action::Guard, Binding{SDLK_g, 0}).outcome == Hotkeys::AssignOutcome::Unchanged);
@@ -282,12 +283,12 @@ TEST_CASE("A customised profile is left exactly as the player saved it", "[hotke
     REQUIRE(pressed(loaded.bindings, SDLK_SEMICOLON) == Action::Stop);
     REQUIRE_FALSE(pressed(loaded.bindings, SDLK_a));
     // Commands newer than the profile keep a default only where the saved keys leave it free:
-    // B, N, K, J, Y, L and V are the player's, Self-destruct's Delete is not taken.
+    // B, N, K, J, Y, L, V and I are the player's, Self-destruct's Delete is not taken.
     for(const Action newer : {Action::Ambush, Action::Hunt, Action::Retreat, Action::Sabotage, Action::DeployMCV,
-                              Action::Heal, Action::ToggleMovementPaths})
+                              Action::Heal, Action::ToggleMovementPaths, Action::Garrison})
         REQUIRE_FALSE(loaded.bindings.get(newer).bound());
     REQUIRE(loaded.bindings.get(Action::SelfDestruct) == Binding{SDLK_DELETE, 0});
-    REQUIRE(loaded.warnings.size() == 7);
+    REQUIRE(loaded.warnings.size() == 8);
     REQUIRE(loaded.bindings.conflicts().empty());
 
     // A single saved key is a customised profile too: it wins over the newer default on it.
