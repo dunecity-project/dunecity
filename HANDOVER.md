@@ -1,3 +1,71 @@
+## 2026-11-28 - Fremen Palace worm: real assertion tests through the player's path, the AI's worm no longer taken by the base defence, re-measured (v4)
+
+Stefan, 2026-11-27: "i want freeman house to get a worm as its palace special - it has full control over the
+worm and can eat enemy units with it via hunt, or can explode to create spice where the ai wants near its base.
+make an agent for doing this along with tweaking the ai behaviour." Then: "you need to make sure you include REAL
+assert tests to make sure the things you add actually work", and "i ask you to try things. you say you do and it
+doesn't work so then i do it and it does ... you need more assertions". Follows the 2026-11-27 entry below.
+Commits `cc09c95fa` (player-path and AI-level probe cases, real-game test, a bloom trip survives being shot),
+`c3e54081a`, `517b634b7`, `07bce9e68`, `71a8cb9f3`, `75f6898d0`, `80261e3a8` (defence scramble), `d1ad80aa6`
+(activation houses). Evidence: `~/Documents/projects/outputs/palace-worm-20261127/v4/` (`report.txt`).
+
+**Results** (`palace_worm_probe` and `palace_worm_real_game`, both headless nightly CTests that exit non-zero;
+AWS `20261128T024605-ctest-4dbe8e` at `80261e3a8`, both passed, the same values as the Mini):
+
+| Request line | Test (assert) | Measured | Result |
+|---|---|---|---|
+| Fremen gets a worm as its Palace special | probe `player-hunt-button`: Palace panel button (hidden while charging, sandworm picture and tooltip, sends `CMD_PALACE_SPECIALWEAPON`, charge used); `bundled-deserted` (4P Deserted); real_game A1 | 1 Fremen-owned worm per press; real games 13 / 2 / 17 worms, 0 for other houses | pass |
+| ... only Fremen; the warriors otherwise | probe `player-warriors-rule-on-1` (Atreides), `player-warriors-rule-off-3`; real_game A2 | button shows and calls 12 warriors, no worm; 0 worms with the rule off | pass |
+| full control over the worm | probe `control`, `player-hunt-button`, `player-attack-click`, `bundled-deserted` (click select, Guard, Move, Hunt buttons and map clicks through `Game::doInput`) | Move click reached 76,114 in 18 s (Deserted); ordered onto rock it stops on the sand; Attack cursor on a Tank eaten in 13 s, right click on a Quad in 16 s; second Palace's button disabled "still out" | pass |
+| can eat enemy units with it via hunt | probe `player-hunt-button`, `hunt`, `bundled-deserted`; real_game A3 | Hunt button: Tank eaten in 15 s, the one on rock spared, 2 kills credited to Fremen; Deserted: Harkonnen Tank in 50 s; real games 199 hunt orders, 97 units eaten, meals in 3/3 | pass |
+| can explode to create spice | probe `player-spice-bloom`, `bundled-deserted` | Spice Bloom button + click at 40,22: burst in 16 s, 47 spice tiles; Deserted click at 77,98: 35 tiles; right click cancels, deep rock refused | pass |
+| where the AI wants near its base | probe `bloom-near-refinery`, `ai-level-0/1`; real_game A4 | 48 spice tiles beside the Refinery; real games 7 of 14 bursts with >= 30 tiles within 18 tiles of a refinery (needs half; median 18.5) | pass, at the threshold |
+| tweaking the AI (an agent for it) | probe `ai-level-1/0/2`, `bloom-under-fire` (both owners); real_game A5, A6; activation harness on v4 | level 1 hunts then bursts, 0 bursts at 2, 0 hunts at 0; hit 6 times on its way it keeps the bloom order; real games 23/26 hunting worms ate, 14/21 bloom orders burst, 0 orders from other controllers; v4: fired and reached its effect in 96% of 80 Fremen house-games (tested) | pass |
+
+**Deviations** (caps Stefan did not ask for; none stops the asked-for thing): one worm per house at a time (a
+second charged Palace's button is disabled while it is out); 5-minute charge; 3-minute life or 6 meals, a worm on
+its way to burst at the end bursts where it is; beaten to half health it leaves; it stays on sand (units on rock
+cannot be eaten, a bloom aimed at rock moves to sand within 6 tiles); AI: prey under 250 credits is not hunted,
+bloom sites keep 8 tiles from enemy units and are searched within 14 (then 30) tiles of a refinery.
+
+**What the tests found** (all fixed):
+- *A bloom trip did not survive being shot* (`cc09c95fa`): `UnitBase::handleDamage` in Hunt answers the shooter
+  with `doAttackObject`, which cleared the worm's bloom target, and QuantBot re-ordered the same spot every pass.
+  Orders made while a Palace worm takes damage no longer cancel its trip; a trip whose path search gave up
+  bursts where it stands.
+- *The base-defence scramble took the AI's worm* (`80261e3a8`): `scrambleUnitsAndDefend` enlisted it against
+  intruders and the defence upkeep in `checkAllUnits` re-targeted it every pass: 35 orders and 27 cancelled bloom
+  trips in three games. It now skips sandworms (only Palace worms belong to a house; nothing changes with the
+  rule off). Redirections are logged (`PALACE_WORM: event=redirected ... by=<caller>`) and counted.
+- *Test faults*: the fixture's still enemy is a HumanPlayer and a local game makes the last HumanPlayer local, so
+  the player-path cases ran as Harkonnen (`517b634b7`); an AI house's worm leaves the Palace in Hunt, so QuantBot
+  need not order a hunt there (`71a8cb9f3`; its orders are asserted in the ai-level cases, and every hunt order is
+  now logged, `07bce9e68`); on 4P Deserted the Fremen QuantBot never builds a Palace before it is wiped out (18
+  min), so the real-game test plays `rs160-dunecity` 9101-9103, where Fremen starts with a Palace, and clears
+  its result folders first (a rerun read the last build's `games.csv`) (`75f6898d0`).
+- *Harness*: only Fremen can call a worm, so with all four FFA houses labelled `default@palace-worm-1` the
+  activation harness counted 320 house-games (24%, NOT TESTED). `activation-events.json` entries may now name
+  `"houses"`; the palace-worm styles name Fremen (`d1ad80aa6`, unit-tested).
+
+**Measured (v4, `80261e3a8`)**: `rs160-dunecity`, four QuantBot Brutal houses, 45 min, seeds 9101-9180,
+`fremen-worm-on.ini` (label `default@palace-worm-1`) against `fremen-worm-off.ini` (warriors), 80 paired games,
+none failed. Worms 968 (12.1 a Fremen game), meals 2,652 (33.1), 698,170 credits of units eaten, 610 bursts (7.6);
+524/644 hunting worms ate (81%), 610/724 bloom orders burst (84%), 11 trips cancelled by a move order from the
+worm's own controller, 0 orders from other controllers. Fremen placement **-0.015 (-0.114 to +0.090): level** with the
+warriors, and tested (96% activation); wins 4 -> 6 (+0.025, -0.025 to +0.075); time-outs 50.0% -> 57.5% (no
+difference shown). v3 was -0.021 (-0.132 to +0.090). Only Fortress Brutal was measured, not Hard or `/weak`.
+
+**Gates at `80261e3a8`**: the four AI gates, `dunelegacy_tests` and `genome_registry_contract` passed on AWS
+(`20261128T024618-ctest-bf3926`, 6/6); `perf_regression` passed on the Mini (105 s). Nightly
+`-L nightly -LE gui` (`20261128T024705-ctest-873093`): 264/265 passed, `palace_worm_probe` and `palace_worm_real_game` among them; the
+one failure, `zone_garrison_real_game` (its A9, soldiers pulled away, on both machines, read from a stale
+results folder), belongs to the Zone Garrisons work (its folder fix is `b970eeb1c`).
+
+**Not exercised:** a real mouse in a window. The clicks are SDL mouse events pushed through `Game::doInput` and
+the panel buttons are pressed through their own `handleMouseLeft`, on the dummy video driver; the cursor drawing
+and a real window's coordinate scaling were not checked. No release was made: the Air's app does not contain
+these commits.
+
 ## 2026-11-28 - Turret front v2/v3: every switch proven to fire, the turret drill, NOT TESTED verdicts; acceptance list
 
 Stefan, 2026-11-27, after the first measurement: "i have a feeling the reason you think none of these things work is
