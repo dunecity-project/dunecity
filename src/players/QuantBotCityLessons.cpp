@@ -93,9 +93,11 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
             // New zones since the first pass (his map started every house with 92).
             const int zones = zonesNow - lessons.economyFirstStartZones;
             const int yards = house->getNumItems(Structure_ConstructionYard);
-            SDL_Log("ECONOMY_FIRST: house=%d event=footprint met=%d zones=%d yards=%d population=%d credits=%d cycle=%u",
-                    houseID, int(zones >= L::kEconomyFirstZones && yards >= L::kEconomyFirstCheckYards), zones, yards,
-                    population, house->getCredits(), getGameCycleCount());
+            SDL_Log("ECONOMY_FIRST: house=%d event=footprint met=%d half_his=%d zones=%d yards=%d mcvs=%d population=%d "
+                    "credits=%d cycle=%u", houseID,
+                    int(lessons.economyFirstMcvs > 0 && zones >= L::kEconomyFirstEffectZones),
+                    int(zones >= L::kEconomyFirstZones && yards >= L::kEconomyFirstCheckYards), zones, yards,
+                    lessons.economyFirstMcvs, population, house->getCredits(), getGameCycleCount());
         }
         if (population >= L::kEconomyFirstPopulation) {
             lessons.economyFirstStoodDown = true;
@@ -154,7 +156,7 @@ bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
     const char* what = "mcv";
     if (campaignAvailableToBuild(builder, Unit_MCV)) {
         ordered = produceItemWithLogging(pass, turn, Unit_MCV, __LINE__, "economy_first_mcv");
-        if (ordered) ++pass.economyFirstMcvsOrdered;
+        if (ordered) { ++pass.economyFirstMcvsOrdered; ++cityLessons.economyFirstMcvs; }
     } else if (builder->getCurrentUpgradeLevel() < builder->getMaxUpgradeLevel()
                && getHouse()->getCredits() >= builder->getUpgradeCost()) {
         what = "upgrade";

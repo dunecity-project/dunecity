@@ -115,9 +115,11 @@ constexpr int kEconomyFirstSpicePerHouse = 20000;
 inline bool lowSpiceMap(int mapSpice, int livingHouses) {
     return mapSpice < kEconomyFirstSpicePerHouse * std::max(1, livingHouses);
 }
-/// The proximate effect, read at minute 10: half the zones he added by then (76 ordered: 33 R, 8 C, 35 I;
-/// counted from the first pass) and his four yards.
-constexpr int kEconomyFirstCheckMinute = 10, kEconomyFirstZones = 38, kEconomyFirstCheckYards = 4;
+/// Read at minute 10. The proximate effect (activation): an MCV ordered and at least kEconomyFirstEffectZones zones
+/// added since the first pass. His footprint, reported beside it: half the zones he added by then (76 ordered:
+/// 33 R, 8 C, 35 I) and his four yards.
+constexpr int kEconomyFirstCheckMinute = 10, kEconomyFirstEffectZones = 10;
+constexpr int kEconomyFirstZones = 38, kEconomyFirstCheckYards = 4;
 /// ECONOMY_STATE: credits, yards, zones, power, population and tax are logged this often.
 constexpr int kEconomyLogMs = 60000;
 

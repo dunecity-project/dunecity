@@ -1234,6 +1234,14 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/turret-drill-save.py
             --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/turret-drill-save)
         set_tests_properties(turret_drill_save PROPERTIES TIMEOUT 2700 PROCESSORS 2)
+        # EconomyFirst (Stefan's last Air game, 2026-11-28: "the ai needs to escape the poverty trap on low / no
+        # spice maps"): on his map with the switch on, house Neutral orders MCVs, holds unit cash, zones and adds
+        # zones ahead of the same game with it off; off it never acts; on a spice-rich map it does not act.
+        # tests/ai/economy-first-test.py.
+        dunecity_add_test(headless nightly NAME economy_first COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/economy-first-test.py
+            --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/economy-first)
+        set_tests_properties(economy_first PROPERTIES TIMEOUT 2400 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)

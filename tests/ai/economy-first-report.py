@@ -59,6 +59,8 @@ def main():
                 states[key].append(r)
             elif r['kind'] == 'economy_first':
                 first[key][r['event'] + ('_met' if r['event'] == 'footprint' and r['met'] == '1' else '')] += 1
+                if r['event'] == 'footprint' and r.get('half_his') == '1':
+                    first[key]['half_his'] += 1
             elif r['kind'] == 'build_order':
                 orders[key].append(r)
     out = ['# EconomyFirst: economy against Stefan\'s Air game', '']
@@ -92,8 +94,8 @@ def main():
             med = lambda f: statistics.median(p[f] for p in picked)  # noqa: E731
             out.append(f"| {label} | {m} | {len(picked)} | {med('yards'):.0f} | {med('zones'):.0f} | {med('nuclear'):.0f} | "
                        f"{med('palaces'):.0f} | {med('population'):.0f} | {med('tax'):.0f} | {med('credits'):.0f} | {med('units'):.0f} |")
-    out += ['', '## Activation', '', '| arm | house-games | fired (ECONOMY_FIRST pass) | footprint met at minute 10 (>= 38 zones added, 4 yards) | stood down | spice-rich (did not act) | map spice at start (median) |',
-            '|---|---:|---:|---:|---:|---:|---:|']
+    out += ['', '## Activation', '', '| arm | house-games | fired (ECONOMY_FIRST pass) | effect at minute 10 (an MCV, >= 10 zones added) | half his footprint at minute 10 (>= 38 zones, 4 yards) | stood down (his minute-31 population) | spice-rich (did not act) | map spice at start (median) |',
+            '|---|---:|---:|---:|---:|---:|---:|---:|']
     for label in labels:
         keys = by_label[label]
         fired = sum(first[k]['pass'] > 0 for k in keys)
@@ -102,7 +104,8 @@ def main():
         rich = sum(first[k]['spice_rich'] > 0 for k in keys)
         spice = [num(min(states[k], key=lambda r: num(r['cycle'])).get('spice')) for k in keys if states[k]]
         verdict = '' if label == 'default' else (' (tested)' if met * 2 >= len(keys) else ' **NOT TESTED**')
-        out.append(f'| {label} | {len(keys)} | {fired} | {met}{verdict} | {down} | {rich} | '
+        half = sum(first[k]['half_his'] > 0 for k in keys)
+        out.append(f'| {label} | {len(keys)} | {fired} | {met}{verdict} | {half} | {down} | {rich} | '
                    f'{statistics.median(spice) if spice else "-"} |')
     out += ['', '## Where the money went: orders in the first 2 and 10 minutes (median credits per house-game)', '',
             '| arm | units 0-2 | structures 0-2 | MCVs 0-10 | units 0-10 | zones 0-10 | Nuclear 0-10 |', '|---|---:|---:|---:|---:|---:|---:|']
