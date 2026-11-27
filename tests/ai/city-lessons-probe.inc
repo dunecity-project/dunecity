@@ -67,18 +67,19 @@ void runCityLessonsProbe(Game& game) {
     const int onOrni0 = onHouse->getNumBuiltItems(Unit_Ornithopter);
     const int64_t offVehicles0 = vehicleBuilt(offHouse), offLaunchers0 = built(offHouse, Unit_Launcher);
 
-    // 1. The first passes: ON holds the mix, OFF does not.
+    // 1. The first game minute through the real update loop (the bots initialise on their first
+    //    update): ON holds the mix in its build passes, OFF never does.
     require(on->cityLessons.launcherArmyPasses == 0 && off->cityLessons.launcherArmyPasses == 0, "Passes before the run");
-    on->build(on->militaryUnitValue());
-    off->build(off->militaryUnitValue());
-    require(on->cityLessons.launcherArmyPasses == 1, "ON's build pass did not hold the Launcher mix");
+    const Uint32 firstMinute = game.getGameCycleCount() + MILLI2CYCLES(60000);
+    while (game.getGameCycleCount() < firstMinute && !game.finished) game.updateGameState();
+    SDL_Log("CITY_LESSONS_PROBE: first minute on passes=%d launcher_bps=%d ornithopter_bps=%d off passes=%d launcher_bps=%d ornithopter_bps=%d",
+            on->cityLessons.launcherArmyPasses, on->lastUnitMixBps[L::kLauncherSlot], on->lastUnitMixBps[UnitMixPolicy::kOrnithopterSlot],
+            off->cityLessons.launcherArmyPasses, off->lastUnitMixBps[L::kLauncherSlot], off->lastUnitMixBps[UnitMixPolicy::kOrnithopterSlot]);
+    require(on->cityLessons.launcherArmyPasses > 0, "ON's build passes did not hold the Launcher mix in the first minute");
     require(on->lastUnitMixBps[L::kLauncherSlot] >= L::kLauncherArmyBps,
             "ON's Launcher share is below the CityLauncherArmy floor");
     require(on->lastUnitMixBps[UnitMixPolicy::kOrnithopterSlot] == 0, "ON's mix still has an Ornithopter share");
-    require(off->cityLessons.launcherArmyPasses == 0, "OFF's build pass held the Launcher mix");
-    SDL_Log("CITY_LESSONS_PROBE: first pass on launcher_bps=%d ornithopter_bps=%d off launcher_bps=%d ornithopter_bps=%d",
-            on->lastUnitMixBps[L::kLauncherSlot], on->lastUnitMixBps[UnitMixPolicy::kOrnithopterSlot],
-            off->lastUnitMixBps[L::kLauncherSlot], off->lastUnitMixBps[UnitMixPolicy::kOrnithopterSlot]);
+    require(off->cityLessons.launcherArmyPasses == 0, "OFF's build passes held the Launcher mix");
 
     // 3-5 are read as the game runs: the first plan, its placement and its effect.
     auto* sim = game.getCitySimulation();
