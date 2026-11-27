@@ -406,6 +406,7 @@ QuantBotConfig::QuantBotConfig() {
     force.advancingTurrets = false;
     force.turretCreep = false;
     force.rearTurretRetire = false;
+    force.turretDrill = false;
     // Stefan, 2026-11-27, seewhatidid: "added more palaces to improve land ... built a lot of launchers"
     // (CityLessonsPolicy.h). Off until measured.
     force.cityLauncherArmy = false;
@@ -965,6 +966,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "AdvancingTurrets", force.advancingTurrets);
         iniFile.setBoolValue("Force Concentration", "TurretCreep", force.turretCreep);
         iniFile.setBoolValue("Force Concentration", "RearTurretRetire", force.rearTurretRetire);
+        iniFile.setBoolValue("Force Concentration", "TurretDrill", force.turretDrill);
         iniFile.setBoolValue("Force Concentration", "CityLauncherArmy", force.cityLauncherArmy);
         iniFile.setIntValue("Force Concentration", "CityLauncherArmyBps", force.cityLauncherArmyBps);
         iniFile.setBoolValue("Force Concentration", "LowValuePalaces", force.lowValuePalaces);
@@ -1348,6 +1350,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.advancingTurrets = iniFile.getBoolValue("Force Concentration", "AdvancingTurrets", force.advancingTurrets);
     force.turretCreep = iniFile.getBoolValue("Force Concentration", "TurretCreep", force.turretCreep);
     force.rearTurretRetire = iniFile.getBoolValue("Force Concentration", "RearTurretRetire", force.rearTurretRetire);
+    force.turretDrill = iniFile.getBoolValue("Force Concentration", "TurretDrill", force.turretDrill);
     force.cityLauncherArmy = iniFile.getBoolValue("Force Concentration", "CityLauncherArmy", force.cityLauncherArmy);
     force.cityLauncherArmyBps = std::clamp(iniFile.getIntValue("Force Concentration", "CityLauncherArmyBps",
         force.cityLauncherArmyBps), CityLessonsPolicy::kLauncherArmyMinBps, CityLessonsPolicy::kLauncherArmyMaxBps);
@@ -2130,6 +2133,7 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.advancingTurrets) addNamed("advancingTurrets", force.advancingTurrets);
     if (force.turretCreep) addNamed("turretCreep", force.turretCreep);
     if (force.rearTurretRetire) addNamed("rearTurretRetire", force.rearTurretRetire);
+    if (force.turretDrill) addNamed("turretDrill", force.turretDrill);
     if (force.cityLauncherArmy) addNamed("cityLauncherArmy", force.cityLauncherArmy);
     if (force.cityLauncherArmyBps != CityLessonsPolicy::kLauncherArmyBps) addNamed("cityLauncherArmyBps", force.cityLauncherArmyBps);
     if (force.lowValuePalaces) addNamed("lowValuePalaces", force.lowValuePalaces);

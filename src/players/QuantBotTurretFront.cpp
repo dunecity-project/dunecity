@@ -25,6 +25,7 @@
 #include <players/QuantBotAirDefencePolicy.h>
 #include <dunecity/CityEffects.h>
 #include <dunecity/CitySimulation.h>
+#include <structures/TurretBase.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -64,6 +65,11 @@ int beltGoal() {
     static const int value = envInt("DUNECITY_TEST_BELT_GOAL", TurretFrontPolicy::kBeltGoal, 1, 30);
     return value;
 }
+const char* turretFrontRule(QuantBot::TurretFrontMode mode) {
+    return mode == QuantBot::TurretFrontMode::Reinforce ? "front_reinforce"
+        : mode == QuantBot::TurretFrontMode::Creep ? "turret_creep"
+        : mode == QuantBot::TurretFrontMode::Drill ? "turret_drill" : "turret_advance";
+}
 int beltStandoff() {
     static const int value = envInt("DUNECITY_TEST_BELT_STANDOFF", TurretFrontPolicy::kBeltEnemyStandoff, 1, 60);
     return value;
@@ -93,6 +99,10 @@ bool QuantBot::rearTurretRetireEnabled() const {
     static const int override = envSwitch("DUNECITY_TEST_REAR_TURRET_RETIRE");
     return override >= 0 ? override == 1 : botConfig().force.rearTurretRetire;
 }
+bool QuantBot::turretDrillEnabled() const {
+    static const int override = envSwitch("DUNECITY_TEST_TURRET_DRILL");
+    return override >= 0 ? override == 1 : botConfig().force.turretDrill;
+}
 
 void QuantBot::logTurretLedger(Uint32 now) {
     // Every city house, whatever its switches: what its Rocket Turrets cost in upkeep, for the
@@ -120,9 +130,10 @@ void QuantBot::planTurretFront(BuildPass& pass) {
     turretFrontPlan.ordered = false;
     const Uint32 now = getGameCycleCount();
     if (pass.citySimEnabled) logTurretLedger(now);
+    trackTurretFrontOrders(now);
     const bool reinforce = frontTurretsEnabled(), advance = advancingTurretsEnabled();
-    const bool creep = turretCreepEnabled(), retire = rearTurretRetireEnabled();
-    if (!reinforce && !advance && !creep && !retire) return;
+    const bool creep = turretCreepEnabled(), retire = rearTurretRetireEnabled(), drill = turretDrillEnabled();
+    if (!reinforce && !advance && !creep && !retire && !drill) return;
     if (gameMode != GameMode::Custom || difficulty < Difficulty::Hard) return;
     const int houseID = getHouse()->getHouseID();
     const auto& turret = currentGame->objectData.data[Structure_RocketTurret][houseID];
@@ -130,12 +141,16 @@ void QuantBot::planTurretFront(BuildPass& pass) {
 
     const bool retireDue = retire && now / TF::kRetirePeriodCycles != turretRetireBucket;
     // Retirement alone needs only its own two-minute review, not the eight-second scan.
-    const bool scanDue = (reinforce || advance || creep)
+    // A drilling house scans again soon after each order, so the mass grows as fast as the yards
+    // and the budget allow; otherwise every kScanPeriodCycles.
+    const Uint32 period = turretDrilling ? TF::kDrillScanPeriodCycles : TF::kScanPeriodCycles;
+    const bool scanDue = (reinforce || advance || creep || drill)
         && (turretFrontScanCycle == std::numeric_limits<Uint32>::max()
-            || now < turretFrontScanCycle || now - turretFrontScanCycle >= TF::kScanPeriodCycles);
+            || now < turretFrontScanCycle || now - turretFrontScanCycle >= period);
     if (scanDue || retireDue) {
         turretFrontScanCycle = now;
-        scanTurretFront(pass, reinforce, advance, creep, retireDue);
+        scanTurretFront(pass, reinforce, advance, creep, drill, retireDue);
+        logTurretFrontState(now);
     }
     if (turretFrontPlan.site.isValid()) {
         turretFrontPlan.active = true;
@@ -143,10 +158,11 @@ void QuantBot::planTurretFront(BuildPass& pass) {
     }
 }
 
-void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bool creep, bool retireDue) {
+void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bool creep, bool drill, bool retireDue) {
     namespace TF = TurretFrontPolicy;
     AITelemetry::PerformanceScope perfScope("ai.scanTurretFront", getGameCycleCount(), getHouse()->getHouseID());
     turretFrontPlan = TurretFrontPlan();
+    turretDrilling = false;
     const Map& map = getMap();
     const int w = map.getSizeX(), h = map.getSizeY();
     if (w <= 0 || h <= 0) return;
@@ -276,36 +292,108 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
 
     // The base's enemy-facing edge: its own building nearest an enemy building.
     const int edge = anchors.empty() ? TF::kDistanceCap : distAt(anchors.front().x, anchors.front().y);
+    turretFrontPlan.edge = edge;
+    turretFrontPlan.armyLead = -1;
 
-    // (c) TurretCreep: in range of enemy buildings, where at most one enemy turret reaches.
-    if (creep && buildUp && enemyKnown && turretFrontPlan.site.isInvalid()) {
-        int forward = 0;
-        for (const auto& own : ownTurrets) forward += int(distAt(own.at.x, own.at.y) <= range - 1);
-        turretFrontPlan.forward = forward;
-        if (forward < TF::kCreepCap) {
-            int bestScore = std::numeric_limits<int>::min();
-            Coord best = Coord::Invalid();
-            const int window = BUILDRANGE + 1;
-            int examined = 0;
-            for (const Coord a : anchors) {
-                if (distAt(a.x, a.y) > TF::kCreepAnchorTiles || examined >= TF::kCreepAnchors) break;
-                ++examined;
-                for (int y = std::max(0, a.y - window); y <= std::min(h - 1, a.y + window + 3); ++y)
-                    for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
-                        const int d = distAt(x, y);
-                        if (d < 1 || d > range - 1) continue;
-                        const int turrets = int(enemyTurretSum.around(x, y, range));
-                        if (turrets > TF::kCreepEnemyTurretTolerance) continue;
-                        const int score = TF::creepSiteScore(enemyTileSum.around(x, y, range - 1), turrets,
-                                                            nearestOwnTurret(x, y));
-                        if (score <= bestScore || !legal(x, y)) continue;
-                        bestScore = score; best = Coord(x, y);
-                    }
+    // (e) TurretDrill: once the edge is near an enemy base, the legal tile nearest it, adjacent
+    // turrets allowed, from which a turret reaches what it can shoot. No count cap: the yard pays
+    // from cash beyond the economy's reserve, one order a pass.
+    if (drill && buildUp && enemyKnown && turretFrontPlan.site.isInvalid() && !anchors.empty() && TF::drillStarts(edge)) {
+        const bool fireOnBuildings = currentGame->getGameInitSettings().getGameOptions().turretsFireOnBuildings;
+        std::vector<int32_t> targetW(n, 0);
+        for (const auto& contact : visibleGroundTurretThreats)
+            if (map.tileExists(contact.at)) targetW[index(contact.at.x, contact.at.y)] += contact.value;
+        if (fireOnBuildings)
+            for (size_t i = 0; i < n; ++i) if (enemyTileW[i]) targetW[i] += 100;
+        const TF::BoxSum targetSum(targetW, w, h);
+        // The drill's own spacing: none (a mass), but every site keeps its corridor.
+        auto drillLegal = [&](int x, int y) {
+            if (!map.tileExists(x, y) || ownTurretW[index(x, y)] > 0) return false;
+            if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) return false;
+            if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) return false;
+            if (!cityRoadImpact(map, x, y, 1, 1, Structure_RocketTurret).preservesConnections) return false;
+            if (currentGame->isCitySimEnabled() && wouldLandlockNeighbouringZone(map, houseID, x, y, 1, 1)) return false;
+            int passable = 0;
+            for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                if ((!ox && !oy) || !map.tileExists(x + ox, y + oy)) continue;
+                const Tile* tile = map.getTile(x + ox, y + oy);
+                if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
             }
-            if (best.isValid()) {
-                turretFrontPlan.site = best;
-                turretFrontPlan.mode = TurretFrontMode::Creep;
-                turretFrontPlan.anchor = Coord::Invalid();
+            return FrontBatteryPolicy::keepsCorridor(passable, TF::kDrillCorridorNeighbours);
+        };
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        const int window = BUILDRANGE + 1;
+        int examined = 0;
+        for (const Coord a : anchors) {
+            if (examined >= TF::kDrillAnchors) break;
+            ++examined;
+            for (int y = std::max(0, a.y - window); y <= std::min(h - 1, a.y + window + 3); ++y)
+                for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
+                    const int d = distAt(x, y);
+                    if (d < 1 || d > edge) continue;
+                    const int score = TF::drillSiteScore(d, targetSum.around(x, y, range - 1),
+                                                         int(ownTurretSum.around(x, y, 1)));
+                    if (score <= bestScore || !drillLegal(x, y)) continue;
+                    bestScore = score; best = Coord(x, y);
+                }
+        }
+        if (best.isValid()) {
+            turretFrontPlan.site = best;
+            turretFrontPlan.mode = TurretFrontMode::Drill;
+            turretFrontPlan.anchor = Coord::Invalid();
+            turretDrilling = true;
+        }
+    }
+
+    // (c) TurretCreep: in range of the enemy's defenders (visible enemy combat units near its
+    // buildings), where at most one enemy turret reaches. Turrets fire on units only by default.
+    if (creep && buildUp && enemyKnown && turretFrontPlan.site.isInvalid() && !visibleGroundTurretThreats.empty()) {
+        std::vector<uint8_t> defenderSeed(n, 0);
+        std::vector<int32_t> defenderW(n, 0);
+        bool defenders = false;
+        for (const auto& contact : visibleGroundTurretThreats) {
+            if (!map.tileExists(contact.at) || distAt(contact.at.x, contact.at.y) > TF::kCreepDefenderTiles) continue;
+            defenderSeed[index(contact.at.x, contact.at.y)] = 1;
+            defenderW[index(contact.at.x, contact.at.y)] += contact.value;
+            defenders = true;
+        }
+        if (defenders) {
+            const std::vector<uint16_t> defenderDist = TF::chebyshevDistance(defenderSeed, w, h, TF::kDistanceCap);
+            const TF::BoxSum defenderSum(defenderW, w, h);
+            // No count cap (Stefan's turrets went in as a mass): the yard pays from cash beyond the
+            // economy's reserve, one order a pass.
+            int forward = 0;
+            for (const auto& own : ownTurrets) forward += int(defenderDist[index(own.at.x, own.at.y)] <= range - 1);
+            turretFrontPlan.forward = forward;
+            {
+                const int window = BUILDRANGE + 1;
+                // Anchors whose build window can reach a tile in range of a defender, nearest first.
+                std::vector<Coord> near;
+                for (const Coord a : anchors)
+                    if (int(defenderDist[index(a.x, a.y)]) <= range - 1 + window + 3) near.push_back(a);
+                std::sort(near.begin(), near.end(), [&](Coord a, Coord b) {
+                    const int da = defenderDist[index(a.x, a.y)], db = defenderDist[index(b.x, b.y)];
+                    return da != db ? da < db : index(a.x, a.y) < index(b.x, b.y);
+                });
+                if (near.size() > size_t(TF::kCreepAnchors)) near.resize(TF::kCreepAnchors);
+                int bestScore = std::numeric_limits<int>::min();
+                Coord best = Coord::Invalid();
+                for (const Coord a : near)
+                    for (int y = std::max(0, a.y - window); y <= std::min(h - 1, a.y + window + 3); ++y)
+                        for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
+                            const int turrets = int(enemyTurretSum.around(x, y, range));
+                            if (!TF::creepSite(defenderDist[index(x, y)], range, turrets)) continue;
+                            const int score = TF::creepSiteScore(defenderSum.around(x, y, range - 1), turrets,
+                                                                nearestOwnTurret(x, y));
+                            if (score <= bestScore || !legal(x, y)) continue;
+                            bestScore = score; best = Coord(x, y);
+                        }
+                if (best.isValid()) {
+                    turretFrontPlan.site = best;
+                    turretFrontPlan.mode = TurretFrontMode::Creep;
+                    turretFrontPlan.anchor = Coord::Invalid();
+                }
             }
         }
     }
@@ -321,7 +409,8 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
             lead.push_back(distAt(unit->getLocation().x, unit->getLocation().y));
         }
         turretFrontPlan.edge = edge;
-        if (int(lead.size()) >= TF::kArmyLeadRank && edge > beltStandoff()) {
+        turretFrontPlan.armyUnits = int(lead.size());
+        if (int(lead.size()) >= TF::kArmyLeadRank) {
             std::nth_element(lead.begin(), lead.begin() + (TF::kArmyLeadRank - 1), lead.end());
             const int armyLead = lead[TF::kArmyLeadRank - 1];
             turretFrontPlan.armyLead = armyLead;
@@ -337,9 +426,11 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
                     for (int y = std::max(0, a.y - window); y <= std::min(h - 1, a.y + window + 3); ++y)
                         for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
                             const int d = distAt(x, y);
-                            // Forward progress, or a sideways tile while the belt is still short.
-                            if (d > edge || (d == edge && belt >= beltGoal())) continue;
-                            if (d < beltStandoff() || d < armyLead + beltBehindArmy()) continue;
+                            // Forward progress, or a sideways tile while the belt is still short;
+                            // behind the army, clear of every known enemy turret.
+                            if (d > edge) continue;
+                            if (!TF::beltSite(d, edge, belt, beltGoal(), armyLead, beltStandoff(), beltBehindArmy(),
+                                              int(enemyTurretSum.around(x, y, TF::kEnemyTurretReachTiles)))) continue;
                             const int score = TF::advanceSiteScore(d, edge, nearestOwnTurret(x, y));
                             if (score <= bestScore || !legal(x, y)) continue;
                             bestScore = score; best = Coord(x, y);
@@ -397,7 +488,69 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
                 ++retired;
             }
             pass.itemCount[Structure_RocketTurret] -= retired;
+            turretRetired += retired;
         }
+    }
+}
+
+void QuantBot::logTurretFrontState(Uint32 now) {
+    // Why the switches did or did not act, every two game minutes per house with any of them on:
+    // the edge and the army's lead (b), and the orders so far by rule (ordered/placed/engaged/missed).
+    const Uint32 bucket = now / TurretFrontPolicy::kRetirePeriodCycles;
+    if (bucket == turretStateBucket) return;
+    turretStateBucket = bucket;
+    const auto& r = turretFrontCounts[size_t(TurretFrontMode::Reinforce)];
+    const auto& c = turretFrontCounts[size_t(TurretFrontMode::Creep)];
+    const auto& a = turretFrontCounts[size_t(TurretFrontMode::Advance)];
+    const auto& d = turretFrontCounts[size_t(TurretFrontMode::Drill)];
+    SDL_Log("TURRET_FRONT_STATE: house=%d edge=%d army_lead=%d army_units=%d mode=%d "
+            "reinforce=%d/%d/%d/%d creep=%d/%d/%d/%d advance=%d/%d/%d/%d drill=%d/%d/%d/%d retired=%d cycle=%u",
+            getHouse()->getHouseID(), turretFrontPlan.edge, turretFrontPlan.armyLead, turretFrontPlan.armyUnits,
+            int(turretFrontPlan.mode), r.ordered, r.placed, r.engaged, r.missed, c.ordered, c.placed, c.engaged, c.missed,
+            a.ordered, a.placed, a.engaged, a.missed, d.ordered, d.placed, d.engaged, d.missed, turretRetired, now);
+}
+
+void QuantBot::trackTurretFrontOrders(Uint32 now) {
+    // Each front order is followed until its turret stands at the site (placed) and has a unit as
+    // its target (engaged); an order not standing after kPlaceTimeoutCycles is missed. Logging and
+    // counts only: nothing here changes the game.
+    namespace TF = TurretFrontPolicy;
+    if (turretFrontOrders.empty()) return;
+    const Map& map = getMap();
+    const int houseID = getHouse()->getHouseID();
+    for (auto it = turretFrontOrders.begin(); it != turretFrontOrders.end();) {
+        TurretFrontOrder& order = *it;
+        auto& counts = turretFrontCounts[size_t(order.mode)];
+        if (order.turret == NONE_ID) {
+            const ObjectBase* object = map.tileExists(order.site) ? map.getTile(order.site)->getGroundObject() : nullptr;
+            if (object != nullptr && object->isAStructure() && object->getItemID() == Structure_RocketTurret
+                && object->getOwner() == getHouse()) {
+                order.turret = object->getObjectID();
+                ++counts.placed;
+                SDL_Log("TURRET_FRONT_PLACED: house=%d rule=%s x=%d y=%d object=%u delay=%u cycle=%u", houseID,
+                        turretFrontRule(order.mode), order.site.x, order.site.y, order.turret, now - order.cycle, now);
+            } else if (now < order.cycle || now - order.cycle > TF::kPlaceTimeoutCycles) {
+                ++counts.missed;
+                SDL_Log("TURRET_FRONT_MISSED: house=%d rule=%s x=%d y=%d cycle=%u", houseID,
+                        turretFrontRule(order.mode), order.site.x, order.site.y, now);
+                it = turretFrontOrders.erase(it);
+                continue;
+            }
+            ++it;
+            continue;
+        }
+        const auto* turret = dynamic_cast<const TurretBase*>(currentGame->getObjectManager().getObject(order.turret));
+        if (turret == nullptr || turret->getHealth() <= 0) { it = turretFrontOrders.erase(it); continue; }
+        const ObjectBase* target = turret->getTarget();
+        if (target != nullptr && !target->isAStructure()) {
+            ++counts.engaged;
+            SDL_Log("TURRET_FRONT_ENGAGED: house=%d rule=%s x=%d y=%d object=%u target=%u delay=%u cycle=%u", houseID,
+                    turretFrontRule(order.mode), order.site.x, order.site.y, order.turret, target->getObjectID(),
+                    now - order.cycle, now);
+            it = turretFrontOrders.erase(it);
+            continue;
+        }
+        ++it;
     }
 }
 
@@ -431,8 +584,7 @@ void QuantBot::chooseYardTurretFront(BuildPass& pass, BuilderTurn& turn, YardTur
     for (const auto& slab : foundationOrders(turn.pBuilder, Structure_RocketTurret, site))
         cost += purchasePrice(turn.pBuilder, slab.item);
     if (!Air::affordable(pass.money, cost, turretFrontPlan.reserve)) return;
-    const char* rule = turretFrontPlan.mode == TurretFrontMode::Reinforce ? "front_reinforce"
-        : turretFrontPlan.mode == TurretFrontMode::Creep ? "turret_creep" : "turret_advance";
+    const char* rule = turretFrontRule(turretFrontPlan.mode);
     turretFrontPlan.ordered = true;
     yardTurn.itemID = Structure_RocketTurret;
     yardTurn.crimeServiceSite = site;
@@ -447,6 +599,9 @@ void QuantBot::chooseYardTurretFront(BuildPass& pass, BuilderTurn& turn, YardTur
     SDL_Log("TURRET_FRONT: house=%d rule=%s x=%d y=%d cost=%d cover=%d goal=%d attack_value=%d forward=%d edge=%d army_lead=%d cycle=%u",
             getHouse()->getHouseID(), rule, site.x, site.y, cost, turretFrontPlan.cover, turretFrontPlan.goal,
             turretFrontPlan.attackValue, turretFrontPlan.forward, turretFrontPlan.edge, turretFrontPlan.armyLead, now);
+    ++turretFrontCounts[size_t(turretFrontPlan.mode)].ordered;
+    if (turretFrontOrders.size() >= TurretFrontPolicy::kTrackedOrders) turretFrontOrders.erase(turretFrontOrders.begin());
+    turretFrontOrders.push_back({site, turretFrontPlan.mode, now});
     // The next scan picks the next site; this one is now the yard's reservation.
     turretFrontPlan.site = Coord::Invalid();
 }

@@ -708,6 +708,11 @@ TurretCreep=0
 # RearTurretRetire: turrets far from every enemy are sold (demolished where selling is off), four
 # every two minutes, keeping the base's own coverage need.
 RearTurretRetire=0
+# TurretDrill: once the base's edge stands within 24 tiles of an enemy building, a dense mass of
+# Rocket Turrets is built straight toward and into that base, as close as each yard can place it,
+# for as long as cash beyond the economy's reserve lasts (no count cap). Stefan, 2026-11-27: "i just
+# build turrets into their base as a mass and they carved a hole in the ebemy base" (TurretFrontPolicy.h).
+TurretDrill=0
 # Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
 # it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
 # destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes

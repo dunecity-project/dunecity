@@ -689,6 +689,11 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         dunecity_add_test(headless integration NAME quantbot_match_score COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/test_match_score.py)
         set_tests_properties(quantbot_match_score PROPERTIES TIMEOUT 30)
+        # AI reports refuse untested verdicts: an arm whose behaviour never reached its effect reads
+        # NOT TESTED (tests/ai/activation.py; CLAUDE.md "Asked-for behaviour", rule 4).
+        dunecity_add_test(headless integration NAME quantbot_activation_report COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/test_activation.py)
+        set_tests_properties(quantbot_activation_report PROPERTIES TIMEOUT 60)
         dunecity_add_test(headless integration NAME save_scenario_input_preservation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/scenarios/test-export-paths.py)
         set_tests_properties(save_scenario_input_preservation PROPERTIES TIMEOUT 30)
@@ -1204,6 +1209,14 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-turret-target-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/turret-target-probe)
         set_tests_properties(turret_target_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        # Rocket Turrets at the front (QuantBotTurretFront.cpp): each switch, including the turret
+        # drill, acts in its situation with its effect (turrets stand and fire, the belt moves forward,
+        # the mass reaches the enemy base, only rear turrets retire), and does not act when off or out
+        # of its situation.
+        dunecity_add_test(headless nightly NAME turret_front_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-turret-front-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/turret-front-probe)
+        set_tests_properties(turret_front_probe PROPERTIES TIMEOUT 2400 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)

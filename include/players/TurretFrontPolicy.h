@@ -22,14 +22,31 @@
 
     (a) FrontTurrets: an own building cluster with visible enemy ground units on it gets Rocket
         Turrets beside it until the local cover matches the attackers' value.
-    (b) AdvancingTurrets: while the army stands ahead of the base's edge facing the nearest enemy,
-        a belt of turrets is kept at that edge and extended toward the enemy, staying behind the
-        army. Each turret extends the build range, so the belt moves forward with the army.
-    (c) TurretCreep: turrets placed within range of enemy buildings, where few enemy turrets reach.
+    (b) AdvancingTurrets: while the army's lead stands ahead of the base's edge facing the nearest
+        enemy, a belt of turrets is kept at that edge and extended toward the enemy, behind the army
+        and outside the reach of every known enemy turret. Each turret extends the build range and
+        is itself the new edge, so the belt moves forward with the army.
+    (c) TurretCreep: turrets placed within range of the enemy's defenders (visible enemy combat
+        units near the enemy's buildings), where at most one enemy turret reaches. Turrets fire on
+        units only (Turrets Can Fire On Buildings is off by default), so creep goes for what they
+        can shoot.
+
+    2026-11-27, second version: the first triggers barely ran in real games (the belt needed the
+    fifth unit four tiles ahead of the edge and no site within 10 tiles of an enemy building, which
+    3waysplit's close bases never offered; creep needed an own building within 12 tiles of an enemy
+    building, which rs192's bases never were, and aimed at buildings the turrets cannot shoot).
+    Every order is now followed to its turret standing and firing (TURRET_FRONT_PLACED/ENGAGED).
     (d) RearTurretRetire: turrets deep behind the base's enemy-facing edge and far from every enemy
         building and contact are sold (demolished where selling is off), a few at a time, keeping the
         base's own coverage need. With (b) it is the moving line: the belt goes forward and the
         turrets it leaves behind stop drawing upkeep.
+
+    (e) TurretDrill: once the base's edge stands within kDrillStartTiles of an enemy building, a dense
+        mass of Rocket Turrets is built straight toward and into that base: each order takes the legal
+        tile nearest the enemy (adjacent turrets allowed), preferring tiles from which the turret reaches
+        what it can shoot, for as long as cash beyond the economy's reserve lasts (no count cap; one
+        order a build pass). Stefan, 2026-11-27, after doing it by hand on Metropolis: "i just build
+        turrets into their base as a mass and they carved a hole in the ebemy base".
 
     Everything here is integer and geometric: Chebyshev distances on the tile grid and box counts.
 */
@@ -143,15 +160,25 @@ constexpr int kBeltTiles = 6;
 /// The belt wanted at the edge.
 constexpr int kBeltGoal = 6;
 /// The army counts as ahead of the edge when its lead stands this many tiles nearer the enemy.
-constexpr int kArmyLeadTiles = 4;
+constexpr int kArmyLeadTiles = 2;
 /// A belt turret stays at least this many tiles behind the army's lead.
-constexpr int kBehindArmyTiles = 3;
+constexpr int kBehindArmyTiles = 2;
 /// The army's lead is the k-th own combat unit nearest the enemy (one scout is not a front).
-constexpr int kArmyLeadRank = 5;
-/// The belt never stands closer to an enemy building than this (the creep switch goes closer).
-constexpr int kBeltEnemyStandoff = 10;
+constexpr int kArmyLeadRank = 3;
+/// The belt never stands closer to an enemy building than this (buildings cannot shoot; the
+/// enemy turrets' reach below is what stops it).
+constexpr int kBeltEnemyStandoff = 4;
+/// No belt turret where a known enemy Rocket or Gun Turret reaches (rocket range 8, plus one).
+constexpr int kEnemyTurretReachTiles = 9;
 inline bool armyAhead(int armyLead, int edge) { return armyLead + kArmyLeadTiles <= edge; }
 inline bool behindArmy(int site, int armyLead) { return site >= armyLead + kBehindArmyTiles; }
+/// A belt site at enemy distance \a site: forward of the edge, or along it while the belt there is
+/// short; behind the army; clear of enemy buildings by the standoff and of every enemy turret.
+inline bool beltSite(int site, int edge, int belt, int goal, int armyLead, int standoff, int behind,
+                     int enemyTurretsInReach) {
+    if (site > edge || (site == edge && belt >= goal)) return false;
+    return site >= standoff && site >= armyLead + behind && enemyTurretsInReach == 0;
+}
 /// Site score for the belt: tiles gained toward the enemy first, then spacing.
 inline int advanceSiteScore(int site, int edge, int nearestOwnTurret) {
     return (edge - site) * 100 + std::min(nearestOwnTurret, 4) * 5;
@@ -159,20 +186,48 @@ inline int advanceSiteScore(int site, int edge, int nearestOwnTurret) {
 
 // --- (c) TurretCreep ---------------------------------------------------------------------------
 
-/// Own buildings this close to an enemy building anchor the creep search.
-constexpr int kCreepAnchorTiles = 12;
+/// A visible enemy combat unit this close to an enemy building is one of its defenders.
+constexpr int kCreepDefenderTiles = 12;
 /// A creep site may be within reach of at most this many enemy turrets (rocket or gun).
 constexpr int kCreepEnemyTurretTolerance = 1;
-/// At most this many own Rocket Turrets stand in range of enemy buildings at once.
-constexpr int kCreepCap = 12;
-/// Anchors examined per search, nearest the enemy first.
+/// Anchors examined per search, nearest the defenders first.
 constexpr int kCreepAnchors = 16;
-/// Site score for creep: enemy building tiles in range first, enemy turrets reaching it second,
-/// spacing last.
-inline int creepSiteScore(int64_t enemyTilesInRange, int enemyTurretsInReach, int nearestOwnTurret) {
-    return int(std::min<int64_t>(enemyTilesInRange, 200)) * 10 - enemyTurretsInReach * 300
+/// A creep site is in range of a defender: \a toDefender at most range - 1, not on it.
+inline bool creepSite(int toDefender, int range, int enemyTurretsInReach) {
+    return toDefender >= 1 && toDefender <= range - 1 && enemyTurretsInReach <= kCreepEnemyTurretTolerance;
+}
+/// Site score for creep: defenders' value in range first (in hundreds of credits), enemy turrets
+/// reaching it second, spacing last.
+inline int creepSiteScore(int64_t defenderValueInRange, int enemyTurretsInReach, int nearestOwnTurret) {
+    return int(std::min<int64_t>(defenderValueInRange / 100, 200)) * 10 - enemyTurretsInReach * 300
         + std::min(nearestOwnTurret, 4) * 5;
 }
+
+// --- (e) TurretDrill ---------------------------------------------------------------------------
+
+/// The drill starts once the base's edge stands this close to an enemy building.
+constexpr int kDrillStartTiles = 24;
+/// Anchors examined per drill search, nearest the enemy first.
+constexpr int kDrillAnchors = 24;
+/// A drilling house scans again this soon after each order (2 s at normal speed).
+constexpr uint32_t kDrillScanPeriodCycles = 128;
+/// A drill site keeps at least this many passable neighbours (the mass may touch, never wall in).
+constexpr int kDrillCorridorNeighbours = 2;
+inline bool drillStarts(int edge) { return edge <= kDrillStartTiles; }
+/// Drill site score: nearer the enemy first, then the value the turret reaches (in hundreds of
+/// credits: enemy units always, enemy buildings when turrets may fire on them), then touching the
+/// mass (adjacent own turrets).
+inline int drillSiteScore(int enemyDistance, int64_t targetValueInRange, int adjacentOwnTurrets) {
+    return -std::min(enemyDistance, 60) * 100 + int(std::min<int64_t>(targetValueInRange / 100, 200)) * 10
+        + std::min(adjacentOwnTurrets, 4) * 15;
+}
+
+// --- Following the orders ----------------------------------------------------------------------
+
+/// An order whose turret is not standing at its site this long after the order is missed.
+constexpr uint32_t kPlaceTimeoutCycles = 3 * 3750;
+/// At most this many orders are followed at once (the oldest is dropped first).
+constexpr size_t kTrackedOrders = 64;
 
 // --- (d) RearTurretRetire ----------------------------------------------------------------------
 

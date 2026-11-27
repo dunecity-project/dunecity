@@ -19,6 +19,13 @@ Per house-game means:
   destroyed            houses.csv kill_value (enemy value destroyed)
   credits, population  the last TURRET_LEDGER line
   front, retired       TURRET_FRONT orders and TURRET_RETIRE turrets per house-game
+
+Activation (CLAUDE.md, "AI behaviours: prove the switch actually does its job"), a table per map:
+for each arm and rule (front_reinforce, turret_creep, turret_advance, turret_drill, retire), the share of the arm's
+house-games in which it fired, its orders per house-game, and how many of the ordered turrets stood
+at their site (TURRET_FRONT_PLACED) and fired on a unit (TURRET_FRONT_ENGAGED). An arm whose rules
+fired in fewer than half of its house-games, or whose ordered turrets mostly never stood, is
+"not tested", whatever its score.
 """
 import argparse
 import collections
@@ -36,7 +43,13 @@ TURRET_ITEM = '12'
 HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5,
                  'neutral': 6}
 LEDGER_MINUTES = 2.0
-FRONT_RULES = ('front_reinforce', 'turret_creep', 'turret_advance')
+FRONT_RULES = ('front_reinforce', 'turret_creep', 'turret_advance', 'turret_drill')
+# The rules each play style switches on (its arm label default@<style>).
+ARM_RULES = {'front-turrets': ('front_reinforce',), 'advancing-turrets': ('turret_advance',),
+             'turret-creep': ('turret_creep',), 'rear-turret-retire': ('retire',),
+             'moving-line': ('turret_advance', 'retire'),
+             'turret-front-all': ('front_reinforce', 'turret_creep', 'turret_advance', 'retire'),
+             'turret-drill': ('turret_drill',)}
 
 
 def rows(directory, name):
@@ -90,6 +103,8 @@ def collect(directories):
             ledgers[slot].append(t)
         elif t['event'] == 'front':
             per[slot][t['rule']] = per[slot].get(t['rule'], 0) + 1
+        elif t['event'] in ('placed', 'engaged', 'missed'):
+            per[slot][t['event'] + ':' + t['rule']] = per[slot].get(t['event'] + ':' + t['rule'], 0) + 1
         elif t['event'] == 'retire':
             per[slot]['retired'] = per[slot].get('retired', 0) + 1
     for slot, lines in ledgers.items():
@@ -163,11 +178,41 @@ def main():
                        f'{sum(m.get("retired", 0) for m in members) / n:.1f} |')
         return out
 
+    def activation(select, title):
+        out = [f'\n## Activation: {title}\n',
+               '| arm | rule | house-games | fired in | orders / house-game | placed | engaged | missed | tested |',
+               '|---|---|---:|---:|---:|---:|---:|---:|---|']
+        chosen = [m for m in per.values() if select(m)]
+        for label in sorted({m['label'] for m in chosen}):
+            style = label.split('@', 1)[1] if '@' in label else ''
+            if style not in ARM_RULES:
+                continue
+            members = [m for m in chosen if m['label'] == label]
+            verdicts = []
+            for rule in ARM_RULES[style]:
+                key = 'retired' if rule == 'retire' else rule
+                fired = sum(1 for m in members if m.get(key, 0) > 0)
+                orders = sum(m.get(key, 0) for m in members)
+                placed = sum(m.get('placed:' + rule, 0) for m in members)
+                engaged = sum(m.get('engaged:' + rule, 0) for m in members)
+                missed = sum(m.get('missed:' + rule, 0) for m in members)
+                share = fired / len(members) if members else 0.0
+                ok = share >= 0.5 and (rule == 'retire' or (orders > 0 and placed >= 0.5 * orders))
+                verdicts.append(ok)
+                effect = '-' if rule == 'retire' else f'{placed} ({placed / orders:.0%})' if orders else '0'
+                hits = '-' if rule == 'retire' else f'{engaged} ({engaged / placed:.0%})' if placed else '0'
+                out.append(f'| {label} | {rule} | {len(members)} | {share:.0%} | {orders / max(1, len(members)):.1f} | '
+                           f'{effect} | {hits} | {"-" if rule == "retire" else missed} | {"yes" if ok else "**not tested**"} |')
+            if verdicts and not all(verdicts):
+                out.append(f'| {label} | (arm) | | | | | | | **not tested** |')
+        return out
+
     ALL = lambda m: True  # noqa: E731
     out = ['# Rocket Turrets at the front', '', match_score.describe(args.scoring, args.draw_score, 0)]
     out += table(ALL, 'All games')
     for map_name in sorted({m['map'] for m in per.values()}):
         out += table(lambda m, mp=map_name: m['map'] == mp, f'{map_name}')
+        out += activation(lambda m, mp=map_name: m['map'] == mp, f'{map_name}')
     for spec in args.pair:
         on, off = spec.split(':', 1)
         out += table(lambda m, tags=(on, off): m['tag'] in tags, f'Self-play {on} against {off}')

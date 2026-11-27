@@ -35,7 +35,7 @@ class StyleAndPatterns(unittest.TestCase):
 
     def test_registry_is_valid_and_lists_the_turret_switches(self):
         registry = activation.load_registry()
-        for style in ('front-turrets', 'advancing-turrets', 'turret-creep', 'rear-turret-retire'):
+        for style in ('front-turrets', 'advancing-turrets', 'turret-creep', 'rear-turret-retire', 'turret-drill'):
             self.assertIn(style, registry)
         for style in registry:
             play_style = HERE / 'play-styles' / f'{style}.ini'

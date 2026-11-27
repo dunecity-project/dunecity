@@ -2281,11 +2281,11 @@ private:
     /// of the first own Airport, by object id, short of its ring; invalid when every Airport has
     /// its ring or no tile is legal. \a airport and \a ring receive that Airport and its count.
     Coord findAirportGuardSite(Uint32* airport = nullptr, int* ring = nullptr, int* unguarded = nullptr);
-    /// Rocket Turrets at the front: FrontTurrets, AdvancingTurrets, TurretCreep and
-    /// RearTurretRetire (all default off; TurretFrontPolicy.h, QuantBotTurretFront.cpp). The site
+    /// Rocket Turrets at the front: FrontTurrets, AdvancingTurrets, TurretCreep, RearTurretRetire
+    /// and TurretDrill (all default off; TurretFrontPolicy.h, QuantBotTurretFront.cpp). The site
     /// comes from a scan every TurretFrontPolicy::kScanPeriodCycles and waits here for a yard;
     /// nothing is saved, a loaded game scans on its first pass.
-    enum class TurretFrontMode { None, Reinforce, Creep, Advance };
+    enum class TurretFrontMode { None, Reinforce, Creep, Advance, Drill };
     struct TurretFrontPlan {
         bool active = false;     ///< a site waits and this pass may order it
         bool ordered = false;    ///< a yard took the turret (or its Wind Trap) this pass
@@ -2297,19 +2297,39 @@ private:
         int goal = 0;            ///< cover wanted there
         int attackValue = 0;     ///< (a) value of the attack served
         int forward = 0;         ///< (c) own turrets already in range of enemy buildings
-        int edge = 0;            ///< (b) the edge's distance to the nearest enemy building
-        int armyLead = 0;        ///< (b) the army lead's distance to it
+        int edge = 0;            ///< the edge's distance to the nearest enemy building
+        int armyLead = -1;       ///< (b) the army lead's distance to it (-1: not computed)
+        int armyUnits = 0;       ///< (b) own ground combat units counted for the lead
     } turretFrontPlan;
     Uint32 turretFrontScanCycle = std::numeric_limits<Uint32>::max();
     Uint32 turretRetireBucket = std::numeric_limits<Uint32>::max();
     Uint32 turretLedgerBucket = std::numeric_limits<Uint32>::max();
+    Uint32 turretStateBucket = std::numeric_limits<Uint32>::max();
+    /// Every front order, followed until its turret stands at the site (placed) and has a unit as
+    /// its target (engaged), or it is missed (TurretFrontPolicy::kPlaceTimeoutCycles): the
+    /// activation counts of the match logs (TURRET_FRONT_PLACED/ENGAGED/MISSED, TURRET_FRONT_STATE)
+    /// and of turret_front_probe. Logging only, not saved.
+    struct TurretFrontOrder {
+        Coord site = Coord::Invalid();
+        TurretFrontMode mode = TurretFrontMode::None;
+        Uint32 cycle = 0;
+        Uint32 turret = NONE_ID;
+    };
+    std::vector<TurretFrontOrder> turretFrontOrders;
+    struct TurretFrontCounts { int ordered = 0, placed = 0, engaged = 0, missed = 0; };
+    std::array<TurretFrontCounts, 5> turretFrontCounts{};   ///< by TurretFrontMode
+    bool turretDrilling = false;                              ///< (e) the last scan found a drill site
+    int turretRetired = 0;                                    ///< (d) turrets sold or demolished
+    void trackTurretFrontOrders(Uint32 now);
+    void logTurretFrontState(Uint32 now);
     /// The four switches, each with an experiment-only DUNECITY_TEST_* override (0 or 1).
     bool frontTurretsEnabled() const;
     bool advancingTurretsEnabled() const;
     bool turretCreepEnabled() const;
     bool rearTurretRetireEnabled() const;
+    bool turretDrillEnabled() const;
     void planTurretFront(BuildPass& pass);
-    void scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bool creep, bool retireDue);
+    void scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bool creep, bool drill, bool retireDue);
     /// One Rocket Turret per pass across all yards at the waiting site, or the Wind Trap that
     /// powers it; from cash beyond the economy's reserve only.
     void chooseYardTurretFront(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);

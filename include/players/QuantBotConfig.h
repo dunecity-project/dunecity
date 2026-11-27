@@ -327,6 +327,7 @@ struct QuantBotConfig {
         bool advancingTurrets;                 ///< (b) A turret belt at the enemy-facing edge, moved forward behind the army.
         bool turretCreep;                      ///< (c) Turrets within range of enemy buildings where at most one enemy turret reaches.
         bool rearTurretRetire;                 ///< (d) Turrets far from every enemy are sold or demolished, cutting police upkeep.
+        bool turretDrill;                      ///< (e) A dense mass of Rocket Turrets built into the nearest enemy base, sized by budget (Stefan's drill).
         /// Lessons from Stefan's Metropolis save seewhatidid (default off until measured; CityLessonsPolicy.h).
         bool cityLauncherArmy;                 ///< City games: no Ornithopter share, Launchers at least cityLauncherArmyBps of the vehicle mix.
         int cityLauncherArmyBps;               ///< That floor, 3000-9500 (default 7000). Hashed only when not the default.

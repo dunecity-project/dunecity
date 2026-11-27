@@ -54,15 +54,30 @@ TEST_CASE("TurretFront: the four rules", "[ai][turret-front][policy]") {
     // Spacing: no own turret on the 8 neighbours.
     REQUIRE(TF::spaced(0));
     REQUIRE_FALSE(TF::spaced(1));
-    // (b) the army must lead the edge by four tiles, and the belt stays three behind it.
-    REQUIRE(TF::armyAhead(20, 24));
-    REQUIRE_FALSE(TF::armyAhead(21, 24));
-    REQUIRE(TF::behindArmy(23, 20));
-    REQUIRE_FALSE(TF::behindArmy(22, 20));
+    // (b) the army must lead the edge by two tiles, and the belt stays two behind it.
+    REQUIRE(TF::armyAhead(22, 24));
+    REQUIRE_FALSE(TF::armyAhead(23, 24));
+    REQUIRE(TF::behindArmy(22, 20));
+    REQUIRE_FALSE(TF::behindArmy(21, 20));
+    // The belt: forward of the edge, along it only while short, behind the army, clear of turrets.
+    REQUIRE(TF::beltSite(20, 24, 6, 6, 15, 4, 2, 0));
+    REQUIRE(TF::beltSite(24, 24, 3, 6, 15, 4, 2, 0));
+    REQUIRE_FALSE(TF::beltSite(24, 24, 6, 6, 15, 4, 2, 0));
+    REQUIRE_FALSE(TF::beltSite(25, 24, 0, 6, 15, 4, 2, 0));
+    REQUIRE_FALSE(TF::beltSite(16, 24, 0, 6, 15, 4, 2, 0));   // in the army's midst
+    REQUIRE_FALSE(TF::beltSite(3, 24, 0, 6, 0, 4, 2, 0));     // beside an enemy building
+    REQUIRE_FALSE(TF::beltSite(20, 24, 0, 6, 15, 4, 2, 1));   // an enemy turret reaches it
+    REQUIRE(TF::kBeltEnemyStandoff < 10);                     // 3waysplit's bases stand within 10
     REQUIRE(TF::advanceSiteScore(22, 24, 2) > TF::advanceSiteScore(23, 24, 4));
-    // (c) enemy buildings in range first, a reaching enemy turret costs thirty tiles of them.
-    REQUIRE(TF::creepSiteScore(40, 0, 2) > TF::creepSiteScore(40, 1, 2));
-    REQUIRE(TF::creepSiteScore(50, 1, 2) > TF::creepSiteScore(10, 0, 2));
+    // (c) defenders' value in range first, a reaching enemy turret costs 3,000 credits of them.
+    REQUIRE(TF::creepSiteScore(4000, 0, 2) > TF::creepSiteScore(4000, 1, 2));
+    REQUIRE(TF::creepSiteScore(5000, 1, 2) > TF::creepSiteScore(1000, 0, 2));
+    // Creep: in range of a defender (range 8: 1..7 tiles), at most one enemy turret reaching.
+    REQUIRE(TF::creepSite(7, 8, 1));
+    REQUIRE(TF::creepSite(1, 8, 0));
+    REQUIRE_FALSE(TF::creepSite(8, 8, 0));
+    REQUIRE_FALSE(TF::creepSite(0, 8, 0));
+    REQUIRE_FALSE(TF::creepSite(5, 8, 2));
     // (d) rear only far from enemy buildings and contacts; four a review above the keep.
     REQUIRE(TF::rearTurret(28, 5, 0));
     REQUIRE_FALSE(TF::rearTurret(27, 5, 0));
@@ -90,7 +105,8 @@ TEST_CASE("TurretFront switches default off, round trip and hash only when on", 
     REQUIRE_FALSE(defaults.force.advancingTurrets);
     REQUIRE_FALSE(defaults.force.turretCreep);
     REQUIRE_FALSE(defaults.force.rearTurretRetire);
-    const char* keys[] = {"FrontTurrets", "AdvancingTurrets", "TurretCreep", "RearTurretRetire"};
+    REQUIRE_FALSE(defaults.force.turretDrill);
+    const char* keys[] = {"FrontTurrets", "AdvancingTurrets", "TurretCreep", "RearTurretRetire", "TurretDrill"};
     std::vector<std::string> hashes{defaults.getConfigHash()};
     for (const char* key : keys) {
         const auto path = std::filesystem::temp_directory_path() / (std::string("quantbot-turret-front-") + key + ".ini");
@@ -101,7 +117,7 @@ TEST_CASE("TurretFront switches default off, round trip and hash only when on", 
         QuantBotConfig loaded;
         REQUIRE(loaded.applyOverrides(path.string()));
         const int on = int(loaded.force.frontTurrets) + int(loaded.force.advancingTurrets)
-            + int(loaded.force.turretCreep) + int(loaded.force.rearTurretRetire);
+            + int(loaded.force.turretCreep) + int(loaded.force.rearTurretRetire) + int(loaded.force.turretDrill);
         REQUIRE(on == 1);
         for (const auto& hash : hashes) REQUIRE(loaded.getConfigHash() != hash);
         hashes.push_back(loaded.getConfigHash());
