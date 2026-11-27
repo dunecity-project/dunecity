@@ -84,6 +84,26 @@ inline bool frontPalaceCentre(int enemyTiles, int turretsAhead) {
 
 inline bool lowLot(int landValue) { return landValue <= kLowLandValue; }
 
+/// EconomyFirst: Stefan's last Air game (2026-11-28, "i did the building for the ai and we obliterated
+/// the enemy opponents"; 4P 192x192 Random 1v3 FFA DuneCity T9, seed 817478863, 20,000 credits each).
+/// He had 4 Construction Yards by minute 2.2, 6 by 17.4 and 9 by 22.7, and spent little on units in the
+/// first ten minutes; the three Brutal AIs each put about 15,000 of their 20,000 into units within two
+/// minutes, then stayed below 1,000 credits with one yard for the rest of the game.
+/// Yards the house aims for by game minute (his schedule).
+inline int economyFirstYards(int minute) { return minute < 15 ? 4 : minute < 20 ? 6 : 9; }
+/// While the switch is on and no enemy ground unit is near our buildings, unit producers leave this
+/// much cash for the yards (his balance at minute 31 was 22,848 against the AIs' 0-820).
+constexpr int kEconomyFirstHold = 10000;
+/// An enemy ground unit this close to one of our buildings releases the hold (the base is defended).
+constexpr int kEconomyFirstThreatTiles = 12;
+/// The switch stands down once the house's city has his minute-31 population.
+constexpr int kEconomyFirstPopulation = 6734;
+/// The proximate effect, read at minute 10: half the zones he added by then (76 ordered: 33 R, 8 C, 35 I;
+/// counted from the first pass) and his four yards.
+constexpr int kEconomyFirstCheckMinute = 10, kEconomyFirstZones = 38, kEconomyFirstCheckYards = 4;
+/// ECONOMY_STATE: credits, yards, zones, power, population and tax are logged this often.
+constexpr int kEconomyLogMs = 60000;
+
 } // namespace CityLessonsPolicy
 
 #endif // CITYLESSONSPOLICY_H

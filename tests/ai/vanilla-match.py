@@ -170,12 +170,18 @@ TURRET_ROW_FIELDS = KEY + ('event', 'label') + TURRET_FIELDS
 # CITY_LOTS (kind city_lots): every 3 game minutes each QuantBot house's R/C lots, low-value lots and mean
 # land value, so an arm's low-lot share compares with the control's.
 LESSON_EVENTS = (('LAUNCHER_ARMY:', 'launcher_army'), ('LOW_VALUE_PALACE:', 'low_value_palace'),
-                 ('FRONT_PALACE:', 'front_palace'), ('CITY_LOTS:', 'city_lots'))
+                 ('FRONT_PALACE:', 'front_palace'), ('CITY_LOTS:', 'city_lots'),
+                 # EconomyFirst (Stefan's Air game, 2026-11-28): tests/ai/economy-first-report.py.
+                 ('ECONOMY_FIRST:', 'economy_first'), ('ECONOMY_STATE:', 'economy_state'), ('BUILD_ORDER:', 'build_order'))
 LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 'launchers', 'ornithopters',
                  'launcher_value', 'vehicle_value', 'x', 'y', 'low_lots', 'lots_standing', 'lv_before', 'lv_now',
                  'lv_after', 'rise', 'palace_stands', 'palaces', 'credits', 'wait_s', 'met', 'enemy_tiles',
                  'turrets_ahead', 'lots', 'price', 'project_passes', 'pending_passes', 'saving_passes',
-                 'preempted_passes', 'ordered_passes', 'held_passes', 'blocked', 'reason', 'turrets', 'allowed_tiles', 'cycle')
+                 'preempted_passes', 'ordered_passes', 'held_passes', 'blocked', 'reason', 'turrets', 'allowed_tiles',
+                 'yards', 'mcvs', 'yard_target', 'was', 'capacity', 'refinery_bays', 'yard_refineries', 'zones_r',
+                 'zones_c', 'zones_i', 'nuclear', 'windtraps', 'police', 'rocket_turrets', 'heavy_factories',
+                 'population', 'tax_per_min', 'power', 'unit_built', 'structure_built', 'hold', 'threat', 'producer',
+                 'item', 'rule', 'hold_passes', 'threat_passes', 'zones', 'cycle')
 LESSON_ROW_FIELDS = KEY + ('kind', 'label') + LESSON_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on
@@ -265,6 +271,11 @@ def map_path(name):
     # A custom-game map shipped among the single-player maps, e.g. 3waysplit (Stefan's 3P 192x192
     # city game, 2026-11-27): the same file-stem rule.
     for path in (root / 'data/maps/singleplayer').glob('*.ini'):
+        if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
+            return path
+    # A test-only map of a game Stefan played, kept out of the game's own map list, e.g. air-1v3 (his last
+    # Air game, 2026-11-28; tests/ai/maps).
+    for path in (root / 'tests/ai/maps').glob('*.ini'):
         if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
             return path
     raise SystemExit(f'Unknown map {name}')

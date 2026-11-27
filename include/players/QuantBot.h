@@ -2152,6 +2152,14 @@ private:
     bool cityLauncherArmyEnabled() const;
     bool lowValuePalacesEnabled() const;
     bool frontPalacesEnabled() const;
+    /// EconomyFirst (Stefan's Air game, 2026-11-28; CityLessonsPolicy.h): yards on his schedule and a cash
+    /// hold against unit producers until the city has his population. Logs ECONOMY_FIRST lines.
+    bool economyFirstEnabled() const;
+    void planEconomyFirst(BuildPass& pass);
+    /// ECONOMY_STATE every game minute (switch on, or DUNECITY_TEST_ECONOMY_LOG=1 for every QuantBot
+    /// house): the control arm logs the same numbers.
+    void logEconomyState(const BuildPass& pass);
+    bool economyLogEnabled() const;
     /// CityLauncherArmy: this pass's vehicle mix without Ornithopters and Launchers floored.
     void applyCityLauncherArmy(BuildPass& pass);
     /// LowValuePalaces: plan (or keep planning) a Palace on the site with most low-value lots in
@@ -2190,6 +2198,10 @@ private:
         /// Sites whose plan expired and when: neither switch plans within 2 tiles of one for 10 minutes.
         std::vector<std::pair<Coord, Uint32>> expiredSites;
         Uint32 lastFrontPlan = 0, lastLotsLog = 0;
+        Uint32 lastEconomyLog = 0;
+        bool economyFirstStoodDown = false, economyFirstFootprintLogged = false;
+        int economyFirstHoldPasses = 0, economyFirstThreatPasses = 0;
+        int economyFirstStartZones = -1;   ///< zones at the first pass (the map's prebuilt city)
     } cityLessons;
     bool ownPalaceAt(Coord site) const;
     /// A lesson Palace site whose plan expired lately lies within 2 tiles of \a pos.

@@ -317,6 +317,8 @@ struct QuantBot::BuildPass {
     /// protected from every non-yard producer this pass, and its site (palace).
     Uint32 economyProject = NONE_ID;
     int economyProjectReserve{};
+    /// EconomyFirst (default off): cash unit producers leave for the yards this pass.
+    int economyFirstHold{};
     Coord economyProjectSite = Coord::Invalid();
     bool economyProjectOrdered{};
     /// Beyond the core limits: bought only from cash kSpareCashReserve above its price, never saved for.

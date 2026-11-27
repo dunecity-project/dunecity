@@ -28,6 +28,7 @@
 #include <players/CityLessonsPolicy.h>
 #include <players/TurretFrontPolicy.h>
 #include <dunecity/CitySimulation.h>
+#include <dunecity/CityEffects.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -49,6 +50,102 @@ bool QuantBot::cityLauncherArmyEnabled() const {
 bool QuantBot::frontPalacesEnabled() const {
     static const int forced = envSwitch("DUNECITY_TEST_FRONT_PALACES");
     return forced >= 0 ? forced == 1 : botConfig().force.frontPalaces;
+}
+
+bool QuantBot::economyFirstEnabled() const {
+    static const int forced = envSwitch("DUNECITY_TEST_ECONOMY_FIRST");
+    return forced >= 0 ? forced == 1 : botConfig().force.economyFirst;
+}
+
+bool QuantBot::economyLogEnabled() const {
+    static const int forced = envSwitch("DUNECITY_TEST_ECONOMY_LOG");
+    return forced == 1 || economyFirstEnabled();
+}
+
+void QuantBot::planEconomyFirst(BuildPass& pass) {
+    namespace L = CityLessonsPolicy;
+    pass.economyFirstHold = 0;
+    auto& lessons = cityLessons;
+    const auto* sim = currentGame->getCitySimulation();
+    const int houseID = getHouse()->getHouseID();
+    if (economyFirstEnabled() && pass.citySimEnabled && sim && gameMode == GameMode::Custom
+        && !lessons.economyFirstStoodDown) {
+        const int population = sim->getHouseState(houseID).getTotalPop();
+        const int minute = int(getGameCycleCount() / MILLI2CYCLES(60000));
+        const auto* house = getHouse();
+        const int zonesNow = house->getNumItems(Structure_ZoneResidential) + house->getNumItems(Structure_ZoneCommercial)
+            + house->getNumItems(Structure_ZoneIndustrial);
+        if (lessons.economyFirstStartZones < 0) lessons.economyFirstStartZones = zonesNow;
+        if (!lessons.economyFirstFootprintLogged && minute >= L::kEconomyFirstCheckMinute) {
+            lessons.economyFirstFootprintLogged = true;
+            // New zones since the first pass (his map started every house with 92).
+            const int zones = zonesNow - lessons.economyFirstStartZones;
+            const int yards = house->getNumItems(Structure_ConstructionYard);
+            SDL_Log("ECONOMY_FIRST: house=%d event=footprint met=%d zones=%d yards=%d population=%d credits=%d cycle=%u",
+                    houseID, int(zones >= L::kEconomyFirstZones && yards >= L::kEconomyFirstCheckYards), zones, yards,
+                    population, house->getCredits(), getGameCycleCount());
+        }
+        if (population >= L::kEconomyFirstPopulation) {
+            lessons.economyFirstStoodDown = true;
+            SDL_Log("ECONOMY_FIRST: house=%d event=stood_down population=%d yards=%d hold_passes=%d threat_passes=%d "
+                    "cycle=%u", houseID, population, getHouse()->getNumItems(Structure_ConstructionYard),
+                    lessons.economyFirstHoldPasses, lessons.economyFirstThreatPasses, getGameCycleCount());
+        } else {
+            // His schedule of yards; the game option's yard limit still caps it.
+            const int before = pass.cityYardTarget;
+            pass.cityYardTarget = std::max(pass.cityYardTarget, L::economyFirstYards(minute));
+            if (pass.yardLimit > 0) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.yardLimit);
+            // An enemy ground unit near one of our buildings releases the hold: the base is defended.
+            bool threat = false;
+            for (const auto& contact : visibleGroundTurretThreats) {
+                for (const auto* structure : getStructureList()) {
+                    if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+                    if (blockDistance(contact.at, structure->getClosestPoint(contact.at)) <= L::kEconomyFirstThreatTiles) {
+                        threat = true;
+                        break;
+                    }
+                }
+                if (threat) break;
+            }
+            if (threat) ++lessons.economyFirstThreatPasses;
+            else {
+                pass.economyFirstHold = L::kEconomyFirstHold;
+                ++lessons.economyFirstHoldPasses;
+            }
+            if (pass.emitStatsLog)
+                SDL_Log("ECONOMY_FIRST: house=%d event=pass yard_target=%d was=%d capacity=%d hold=%d threat=%d credits=%d "
+                        "population=%d cycle=%u", houseID, pass.cityYardTarget, before, pass.cityConstructionCapacity,
+                        pass.economyFirstHold, int(threat), getHouse()->getCredits(), population, getGameCycleCount());
+        }
+    }
+    if (pass.citySimEnabled && economyLogEnabled()) logEconomyState(pass);
+}
+
+void QuantBot::logEconomyState(const BuildPass& pass) {
+    const auto* sim = currentGame->getCitySimulation();
+    const Uint32 now = getGameCycleCount();
+    auto& lessons = cityLessons;
+    if (!sim || (lessons.lastEconomyLog != 0 && now - lessons.lastEconomyLog < MILLI2CYCLES(CityLessonsPolicy::kEconomyLogMs)))
+        return;
+    lessons.lastEconomyLog = now;
+    const int houseID = getHouse()->getHouseID();
+    const auto& state = sim->getHouseState(houseID);
+    const int taxPerMinute = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(state.taxBaseEighths,
+        sim->getCityTax(houseID), state.avgLandValue));
+    const auto* house = getHouse();
+    SDL_Log("ECONOMY_STATE: house=%d credits=%d yards=%d mcvs=%d yard_target=%d capacity=%d refinery_bays=%d "
+            "yard_refineries=%d zones_r=%d zones_c=%d zones_i=%d nuclear=%d windtraps=%d palaces=%d police=%d "
+            "rocket_turrets=%d heavy_factories=%d population=%d tax_per_min=%d power=%d/%d unit_built=%d "
+            "structure_built=%d hold=%d cycle=%u", houseID, house->getCredits(),
+            house->getNumItems(Structure_ConstructionYard), house->getNumItems(Unit_MCV), pass.cityYardTarget,
+            pass.cityConstructionCapacity, getAIRefineryBays(), pass.cityYardRefineries,
+            house->getNumItems(Structure_ZoneResidential), house->getNumItems(Structure_ZoneCommercial),
+            house->getNumItems(Structure_ZoneIndustrial), house->getNumItems(Structure_NuclearPlant),
+            house->getNumItems(Structure_WindTrap), house->getNumItems(Structure_Palace),
+            house->getNumItems(Structure_PoliceStation), house->getNumItems(Structure_RocketTurret),
+            house->getNumItems(Structure_HeavyFactory), state.getTotalPop(), taxPerMinute,
+            house->getProducedPower(), house->getPowerRequirement(), house->getUnitBuiltValue(),
+            house->getStructureBuiltValue(), pass.economyFirstHold, now);
 }
 
 bool QuantBot::lowValuePalacesEnabled() const {

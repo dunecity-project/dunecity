@@ -333,6 +333,7 @@ struct QuantBotConfig {
         int cityLauncherArmyBps;               ///< That floor, 3000-9500 (default 7000). Hashed only when not the default.
         bool lowValuePalaces;                  ///< A Palace saved for where most own R/C lots of land value <= 80 are, reached or not.
         bool frontPalaces;                     ///< Palaces on the enemy side of the city, 10-31 tiles from enemy buildings, behind own turrets.
+        bool economyFirst;                     ///< City games: yards on Stefan's schedule (4/6/9) and unit producers leave 10,000 for the yards until his population.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

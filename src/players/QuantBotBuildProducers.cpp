@@ -421,6 +421,13 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
+        // BUILD_ORDER (EconomyFirst evidence; switch on, or DUNECITY_TEST_ECONOMY_LOG=1): what each producer
+        // bought, by which rule, from how much cash. Slabs and roads are left out.
+        if (currentGame && currentGame->isCitySimEnabled() && itemID != Structure_Slab1 && itemID != Structure_Slab4
+            && itemID != Structure_Road && economyLogEnabled())
+            SDL_Log("BUILD_ORDER: house=%d producer=%d item=%d rule=%s price=%d credits=%d cycle=%u",
+                    getHouse()->getHouseID(), int(turn.pBuilder->getItemID()), int(itemID), rule ? rule : "-",
+                    int(data[itemID][houseID].price), getHouse()->getCredits(), getGameCycleCount());
         if (replacement > pass.itemCount[Unit_Harvester]) {
             const int live = getAIHarvesterCount();
             traceDecision("harvester_replacement", AITelemetry::Record()
@@ -1175,6 +1182,12 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     if (producer != Structure_ConstructionYard)
         protectedCash = std::max({protectedCash, pass.turretClusterReserve, pass.economyProjectReserve,
                                   pass.turretDrillReserve});
+    // EconomyFirst (default off): unit producers leave the hold for the yards. A Heavy Factory or Starport
+    // keeps its cash while the house is short of its yard target, so it can buy the MCV.
+    if (producer != Structure_ConstructionYard && pass.economyFirstHold > 0
+        && !((producer == Structure_HeavyFactory || producer == Structure_StarPort)
+             && pass.cityConstructionCapacity < pass.cityYardTarget))
+        protectedCash = std::max(protectedCash, pass.economyFirstHold);
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;
 }
