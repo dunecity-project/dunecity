@@ -14,8 +14,8 @@
 //  - ZoneCaptureRaid: free soldiers take empty enemy zones nobody guards;
 //  - ZoneCaptureLevy: the Barracks train cheap Soldiers that walk into the nearest enemy zones;
 //  - ZoneGarrisonReinforce: Troopers reinforce garrisons enemies close on;
-//  - ZoneFrontGarrison: our zones nearest the enemy get a garrison first;
-//  - ZoneCaptureChain: from every zone we hold, soldiers take the next enemy zone across the street.
+//  - ZoneFrontGarrison: our zones nearest the enemy (the front, however far) get a garrison first;
+//  - ZoneCaptureChain: soldiers take the empty enemy zones nearest a zone we hold, block by block.
 // A captured zone returns to its owner once its garrison is gone, so soldiers in a captured zone stay.
 // A soldier on its way in belongs to this controller alone (Player's garrisonBound refuses every
 // other controller's order); this pass ends an order whose zone is gone, held by someone else, or
@@ -58,15 +58,16 @@ constexpr int kLevyCashReserve = 300;
 constexpr int kLevyRadius = 48;
 /// ZoneGarrisonReinforce: Troopers this close to a threatened garrison of ours reinforce it.
 constexpr int kReinforceRadius = 16;
-/// ZoneFrontGarrison: a zone of ours with a visible enemy building this close is at the front; it
-/// gets kFrontGarrison soldiers from within kFrontResponderRadius.
-constexpr int kFrontRadius = 12;
+/// ZoneFrontGarrison: our kFrontZones zones nearest a visible enemy building are the front, however
+/// far that is; each gets kFrontGarrison soldiers from within kFrontResponderRadius.
+constexpr int kFrontZones = 4;
 constexpr int kFrontGarrison = 2;
 constexpr int kFrontResponderRadius = 20;
-/// ZoneCaptureChain: an empty enemy zone this close to a zone we hold is the next block; soldiers
-/// within kChainResponderRadius take it.
-constexpr int kChainReach = 5;
-constexpr int kChainResponderRadius = 16;
+/// ZoneCaptureChain: the kChainFrontier empty enemy zones nearest a zone we hold (own or captured),
+/// however far, are the next blocks; soldiers within kChainResponderRadius take them. Each zone
+/// taken is a zone we hold, so the chain moves on from it.
+constexpr int kChainFrontier = 2;
+constexpr int kChainResponderRadius = 40;
 /// A soldier on its way in that has not got closer for this long gives up (Stefan: exempt "until it
 /// is inside ... or it has made no progress for a set time").
 constexpr int kNoProgressSeconds = 45;
@@ -242,20 +243,21 @@ void QuantBot::updateZoneGarrisons() {
         targets.push_back(zone);
     }
 
-    // Our zones at the front: a visible enemy building within kFrontRadius, nearest first.
+    // Our zones at the front: the kFrontZones nearest a visible enemy building, nearest first.
     std::vector<std::pair<int, ZoneStructure*>> front;
-    if (force.zoneFrontGarrison) {
+    if (force.zoneFrontGarrison && !enemyBuildings.empty()) {
         for (const StructureBase* structure : getStructureList()) {
             if (structure->getOwner() != house) continue;
             auto* zone = dynamic_cast<ZoneStructure*>(const_cast<StructureBase*>(structure));
             if (zone == nullptr || zone->getGarrisonOriginalOwner() >= 0) continue;
             int closest = INT_MAX;
             for (const Coord& at : enemyBuildings) closest = std::min(closest, tenths(blockDistance(at, zone->getClosestPoint(at))));
-            if (closest <= kFrontRadius * 10) front.emplace_back(closest, zone);
+            front.emplace_back(closest, zone);
         }
         std::sort(front.begin(), front.end(), [](const auto& a, const auto& b) {
             return a.first != b.first ? a.first < b.first : a.second->getObjectID() < b.second->getObjectID();
         });
+        if (front.size() > size_t(kFrontZones)) front.resize(kFrontZones);
     }
     auto atTheFront = [&](const ZoneStructure* zone) {
         return std::any_of(front.begin(), front.end(), [&](const auto& item) { return item.second == zone; });
@@ -384,19 +386,29 @@ void QuantBot::updateZoneGarrisons() {
         }
     };
 
-    // Chain: the next empty enemy zone across the street from a zone we hold, block by block.
+    // Chain: the next empty enemy zone across the street from a zone we hold (own or captured),
+    // block by block: each zone taken becomes the next starting point.
     if (force.zoneCaptureChain && !targets.empty()) {
         std::vector<const ZoneStructure*> held;
         for (const StructureBase* structure : getStructureList()) {
             if (structure->getOwner() != house) continue;
-            const auto* zone = dynamic_cast<const ZoneStructure*>(structure);
-            if (zone != nullptr && zone->isGarrisoned() && zone->getGarrisonHouse() == house) held.push_back(zone);
+            if (const auto* zone = dynamic_cast<const ZoneStructure*>(structure)) held.push_back(zone);
         }
-        std::vector<const ZoneStructure*> next;
+        std::vector<std::pair<int, const ZoneStructure*>> frontier;
         for (const ZoneStructure* zone : targets) {
+            if (pending[zone->getObjectID()] > 0) continue;
             const Coord at = zone->getLocation();
-            if (std::any_of(held.begin(), held.end(), [&](const ZoneStructure* own) {
-                    return blockDistance(at, own->getClosestPoint(at)) <= kChainReach; })) next.push_back(zone);
+            int closest = INT_MAX;
+            for (const ZoneStructure* own : held) closest = std::min(closest, tenths(blockDistance(at, own->getClosestPoint(at))));
+            if (closest != INT_MAX) frontier.emplace_back(closest, zone);
+        }
+        std::sort(frontier.begin(), frontier.end(), [](const auto& a, const auto& b) {
+            return a.first != b.first ? a.first < b.first : a.second->getObjectID() < b.second->getObjectID();
+        });
+        std::vector<const ZoneStructure*> next;
+        for (const auto& item : frontier) {
+            if (next.size() >= size_t(kChainFrontier)) break;
+            next.push_back(item.second);
         }
         dispatch(next, kChainResponderRadius, false, "chain");
     }
