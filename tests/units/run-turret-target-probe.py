@@ -50,6 +50,7 @@ def build_probe(build, out):
             compile_command.remove(option)
     compile_command[compile_command.index('-o') + 1] = str(obj)
     compile_command[compile_command.index('-c') + 1] = str(source)
+    compile_command.append('-fno-access-control')   # Game's private loop (updateGameState, initializeGameLoop)
     binary = native_probe_binary(build, out, 'turret-target-probe')
     link = shlex.split(next(line for line in commands if ' -o ' + NATIVE_TARGET + ' ' in line))
     link = link[link.index('&&') + 1:]
