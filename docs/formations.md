@@ -2302,6 +2302,25 @@ PollutionRelocation searched in every one of its non-firing house-games on the w
 maps; in 89 of 107 and 65 of 77 every search found no zone costing its homes 40 land value (or no money):
 those cities had nothing to relocate. IndustrySeparation builds about 10% fewer Industrial zones.
 
+**Acceptance test on Stefan's save** (`quantbot_redevelop_low_save`, nightly; CLAUDE.md "Asked-for behaviour"):
+`tests/saves/data/low-dunecity.dls.gz` continued 20 minutes in five arms, one assert per line of the request,
+table in HANDOVER (2026-11-27). At `0c14b4a0d` every implemented line passes:
+- 182 lane Parks and 89 lot Parks standing at their chosen sites, raising their lots in 118 of 178 and 52 of 88
+  reads;
+- 252 of 252 Parks are road connections without unit speed;
+- second-lane road tiles 1,578 against 2,357;
+- 6 Industrial zones moved, each halving the harm, with the homes round them cleaner in 6 of 6 reads;
+- 14 of 14 Construction Yards keep their path out;
+- the searches take 0.9 s of a 210 s arm.
+
+Fixes it forced:
+- the ordinary Industrial site as relocation fallback when no clear ground is in reach;
+- vacated sites kept free of Industrial zones for 10 minutes;
+- a Park that became the only unit link is removed and its road restored;
+- `ParkDistrictPolicy::blockGain` counts nothing for blocks at the land-value floor.
+
+Not done: moving factories (none in that save); Palaces are LowValuePalaces (`quantbot_city_lessons`).
+
 **Decision.** All four stay off: no arm's all-games interval is above 0. They now demonstrably act, so
 these are measurements of the ideas: the park switches lift Stefan's lobby land value by about 1.5 without
 changing a result; PollutionRelocation, where it has work, trades 2 land value for 3,700 residents;

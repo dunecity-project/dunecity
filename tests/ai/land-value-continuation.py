@@ -245,7 +245,8 @@ def acceptance(args):
          'cleaner in %d of %d reads (need half, 3 reads)' % (cleaner, checked), checked >= 3 and 2 * cleaner >= checked)
     line('... and more land value', t, 'raised in %d of %d reads (need half)' % (raised, checked),
          checked >= 3 and 2 * raised >= checked)
-    line('"moving factories"', '-', 'no switch moves a factory', 'NOT DONE')
+    line('"moving factories"', '-', 'no switch moves one (the save has no Dune factory; besides Industrial zones its '
+         'polluters are 1-2 Refineries and an Airport a house)', 'NOT DONE')
     line('"adding in more palaces" / "destroying and adding palaces"', 'quantbot_city_lessons (LowValuePalaces, seewhatidid-ai)',
          'not in this test', 'NOT DONE')
 

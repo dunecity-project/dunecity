@@ -1,3 +1,59 @@
+## 2026-11-27 - Redevelopment: Stefan's request as an acceptance list, asserted on his save (`quantbot_redevelop_low_save`)
+
+Stefan: "there's still lots of low value see mba save low. the AI could benefit from demolishing and rebuilding to
+either remove pollution from an area buy moving factories and industrial zones to different areas or by adding in
+more palaces or parks. count a park as a road (without the movement bonus) as a way to also increase value and then
+test different ai behaviours around destroying and rebuilding zones or detroying and adding palaces. also it has
+lots of 2 lane roads which is a waste. we can remove some roads as long as we maintain paths out of the base (dont
+introduce performanc eissues evaluating thiugh)." Per CLAUDE.md "Asked-for behaviour: an acceptance list first",
+each line below is one assert in the headless nightly CTest `quantbot_redevelop_low_save`
+(`tests/ai/land-value-continuation.py --ctest`): his save `tests/saves/data/low-dunecity.dls.gz` continued 20
+minutes in five arms at once (off, road-lane-parks, lot-parks, pollution-relocation, industry-separation). Commits
+`0282e5c8d`, `6340a551c`, `11a341fab`, `0c14b4a0d`, and the generated-map probe change after them.
+
+| Request line (Stefan, 2026-11-27) | Test | Measured (low.dls, 20 minutes, `0c14b4a0d`) | Result |
+|---|---|---|---|
+| nothing fires with the switches off | `quantbot_redevelop_low_save` | 0 redevelopment orders | PASS |
+| "demolishing and rebuilding ... moving ... industrial zones to different areas" | `quantbot_redevelop_low_save` | 6 Industrial zones rebuilt elsewhere, the old one demolished (need 3) | PASS |
+| ... to a different area: the new site costs our homes at most half the old one | `quantbot_redevelop_low_save` | 6 of 6 (2 beyond 5 tiles of every home) | PASS |
+| ... "to remove pollution from an area" | `quantbot_redevelop_low_save` | the homes round a moved zone cleaner in 6 of 6 reads | PASS |
+| ... more land value there | `quantbot_redevelop_low_save` | raised in 4 of 6 reads (need half) | PASS |
+| "moving factories" | - | no switch moves one (the save has no Dune factory; besides Industrial zones its polluters are 1-2 Refineries and an Airport a house) | NOT DONE |
+| "adding in more palaces" / "destroying and adding palaces" | `quantbot_city_lessons` (LowValuePalaces, seewhatidid-ai session) | not mine; that test failed in my nightly at `e940e96c5` | NOT DONE here |
+| "adding in more ... parks" (spare lanes) | `quantbot_redevelop_low_save` | 182 Parks standing on their chosen lane tiles (need 10) | PASS |
+| "adding in more ... parks" (cleared lots) | `quantbot_redevelop_low_save` | 89 Parks on cleared lots (need 5) | PASS |
+| ... "as a way to also increase value" (lane Parks) | `quantbot_redevelop_low_save` | raised in 118 of 178 reads (need half) | PASS |
+| ... "as a way to also increase value" (lot Parks) | `quantbot_redevelop_low_save` | raised in 52 of 88 reads (need half) | PASS |
+| "count a park as a road (without the movement bonus)" | `quantbot_redevelop_low_save`; `skirmish_generator_probe_city-park` | 252 of 252 Parks are road connections with no unit road speed | PASS |
+| "destroying and rebuilding zones" | `quantbot_redevelop_low_save` | 53 lots demolished and rebuilt as Parks, 6 zones moved | PASS |
+| "lots of 2 lane roads ... we can remove some roads" | `quantbot_redevelop_low_save` | second-lane road tiles at the end 1,578 vs 2,357 off | PASS |
+| "as long as we maintain paths out of the base" (round each lane Park) | `quantbot_redevelop_low_save` | 0 of 172 lane Parks leave units no way round (1 retired when later building closed the way) | PASS |
+| "as long as we maintain paths out of the base" (yards to the map edge) | `quantbot_redevelop_low_save` | 0 of 14 Construction Yards lost their path | PASS |
+| "dont introduce performance issues evaluating though" | `quantbot_redevelop_low_save`; `perf_regression` | searches 0.9 s of a 210 s arm (need <= 2%); perf_regression passed | PASS |
+| IndustrySeparation (the industry siting follow-up) | `quantbot_redevelop_low_save` | 0 of 24 new Industrial zones within 5 tiles of a home (switch off, in the relocation arm: 109 of 131) | PASS |
+
+**What the test found and fixed.**
+- In his dense city 61 of 73 relocation searches found no ground clear of homes. Relocation now takes the ordinary
+  Industrial site when it at least halves the harm.
+- Ordinary growth rebuilt Industrial zones on the sites just vacated, so a site vacated by a relocation now takes
+  no new Industrial zone for 10 minutes.
+- Later building closed the unit path round 2 of 149 lane Parks. A Park that has become the only unit link is now
+  removed and its road restored, checked once a game second.
+- LotParks lifted its lots by +0.1 a lot on average: its gain estimate counted blocks held at the land-value floor
+  by pollution. `ParkDistrictPolicy::blockGain` now counts no gain there.
+
+**Deviations from the request (listed, none stops the asked-for thing).**
+- A relocation needs harm of 40 or more to our homes.
+- Park searches run every 8 s and relocation searches every 30 s.
+- A spare-lane Park needs a 2x2 road square.
+- A lot is cleared only at land value 64 or less, density 1 or less, and 24 total gain.
+
+**Not done.** Moving factories (none in his save; Refineries and Airports are not moved). Palaces belong to the
+seewhatidid-ai session's LowValuePalaces (`quantbot_city_lessons`), coordinated so that it is built once.
+
+Gates at the final commit: the four AI gates are running on AWS (see below), `perf_regression` passed (Mini), and
+`dunelegacy_tests` and both skirmish probes passed.
+
 ## 2026-11-27 - Redevelopment switches proven to act, re-measured with fire counts; IndustrySeparation added; all stay OFF
 
 Stefan, 2026-11-27: "i have a feeling the reason you think none of these things work is because you aren't
