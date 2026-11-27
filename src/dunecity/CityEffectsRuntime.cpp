@@ -1640,7 +1640,7 @@ void CitySimulation::runZoneGrowth() {
             if (h >= 0 && n.role == CityRole::Residential && n.level > 0)
                 populatedResZones[h]++;
         }
-        auto days = hospitalCare_.overlayDays();
+        const auto& days = hospitalCare_.overlayDays();   // replaced only after the last read below
         const auto sinceOf = [&](const ZoneStructure* zone) {
             const auto it = days.find(zone->getObjectID());
             return it != days.end() && it->second != 0 ? it->second : today;
@@ -1648,12 +1648,13 @@ void CitySimulation::runZoneGrowth() {
         struct Civic { ZoneStructure* zone; uint32_t since; bool locked; };
         std::vector<Civic> hospitals[kMaxCityHouses], churches[kMaxCityHouses];
         std::vector<ZoneStructure*> candidates[kMaxCityHouses];
-        std::map<const ZoneStructure*, ZoneStructure::CivicOverlay> before;
-        for (const auto& n : nodes) {
+        std::vector<ZoneStructure::CivicOverlay> before(nodes.size(), ZoneStructure::CivicOverlay::None);
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            const auto& n = nodes[i];
             auto* zone = n.pZone;
             if (!zone) continue;
             const int h = ownerSlot(n.pStruct);
-            before[zone] = zone->getCivicOverlay();
+            before[i] = zone->getCivicOverlay();
             if (n.role == CityRole::Residential && h >= 0 && HospitalCare::keepsHospital(zone)) {
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
                 hospitals[h].push_back({zone, sinceOf(zone), true});
@@ -1734,11 +1735,12 @@ void CitySimulation::runZoneGrowth() {
 
         HospitalCareState::Overlays overlays;
         HospitalCareState::OverlayDays overlayDays;
-        for (const auto& n : nodes) {
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            const auto& n = nodes[i];
             auto* zone = n.pZone;
             if (!zone) continue;
             const int h = ownerSlot(n.pStruct);
-            const auto overlayBefore = before[zone];
+            const auto overlayBefore = before[i];
             const auto overlayAfter = zone->getCivicOverlay();
             if (overlayAfter != overlayBefore && h >= 0) {
                 auto& churn = zoneChurn_[h];
