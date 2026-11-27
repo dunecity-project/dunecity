@@ -390,10 +390,11 @@ int runBrutalUnitOverrideProbe() {
         // local pair while the map's units are placed.
         auto second = std::make_unique<Game>();
         currentGame = second.get();
-        GameInitSettings again("override.ini", mapData, "Second match in one session", true,
-                               settings.gameOptions);
+        // Built as the Custom Game lobby builds it (no server name): a watched offline match.
+        GameInitSettings again("override.ini", mapData, true, settings.gameOptions);
         again.randomSeed = 92;
         again.setLocalSpectator(true);
+        again.setMultiplePlayersPerHouse(false);
         GameInitSettings::HouseInfo first(HOUSE_ATREIDES, 1);
         first.addPlayerInfo({"Brutal bot one", "qBotBrutal"});
         again.addHouseInfo(first);
