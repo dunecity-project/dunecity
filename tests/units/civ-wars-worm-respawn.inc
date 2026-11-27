@@ -130,12 +130,30 @@ void runCivWarsWormRespawnProbe(std::unique_ptr<Game>& game, const std::string& 
     blockedWake(left, leftAt);
     surfaceBlocker->cancelDeployment();
 
-    // A pre-9881 object record has no origin bytes: do not consume the next record.
+    // A pre-9881 object record has no origin bytes: do not consume the next record. The record
+    // ends with the origin (two Sint32, 9881) and, from 9901, the Palace worm state (a bool and
+    // three Sint32, SAVEGAMEVERSION_PALACE_WORM), so an older record lacks both.
+    constexpr size_t kPalaceWormBytes = 1 + 3 * sizeof(Sint32);
     OMemoryStream record;
     record.open();
     left->save(record);
-    civWormRequire(record.getDataLength() >= 8, "Worm record omitted its two origin coordinates");
-    std::string legacyBytes(record.getData(), record.getDataLength() - 8);
+    civWormRequire(record.getDataLength() >= 8 + kPalaceWormBytes, "Worm record omitted its two origin coordinates");
+    {
+        // A 9881-9900 record has the origin but no Palace worm state.
+        std::string bytes(record.getData(), record.getDataLength() - kPalaceWormBytes);
+        bytes += "slot-tail";
+        const auto saved = game->loadedSavegameVersion;
+        game->loadedSavegameVersion = SAVEGAMEVERSION_PALACE_WORM - 1;
+        IMemoryStream input(bytes.data(), bytes.size());
+        auto* older = new Sandworm(input);
+        older->setObjectID(game->getObjectManager().addObject(older));
+        game->loadedSavegameVersion = saved;
+        civWormRequire(older->getRespawnOrigin() == left->getRespawnOrigin() && !older->isPalaceWorm()
+                           && input.getRemainingLength() == std::string("slot-tail").size(),
+                       "Pre-9901 worm load consumed following bytes or lost its origin");
+        older->cancelDeployment();
+    }
+    std::string legacyBytes(record.getData(), record.getDataLength() - 8 - kPalaceWormBytes);
     const std::string tail = "slot-tail";
     legacyBytes += tail;
     const auto loadedVersion = game->loadedSavegameVersion;
