@@ -54,7 +54,8 @@ MIN_RISE = 10
 CYCLES_PER_MINUTE = 3750
 # CityLessonsPolicy::BlockCheck: the placement checks a held lesson Palace failed.
 BLOCK_CHECKS = ((1, 'own_units'), (2, 'road_connections'), (4, 'reserved'), (8, 'ground_access'),
-                (16, 'recent_loss'), (32, 'danger'), (64, 'reactor'))
+                (16, 'recent_loss'), (32, 'danger'), (64, 'reactor'), (128, 'structure'), (256, 'unit'),
+                (512, 'engine'))
 
 
 def rows(directory, name):

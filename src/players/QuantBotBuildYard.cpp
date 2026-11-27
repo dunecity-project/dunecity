@@ -4064,7 +4064,16 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                         | (nearRecentStructureLoss(location.x, location.y, sz.x, sz.y) ? L::kBlockRecentLoss : 0)
                         | (threatTolerant || dangerAt(location, sz) == 0 ? 0 : L::kBlockDanger)
                         | (TacticalSafetyPolicy::reactorPlacementAllowed(itemToBePlaced, reactorClearance(itemToBePlaced, location))
-                            ? 0 : L::kBlockReactor);
+                            ? 0 : L::kBlockReactor)
+                        | (getMap().okayToPlaceStructure(location.x, location.y, sz.x, sz.y, false, getHouse(), true, itemToBePlaced)
+                            ? 0 : L::kBlockEngine);
+                    for (int ty = location.y; ty < location.y + sz.y; ++ty)
+                        for (int tx = location.x; tx < location.x + sz.x; ++tx) {
+                            if (!getMap().tileExists(tx, ty)) continue;
+                            const Tile* tile = getMap().getTile(tx, ty);
+                            if (tile->isMountain() || tile->hasAStructure()) watch->blockedChecks |= L::kBlockStructure;
+                            else if (tileBlocksOwnPlacement(tile)) watch->blockedChecks |= L::kBlockUnit;
+                        }
                 }
                 if (pass.emitStatsLog) tracePlacementIssue("placement_deferred", "lesson_palace_site_blocked", location);
                 location = Coord::Invalid();

@@ -53,7 +53,10 @@ constexpr int kExpiredSiteTiles = 2;
 /// The placement checks a held lesson Palace failed (logged as blocked= at expiry).
 enum BlockCheck : int {
     kBlockOwnUnits = 1, kBlockRoadConnections = 2, kBlockReserved = 4, kBlockGroundAccess = 8,
-    kBlockRecentLoss = 16, kBlockDanger = 32, kBlockReactor = 64
+    kBlockRecentLoss = 16, kBlockDanger = 32, kBlockReactor = 64,
+    // What failed kBlockOwnUnits: a structure (or mountain) on the footprint, a unit there that is not ours
+    // or cannot leave, or the engine's own placement test (build range, terrain).
+    kBlockStructure = 128, kBlockUnit = 256, kBlockEngine = 512
 };
 /// CITY_LOTS: each house's lots, low-value lots and mean land value are logged this often.
 constexpr int kLotsLogMs = 180000;
