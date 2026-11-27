@@ -393,7 +393,6 @@ QuantBotConfig::QuantBotConfig() {
     force.lotParks = false;
     force.pollutionRelocation = false;
     force.industrySeparation = false;
-    force.homeSeparation = false;
     force.landmarkAnchoring = true;
     force.palaceDenseClearing = true;
     force.palaceTurrets = false;
@@ -954,7 +953,6 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "LotParks", force.lotParks);
         iniFile.setBoolValue("Force Concentration", "PollutionRelocation", force.pollutionRelocation);
         iniFile.setBoolValue("Force Concentration", "IndustrySeparation", force.industrySeparation);
-        iniFile.setBoolValue("Force Concentration", "HomeSeparation", force.homeSeparation);
         iniFile.setBoolValue("Force Concentration", "LandmarkAnchoring", force.landmarkAnchoring);
         iniFile.setBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
         iniFile.setBoolValue("Force Concentration", "PalaceTurrets", force.palaceTurrets);
@@ -1339,7 +1337,6 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.lotParks = iniFile.getBoolValue("Force Concentration", "LotParks", force.lotParks);
     force.pollutionRelocation = iniFile.getBoolValue("Force Concentration", "PollutionRelocation", force.pollutionRelocation);
     force.industrySeparation = iniFile.getBoolValue("Force Concentration", "IndustrySeparation", force.industrySeparation);
-    force.homeSeparation = iniFile.getBoolValue("Force Concentration", "HomeSeparation", force.homeSeparation);
     force.landmarkAnchoring = iniFile.getBoolValue("Force Concentration", "LandmarkAnchoring", force.landmarkAnchoring);
     force.palaceDenseClearing = iniFile.getBoolValue("Force Concentration", "PalaceDenseClearing", force.palaceDenseClearing);
     force.palaceTurrets = iniFile.getBoolValue("Force Concentration", "PalaceTurrets", force.palaceTurrets);
@@ -2120,7 +2117,6 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.lotParks) addNamed("lotParks", force.lotParks);
     if (force.pollutionRelocation) addNamed("pollutionRelocation", force.pollutionRelocation);
     if (force.industrySeparation) addNamed("industrySeparation", force.industrySeparation);
-    if (force.homeSeparation) addNamed("homeSeparation", force.homeSeparation);
     if (force.landmarkAnchoring) addNamed("landmarkAnchoring", force.landmarkAnchoring);
     if (force.palaceDenseClearing) addNamed("palaceDenseClearing", force.palaceDenseClearing);
     if (force.palaceTurrets) addNamed("palaceTurrets", force.palaceTurrets);

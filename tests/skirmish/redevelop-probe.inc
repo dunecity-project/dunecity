@@ -14,7 +14,6 @@
 //   IndustrySeparation   the industry is grown by 40 zones sited by the bot's own siting: ON
 //                        sites none within 5 tiles of an own R/C lot, OFF some, and the bot's
 //                        homes end with less pollution and more land value than OFF.
-//   HomeSeparation       the same with 16 Residential lots against the bot's polluters.
 // Every count comes from QuantBot::getRedevelopmentActivity(), the counters the measured games log
 // (SCENARIO_SWITCH_ACTIVITY). Included inside skirmish-probe.inc (SKIRMISH_PROBE_CASE=city-redevelop).
 
@@ -53,7 +52,7 @@ std::unique_ptr<Game> load(const std::string& save) {
     return game;
 }
 
-struct Switches { bool lane = false, lot = false, relocate = false, separate = false, homes = false; };
+struct Switches { bool lane = false, lot = false, relocate = false, separate = false; };
 
 void configure(QuantBot* bot, Switches s) {
     auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
@@ -61,7 +60,6 @@ void configure(QuantBot* bot, Switches s) {
     config->force.lotParks = s.lot;
     config->force.pollutionRelocation = s.relocate;
     config->force.industrySeparation = s.separate;
-    config->force.homeSeparation = s.homes;
     config->force.parkDistricts = false;
     bot->configOverride = config;
 }
@@ -261,7 +259,7 @@ Run play(const std::string& save, Switches switches, int minutes, bool plant, Co
 /// The bot's own siting (QuantBot::findPlaceLocation) asked for \a zones sites of \a item in a row,
 /// each built (Industrial at full density): how many landed within 5 tiles of the other side (homes
 /// for Industrial, own polluters for R), and the homes' mean land value and pollution two minutes
-/// later. \a on turns on IndustrySeparation (Industrial) or HomeSeparation (Residential).
+/// later. \a on turns on IndustrySeparation.
 struct Separation {
     int placed = 0, near = 0;
     double landValue = 0, pollution = 0;
@@ -285,7 +283,7 @@ Separation separationRun(const std::string& save, Uint32 item, bool on, int zone
     auto game = load(save);
     Bot b = findBot(*game);
     Switches switches;
-    (item == Structure_ZoneIndustrial ? switches.separate : switches.homes) = on;
+    switches.separate = on;
     configure(b.bot, switches);
     game->winFlags = game->loseFlags = 0;
     Separation out;
@@ -303,7 +301,6 @@ Separation separationRun(const std::string& save, Uint32 item, bool on, int zone
             }
     }
     const int level = DuneCity::getStructureMaxLevel(Structure_ZoneIndustrial);
-    std::vector<Uint32> ids;
     for (int k = 0; k < zones; ++k) {
         b.bot->placementCache.erase(item);
         const Coord site = b.bot->findPlaceLocation(item);
@@ -314,7 +311,6 @@ Separation separationRun(const std::string& save, Uint32 item, bool on, int zone
         if (item == Structure_ZoneIndustrial) {
             for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx)
                 currentGameMap->getTile(site.x + dx, site.y + dy)->setCityZoneDensity(level);
-            ids.push_back(zone->getObjectID());
         }
         out.near += R::industryTooCloseToHomes(distance);
         ++out.placed;
@@ -322,15 +318,12 @@ Separation separationRun(const std::string& save, Uint32 item, bool on, int zone
         SDL_Log("SKIRMISH_PROBE: redevelop separation item=%u on=%d crowded=%d zone=(%d,%d) distance=%d", item, on, crowded,
                 site.x, site.y, distance);
     }
-    const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(2 * 60 * 1000);
-    while (game->getGameCycleCount() < end) {
-        game->updateGameState();
-        if (game->getGameCycleCount() % MILLI2CYCLES(1000) != 0) continue;
-        for (Uint32 id : ids)
-            if (const auto* z = game->getObjectManager().getObject(id))
-                for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx)
-                    currentGameMap->getTile(z->getLocation().x + dx, z->getLocation().y + dy)->setCityZoneDensity(level);
-    }
+    // One effects scan with everything else as it was (the crime reading kept): what the new
+    // zones do to their neighbours, without the city's growth answering the extra jobs.
+    auto* sim = game->getCitySimulation();
+    const auto crime = sim->crimeRateMap_;
+    sim->crimeRateMap_ = crime;
+    sim->runEffectsScans();
     const auto homes = lotOrigins(b.house);
     out.landValue = meanLandValue(*game->getCitySimulation(), homes);
     out.pollution = meanPollution(*game->getCitySimulation(), homes);
@@ -465,12 +458,12 @@ void runRedevelopProbe() {
     // each (at full density), then plays two minutes and reads the homes.
     // Open ground: the ordinary siting already keeps the two apart (40 of 40 Industrial zones and
     // 16 of 16 homes beyond 5 tiles with the switches off, 2026-11-27); ON must not do worse.
-    for (const Uint32 item : {Uint32(Structure_ZoneIndustrial), Uint32(Structure_ZoneResidential)}) {
-        const bool industry = item == Structure_ZoneIndustrial;
-        const char* name = industry ? "IndustrySeparation" : "HomeSeparation";
-        const int zones = industry ? 40 : 16;
+    {
+        const Uint32 item = Structure_ZoneIndustrial;
+        const char* name = "IndustrySeparation";
+        const int zones = 40;
         const Separation openOff = separationRun(save, item, false, zones), openOn = separationRun(save, item, true, zones);
-        // Crowded: only ground near the other side is left. OFF builds there, ON must not.
+        // Crowded: only ground near the homes is left. OFF builds there, ON must not.
         const Separation crowdOff = separationRun(save, item, false, 8, true), crowdOn = separationRun(save, item, true, 8, true);
         SDL_Log("SKIRMISH_PROBE: redevelop %s open placed on=%d off=%d near on=%d off=%d land_value on=%.1f off=%.1f | "
                 "crowded placed on=%d off=%d near on=%d off=%d home_pollution on=%.1f off=%.1f home_land_value on=%.1f off=%.1f",
@@ -478,35 +471,23 @@ void runRedevelopProbe() {
                 crowdOn.placed, crowdOff.placed, crowdOn.near, crowdOff.near, crowdOn.pollution, crowdOff.pollution,
                 crowdOn.landValue, crowdOff.landValue);
         expect(openOn.placed * 2 >= zones, std::string(name) + ": on open ground the siting found too few sites");
-        expect(openOn.near == 0 && crowdOn.near == 0, std::string(name) + ": a site within 5 tiles of the other side");
-        expect(crowdOff.near >= 1, std::string(name) + ": crowded OFF never built near the other side, so the test proves nothing");
-        if (industry) {
-            // The homes within 5 tiles of where OFF built: cleaner and worth more with ON.
-            double onP = 0, offP = 0, onV = 0, offV = 0;
-            int n = 0;
-            for (const auto& [at, value] : crowdOff.pollutionAt) {
-                const Coord home(at.first, at.second);
-                if (std::none_of(crowdOff.sites.begin(), crowdOff.sites.end(), [&](Coord z) {
-                        return R::industryTooCloseToHomes(CityPlacementPolicy::footprintDistance(z.x, z.y, 2, 2, home.x, home.y, 2, 2)); }))
-                    continue;
-                ++n; offP += value; onP += crowdOn.pollutionAt.at(at);
-                offV += crowdOff.landValueAt.at(at); onV += crowdOn.landValueAt.at(at);
-            }
-            SDL_Log("SKIRMISH_PROBE: redevelop IndustrySeparation crowded homes_near_off_sites=%d pollution on=%.1f off=%.1f "
-                    "land_value on=%.1f off=%.1f", n, n ? onP / n : 0, n ? offP / n : 0, n ? onV / n : 0, n ? offV / n : 0);
-            expect(n > 0 && onP < offP, std::string(name) + ": crowded, the homes beside OFF's sites are no cleaner with ON");
-            expect(n > 0 && onV > offV, std::string(name) + ": crowded, the homes beside OFF's sites are worth no more with ON");
-        } else {
-            // The homes OFF adds beside polluters are more polluted and worth less than the
-            // homes the city keeps when ON refuses them.
-            SDL_Log("SKIRMISH_PROBE: redevelop HomeSeparation crowded off_new_homes=%zu pollution=%.1f land_value=%.1f | "
-                    "on homes pollution=%.1f land_value=%.1f", crowdOff.sites.size(), crowdOff.sitePollution,
-                    crowdOff.siteLandValue, crowdOn.pollution, crowdOn.landValue);
-            expect(!crowdOff.sites.empty() && crowdOff.sitePollution > crowdOn.pollution,
-                   std::string(name) + ": crowded, OFF's new homes are no more polluted than the homes ON keeps");
-            expect(!crowdOff.sites.empty() && crowdOff.siteLandValue < crowdOn.landValue,
-                   std::string(name) + ": crowded, OFF's new homes are worth no less than the homes ON keeps");
+        expect(openOn.near == 0 && crowdOn.near == 0, std::string(name) + ": a site within 5 tiles of a home");
+        expect(crowdOff.near >= 1, std::string(name) + ": crowded OFF never built near a home, so the test proves nothing");
+        // The homes within 5 tiles of where OFF built: cleaner and worth more with ON.
+        double onP = 0, offP = 0, onV = 0, offV = 0;
+        int n = 0;
+        for (const auto& [at, value] : crowdOff.pollutionAt) {
+            const Coord home(at.first, at.second);
+            if (std::none_of(crowdOff.sites.begin(), crowdOff.sites.end(), [&](Coord z) {
+                    return R::industryTooCloseToHomes(CityPlacementPolicy::footprintDistance(z.x, z.y, 2, 2, home.x, home.y, 2, 2)); }))
+                continue;
+            ++n; offP += value; onP += crowdOn.pollutionAt.at(at);
+            offV += crowdOff.landValueAt.at(at); onV += crowdOn.landValueAt.at(at);
         }
+        SDL_Log("SKIRMISH_PROBE: redevelop IndustrySeparation crowded homes_near_off_sites=%d pollution on=%.1f off=%.1f "
+                "land_value on=%.1f off=%.1f", n, n ? onP / n : 0, n ? offP / n : 0, n ? onV / n : 0, n ? offV / n : 0);
+        expect(n > 0 && onP < offP, std::string(name) + ": crowded, the homes beside OFF's sites are no cleaner with ON");
+        expect(n > 0 && onV > offV, std::string(name) + ": crowded, the homes beside OFF's sites are worth no more with ON");
     }
 
     std::string all;

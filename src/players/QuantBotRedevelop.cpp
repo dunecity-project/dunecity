@@ -514,7 +514,9 @@ void QuantBot::updateRedevelopmentOrders() {
     }
 }
 
-/// Every own R/C lot placed: whether it landed within kIndustrySeparationTiles of an own polluter.
+/// Every own R/C lot placed: whether it landed within kIndustrySeparationTiles of an own polluter
+/// (a diagnostic: a HomeSeparation switch refusing such sites was tried and removed on 2026-11-27,
+/// because the homes it refused were cleaner and worth more than the city's average home).
 void QuantBot::noteHomePlaced(Coord site) {
     const Coord size = getStructureSize(Structure_ZoneResidential);
     int nearest = 1000000;
@@ -528,8 +530,7 @@ void QuantBot::noteHomePlaced(Coord site) {
     ++redevelopmentActivity.homesPlaced;
     const bool near = RedevelopmentPolicy::industryTooCloseToHomes(nearest);
     if (near) ++redevelopmentActivity.homesNearIndustry;
-    SDL_Log("HOME_PLACED: house=%d separated=%d near_industry=%d industry_distance=%d x=%d y=%d", getHouse()->getHouseID(),
-            int(botConfig().force.homeSeparation), int(near), nearest == 1000000 ? -1 : nearest, site.x, site.y);
+    SDL_Log("HOME_PLACED: house=%d near_industry=%d industry_distance=%d x=%d y=%d", getHouse()->getHouseID(), int(near), nearest == 1000000 ? -1 : nearest, site.x, site.y);
 }
 
 /// Every own Industrial zone placed: whether it landed within kIndustrySeparationTiles of an own R/C lot.
