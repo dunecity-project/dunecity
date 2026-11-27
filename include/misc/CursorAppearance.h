@@ -7,10 +7,10 @@
 #include <misc/MobilePlatform.h>
 
 namespace CursorAppearance {
-enum class Action { Pointer, Move, Attack, Capture, Drop, Heal, Repair, Return, Deploy, Destruct, Paths, Patrol };
+enum class Action { Pointer, Move, Attack, Capture, Drop, Heal, Repair, Return, Deploy, Destruct, Paths, Patrol, Garrison };
 /// Cursors that pick a map position keep their hotspot clear so the exact target stays visible.
 inline bool aimsAtHotspot(Action action) {
-    return (action >= Action::Move && action <= Action::Heal) || action == Action::Patrol;
+    return (action >= Action::Move && action <= Action::Heal) || action == Action::Patrol || action == Action::Garrison;
 }
 inline SDL_Point hotspot(Action action, float scale) {
     const float factor = scale / 1.5f;
@@ -79,6 +79,12 @@ inline float shapeDistance(Action action, SDL_FPoint p) {
                 polygonDistance(p,{{19,4},{26,9},{19,14}}),
                 segmentDistance(p,{8,19},{24,19})-1.3f,
                 polygonDistance(p,{{9,14},{2,19},{9,24}})});
+        case Action::Garrison:
+            // Zone Garrisons: a house (roof and walls, its open door the hotspot) behind a row of sandbags.
+            return std::min({segmentDistance(p,{4,12},{14,3})-1.3f, segmentDistance(p,{14,3},{24,12})-1.3f,
+                segmentDistance(p,{8,11},{8,21})-1.3f, segmentDistance(p,{20,11},{20,21})-1.3f,
+                std::hypot(p.x-6,p.y-25)-2.6f, std::hypot(p.x-11.5f,p.y-25)-2.6f,
+                std::hypot(p.x-17,p.y-25)-2.6f, std::hypot(p.x-22.5f,p.y-25)-2.6f});
     }
     return 1000;
 }

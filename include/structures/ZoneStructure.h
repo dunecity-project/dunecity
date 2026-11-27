@@ -82,6 +82,8 @@ public:
     // --- Zone Garrisons (docs/zone-garrisons.md; ZoneStructureGarrison.cpp) ---
     /// The match rule is on for this game.
     static bool garrisonsEnabled();
+    /// The Garrison command applies to UNIT: the rule is on in a city game and UNIT can capture.
+    static bool garrisonOrderAvailable(const ObjectBase* unit);
     bool isGarrisoned() const { return !garrison_.empty(); }
     int getGarrisonSize() const { return static_cast<int>(garrison_.size()); }
     /// Occupants in the order they entered; the first takes the cover damage.
@@ -124,6 +126,10 @@ private:
     Uint32 garrisonTargetID_ = NONE_ID;     ///< saved
     Sint32 garrisonSearchTimer_ = 0;        ///< saved
     Sint32 garrisonOriginalOwner_ = -1;     ///< saved from SAVEGAMEVERSION_ZONE_GARRISON_RETURN
+    /// Shots the present garrison fired, and at aircraft: reported in the exit line of the match log
+    /// only (not saved, no effect on play).
+    int garrisonShots_ = 0;
+    int garrisonAirShots_ = 0;
 
     DuneCity::ZoneType zoneType_;  // The type of zone this structure represents
     uint8_t residentialPopulation_ = 0;

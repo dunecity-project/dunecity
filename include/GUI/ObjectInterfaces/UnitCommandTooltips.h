@@ -81,8 +81,15 @@ inline std::string stop() {
 inline std::string carryallDrop() {
     return withHotkey(_("Request Carryall drop"), Hotkeys::Action::CarryallDrop, _("fly the unit to a position"));
 }
-inline std::string capture() {
-    return withHotkey(_("Capture"), Hotkeys::Action::Capture, _("take over a building; Shift queues"));
+/// ZONES: the Zone Garrisons rule is on in a city game, so Capture on a zone occupies it.
+inline std::string capture(bool zones = false) {
+    return withHotkey(_("Capture"), Hotkeys::Action::Capture, zones
+        ? _("take over a building, or occupy a zone (own: defend it; enemy: take it); Shift queues")
+        : _("take over a building; Shift queues"));
+}
+inline std::string garrison() {
+    return withHotkey(_("Garrison"), Hotkeys::Action::Garrison,
+        _("occupy a zone (own: defend it; enemy: take it); Soldiers and Troopers fire out with their own weapons"));
 }
 inline std::string returnHarvester() {
     return withHotkey(_("Return harvester"), Hotkeys::Action::Hold, _("deliver spice to a refinery; Shift queues"));

@@ -34,10 +34,23 @@ UnitBase* occupantUnit(Uint32 objectID) {
     return dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(objectID));
 }
 
+/// The house of the first live soldier of OCCUPANTS, or -1.
+int getGarrisonHouseID(const std::vector<Uint32>& occupants) {
+    for(const Uint32 id : occupants) {
+        if(const UnitBase* unit = occupantUnit(id)) return unit->getOwner()->getHouseID();
+    }
+    return -1;
+}
+
 } // namespace
 
 bool ZoneStructure::garrisonsEnabled() {
     return currentGame != nullptr && currentGame->getGameInitSettings().getGameOptions().zoneGarrisons;
+}
+
+bool ZoneStructure::garrisonOrderAvailable(const ObjectBase* unit) {
+    return unit != nullptr && unit->isAUnit() && garrisonsEnabled() && currentGame->isCitySimEnabled()
+        && static_cast<const UnitBase*>(unit)->canCaptureStructures();
 }
 
 int ZoneStructure::evacuateHealthPercent() {
@@ -96,6 +109,9 @@ bool ZoneStructure::enterGarrison(UnitBase* unit) {
     unit->enterGarrison();
     garrison_.push_back(unit->getObjectID());
     garrisonSearchTimer_ = 0;
+    SDL_Log("ZONE_GARRISON: event=entered house=%d unit=%u item=%d zone=%u taken=%d previous_house=%d occupants=%d cycle=%u",
+            house->getHouseID(), unit->getObjectID(), unit->getItemID(), objectID, taken ? 1 : 0, previousHouse,
+            getGarrisonSize(), currentGame->getGameCycleCount());
     if(AITelemetry::log().enabled()) {
         const Coord pos = getLocation();
         AITelemetry::log().write(currentGame->getGameCycleCount(), house->getHouseID(), -1,
@@ -110,6 +126,8 @@ bool ZoneStructure::enterGarrison(UnitBase* unit) {
 int ZoneStructure::evacuateGarrison(bool destroying) {
     if(garrison_.empty()) return 0;
     int deployed = 0;
+    int hurt = 0;
+    const bool lowHealth = !destroying && tooDamagedToHold();
     std::vector<Uint32> remaining;
     const auto occupants = garrison_;
     garrison_.clear();
@@ -127,8 +145,11 @@ int ZoneStructure::evacuateGarrison(bool destroying) {
             unit->setForced(false);
             unit->deploy(spot);
             // Thrown out of the ruin: hurt, never killed (DuneCity::ZoneGarrison::healthAfterEjection).
-            if(destroying) unit->setHealth(DuneCity::ZoneGarrison::healthAfterEjection(
-                unit->getHealth().lround(), unit->getMaxHealth()));
+            if(destroying) {
+                const int before = unit->getHealth().lround();
+                unit->setHealth(DuneCity::ZoneGarrison::healthAfterEjection(before, unit->getMaxHealth()));
+                hurt += before - unit->getHealth().lround();
+            }
             ++deployed;
         } else if(destroying) {
             unit->setHealth(0);    // Buried in the ruin; removed on its next update.
@@ -137,6 +158,12 @@ int ZoneStructure::evacuateGarrison(bool destroying) {
         }
     }
     garrison_ = std::move(remaining);
+    if(owner != nullptr) {
+        SDL_Log("ZONE_GARRISON: event=exit house=%d zone=%u deployed=%d remaining=%d destroyed=%d low_health=%d hurt=%d health=%d max_health=%d shots=%d air_shots=%d cycle=%u",
+                getGarrisonHouseID(occupants), objectID, deployed, getGarrisonSize(), destroying ? 1 : 0, lowHealth ? 1 : 0,
+                hurt, getHealth().lround(), getMaxHealth(), garrisonShots_, garrisonAirShots_, currentGame->getGameCycleCount());
+    }
+    if(garrison_.empty()) garrisonShots_ = garrisonAirShots_ = 0;
     if(AITelemetry::log().enabled() && owner != nullptr) {
         AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "zone_garrison_exit",
             AITelemetry::Record().set("zone", objectID).set("deployed", deployed)
@@ -156,6 +183,8 @@ void ZoneStructure::returnCapturedZone() {
     if(original == nullptr || original == owner || !original->isAlive()) return;
     const int holder = owner->getHouseID();
     transferOwnership(original, false);
+    SDL_Log("ZONE_GARRISON: event=returned house=%d holder=%d zone=%u health=%d cycle=%u",
+            original->getHouseID(), holder, objectID, getHealth().lround(), currentGame->getGameCycleCount());
     if(AITelemetry::log().enabled()) {
         const Coord pos = getLocation();
         AITelemetry::log().write(currentGame->getGameCycleCount(), original->getHouseID(), -1,
@@ -212,6 +241,10 @@ void ZoneStructure::dropDeadOccupants() {
     }), garrison_.end());
     if(garrison_.empty()) {
         garrisonTargetID_ = NONE_ID;
+        SDL_Log("ZONE_GARRISON: event=killed_out house=%d zone=%u health=%d max_health=%d shots=%d air_shots=%d cycle=%u",
+                owner != nullptr ? owner->getHouseID() : -1, objectID, getHealth().lround(), getMaxHealth(),
+                garrisonShots_, garrisonAirShots_, currentGame->getGameCycleCount());
+        garrisonShots_ = garrisonAirShots_ = 0;
         // The last soldier inside was killed: a captured zone is held only while occupied.
         if(getHealth() > 0) returnCapturedZone();
     }
@@ -318,8 +351,12 @@ void ZoneStructure::updateGarrison() {
     const FixPoint distance = blockDistance(fromTile, target->getLocation());
     for(const Uint32 id : garrison_) {
         UnitBase* unit = occupantUnit(id);
-        if(unit->garrisonWeaponReady() && unit->canAttack(target) && distance <= unit->getWeaponRange()) {
-            unit->fireFromGarrison(target, muzzle, fromTile);
+        if(unit->garrisonWeaponReady() && unit->canAttack(target) && distance <= unit->getWeaponRange()
+           && unit->fireFromGarrison(target, muzzle, fromTile) && (++garrisonShots_, target->isAFlyingUnit())) {
+            ++garrisonAirShots_;
+            SDL_Log("ZONE_GARRISON: event=fired_air house=%d unit=%u item=%d zone=%u target=%u target_item=%d cycle=%u",
+                    unit->getOwner()->getHouseID(), unit->getObjectID(), unit->getItemID(), objectID,
+                    target->getObjectID(), target->getItemID(), currentGame->getGameCycleCount());
         }
     }
 }

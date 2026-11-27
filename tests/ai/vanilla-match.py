@@ -136,6 +136,15 @@ WORM_ROW_FIELDS = KEY + ('event',) + WORM_FIELDS
 # reordered, stalled).
 HOSPITAL_FIELDS = ('house', 'object', 'item', 'hp', 'max_hp', 'hospital', 'why', 'cycle')
 HOSPITAL_ROW_FIELDS = KEY + ('event',) + HOSPITAL_FIELDS
+# One row per Zone Garrisons event (docs/zone-garrisons.md, ZONE_GARRISON: lines): QuantBot orders
+# (event=order why=defend|take|raid|levy|reinforce|front|chain), their ends (order_ended why=no_zone|
+# held_by_other|no_progress), soldiers in (entered, taken=1 for an enemy zone), out (exit: low_health,
+# destroyed, hurt), captured zones handed back (returned), releases, levy training, shots at aircraft
+# from a garrison (fired_air) and other controllers' refused orders (redirect_refused).
+GARRISON_FIELDS = ('house', 'why', 'unit', 'item', 'zone', 'zone_house', 'occupants', 'taken', 'previous_house',
+                   'holder', 'deployed', 'remaining', 'destroyed', 'low_health', 'hurt', 'health', 'max_health',
+                   'target_item', 'order', 'by', 'price', 'soldiers', 'shots', 'air_shots', 'cycle')
+GARRISON_ROW_FIELDS = KEY + ('event',) + GARRISON_FIELDS
 # One row per city house a city year (CITY_ZONE_CHURN, CityEffectsRuntime.cpp): its zone counts and
 # how often its zones changed density, population and Hospital/Church overlay that year.
 ZONE_FIELDS = ('house', 'year', 'cycle', 'days', 'r', 'c', 'i', 'hospitals', 'churches', 'hospital_days',
@@ -486,6 +495,13 @@ def play(args, scratch, binary, key):
             hospital.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
                              **{f: data.get(f, '') for f in HOSPITAL_FIELDS}})
     append(results / 'hospital.csv', HOSPITAL_ROW_FIELDS, hospital)
+    garrison = []
+    for l in lines:
+        if 'ZONE_GARRISON:' in l:
+            data = parse(l, 'ZONE_GARRISON:')
+            garrison.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
+                             **{f: data.get(f, '') for f in GARRISON_FIELDS}})
+    append(results / 'garrison.csv', GARRISON_ROW_FIELDS, garrison)
     zones = [{**dict(zip(KEY, key)), **{f: d.get(f, '') for f in ZONE_FIELDS}}
              for d in (parse(l, 'CITY_ZONE_CHURN:') for l in lines if 'CITY_ZONE_CHURN:' in l)]
     append(results / 'zones.csv', ZONE_ROW_FIELDS, zones)

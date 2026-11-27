@@ -874,6 +874,15 @@ struct QuantBotConfig {
         /// Zone Garrisons: Barracks train cheap Soldiers for a capture levy that walks into the
         /// nearest enemy zones (QuantBotGarrison.cpp). Off unless measured.
         bool zoneCaptureLevy;
+        /// Zone Garrisons, house to house: Troopers reinforce our garrisons enemies close on, up to
+        /// the zone's four (QuantBotGarrison.cpp). Off unless measured.
+        bool zoneGarrisonReinforce;
+        /// Zone Garrisons, house to house: our empty zones nearest the enemy (the front) get a
+        /// garrison before anyone attacks them. Off unless measured.
+        bool zoneFrontGarrison;
+        /// Zone Garrisons, house to house: from every zone we hold, soldiers take the next empty enemy
+        /// zone across the street, block by block. Off unless measured.
+        bool zoneCaptureChain;
         /// Stateless existing-composition/technology experiment, default OFF.
         /// Current paired outcome audits reject adoption; see HANDOVER.
         bool simpleTechSavings;

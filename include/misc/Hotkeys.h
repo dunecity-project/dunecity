@@ -37,6 +37,7 @@ enum class Action : int {
     ToggleFormationMoves, NextFormationShape, ToggleMovementPaths,
     CityZoneTool, CityRoadTool, CityBudget, CityStatsOverlay,
     ToggleGameTime,
+    Garrison,
     Count
 };
 constexpr int actionCount = static_cast<int>(Action::Count);
@@ -104,6 +105,7 @@ inline const std::array<ActionInfo, actionCount>& actions() {
         {Action::CityBudget,             "City Budget",             "City budget",                   {SDLK_b, Mod::Shift},             false},
         {Action::CityStatsOverlay,       "City Statistics",         "City statistics overlay",       {SDLK_c, Mod::Shift},             false},
         {Action::ToggleGameTime,         "Show Game Time",          "Show game time",                {SDLK_t, Mod::Shift},             false},
+        {Action::Garrison,               "Garrison",                "Garrison a zone (Zone Garrisons)", {SDLK_i, 0},                   false},  // +
     }};
     return table;
 }

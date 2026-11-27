@@ -36,6 +36,7 @@
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
 #include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
 #include <dunecity/HospitalCare.h>
+#include <structures/ZoneStructure.h>
 #include <GUI/ObjectInterfaces/FormationBar.h>
 #include <FormationOrders.h>
 
@@ -95,9 +96,16 @@ protected:
         carryallDropButton.setOnClick(std::bind(&MultiUnitInterface::onCarryallDrop, this));
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
-        captureButton.setTooltipText(UnitCommandTooltips::capture());
+        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled() && currentGame->isCitySimEnabled()));
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&MultiUnitInterface::onCapture, this));
+
+        // Zone Garrisons: the Garrison cursor, shown while a selected unit can garrison.
+        garrisonButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Garrison)});
+        garrisonButton.setTooltipText(UnitCommandTooltips::garrison());
+        garrisonButton.setToggleButton(true);
+        garrisonButton.setVisible(false);
+        garrisonButton.setOnClick([]() { currentGame->setCursorMode(Game::CursorMode_Garrison); });
 
         returnButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Return)});
         returnButton.setTooltipText(UnitCommandTooltips::returnHarvester());
@@ -130,7 +138,7 @@ protected:
         movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
         actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
-            &carryallDropButton, &captureButton, &returnButton, &deployButton,
+            &carryallDropButton, &captureButton, &garrisonButton, &returnButton, &deployButton,
             &destructButton, &healButton, &sendToRepairButton});
         buttonVBox.addWidget(&actionBar);
 
@@ -352,6 +360,7 @@ protected:
         patrolButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Patrol);
         healButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Heal);
         captureButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Capture);
+        garrisonButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Garrison);
 
         bool bGuard = true;
         bool bAreaGuard = true;
@@ -365,6 +374,7 @@ protected:
         bool bShowAttack = false;
         bool bShowHeal = false;
         bool bShowCapture = false;
+        bool bShowGarrison = false;
         bool bShowReturn = false;
         bool bShowDeploy = false;
         bool bShowDevastate = false;
@@ -412,6 +422,7 @@ protected:
                 }
 
                 if(pUnit->canCaptureStructures()) bShowCapture = true;
+                if(ZoneStructure::garrisonOrderAvailable(pUnit)) bShowGarrison = true;
                 switch(pUnit->getItemID()) {
                     case Unit_MCV: {
                         bShowDeploy = true;
@@ -435,6 +446,7 @@ protected:
         attackButton.setVisible(bShowAttack);
         healButton.setVisible(bShowHeal);
         captureButton.setVisible(bShowCapture);
+        garrisonButton.setVisible(bShowGarrison);
         sabotageButton.setVisible(ModManager::instance().isTornieFamilyContentActive() && bShowCapture);
         sabotageButton.setToggleState(bSabotage);
         returnButton.setVisible(bShowReturn);
@@ -476,6 +488,7 @@ protected:
     SymbolButton    attackButton;
     SymbolButton    patrolButton;
     SymbolButton    captureButton;
+    SymbolButton    garrisonButton;
     SymbolButton    returnButton;
     SymbolButton    deployButton;
     SymbolButton    destructButton;

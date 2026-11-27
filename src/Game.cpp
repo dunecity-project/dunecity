@@ -3384,6 +3384,14 @@ case CursorMode_Heal: {
 
                                 } break;
 
+                                case CursorMode_Garrison: {
+
+                                    if(screenborder->isScreenCoordInsideMap(mouse->x, mouse->y) == true) {
+                                        handleSelectedObjectsGarrisonClick(screenborder->screen2MapX(mouse->x), screenborder->screen2MapY(mouse->y));
+                                    }
+
+                                } break;
+
                                 case CursorMode_CityZone: {
 
                                     if(screenborder->isScreenCoordInsideMap(mouse->x, mouse->y) == true) {
@@ -6432,6 +6440,11 @@ case CursorMode_Heal: {
                     return false;
                 } break;
 
+                case CursorMode_Garrison: {
+                    handleSelectedObjectsGarrisonClick(worldPosition.x / TILESIZE, worldPosition.y / TILESIZE);
+                    return false;
+                } break;
+
                 case CursorMode_CarryallDrop: {
                     handleSelectedObjectsRequestCarryallDropClick(worldPosition.x / TILESIZE, worldPosition.y / TILESIZE);
                     return false;
@@ -6838,6 +6851,12 @@ void Game::runHotkeyAction(Hotkeys::Action action, bool extraShift) {
         case Action::Patrol: setCursorMode(CursorMode_Patrol); break;
         case Action::Capture: setCursorMode(CursorMode_Capture); break;
         case Action::CarryallDrop: setCursorMode(CursorMode_CarryallDrop); break;
+        case Action::Garrison: {
+            // Zone Garrisons: only when a selected unit can garrison (the button shows then too).
+            bool any = false;
+            for(Uint32 id : selectedList) any = any || ZoneStructure::garrisonOrderAvailable(objectManager.getObject(id));
+            if(any) setCursorMode(CursorMode_Garrison);
+        } break;
 
         case Action::Stop: setSelectedUnitsAttackMode(STOP); break;
         case Action::Guard: setSelectedUnitsAttackMode(GUARD); break;
@@ -7296,6 +7315,35 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
     }
 
     return false;
+}
+
+bool Game::handleSelectedObjectsGarrisonClick(int xPos, int yPos) {
+    const Tile* pTile = currentGameMap->getTile(xPos, yPos);
+    if(pTile == nullptr || dynamic_cast<const ZoneStructure*>(pTile->getGroundObject()) == nullptr) return false;
+    return handleSelectedObjectsCaptureClick(xPos, yPos);
+}
+
+CursorAppearance::Action Game::orderCursorAction(int mode, int x, int y) const {
+    using Action = CursorAppearance::Action;
+    const Action symbol = mode == CursorMode_Garrison ? Action::Garrison : Action::Capture;
+    if(pLocalHouse == nullptr || currentGameMap == nullptr || !currentGameMap->tileExists(x, y)) return Action::Pointer;
+    const auto* structure = dynamic_cast<const StructureBase*>(currentGameMap->getTile(x, y)->getGroundObject());
+    if(structure == nullptr) return Action::Pointer;
+    const bool enemy = structure->getOwner()->getTeamID() != pLocalHouse->getTeamID();
+    const auto* zone = dynamic_cast<const ZoneStructure*>(structure);
+    if(zone != nullptr && ZoneStructure::garrisonsEnabled()) {
+        // An own zone to occupy, or an enemy's to take (or to fire on while enemy soldiers hold it).
+        if(zone->getOwner() == pLocalHouse || enemy) return symbol;
+        return Action::Pointer;
+    }
+    if(mode == CursorMode_Capture && enemy && structure->canBeCaptured()) return symbol;
+    return Action::Pointer;
+}
+
+CursorAppearance::Action Game::getOrderCursorAction() const {
+    if(!screenborder || !screenborder->isScreenCoordInsideMap(drawnMouseX, drawnMouseY))
+        return CursorAppearance::Action::Pointer;
+    return orderCursorAction(currentCursorMode, screenborder->screen2MapX(drawnMouseX), screenborder->screen2MapY(drawnMouseY));
 }
 
 void Game::handleCityZonePlacementClick(int xPos, int yPos) {

@@ -29,6 +29,7 @@
 #include <GUI/SymbolButton.h>
 #include <misc/CursorAppearance.h>
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
+#include <structures/ZoneStructure.h>
 #include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
 #include <dunecity/HospitalCare.h>
 #include <GUI/HBox.h>
@@ -87,11 +88,19 @@ protected:
         carryallDropButton.setOnClick(std::bind(&UnitInterface::onCarryallDrop, this));
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
-        captureButton.setTooltipText(UnitCommandTooltips::capture());
+        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled() && currentGame->isCitySimEnabled()));
         captureButton.setVisible(itemID == Unit_Soldier || itemID == Unit_Trooper
             || (ModManager::instance().isTornieFamilyContentActive() && itemID == Unit_FlameTrooper));
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&UnitInterface::onCapture, this));
+
+        // Zone Garrisons (Stefan, 2026-11-27: "i cant garison my own buildings there no button"): the
+        // Garrison cursor; only zones are its targets (own: occupy; enemy: take).
+        garrisonButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Garrison)});
+        garrisonButton.setTooltipText(UnitCommandTooltips::garrison());
+        garrisonButton.setVisible(ZoneStructure::garrisonOrderAvailable(currentGame->getObjectManager().getObject(objectID)));
+        garrisonButton.setToggleButton(true);
+        garrisonButton.setOnClick([]() { currentGame->setCursorMode(Game::CursorMode_Garrison); });
 
         returnButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Return)});
         returnButton.setTooltipText(UnitCommandTooltips::returnHarvester());
@@ -134,7 +143,7 @@ protected:
         movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
         actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
-            &carryallDropButton, &captureButton, &returnButton, &deployButton,
+            &carryallDropButton, &captureButton, &garrisonButton, &returnButton, &deployButton,
             &destructButton, &spiceBloomButton, &healButton, &sendToRepairButton});
         buttonVBox.addWidget(&actionBar);
 
@@ -343,6 +352,8 @@ protected:
         attackButton.setVisible(pObject->canAttack());
         healButton.setVisible(pObject->canHeal());
         captureButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Capture);
+        garrisonButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Garrison);
+        garrisonButton.setVisible(ZoneStructure::garrisonOrderAvailable(pObject));
         carryallDropButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_CarryallDrop);
         spiceBloomButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_SpiceBloom);
         carryallDropButton.setVisible(currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops && pObject->getOwner()->hasCarryalls());
@@ -386,6 +397,7 @@ protected:
     SymbolButton    attackButton;
     SymbolButton    patrolButton;
     SymbolButton    captureButton;
+    SymbolButton    garrisonButton;
     SymbolButton    returnButton;
     SymbolButton    deployButton;
     SymbolButton    destructButton;

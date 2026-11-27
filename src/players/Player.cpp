@@ -20,6 +20,7 @@
 #include <players/Player.h>
 
 #include <cstring>
+#include <map>
 #include <players/QuantBotConfig.h>
 
 #include <Map.h>
@@ -133,12 +134,26 @@ const House* Player::getHouse(int houseID) const {
 namespace {
 
 /// Zone Garrisons: a soldier the AI sent into a zone (capture order) keeps that order; no other
-/// controller re-routes it before it is inside or the order ends. Otherwise the army, defence and
-/// formation passes pulled it away every pass and it was ordered back the next (2026-11-27
-/// self-play: 3,421 orders for 663 entries in one game).
-bool garrisonBound(const UnitBase* unit) {
-    return unit->getAttackMode() == CAPTURE && ZoneStructure::garrisonsEnabled()
-        && dynamic_cast<const ZoneStructure*>(unit->getTarget()) != nullptr;
+/// controller (attack waves, defence pulls, formations, retreat, repair, hospital trips, airlifts,
+/// idle sweeps) re-routes it before it is inside or the order ends. Only the garrison controller
+/// itself (QuantBot::updateZoneGarrisons) may change it: it ends an order whose zone is gone, taken
+/// by someone else, or that made no progress for a set time. Stefan, 2026-11-27: "and sto the ai
+/// pulling soldiers away on their way in" (self-play before: 3,421 orders for 663 entries in a game).
+/// Every refused order is logged (once a soldier per 30 s) so the measured games count them.
+bool garrisonBound(const UnitBase* unit, const char* order, const char* caller) {
+    if(unit->getAttackMode() != CAPTURE || !ZoneStructure::garrisonsEnabled()
+       || dynamic_cast<const ZoneStructure*>(unit->getTarget()) == nullptr) return false;
+    if(caller != nullptr && std::strcmp(caller, "updateZoneGarrisons") == 0) return false;
+    static std::map<Uint32, Uint32> lastLogged;
+    const Uint32 cycle = currentGame->getGameCycleCount();
+    auto& last = lastLogged[unit->getObjectID()];
+    if(last == 0 || cycle < last || cycle - last >= MILLI2CYCLES(30000)) {
+        last = cycle;
+        SDL_Log("ZONE_GARRISON: event=redirect_refused house=%d unit=%u zone=%u order=%s by=%s cycle=%u",
+                unit->getOwner()->getHouseID(), unit->getObjectID(), unit->getTarget()->getObjectID(), order,
+                caller != nullptr ? caller : "?", cycle);
+    }
+    return true;
 }
 
 /// An AI player's army order addressed to a Saboteur. True when it must not be applied: with
@@ -165,6 +180,7 @@ bool saboteurRefuses(const ObjectBase* pObject, const char* order, const char* c
 void Player::doRepair(const ObjectBase* pObject, const char* caller) const {
     if(pObject->getOwner() == getHouse() && pObject->isActive()) {
         if(saboteurRefuses(pObject, "repair", caller)) return;
+        if(pObject->isAUnit() && garrisonBound(static_cast<const UnitBase*>(pObject), "repair", caller)) return;
         if(pObject->isAUnit()) const_cast<UnitBase*>(static_cast<const UnitBase*>(pObject))->leaveFormation();
         const_cast<ObjectBase*>(pObject)->doRepair();
     } else {
@@ -456,7 +472,7 @@ void Player::doAttackObject(const TurretBase* pTurret, const ObjectBase* pTarget
 
 void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
-        if(garrisonBound(pUnit)) return;
+        if(garrisonBound(pUnit, "move", caller)) return;
         if(saboteurRefuses(pUnit, "move", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Pos(x, y, bForced);
@@ -468,7 +484,7 @@ void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced, const
 
 void Player::doHuntToward(const UnitBase* pUnit, int x, int y, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
-        if(garrisonBound(pUnit)) return;
+        if(garrisonBound(pUnit, "hunt_toward", caller)) return;
         if(saboteurRefuses(pUnit, "hunt_toward", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doHuntToward(x, y);
@@ -497,7 +513,7 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
                                             const char* order, const char* caller, bool countApplied) {
     std::vector<const UnitBase*> own;
     for(const UnitBase* unit : units) {
-        if(unit == nullptr || unit->getOwner() != house || !unit->isActive() || garrisonBound(unit)) continue;
+        if(unit == nullptr || unit->getOwner() != house || !unit->isActive() || garrisonBound(unit, order, caller)) continue;
         notePalaceWormOrder(unit, order, caller);
         if(unit->getItemID() == Unit_Saboteur && (countApplied || Saboteur::keepsOwnHunt())
            && saboteurRefuses(unit, order, caller)) continue;
@@ -568,7 +584,7 @@ void Player::doFormUp(const std::vector<const UnitBase*>& units, const char* cal
 
 void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
-        if(garrisonBound(pUnit)) return;
+        if(garrisonBound(pUnit, "move_to_object", caller)) return;
         if(saboteurRefuses(pUnit, "move_to_object", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Object(pTargetObject);
@@ -580,7 +596,7 @@ void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObjec
 
 void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
-        if(garrisonBound(pUnit)) return;
+        if(garrisonBound(pUnit, "attack_pos", caller)) return;
         if(saboteurRefuses(pUnit, "attack_position", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackPos(x, y, bForced);
@@ -592,7 +608,7 @@ void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced, cons
 
 void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObject, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
-        if(garrisonBound(pUnit)) return;
+        if(garrisonBound(pUnit, "attack_object", caller)) return;
         if(saboteurRefuses(pUnit, "attack_object", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackObject(pTargetObject, bForced);
@@ -604,7 +620,7 @@ void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObje
 
 void Player::doSetAttackMode(const UnitBase* pUnit, ATTACKMODE attackMode, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
-        if(garrisonBound(pUnit)) return;
+        if(garrisonBound(pUnit, "attack_mode", caller)) return;
         if(saboteurRefuses(pUnit, "attack_mode", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doSetAttackMode(attackMode);
@@ -656,6 +672,7 @@ bool Player::doDeploy(const MCV* pMCV) const {
 bool Player::doRequestCarryallDrop(const GroundUnit* pGroundUnit, const char* caller) const {
     if(pGroundUnit->getOwner() == getHouse() && pGroundUnit->isActive()) {
         if(saboteurRefuses(pGroundUnit, "carryall", caller)) return false;
+        if(garrisonBound(pGroundUnit, "carryall", caller)) return false;
         const_cast<GroundUnit*>(pGroundUnit)->leaveFormation();
         return const_cast<GroundUnit*>(pGroundUnit)->requestCarryall();
     } else {

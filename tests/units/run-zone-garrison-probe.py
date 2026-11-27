@@ -34,7 +34,7 @@ parser.add_argument('--output-dir', type=Path)
 parser.add_argument('--overlay-source', action='append', default=[],
                     help='Production source (e.g. src/structures/ZoneStructureGarrison.cpp) to compile from the '
                          'working tree into the probe instead of linking the build tree\'s object')
-parser.add_argument('--wall-timeout', type=int, default=240)
+parser.add_argument('--wall-timeout', type=int, default=400)
 args = parser.parse_args()
 build = args.build_dir.resolve()
 out = args.output_dir.resolve() if args.output_dir else Path(tempfile.mkdtemp(prefix='dunecity-zone-garrison-probe-'))

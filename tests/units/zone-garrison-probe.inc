@@ -31,6 +31,15 @@
 //                    the panel says captured; Evacuate hands the zone back
 // player refused     a full own zone, an ally's zone (the cursor refuses the click) and a zone below the
 //                    threshold are not entered; an enemy's garrisoned zone shows Evacuate disabled
+// garrison button    the unit panel's Garrison button (and the I key) for Soldiers and Troopers, hidden for
+//                    a tank and with the rule off; the cursor shows the Garrison symbol over an own or enemy
+//                    zone and a pointer over sand; a click on sand is refused, on an own zone garrisons it
+// reinforce          a Trooper joins a Soldier's own garrison and a captured zone's garrison (mixed)
+// trooper air/tank   a garrisoned Trooper hits an Ornithopter and a tank with its own rockets
+// no pull            a soldier on its way in keeps its order against every other controller's order
+//                    (move, hunt, attack, formation, repair, Carryall, attack mode); the garrison
+//                    controller's own order is obeyed
+// price              the Soldier costs 30 credits in the Barracks build list
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -45,6 +54,7 @@
 #include <mod/ModManager.h>
 #include <players/Player.h>
 #include <structures/ZoneStructure.h>
+#include <structures/BuilderBase.h>
 #include <units/InfantryBase.h>
 #include <units/UnitBase.h>
 #include <dunecity/ZoneGarrisonPolicy.h>
@@ -766,6 +776,206 @@ void checkPlayerRefused() {
     record("player_refused", "full own zone, ally's zone and a damaged zone not entered; enemy's Evacuate disabled");
 }
 
+// --- Garrison button, reinforcement, garrison weapons, no pulling away, price -----------------------
+
+void checkGarrisonButton() {
+    Fixture f("garrison button");
+    Game& game = *f.game;
+    auto* z = f.zone(f.own, Structure_ZoneResidential, 24, 24);
+    auto* foe = f.zone(f.enemy, Structure_ZoneCommercial, 40, 24, 2);
+    auto* soldier = f.unit(f.own, Unit_Soldier, 20, 25);
+    auto* trooper = f.unit(f.own, Unit_Trooper, 20, 27);
+    auto* tank = f.unit(f.own, Unit_Tank, 16, 30);
+    f.run(1);
+    // One Soldier: the panel shows Garrison, with its tooltip, and Capture says it occupies zones.
+    auto* one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
+    require(one != nullptr, "garrison button: one Soldier selected opened no unit panel");
+    require(one->garrisonButton.isVisible() && one->garrisonButton.isEnabled(),
+            "garrison button: the Garrison button is not shown for a Soldier");
+    require(one->garrisonButton.getTooltipText().find(_("Garrison")) != std::string::npos
+                && one->garrisonButton.getTooltipText().find("(I)") != std::string::npos,
+            "garrison button: the tooltip does not name Garrison and its I key: " + one->garrisonButton.getTooltipText());
+    require(one->captureButton.getTooltipText().find(_("zone")) != std::string::npos,
+            "garrison button: the Capture tooltip does not mention zones: " + one->captureButton.getTooltipText());
+    // A tank alone: no Garrison button; a tank with a Soldier: the group panel shows it.
+    auto* tankPanel = dynamic_cast<UnitInterface*>(selectUnits(f, {tank}));
+    require(tankPanel != nullptr && !tankPanel->garrisonButton.isVisible(), "garrison button: shown for a tank");
+    auto* many = dynamic_cast<MultiUnitInterface*>(selectUnits(f, {tank, soldier}));
+    require(many != nullptr, "garrison button: a tank and a Soldier opened no group panel");
+    many->update();
+    require(many->garrisonButton.isVisible(), "garrison button: the group panel hides Garrison with a Soldier in it");
+    // Press it: the Garrison cursor; its symbol over an own and an enemy zone, a pointer over sand.
+    one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
+    press(one->garrisonButton);
+    require(game.currentCursorMode == Game::CursorMode_Garrison, "garrison button: pressing it did not open the Garrison cursor");
+    one->update();
+    require(one->garrisonButton.getToggleState(), "garrison button: the button does not show it is active");
+    using Action = CursorAppearance::Action;
+    require(game.orderCursorAction(Game::CursorMode_Garrison, 24, 24) == Action::Garrison,
+            "garrison button: the cursor over an own zone is not the Garrison symbol");
+    require(game.orderCursorAction(Game::CursorMode_Garrison, 41, 25) == Action::Garrison,
+            "garrison button: the cursor over an enemy zone is not the Garrison symbol");
+    require(game.orderCursorAction(Game::CursorMode_Garrison, 30, 30) == Action::Pointer,
+            "garrison button: the cursor over sand claims a target");
+    require(game.orderCursorAction(Game::CursorMode_Capture, 25, 25) == Action::Capture,
+            "garrison button: the Capture cursor over an own zone does not show it is a target");
+    // A click on sand is refused and keeps the cursor; a click on the own zone garrisons it.
+    const int before = queued(game, CMD_INFANTRY_CAPTURE);
+    clickMap(f, Coord(30, 30));
+    require(game.currentCursorMode == Game::CursorMode_Garrison && queued(game, CMD_INFANTRY_CAPTURE) == before,
+            "garrison button: a click on sand ordered something or closed the cursor");
+    clickMap(f, z->getLocation());
+    require(queued(game, CMD_INFANTRY_CAPTURE) == before + 1 && game.currentCursorMode == Game::CursorMode_Normal,
+            "garrison button: the click on an own zone queued no garrison order");
+    require(f.runUntil(30, [&] { return z->getGarrisonSize() == 1 && hidden(soldier); }),
+            "garrison button: the Soldier never went into the zone it was sent to");
+    // The I key with a Trooper selected opens the same cursor; the Trooper takes the enemy zone.
+    selectUnits(f, {trooper});
+    SDL_KeyboardEvent key{};
+    key.type = SDL_KEYDOWN;
+    key.keysym.sym = SDLK_i;
+    game.handleKeyInput(key);
+    require(game.currentCursorMode == Game::CursorMode_Garrison, "garrison button: the I key did not open the Garrison cursor");
+    clickMap(f, foe->getLocation());
+    require(f.runUntil(40, [&] { return foe->getOwner() == f.own && foe->getGarrisonSize() == 1; }),
+            "garrison button: the Trooper sent with the I key did not take the enemy zone");
+    // A tank alone: the I key does nothing.
+    selectUnits(f, {tank});
+    game.handleKeyInput(key);
+    require(game.currentCursorMode == Game::CursorMode_Normal, "garrison button: the I key opened the cursor for a tank");
+    record("garrison_button", "shown for Soldier/Trooper and a mixed group, hidden for a tank; tooltip names I; "
+           "symbol over own/enemy zone, pointer over sand; sand refused; own zone garrisoned; I key took an enemy zone");
+}
+
+void checkGarrisonButtonRuleOff() {
+    Fixture f("garrison button rule off", false);
+    auto* soldier = f.unit(f.own, Unit_Soldier, 20, 25);
+    f.run(1);
+    auto* one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
+    require(one != nullptr && !one->garrisonButton.isVisible(), "garrison button rule off: the button is shown with the rule off");
+    SDL_KeyboardEvent key{};
+    key.type = SDL_KEYDOWN;
+    key.keysym.sym = SDLK_i;
+    f.game->handleKeyInput(key);
+    require(f.game->currentCursorMode != Game::CursorMode_Garrison, "garrison button rule off: the I key opened the cursor");
+    record("garrison_button_rule_off", "no button, no cursor");
+}
+
+void checkReinforce() {
+    Fixture f("reinforce");
+    auto* z = f.zone(f.own, Structure_ZoneResidential, 24, 24);
+    auto* soldier = f.unit(f.own, Unit_Soldier, 22, 23);
+    f.run(1);
+    captureByPlayer(f, {soldier}, z);
+    require(f.runUntil(20, [&] { return z->getGarrisonSize() == 1; }), "reinforce: the Soldier did not go in");
+    auto* trooper = f.unit(f.own, Unit_Trooper, 20, 26);
+    f.run(1);
+    require(captureByPlayer(f, {trooper}, z) == 1, "reinforce: the Trooper's order on the held own zone was not queued");
+    require(f.runUntil(30, [&] { return z->getGarrisonSize() == 2; }), "reinforce: the Trooper did not join the Soldier");
+    require(z->getGarrison()[0] == soldier->getObjectID() && z->getGarrison()[1] == trooper->getObjectID(),
+            "reinforce: the mixed garrison is not the Soldier then the Trooper");
+    // A captured zone: a Trooper takes it, another reinforces; the zone stays captured.
+    auto* foe = f.zone(f.enemy, Structure_ZoneIndustrial, 40, 30, 2);
+    auto* first = f.unit(f.own, Unit_Trooper, 39, 30);
+    f.run(1);
+    f.capture(first, foe);
+    require(foe->getOwner() == f.own && foe->getGarrisonSize() == 1, "reinforce: the enemy zone was not taken");
+    auto* second = f.unit(f.own, Unit_Soldier, 36, 31);
+    f.run(1);
+    captureByPlayer(f, {second}, foe);
+    require(f.runUntil(30, [&] { return foe->getGarrisonSize() == 2; }), "reinforce: nobody joined the captured zone's garrison");
+    require(foe->getGarrisonOriginalOwner() == HOUSE_HARKONNEN, "reinforce: the captured zone forgot whom it was taken from");
+    record("reinforce", "a Trooper joined a Soldier's own zone (mixed), a Soldier joined a captured zone");
+}
+
+void checkTrooperAir() {
+    Fixture f("trooper air");
+    require(f.game->getGameInitSettings().getGameOptions().trooperAntiAir, "trooper air: Trooper Anti-Air is off in the fixture");
+    auto* z = f.zone(f.own, Structure_ZoneResidential, 30, 30);
+    auto* trooper = f.unit(f.own, Unit_Trooper, 29, 29);
+    f.capture(trooper, z);
+    require(f.runUntil(20, [&] { return z->getGarrisonSize() == 1; }), "trooper air: the Trooper did not go in");
+    auto* bird = f.unit(f.enemy, Unit_Ornithopter, 34, 30);
+    const Uint32 birdID = bird->getObjectID();
+    const int birdHealth = bird->getHealth().lround();
+    bird->doAttackObject(z, true);
+    const auto before = f.own->getCombatReward(Unit_Trooper).hpRemovedMilli;
+    require(f.runUntil(40, [&] {
+                const auto* b = dynamic_cast<const UnitBase*>(f.game->getObjectManager().getObject(birdID));
+                return b == nullptr || b->getHealth().lround() < birdHealth; }),
+            "trooper air: the garrisoned Trooper never hit the Ornithopter attacking its zone");
+    require(f.own->getCombatReward(Unit_Trooper).hpRemovedMilli > before, "trooper air: the hit was not credited to the Trooper");
+    require(z->getGarrisonSize() == 1 || z->getHealth() <= 0 || !z->isGarrisoned(), "trooper air: the garrison changed");
+    record("trooper_air", "a garrisoned Trooper hit an Ornithopter (credited to the Trooper)");
+}
+
+void checkTrooperTank() {
+    Fixture f("trooper tank");
+    auto* z = f.zone(f.own, Structure_ZoneResidential, 30, 30);
+    auto* trooper = f.unit(f.own, Unit_Trooper, 29, 29);
+    f.capture(trooper, z);
+    require(f.runUntil(20, [&] { return z->getGarrisonSize() == 1; }), "trooper tank: the Trooper did not go in");
+    auto* tank = f.unit(f.enemy, Unit_Tank, 35, 31, STOP);
+    const Uint32 tankID = tank->getObjectID();
+    const int tankHealth = tank->getHealth().lround();
+    const auto before = f.own->getCombatReward(Unit_Trooper).hpRemovedMilli;
+    require(f.runUntil(30, [&] {
+                const auto* t = dynamic_cast<const UnitBase*>(f.game->getObjectManager().getObject(tankID));
+                return t == nullptr || t->getHealth().lround() < tankHealth; }),
+            "trooper tank: the garrisoned Trooper never hit the tank in its rocket range");
+    const auto removed = f.own->getCombatReward(Unit_Trooper).hpRemovedMilli - before;
+    require(removed > 0, "trooper tank: the tank's damage was not credited to the Trooper");
+    record("trooper_tank", "a garrisoned Trooper's rockets hit a tank 5 tiles out (" + std::to_string(removed / 1000)
+           + " hp credited)");
+}
+
+void checkNoPull() {
+    Fixture f("no pull");
+    auto* z = f.zone(f.own, Structure_ZoneResidential, 40, 40);
+    auto* soldier = f.unit(f.own, Unit_Soldier, 30, 40);
+    auto* tank = f.unit(f.enemy, Unit_Tank, 50, 50, STOP);
+    f.run(1);
+    f.capture(soldier, z);
+    require(soldier->getAttackMode() == CAPTURE, "no pull: the capture order did not take");
+    Player* player = f.own->getPlayerList().front().get();
+    // Every controller's order as an attack wave, a defence pull, a formation, a retreat, a repair
+    // trip, an airlift or an idle sweep would give it.
+    player->doMove2Pos(soldier, 20, 20, true, "retreat");
+    player->doHuntToward(soldier, 50, 50, "attackWave");
+    player->doAttackObject(soldier, tank, true, "defencePull");
+    player->doAttackPos(soldier, 50, 50, true, "idleSweep");
+    player->doMove2Object(soldier, tank, "escort");
+    player->doSetAttackMode(soldier, AREAGUARD, "formation");
+    player->doFormationMove({soldier}, 20, 20, true, 0, "waveFormation");
+    player->doRepair(soldier, "repairTrip");
+    player->doRequestCarryallDrop(static_cast<const GroundUnit*>(static_cast<const UnitBase*>(soldier)), "airlift");
+    require(soldier->getAttackMode() == CAPTURE && soldier->getTarget() == z,
+            "no pull: another controller's order re-routed the soldier on its way in");
+    require(f.runUntil(40, [&] { return z->getGarrisonSize() == 1; }), "no pull: the soldier did not reach its zone");
+    // The garrison controller's own order is obeyed.
+    auto* other = f.unit(f.own, Unit_Soldier, 30, 44);
+    f.run(1);
+    f.capture(other, z);
+    player->doSetAttackMode(other, AREAGUARD, "updateZoneGarrisons");
+    require(other->getAttackMode() == AREAGUARD, "no pull: the garrison controller could not end its own order");
+    record("no_pull", "9 orders from other controllers refused; the soldier went in; the controller's own order obeyed");
+}
+
+void checkPrice() {
+    Fixture f("price");
+    require(f.game->objectData.data[Unit_Soldier][HOUSE_ATREIDES].price == 30, "price: the Soldier's price is not 30");
+    f.own->placeStructure(NONE_ID, Structure_WindTrap, 10, 10, true, true);
+    f.own->placeStructure(NONE_ID, Structure_Radar, 13, 10, true, true);
+    auto* barracks = dynamic_cast<BuilderBase*>(f.own->placeStructure(NONE_ID, Structure_Barracks, 10, 14, true, true));
+    require(barracks != nullptr, "price: cannot place a Barracks");
+    f.run(2);
+    barracks->updateBuildList();
+    int price = -1;
+    for(const BuildItem& item : barracks->getBuildList()) if(item.itemID == Unit_Soldier) price = static_cast<int>(item.price);
+    require(price == 30, "price: the Barracks build list prices the Soldier at " + std::to_string(price));
+    record("price", "Soldier 30 credits in the Barracks build list");
+}
+
 } // namespace ZoneGarrisonProbe
 
 int runZoneGarrisonProbe() {
@@ -781,7 +991,9 @@ int runZoneGarrisonProbe() {
     int failed = 0;
     for(auto check : {checkOwnZone, checkTake, checkFireOut, checkAssault, checkEvacuate, checkDestroyed,
                       checkReturn, checkLowHealth, checkAlly, checkContainment, checkSave, checkRuleOff,
-                      checkPlayerOwnZone, checkPlayerTake, checkPlayerRefused, checkPicture}) {
+                      checkPlayerOwnZone, checkPlayerTake, checkPlayerRefused, checkGarrisonButton,
+                      checkGarrisonButtonRuleOff, checkReinforce, checkTrooperAir, checkTrooperTank, checkNoPull,
+                      checkPrice, checkPicture}) {
         try {
             check();
         } catch(const std::exception&) {
@@ -789,7 +1001,7 @@ int runZoneGarrisonProbe() {
             currentGame = nullptr;
         }
     }
-    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 16 cases");
-    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 16 cases failed", failed);
+    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 23 cases");
+    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 23 cases failed", failed);
     return -1;
 }

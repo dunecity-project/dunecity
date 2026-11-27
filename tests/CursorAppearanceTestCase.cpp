@@ -7,7 +7,7 @@
 TEST_CASE("All cursor actions retain contrast and smooth edges at every supported size", "[rendering][cursor]") {
     for(float scale : {1.0f,1.5f,2.0f,3.0f,4.0f}) {
         std::set<std::vector<Uint32>> silhouettes;
-        for(int mode=0;mode<=static_cast<int>(CursorAppearance::Action::Patrol);++mode) {
+        for(int mode=0;mode<=static_cast<int>(CursorAppearance::Action::Garrison);++mode) {
             CAPTURE(scale,mode);
             const auto action=static_cast<CursorAppearance::Action>(mode);
             sdl2::surface_ptr surface{CursorAppearance::create(action,scale)};

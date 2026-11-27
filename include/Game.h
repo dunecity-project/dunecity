@@ -95,6 +95,11 @@ class Game
 {
 public:
     CursorAppearance::Action getHoverCursorAction() const;
+    /// The cursor the Capture or Garrison mode (MODE) shows over tile (X, Y): its own symbol over a
+    /// target the click would order the selection at, a plain pointer elsewhere.
+    CursorAppearance::Action orderCursorAction(int mode, int x, int y) const;
+    /// orderCursorAction() at the mouse position.
+    CursorAppearance::Action getOrderCursorAction() const;
     const ChaosMode& getChaosMode() const { return chaosMode; }
     bool canPlayerControlHouse(const House* playerHouse, const House* owner) const;
     bool canPlayerControlHouse(Uint8 playerID, const House* owner) const;
@@ -838,6 +843,9 @@ private:
         \return true if capture is possible
     */
     bool handleSelectedObjectsCaptureClick(int xPos, int yPos);
+    /// Zone Garrisons: the Garrison cursor's click. Only a zone is a target (own: occupy it; enemy:
+    /// take it), through the capture order; anything else leaves the cursor open.
+    bool handleSelectedObjectsGarrisonClick(int xPos, int yPos);
 
     /**
         Handles a city zone placement click.
@@ -962,7 +970,8 @@ public:
         CursorMode_CityZone,
         CursorMode_CityRoad,
         CursorMode_Patrol,
-        CursorMode_SpiceBloom             ///< Picks where the selected Palace worm bursts (Sandworm::doSpiceBloom)
+        CursorMode_SpiceBloom,            ///< Picks where the selected Palace worm bursts (Sandworm::doSpiceBloom)
+        CursorMode_Garrison               ///< Zone Garrisons: picks a zone to occupy (own) or take (enemy)
     };
 
     /// Player position orders that go through issuePositionOrder().

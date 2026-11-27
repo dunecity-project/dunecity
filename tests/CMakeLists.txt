@@ -1261,7 +1261,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         dunecity_add_test(headless nightly NAME zone_garrison_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-probe)
-        set_tests_properties(zone_garrison_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
+        set_tests_properties(zone_garrison_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
+        # Zone Garrisons acceptance in real games (Stefan's 4P DuneCity map, every QuantBot Zone
+        # Garrisons switch on): one ACCEPT line per request, any failure fails the test.
+        dunecity_add_test(headless nightly NAME zone_garrison_real_game COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-zone-garrison-real-game.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-real-game)
+        set_tests_properties(zone_garrison_real_game PROPERTIES TIMEOUT 2400 PROCESSORS 3)
         # The Saboteur hunt off against on in one binary: 96 seeded Palace releases per arm and
         # mod against turreted bases; more Saboteurs must destroy something with the rule on.
         dunecity_add_test(headless nightly NAME saboteur_effect_probe COMMAND ${Python3_EXECUTABLE}

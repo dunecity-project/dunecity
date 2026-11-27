@@ -2192,6 +2192,10 @@ private:
     /// Zone Garrisons (ZoneGarrison switch; QuantBotGarrison.cpp): soldiers into own zones enemies
     /// close on, out again once quiet, and into empty enemy zones they pass. Stateless.
     void updateZoneGarrisons();
+    /// Zone Garrisons: per soldier on its way into a zone, the cycle it last got closer and its
+    /// distance then (tenths of a tile). An order with no progress for kNoProgressSeconds ends. Not
+    /// saved: after a load every peer restarts the clocks the same way.
+    std::map<Uint32, std::pair<Uint32, int>> zoneGarrisonProgress_;
     /// City redevelopment for land value (default off; QuantBotRedevelop.cpp, RedevelopmentPolicy.h):
     /// RoadLaneParks, LotParks and PollutionRelocation, each its own [Force Concentration] switch.
     void chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);

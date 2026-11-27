@@ -748,6 +748,11 @@ ZoneGarrison=0
 ZoneCaptureRaid=0
 # Barracks train a levy of cheap Soldiers that walks into the nearest enemy zones.
 ZoneCaptureLevy=0
+# House to house (Stefan, 2026-11-27): Troopers reinforce threatened garrisons; our zones nearest the
+# enemy get a garrison first; soldiers take the next enemy zone across the street from a zone we hold.
+ZoneGarrisonReinforce=0
+ZoneFrontGarrison=0
+ZoneCaptureChain=0
 # Stateless existing-composition/technology experiment; paired outcomes rejected adoption.
 # Default OFF. No saved budget, save-format change or protocol change.
 SimpleTechSavings=0

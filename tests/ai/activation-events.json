@@ -18,5 +18,13 @@
   "lot-parks": {"fire": ["REDEVELOP: event=ordered kind=lot_clear", "REDEVELOP: event=ordered kind=lot_fill"], "success": ["REDEVELOP: event=effect kind=lot_clear raised=1", "REDEVELOP: event=effect kind=lot_fill raised=1"]},
   "pollution-relocation": {"fire": ["REDEVELOP: event=ordered kind=relocation"], "success": ["REDEVELOP: event=effect kind=relocation raised=1"]},
   "industry-separation": {"fire": ["INDUSTRY_PLACED: separated=1"], "success": ["INDUSTRY_PLACED: separated=1 near_homes=0"]},
-  "redevelop-all": {"fire": ["REDEVELOP: event=ordered kind=lane_park", "REDEVELOP: event=ordered kind=lot_clear", "REDEVELOP: event=ordered kind=lot_fill", "REDEVELOP: event=ordered kind=relocation", "INDUSTRY_PLACED: separated=1"], "success": ["REDEVELOP: event=effect kind=lane_park raised=1", "REDEVELOP: event=effect kind=lot_clear raised=1", "REDEVELOP: event=effect kind=lot_fill raised=1", "REDEVELOP: event=effect kind=relocation raised=1", "INDUSTRY_PLACED: separated=1 near_homes=0"]}
+  "redevelop-all": {"fire": ["REDEVELOP: event=ordered kind=lane_park", "REDEVELOP: event=ordered kind=lot_clear", "REDEVELOP: event=ordered kind=lot_fill", "REDEVELOP: event=ordered kind=relocation", "INDUSTRY_PLACED: separated=1"], "success": ["REDEVELOP: event=effect kind=lane_park raised=1", "REDEVELOP: event=effect kind=lot_clear raised=1", "REDEVELOP: event=effect kind=lot_fill raised=1", "REDEVELOP: event=effect kind=relocation raised=1", "INDUSTRY_PLACED: separated=1 near_homes=0"]},
+  "zone-garrison": {"fire": ["ZONE_GARRISON: event=order why=defend", "ZONE_GARRISON: event=order why=take"], "success": ["ZONE_GARRISON: event=entered"]},
+  "zone-capture-raid": {"fire": ["ZONE_GARRISON: event=order why=raid"], "success": ["ZONE_GARRISON: event=entered taken=1"]},
+  "zone-capture-levy": {"fire": ["ZONE_GARRISON: event=order why=levy"], "success": ["ZONE_GARRISON: event=entered taken=1"]},
+  "zone-garrison-reinforce": {"fire": ["ZONE_GARRISON: event=order why=reinforce"], "success": ["ZONE_GARRISON: event=entered item=44"]},
+  "zone-front-garrison": {"fire": ["ZONE_GARRISON: event=order why=front"], "success": ["ZONE_GARRISON: event=entered taken=0"]},
+  "zone-capture-chain": {"fire": ["ZONE_GARRISON: event=order why=chain"], "success": ["ZONE_GARRISON: event=entered taken=1"]},
+  "zone-garrison-raid-levy": {"fire": ["ZONE_GARRISON: event=order"], "success": ["ZONE_GARRISON: event=entered"]},
+  "house-to-house": {"fire": ["ZONE_GARRISON: event=order"], "success": ["ZONE_GARRISON: event=entered"]}
 }
