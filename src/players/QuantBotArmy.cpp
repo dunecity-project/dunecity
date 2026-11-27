@@ -415,6 +415,9 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         if (unit->getOwner()!=getHouse() || !unit->isRespondable()
             || !unit->canAttack(intruder) || unit->getAttackMode()==RETREAT
             || unit->getItemID()==Unit_Saboteur || QuantBotInternal::harvesterItem(unit->getItemID())
+            // The Fremen Palace worm takes orders only from managePalaceWorm: a defence assignment
+            // here re-targeted it every pass and cancelled its bloom trips (palace_worm_real_game A6).
+            || unit->getItemID()==Unit_Sandworm
             || QuantBotInternal::ornithopterItem(unit->getItemID())) continue; // Air planner owns aircraft.
         // A human order and a repair run outrank the scramble, and a worker raid
         // cannot cancel an ongoing whole-army base response.
