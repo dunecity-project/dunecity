@@ -70,6 +70,14 @@ constexpr int kHospitalHealCostTenths = 2;
 constexpr int kHospitalAutoHealthPercent = 50;
 /// The automatic rule and a waiting soldier look again every this many cycles.
 constexpr int kHospitalRecheckCycles = 32;
+/// QuantBot (HospitalInfantry): a soldier below this share of its health goes to a Hospital...
+constexpr int kHospitalBotHealthPercent = 60;
+/// ...once no armed enemy has had it in reach for this many cycles (8 s at the default speed).
+/// The first measurement sent soldiers the moment they were hit: 637 of 891 trips a game ended
+/// with the soldier dead on the way, a median 169 cycles after it was sent.
+constexpr uint32_t kHospitalQuietCycles = 500;
+/// The contact scan looks this many tiles round the soldier (the longest weapon reach in play).
+constexpr int kHospitalContactScanTiles = 9;
 /// A walk that has come no closer to its Hospital for this many cycles (one game minute at the
 /// default speed) is abandoned: the route is blocked. A Soldier needs about 300 cycles a tile.
 constexpr uint32_t kHospitalTripStallCycles = 3750;
@@ -132,7 +140,13 @@ public:
     const Overlays& overlays() const { return overlays_; }
     void setOverlays(Overlays overlays) { overlays_ = std::move(overlays); }
 
-    void clear() { trips_.clear(); overlays_.clear(); }
+    /// QuantBot soldiers below kHospitalBotHealthPercent with no enemy in reach: the cycle each was
+    /// first seen out of contact (HospitalInfantry's quiet rule). Rebuilt on every recheck.
+    using QuietClocks = std::map<uint32_t, uint32_t>;
+    const QuietClocks& quietSince() const { return quietSince_; }
+    void setQuietSince(QuietClocks clocks) { quietSince_ = std::move(clocks); }
+
+    void clear() { trips_.clear(); overlays_.clear(); quietSince_.clear(); }
 
     void save(OutputStream& stream) const {
         stream.writeUint32(static_cast<Uint32>(overlays_.size()));
@@ -151,6 +165,11 @@ public:
             stream.writeUint32(t.startCycle);
             stream.writeSint16(t.bestDistance);
             stream.writeUint8(t.priorMode);
+        }
+        stream.writeUint32(static_cast<Uint32>(quietSince_.size()));
+        for(const auto& [unit, since] : quietSince_) {
+            stream.writeUint32(unit);
+            stream.writeUint32(since);
         }
     }
 
@@ -181,11 +200,18 @@ public:
             t.priorMode = stream.readUint8();
             trips_[unit] = t;
         }
+        const Uint32 quietCount = stream.readUint32();
+        stream.requireReadableElements(quietCount, 8);
+        for(Uint32 i = 0; i < quietCount; ++i) {
+            const Uint32 unit = stream.readUint32();
+            quietSince_[unit] = stream.readUint32();
+        }
     }
 
 private:
     Trips trips_;
     Overlays overlays_;
+    QuietClocks quietSince_;
 };
 
 /// Game-side rules (src/dunecity/HospitalCare.cpp). All of them are no-ops outside a city game or
@@ -218,10 +244,13 @@ bool canBeHealed(const UnitBase* unit);
 bool sendToHospital(GroundUnit* unit);
 
 /// The automatic rule, checked by update() every kHospitalRecheckCycles for every soldier while
-/// its house has a Hospital (InfantryBase::checkPos does not run GroundUnit's): a soldier
-/// below half health whose owner allows it (a human house, or a QuantBot with HospitalInfantry
-/// on) and has Carryalls, as for vehicles and Repair Yards.
+/// its house has a Hospital (InfantryBase::checkPos does not run GroundUnit's): a human house's
+/// soldier below half health, if the house has Carryalls, as for vehicles and Repair Yards.
 void considerAutomatic(GroundUnit* unit);
+
+/// An armed enemy (a unit or structure that can attack) has \a unit within its weapon reach, or
+/// is within the soldier's own: the soldier is in contact.
+bool inContact(const UnitBase* unit);
 
 /// One game cycle: validate every trip, admit arrivals, heal and discharge. Called by Game after
 /// the city simulation phase.

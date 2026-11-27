@@ -147,8 +147,9 @@ bool dispatch(HospitalCareState& care, GroundUnit* unit, ZoneStructure* zone, co
 }
 
 /// A human house always; an AI house only when its QuantBot has HospitalInfantry on.
-bool ownerSendsAutomatically(const House* owner) {
-    if(!owner->isAI()) return true;
+/// An AI house whose QuantBot has HospitalInfantry on.
+bool botSends(const House* owner) {
+    if(!owner->isAI()) return false;
     for(const auto& player : owner->getPlayerList()) {
         const auto* bot = dynamic_cast<const QuantBot*>(player.get());
         if(bot && bot->sendsInfantryToHospital()) return true;
@@ -209,7 +210,7 @@ void considerAutomatic(GroundUnit* unit) {
         return;
     }
     const House* owner = unit->getOwner();
-    if(!owner->hasCarryalls() || !ownerSendsAutomatically(owner)) return;
+    if(!owner->hasCarryalls() || owner->isAI()) return;
     auto& care = *state();
     if(care.trip(unit->getObjectID())) return;
     if(ZoneStructure* zone = chooseHospital(care, unit, 0, false)) dispatch(care, unit, zone, "auto");
@@ -230,16 +231,63 @@ void applyLoadedOverlays() {
 
 /// Every kHospitalRecheckCycles, while any house has a Hospital: the automatic rule for every
 /// soldier, in unit-list order (the same on every peer).
-static void considerEveryone(const HospitalCareState& care, Uint32 cycle) {
+bool inContact(const UnitBase* unit) {
+    const Coord at = unit->getLocation();
+    const int team = unit->getOwner()->getTeamID();
+    const int ownReach = unit->getWeaponRange();
+    auto armedEnemyInReach = [&](const ObjectBase* other) {
+        if(!other || other->getHealth() <= 0 || !other->canAttack() || other->getOwner()->getTeamID() == team) return false;
+        const int distance = blockDistanceApprox(at, other->getClosestPoint(at));
+        return distance <= std::max(ownReach, other->getWeaponRange()) + 1;
+    };
+    for(int y = at.y - kHospitalContactScanTiles; y <= at.y + kHospitalContactScanTiles; ++y) {
+        for(int x = at.x - kHospitalContactScanTiles; x <= at.x + kHospitalContactScanTiles; ++x) {
+            if(!currentGameMap->tileExists(x, y)) continue;
+            const Tile* tile = currentGameMap->getTile(x, y);
+            if(armedEnemyInReach(tile->getNonInfantryGroundObject())) return true;
+            for(Uint32 id : tile->getInfantryList())
+                if(armedEnemyInReach(currentGame->getObjectManager().getObject(id))) return true;
+            for(Uint32 id : tile->getAirUnitList())
+                if(armedEnemyInReach(currentGame->getObjectManager().getObject(id))) return true;
+        }
+    }
+    return false;
+}
+
+/// HospitalInfantry: a QuantBot soldier below kHospitalBotHealthPercent goes once it has been out
+/// of contact for kHospitalQuietCycles; the clock restarts at every contact.
+static void considerBotSoldier(HospitalCareState& care, GroundUnit* unit, Uint32 cycle,
+                               HospitalCareState::QuietClocks& quiet) {
+    if(!canBeHealed(unit) || unit->isPickedUp() || !unit->isActive() || unit->getAttackMode() == HOLD
+        || unit->getHealth() * 100 >= unit->getMaxHealth() * kHospitalBotHealthPercent
+        || care.trip(unit->getObjectID()) || inContact(unit)) {
+        return;
+    }
+    const auto it = care.quietSince().find(unit->getObjectID());
+    const Uint32 since = it != care.quietSince().end() ? it->second : cycle;
+    if(cycle - since < kHospitalQuietCycles) {
+        quiet[unit->getObjectID()] = since;
+        return;
+    }
+    if(ZoneStructure* zone = chooseHospital(care, unit, 0, false)) dispatch(care, unit, zone, "quiet");
+}
+
+static void considerEveryone(HospitalCareState& care, Uint32 cycle) {
     if(cycle % kHospitalRecheckCycles != 0) return;
     const bool anyHospital = std::any_of(care.overlays().begin(), care.overlays().end(), [](const auto& entry) {
         return entry.second == static_cast<uint8_t>(ZoneStructure::CivicOverlay::Hospital);
     });
-    if(!anyHospital) return;
+    if(!anyHospital) { care.setQuietSince({}); return; }
+    HospitalCareState::QuietClocks quiet;
     for(UnitBase* unit : unitList) {
-        if(unit->isInfantry() && unit->getHealth() * 100 < unit->getMaxHealth() * kHospitalAutoHealthPercent)
+        if(!unit->isInfantry()) continue;
+        if(botSends(unit->getOwner())) {
+            considerBotSoldier(care, static_cast<GroundUnit*>(unit), cycle, quiet);
+        } else if(unit->getHealth() * 100 < unit->getMaxHealth() * kHospitalAutoHealthPercent) {
             considerAutomatic(static_cast<GroundUnit*>(unit));
+        }
     }
+    care.setQuietSince(std::move(quiet));
 }
 
 void update() {

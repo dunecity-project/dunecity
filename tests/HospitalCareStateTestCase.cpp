@@ -51,6 +51,7 @@ TEST_CASE("Hospital care state round-trips through a save", "[city][hospital][sa
     carried.carried = true;
     care.setTrip(13, carried);
     care.setTrip(14, trip(40, HospitalTrip::Stage::Waiting));
+    care.setQuietSince({{21, 3000}, {22, 3100}});
 
     OMemoryStream out;
     out.open();
@@ -63,6 +64,7 @@ TEST_CASE("Hospital care state round-trips through a save", "[city][hospital][sa
     REQUIRE(in.readUint32() == 0xfeedbeefu);
     REQUIRE(loaded.overlays() == care.overlays());
     REQUIRE(loaded.trips() == care.trips());
+    REQUIRE(loaded.quietSince() == care.quietSince());
     REQUIRE(loaded.trip(99) == nullptr);
 }
 

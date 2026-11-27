@@ -28,6 +28,7 @@
 #include <Map.h>
 #include <mod/ModManager.h>
 #include <players/Player.h>
+#include <players/QuantBot.h>
 #include <structures/ZoneStructure.h>
 #include <units/Carryall.h>
 #include <units/GroundUnit.h>
@@ -83,8 +84,10 @@ std::string fixtureMap() {
     return data;
 }
 
-/// Atreides is the human tester; Harkonnen an AI Player house (no QuantBot).
-std::unique_ptr<Game> newGame(const std::string& mapData, int seed, bool hospitalCare) {
+/// Atreides is the human tester; Harkonnen an AI Player house (no QuantBot), or with \a aiClass
+/// another AI player class.
+std::unique_ptr<Game> newGame(const std::string& mapData, int seed, bool hospitalCare,
+                              const std::string& aiClass = "AIPlayer:hard") {
     auto options = gModOptions;
     options.hospitalCare = hospitalCare;
     options.immortalHumanPlayer = false;
@@ -94,7 +97,7 @@ std::unique_ptr<Game> newGame(const std::string& mapData, int seed, bool hospita
     human.addPlayerInfo({"Hospital tester", "HumanPlayer"});
     init.addHouseInfo(human);
     GameInitSettings::HouseInfo ai(HOUSE_HARKONNEN, 2);
-    ai.addPlayerInfo({"Hospital AI", "AIPlayer:hard"});
+    ai.addPlayerInfo({"Hospital AI", aiClass});
     init.addHouseInfo(ai);
 
     auto game = std::make_unique<Game>();
@@ -391,6 +394,47 @@ void checkAuto(const std::string& mapData) {
     }
 }
 
+// HospitalInfantry: a QuantBot soldier below 60% waits until no armed enemy has had it in reach for
+// kHospitalQuietCycles. A builder-role QuantBot leaves the soldier where it is put.
+void checkBotQuiet(const std::string& mapData) {
+    auto game = newGame(mapData, 16, true, "qBotSupportHard");
+    House* human = game->getHouse(HOUSE_ATREIDES);
+    House* bots = game->getHouse(HOUSE_HARKONNEN);
+    QuantBot* bot = nullptr;
+    for(const auto& player : bots->getPlayerList()) if(!bot) bot = dynamic_cast<QuantBot*>(player.get());
+    require(bot != nullptr, "The second house is not a QuantBot");
+    auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
+    config->force.hospitalInfantry = true;
+    bot->configOverride = config;
+    require(bot->sendsInfantryToHospital(), "HospitalInfantry did not switch on for the bot");
+    const std::vector<Uint32> hospitals{placeHospital(bots, Coord(40, 40))};
+    parkCarryall(bots, Coord(44, 44));
+    auto* wounded = soldier(bots, Coord(30, 30), 8);            // 40%
+    const Uint32 id = wounded->getObjectID();
+    auto* quad = dynamic_cast<UnitBase*>(human->createUnit(Unit_Quad, true));
+    require(quad != nullptr, "Could not create the enemy Quad");
+    quad->deploy(Coord(33, 30));
+    quad->setActive(false);                                       // armed and in reach, but holds fire
+    step(*game, hospitals, 1000);
+    require(HC::inContact(wounded), "An armed enemy three tiles away is not contact");
+    require(care().trip(id) == nullptr, "A QuantBot soldier was sent to a Hospital while in contact");
+    quad->cancelDeployment();
+    const Uint32 quietFrom = game->getGameCycleCount();
+    require(!HC::inContact(wounded), "Contact outlived the enemy");
+    Uint32 sentAt = 0;
+    for(int i = 0; i < 2000 && !sentAt; ++i) {
+        step(*game, hospitals);
+        if(care().trip(id)) sentAt = game->getGameCycleCount();
+    }
+    require(sentAt != 0, "A quiet QuantBot soldier below 60% was never sent");
+    const Uint32 waited = sentAt - quietFrom;
+    require(waited >= DuneCity::kHospitalQuietCycles && waited <= DuneCity::kHospitalQuietCycles + 2 * DuneCity::kHospitalRecheckCycles,
+            "A QuantBot soldier was not sent about eight seconds after its last contact");
+    record("bot_quiet", "held while an armed enemy was in reach; sent " + std::to_string(waited) + " cycles after it left");
+    game.reset();
+    currentGame = nullptr;
+}
+
 void checkSave(const std::string& mapData) {
     auto game = newGame(mapData, 15, true);
     House* owner = game->getHouse(HOUSE_ATREIDES);
@@ -473,6 +517,7 @@ int runHospitalCareProbe() {
     if(wanted("lock")) checkLock(mapData);
     if(wanted("carryall")) checkCarryall(mapData);
     if(wanted("auto")) checkAuto(mapData);
+    if(wanted("bot_quiet")) checkBotQuiet(mapData);
     if(wanted("save")) checkSave(mapData);
     gChecks.close();
     SDL_Log("HOSPITAL_CARE_PROBE_PASS");

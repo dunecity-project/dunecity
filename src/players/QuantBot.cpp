@@ -1044,16 +1044,6 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
             scrambleUnitsAndDefend(pDamager);
         }
 
-		// HospitalInfantry (city games): a soldier below 60% health goes to the nearest Hospital with
-		// a free bed, as a vehicle below 60% goes to a Repair Yard; the trip reserves it
-		// (reserveDamagedUnitForRepair) until it is healed.
-		if (sendsInfantryToHospital() && DuneCity::HospitalCare::canBeHealed(pGroundUnit)
-			&& unitRole(pGroundUnit, {UnitRole::Human}) == UnitRole::Free
-			&& pGroundUnit->getHealth() * 5 < pGroundUnit->getMaxHealth() * 3
-			&& !DuneCity::HospitalCare::tripOf(pGroundUnit)) {
-			doRepair(pGroundUnit);
-		}
-
 		if (QuantBotInternal::harvesterItem(pGroundUnit->getItemID())) {
 			// Always keep Harvesters away from harm
 			// Defend the harvester!
