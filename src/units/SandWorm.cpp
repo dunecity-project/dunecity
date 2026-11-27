@@ -296,6 +296,10 @@ bool Sandworm::attack() {
             drawnFrame = 0;
             attackFrameTimer = SANDWORM_ATTACKFRAMETIME;
             primaryWeaponTimer = getWeaponReloadTime();
+            // A Palace worm searches again when the meal is over: a search while eating finds
+            // nothing (findTarget), and UnitBase::targeting then drops a hunter with no target
+            // back to Guard, where it sees two tiles and never finds the next meal.
+            if(palaceWorm) findTargetTimer = SANDWORM_ATTACKFRAMETIME * 9 + 1;
             return true;
         }
     }
