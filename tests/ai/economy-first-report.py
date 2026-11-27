@@ -27,8 +27,10 @@ STEFAN = {3: dict(yards=4, zones=19, nuclear=0, palaces=3, population=2060),
           23: dict(yards=9, zones=219, nuclear=5, palaces=9, population=5507),
           31: dict(yards=9, zones=328, nuclear=10, palaces=15, population=6734)}
 KEY = ('tag', 'difficulty', 'map', 'seed', 'sides', 'house')
-# The acceptance lines, fixed from Stefan's footprint before the measured games (commit after 6c2363a6a): his
-# number, and the tolerance of the turret-drill acceptance test (half his number, rounded up). Nuclear Plants and
+# The acceptance lines, fixed from Stefan's footprint before the measured games (commit after 6c2363a6a). A row
+# reads "reached his footprint" only at his number; short of it, "not reached" with the share of his number, and
+# the control's share beside it (a half line passed by the unchanged AI proves nothing). The fourth value is a
+# floor kept for reference only. Nuclear Plants and
 # Palaces (and zones) are his orders since the start against the AI's standing count, zones net of losses (the
 # map's 2 Nuclear Plants included in both).
 # His tax: 247 a second at minute 31 (BUILD-BALANCE taxPerSec in his game log, once his partner built).
@@ -109,9 +111,9 @@ def main():
             med = lambda f: statistics.median(p[f] for p in picked)  # noqa: E731
             out.append(f"| {label} | {m} | {len(picked)} | {med('yards'):.0f} | {med('zones'):.0f} | {med('nuclear'):.0f} | "
                        f"{med('palaces'):.0f} | {med('population'):.0f} | {med('tax'):.0f} | {med('credits'):.0f} | {med('units'):.0f} |")
-    out += ['', '## Acceptance: Stefan\'s footprint on his map (median of the arm; line = half his number)', '',
-            '| minute | measure | Stefan | line | ' + ' | '.join(l for l in labels if l != 'default') + ' | control |',
-            '|---:|---|---:|---:|' + '---|' * (len(labels) - 1) + '---:|']
+    out += ['', '## Acceptance: Stefan\'s footprint on his map (median of the arm, share of his number)', '',
+            '| minute | measure | Stefan | ' + ' | '.join(l for l in labels if l != 'default') + ' | control |',
+            '|---:|---|---:|' + '---|' * (len(labels) - 1) + '---|']
     def median_at(label, minute, field):
         vals = []
         for key in by_label[label]:
@@ -125,13 +127,17 @@ def main():
                          'palaces': num(r['palaces']), 'population': num(r['population']),
                          'tax_per_s': num(r['tax_per_min']) / 60}[field])
         return statistics.median(vals) if vals else None
-    for minute, field, his, line in ACCEPTANCE:
-        cells = []
-        for label in [l for l in labels if l != 'default']:
-            v = median_at(label, minute, field)
-            cells.append('-' if v is None else f"{v:.0f} {'met' if v >= line else '**not met**'}")
+    def cell(v, his):
+        if v is None:
+            return '-'
+        share = v / his if his else 0
+        return (f'{v:.0f} reached his footprint' if v >= his
+                else f'{v:.0f} **not reached, {share:.0%}**')
+    for minute, field, his, _floor in ACCEPTANCE:
+        cells = [cell(median_at(label, minute, field), his) for label in labels if label != 'default']
         ctrl = median_at('default', minute, field)
-        out.append(f"| {minute} | {field} | {his} | {line} | " + ' | '.join(cells) + f" | {'-' if ctrl is None else f'{ctrl:.0f}'} |")
+        ctrl_text = '-' if ctrl is None else f'{ctrl:.0f} ({ctrl / his:.0%})'
+        out.append(f"| {minute} | {field} | {his} | " + ' | '.join(cells) + f' | {ctrl_text} |')
     out += ['', '## Activation', '', '| arm | house-games | fired (ECONOMY_FIRST pass) | effect at minute 10 (an MCV, >= 10 zones added) | half his footprint at minute 10 (>= 38 zones, 4 yards) | stood down (his minute-31 population) | spice-rich (did not act) | map spice at start (median) |',
             '|---|---:|---:|---:|---:|---:|---:|---:|']
     for label in labels:
