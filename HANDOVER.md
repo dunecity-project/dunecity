@@ -110,8 +110,10 @@ Not released. Full write-up: docs/formations.md, "Redevelopment for land value".
   -4.4, population +2.5k (and +1.8k at 240 minutes), placement unchanged. In `low.dls` RoadLaneParks raised house 0's
   lot land value 111 -> 117 in 30 minutes.
 - **Gates:** the four AI gates passed on AWS at 3342d22d9 (20261127T095515-ctest-d85748); `perf_regression` passed on
-  the Mini at f04996622 (20261127T110338-ctest-e54bb7); nightly tier `-L nightly -LE gui` at 7ace04b61 is job
-  20261127T114821-ctest-12c4b7 (result below once in).
+  the Mini at f04996622 (20261127T110338-ctest-e54bb7); nightly tier `-L nightly -LE gui` at 7ace04b61
+  (20261127T114821-ctest-12c4b7): 256 of 257 passed; the one failure, zone_garrison_probe ("a soldier did not come
+  out of the ruin"), was the garrison probe's own ruin case, fixed by fa60fc5ea, and passed at ce4bedffb
+  (20261127T123811-ctest-f71737).
 - **Next lever** (not done): site new Industrial zones beyond the 5-tile pollution reach of R/C lots, and more
   landmarks where low lots lie outside every reach.
 - Harness: `tests/ai/land-value-continuation.py --freeze SAVE INI` freezes a save; `--game-options INI` continues it
