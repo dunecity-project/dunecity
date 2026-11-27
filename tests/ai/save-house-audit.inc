@@ -10,6 +10,7 @@
 #include <dunecity/CitySimulation.h>
 #include <structures/StructureBase.h>
 #include <units/UnitBase.h>
+#include <players/HumanPlayer.h>
 #include <map>
 #include <sstream>
 
@@ -34,7 +35,7 @@ inline void report(Game& game, const char* phase) {
         bool first = true;
         for (const auto& p : house->getPlayerList()) {
             players << (first ? "" : ",") << "{\"name\":\"" << p->getPlayername() << "\",\"class\":\"" << p->getPlayerclass()
-                    << "\",\"ai\":" << (p->isAI() ? 1 : 0) << "}";
+                    << "\",\"ai\":" << (dynamic_cast<const HumanPlayer*>(p.get()) ? 0 : 1) << "}";
             first = false;
         }
         std::map<std::string, int> units, structures;
