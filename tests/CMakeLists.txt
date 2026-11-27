@@ -1250,6 +1250,11 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-palace-worm-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/palace-worm-probe)
         set_tests_properties(palace_worm_probe PROPERTIES TIMEOUT 900 PROCESSORS 2)
+        # The worm's acceptance lines in real QuantBot games on the bundled 4P Deserted map.
+        dunecity_add_test(headless nightly NAME palace_worm_real_game COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-palace-worm-real-game.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/palace-worm-real-game)
+        set_tests_properties(palace_worm_real_game PROPERTIES TIMEOUT 2400 PROCESSORS 3)
         # A unit the map starts with on a spice or special bloom loads alive and visible with the
         # bloom intact (no untargetable ghost); a unit arriving on a bloom still sets it off.
         dunecity_add_test(headless nightly NAME bloom_placement_probe COMMAND ${Python3_EXECUTABLE}

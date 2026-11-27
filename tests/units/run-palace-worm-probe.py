@@ -6,7 +6,9 @@ Palace, takes move orders and never leaves the sand; in Hunt it eats the enemy o
 (not on rock, not its own side) and the kills are credited to the Fremen house; the Spice
 Bloom order bursts it into a spice field; it leaves after its life or six meals; a QuantBot
 owner hunts with it and otherwise bursts it for spice beside its refinery; it survives a
-full save and load; with the rule off the Palace calls Fremen warriors
+full save and load; with the rule off the Palace calls Fremen warriors. The player's own path is
+driven through the real Palace and unit panels and Game::doInput mouse clicks, and QuantBot's
+PalaceWorm levels 0/1/2 are checked by their effect and by the PALACE_WORM log lines each case wrote
 (tests/units/palace-worm-probe.inc).
 
 Requires the existing Ninja Release build and bundled game assets. Uses an isolated
@@ -99,11 +101,57 @@ with (out / 'build.log').open('w') as log:
         link[hits[0]] = str(obj)
     subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
+
+
+def check_case_events(text):
+    """The PALACE_WORM log lines each case wrote (the lines the match tables read): QuantBot's hunt
+    and bloom orders by PalaceWorm level, none from a human's worm, and no other controller's order."""
+    cases, label = {}, None
+    for line in text.splitlines():
+        if 'PALACE_WORM_CASE_BEGIN: ' in line:
+            label = line.split('PALACE_WORM_CASE_BEGIN: ', 1)[1].strip()
+            cases[label] = {}
+        elif label and 'PALACE_WORM: event=' in line:
+            event = line.split('PALACE_WORM: event=', 1)[1].split()[0]
+            cases[label][event] = cases[label].get(event, 0) + 1
+    want = {  # label: {event: (min, max)}
+        'qBotHard/hunt': {'hunt': (1, None), 'ate': (2, 2)},
+        'qBotHard/bloom-near-refinery': {'hunt': (0, 0), 'bloom_order': (1, None), 'bloom': (1, 1)},
+        'qBotHard/ai-level-1': {'hunt': (1, None), 'ate': (2, 2), 'bloom_order': (1, None), 'bloom': (1, 1)},
+        'qBotHard/ai-level-0': {'hunt': (0, 0), 'ate': (0, 0), 'bloom_order': (1, None), 'bloom': (1, 1), 'spice': (1, 1)},
+        'qBotHard/ai-level-2': {'hunt': (1, None), 'ate': (2, 2), 'bloom_order': (0, 0), 'bloom': (0, 0), 'expired': (1, 1)},
+        'HumanPlayer/player-hunt-button': {'summoned': (1, 1), 'ate': (1, 1)},
+        'HumanPlayer/player-attack-click': {'summoned': (1, 1), 'ate': (2, 2)},
+        'HumanPlayer/player-spice-bloom': {'summoned': (1, 1), 'bloom_order': (1, 1), 'bloom': (1, 1)},
+        'HumanPlayer/bundled-deserted': {'summoned': (1, 1), 'ate': (1, None), 'bloom_order': (1, 1), 'bloom': (1, 1), 'spice': (1, 1)},
+        'HumanPlayer/bloom-under-fire': {'bloom_order': (1, 1), 'bloom_cancelled': (0, 0), 'bloom': (1, 1)},
+        'qBotHard/bloom-under-fire': {'bloom_order': (1, 1), 'bloom_cancelled': (0, 0), 'bloom': (1, 1)},
+    }
+    problems = []
+    for label, need in want.items():
+        if label not in cases:
+            problems.append(label + ': the case did not run')
+            continue
+        for event, (low, high) in need.items():
+            count = cases[label].get(event, 0)
+            if count < low or (high is not None and count > high):
+                problems.append(f'{label}: {count} {event} lines, expected {low}..{high if high is not None else "any"}')
+    for label, events in cases.items():
+        if events.get('redirected'):
+            problems.append(f'{label}: {events["redirected"]} orders to the worm from another controller')
+        if label.startswith('HumanPlayer/') and events.get('hunt'):
+            problems.append(f'{label}: a human\'s worm logged an AI hunt order')
+    print('Palace worm log lines per case: ' + '; '.join(
+        f'{label} ' + ','.join(f'{e}={n}' for e, n in sorted(events.items())) for label, events in cases.items()))
+    return problems
+
+
 mods = [mod for mod in args.mods.split(',') if mod]
 for mod in mods:
     env = dict(os.environ, DUNECITY_USERDIR=str(out / ('profile-' + mod)),
                SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', PALACE_WORM_PROBE_MOD=mod,
-               PALACE_WORM_PROBE_SAVE=str(out / ('palace-worm-' + mod + '.dls')))
+               PALACE_WORM_PROBE_SAVE=str(out / ('palace-worm-' + mod + '.dls')),
+               PALACE_WORM_PROBE_BUNDLED_MAP=str(root / 'data/maps/multiplayer/4P - 128x128 - Deserted.ini'))
     logfile = out / ('run-' + mod + '.log')
     with logfile.open('w') as log:
         done = subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
@@ -114,6 +162,11 @@ for mod in mods:
             print(mod + ': ' + line[line.index('PALACE_WORM_'):])
     passed = done.returncode == 0 and 'PALACE_WORM_PROBE_PASS:' in text \
         and 'PALACE_WORM_PROBE_FAIL:' not in text
+    if passed:
+        problems = check_case_events(text)
+        for problem in problems:
+            print(mod + ': PALACE_WORM_LOG_FAIL: ' + problem)
+        passed = not problems
     if passed == args.expect_failure:
         raise RuntimeError(('Palace worm probe passed although a failure was expected: ' if passed
                             else 'Palace worm probe failed: ') + str(logfile))

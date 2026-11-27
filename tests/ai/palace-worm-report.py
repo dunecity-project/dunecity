@@ -11,7 +11,11 @@ seeds and sides with fremen-worm-on.ini (each perhaps with its own PalaceWorm pl
   python3 tests/ai/palace-worm-report.py --results DIR --control worm-off --candidates worm-on worm-on-0 worm-on-2
 
 Per arm: worms summoned, meals (and the credit value eaten), blooms, how the worms ended (bloom,
-expired, sated, beaten), the time-out rate and the Fremen house's placement score
+expired, sated, beaten), the time-out rate and the Fremen house's placement score. Per arm and map,
+the activation: in how many Fremen house-games the worm was summoned, hunted, ate and bloomed, how
+many of its hunts led to a meal and its bloom orders to a burst, and how many orders other
+controllers gave it; an arm summoning in fewer than half its house-games, or whose orders mostly
+failed, is reported NOT TESTED
 (tests/ai/match_score.py). The paired difference candidate - control is per game (same map, seed
 and sides) with a 95% bootstrap interval: the candidate is a better Fremen special only when the
 whole interval of the Fremen placement difference is above 0 (the default rule). A match diverges
@@ -90,6 +94,51 @@ def game_stats(tag, pair):
                 fremen_won=game['winner'] == str(FREMEN))
 
 
+def activation(tag, pairs):
+    """How often the worm acted per Fremen house-game, and how often its actions reached their effect
+    (AGENTS.md "AI behaviours: prove the switch actually does its job"). Read from the PALACE_WORM lines."""
+    out = []
+    for map_name in sorted({p[1] for p in pairs}):
+        mine = [p for p in pairs if p[1] == map_name]
+        per = []
+        hunted = hunted_ate = ordered = burst = redirected = cancelled = 0
+        for pair in mine:
+            rows = [r for r in events[(tag, pair)] if r['house'] == str(FREMEN)]
+            count = defaultdict(int)
+            for r in rows:
+                count[r['event']] += 1
+            per.append(count)
+            redirected += count['redirected']
+            cancelled += count['bloom_cancelled']
+            by_worm = defaultdict(list)
+            for r in rows:
+                by_worm[r['object']].append(r['event'])
+            for seq in by_worm.values():
+                if 'hunt' in seq:
+                    hunted += 1
+                    hunted_ate += any(e == 'ate' for e in seq[seq.index('hunt'):])
+                if 'bloom_order' in seq:
+                    ordered += 1
+                    burst += 'bloom' in seq
+        n = len(per)
+        share = lambda e: sum(c[e] > 0 for c in per)
+        mean = lambda e: sum(c[e] for c in per) / n
+        fired = share('summoned')
+        hunt_rate = hunted_ate / hunted if hunted else None
+        bloom_rate = burst / ordered if ordered else None
+        failed = (hunt_rate is not None and hunt_rate < 0.5) and (bloom_rate is None or bloom_rate < 0.5)
+        verdict = 'tested' if n and fired * 2 >= n and not failed else 'NOT TESTED'
+        out.append(f'  {tag} {map_name}: {n} Fremen house-games; summoned in {fired}, hunted in {share("hunt")}, '
+                   f'ate in {share("ate")}, bloomed in {share("bloom")}; per house-game {mean("summoned"):.1f} worms, '
+                   f'{mean("hunt"):.1f} hunt orders, {mean("ate"):.1f} meals, {mean("bloom_order"):.1f} bloom orders, '
+                   f'{mean("bloom"):.1f} blooms')
+        out.append(f'    effect: {hunted_ate}/{hunted} hunting worms ate'
+                   + (f' ({100 * hunt_rate:.0f}%)' if hunt_rate is not None else '')
+                   + f', {burst}/{ordered} bloom orders burst' + (f' ({100 * bloom_rate:.0f}%)' if bloom_rate is not None else '')
+                   + f', {cancelled} bloom trips cancelled; {redirected} orders from other controllers; activation: {verdict}')
+    return out
+
+
 lines = []
 for candidate in args.candidates:
     pairs = sorted(pair for tag, pair in games if tag == candidate and ok(candidate, pair) and ok(args.control, pair))
@@ -122,6 +171,10 @@ for candidate in args.candidates:
         lines.append(f'  {text}: {statistics.mean(values):+.{digits}f} ({low:+.{digits}f} to {high:+.{digits}f}), '
                      f'{len(values)} games: {verdict}')
 
+    lines.append('Activation per arm and map (the warriors arm must show no worm):')
+    lines += activation(candidate, pairs)
+    control_worms = sum(1 for pair in pairs for r in events[(args.control, pair)] if r['event'] == 'summoned')
+    lines.append(f'  {args.control}: {control_worms} worms summoned' + ('' if control_worms == 0 else ' -- THE RULE WAS NOT OFF'))
     lines.append(f'Paired difference {candidate} - {args.control} per game (95% bootstrap interval):')
     difference('Fremen placement score', lambda g: g['fremen'])
     difference('Fremen won (1/0)', lambda g: 1.0 if g['fremen_won'] else 0.0)

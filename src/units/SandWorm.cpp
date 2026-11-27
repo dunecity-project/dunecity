@@ -31,6 +31,7 @@
 #include <misc/draw_util.h>
 
 #include <units/InfantryBase.h>
+#include <structures/StructureBase.h>
 #include <units/PalaceWormRules.h>
 #include <players/AIDecisionLog.h>
 #include <FileClasses/TextManager.h>
@@ -175,6 +176,23 @@ void Sandworm::palaceWormBurst() {
     const Coord where = location;
     const auto terrain = currentGameMap->chooseGeneratedSpiceTerrain();
     currentGameMap->createSpiceField(where, PalaceWorm::kBloomRadius, true, terrain.first, terrain.second);
+    {
+        // What the burst made and how near the base: read by the real-game acceptance test
+        // (tests/ai/run-palace-worm-real-game.py) and tests/ai/palace-worm-report.py.
+        int spiceTiles = 0;
+        for(int dy = -PalaceWorm::kBloomRadius; dy <= PalaceWorm::kBloomRadius; ++dy)
+            for(int dx = -PalaceWorm::kBloomRadius; dx <= PalaceWorm::kBloomRadius; ++dx)
+                if(currentGameMap->tileExists(where.x + dx, where.y + dy) && currentGameMap->getTile(where.x + dx, where.y + dy)->isSpice())
+                    ++spiceTiles;
+        int refineryDistance = -1;
+        for(const auto* structure : structureList)
+            if(structure->getOwner() == owner && structure->getItemID() == Structure_Refinery) {
+                const int d = blockDistance(where, structure->getCenterPoint() / TILESIZE).lround();
+                if(refineryDistance < 0 || d < refineryDistance) refineryDistance = d;
+            }
+        SDL_Log("PALACE_WORM: event=spice house=%d object=%u x=%d y=%d spice_tiles=%d refinery_dist=%d cycle=%u",
+                owner->getHouseID(), objectID, where.x, where.y, spiceTiles, refineryDistance, currentGame->getGameCycleCount());
+    }
     soundPlayer->playSoundAt(Sound_Bloom, where);
     if(owner == pLocalHouse) soundPlayer->playVoice(BloomLocated, owner->getHouseID());
     AITelemetry::log().account(owner->getHouseID(), "palace_worm_bloom", int64_t{1} << 32);
@@ -240,18 +258,34 @@ bool Sandworm::handleSelectedSpiceBloomClick(int x, int y) {
     return responder != nullptr;
 }
 
-void Sandworm::doMove2Pos(int xPos, int yPos, bool bForced) {
+/// Clears the Spice Bloom order for a new ORDER, logging it when there was one (tests/ai/palace-worm-report.py).
+void Sandworm::noteBloomCancelled(const char* order) {
+    if(bloomTarget.isValid())
+        SDL_Log("PALACE_WORM: event=bloom_cancelled house=%d object=%u x=%d y=%d aim_x=%d aim_y=%d order=%s cycle=%u",
+                owner->getHouseID(), objectID, location.x, location.y, bloomTarget.x, bloomTarget.y, order,
+                currentGame->getGameCycleCount());
     bloomTarget.invalidate();
+}
+
+// An order replaces a Spice Bloom trip, except the engine's own turn on whoever shot the worm
+// (UnitBase::handleDamage in Hunt): a worm on its way to burst keeps going. Before 2026-11-27 that
+// turn cancelled the trip each time the worm was hit, and the AI gave the order again every pass
+// (self-play: 22.7 bloom orders for 7.0 bursts per Fremen house-game).
+void Sandworm::doMove2Pos(int xPos, int yPos, bool bForced) {
+    if(takingDamage && bloomTarget.isValid()) return;
+    noteBloomCancelled("move");
     GroundUnit::doMove2Pos(xPos, yPos, bForced);
 }
 
 void Sandworm::doAttackObject(const ObjectBase* pTargetObject, bool bForced) {
-    bloomTarget.invalidate();
+    if(takingDamage && bloomTarget.isValid()) return;
+    noteBloomCancelled("attack_object");
     GroundUnit::doAttackObject(pTargetObject, bForced);
 }
 
 void Sandworm::doAttackPos(int xPos, int yPos, bool bForced) {
-    bloomTarget.invalidate();
+    if(takingDamage && bloomTarget.isValid()) return;
+    noteBloomCancelled("attack_position");
     GroundUnit::doAttackPos(xPos, yPos, bForced);
 }
 
@@ -518,7 +552,9 @@ void Sandworm::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
     if(palaceWorm) {
         // Its owner's orders stand (no switch to Hunt, no forced chase); a worm in Guard or Hunt
         // that is not on its way to burst turns on an enemy that shot it from the sand.
+        takingDamage = true;
         GroundUnit::handleDamage(damage, damagerID, damagerOwner, provenance);
+        takingDamage = false;
         if(damage > 0 && bloomTarget.isInvalid() && !target && (attackMode == GUARD || attackMode == HUNT
            || attackMode == AREAGUARD || attackMode == AMBUSH)) {
             const ObjectBase* pDamager = currentGame->getObjectManager().getObject(damagerID);
@@ -561,9 +597,11 @@ bool Sandworm::update() {
         }
         if(palaceWormCyclesLeft > 0) --palaceWormCyclesLeft;
         if(!isEating()) {
-            // At the spot, or stopped beside it (another worm took the tile): burst here.
+            // At the spot, or stopped beside it (another worm took the tile), or stopped for good
+            // short of it (the path search gave up: UnitBase::navigate set the destination to
+            // where it stands): burst here rather than wait out its life.
             if(bloomTarget.isValid() && (location == bloomTarget
-               || (!moving && !justStoppedMoving && blockDistance(location, bloomTarget) <= 2))) {
+               || (!moving && !justStoppedMoving && (blockDistance(location, bloomTarget) <= 2 || destination == location)))) {
                 palaceWormBurst();
                 return false;
             }

@@ -124,10 +124,12 @@ SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehi
                    'order', 'caller', 'busy', 'from', 'to')
 SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
 # One row per Fremen Palace worm event the engine logs (match rule Fremen Palace Worm): summoned,
-# bloom_order, ate (one per meal, with the victim's item and price), and how it ended: bloom,
-# expired, sated or beaten.
+# bloom_order, hunt (QuantBot's order to eat PREY), ate (one per meal, with the victim's item and
+# price), redirected (another controller's ORDER to it, BY which function), bloom_cancelled, spice
+# (a burst's SPICE_TILES and its REFINERY_DIST to the nearest own refinery), and how it ended:
+# bloom, expired, sated or beaten.
 WORM_FIELDS = ('house', 'object', 'x', 'y', 'kills', 'cycles_left', 'item', 'price', 'victim_house', 'palace',
-               'aim_x', 'aim_y', 'cycle')
+               'aim_x', 'aim_y', 'cycle', 'prey', 'order', 'by', 'spice_tiles', 'refinery_dist')
 WORM_ROW_FIELDS = KEY + ('event',) + WORM_FIELDS
 # One row per Hospital trip event (match rule Hospital Care, dunecity/HospitalCare.h): a soldier
 # sent (why: order, auto, redirect), healed, or ended early (why: lost, hospital_lost, left_bed,

@@ -166,7 +166,12 @@ protected:
             weaponProgressBar.setProgress(pPalace->getPercentComplete());
 
             weaponSelectButton.setVisible(pPalace->isSpecialWeaponReady());
+            // One Palace worm a house at a time (PalaceWormRules.h): while it is out, the charged
+            // button stays shown but cannot be pressed, and says why.
+            const bool wormOut = pPalace->usesPalaceWorm() && Palace::findPalaceWorm(pPalace->getOwner()) != nullptr;
+            weaponSelectButton.setEnabled(!wormOut);
             weaponSelectButton.setTooltipText(pPalace->usesKleshmershNapalm() ? _("Napalm missile")
+                : wormOut ? _("The worm is still out")
                 : pPalace->usesPalaceWorm() ? _("Call a sandworm: Hunt eats enemy units on sand, Spice Bloom bursts it into spice") : "");
 
             int level = static_cast<int>(pPalace->getCityOccupancy());

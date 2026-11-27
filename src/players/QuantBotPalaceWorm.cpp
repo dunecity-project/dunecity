@@ -159,6 +159,12 @@ void QuantBot::managePalaceWorm(const Sandworm* worm) {
         const auto* current = worm->getTarget();
         if(current == nullptr || !worm->canAttack(current)) {
             doAttackObject(worm, prey, false);
+            // Read by tests/ai/palace-worm-report.py: hunts per house-game, and whether they led to a meal.
+            SDL_Log("PALACE_WORM: event=hunt house=%d object=%u x=%d y=%d prey=%u item=%d price=%d kills=%d cycles_left=%d cycle=%u",
+                    getHouse()->getHouseID(), worm->getObjectID(), prey->getLocation().x, prey->getLocation().y,
+                    prey->getObjectID(), prey->getItemID(),
+                    currentGame->objectData.data[prey->getItemID()][prey->getProductionHouseID()].price,
+                    worm->getKills(), cyclesLeft, currentGame->getGameCycleCount());
             traceDecision("palace_worm_hunt", AITelemetry::Record().set("worm", worm->getObjectID())
                 .set("prey", prey->getObjectID()).set("item", prey->getItemID())
                 .set("x", prey->getX()).set("y", prey->getY()).set("kills", worm->getKills()));

@@ -5,5 +5,8 @@
   "turret-creep": {"fire": ["TURRET_FRONT: rule=turret_creep"], "success": ["TURRET_FRONT_ENGAGED: rule=turret_creep"]},
   "rear-turret-retire": {"fire": ["TURRET_RETIRE:"], "success": ["TURRET_RETIRE:"]},
   "moving-line": {"fire": ["TURRET_FRONT: rule=turret_advance", "TURRET_RETIRE:"], "success": ["TURRET_FRONT_PLACED: rule=turret_advance"]},
-  "turret-front-all": {"fire": ["TURRET_FRONT:", "TURRET_RETIRE:"], "success": ["TURRET_FRONT_ENGAGED:"]}
+  "turret-front-all": {"fire": ["TURRET_FRONT:", "TURRET_RETIRE:"], "success": ["TURRET_FRONT_ENGAGED:"]},
+  "palace-worm-1": {"fire": ["PALACE_WORM: event=hunt", "PALACE_WORM: event=bloom_order"], "success": ["PALACE_WORM: event=ate", "PALACE_WORM: event=spice"]},
+  "palace-worm-0": {"fire": ["PALACE_WORM: event=bloom_order"], "success": ["PALACE_WORM: event=spice"]},
+  "palace-worm-2": {"fire": ["PALACE_WORM: event=hunt"], "success": ["PALACE_WORM: event=ate"]}
 }

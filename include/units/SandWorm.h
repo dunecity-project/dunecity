@@ -166,6 +166,8 @@ private:
     Sint32 palaceWormCyclesLeft = 0;        ///< Cycles before it leaves on its own
     Coord  bloomTarget = Coord::Invalid();  ///< Spice Bloom order, see doSpiceBloom()
     bool   palaceWormSpent = false;         ///< Burst or left (transient: set just before destroy())
+    void   noteBloomCancelled(const char* order);
+    bool   takingDamage = false;            ///< Inside handleDamage() (transient): its retaliation orders do not cancel a bloom trip
 
     /// Ends a Palace worm that burst or left on its own. Calls destroy(): return false from update().
     void palaceWormLeave(const char* why);

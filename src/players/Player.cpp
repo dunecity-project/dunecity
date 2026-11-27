@@ -18,6 +18,8 @@
  */
 
 #include <players/Player.h>
+
+#include <cstring>
 #include <players/QuantBotConfig.h>
 
 #include <Map.h>
@@ -141,7 +143,20 @@ bool garrisonBound(const UnitBase* unit) {
 
 /// An AI player's army order addressed to a Saboteur. True when it must not be applied: with
 /// the match rule on, a released Saboteur keeps its own hunt until it has blown something up.
+/// The Fremen Palace worm takes its AI orders from QuantBot::managePalaceWorm only. Any other
+/// controller's order to it is logged (never refused) so the measured games count redirections
+/// (tests/ai/palace-worm-report.py).
+void notePalaceWormOrder(const ObjectBase* pObject, const char* order, const char* caller) {
+    if(pObject == nullptr || pObject->getItemID() != Unit_Sandworm) return;
+    const auto* worm = static_cast<const Sandworm*>(pObject);
+    if(!worm->isPalaceWorm() || (caller != nullptr && std::strcmp(caller, "managePalaceWorm") == 0)) return;
+    SDL_Log("PALACE_WORM: event=redirected house=%d object=%u x=%d y=%d order=%s by=%s cycle=%u",
+            worm->getOwner()->getHouseID(), worm->getObjectID(), worm->getLocation().x, worm->getLocation().y,
+            order, caller != nullptr ? caller : "?", currentGame->getGameCycleCount());
+}
+
 bool saboteurRefuses(const ObjectBase* pObject, const char* order, const char* caller) {
+    notePalaceWormOrder(pObject, order, caller);
     if(pObject == nullptr || pObject->getItemID() != Unit_Saboteur) return false;
     return const_cast<Saboteur*>(static_cast<const Saboteur*>(pObject))->armyOrder(order, caller);
 }
@@ -483,6 +498,7 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
     std::vector<const UnitBase*> own;
     for(const UnitBase* unit : units) {
         if(unit == nullptr || unit->getOwner() != house || !unit->isActive() || garrisonBound(unit)) continue;
+        notePalaceWormOrder(unit, order, caller);
         if(unit->getItemID() == Unit_Saboteur && (countApplied || Saboteur::keepsOwnHunt())
            && saboteurRefuses(unit, order, caller)) continue;
         own.push_back(unit);
