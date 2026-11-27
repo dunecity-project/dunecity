@@ -7,7 +7,8 @@ as a maginot and built a lot of launchers ... analyse the save and the logs").
 Save] SHA256 and GzipBase64; the queue carries its bytes). Each arm loads the save headless with the
 dummy driver and logs SAVE_HOUSE_AUDIT rows (tests/ai/save-house-audit.inc) per house - players, credits,
 city, units and structures by type, Palaces with the land value of their lots, Rocket Turrets against the
-enemy - with each house's UNIT_ECONOMY combat record (houses.jsonl, units.csv). With --extra-minutes the
+enemy - with each house's UNIT_ECONOMY combat record (houses.csv with each row's JSON, units.csv; every
+arm's rows, also when the queue collects them; houses.jsonl only for a local run). With --extra-minutes the
 AI plays on and is audited every 10 minutes, at each --audit-at minute and at the end. Arm 'audit' plays
 the shipped defaults; any other --arms name is a QuantBot play style (tests/ai/play-styles/<arm>.ini) for
 every house. --arm NAME:HOUSE=STYLE[,HOUSE=STYLE][;buildings=0|1] is a named arm in which only those
@@ -35,6 +36,9 @@ from probe_profile import finish_game, probe_binary, require_free_space, restore
 
 KEY = ('arm',)
 FIELDS = KEY + ('sha256', 'extra_minutes', 'wall_s', 'error')
+# houses.csv: one row per house and audit, the whole SAVE_HOUSE_AUDIT object in 'json'. The cluster appends
+# every game's CSV tables into the job's results; a .jsonl file is kept from one game only.
+HOUSE_FIELDS = ('arm', 'phase', 'minute', 'house', 'json')
 ECONOMY = ('arm', 'phase', 'house', 'item', 'name', 'kind', 'price', 'built', 'lost', 'damage_value', 'kill_bonus',
            'kills', 'hits', 'cycle')
 
@@ -148,6 +152,10 @@ def play(args, scratch, binary, key):
     with (results / 'houses.jsonl').open('a') as handle:
         for row in houses:
             handle.write(json.dumps(row, sort_keys=True) + '\n')
+    if houses:
+        append(results / 'houses.csv', HOUSE_FIELDS, [{'arm': arm, 'phase': row['phase'], 'minute': row['minute'],
+                                                      'house': row['house'], 'json': json.dumps(row, sort_keys=True)}
+                                                     for row in houses])
     if economy:
         append(results / 'units.csv', ECONOMY, economy)
     passed = process.returncode == 0 and any(r['phase'] == 'loaded' for r in houses)
@@ -165,9 +173,8 @@ def report(args):
     rows = read(Path(args.results) / 'games.csv')
     failed = [row for row in rows if row['error']]
     print('Save house audit: %d passed, %d failed' % (len(rows) - len(failed), len(failed)))
-    path = Path(args.results) / 'houses.jsonl'
-    for line in (path.read_text().splitlines() if path.exists() else []):
-        row = json.loads(line)
+    for line in read(Path(args.results) / 'houses.csv'):
+        row = json.loads(line['json'])
         print('%-8s %-8s m%-6s h%s players=%s credits=%s lv=%s low=%s/%s turrets=%s bands=%s units=%s' % (
             row['arm'], row['phase'], row['minute'], row['house'], [p['class'] for p in row['players']], row['credits'],
             row['avg_land_value'], row['low_lots'], row['lots'], row['rocket_turrets'], row['turret_enemy_bands'],
