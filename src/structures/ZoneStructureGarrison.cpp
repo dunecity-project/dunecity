@@ -269,71 +269,74 @@ void ZoneStructure::updateGarrison() {
 
 void ZoneStructure::drawGarrisonSandbags() const {
     // Original pixel art, drawn rather than loaded: a ring of stacked sandbags hugging the lot's
-    // edge, tinted toward the garrison's house colour along the top seam so a held zone reads at
-    // a glance. Bags are laid in staggered courses, two high, with a dark outline and a light
-    // top face; gaps at the middle of each side are the firing slits.
-    const int zoom = currentZoomlevel + 1;
+    // edge, two staggered courses on every side with a gap in the middle of each side as a firing
+    // slit, the garrison house's colour along the front course, and an olive helmet per soldier.
     const int x0 = screenborder->world2screenX(lround(realX));
     const int y0 = screenborder->world2screenY(lround(realY));
-    const int scaleW = screenborder->world2screenX(lround(realX) + structureSize.x * TILESIZE) - x0;
-    const int scaleH = screenborder->world2screenY(lround(realY) + structureSize.y * TILESIZE) - y0;
-    const int bagW = std::max(3, scaleW / 9);
-    const int bagH = std::max(2, scaleH / 14);
+    const int w = screenborder->world2screenX(lround(realX) + structureSize.x * TILESIZE) - x0;
+    const int h = screenborder->world2screenY(lround(realY) + structureSize.y * TILESIZE) - y0;
+    const int bagL = std::max(5, w / 7);        // a bag's long side
+    const int bagS = std::max(3, h / 10);       // its short side
     const House* house = getGarrisonHouse();
     const int houseColor = house ? house->getHouseID() : owner->getHouseID();
     const SDL_Color seam = getHouseColorSDL(getHouseVisualHouse(houseColor));
 
-    auto bag = [&](int x, int y, int bw, int bh) {
-        SDL_Rect body{x, y, bw, bh};
-        SDL_SetRenderDrawColor(renderer, 182, 152, 98, 255);    // sacking
-        SDL_RenderFillRect(renderer, &body);
-        SDL_Rect top{x + 1, y, std::max(1, bw - 2), std::max(1, bh / 3)};
-        SDL_SetRenderDrawColor(renderer, 214, 188, 132, 255);   // sunlit top
-        SDL_RenderFillRect(renderer, &top);
-        SDL_Rect tie{x + bw / 2, y + 1, std::max(1, bw / 8), std::max(1, bh - 2)};
-        SDL_SetRenderDrawColor(renderer, 140, 112, 70, 255);    // stitched seam
-        SDL_RenderFillRect(renderer, &tie);
-        SDL_SetRenderDrawColor(renderer, 62, 46, 28, 255);      // outline
-        SDL_RenderDrawRect(renderer, &body);
+    auto fill = [](int x, int y, int bw, int bh, Uint8 r, Uint8 g, Uint8 b) {
+        SDL_Rect rect{x, y, std::max(1, bw), std::max(1, bh)};
+        SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+        SDL_RenderFillRect(renderer, &rect);
     };
-    // Two staggered courses along one edge, leaving the middle bag out as a firing slit.
-    auto wallH = [&](int y) {
-        const int count = std::max(4, scaleW / bagW);
+    // One bag: dark outline, sacking body, sunlit face on its top or left side, a tie in the middle.
+    auto bag = [&](int x, int y, int bw, int bh, bool horizontal) {
+        fill(x, y, bw, bh, 58, 42, 24);
+        fill(x + 1, y + 1, bw - 2, bh - 2, 176, 146, 92);
+        if(horizontal) {
+            fill(x + 1, y + 1, bw - 2, std::max(1, (bh - 2) / 3), 216, 190, 134);
+            fill(x + bw / 2, y + 1, 1, bh - 2, 128, 100, 62);
+        } else {
+            fill(x + 1, y + 1, std::max(1, (bw - 2) / 3), bh - 2, 216, 190, 134);
+            fill(x + 1, y + bh / 2, bw - 2, 1, 128, 100, 62);
+        }
+    };
+    // A wall of two staggered courses along one side; the middle bag of the outer course is left
+    // out as a firing slit.
+    auto wallH = [&](int y, bool outerBelow) {
         for(int course = 0; course < 2; ++course) {
-            const int offset = course == 0 ? 0 : bagW / 2;
+            const int offset = course == 0 ? 0 : bagL / 2;
+            const int cy = outerBelow ? y + (1 - course) * (bagS - 1) : y + course * (bagS - 1);
+            const int count = (w - offset) / bagL;
             for(int i = 0; i < count; ++i) {
-                if(i == count / 2) continue;
-                const int x = x0 + offset + i * bagW;
-                if(x + bagW > x0 + scaleW) break;
-                bag(x, y - course * (bagH - 1), bagW, bagH);
+                if(course == 0 && i == count / 2) continue;
+                bag(x0 + offset + i * bagL, cy, bagL, bagS, true);
             }
         }
     };
-    auto wallV = [&](int x) {
-        const int count = std::max(4, scaleH / bagW);
-        for(int i = 0; i < count; ++i) {
-            if(i == count / 2) continue;
-            const int y = y0 + i * bagW;
-            if(y + bagW > y0 + scaleH) break;
-            bag(x, y, bagH + 1, bagW);
+    auto wallV = [&](int x, bool outerRight) {
+        for(int course = 0; course < 2; ++course) {
+            const int offset = bagS * 2 + (course == 0 ? 0 : bagL / 2);
+            const int cx = outerRight ? x + (1 - course) * (bagS - 1) : x + course * (bagS - 1);
+            const int count = (h - 2 * offset) / bagL;
+            for(int i = 0; i < count; ++i) {
+                if(course == 0 && i == count / 2) continue;
+                bag(cx, y0 + offset + i * bagL, bagS, bagL, false);
+            }
         }
     };
-    wallV(x0);
-    wallV(x0 + scaleW - bagH - 1);
-    wallH(y0 + scaleH - bagH);
-    wallH(y0 + bagH);
-    // The house's colour along the front course, as a pennant line over the sandbags.
-    SDL_SetRenderDrawColor(renderer, seam.r, seam.g, seam.b, 255);
-    SDL_Rect pennant{x0 + bagW, y0 + scaleH - bagH - 1, std::max(1, scaleW - 2 * bagW), std::max(1, zoom / 2 + 1)};
-    SDL_RenderFillRect(renderer, &pennant);
+    wallV(x0, false);
+    wallV(x0 + w - 2 * bagS + 1, true);
+    wallH(y0, false);
+    wallH(y0 + h - 2 * bagS + 1, true);
+    // The garrison house's colour along the front course, as a pennant line over the bags.
+    fill(x0 + bagL, y0 + h - 2 * bagS, w - 2 * bagL, std::max(2, bagS / 2), seam.r, seam.g, seam.b);
 
-    // One small helmet per soldier inside, in the top-left corner: how full it is at a glance.
+    // An olive helmet per soldier inside, along the top wall: how full it is at a glance.
+    const int helmet = std::max(3, bagS + 1);
     for(int i = 0; i < getGarrisonSize(); ++i) {
-        SDL_Rect helmet{x0 + bagH + 2 + i * (bagW / 2 + 2), y0 + 2 * bagH + 2, std::max(2, bagW / 2), std::max(2, bagH)};
-        SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
-        SDL_RenderFillRect(renderer, &helmet);
-        SDL_Rect band{helmet.x, helmet.y + helmet.h - 1, helmet.w, 1};
-        SDL_SetRenderDrawColor(renderer, seam.r, seam.g, seam.b, 255);
-        SDL_RenderFillRect(renderer, &band);
+        const int hx = x0 + 2 * bagS + 1 + i * (helmet + 2);
+        const int hy = y0 + 2 * bagS;
+        fill(hx, hy, helmet, helmet, 20, 20, 14);                       // outline
+        fill(hx + 1, hy + 1, helmet - 2, helmet - 2, 92, 104, 52);      // olive drab
+        fill(hx + 1, hy + 1, std::max(1, (helmet - 2) / 2), 1, 150, 164, 96);   // highlight
+        fill(hx, hy + helmet - 1, helmet, 1, seam.r, seam.g, seam.b);   // house-coloured band
     }
 }
