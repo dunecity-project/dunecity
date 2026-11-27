@@ -1185,7 +1185,7 @@ void checkMetropolis() {
         const auto safeFar = [&](const Coord& c) {
             bool ownNear = false;
             for(StructureBase* structure : structureList) {
-                const int d = blockDistance(c, structure->getClosestPoint(c));
+                const int d = blockDistance(c, structure->getClosestPoint(c)).lround();
                 if(structure->getOwner() == home) { if(d <= 3) ownNear = true; }
                 else if(d < 16) return false;
             }
