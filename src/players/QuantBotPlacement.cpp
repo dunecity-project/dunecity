@@ -616,8 +616,12 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLo
         std::vector<Uint32> cleared;
         const bool redevelop = redevelopmentZones(item, pos, cleared);
         if (!redevelop && !placeableAmongOwnUnits(c.x, c.y, size.x, size.y, item)) continue;
+        // LowValuePalaces / FrontPalaces (default off) judge ground access with the lots they clear already gone:
+        // the yard re-checks it at placement after the demolition, and a site that opened a passage there was
+        // refused (quantbot_city_lessons, 2477d8a29: ground_access_kept=0 on every retry).
+        const bool lessonSearch = lowValueLots || allowedCentres;
         if (overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
-            || dangerAt(pos, size) > 0 || !preservesGroundAccess(item, pos)
+            || dangerAt(pos, size) > 0 || !preservesGroundAccess(item, pos, lessonSearch && redevelop ? &cleared : nullptr)
             || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, item).preservesConnections) continue;
         // Each demolished lot costs kPalaceClearLotCost; with PalaceDenseClearing a denser lot costs its
         // whole tax (density x land value over the landmark's +40), and such a site must still net
