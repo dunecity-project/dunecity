@@ -267,6 +267,9 @@ bool walkIn(UnitBase* unitBase, ZoneStructure* zone) {
     auto* unit = dynamic_cast<GroundUnit*>(unitBase);
     auto* care = state();
     if(!unit || !zone || !care) return false;
+    // A group move made it a formation member whose march would take it to its slot again: it
+    // leaves the formation to walk in (measured: all three of a group were re-ordered the same cycle).
+    unit->leaveFormation();
     if(const auto* trip = care->trip(unit->getObjectID())) {
         if(trip->hospitalID == zone->getObjectID()) {
             // Ordered to the Hospital it is already going to: the walk to its tile stands, and a
