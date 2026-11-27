@@ -155,7 +155,8 @@ inline int reinforceSiteScore(int toAttack, int toAnchor, int nearestOwnTurret, 
 
 // --- (b) AdvancingTurrets ----------------------------------------------------------------------
 
-/// Turrets within this many tiles of the base's enemy-facing edge make the belt.
+/// Own turrets within this many tiles of the edge's anchor, and no deeper than one tile behind the
+/// edge, make the line's width.
 constexpr int kBeltTiles = 6;
 /// The belt wanted at the edge.
 constexpr int kBeltGoal = 6;
@@ -172,14 +173,16 @@ constexpr int kBeltEnemyStandoff = 4;
 constexpr int kEnemyTurretReachTiles = 9;
 inline bool armyAhead(int armyLead, int edge) { return armyLead + kArmyLeadTiles <= edge; }
 inline bool behindArmy(int site, int armyLead) { return site >= armyLead + kBehindArmyTiles; }
-/// A belt site at enemy distance \a site: along the edge (or one tile ahead) while the line there is
-/// short of \a goal, forward of the edge once it is that wide; behind the army when the army stands
+/// A belt site at enemy distance \a site: along the edge while the line there (own turrets at the
+/// edge's depth, see kBeltTiles) is short of \a goal, forward of the edge once it is that wide; behind the army when the army stands
 /// ahead (\a behindLimit, 0 otherwise); clear of enemy buildings by the standoff and of every enemy
 /// turret. No army is needed: the line moves forward on its own (Stefan's "maginot line which
 /// moves forward"; the army lead the first version required kept it from moving).
 inline bool beltSite(int site, int edge, int belt, int goal, int behindLimit, int standoff, int enemyTurretsInReach) {
     if (site > edge) return false;
-    if (belt < goal ? site < edge - 1 : site >= edge) return false;
+    // Short of its width the line only widens along its edge (a tile ahead would itself become the
+    // edge, and the line would advance as a spear); once wide it steps forward.
+    if (belt < goal ? site != edge : site >= edge) return false;
     return site >= standoff && site >= behindLimit && enemyTurretsInReach == 0;
 }
 /// Site score for the belt: tiles gained toward the enemy first, then spacing.

@@ -16,9 +16,9 @@
 //                   stand and fire on the Quads
 //   reinforce-off   the same with the switch off: no front order
 //   reinforce-far   switch on, Quads parked 20 tiles from every own building: no front order
-//   advance-on      own Combat Tanks stand east of the base: AdvancingTurrets builds a belt that
-//                   stands at least six tiles east of the base's first eastern edge, and never
-//                   within reach of the enemy Rocket Turret
+//   advance-on      own Combat Tanks stand east of the base: AdvancingTurrets builds a line of eight
+//                   or more turrets, at least three side by side, its furthest at least six tiles
+//                   east of the base's first eastern edge, none within reach of the enemy turret
 //   advance-off     the same with the switch off: no advance order
 //   advance-noarmy  switch on, no army at all: the line still forms and moves forward (it needs no
 //                   army; the first version's army-lead trigger kept it from moving)
@@ -31,10 +31,10 @@
 //   retire-off      the same with the switch off: every turret stays
 //   drill-on        an enemy base 18 tiles from the own base's edge, guarded by Quads: TurretDrill
 //                   builds a dense mass toward and into it (turrets touching, within range of the
-//                   enemy buildings) that kills the Quads; with turrets firing on units only (the
-//                   default) the enemy buildings take no turret damage
-//   drill-buildings the same with Turrets Can Fire On Buildings on: the mass also damages the enemy
-//                   buildings it reaches
+//                   enemy buildings) that hurts the Quads; with turrets firing on units only (the
+//                   default) no own turret ever targets an enemy building
+//   drill-buildings the same with Turrets Can Fire On Buildings on: own turrets also fire on the
+//                   enemy buildings they reach
 //   drill-off       the same with the switch off: no drill order
 //   drill-far       switch on, the enemy base 90 tiles away: no drill order
 #include <Game.h>
@@ -226,6 +226,24 @@ std::vector<const StructureBase*> rocketTurrets(House* house) {
     return out;
 }
 
+/// Placed turrets of \a mode, by position, sampled from the bot's order tracker (an order stays
+/// tracked until its turret engages a unit or is lost).
+void collectPlaced(const Fixture& f, QuantBot::TurretFrontMode mode, std::set<std::pair<int, int>>& out) {
+    for(const auto& order : f.bot->turretFrontOrders)
+        if(order.mode == mode && order.turret != NONE_ID) out.insert({order.site.x, order.site.y});
+}
+
+/// Own Rocket Turrets whose target is an enemy building, and those whose target is a unit.
+void sampleTargets(const Fixture& f, int& onBuildings, int& onUnits) {
+    for(const StructureBase* s : structureList) {
+        if(s->getOwner() != f.own || s->getItemID() != Structure_RocketTurret) continue;
+        const auto* t = dynamic_cast<const TurretBase*>(s);
+        const ObjectBase* target = t ? t->getTarget() : nullptr;
+        if(target == nullptr || target->getOwner() == f.own) continue;
+        if(target->isAStructure()) ++onBuildings; else ++onUnits;
+    }
+}
+
 int health(Uint32 id) {
     const auto* object = currentGame->getObjectManager().getObject(id);
     return object ? int(lround(object->getHealth())) : 0;
@@ -303,26 +321,49 @@ void advance(bool on, bool army) {
     if(army)
         for(int i = 0; i < 8; ++i) tanks.push_back(unit(f.own, Unit_Tank, 34 + i % 2, 28 + i / 2)->getObjectID());
     const auto& c = counts(f, QuantBot::TurretFrontMode::Advance);
+    // The belt's own turrets (placed by AdvancingTurrets orders), not every own turret.
+    std::set<std::pair<int, int>> belt;
     auto furthestEast = [&] {
         int x = 0;
-        for(const StructureBase* t : rocketTurrets(f.own)) x = std::max(x, t->getLocation().x);
+        for(const auto& at : belt) x = std::max(x, at.first);
         return x;
     };
-    const int played = play(f, 12000, [&] { return c.placed >= 4 && furthestEast() >= baseEast + 6; });
+    const int played = play(f, 12000, [&] {
+        collectPlaced(f, QuantBot::TurretFrontMode::Advance, belt);
+        return belt.size() >= 8 && furthestEast() >= baseEast + 6;
+    });
+    collectPlaced(f, QuantBot::TurretFrontMode::Advance, belt);
     if(!on) {
         require(totalOrders(f) == 0, name + ": front orders with the switch off");
         record(name, "no advance order in " + std::to_string(played) + " cycles");
         return;
     }
     require(c.ordered > 0, name + ": no belt ordered with the army ahead (" + countText(c) + ")");
-    require(c.placed >= 4, name + ": the belt did not stand, four turrets wanted (" + countText(c) + ")");
-    require(furthestEast() >= baseEast + 6, name + ": the belt did not move forward, furthest turret at x="
+    require(belt.size() >= 8, name + ": the line did not stand, eight belt turrets wanted, "
+                              + std::to_string(belt.size()) + " (" + countText(c) + ")");
+    require(furthestEast() >= baseEast + 6, name + ": the line did not move forward, furthest belt turret at x="
                                                 + std::to_string(furthestEast()));
-    for(const StructureBase* t : rocketTurrets(f.own))
-        require(TurretFrontPolicy::tileDistance(t->getLocation().x, t->getLocation().y, enemyTurret.x, enemyTurret.y)
+    // The line is a line: at least three belt turrets stand at the same distance from the enemy.
+    auto enemyDistance = [&](int x, int y) {
+        int d = 1000;
+        for(const StructureBase* s : structureList) {
+            if(s->getOwner() != f.enemy) continue;
+            const Coord l = s->getLocation(), z = s->getStructureSize();
+            d = std::min(d, std::max(std::max({0, l.x - x, x - (l.x + z.x - 1)}), std::max({0, l.y - y, y - (l.y + z.y - 1)})));
+        }
+        return d;
+    };
+    std::map<int, int> depth;
+    for(const auto& at : belt) ++depth[enemyDistance(at.first, at.second)];
+    int widest = 0;
+    for(const auto& entry : depth) widest = std::max(widest, entry.second);
+    require(widest >= 3, name + ": the belt is a spear, not a line (" + std::to_string(widest) + " side by side)");
+    for(const auto& at : belt)
+        require(TurretFrontPolicy::tileDistance(at.first, at.second, enemyTurret.x, enemyTurret.y)
                     > TurretFrontPolicy::kEnemyTurretReachTiles,
                 name + ": a belt turret stands within the enemy turret's reach");
-    record(name, countText(c) + "; furthest turret x=" + std::to_string(furthestEast()) + " (base edge x="
+    record(name, countText(c) + "; " + std::to_string(belt.size()) + " belt turrets, " + std::to_string(widest)
+                 + " side by side, furthest x=" + std::to_string(furthestEast()) + " (base edge x="
                  + std::to_string(baseEast) + "); cycles " + std::to_string(played));
 }
 
@@ -460,11 +501,12 @@ void drill(bool on, bool fireOnBuildings, bool far) {
                 }
         }
     };
-    int nearest = 1000, touching = 0;
+    int nearest = 1000, touching = 0, onBuildings = 0, onUnits = 0;
     const int played = play(f, 12000, [&] {
         mass(nearest, touching);
+        sampleTargets(f, onBuildings, onUnits);
         const bool reached = nearest <= 7 && touching >= 4 && c.placed >= 8;
-        return reached && sum(quads) == 0 && (!fireOnBuildings || sum(enemyBuildings) < buildingStart);
+        return reached && sum(quads) == 0 && (!fireOnBuildings || onBuildings > 0);
     });
     mass(nearest, touching);
     if(!on) {
@@ -483,13 +525,15 @@ void drill(bool on, bool fireOnBuildings, bool far) {
     require(touching >= 4, name + ": the mass is not dense, " + std::to_string(touching) + " turrets touch another");
     require(c.engaged > 0, name + ": no drill turret fired on a unit (" + countText(c) + ")");
     require(sum(quads) < quadStart, name + ": the defenders lost no health");
+    // The rule, on the turrets themselves (the bot's army may hit buildings either way).
     if(fireOnBuildings)
-        require(sum(enemyBuildings) < buildingStart, name + ": the mass did not damage the enemy buildings in reach");
+        require(onBuildings > 0, name + ": no own turret fired on an enemy building with Turrets Can Fire On Buildings on");
     else
-        require(sum(enemyBuildings) == buildingStart, name + ": turrets damaged enemy buildings with the rule off");
+        require(onBuildings == 0, name + ": an own turret targeted an enemy building with the rule off");
     record(name, countText(c) + "; nearest " + std::to_string(nearest) + " tiles, " + std::to_string(touching)
                  + " touching; defenders " + std::to_string(quadStart) + "->" + std::to_string(sum(quads))
                  + "; enemy buildings " + std::to_string(buildingStart) + "->" + std::to_string(sum(enemyBuildings))
+                 + "; turret targets: " + std::to_string(onUnits) + " units, " + std::to_string(onBuildings) + " buildings"
                  + "; cycles " + std::to_string(played));
 }
 

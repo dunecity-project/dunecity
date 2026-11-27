@@ -62,7 +62,7 @@ TEST_CASE("TurretFront: the four rules", "[ai][turret-front][policy]") {
     // The belt: along the edge while short of its width, forward once wide; behind the army when the
     // army is ahead; clear of enemy buildings and turrets. No army needed.
     REQUIRE(TF::beltSite(24, 24, 3, 6, 0, 4, 0));             // widening along the edge
-    REQUIRE(TF::beltSite(23, 24, 3, 6, 0, 4, 0));             // or a tile ahead of it
+    REQUIRE_FALSE(TF::beltSite(23, 24, 3, 6, 0, 4, 0));       // not a tile ahead (a spear)
     REQUIRE_FALSE(TF::beltSite(20, 24, 3, 6, 0, 4, 0));       // not forward while short
     REQUIRE(TF::beltSite(20, 24, 6, 6, 0, 4, 0));             // forward once wide, no army
     REQUIRE_FALSE(TF::beltSite(24, 24, 6, 6, 0, 4, 0));       // not sideways once wide

@@ -423,7 +423,11 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
             turretFrontPlan.armyLead = armyLead;
             if (TF::armyAhead(armyLead, edge)) behindLimit = armyLead + beltBehindArmy();
         }
-        const int belt = int(ownTurretSum.around(edgeAnchor.x, edgeAnchor.y, TF::kBeltTiles));
+        // The line's width: own turrets near the edge's anchor at the edge's depth (one tile slack).
+        int belt = 0;
+        for (const auto& own : ownTurrets)
+            belt += int(TF::tileDistance(own.at.x, own.at.y, edgeAnchor.x, edgeAnchor.y) <= TF::kBeltTiles
+                        && distAt(own.at.x, own.at.y) <= edge + 1);
         int bestScore = std::numeric_limits<int>::min();
         Coord best = Coord::Invalid();
         const int window = BUILDRANGE + 1;
