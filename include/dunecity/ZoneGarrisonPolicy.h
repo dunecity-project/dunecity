@@ -40,9 +40,11 @@ inline constexpr int occupantDamage(int damage) {
 
 /// Stefan, 2026-11-27: "make troopers and infantry evacuate buildings with an evacuate when it gets
 /// below X% health". A garrisoned zone below this share of its hit points puts its soldiers out,
-/// and a zone below it cannot be garrisoned or taken. Chosen from measured games
-/// (docs/zone-garrisons.md, "Evacuation threshold"); 0 would mean never.
-inline constexpr int kEvacuateHealthPercent = 40;
+/// and a zone below it cannot be garrisoned or taken. 60, chosen from 1,152 measured games at
+/// 0/25/40/60 (docs/zone-garrisons.md, "Evacuation threshold"): placement and exchange value were
+/// level at every threshold; 60 brought most soldiers out alive (65% of entries, 53% at 0) and lost
+/// as few garrisons in exploding zones as 40. 0 would mean never.
+inline constexpr int kEvacuateHealthPercent = 60;
 
 /// Is a zone at HEALTH of MAXHEALTH too damaged to hold, at threshold PERCENT?
 inline constexpr bool belowEvacuateHealth(int health, int maxHealth, int percent) {
