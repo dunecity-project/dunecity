@@ -1264,7 +1264,10 @@ void checkPacing(const std::string& mapData) {
         for(size_t k = 0; k < zones.size(); ++k) {
             auto* z = zones[k];
             int level = day < lowDay ? 3 : (z->getCivicOverlay() == CO::Hospital ? 2 : 1);
-            if(z->getCivicOverlay() != CO::Hospital && (k + day) % 8 < 3) level = day < lowDay ? (day % 2 ? 0 : 1) : 0;
+            // One zone in eight (never a Hospital) empties and refills: the populated count moves
+            // between 26 and 30, which re-picked every overlay under the old census. The rest keep
+            // the city above 768 residents (three Hospitals) despite the unpowered decline.
+            if(z->getCivicOverlay() != CO::Hospital && (k + day) % 8 < 1) level = day < lowDay ? (day % 2 ? 0 : 1) : 0;
             if(currentGameMap->getTile(z->getLocation())->getCityZoneDensity() != level) {
                 z->setStartingLevel(level);
                 ++populationChanges;
