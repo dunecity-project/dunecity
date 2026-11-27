@@ -167,6 +167,8 @@ Run play(const std::string& save, Switches switches, int minutes, bool plant, Co
     Bot b = findBot(*game);
     configure(b.bot, switches);
     if (credits > 0) b.house->addCredits(FixPoint(credits));
+    // The idle player may be overrun; the arm still plays its minutes (no win or loss ends it).
+    game->winFlags = game->loseFlags = 0;
     auto* sim = game->getCitySimulation();
     Uint32 plantID = NONE_ID;
     if(plant) {
