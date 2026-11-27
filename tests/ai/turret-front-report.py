@@ -49,7 +49,8 @@ ARM_RULES = {'front-turrets': ('front_reinforce',), 'advancing-turrets': ('turre
              'turret-creep': ('turret_creep',), 'rear-turret-retire': ('retire',),
              'moving-line': ('turret_advance', 'retire'),
              'turret-front-all': ('front_reinforce', 'turret_creep', 'turret_advance', 'retire'),
-             'turret-drill': ('turret_drill',)}
+             'turret-drill': ('turret_drill',),
+             'city-lessons-front-palaces-drill': ('turret_drill',), 'city-launcher-army-drill': ('turret_drill',)}
 
 
 def rows(directory, name):
