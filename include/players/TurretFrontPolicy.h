@@ -188,7 +188,7 @@ inline bool beltSite(int site, int edge, int belt, int goal, int behindLimit, in
 /// Site score for the belt: tiles gained toward the enemy first, then touching the line (Stefan's
 /// line was clumps of touching turrets, 94-97% of them touching another).
 inline int advanceSiteScore(int site, int edge, int adjacentOwnTurrets) {
-    return (edge - site) * 100 + std::min(adjacentOwnTurrets, 4) * 15;
+    return (edge - site) * 100 + std::min(adjacentOwnTurrets, 4) * 50;
 }
 
 // --- (c) TurretCreep ---------------------------------------------------------------------------
@@ -212,6 +212,10 @@ inline int creepSiteScore(int64_t defenderValueInRange, int enemyTurretsInReach,
 
 // --- (e) TurretDrill ---------------------------------------------------------------------------
 
+/// Score per own turret a mass site touches (at most four): one touching turret is worth half a
+/// tile nearer the enemy, four are worth two tiles. Stefan's turrets touched another 94-97% of the
+/// time; at 15 a neighbour the drill's touched 56-72% (seewhatiddid.dls demonstration).
+constexpr int kMassTouchWeight = 50;
 /// The drill starts once the base's edge stands this close to an enemy building.
 constexpr int kDrillStartTiles = 24;
 /// Anchors examined per drill search, nearest the enemy first.
@@ -236,8 +240,12 @@ inline bool drillSite(int site, int edge, int enemyTurretsInReach) {
 /// mass (adjacent own turrets).
 inline int drillSiteScore(int enemyDistance, int64_t targetValueInRange, int adjacentOwnTurrets) {
     return -std::min(enemyDistance, 60) * 100 + int(std::min<int64_t>(targetValueInRange / 100, 200)) * 10
-        + std::min(adjacentOwnTurrets, 4) * 15;
+        + std::min(adjacentOwnTurrets, 4) * kMassTouchWeight;
 }
+/// Cash a drilling house keeps when it orders a drill turret: Stefan spent his house down to about
+/// 3,200 credits on the mass; the economy's own reserve (threatReserve) starved the first drill
+/// (Stefan's save, house 0 alone on turret-drill: 128 waiting sites unpaid in 48 minutes).
+constexpr int kDrillReserveCredits = 1000;
 
 // --- Following the orders ----------------------------------------------------------------------
 

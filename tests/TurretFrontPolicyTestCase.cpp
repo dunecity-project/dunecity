@@ -71,7 +71,7 @@ TEST_CASE("TurretFront: the four rules", "[ai][turret-front][policy]") {
     REQUIRE_FALSE(TF::beltSite(3, 24, 6, 6, 0, 4, 0));        // beside an enemy building
     REQUIRE_FALSE(TF::beltSite(20, 24, 6, 6, 0, 4, 1));       // an enemy turret reaches it
     REQUIRE(TF::kBeltEnemyStandoff < 10);                     // 3waysplit's bases stand within 10
-    REQUIRE(TF::advanceSiteScore(22, 24, 0) > TF::advanceSiteScore(23, 24, 4));   // progress first
+    REQUIRE(TF::advanceSiteScore(21, 24, 0) > TF::advanceSiteScore(23, 24, 2));   // three tiles beat two neighbours
     REQUIRE(TF::advanceSiteScore(23, 24, 2) > TF::advanceSiteScore(23, 24, 0));   // then touching the line
     // (e) the drill: no nearer than 4 tiles to an enemy building, at most one enemy turret reaching.
     REQUIRE(TF::drillSite(11, 20, 0));
@@ -79,7 +79,8 @@ TEST_CASE("TurretFront: the four rules", "[ai][turret-front][policy]") {
     REQUIRE_FALSE(TF::drillSite(3, 20, 0));
     REQUIRE_FALSE(TF::drillSite(11, 20, 2));
     REQUIRE_FALSE(TF::drillSite(21, 20, 0));
-    REQUIRE(TF::drillSiteScore(9, 0, 0) > TF::drillSiteScore(10, 0, 4));          // nearer first
+    REQUIRE(TF::drillSiteScore(9, 0, 0) > TF::drillSiteScore(12, 0, 4));          // nearer first, by 3 tiles
+    REQUIRE(TF::drillSiteScore(10, 0, 3) > TF::drillSiteScore(9, 0, 0));          // touching 3 beats a tile nearer
     REQUIRE(TF::drillSiteScore(9, 0, 3) > TF::drillSiteScore(9, 0, 0));           // then the mass
     // (c) defenders' value in range first, a reaching enemy turret costs 3,000 credits of them.
     REQUIRE(TF::creepSiteScore(4000, 0, 2) > TF::creepSiteScore(4000, 1, 2));
