@@ -1613,6 +1613,10 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                     const int separation=pollutionSeparation.footprint(placeLocationX,placeLocationY,newSizeX,newSizeY);
                     // IndustrySeparation (default off) and every PollutionRelocation site: no new
                     // Industrial zone within the pollution stamp's reach of an own R/C lot.
+                    if (itemID == Structure_ZoneIndustrial && nearRelocatedFrom(placeLocationX, placeLocationY)) {
+                        ++pollutionRejected;
+                        continue;
+                    }
                     if (separateIndustry && RedevelopmentPolicy::industryTooCloseToHomes(separation)) {
                         ++pollutionRejected;
                         continue;

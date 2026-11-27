@@ -40,6 +40,11 @@ constexpr int kParkSearchPeriodMs = 8000;
 constexpr int kIndustrySeparationTiles = 5;
 inline bool industryTooCloseToHomes(int footprintDistance) { return footprintDistance <= kIndustrySeparationTiles; }
 
+/// A site an Industrial zone was relocated away from takes no new Industrial zone within this many
+/// tiles for this long (in low.dls ordinary growth rebuilt one on the vacated site, undoing the move).
+constexpr int kRelocatedFromTiles = 2;
+constexpr int kRelocatedFromMs = 600000;
+
 /// Lots whose land value a redevelopment is meant to raise: own R/C lots within this many tiles
 /// (Chebyshev, origin to origin) of a new Park (two park-terrain blocks), or of a relocated
 /// Industrial zone (the stamp plus the two smoothing passes, a block each).

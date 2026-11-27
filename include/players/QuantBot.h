@@ -2202,6 +2202,7 @@ private:
         Coord site = Coord::Invalid();
         Uint32 oldZone = NONE_ID;                    ///< PollutionRelocation: the zone to demolish once placed.
         Uint32 orderCycle = 0, placedCycle = 0;
+        int harm = 0, newHarm = 0;                   ///< PollutionRelocation: harm to our lots at the old and new site.
         std::vector<std::pair<Coord, int>> lots;     ///< Affected own R/C lots and their land value at the order.
         std::vector<int> pollution;                  ///< Their pollution at the order.
     };
@@ -2210,6 +2211,10 @@ private:
     Uint32 nextRelocationSearch = 0, nextParkSearch = 0;
     /// Set around PollutionRelocation's site search: Industrial siting then keeps clear of our homes.
     bool industrySeparationSearch = false;
+    /// Sites Industrial zones were relocated away from, with the cycle (no new Industrial zone near them
+    /// for RedevelopmentPolicy::kRelocatedFromMs). Not saved.
+    std::vector<std::pair<Coord, Uint32>> relocatedFrom;
+    bool nearRelocatedFrom(int x, int y) const;
     void noteRedevelopmentOrder(int kind, Uint32 item, Coord site, Uint32 oldZone, Coord effectCentre);
     void updateRedevelopmentOrders();
     void noteIndustryPlaced(Coord site);

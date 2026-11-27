@@ -127,6 +127,15 @@ bool QuantBot::parkKeepsPassage(int x, int y) const {
     return RedevelopmentPolicy::sidesStayConnected(open) && RedevelopmentPolicy::sidesStayConnected(road);
 }
 
+bool QuantBot::nearRelocatedFrom(int x, int y) const {
+    const Uint32 cycle = getGameCycleCount();
+    for (const auto& [site, when] : relocatedFrom)
+        if (cycle - when < MILLI2CYCLES(RedevelopmentPolicy::kRelocatedFromMs)
+            && CityPlacementPolicy::footprintDistance(x, y, 2, 2, site.x, site.y, 2, 2) <= RedevelopmentPolicy::kRelocatedFromTiles)
+            return true;
+    return false;
+}
+
 bool QuantBot::redevelopmentSiteHeld(Uint32 item, Coord site) const {
     return std::any_of(redevelopmentOrders.begin(), redevelopmentOrders.end(), [&](const RedevelopmentOrder& o) {
         return o.placedCycle == 0 && o.item == item && o.site == site;
@@ -324,6 +333,13 @@ bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, i
     site = findPlaceLocation(Structure_ZoneIndustrial);
     industrySeparationSearch = false;
     placementCache.erase(Structure_ZoneIndustrial);
+    // A city with no ground clear of its homes in reach (low.dls: 61 of 73 searches) still moves the
+    // polluter to a different area when the ordinary Industrial site at least halves the harm.
+    if (!site.isValid()) {
+        redevelopmentActivity.note("relocate_no_clear_site");
+        site = findPlaceLocation(Structure_ZoneIndustrial);
+        placementCache.erase(Structure_ZoneIndustrial);
+    }
     if (!site.isValid()) { redevelopmentActivity.note("relocate_no_site"); return false; }
     newHarm = harmAt(site, getStructureSize(Structure_ZoneIndustrial), emission, Coord::Invalid());
     if (!RedevelopmentPolicy::relocationPays(harm, newHarm)) { redevelopmentActivity.note("relocate_not_paying"); return false; }
@@ -387,6 +403,8 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
                 .set("harm", harm).set("new_harm", newHarm).set("density", getMap().getTile(old.x, old.y)->getCityZoneDensity())
                 .set("money", pass.money));
             noteRedevelopmentOrder(R::Relocation, Structure_ZoneIndustrial, site, zoneID, old);
+            redevelopmentOrders.back().harm = harm;
+            redevelopmentOrders.back().newHarm = newHarm;
             yardTurn.itemID = Structure_ZoneIndustrial;
             yardTurn.crimeServiceSite = site;
             yardTurn.structureRule = "pollution_relocation";
@@ -472,6 +490,8 @@ void QuantBot::updateRedevelopmentOrders() {
     if (redevelopmentOrders.empty() || !currentGame->getCitySimulation()) return;
     const Uint32 cycle = getGameCycleCount();
     if (cycle % MILLI2CYCLES(1000) != 0) return;
+    relocatedFrom.erase(std::remove_if(relocatedFrom.begin(), relocatedFrom.end(), [&](const auto& entry) {
+        return cycle - entry.second >= MILLI2CYCLES(R::kRelocatedFromMs); }), relocatedFrom.end());
     const auto& landValue = currentGame->getCitySimulation()->getLandValueMap();
     for (auto it = redevelopmentOrders.begin(); it != redevelopmentOrders.end();) {
         auto& o = *it;
@@ -493,10 +513,11 @@ void QuantBot::updateRedevelopmentOrders() {
                             homes = std::min(homes, CityPlacementPolicy::footprintDistance(o.site.x, o.site.y, 2, 2,
                                 s->getLocation().x, s->getLocation().y, s->getStructureSize().x, s->getStructureSize().y));
                     SDL_Log("REDEVELOP: house=%d event=moved kind=relocation x=%d y=%d from_x=%d from_y=%d home_distance=%d "
-                            "old_demolished=%d cycle=%u", getHouse()->getHouseID(), o.site.x, o.site.y,
+                            "harm=%d new_harm=%d old_demolished=%d cycle=%u", getHouse()->getHouseID(), o.site.x, o.site.y,
                             demolish ? old->getLocation().x : -1, demolish ? old->getLocation().y : -1,
-                            homes == 1000000 ? -1 : homes, int(demolish), cycle);
+                            homes == 1000000 ? -1 : homes, o.harm, o.newHarm, int(demolish), cycle);
                     if (demolish) {
+                        relocatedFrom.push_back({old->getLocation(), cycle});
                         traceDecision("pollution_relocation_done", AITelemetry::Record().set("zone", o.oldZone)
                             .set("x", o.site.x).set("y", o.site.y));
                         old->demolish();

@@ -238,8 +238,19 @@ inline void redevelopAudit(Game& game, const char* phase) {
                 road[(dy + r) * side + dx + r] = currentGameMap->tileExists(p.x + dx, p.y + dy)
                     && currentGameMap->getTile(p.x + dx, p.y + dy)->isRoad();
             const Tile* t = currentGameMap->getTile(p.x, p.y);
-            SDL_Log("PARK_AUDIT: house=%d x=%d y=%d road_connection=%d unit_road=%d roads_joined=%d", hid, p.x, p.y,
-                    int(t->isRoadConnection()), int(t->isRoad()), int(RedevelopmentPolicy::sidesStayConnected(road)));
+            // Roads: the Park is a road connection, so the city's traffic still crosses it; whether its
+            // road neighbours also meet over road alone is logged for reference. Units cannot cross a
+            // Park: units_joined says whether its open side neighbours still meet over open ground
+            // without it, inside the same window (the passage RoadLaneParks promises).
+            bool open[side * side];
+            for (int dy = -r; dy <= r; ++dy) for (int dx = -r; dx <= r; ++dx) {
+                const bool exists = currentGameMap->tileExists(p.x + dx, p.y + dy);
+                const Tile* n = exists ? currentGameMap->getTile(p.x + dx, p.y + dy) : nullptr;
+                open[(dy + r) * side + dx + r] = n && !n->isMountain() && !n->hasAStructure();
+            }
+            SDL_Log("PARK_AUDIT: house=%d x=%d y=%d road_connection=%d unit_road=%d roads_joined=%d units_joined=%d", hid,
+                    p.x, p.y, int(t->isRoadConnection()), int(t->isRoad()), int(RedevelopmentPolicy::sidesStayConnected(road)),
+                    int(RedevelopmentPolicy::sidesStayConnected(open)));
         }
         for (const auto& player : house->getPlayerList())
             if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {

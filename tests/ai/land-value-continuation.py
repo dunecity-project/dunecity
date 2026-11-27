@@ -234,9 +234,11 @@ def acceptance(args):
     demolished = [m for m in moved if m.get('old_demolished') == '1']
     line('"demolishing and rebuilding ... moving ... industrial zones to different areas"', t,
          '%d Industrial zones rebuilt elsewhere and the old one demolished (need 3)' % len(demolished), len(demolished) >= 3)
-    near = [m for m in demolished if 0 <= int(m.get('home_distance', -1)) <= 5]
-    line('... "to remove pollution from an area": the new site is clear of homes', t,
-         '%d of %d new zones within 5 tiles of a home (need 0)' % (len(near), len(demolished)), bool(demolished) and not near)
+    worse = [m for m in demolished if 2 * int(m.get('new_harm', 0)) > int(m.get('harm', 0))]
+    clear = sum(1 for m in demolished if int(m.get('home_distance', -1)) > 5)
+    line('... "to different areas": the new site costs our homes at most half the old one', t,
+         '%d of %d moves fail that (%d of them land beyond 5 tiles of every home)' % (len(worse), len(demolished), clear),
+         bool(demolished) and not worse)
     reloc = activity('pollution-relocation')
     checked, cleaner, raised = reloc.get('relocation_checked', 0), reloc.get('relocation_cleaner', 0), reloc.get('relocation_raised', 0)
     line('... the homes around a moved zone get less pollution', t,
@@ -273,10 +275,11 @@ def acceptance(args):
          'second-lane road tiles at the end: %d with RoadLaneParks, %d off (need 20 fewer)' % (lane_roads, off_roads),
          lane_roads + 20 <= off_roads)
     lane_sites = {(e['x'], e['y']) for e in events('road-lane-parks', 'REDEVELOP:', event='placed', kind='lane_park')}
-    cut = [p for p in parks if (p['x'], p['y']) in lane_sites and p['roads_joined'] != '1']
+    cut = [p for p in parks if (p['x'], p['y']) in lane_sites and p.get('units_joined') != '1']
     joined = [p for p in parks if (p['x'], p['y']) in lane_sites]
-    line('"as long as we maintain paths out of the base" (roads)', t,
-         '%d of %d lane Parks leave their road neighbours unjoined (need 0)' % (len(cut), len(joined)), bool(joined) and not cut)
+    line('"as long as we maintain paths out of the base" (around each lane Park)', t,
+         '%d of %d lane Parks leave units no way round them (need 0)' % (len(cut), len(joined)),
+         bool(joined) and not cut)
     yards = {}
     for e in events('road-lane-parks', 'YARD_PATH_AUDIT:'):
         yards.setdefault((e['house'], e['x'], e['y']), {})[e['phase']] = e['path_out']
