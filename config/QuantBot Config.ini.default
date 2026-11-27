@@ -689,12 +689,12 @@ AirThreatTurrets=0
 # bombs destroyed the same Airports (1.04 a game against 1.10); level on placement in 288 mixed games.
 AirportTurrets=0
 # Stefan, 2026-11-27: Hospitals heal infantry (match rule Hospital Care). With this on, a QuantBot
-# soldier below 60% health goes to the nearest own Hospital with a free bed (flown when a Carryall
-# is free and it is far), stays out of every order until healed, and the engine's automatic rule
-# (below half health, with Carryalls) applies to its infantry as to a human player's. 0 = off: AI
-# infantry are never sent to a Hospital.
-# Default off: level in 288 mixed games (on - off -0.017, -0.09 to +0.06); of 891 trips a game, 234
-# healed and 637 soldiers died on the way, sent while under fire.
+# soldier below 60% health goes to the nearest own Hospital with a free bed once no armed enemy has
+# been within weapon reach of it for 500 cycles (about 8 s); 6+ tiles away it also asks for a
+# Carryall. It is reserved until healed. 0 = off: AI infantry are never sent to a Hospital.
+# Default off: level in two 288-game mixed screens. Sent under fire (onDamage): on - off -0.017
+# (-0.09..+0.06), 637 of 891 trips a game died on the way. Out of contact only: -0.005
+# (-0.09..+0.07), 55 of 64 trips a game healed.
 HospitalInfantry=0
 # Stefan, 2026-11-27: Rocket Turrets at the front (include/players/TurretFrontPolicy.h). All off
 # until measured. A Rocket Turret costs 15 credits a city year of police upkeep (7.5 a minute with

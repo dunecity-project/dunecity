@@ -183,7 +183,7 @@ Stefan, 2026-11-27: "i want troopers and infantry to be able to be healed / repa
 carryalls can also pick them up in dune city. a single hispital can heal up to 5 men at a time. while a hospital is
 healing me or while a unit is walking to get healed or being carryalled to be healed it cannot change type from
 hospital to something else". Commits fb6958544 (feature), 9e6aaa901, aa930e15c, 5de90205c, 25744ee43, dd760c684,
-761c3b95c, 7ad441dba. Not released. Code: `include/dunecity/HospitalCare.h` (rules, saved state), `src/dunecity/HospitalCare.cpp`.
+761c3b95c, 7ad441dba, 6650f99ad (out-of-contact rule). Not released. Code: `include/dunecity/HospitalCare.h` (rules, saved state), `src/dunecity/HospitalCare.cpp`.
 Evidence: `~/Documents/projects/outputs/hospital-care-20261127/`.
 
 **Rules chosen.** Match rule **Hospital Care**, default on (INI key; bit 6 of the MOD20 starting-tech-level byte,
@@ -219,11 +219,13 @@ set only when off; the level mask is now 0x3F, bits 4-5 of that byte are free).
 - Match logs: `HOSPITAL_CARE: event=sent|healed|ended why=...`; `vanilla-match.py` writes `hospital.csv`.
 
 **QuantBot: HospitalInfantry** ([Force Concentration], default off; play styles `@hospital-infantry`,
-`@hospital-infantry-off`). On, a soldier below 60% health goes to a Hospital from `onDamage`, a soldier on a trip is
-reserved as Repair (`reserveDamagedUnitForRepair`) and is not halted under fire, and the automatic rule covers the
-bot's infantry.
+`@hospital-infantry-off`). On (6650f99ad), a soldier below 60% health goes to a Hospital only once no armed enemy
+has been within weapon reach of it for 500 cycles (`kHospitalQuietCycles`, about 8 s; checked every 32 cycles over
+9 tiles, either side's reach + 1, the quiet clock saved). 6+ tiles away it also asks for a Carryall. A soldier on a
+trip is reserved as Repair (`reserveDamagedUnitForRepair`) and is not halted under fire. The engine's half-health
+automatic rule stays for human houses only. The first version sent soldiers from `onDamage` (screen 1 below).
 
-**Measured: left off.** 288 mixed games on faf6ab1e0 (AWS 20261127T105107-hospital-mixed2-a5daa9): Stefan's 4P
+**Measured: left off, twice.** Screen 1, sent under fire: 288 mixed games on faf6ab1e0 (AWS 20261127T105107-hospital-mixed2-a5daa9): Stefan's 4P
 DuneCity free-for-all (`rs160-dunecity`, Fortress starts, four Brutal QuantBots, 45 min, seeds 9101-9148),
 `--ffa default,default@hospital-infantry`, two houses each, every balanced assignment.
 
@@ -239,9 +241,25 @@ Time-outs 153 of 288 games. With the switch on, a game had 891 Hospital trips (8
 automatic): 234 healed, 637 soldiers died on the way (a median 169 cycles after they were sent; they are sent
 while under fire), 8 re-ordered, 6 lost their Hospital, 3 left a bed. Not a default under the rule (interval
 not above 0, point estimate negative); `/weak` is a formation duel without a city, so Hospitals cannot act there.
-What could change it: send only soldiers out of contact, or only with a Carryall free - not built. The first 12
-games (761c3b95c, `mixed-v1-guard-beds`) had healing soldiers in Guard leave their bed after a median 44 cycles
+The first 12 games (761c3b95c, `mixed-v1-guard-beds`) had healing soldiers in Guard leave their bed after a median 44 cycles
 (5,361 of 12,561 trips) and be sent again, up to 216 times; healing soldiers now hold (7ad441dba).
+
+Screen 2, out of contact only (6650f99ad, run on 33e44a746; AWS 20261127T115547-hospital-quiet-82e3c2, same map,
+seeds and assignments; `mixed-quiet`):
+
+| 288 games, two houses a label | default (off) | @hospital-infantry (on) |
+|---|---:|---:|
+| Mean placement score | -0.078 | -0.083 |
+| Paired on - off (95%) | | -0.005 (-0.09..+0.07), level |
+| Wins (sole survivor) / eliminated | 76 / 310 | 85 / 311 |
+| Alive at a time-out (share of houses) | 33% | 31% |
+| Kill / loss value per house | 138,288 / 139,125 | 137,151 / 137,083 |
+
+Time-outs 127 of 288 games. The rule works as meant: a game had 64 trips (all but 26 in 288 games sent by the
+quiet rule), 55 healed, 6 soldiers died on the way, 1 re-ordered, 1 lost its Hospital. That restores about 1,140
+HP a game for 228 credits, a few soldiers' worth, too little to move placement in a 40-minute four-house game.
+Screen 1 healed more soldiers (234 a game) but threw away 637; neither moved the score. Not a default
+under the rule (interval not above 0 in either screen). The player feature is unaffected (default on).
 
 **Tests.** `HospitalCareStateTestCase` (beds and claims, save round trip, damaged stream refused); CoopGameSettings:
 MOD20 bit 6 round trip with every tech level and the Saboteur bit, older streams play the rule, the off bit does not
@@ -251,9 +269,10 @@ overflow to a second Hospital; the lock held while walking, healing and flying a
 `CMD_UNIT_MOVE2POS` and death, with the census clearing the zone after each release; a Trooper 35 tiles away
 flown by a Carryall and healed; the automatic rule (human soldier at 40% goes, an AI Player's and a 75% one stay,
 rule off sends nobody and refuses the order); a save with five healing, one waiting and one in a Carryall loads the
-same trips and overlays and plays the next 600 cycles identically.
+same trips and overlays and plays the next 600 cycles identically; a Brutal QuantBot soldier with HospitalInfantry on
+stays while an armed enemy Quad is 3 tiles away and is sent 537 cycles after the Quad leaves (`bot_quiet`).
 
-**Verified.** Mini `build-int` on 761c3b95c and faf6ab1e0: `dunelegacy_tests` (1,499 cases) and
+**Verified.** Mini `build-int` on 761c3b95c, faf6ab1e0 and 33e44a746 (the out-of-contact rule): `dunelegacy_tests` (1,499 cases) and
 `hospital_care_probe` passed; `perf_regression` passed on the Mini (761c3b95c, 122 s). AWS nightly tier
 `-L nightly -LE gui` on faf6ab1e0 (20261127T105135-ctest-c54d0c): 252 of 256 passed, including the four AI gates
 (`quantbot_all_against_atreides`, `_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`),
