@@ -51,6 +51,22 @@ class StyleAndPatterns(unittest.TestCase):
                  'x TURRET_FRONT_STATE: house=1 drill=1/1/1/0']        # not the marker
         self.assertEqual(activation.count(lines, {1: 's', 3: 'unregistered'}, registry), {1: (1, 1)})
 
+    def test_houses_limit_the_house_games(self):
+        registry = activation.load_registry()
+        self.assertEqual(registry['palace-worm-1']['houses'], {'fremen'})
+        key = dict(tag='t', difficulty='brutal', map='m', seed='1', sides='s')
+        label = 'default@palace-worm-1'
+        houses = [{**key, 'house': h, 'label': label} for h in ('fremen', 'harkonnen', 'atreides', 'ordos')]
+        events = [{**key, 'house': 'fremen', 'label': label, 'style': 'palace-worm-1', 'fired': 2, 'succeeded': 1}]
+        summary = activation.summarise(houses, events, registry)[label]
+        # Only Fremen can call a worm: one house-game, fired and reached its effect.
+        self.assertEqual((summary.house_games, summary.fired, summary.succeeded), (1, 1, 1))
+        self.assertTrue(summary.tested)
+        # A Fremen house-game without a worm still counts against the style.
+        summary = activation.summarise(houses, [], registry)[label]
+        self.assertEqual((summary.house_games, summary.fired), (1, 0))
+        self.assertFalse(summary.tested)
+
 
 def write(path, fields, rows):
     with path.open('w', newline='') as handle:

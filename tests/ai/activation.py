@@ -12,6 +12,10 @@ A pattern is a log marker (the text up to and including its ':') followed by opt
 filters, all of which must equal the line's own key=value fields. Every such line must name its house
 as house=<engine house number>. Several patterns in a list count together.
 
+A behaviour that only one house can have (the Fremen Palace worm) names it: "houses": ["fremen"]. Only
+those houses' house-games count for the style; a label carried by a house that cannot fire it is not a
+house-game where the behaviour could have acted.
+
 vanilla-match.py counts, per game and house, the fire and success lines of the style its label plays
 (default@<style>, also default@<style>#strategy or /variant) into activation.csv. The reports
 (vanilla-match.py --report, play-style-matrix.py, turret-front-report.py) then print each arm's fire
@@ -60,9 +64,13 @@ def load_registry(path=REGISTRY_PATH):
     for style, entry in data.items():
         if style.startswith('_'):
             continue
-        if set(entry) - {'fire', 'success', 'note'} or not entry.get('fire') or not entry.get('success'):
+        if set(entry) - {'fire', 'success', 'note', 'houses'} or not entry.get('fire') or not entry.get('success'):
             raise ValueError(f'Activation entry {style!r} needs "fire" and "success" pattern lists')
+        if 'houses' in entry and (not isinstance(entry['houses'], list) or not entry['houses']):
+            raise ValueError(f'Activation entry {style!r}: "houses" must be a non-empty list of house names')
         registry[style] = {kind: [parse_pattern(p) for p in entry[kind]] for kind in ('fire', 'success')}
+        if 'houses' in entry:
+            registry[style]['houses'] = {house.lower() for house in entry['houses']}
     return registry
 
 
@@ -127,8 +135,12 @@ def summarise(house_rows, activation_rows, registry):
     events = {key(r): r for r in activation_rows}
     by_label = defaultdict(lambda: [0, 0, 0])
     for row in house_rows:
-        if not style_of(row['label']):
+        style = style_of(row['label'])
+        if not style:
             continue
+        houses = registry.get(style, {}).get('houses')
+        if houses is not None and row['house'].lower() not in houses:
+            continue   # This house cannot have the behaviour (e.g. a worm is Fremen's alone).
         counts = by_label[row['label']]
         counts[0] += 1
         event = events.get(key(row))
