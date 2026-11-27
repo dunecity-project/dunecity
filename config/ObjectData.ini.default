@@ -825,7 +825,7 @@ UpgradeLevel(O) = 2
 [Soldier]
 Enabled = true
 HitPoints = 20
-Price = 60
+Price = 30  # Stefan, 2026-11-27: "make infantry cost 30 credits" (docs/zone-garrisons.md)
 ViewRange = 1
 WeaponDamage = 3
 WeaponRange = 2

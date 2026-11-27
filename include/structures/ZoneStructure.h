@@ -97,8 +97,16 @@ public:
     /// Deploys the occupants beside the zone. Returns how many came out. DESTROYING kills
     /// those with no free tile around; otherwise they stay inside.
     int evacuateGarrison(bool destroying = false);
-    /// Hands the zone, its tiles, power draw and counts to NEWOWNER; city state stays.
-    void transferOwnership(House* newOwner);
+    /// Hands the zone, its tiles, power draw and counts to NEWOWNER; city state stays. CAPTURE
+    /// false is a captured zone going back to its original owner (no capture achievement).
+    void transferOwnership(House* newOwner, bool capture = true);
+    /// The house that owned this zone before its present garrison took it, or -1 when it is the
+    /// holder's own: once that garrison is gone, by order, at low health or killed, it goes back.
+    int getGarrisonOriginalOwner() const { return garrisonOriginalOwner_; }
+    /// The share of hit points below which the garrison leaves and nobody may enter (percent).
+    static int evacuateHealthPercent();
+    /// Too damaged to hold: below evacuateHealthPercent() of its hit points.
+    bool tooDamagedToHold() const;
 
     void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                       const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
@@ -107,12 +115,15 @@ private:
     void drawZoneImage();
     void updateGarrison();
     void dropDeadOccupants();
+    /// A captured zone whose garrison is gone returns to its original owner, if that house lives.
+    void returnCapturedZone();
     const ObjectBase* findGarrisonTarget(int range) const;
     void drawGarrisonSandbags() const;
 
     std::vector<Uint32> garrison_;          ///< saved from SAVEGAMEVERSION_ZONE_GARRISON
     Uint32 garrisonTargetID_ = NONE_ID;     ///< saved
     Sint32 garrisonSearchTimer_ = 0;        ///< saved
+    Sint32 garrisonOriginalOwner_ = -1;     ///< saved from SAVEGAMEVERSION_ZONE_GARRISON_RETURN
 
     DuneCity::ZoneType zoneType_;  // The type of zone this structure represents
     uint8_t residentialPopulation_ = 0;

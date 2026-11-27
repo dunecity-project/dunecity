@@ -75,7 +75,7 @@ protected:
         garrisonLabel.setVisible(false);
         textVBox.addWidget(&garrisonLabel, (Sint32)24);
         evacuateButton.setText(_("Evacuate"));
-        evacuateButton.setTooltipText(_("The soldiers garrisoning this zone come out beside it."));
+        evacuateButton.setTooltipText(_("The soldiers garrisoning this zone come out beside it. A captured zone goes back to its owner."));
         evacuateButton.setOnClick([id = objectID] {
             if (currentGame && pLocalPlayer)
                 currentGame->getCommandManager().addCommand(Command(pLocalPlayer->getPlayerID(),
@@ -151,9 +151,11 @@ protected:
 
         const bool garrisoned = pZone->isGarrisoned();
         garrisonLabel.setVisible(garrisoned);
+        // A captured zone says so: it goes back to its owner once the garrison leaves.
         if (garrisoned)
             garrisonLabel.setText(" " + _("Garrison") + ": " + std::to_string(pZone->getGarrisonSize())
-                                  + "/" + std::to_string(DuneCity::ZoneGarrison::kCapacity));
+                                  + "/" + std::to_string(DuneCity::ZoneGarrison::kCapacity)
+                                  + (pZone->getGarrisonOriginalOwner() >= 0 ? " " + _("(captured)") : std::string()));
         evacuateButton.setVisible(garrisoned);
         evacuateButton.setEnabled(garrisoned && currentGame->canControlHouse(pZone->getOwner()));
 

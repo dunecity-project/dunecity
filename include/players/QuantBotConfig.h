@@ -861,6 +861,12 @@ struct QuantBotConfig {
         /// Zone Garrisons (match rule): Soldiers and Troopers into own zones enemies close on, out when
         /// quiet, and into empty enemy zones they pass (QuantBotGarrison.cpp). Off unless measured.
         bool zoneGarrison;
+        /// Zone Garrisons: send a free Soldier or Trooper to take each empty enemy zone with no enemy
+        /// unit or turret near it, and keep it inside (QuantBotGarrison.cpp). Off unless measured.
+        bool zoneCaptureRaid;
+        /// Zone Garrisons: Barracks train cheap Soldiers for a capture levy that walks into the
+        /// nearest enemy zones (QuantBotGarrison.cpp). Off unless measured.
+        bool zoneCaptureLevy;
         /// Stateless existing-composition/technology experiment, default OFF.
         /// Current paired outcome audits reject adoption; see HANDOVER.
         bool simpleTechSavings;

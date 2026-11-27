@@ -585,6 +585,10 @@ QuantBotConfig::QuantBotConfig() {
     force.fundedClassicProduction = true;
     force.trooperSupport = true; // Provisional shared-candidate ON; outcome gate decides the final default.
     force.zoneGarrison = false;  // Stefan, 2026-11-27: "AI can also garasion its own buildings defensively"
+    // Stefan, 2026-11-27: "try behaviour where the ai tries capuring undefended buildings or mass
+    // spamming infantry to try capture buildings".
+    force.zoneCaptureRaid = false;
+    force.zoneCaptureLevy = false;
     force.simpleTechSavings = false;
     force.launcherKiteExtraDistance = 2; // Accepted ON after the paired two-cohort outcome audit.
     force.exhaustedArmyDispatch = true;
@@ -1133,6 +1137,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
         iniFile.setBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
         iniFile.setBoolValue("Force Concentration", "ZoneGarrison", force.zoneGarrison);
+        iniFile.setBoolValue("Force Concentration", "ZoneCaptureRaid", force.zoneCaptureRaid);
+        iniFile.setBoolValue("Force Concentration", "ZoneCaptureLevy", force.zoneCaptureLevy);
         iniFile.setBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
         iniFile.setIntValue("Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance);
         iniFile.setBoolValue("Force Concentration", "ExhaustedArmyDispatch", force.exhaustedArmyDispatch);
@@ -1545,6 +1551,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.fundedClassicProduction = iniFile.getBoolValue("Force Concentration", "FundedClassicProduction", force.fundedClassicProduction);
     force.trooperSupport = iniFile.getBoolValue("Force Concentration", "TrooperSupport", force.trooperSupport);
     force.zoneGarrison = iniFile.getBoolValue("Force Concentration", "ZoneGarrison", force.zoneGarrison);
+    force.zoneCaptureRaid = iniFile.getBoolValue("Force Concentration", "ZoneCaptureRaid", force.zoneCaptureRaid);
+    force.zoneCaptureLevy = iniFile.getBoolValue("Force Concentration", "ZoneCaptureLevy", force.zoneCaptureLevy);
     force.simpleTechSavings = iniFile.getBoolValue("Force Concentration", "SimpleTechSavings", force.simpleTechSavings);
     force.launcherKiteExtraDistance = std::clamp(iniFile.getIntValue(
         "Force Concentration", "LauncherKiteExtraDistance", force.launcherKiteExtraDistance), 0, 2);
@@ -2293,6 +2301,8 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("fundedClassicProduction", force.fundedClassicProduction);
     addNamed("trooperSupport", force.trooperSupport);
     if (force.zoneGarrison) addNamed("zoneGarrison", force.zoneGarrison);
+    if (force.zoneCaptureRaid) addNamed("zoneCaptureRaid", force.zoneCaptureRaid);
+    if (force.zoneCaptureLevy) addNamed("zoneCaptureLevy", force.zoneCaptureLevy);
     addNamed("simpleTechSavings", force.simpleTechSavings);
     addNamed("launcherKiteExtraDistance", force.launcherKiteExtraDistance);
     addNamed("exhaustedArmyDispatch", force.exhaustedArmyDispatch);

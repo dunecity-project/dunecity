@@ -26,6 +26,7 @@
 #include <units/UnitBase.h>
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace {
 
@@ -39,6 +40,22 @@ bool ZoneStructure::garrisonsEnabled() {
     return currentGame != nullptr && currentGame->getGameInitSettings().getGameOptions().zoneGarrisons;
 }
 
+int ZoneStructure::evacuateHealthPercent() {
+    // Threshold experiments only (tests/ai matches on the queue): DUNECITY_TEST_GARRISON_EVACUATE_PERCENT
+    // sets it for a whole process, read once (0 = never leave). Never set in a game people play: it
+    // is not part of the match rules and two players with different values would fall out of step.
+    static const int percent = [] {
+        const char* text = std::getenv("DUNECITY_TEST_GARRISON_EVACUATE_PERCENT");
+        if(text == nullptr || *text == '\0') return DuneCity::ZoneGarrison::kEvacuateHealthPercent;
+        return std::clamp(std::atoi(text), 0, 100);
+    }();
+    return percent;
+}
+
+bool ZoneStructure::tooDamagedToHold() const {
+    return DuneCity::ZoneGarrison::belowEvacuateHealth(getHealth().lround(), getMaxHealth(), evacuateHealthPercent());
+}
+
 const House* ZoneStructure::getGarrisonHouse() const {
     for(const Uint32 id : garrison_) {
         if(const UnitBase* unit = occupantUnit(id)) return unit->getOwner();
@@ -49,7 +66,7 @@ const House* ZoneStructure::getGarrisonHouse() const {
 bool ZoneStructure::mayEnterGarrison(const UnitBase* unit) const {
     if(!garrisonsEnabled() || unit == nullptr || owner == nullptr || getHealth() <= 0
        || !unit->isActive() || unit->getHealth() <= 0 || !unit->canCaptureStructures()
-       || getLocation().isInvalid()) return false;
+       || getLocation().isInvalid() || tooDamagedToHold()) return false;
     const House* garrisonHouse = getGarrisonHouse();
     const auto entry = DuneCity::ZoneGarrison::entryFor(
         unit->getOwner()->getHouseID(), unit->getOwner()->getTeamID(),
@@ -70,7 +87,12 @@ bool ZoneStructure::enterGarrison(UnitBase* unit) {
     House* house = unit->getOwner();
     const bool taken = house->getTeamID() != owner->getTeamID();
     const int previousHouse = owner->getHouseID();
-    if(taken) transferOwnership(house);
+    if(taken) {
+        // An empty zone is never a captured one (it went back when its garrison left), so the
+        // house it is taken from is the one it returns to.
+        garrisonOriginalOwner_ = previousHouse;
+        transferOwnership(house);
+    }
     unit->enterGarrison();
     garrison_.push_back(unit->getObjectID());
     garrisonSearchTimer_ = 0;
@@ -104,6 +126,9 @@ int ZoneStructure::evacuateGarrison(bool destroying) {
             unit->setGuardPoint(spot);
             unit->setForced(false);
             unit->deploy(spot);
+            // Thrown out of the ruin: hurt, never killed (DuneCity::ZoneGarrison::healthAfterEjection).
+            if(destroying) unit->setHealth(DuneCity::ZoneGarrison::healthAfterEjection(
+                unit->getHealth().lround(), unit->getMaxHealth()));
             ++deployed;
         } else if(destroying) {
             unit->setHealth(0);    // Buried in the ruin; removed on its next update.
@@ -115,12 +140,31 @@ int ZoneStructure::evacuateGarrison(bool destroying) {
     if(AITelemetry::log().enabled() && owner != nullptr) {
         AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "zone_garrison_exit",
             AITelemetry::Record().set("zone", objectID).set("deployed", deployed)
-                .set("remaining", getGarrisonSize()).set("destroyed", destroying));
+                .set("remaining", getGarrisonSize()).set("destroyed", destroying)
+                .set("low_health", !destroying && tooDamagedToHold())
+                .set("health", getHealth().lround()).set("max_health", getMaxHealth()));
     }
+    if(!destroying && garrison_.empty()) returnCapturedZone();
     return deployed;
 }
 
-void ZoneStructure::transferOwnership(House* newOwner) {
+void ZoneStructure::returnCapturedZone() {
+    if(garrisonOriginalOwner_ < 0 || owner == nullptr) return;
+    House* original = currentGame->getHouse(garrisonOriginalOwner_);
+    garrisonOriginalOwner_ = -1;
+    // A house the capture defeated gets nothing back: the zone stays with the house that took it.
+    if(original == nullptr || original == owner || !original->isAlive()) return;
+    const int holder = owner->getHouseID();
+    transferOwnership(original, false);
+    if(AITelemetry::log().enabled()) {
+        const Coord pos = getLocation();
+        AITelemetry::log().write(currentGame->getGameCycleCount(), original->getHouseID(), -1,
+            "zone_garrison_returned", AITelemetry::Record().set("zone", objectID).set("item", itemID)
+                .set("holder", holder).set("health", getHealth().lround()).set("x", pos.x).set("y", pos.y));
+    }
+}
+
+void ZoneStructure::transferOwnership(House* newOwner, bool capture) {
     if(newOwner == nullptr || newOwner == owner || owner == nullptr) return;
     House* previous = owner;
     // The zone's live power draw belongs to whoever owns it.
@@ -144,7 +188,7 @@ void ZoneStructure::transferOwnership(House* newOwner) {
     }
     refreshZonePowerDraw();
     garrisonTargetID_ = NONE_ID;
-    AchievementEvents::captured(newOwner, previous);
+    if(capture) AchievementEvents::captured(newOwner, previous);
 }
 
 void ZoneStructure::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
@@ -161,11 +205,16 @@ void ZoneStructure::handleDamage(int damage, Uint32 damagerID, House* damagerOwn
 }
 
 void ZoneStructure::dropDeadOccupants() {
+    if(garrison_.empty()) return;
     garrison_.erase(std::remove_if(garrison_.begin(), garrison_.end(), [](Uint32 id) {
         const UnitBase* unit = occupantUnit(id);
         return unit == nullptr || unit->getHealth() <= 0;
     }), garrison_.end());
-    if(garrison_.empty()) garrisonTargetID_ = NONE_ID;
+    if(garrison_.empty()) {
+        garrisonTargetID_ = NONE_ID;
+        // The last soldier inside was killed: a captured zone is held only while occupied.
+        if(getHealth() > 0) returnCapturedZone();
+    }
 }
 
 const ObjectBase* ZoneStructure::findGarrisonTarget(int range) const {
@@ -221,6 +270,12 @@ const ObjectBase* ZoneStructure::findGarrisonTarget(int range) const {
 void ZoneStructure::updateGarrison() {
     dropDeadOccupants();
     if(garrison_.empty() || owner == nullptr || currentGameMap == nullptr || getLocation().isInvalid()) return;
+    // Below the threshold the garrison leaves on its own (any with no free tile around stay and
+    // try again next cycle); a captured zone goes back to its original owner as they do.
+    if(tooDamagedToHold()) {
+        evacuateGarrison();
+        if(garrison_.empty()) return;
+    }
 
     bool anyReady = false;
     int range = 0;

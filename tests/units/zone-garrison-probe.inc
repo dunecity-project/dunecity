@@ -9,11 +9,16 @@
 // assault       three Troopers ordered to capture a zone one enemy Soldier holds shoot it out and take it
 // evacuate      the owner's Evacuate command brings every soldier out beside the zone; an enemy's
 //               command is refused
-// destroyed     soldiers come out of a zone that is destroyed around them
+// destroyed     soldiers come out of a zone that is destroyed around them, each losing half its
+//               maximum hit points
+// return        a captured zone goes back to its owner (count, power draw, tiles) when its garrison is
+//               evacuated or killed; an own zone stays
+// low health    below the evacuation threshold the garrison leaves on its own and a captured zone goes
+//               back; nobody enters or takes a zone that damaged
 // ally          an ally's zone is refused (it is never taken or shared)
 // containment   transport recovery passes do not pull soldiers out of a zone
-// save          a captured, garrisoned zone saves and loads with its owner and occupants, and they
-//               come out after the load
+// save          a captured, garrisoned zone saves and loads with its owner, original owner and
+//               occupants; they come out after the load and the zone goes back
 // rule off      with Zone Garrisons off, a capture order on an own zone does nothing and an enemy zone
 //               is not entered
 // picture       garrison.png: a garrisoned zone beside an empty one, for a person to look at
@@ -303,17 +308,107 @@ void checkDestroyed() {
     require(f.runUntil(20, [&] { return z->getGarrisonSize() == 2; }), "destroyed: the soldiers did not enter");
     const Uint32 zoneID = z->getObjectID();
     std::vector<Uint32> ids;
-    for(auto* s : soldiers) ids.push_back(s->getObjectID());
+    std::vector<int> before;
+    for(auto* s : soldiers) {
+        ids.push_back(s->getObjectID());
+        before.push_back(s->getHealth().lround());
+    }
     // The building's own damage path, without the garrison's cover split: a hit this large would
     // also kill the soldier at the front (cover, not immunity), and this case is about coming out.
     z->StructureBase::handleDamage(100000, NONE_ID, f.enemy);
     require(f.runUntil(5, [&] { return !f.alive(zoneID); }), "destroyed: the zone did not go");
-    for(const Uint32 id : ids) {
-        auto* s = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(id));
+    std::string hurt;
+    for(size_t i = 0; i < ids.size(); ++i) {
+        auto* s = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(ids[i]));
         require(s != nullptr && s->isActive() && !s->isPickedUp() && currentGameMap->tileExists(s->getLocation()),
                 "destroyed: a soldier did not come out of the ruin");
+        require(s->getHealth().lround() == DuneCity::ZoneGarrison::healthAfterEjection(before[i], s->getMaxHealth())
+                    && s->getHealth() > 0 && s->getHealth().lround() < before[i],
+                "destroyed: a soldier thrown out of the ruin did not lose half its hit points");
+        hurt += " " + std::to_string(before[i]) + "->" + std::to_string(s->getHealth().lround());
     }
-    record("destroyed", "both soldiers out of the ruin");
+    record("destroyed", "both soldiers out of the ruin, hurt:" + hurt);
+}
+
+/// A captured zone goes back to the house it was taken from once its garrison is gone: by the
+/// Evacuate command, or when the last soldier inside is killed. An own zone stays.
+void checkReturn() {
+    Fixture f("return");
+    auto* z = f.zone(f.enemy, Structure_ZoneCommercial, 40, 20, 2);
+    auto* trooper = f.unit(f.own, Unit_Trooper, 39, 20);
+    f.run(1);
+    const int enemyZones = f.enemy->getNumItems(Structure_ZoneCommercial);
+    const int enemyRequirement = f.enemy->getPowerRequirement();
+    f.capture(trooper, z);
+    require(z->getOwner() == f.own && z->getGarrisonOriginalOwner() == HOUSE_HARKONNEN,
+            "return: the zone was not taken, or does not know whom it was taken from");
+    Command(f.playerOf(f.own), CMD_ZONE_EVACUATE, z->getObjectID()).executeCommand();
+    require(!z->isGarrisoned() && onMapBeside(trooper, z, 2), "return: the Trooper did not come out");
+    require(z->getOwner() == f.enemy && z->getGarrisonOriginalOwner() < 0,
+            "return: the evacuated captured zone did not go back to its owner");
+    require(f.enemy->getNumItems(Structure_ZoneCommercial) == enemyZones
+                && f.enemy->getPowerRequirement() == enemyRequirement,
+            "return: the zone count or power draw did not come back with the zone");
+    for(int dy = 0; dy < 2; ++dy) for(int dx = 0; dx < 2; ++dx)
+        require(currentGameMap->getTile(40 + dx, 20 + dy)->getOwner() == HOUSE_HARKONNEN, "return: a tile kept the holder");
+    // Taken again, and this time the soldier inside is killed.
+    auto* soldier = f.unit(f.own, Unit_Soldier, 39, 21);
+    f.run(1);
+    f.capture(soldier, z);
+    require(z->getOwner() == f.own && z->getGarrisonSize() == 1, "return: the zone was not taken a second time");
+    soldier->ObjectBase::handleDamage(1000, NONE_ID, f.enemy);
+    f.run(1);
+    require(!z->isGarrisoned() && z->getOwner() == f.enemy, "return: a captured zone whose garrison died did not go back");
+    // An own zone the garrison leaves stays its owner's.
+    auto* mine = f.zone(f.own, Structure_ZoneResidential, 20, 20);
+    auto* guard = f.unit(f.own, Unit_Soldier, 19, 20);
+    f.capture(guard, mine);
+    require(f.runUntil(20, [&] { return mine->getGarrisonSize() == 1; }), "return: the soldier did not enter its own zone");
+    Command(f.playerOf(f.own), CMD_ZONE_EVACUATE, mine->getObjectID()).executeCommand();
+    require(mine->getOwner() == f.own && !mine->isGarrisoned(), "return: an own zone changed hands when its garrison left");
+    record("return", "evacuated and killed garrisons hand captured zones back (count, power, tiles); an own zone stays");
+}
+
+/// Below the evacuation threshold the garrison leaves on its own (a captured zone goes back as it
+/// does), and nobody may enter or take a zone that damaged.
+void checkLowHealth() {
+    Fixture f("low health");
+    const int percent = ZoneStructure::evacuateHealthPercent();
+    require(percent == DuneCity::ZoneGarrison::kEvacuateHealthPercent, "low health: the threshold is overridden");
+    auto* z = f.zone(f.own, Structure_ZoneResidential, 20, 30);
+    std::vector<UnitBase*> soldiers;
+    for(int i = 0; i < 2; ++i) {
+        soldiers.push_back(f.unit(f.own, i ? Unit_Trooper : Unit_Soldier, 19, 29 + i));
+        f.capture(soldiers.back(), z);
+    }
+    require(f.runUntil(20, [&] { return z->getGarrisonSize() == 2; }), "low health: the soldiers did not enter");
+    const int max = z->getMaxHealth();
+    const int atLine = (max * percent + 99) / 100;   // the lowest health still held
+    z->setHealth(atLine);
+    f.run(1);
+    require(z->getGarrisonSize() == 2, "low health: the garrison left at " + std::to_string(atLine) + "/" + std::to_string(max));
+    z->setHealth(atLine - 1);
+    f.run(1);
+    require(!z->isGarrisoned() && z->getOwner() == f.own, "low health: the garrison stayed in a zone below the threshold");
+    for(auto* s : soldiers) require(onMapBeside(s, z, 2) && s->getHealth() > 0, "low health: a soldier did not come out");
+    f.capture(soldiers[0], z);
+    f.run(5);
+    require(!z->isGarrisoned(), "low health: a soldier entered a zone below the threshold");
+    // A captured zone driven below the threshold goes back to its owner, and cannot be taken again.
+    auto* foe = f.zone(f.enemy, Structure_ZoneIndustrial, 40, 30, 2);
+    auto* trooper = f.unit(f.own, Unit_Trooper, 39, 30);
+    f.run(1);
+    f.capture(trooper, foe);
+    require(foe->getOwner() == f.own, "low health: the enemy zone was not taken");
+    foe->StructureBase::handleDamage(foe->getHealth().lround() - atLine + 1, NONE_ID, f.enemy);
+    f.run(1);
+    require(!foe->isGarrisoned() && foe->getOwner() == f.enemy && onMapBeside(trooper, foe, 2),
+            "low health: a captured zone below the threshold was not left and handed back");
+    f.capture(trooper, foe);
+    f.run(5);
+    require(foe->getOwner() == f.enemy && !foe->isGarrisoned(), "low health: a zone below the threshold was taken");
+    record("low_health", "held at " + std::to_string(atLine) + "/" + std::to_string(max) + " (" + std::to_string(percent)
+           + "%), left below it; a captured zone went back; no entry below it");
 }
 
 void checkAlly() {
@@ -367,6 +462,7 @@ void checkSave() {
     require(z != nullptr, "save: the zone is missing after the load");
     require(z->getOwner() == game->getHouse(HOUSE_ATREIDES), "save: the captured zone lost its new owner");
     require(z->getGarrison() == occupants, "save: the garrison changed in the load");
+    require(z->getGarrisonOriginalOwner() == HOUSE_HARKONNEN, "save: the captured zone forgot its original owner");
     for(const Uint32 id : occupants) {
         auto* u = dynamic_cast<UnitBase*>(game->getObjectManager().getObject(id));
         require(u != nullptr && hidden(u), "save: a loaded occupant is on the map");
@@ -374,13 +470,15 @@ void checkSave() {
     for(int i = 0; i < MILLI2CYCLES(3000); ++i) game->updateGameState();
     require(z->getGarrison() == occupants, "save: the loaded garrison did not hold");
     require(z->evacuateGarrison() == 2, "save: the loaded garrison did not come out");
+    require(z->getOwner() == game->getHouse(HOUSE_HARKONNEN) && z->getGarrisonOriginalOwner() < 0,
+            "save: the loaded captured zone did not go back to its owner when its garrison left");
     for(const Uint32 id : occupants) {
         auto* u = dynamic_cast<UnitBase*>(game->getObjectManager().getObject(id));
         require(u != nullptr && onMapBeside(u, z, 2), "save: a loaded occupant did not come out beside the zone");
     }
     game.reset();
     currentGame = nullptr;
-    record("save", "owner, 2 occupants and their exit survive save and load");
+    record("save", "owner, original owner, 2 occupants and their exit (the zone goes back) survive save and load");
 }
 
 void checkRuleOff() {
@@ -445,7 +543,8 @@ int runZoneGarrisonProbe() {
     // Every case runs even after one fails, so a run shows all failures; any failure fails the probe.
     int failed = 0;
     for(auto check : {checkOwnZone, checkTake, checkFireOut, checkAssault, checkEvacuate, checkDestroyed,
-                      checkAlly, checkContainment, checkSave, checkRuleOff, checkPicture}) {
+                      checkReturn, checkLowHealth, checkAlly, checkContainment, checkSave, checkRuleOff,
+                      checkPicture}) {
         try {
             check();
         } catch(const std::exception&) {
@@ -453,7 +552,7 @@ int runZoneGarrisonProbe() {
             currentGame = nullptr;
         }
     }
-    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 11 cases");
-    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 11 cases failed", failed);
+    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 13 cases");
+    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 13 cases failed", failed);
     return -1;
 }

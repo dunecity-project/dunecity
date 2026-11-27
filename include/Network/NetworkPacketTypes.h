@@ -503,7 +503,11 @@
 //      byte, set only when on): by default Rocket and Gun Turrets fire on units only, never on buildings or zones, as
 //      in the original game. A 146 peer would desync. Save format unchanged (the bit is in the
 //      settings stream; a save made before protocol 147 loads with turrets firing on units only).
-#define NETWORK_PROTOCOL_VERSION            147
+// 148: Zone Garrisons follow-up: a garrison leaves a zone below 40% health on its own, a captured
+//      zone returns to its original owner once its garrison is gone, and soldiers thrown out of a
+//      destroyed zone lose half their hit points. A 147 peer would desync. Save format 9903 (a
+//      captured zone's original owner). The Soldier's default price is 30 (ObjectData).
+#define NETWORK_PROTOCOL_VERSION            148
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

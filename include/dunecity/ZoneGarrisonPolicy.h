@@ -13,6 +13,7 @@
 #include <fixmath/FixPoint.h>
 
 #include <algorithm>
+#include <cstdint>
 
 /// Zone Garrisons (match rule, default on; Stefan, 2026-11-27: "i want infantry and troopers to be
 /// able to occupy friendly and enemy R/I/C - using the capture command ... it now is owned by the
@@ -35,6 +36,23 @@ inline constexpr int kIdleSearchCycles = 8;
 /// cover, not immunity, so shooting a garrisoned zone is how attackers empty it.
 inline constexpr int occupantDamage(int damage) {
     return damage <= 0 ? 0 : (damage + 1) / 2;
+}
+
+/// Stefan, 2026-11-27: "make troopers and infantry evacuate buildings with an evacuate when it gets
+/// below X% health". A garrisoned zone below this share of its hit points puts its soldiers out,
+/// and a zone below it cannot be garrisoned or taken. Chosen from measured games
+/// (docs/zone-garrisons.md, "Evacuation threshold"); 0 would mean never.
+inline constexpr int kEvacuateHealthPercent = 40;
+
+/// Is a zone at HEALTH of MAXHEALTH too damaged to hold, at threshold PERCENT?
+inline constexpr bool belowEvacuateHealth(int health, int maxHealth, int percent) {
+    return percent > 0 && int64_t(health) * 100 < int64_t(maxHealth) * percent;
+}
+
+/// "if the building explodes they are ejected but are damaged": a soldier thrown out of a ruin
+/// loses half its maximum hit points (rounded up) but always comes out alive with at least 1.
+inline constexpr int healthAfterEjection(int health, int maxHealth) {
+    return std::max(1, health - (maxHealth + 1) / 2);
 }
 
 /// What a capture order on a zone means for a soldier of house OWN (team OWNTEAM) against a zone

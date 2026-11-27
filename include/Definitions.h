@@ -260,7 +260,9 @@
 //       (DuneCity::HospitalCareState): the census's civic overlays (zone id, Hospital or Church)
 //       and every soldier's Hospital trip (soldier, Hospital, tile, stage, carried, start cycle).
 //       An older save has none; its first census designates the overlays again.
-#define SAVEGAMEVERSION     9902
+#define SAVEGAMEVERSION     9903
+/// First save with a captured zone's original owner (Zone Garrisons: an emptied captured zone returns).
+#define SAVEGAMEVERSION_ZONE_GARRISON_RETURN 9903
 /// First save with the Hospital trips and civic overlays (Hospital Care).
 #define SAVEGAMEVERSION_HOSPITAL_CARE 9902
 /// First save with a sandworm's Palace worm state (Fremen Palace Worm).

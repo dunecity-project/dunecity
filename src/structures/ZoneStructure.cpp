@@ -222,6 +222,7 @@ ZoneStructure::ZoneStructure(InputStream& stream)
         garrisonTargetID_ = stream.readUint32();
         garrisonSearchTimer_ = stream.readSint32();
     }
+    if (savegameVersion >= SAVEGAMEVERSION_ZONE_GARRISON_RETURN) garrisonOriginalOwner_ = stream.readSint32();
 }
 
 int ZoneStructure::getResidentialPopulation() const {
@@ -275,6 +276,7 @@ void ZoneStructure::save(OutputStream& stream) const {
     stream.writeUint32Vector(garrison_);
     stream.writeUint32(garrisonTargetID_);
     stream.writeSint32(garrisonSearchTimer_);
+    stream.writeSint32(garrisonOriginalOwner_);
 }
 
 bool ZoneStructure::canBePlacedAt(int x, int y, bool torch) const {

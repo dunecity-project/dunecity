@@ -738,6 +738,11 @@ TrooperSupport=1
 # (7 tiles), come out when none is within 11, and take empty enemy zones within 5 tiles of them.
 # 0 = QuantBot never uses garrisons. docs/zone-garrisons.md has the OFF/ON evidence.
 ZoneGarrison=0
+# A free Soldier or Trooper takes each empty enemy zone with no enemy unit or turret near it and
+# stays inside (a captured zone returns to its owner once its garrison is gone).
+ZoneCaptureRaid=0
+# Barracks train a levy of cheap Soldiers that walks into the nearest enemy zones.
+ZoneCaptureLevy=0
 # Stateless existing-composition/technology experiment; paired outcomes rejected adoption.
 # Default OFF. No saved budget, save-format change or protocol change.
 SimpleTechSavings=0
