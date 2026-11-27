@@ -244,6 +244,22 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
         return FrontBatteryPolicy::keepsCorridor(passable);
     };
     const bool buildUp = !usesOldEnemySpacing();
+    // The mass's legality (the drill and the line): no spacing, turrets touch as in Stefan's clumps,
+    // but every site keeps kDrillCorridorNeighbours passable neighbours.
+    auto massLegal = [&](int x, int y) {
+        if (!map.tileExists(x, y) || ownTurretW[index(x, y)] > 0) return false;
+        if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) return false;
+        if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) return false;
+        if (!cityRoadImpact(map, x, y, 1, 1, Structure_RocketTurret).preservesConnections) return false;
+        if (currentGame->isCitySimEnabled() && wouldLandlockNeighbouringZone(map, houseID, x, y, 1, 1)) return false;
+        int passable = 0;
+        for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+            if ((!ox && !oy) || !map.tileExists(x + ox, y + oy)) continue;
+            const Tile* tile = map.getTile(x + ox, y + oy);
+            if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+        }
+        return FrontBatteryPolicy::keepsCorridor(passable, TF::kDrillCorridorNeighbours);
+    };
 
     // (a) FrontTurrets: the attack worth most within reach of an own building, then its cover.
     if (reinforce && !visibleGroundTurretThreats.empty()) {
@@ -300,8 +316,10 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
     turretFrontPlan.edge = edge;
     turretFrontPlan.armyLead = -1;
 
-    // (e) TurretDrill: once the edge is near an enemy base, the legal tile nearest it, adjacent
-    // turrets allowed, from which a turret reaches what it can shoot. No count cap: the yard pays
+    // (e) TurretDrill: once the edge is near an enemy base, the legal tile nearest it that at most
+    // one enemy turret reaches and no nearer than kDrillMinTiles to an enemy building, touching the
+    // mass, from which a turret reaches what it can shoot (Stefan's drill stood a median 11 tiles
+    // from enemy buildings, at the edge of the enemy turrets' reach). No count cap: the yard pays
     // from cash beyond the economy's reserve, one order a pass.
     if (drill && buildUp && enemyKnown && turretFrontPlan.site.isInvalid() && !anchors.empty() && TF::drillStarts(edge)) {
         const bool fireOnBuildings = currentGame->getGameInitSettings().getGameOptions().turretsFireOnBuildings;
@@ -311,21 +329,6 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
         if (fireOnBuildings)
             for (size_t i = 0; i < n; ++i) if (enemyTileW[i]) targetW[i] += 100;
         const TF::BoxSum targetSum(targetW, w, h);
-        // The drill's own spacing: none (a mass), but every site keeps its corridor.
-        auto drillLegal = [&](int x, int y) {
-            if (!map.tileExists(x, y) || ownTurretW[index(x, y)] > 0) return false;
-            if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) return false;
-            if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) return false;
-            if (!cityRoadImpact(map, x, y, 1, 1, Structure_RocketTurret).preservesConnections) return false;
-            if (currentGame->isCitySimEnabled() && wouldLandlockNeighbouringZone(map, houseID, x, y, 1, 1)) return false;
-            int passable = 0;
-            for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
-                if ((!ox && !oy) || !map.tileExists(x + ox, y + oy)) continue;
-                const Tile* tile = map.getTile(x + ox, y + oy);
-                if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
-            }
-            return FrontBatteryPolicy::keepsCorridor(passable, TF::kDrillCorridorNeighbours);
-        };
         int bestScore = std::numeric_limits<int>::min();
         Coord best = Coord::Invalid();
         const int window = BUILDRANGE + 1;
@@ -336,10 +339,10 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
             for (int y = std::max(0, a.y - window); y <= std::min(h - 1, a.y + window + 3); ++y)
                 for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
                     const int d = distAt(x, y);
-                    if (d < 1 || d > edge) continue;
+                    if (!TF::drillSite(d, edge, int(enemyTurretSum.around(x, y, range)))) continue;
                     const int score = TF::drillSiteScore(d, targetSum.around(x, y, range - 1),
                                                          int(ownTurretSum.around(x, y, 1)));
-                    if (score <= bestScore || !drillLegal(x, y)) continue;
+                    if (score <= bestScore || !massLegal(x, y)) continue;
                     bestScore = score; best = Coord(x, y);
                 }
         }
@@ -440,8 +443,8 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
                     const int d = distAt(x, y);
                     if (!TF::beltSite(d, edge, belt, beltGoal(), behindLimit, beltStandoff(),
                                       int(enemyTurretSum.around(x, y, TF::kEnemyTurretReachTiles)))) continue;
-                    const int score = TF::advanceSiteScore(d, edge, nearestOwnTurret(x, y));
-                    if (score <= bestScore || !legal(x, y)) continue;
+                    const int score = TF::advanceSiteScore(d, edge, int(ownTurretSum.around(x, y, 1)));
+                    if (score <= bestScore || !massLegal(x, y)) continue;
                     bestScore = score; best = Coord(x, y);
                 }
         }

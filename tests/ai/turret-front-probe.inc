@@ -35,6 +35,9 @@
 //                   default) no own turret ever targets an enemy building
 //   drill-buildings the same with Turrets Can Fire On Buildings on: own turrets also fire on the
 //                   enemy buildings they reach
+//   drill-turrets   the enemy base edged with three Rocket Turrets: the mass still forms (8+ placed,
+//                   touching) within 12 tiles of the enemy buildings, and no drill turret stands
+//                   where two enemy turrets reach (Stefan's mass stood at the edge of their reach)
 //   drill-off       the same with the switch off: no drill order
 //   drill-far       switch on, the enemy base 90 tiles away: no drill order
 #include <Game.h>
@@ -458,12 +461,19 @@ void retire(bool on) {
 
 // --- (e) TurretDrill ---------------------------------------------------------------------------
 
-void drill(bool on, bool fireOnBuildings, bool far) {
-    const std::string name = std::string("drill-") + (far ? "far" : !on ? "off" : fireOnBuildings ? "buildings" : "on");
+void drill(bool on, bool fireOnBuildings, bool far, bool turrets = false) {
+    const std::string name = std::string("drill-") + (far ? "far" : !on ? "off" : turrets ? "turrets"
+                                                      : fireOnBuildings ? "buildings" : "on");
     Fixture f = newGame(false, false, false, false, on, fireOnBuildings);
     ownBase(f);
     const int ex = far ? 110 : 34;
     enemyBase(f, ex);
+    std::vector<std::pair<Coord, Uint32>> enemyTurrets;
+    if(turrets)
+        for(int i = 0; i < 3; ++i) {
+            const Coord at(ex - 3, 26 + 5 * i);
+            enemyTurrets.push_back({at, place(f.enemy, Structure_RocketTurret, at.x, at.y)->getObjectID()});
+        }
     std::vector<Uint32> enemyBuildings;
     for(const StructureBase* s : structureList)
         if(s->getOwner() == f.enemy) enemyBuildings.push_back(s->getObjectID());
@@ -501,6 +511,7 @@ void drill(bool on, bool fireOnBuildings, bool far) {
     const int played = play(f, 12000, [&] {
         mass(nearest, touching);
         sampleTargets(f, onBuildings, onUnits);
+        if(turrets) return c.placed >= 10;
         const bool reached = nearest <= 7 && touching >= 4 && c.placed >= 8;
         return reached && sum(quads) == 0 && (!fireOnBuildings || onBuildings > 0);
     });
@@ -516,6 +527,24 @@ void drill(bool on, bool fireOnBuildings, bool far) {
         return;
     }
     require(c.ordered >= 8 && c.placed >= 8, name + ": the drill did not build a mass, eight wanted (" + countText(c) + ")");
+    if(turrets) {
+        std::set<std::pair<int, int>> massTurrets;
+        for(const auto& order : f.bot->turretFrontOrders) if(order.turret != NONE_ID) massTurrets.insert({order.site.x, order.site.y});
+        for(const StructureBase* t : rocketTurrets(f.own)) {
+            int reaching = 0;
+            for(const auto& [e, id] : enemyTurrets)
+                if(health(id) > 0)
+                    reaching += int(TurretFrontPolicy::tileDistance(t->getLocation().x, t->getLocation().y, e.x, e.y) <= 8);
+            require(reaching <= TurretFrontPolicy::kDrillEnemyTurretTolerance || massTurrets.count({t->getLocation().x, t->getLocation().y}) == 0,
+                    name + ": a drill turret stands where two enemy turrets reach");
+        }
+        require(nearest <= 12, name + ": the mass stood off more than 12 tiles (" + std::to_string(nearest) + ")");
+        require(touching >= 4, name + ": the mass is not dense, " + std::to_string(touching) + " turrets touch another");
+        record(name, countText(c) + "; nearest " + std::to_string(nearest) + " tiles from an enemy building, "
+                     + std::to_string(touching) + " touching; turret targets: " + std::to_string(onUnits) + " units, "
+                     + std::to_string(onBuildings) + " buildings; cycles " + std::to_string(played));
+        return;
+    }
     require(nearest <= 7, name + ": the mass did not reach the enemy base, nearest turret " + std::to_string(nearest)
                           + " tiles from an enemy building");
     require(touching >= 4, name + ": the mass is not dense, " + std::to_string(touching) + " turrets touch another");
@@ -561,6 +590,7 @@ int runTurretFrontProbe() {
     if(want("retire-off")) retire(false);
     if(want("drill-on")) drill(true, false, false);
     if(want("drill-buildings")) drill(true, true, false);
+    if(want("drill-turrets")) drill(true, false, false, true);
     if(want("drill-off")) drill(false, false, false);
     if(want("drill-far")) drill(true, false, true);
     gChecks.close();

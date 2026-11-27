@@ -42,9 +42,9 @@
         turrets it leaves behind stop drawing upkeep.
 
     (e) TurretDrill: once the base's edge stands within kDrillStartTiles of an enemy building, a dense
-        mass of Rocket Turrets is built straight toward and into that base: each order takes the legal
-        tile nearest the enemy (adjacent turrets allowed), preferring tiles from which the turret reaches
-        what it can shoot, for as long as cash beyond the economy's reserve lasts (no count cap; one
+        mass of touching Rocket Turrets is built toward that base: each order takes the legal tile
+        nearest the enemy that at most one enemy turret reaches and no nearer than 4 tiles to an enemy
+        building, preferring tiles from which the turret reaches what it can shoot, for as long as cash beyond the economy's reserve lasts (no count cap; one
         order a build pass). Stefan, 2026-11-27, after doing it by hand on Metropolis: "i just build
         turrets into their base as a mass and they carved a hole in the ebemy base".
 
@@ -185,9 +185,10 @@ inline bool beltSite(int site, int edge, int belt, int goal, int behindLimit, in
     if (belt < goal ? site != edge : site >= edge) return false;
     return site >= standoff && site >= behindLimit && enemyTurretsInReach == 0;
 }
-/// Site score for the belt: tiles gained toward the enemy first, then spacing.
-inline int advanceSiteScore(int site, int edge, int nearestOwnTurret) {
-    return (edge - site) * 100 + std::min(nearestOwnTurret, 4) * 5;
+/// Site score for the belt: tiles gained toward the enemy first, then touching the line (Stefan's
+/// line was clumps of touching turrets, 94-97% of them touching another).
+inline int advanceSiteScore(int site, int edge, int adjacentOwnTurrets) {
+    return (edge - site) * 100 + std::min(adjacentOwnTurrets, 4) * 15;
 }
 
 // --- (c) TurretCreep ---------------------------------------------------------------------------
@@ -220,6 +221,16 @@ constexpr uint32_t kDrillScanPeriodCycles = 128;
 /// A drill site keeps at least this many passable neighbours (the mass may touch, never wall in).
 constexpr int kDrillCorridorNeighbours = 2;
 inline bool drillStarts(int edge) { return edge <= kDrillStartTiles; }
+/// The drill never builds nearer an enemy building than this (Stefan's nearest stood 4 tiles off).
+constexpr int kDrillMinTiles = 4;
+/// A drill site may be within reach of at most this many enemy turrets: the mass stops at the
+/// edge of the enemy turrets' reach and trades with one at a time, as his did.
+constexpr int kDrillEnemyTurretTolerance = 1;
+/// A drill site: no further from the enemy than the edge, no nearer an enemy building than
+/// kDrillMinTiles, and within reach of at most kDrillEnemyTurretTolerance enemy turrets.
+inline bool drillSite(int site, int edge, int enemyTurretsInReach) {
+    return site >= kDrillMinTiles && site <= edge && enemyTurretsInReach <= kDrillEnemyTurretTolerance;
+}
 /// Drill site score: nearer the enemy first, then the value the turret reaches (in hundreds of
 /// credits: enemy units always, enemy buildings when turrets may fire on them), then touching the
 /// mass (adjacent own turrets).
