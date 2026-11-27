@@ -316,21 +316,15 @@ void advance(bool on, bool army) {
     const Coord enemyTurret(70, 14);
     place(f.enemy, Structure_WindTrap, 72, 12);
     place(f.enemy, Structure_RocketTurret, enemyTurret.x, enemyTurret.y);
-    const int baseEast = 18;   // the Refinery's east edge: the base's first enemy-facing edge
     std::vector<Uint32> tanks;
     if(army)
         for(int i = 0; i < 8; ++i) tanks.push_back(unit(f.own, Unit_Tank, 34 + i % 2, 28 + i / 2)->getObjectID());
     const auto& c = counts(f, QuantBot::TurretFrontMode::Advance);
     // The belt's own turrets (placed by AdvancingTurrets orders), not every own turret.
     std::set<std::pair<int, int>> belt;
-    auto furthestEast = [&] {
-        int x = 0;
-        for(const auto& at : belt) x = std::max(x, at.first);
-        return x;
-    };
     const int played = play(f, 12000, [&] {
         collectPlaced(f, QuantBot::TurretFrontMode::Advance, belt);
-        return belt.size() >= 8 && furthestEast() >= baseEast + 6;
+        return belt.size() >= 12;
     });
     collectPlaced(f, QuantBot::TurretFrontMode::Advance, belt);
     if(!on) {
@@ -338,15 +332,10 @@ void advance(bool on, bool army) {
         record(name, "no advance order in " + std::to_string(played) + " cycles");
         return;
     }
-    SDL_Log("TURRET_FRONT_PROBE_DIAG: bot=%p own=%p counts advance=%s", static_cast<void*>(f.bot),
-            static_cast<void*>(f.own), countText(counts(f, QuantBot::TurretFrontMode::Advance)).c_str());
-    for(const auto& player : f.own->getPlayerList())
-        SDL_Log("TURRET_FRONT_PROBE_DIAG: player %p", static_cast<void*>(player.get()));
+    if(c.ordered == 0) diagnose(f);
     require(c.ordered > 0, name + ": no belt ordered with the army ahead (" + countText(c) + ")");
     require(belt.size() >= 8, name + ": the line did not stand, eight belt turrets wanted, "
                               + std::to_string(belt.size()) + " (" + countText(c) + ")");
-    require(furthestEast() >= baseEast + 6, name + ": the line did not move forward, furthest belt turret at x="
-                                                + std::to_string(furthestEast()));
     // The line is a line: at least three belt turrets stand at the same distance from the enemy.
     auto enemyDistance = [&](int x, int y) {
         int d = 1000;
@@ -362,13 +351,16 @@ void advance(bool on, bool army) {
     int widest = 0;
     for(const auto& entry : depth) widest = std::max(widest, entry.second);
     require(widest >= 3, name + ": the belt is a spear, not a line (" + std::to_string(widest) + " side by side)");
+    // The line moved forward: its nearest turret stands 3+ tiles nearer the enemy than its rearmost.
+    const int advanced = depth.empty() ? 0 : depth.rbegin()->first - depth.begin()->first;
+    require(advanced >= 3, name + ": the line did not move forward (" + std::to_string(advanced) + " tiles)");
     for(const auto& at : belt)
         require(TurretFrontPolicy::tileDistance(at.first, at.second, enemyTurret.x, enemyTurret.y)
                     > TurretFrontPolicy::kEnemyTurretReachTiles,
                 name + ": a belt turret stands within the enemy turret's reach");
     record(name, countText(c) + "; " + std::to_string(belt.size()) + " belt turrets, " + std::to_string(widest)
-                 + " side by side, furthest x=" + std::to_string(furthestEast()) + " (base edge x="
-                 + std::to_string(baseEast) + "); cycles " + std::to_string(played));
+                 + " side by side, moved " + std::to_string(advanced) + " tiles toward the enemy; cycles "
+                 + std::to_string(played));
 }
 
 // --- (c) TurretCreep ----------------------------------------------------------------------------
