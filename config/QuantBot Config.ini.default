@@ -693,6 +693,8 @@ AirportTurrets=0
 # is free and it is far), stays out of every order until healed, and the engine's automatic rule
 # (below half health, with Carryalls) applies to its infantry as to a human player's. 0 = off: AI
 # infantry are never sent to a Hospital.
+# Default off: level in 288 mixed games (on - off -0.017, -0.09 to +0.06); of 891 trips a game, 234
+# healed and 637 soldiers died on the way, sent while under fire.
 HospitalInfantry=0
 # Stefan, 2026-11-27: Rocket Turrets at the front (include/players/TurretFrontPolicy.h). All off
 # until measured. A Rocket Turret costs 15 credits a city year of police upkeep (7.5 a minute with

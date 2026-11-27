@@ -1,3 +1,95 @@
+## 2026-11-27 - Hospitals heal infantry: five beds, a type lock, Carryall delivery (Hospital Care, protocol 146, save 9902)
+
+Stefan, 2026-11-27: "i want troopers and infantry to be able to be healed / repaied via a hospital R zone -
+carryalls can also pick them up in dune city. a single hispital can heal up to 5 men at a time. while a hospital is
+healing me or while a unit is walking to get healed or being carryalled to be healed it cannot change type from
+hospital to something else". Commits fb6958544 (feature), 9e6aaa901, aa930e15c, 5de90205c, 25744ee43, dd760c684,
+761c3b95c, 7ad441dba. Not released. Code: `include/dunecity/HospitalCare.h` (rules, saved state), `src/dunecity/HospitalCare.cpp`.
+Evidence: `~/Documents/projects/outputs/hospital-care-20261127/`.
+
+**Rules chosen.** Match rule **Hospital Care**, default on (INI key; bit 6 of the MOD20 starting-tech-level byte,
+set only when off; the level mask is now 0x3F, bits 4-5 of that byte are free).
+- A Hospital is an own Residential zone the census gave the Hospital overlay. Every infantry type but the Saboteur
+  can be healed.
+- The repair order (sidebar button/hotkey, `CMD_UNIT_SENDTOREPAIR` -> `GroundUnit::doRepair`) sends a wounded
+  soldier to the nearest own Hospital with a bed not yet claimed by five, else the nearest one. With no Hospital
+  it falls back to a Repair Yard as before.
+- The soldier walks (forced move) to a free tile beside the 2x2 zone; 6+ tiles away it also asks for a Carryall,
+  whose ordinary pickup flies it there. Beside the Hospital it heals standing up and holds its bed (HOLD: fires at
+  enemies in range, never chases off); its own mode comes back when it leaves.
+- **Five at a time** (`kHospitalBeds`); the rest wait beside it, and a waiting soldier moves to another own
+  Hospital with a free bed when there is one.
+- **Rate** 1 HP every 4 cycles per patient (a quarter of a Repair Yard's single bay; five beds = 1.25 yards of
+  throughput). **Cost** 0.2 credits a HP: a Soldier from near death costs about 4 credits, 6.7% of its price, as a
+  Quad's full repair is 6.5% of its price. No cash, no healing that tick.
+- **Automatic**, as for vehicles and Repair Yards: a soldier below half health, not holding, not forced, whose
+  house has Carryalls, goes by itself - for human houses always, for AI houses only with QuantBot HospitalInfantry
+  on. Checked every 32 cycles from the hospital update (`InfantryBase::checkPos` never runs `GroundUnit`'s).
+- **Lock.** Every trip - walking, carried, waiting, healing - is a claim on its Hospital. A claimed zone keeps its
+  overlay through every census and uses its house's quota first; `HospitalCare::isLockedHospital(zone)` is the
+  query for redevelopment (the redevelopment session skips Hospital-overlay zones altogether). The claim ends when
+  the soldier is healed, dies, is ordered elsewhere (its destination leaves the Hospital), changes owner, the zone
+  is lost or changes owner (garrison capture), or the walk comes no closer for a game minute.
+- The census overlays are now designated **per house** from each house's own population. They used the local
+  player's counts for every house, which differed between peers and spectators; harmless while cosmetic, a desync
+  once Hospitals heal.
+- **Save 9902**: the CitySimulation block ends with `HospitalCareState`: the census overlay roster (zone id,
+  Hospital/Church) and every trip (soldier, Hospital, tile, stage, carried, progress clock, closest distance, prior
+  mode). The roster, not the drawn overlay, decides; the first city phase after a load redraws the overlays. An
+  older save has neither; its first census designates them. **Protocol 146.**
+- Match logs: `HOSPITAL_CARE: event=sent|healed|ended why=...`; `vanilla-match.py` writes `hospital.csv`.
+
+**QuantBot: HospitalInfantry** ([Force Concentration], default off; play styles `@hospital-infantry`,
+`@hospital-infantry-off`). On, a soldier below 60% health goes to a Hospital from `onDamage`, a soldier on a trip is
+reserved as Repair (`reserveDamagedUnitForRepair`) and is not halted under fire, and the automatic rule covers the
+bot's infantry.
+
+**Measured: left off.** 288 mixed games on faf6ab1e0 (AWS 20261127T105107-hospital-mixed2-a5daa9): Stefan's 4P
+DuneCity free-for-all (`rs160-dunecity`, Fortress starts, four Brutal QuantBots, 45 min, seeds 9101-9148),
+`--ffa default,default@hospital-infantry`, two houses each, every balanced assignment.
+
+| 288 games, two houses a label | default (off) | @hospital-infantry (on) |
+|---|---:|---:|
+| Mean placement score | -0.093 | -0.109 |
+| Paired on - off (95%) | | -0.017 (-0.09..+0.06), level |
+| Wins (sole survivor) / eliminated | 72 / 280 | 63 / 272 |
+| Alive at a time-out (share of houses) | 39% | 42% |
+| Kill / loss value per house | 140,996 / 143,993 | 143,085 / 141,070 |
+
+Time-outs 153 of 288 games. With the switch on, a game had 891 Hospital trips (841 from `onDamage` below 60%, 50
+automatic): 234 healed, 637 soldiers died on the way (a median 169 cycles after they were sent; they are sent
+while under fire), 8 re-ordered, 6 lost their Hospital, 3 left a bed. Not a default under the rule (interval
+not above 0, point estimate negative); `/weak` is a formation duel without a city, so Hospitals cannot act there.
+What could change it: send only soldiers out of contact, or only with a Carryall free - not built. The first 12
+games (761c3b95c, `mixed-v1-guard-beds`) had healing soldiers in Guard leave their bed after a median 44 cycles
+(5,361 of 12,561 trips) and be sent again, up to 216 times; healing soldiers now hold (7ad441dba).
+
+**Tests.** `HospitalCareStateTestCase` (beds and claims, save round trip, damaged stream refused); CoopGameSettings:
+MOD20 bit 6 round trip with every tech level and the Saboteur bit, older streams play the rule, the off bit does not
+admit a level above 9. `hospital_care_probe` (headless nightly, ~12 s, run twice and compared): seven soldiers on
+one Hospital - never more than five heal, two wait, all leave at full health paying 22 credits, back in Guard;
+overflow to a second Hospital; the lock held while walking, healing and flying and released by healing,
+`CMD_UNIT_MOVE2POS` and death, with the census clearing the zone after each release; a Trooper 35 tiles away
+flown by a Carryall and healed; the automatic rule (human soldier at 40% goes, an AI Player's and a 75% one stay,
+rule off sends nobody and refuses the order); a save with five healing, one waiting and one in a Carryall loads the
+same trips and overlays and plays the next 600 cycles identically.
+
+**Verified.** Mini `build-int` on 761c3b95c and faf6ab1e0: `dunelegacy_tests` (1,499 cases) and
+`hospital_care_probe` passed; `perf_regression` passed on the Mini (761c3b95c, 122 s). AWS nightly tier
+`-L nightly -LE gui` on faf6ab1e0 (20261127T105135-ctest-c54d0c): 252 of 256 passed, including the four AI gates
+(`quantbot_all_against_atreides`, `_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`),
+`hospital_care_probe`, `save_roundtrip_probe`, `repair_return_probe`, `carryall_flight_probe` and
+`genome_registry_contract`. The four failures belong to sibling sessions' probes and were fixed there:
+`zone_garrison_probe` (52ba57f47), `palace_worm_probe` (01db4bfd9) and both `civilization_wars_probe_civ-1v1`
+(ce65f24dd; the legacy sandworm record check did not cut the new Palace worm bytes).
+
+**Also fixed in the shared tree.** Index patches of the protocol 143-145 commits had landed at shifted offsets:
+513531d5d and 5c9ecb9ab did not build (GameInitSettings had a stray `| (zoneGarrisons ...)` after a statement and
+closed the MOD18 reader early; 2f0ebb38d fixed the first). fb6958544 committed the working-tree placement of those
+hunks in GameInitSettings, QuantBotConfig, QuantBot.h/.cpp, tests/CMakeLists.txt and the QuantBot Config default.
+A `dunecity-queue submit ... --results RESULTS` writes into the checkout and blocks staging builds: pass an absolute
+path under `~/Documents/projects/outputs`.
+
 ## 2026-11-27 - Released 1.0.880 (v1.0.880, 2c8c3deb1): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
 
 Stefan: "once all subagents finish deploy game" / "release game i mean". Everything since 1.0.879 in one release:
