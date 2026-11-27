@@ -25,6 +25,7 @@ tests/units/run-zone-garrison-probe.py.
 """
 import argparse
 import csv
+import shutil
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -47,6 +48,9 @@ TROOPER = '44'      # Unit_Trooper
 SOLDIER = '32'      # Unit_Soldier
 
 if not args.reuse:
+    # A fresh folder: vanilla-match.py skips games its results already hold, so a folder left by an
+    # earlier build would be checked instead of this build's games.
+    shutil.rmtree(out, ignore_errors=True)
     command = [sys.executable, str(root / 'tests/ai/vanilla-match.py'), '--build-dir', args.build_dir,
                '--results', str(out), '--tag', TAG, '--difficulty', 'brutal', '--minutes', str(args.minutes),
                '--maps', args.map, '--ffa', 'default@house-to-house',
