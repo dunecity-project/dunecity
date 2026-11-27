@@ -190,6 +190,9 @@ void checkOwnZone() {
 void checkTake() {
     Fixture f("take");
     auto* z = f.zone(f.enemy, Structure_ZoneCommercial, 40, 20, 2);
+    // Beside the zone and standing still, so the capture command takes it in this very cycle: the
+    // city simulation may grow or shrink an enemy lot while a soldier walks over.
+    auto* trooper = f.unit(f.own, Unit_Trooper, 39, 20);
     f.run(1);
     const int enemyZones = f.enemy->getNumItems(Structure_ZoneCommercial);
     const int ownZones = f.own->getNumItems(Structure_ZoneCommercial);
@@ -197,9 +200,9 @@ void checkTake() {
     const int enemyRequirement = f.enemy->getPowerRequirement();
     const int ownRequirement = f.own->getPowerRequirement();
     const int density = currentGameMap->getTile(40, 20)->getCityZoneDensity();
-    auto* trooper = f.unit(f.own, Unit_Trooper, 34, 20);
+    const FixPoint health = z->getHealth();
     f.capture(trooper, z);
-    require(f.runUntil(30, [&] { return z->getOwner() == f.own; }), "take: the empty enemy zone was never taken");
+    require(z->getOwner() == f.own, "take: the empty enemy zone was not taken by a Trooper beside it");
     require(z->getGarrisonSize() == 1 && hidden(trooper), "take: the Trooper is not inside");
     require(f.enemy->getNumItems(Structure_ZoneCommercial) == enemyZones - 1
                 && f.own->getNumItems(Structure_ZoneCommercial) == ownZones + 1,
@@ -207,11 +210,17 @@ void checkTake() {
     for(int dy = 0; dy < 2; ++dy) for(int dx = 0; dx < 2; ++dx)
         require(currentGameMap->getTile(40 + dx, 20 + dy)->getOwner() == HOUSE_ATREIDES, "take: a tile kept its owner");
     require(currentGameMap->getTile(40, 20)->getCityZoneDensity() == density, "take: the zone lost its density");
-    require(f.enemy->getPowerRequirement() == enemyRequirement - draw
-                && f.own->getPowerRequirement() == ownRequirement + z->getZonePowerDraw(),
+    require(z->getZonePowerDraw() == draw && f.enemy->getPowerRequirement() == enemyRequirement - draw
+                && f.own->getPowerRequirement() == ownRequirement + draw,
             "take: the power draw did not move with the zone");
-    require(z->getHealth() > 0, "take: the zone was damaged by its capture");
-    record("take", "density " + std::to_string(density) + ", draw " + std::to_string(draw) + " moved, counts moved");
+    require(z->getHealth() == health, "take: the zone was damaged by its capture");
+    // And a Trooper that has to walk over takes one too.
+    auto* far = f.zone(f.enemy, Structure_ZoneIndustrial, 40, 30, 1);
+    auto* walker = f.unit(f.own, Unit_Trooper, 33, 30);
+    f.capture(walker, far);
+    require(f.runUntil(30, [&] { return far->getOwner() == f.own; }), "take: a walking Trooper never took the zone");
+    record("take", "density " + std::to_string(density) + ", draw " + std::to_string(draw)
+           + " moved with the zone, counts moved; a walking Trooper took a second zone");
 }
 
 void checkFireOut() {
@@ -431,17 +440,18 @@ int runZoneGarrisonProbe() {
     settings.general.playerName = "Garrison tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     require(gModOptions.zoneGarrisons, "Zone Garrisons is not on by default in the Dune City mod");
-    checkOwnZone();
-    checkTake();
-    checkFireOut();
-    checkAssault();
-    checkEvacuate();
-    checkDestroyed();
-    checkAlly();
-    checkContainment();
-    checkSave();
-    checkRuleOff();
-    checkPicture();
-    SDL_Log("ZONE_GARRISON_PROBE_PASS: 11 cases");
+    // Every case runs even after one fails, so a run shows all failures; any failure fails the probe.
+    int failed = 0;
+    for(auto check : {checkOwnZone, checkTake, checkFireOut, checkAssault, checkEvacuate, checkDestroyed,
+                      checkAlly, checkContainment, checkSave, checkRuleOff, checkPicture}) {
+        try {
+            check();
+        } catch(const std::exception&) {
+            ++failed;   // require() logged ZONE_GARRISON_PROBE_FAIL with the reason.
+            currentGame = nullptr;
+        }
+    }
+    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 11 cases");
+    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 11 cases failed", failed);
     return -1;
 }
