@@ -12,6 +12,7 @@
 #include <dunecity/ParkTerrainPolicy.h>
 #include <players/ParkDistrictPolicy.h>
 #include <players/RedevelopmentPolicy.h>
+#include <players/CityPlacementPolicy.h>
 #include <players/QuantBotConfig.h>
 #include <FileClasses/lodepng.h>
 
@@ -205,10 +206,39 @@ TEST_CASE("Redevelopment switches: default off and outside the native config has
     REQUIRE_FALSE(native.force.roadLaneParks);
     REQUIRE_FALSE(native.force.lotParks);
     REQUIRE_FALSE(native.force.pollutionRelocation);
+    REQUIRE_FALSE(native.force.industrySeparation);
     for (bool QuantBotConfig::ForceSettings::*flag : {&QuantBotConfig::ForceSettings::roadLaneParks,
-             &QuantBotConfig::ForceSettings::lotParks, &QuantBotConfig::ForceSettings::pollutionRelocation}) {
+             &QuantBotConfig::ForceSettings::lotParks, &QuantBotConfig::ForceSettings::pollutionRelocation,
+             &QuantBotConfig::ForceSettings::industrySeparation}) {
         QuantBotConfig arm = native;
         arm.force.*flag = true;
         CHECK(arm.getConfigHash() != native.getConfigHash());
     }
+}
+
+TEST_CASE("IndustrySeparation: no Industrial zone within the pollution stamp's reach of a home", "[ai][park][pollution]") {
+    using namespace RedevelopmentPolicy;
+    using CityPlacementPolicy::footprintDistance;
+    CHECK(kIndustrySeparationTiles == DuneCity::kPollutionRadius);
+    // A 2x2 Industrial zone beside, four tiles from and six tiles from a 2x2 lot at (10,10).
+    CHECK(industryTooCloseToHomes(footprintDistance(12, 10, 2, 2, 10, 10, 2, 2)));
+    CHECK(industryTooCloseToHomes(footprintDistance(16, 10, 2, 2, 10, 10, 2, 2)));
+    CHECK_FALSE(industryTooCloseToHomes(footprintDistance(17, 10, 2, 2, 10, 10, 2, 2)));
+    CHECK_FALSE(industryTooCloseToHomes(1000000));   // no home at all
+}
+
+TEST_CASE("Redevelopment activity: every switch's counters reach the match log", "[ai][park]") {
+    RedevelopmentPolicy::Activity a;
+    a.ordered[RedevelopmentPolicy::Relocation] = 3;
+    a.placed[RedevelopmentPolicy::Relocation] = 2;
+    a.raised[RedevelopmentPolicy::LanePark] = 1;
+    a.industryPlaced = 5;
+    a.industryNearHomes = 1;
+    const std::string line = a.format();
+    CHECK(line.find("relocation_ordered=3") != std::string::npos);
+    CHECK(line.find("relocation_placed=2") != std::string::npos);
+    CHECK(line.find("lane_park_raised=1") != std::string::npos);
+    CHECK(line.find("lot_clear_ordered=0") != std::string::npos);
+    CHECK(line.find("lot_fill_lost=0") != std::string::npos);
+    CHECK(line.find("industry_placed=5 industry_near_homes=1") != std::string::npos);
 }

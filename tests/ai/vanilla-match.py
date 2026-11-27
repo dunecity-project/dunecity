@@ -68,6 +68,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+import activation  # noqa: E402
 import match_score  # noqa: E402
 
 MAP_DIR = root / 'data/maps/multiplayer'
@@ -141,10 +142,16 @@ ZONE_ROW_FIELDS = KEY + ZONE_FIELDS
 # Rocket Turrets at the front (include/players/TurretFrontPolicy.h): every city house's turret count,
 # upkeep and population every two minutes (ledger), each front order (front: rule front_reinforce,
 # turret_creep or turret_advance) and each rear turret retired (retire). tests/ai/turret-front-report.py.
-TURRET_EVENTS = (('TURRET_LEDGER:', 'ledger'), ('TURRET_FRONT:', 'front'), ('TURRET_RETIRE:', 'retire'))
+TURRET_EVENTS = (('TURRET_LEDGER:', 'ledger'), ('TURRET_FRONT:', 'front'), ('TURRET_RETIRE:', 'retire'),
+                 ('TURRET_FRONT_PLACED:', 'placed'), ('TURRET_FRONT_ENGAGED:', 'engaged'),
+                 ('TURRET_FRONT_MISSED:', 'missed'), ('TURRET_FRONT_STATE:', 'state'))
 TURRET_FIELDS = ('house', 'rocket_turrets', 'gun_turrets', 'police_stations', 'funding', 'turret_upkeep_milli_per_min',
                  'credits', 'population', 'rule', 'x', 'y', 'cost', 'cover', 'goal', 'attack_value', 'forward', 'edge',
-                 'army_lead', 'object', 'enemy_dist', 'sold', 'refund', 'standing', 'keep', 'cycle')
+                 'army_lead', 'object', 'enemy_dist', 'sold', 'refund', 'standing', 'keep', 'delay', 'target',
+                 'army_units', 'mode', 'reinforce', 'creep', 'advance', 'drill', 'retired', 'cycle')
+# One row per house-game whose label plays a play style with declared activation events
+# (tests/ai/activation-events.json): how often it fired and reached its effect (tests/ai/activation.py).
+ACTIVATION_ROW_FIELDS = KEY + ('house', 'label') + activation.FIELDS
 TURRET_ROW_FIELDS = KEY + ('event', 'label') + TURRET_FIELDS
 # Lessons from Stefan's Metropolis save (include/players/CityLessonsPolicy.h): every stats pass
 # CityLauncherArmy held the vehicle mix (kind launcher_army) and every LowValuePalaces plan, placement,
@@ -500,6 +507,12 @@ def play(args, scratch, binary, key):
                 if number in numbers:
                     lessons[-1]['house'] = numbers[number]
     append(results / 'lessons.csv', LESSON_ROW_FIELDS, lessons)
+    registry = activation.load_registry()
+    styles = {HOUSE_NUMBERS[h]: activation.style_of(l) for h, l in sides}
+    counted = activation.count(lines, styles, registry)
+    append(results / 'activation.csv', ACTIVATION_ROW_FIELDS,
+           [{**dict(zip(KEY, key)), 'house': numbers[n], 'label': label_of[n], 'style': styles[n], 'fired': f, 'succeeded': s}
+            for n, (f, s) in sorted(counted.items())])
     planes = []
     for l in lines:
         for marker, event in PLANE_EVENTS:
@@ -669,7 +682,7 @@ def baseline_table(args, games, houses):
         if c:
             print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
                   f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
-                  f'{c.verdict} {args.baseline} |')
+                  f'{activation.verdict(x, f"{c.verdict} {args.baseline}", activation.summarise(houses, args.activation_rows, activation.load_registry()))} |')
 
 
 def baseline_tag_table(args, games, houses, base_games, base_houses):
@@ -692,7 +705,7 @@ def baseline_tag_table(args, games, houses, base_games, base_houses):
         if c:
             print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
                   f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
-                  f'{c.verdict} tag {args.baseline_tag} |')
+                  f'{activation.verdict(x, f"{c.verdict} tag {args.baseline_tag}", activation.summarise(houses, args.activation_rows, activation.load_registry()))} |')
 
 
 def report_pairs(args, games, houses, samples, waves):
@@ -706,6 +719,9 @@ def report_pairs(args, games, houses, samples, waves):
     print(f'| Pairing (first label\'s side) | Games | {score_columns(args)} | Strict | Elim. W-L / time-outs | '
           'Win min (median) | Loss min (median) | Structures lost / destroyed per game | Verdict |')
     print('|---|---|---|---|---|---|---|---|---|---|' + ('' if args.scoring == 'legacy' else '---|'))
+    summaries = activation.summarise(houses, args.activation_rows, activation.load_registry())
+    if summaries:
+        print('\n'.join([''] + activation.table(summaries) + ['']))
     for pair in args.pairs.split(','):
         x, y = pair.split(':')
         rows = pair_scores(games, houses, x, y, args)
@@ -719,7 +735,7 @@ def report_pairs(args, games, houses, samples, waves):
         print(f'| {x} v {y} | {len(rows)} | {fmt_ci(rows, args)} | {statistics.mean(strict):.3f} | '
               f'{len(wins)}-{len(losses)} / {len(rows) - len(wins) - len(losses)} | '
               f'{statistics.median(wins) if wins else 0:.1f} | {statistics.median(losses) if losses else 0:.1f} | '
-              f'{lost:.1f} / {destroyed:.1f} | {compare(rows, args).verdict} {y} |')
+              f'{lost:.1f} / {destroyed:.1f} | {activation.verdict(x, f"{compare(rows, args).verdict} {y}", summaries)} |')
     if args.baseline:
         baseline_table(args, games, houses)
     if args.baseline_tag:
@@ -845,7 +861,12 @@ def report_ffa(args, games, houses):
     mean = lambda values: (statistics.mean(v[0] for v in values), statistics.mean(1.0 if v[1] else 0.0 for v in values))
     print(f'\nPer game (mean over a label\'s houses), against {control} in the same games '
           f'({"interval of the score against 0.5" if legacy else "difference = score - control score, 95% bootstrap"}):\n')
-    print(f'| Label | Games | Score | Control score | {"95% CI" if legacy else "Difference (95% CI)"} | '
+    summaries = activation.summarise(rows, args.activation_rows, activation.load_registry())
+    if summaries:
+        print('\nActivation (tests/ai/activation.py): an arm whose behaviour reached its effect in fewer than half of '
+              'its house-games is NOT TESTED, whatever its score.\n')
+        print('\n'.join(activation.table(summaries)))
+    print(f'\n| Label | Games | Score | Control score | {"95% CI" if legacy else "Difference (95% CI)"} | '
           'Alive at a time-out (share of houses) own / control | Verdict |')
     print('|---|---|---|---|---|---|---|')
     for label in labels:
@@ -862,7 +883,7 @@ def report_ffa(args, games, houses):
         interval = f'{c.low:.2f}-{c.high:.2f}' if legacy else f'{c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f})'
         print(f'| {label} | {c.n} | {c.candidate:+.3f} | {c.control:+.3f} | {interval} | '
               f'{100 * statistics.mean(p[2] for p in pairs):.0f}% / {100 * statistics.mean(p[3] for p in pairs):.0f}% | '
-              f'{c.verdict} {control} |')
+              f'{activation.verdict(label, f"{c.verdict} {control}", summaries)} |')
     timeouts = sum(1 for g in valid.values() if not g['winner_label'])
     print(f'\nTime-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
 
@@ -980,6 +1001,7 @@ def report(args):
             rows += [r for r in read(extra / name) if keep(r) and r['tag'] == args.baseline_tag]
         return rows
     games, houses = load('games.csv'), load('houses.csv')
+    args.activation_rows = load('activation.csv')
     if args.ffa:
         report_ffa(args, games, houses)
         report_ffa_army(args, games, houses, load('waves.csv'), load('army.csv'))

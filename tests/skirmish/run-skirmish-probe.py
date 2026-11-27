@@ -31,6 +31,11 @@ Each runtime uses fresh leased profiles; failed scratch and all output logs rema
   city-park    DuneCity 96: the player's yard builds a Park, CMD_PLACE_STRUCTURE places it beside
                the player's lots (no road ring, their land value rises, its own block stays
                undeveloped), screenshot, save/load; then a QuantBot with ParkDistricts plants parks
+  city-redevelop  DuneCity 96, one saved start replayed per arm: RoadLaneParks, LotParks,
+               PollutionRelocation and IndustrySeparation each act with their switch on (orders
+               placed at their sites, polluter moved clear of the homes, no Industrial zone within
+               5 tiles of a home) and lift the land value of the lots they are for above the OFF
+               arm; nothing fires with them off
   partner-fighter  a qBotFighterMedium partner plays a minute with the human idle: nothing is
                queued, upgraded or placed in the player's house (docs/ai-roles.md)
   spectate     the screen's Spectate (DuneCity 96, Ordos + 1 ally + 2 enemies, qBotHard with a
@@ -89,7 +94,7 @@ out.mkdir(parents=True, exist_ok=True)
 cases = args.cases.split(',')
 known_cases = {'menu', 'mp-lobby', 'legacy-map', 'vanilla-1v1', 'allied-2v3', 'city-192', 'stefan-128',
                'partner-support', 'partner-quantbot', 'partner-fighter', 'spectate', 'render',
-               'civ-menu', 'civ-1v1', 'civ-2v2', 'civ-3v3', 'civ-research', 'city-park', 'spectate-planes'}
+               'civ-menu', 'civ-1v1', 'civ-2v2', 'civ-3v3', 'civ-research', 'city-park', 'city-redevelop', 'spectate-planes'}
 if not cases or any(case not in known_cases for case in cases):
     parser.error('--cases must name existing probe cases')
 if args.research_payment and cases != ['civ-research']:

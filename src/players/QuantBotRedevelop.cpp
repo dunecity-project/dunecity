@@ -26,23 +26,25 @@
 //   LotParks             a low-value own R/C lot cleared for parks that raise its neighbours'
 //                        land value, then its remaining tiles planted;
 //   PollutionRelocation  an Industrial zone whose pollution costs our R/C lots land value
-//                        rebuilt where the house's own Industrial siting puts it, when that site
-//                        costs at most half as much.
-// Everything here is derived from the map each time (no saved state): searches run in short
-// game-time windows, so they cost a few scans a period rather than one per yard pass.
+//                        rebuilt at an Industrial site clear of our homes, when that site costs
+//                        at most half as much; the old zone goes once the new one stands;
+//   IndustrySeparation   (QuantBotPlacement.cpp) no new Industrial zone within
+//                        kIndustrySeparationTiles of an own R/C lot.
+// Searches run once a period per house, on the next idle yard pass after the period has passed.
+// Each order is followed (updateRedevelopmentOrders): placed at its site or lost, and the land
+// value of the lots it was for read 30 s after it stands (SCENARIO_SWITCH_ACTIVITY). That list
+// and the search timers are not saved: after a load the next search is simply due at once.
 
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
 #include <players/ParkDistrictPolicy.h>
+#include <players/CityPlacementPolicy.h>
+#include <players/RedevelopmentPolicy.h>
 
 using QuantBotInternal::cityRoadImpact;
 using QuantBotInternal::wouldLandlockNeighbouringZone;
 
 namespace {
-bool inWindow(Uint32 cycle, int periodMs, int windowMs) {
-    return cycle % MILLI2CYCLES(periodMs) < MILLI2CYCLES(windowMs);
-}
-
 bool ownLot(const StructureBase* s, const House* house) {
     return s->getOwner() == house && s->getHealth() > 0
         && (s->getItemID() == Structure_ZoneResidential || s->getItemID() == Structure_ZoneCommercial);
@@ -280,7 +282,13 @@ bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, i
         if (h > harm) { harm = h; zoneID = s->getObjectID(); emission = e; }
     }
     if (zoneID == NONE_ID || harm < RedevelopmentPolicy::kRelocateMinHarm) return false;
+    // The new site keeps clear of our homes whatever IndustrySeparation says: a relocation that
+    // moved the polluter next to other lots would be no relocation.
+    placementCache.erase(Structure_ZoneIndustrial);
+    industrySeparationSearch = true;
     site = findPlaceLocation(Structure_ZoneIndustrial);
+    industrySeparationSearch = false;
+    placementCache.erase(Structure_ZoneIndustrial);
     if (!site.isValid()) return false;
     newHarm = harmAt(site, getStructureSize(Structure_ZoneIndustrial), emission, Coord::Invalid());
     return RedevelopmentPolicy::relocationPays(harm, newHarm);
@@ -290,16 +298,17 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
     const auto& force = botConfig().force;
     const Uint32 cycle = getGameCycleCount();
     namespace R = RedevelopmentPolicy;
-    const bool relocateWindow = force.pollutionRelocation && inWindow(cycle, R::kRelocatePeriodMs, R::kRelocateWindowMs);
-    const bool parkWindow = (force.roadLaneParks || force.lotParks) && inWindow(cycle, R::kParkSearchPeriodMs, R::kParkSearchWindowMs);
-    if (!relocateWindow && !parkWindow) return;
+    // A search is due once its period has passed and runs on the next idle yard pass (a fixed
+    // window used to miss the idle yard: PollutionRelocation fired once in 30 minutes).
+    const bool relocateDue = force.pollutionRelocation && cycle >= nextRelocationSearch;
+    const bool parkDue = (force.roadLaneParks || force.lotParks) && cycle >= nextParkSearch;
+    if (!relocateDue && !parkDue) return;
     // Not gated on pass.defendingEconomy: in a long war some enemy is always firing at some
     // building of ours (low.dls: 85% of windows), while redevelopment happens inside the city and
     // every site finder refuses a site under danger (dangerAt).
     if (!pass.citySimEnabled || gameMode != GameMode::Custom || pass.redevelopmentSearched
         || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
         || pass.airEngaged || pass.groundThreatAsset.isValid()) {
-        // Why a window passed without a search (only inside the windows, so a few records a period).
         if (!pass.redevelopmentSearched)
             traceDecision("redevelopment_gate", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
                 .set("item", yardTurn.itemID).set("rule", yardTurn.structureRule ? yardTurn.structureRule : "")
@@ -309,42 +318,40 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
         return;
     }
 
-    // PollutionRelocation: at most one Industrial zone a period, ordered at its new site and
-    // demolished at its old one in the same turn (as the yard's other redevelopment does).
-    if (relocateWindow && !pass.orderedThisTick.count(Structure_ZoneIndustrial)
+    // PollutionRelocation: one Industrial zone at a time, ordered at a site clear of our homes;
+    // the old zone is demolished only once the new one stands (updateRedevelopmentOrders), so an
+    // order that is cancelled, released for funds or placed elsewhere costs nothing.
+    const bool relocationPending = std::any_of(redevelopmentOrders.begin(), redevelopmentOrders.end(),
+        [](const RedevelopmentOrder& o) { return o.kind == R::Relocation && o.placedCycle == 0; });
+    if (relocateDue && !relocationPending && !pass.orderedThisTick.count(Structure_ZoneIndustrial)
         && campaignAvailableToBuild(turn.pBuilder, Structure_ZoneIndustrial)) {
         pass.redevelopmentSearched = true;
-        const auto& state = currentGame->getCitySimulation()->getHouseState(getHouse()->getHouseID());
+        nextRelocationSearch = cycle + MILLI2CYCLES(R::kRelocatePeriodMs);
         const int price = purchasePrice(turn.pBuilder, Structure_ZoneIndustrial);
         Uint32 zoneID = NONE_ID;
         Coord site = Coord::Invalid();
         int harm = 0, newHarm = 0;
-        const bool found = state.indValve >= 0 && pass.money >= 2 * price
-            && findPollutionRelocation(zoneID, site, harm, newHarm);
-        traceDecision("pollution_relocation_search", AITelemetry::Record().set("valve", state.indValve)
-            .set("money", pass.money).set("price", price).set("zone", zoneID).set("harm", harm)
-            .set("new_harm", newHarm).set("site_valid", site.isValid()).set("found", found));
-        if (found) {
-            auto* zone = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(zoneID));
-            if (zone && zone->getOwner() == getHouse()) {
-                const Coord old = zone->getLocation();
-                traceDecision("pollution_relocation", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
-                    .set("zone", zoneID).set("from_x", old.x).set("from_y", old.y).set("x", site.x).set("y", site.y)
-                    .set("harm", harm).set("new_harm", newHarm).set("density", getMap().getTile(old.x, old.y)->getCityZoneDensity())
-                    .set("money", pass.money));
-                pass.itemCount[Structure_ZoneIndustrial]--;
-                zone->demolish();
-                placementCache.erase(Structure_ZoneIndustrial);
-                yardTurn.itemID = Structure_ZoneIndustrial;
-                yardTurn.crimeServiceSite = site;
-                yardTurn.structureRule = "pollution_relocation";
-                yardTurn.skipRemainingStructureLogic = true;
-                return;
-            }
+        const bool found = pass.money >= price && findPollutionRelocation(zoneID, site, harm, newHarm);
+        traceDecision("pollution_relocation_search", AITelemetry::Record().set("money", pass.money)
+            .set("price", price).set("zone", zoneID).set("harm", harm).set("new_harm", newHarm)
+            .set("site_valid", site.isValid()).set("found", found));
+        const auto* zone = found ? dynamic_cast<const ZoneStructure*>(currentGame->getObjectManager().getObject(zoneID)) : nullptr;
+        if (zone && zone->getOwner() == getHouse()) {
+            const Coord old = zone->getLocation();
+            traceDecision("pollution_relocation", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
+                .set("zone", zoneID).set("from_x", old.x).set("from_y", old.y).set("x", site.x).set("y", site.y)
+                .set("harm", harm).set("new_harm", newHarm).set("density", getMap().getTile(old.x, old.y)->getCityZoneDensity())
+                .set("money", pass.money));
+            noteRedevelopmentOrder(R::Relocation, Structure_ZoneIndustrial, site, zoneID, old);
+            yardTurn.itemID = Structure_ZoneIndustrial;
+            yardTurn.crimeServiceSite = site;
+            yardTurn.structureRule = "pollution_relocation";
+            yardTurn.skipRemainingStructureLogic = true;
+            return;
         }
     }
 
-    if (!parkWindow) return;
+    if (!parkDue) return;
     if (pass.orderedThisTick.count(Structure_Park)
         || !campaignAvailableToBuild(turn.pBuilder, Structure_Park)) return;
     // One park at a time: the next is chosen against the terrain the last one added.
@@ -352,34 +359,131 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
     const int price = currentGame->objectData.data[Structure_Park][getHouse()->getHouseID()].price;
     if (pass.money < price) return;
     pass.redevelopmentSearched = true;
+    nextParkSearch = cycle + MILLI2CYCLES(R::kParkSearchPeriodMs);
     int gain = 0;
     Coord site = Coord::Invalid();
     const char* rule = nullptr;
+    int kind = R::LanePark;
     if (force.lotParks) {
         bool cleared = false;
         site = findLotParkSite(&gain, &cleared);
-        if (site.isValid()) rule = cleared ? "lot_park_clear" : "lot_park_fill";
+        if (site.isValid()) { rule = cleared ? "lot_park_clear" : "lot_park_fill"; kind = cleared ? R::LotClear : R::LotFill; }
     }
     if (!site.isValid() && force.roadLaneParks) {
         site = findLaneParkSite(&gain);
-        if (site.isValid()) rule = "lane_park";
+        if (site.isValid()) { rule = "lane_park"; kind = R::LanePark; }
     }
     if (!site.isValid()) return;
-    if (rule == std::string_view("lot_park_clear")) {
-        // The lot goes now, its first Park takes the origin tile and the fill step plants the rest.
-        auto* zone = dynamic_cast<ZoneStructure*>(getMap().getTile(site.x, site.y)->getNonInfantryGroundObject());
-        if (!zone || zone->getOwner() != getHouse() || zone->getLocation() != site) return;
-        traceDecision("lot_park_cleared", AITelemetry::Record().set("zone", zone->getObjectID())
-            .set("item", zone->getItemID()).set("x", site.x).set("y", site.y)
-            .set("land_value", currentGame->getCitySimulation()->getLandValueMap().worldGet(site.x, site.y))
-            .set("density", getMap().getTile(site.x, site.y)->getCityZoneDensity()).set("gain", gain));
-        pass.itemCount[zone->getItemID()]--;
-        zone->demolish();
-    }
+    // A cleared lot is demolished by the yard's redevelopment route once the order is accepted
+    // (redevelopmentZones, lotPark), as a Palace's lots are.
+    noteRedevelopmentOrder(kind, Structure_Park, site, NONE_ID, site);
     yardTurn.itemID = Structure_Park;
     yardTurn.crimeServiceSite = site;
     yardTurn.structureRule = rule;
     yardTurn.skipRemainingStructureLogic = true;
     traceDecision("redevelopment_park", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
         .set("rule", rule).set("x", site.x).set("y", site.y).set("gain", gain).set("money", pass.money));
+}
+
+/// Own R/C lots within \a reach (Chebyshev, origin to origin) of \a centre, with their land value now.
+std::vector<std::pair<Coord, int>> QuantBot::redevelopmentLots(Coord centre, int reach, Coord skip) const {
+    std::vector<std::pair<Coord, int>> lots;
+    const auto& landValue = currentGame->getCitySimulation()->getLandValueMap();
+    for (const auto* s : getStructureList()) {
+        if (!ownLot(s, getHouse())) continue;
+        const Coord o = s->getLocation();
+        if (o == skip || std::max(std::abs(o.x - centre.x), std::abs(o.y - centre.y)) > reach) continue;
+        lots.push_back({o, landValue.worldGet(o.x, o.y)});
+    }
+    return lots;
+}
+
+void QuantBot::noteRedevelopmentOrder(int kind, Uint32 item, Coord site, Uint32 oldZone, Coord effectCentre) {
+    namespace R = RedevelopmentPolicy;
+    RedevelopmentOrder order;
+    order.kind = kind;
+    order.item = item;
+    order.site = site;
+    order.oldZone = oldZone;
+    order.orderCycle = getGameCycleCount();
+    // The lots the change is for: around the new Park, or around the polluter being moved (its own
+    // footprint excluded; a cleared lot is excluded as it goes).
+    order.lots = redevelopmentLots(effectCentre, kind == R::Relocation ? R::kRelocationEffectReach : R::kParkEffectReach,
+                                   kind == R::LotClear ? site : Coord::Invalid());
+    redevelopmentOrders.push_back(std::move(order));
+    ++redevelopmentActivity.ordered[kind];
+}
+
+/// Once a second: an order whose building stands at its site counts as placed (a relocation then
+/// demolishes the old zone); one still missing after kOrderTimeoutMs counts as lost; kEffectDelayMs
+/// after placement the affected lots' mean land value is read against its value at the order.
+void QuantBot::updateRedevelopmentOrders() {
+    namespace R = RedevelopmentPolicy;
+    if (redevelopmentOrders.empty() || !currentGame->getCitySimulation()) return;
+    const Uint32 cycle = getGameCycleCount();
+    if (cycle % MILLI2CYCLES(1000) != 0) return;
+    const auto& landValue = currentGame->getCitySimulation()->getLandValueMap();
+    for (auto it = redevelopmentOrders.begin(); it != redevelopmentOrders.end();) {
+        auto& o = *it;
+        if (o.placedCycle == 0) {
+            const Tile* tile = getMap().tileExists(o.site.x, o.site.y) ? getMap().getTile(o.site.x, o.site.y) : nullptr;
+            const auto* object = tile ? tile->getNonInfantryGroundObject() : nullptr;
+            if (object && object->isAStructure() && Uint32(object->getItemID()) == o.item && object->getOwner() == getHouse()
+                && static_cast<const StructureBase*>(object)->getLocation() == o.site) {
+                o.placedCycle = cycle;
+                ++redevelopmentActivity.placed[o.kind];
+                if (o.kind == R::Relocation) {
+                    auto* old = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(o.oldZone));
+                    if (old && old->getOwner() == getHouse()) {
+                        traceDecision("pollution_relocation_done", AITelemetry::Record().set("zone", o.oldZone)
+                            .set("x", o.site.x).set("y", o.site.y));
+                        old->demolish();
+                    }
+                }
+            } else if (cycle - o.orderCycle > MILLI2CYCLES(R::kOrderTimeoutMs)) {
+                ++redevelopmentActivity.lost[o.kind];
+                traceDecision("redevelopment_lost", AITelemetry::Record().set("kind", R::kindName(o.kind))
+                    .set("x", o.site.x).set("y", o.site.y));
+                it = redevelopmentOrders.erase(it);
+                continue;
+            }
+        } else if (cycle - o.placedCycle >= MILLI2CYCLES(R::kEffectDelayMs)) {
+            // The lots still standing, before and after.
+            long before = 0, after = 0;
+            int n = 0;
+            for (const auto& [lot, value] : o.lots) {
+                const auto* object = getMap().getTile(lot.x, lot.y)->getNonInfantryGroundObject();
+                if (!object || !object->isAStructure() || object->getOwner() != getHouse()
+                    || !ownLot(static_cast<const StructureBase*>(object), getHouse())) continue;
+                before += value;
+                after += landValue.worldGet(lot.x, lot.y);
+                ++n;
+            }
+            if (n > 0) {
+                ++redevelopmentActivity.checked[o.kind];
+                redevelopmentActivity.before10[o.kind] += before * 10 / n;
+                redevelopmentActivity.after10[o.kind] += after * 10 / n;
+                if (after > before) ++redevelopmentActivity.raised[o.kind];
+            }
+            traceDecision("redevelopment_effect", AITelemetry::Record().set("kind", R::kindName(o.kind))
+                .set("x", o.site.x).set("y", o.site.y).set("lots", n).set("before", before).set("after", after));
+            it = redevelopmentOrders.erase(it);
+            continue;
+        }
+        ++it;
+    }
+}
+
+/// Every own Industrial zone placed: whether it landed within kIndustrySeparationTiles of an own R/C lot.
+void QuantBot::noteIndustryPlaced(Coord site) {
+    const Coord size = getStructureSize(Structure_ZoneIndustrial);
+    int nearest = 1000000;
+    for (const auto* s : getStructureList()) {
+        if (!ownLot(s, getHouse())) continue;
+        const Coord o = s->getLocation(), lotSize = s->getStructureSize();
+        nearest = std::min(nearest, CityPlacementPolicy::footprintDistance(site.x, site.y, size.x, size.y,
+                                                                           o.x, o.y, lotSize.x, lotSize.y));
+    }
+    ++redevelopmentActivity.industryPlaced;
+    if (RedevelopmentPolicy::industryTooCloseToHomes(nearest)) ++redevelopmentActivity.industryNearHomes;
 }

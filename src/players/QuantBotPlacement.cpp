@@ -813,6 +813,8 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool newSensitive = newRole == DuneCity::CityRole::Residential || newRole == DuneCity::CityRole::Commercial;
     const bool newPolluter = DuneCity::getPollutionEmission(itemID, DuneCity::getStructureMaxLevel(itemID)) > 0;
     const bool needCityDistances = citySim && (newSensitive || newPolluter);
+    const bool separateIndustry = citySim && itemID == Structure_ZoneIndustrial
+        && (botConfig().force.industrySeparation || industrySeparationSearch);
     bool cityDistancesReady=false;
     auto& nearestResidential=placementDistances.nearestResidential;
     auto& nearestCommercial=placementDistances.nearestCommercial;
@@ -1606,6 +1608,12 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 if (needCityDistances) {
                     prepareCityDistances();
                     const int separation=pollutionSeparation.footprint(placeLocationX,placeLocationY,newSizeX,newSizeY);
+                    // IndustrySeparation (default off) and every PollutionRelocation site: no new
+                    // Industrial zone within the pollution stamp's reach of an own R/C lot.
+                    if (separateIndustry && RedevelopmentPolicy::industryTooCloseToHomes(separation)) {
+                        ++pollutionRejected;
+                        continue;
+                    }
                     const int nearestR=nearestResidential.get(placeLocationX,placeLocationY);
                     const int nearestC=nearestCommercial.get(placeLocationX,placeLocationY);
                     const int nearestI=nearestIndustrial.get(placeLocationX,placeLocationY);

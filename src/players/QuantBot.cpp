@@ -821,6 +821,8 @@ void QuantBot::update() {
     // Zone Garrisons (ZoneGarrison switch): soldiers into threatened own zones, out when quiet,
     // and into empty enemy zones they pass (QuantBotGarrison.cpp).
     updateZoneGarrisons();
+    // Redevelopment orders: placed at their site or lost, then their effect on the lots read.
+    updateRedevelopmentOrders();
     // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
     if (!fighterOnly()) keepPlannedSitesClear();
 

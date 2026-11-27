@@ -3666,7 +3666,12 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         }
         // A Park needs no foundation, but the site its rule chose (a spare lane, a cleared lot,
         // a district block) is the point of the order: keep it rather than re-searching at placement.
-        if (!foundations.empty() || (yardTurn.itemID == Structure_Park && yardTurn.crimeServiceSite.isValid()))
+        // So is a relocated Industrial zone's site, clear of our homes.
+        const bool keepsChosenSite = yardTurn.crimeServiceSite.isValid()
+            && (yardTurn.itemID == Structure_Park
+                || (yardTurn.itemID == Structure_ZoneIndustrial && yardTurn.structureRule
+                    && std::string_view(yardTurn.structureRule) == "pollution_relocation"));
+        if (!foundations.empty() || keepsChosenSite)
             yardTurn.placeLocations->push_back(selectedPlaceLocation);
 
         if (produceItemWithLogging(pass, turn, yardTurn.itemID, __LINE__, yardTurn.structureRule)) {
@@ -4199,6 +4204,7 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
             if (!placed && itemToBePlaced == Structure_Road) yardTurn.placeLocations->push_front(location);
             traceDecision("placement_result", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y).set("success", placed));
+            if (placed && itemToBePlaced == Structure_ZoneIndustrial) noteIndustryPlaced(location);
             if (placed && itemToBePlaced != Structure_Slab1 && itemToBePlaced != Structure_Slab4
                 && itemToBePlaced != Structure_Road) {
                 // How close the base grows to the enemy's (protocol 141): clear tiles between the new

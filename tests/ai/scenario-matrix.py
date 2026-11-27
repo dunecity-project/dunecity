@@ -89,7 +89,7 @@ GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect'
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
                 'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills', 'credits', 'population',
-                'land_value')
+                'land_value', 'switch_activity')
 SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', 'team', 'alive', 'credits',
                  'army_value', 'army_units', 'harvesters', 'structures', 'factories', 'kill_value', 'loss_value',
                  'power', 'need', 'population', 'tax', 'demand', 'built', 'structures_lost', 'base_hp', 'yards',
@@ -811,6 +811,12 @@ def play(args, scratch, binary, game):
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
     result = next((parse(l, 'SCENARIO_RESULT:') for l in lines if 'SCENARIO_RESULT:' in l), {})
     houses = [parse(l, 'SCENARIO_HOUSE:') for l in lines if 'SCENARIO_HOUSE:' in l]
+    # Per-house redevelopment switch counters (QuantBotRedevelop.cpp), kept as 'key=value;...'.
+    activity = {}
+    for l in lines:
+        if 'SCENARIO_SWITCH_ACTIVITY:' in l:
+            fields = parse(l, 'SCENARIO_SWITCH_ACTIVITY:')
+            activity[fields.pop('house', '')] = ';'.join(f'{k}={v}' for k, v in fields.items())
     digest = next((parse(l, 'PROBE_DIGEST:').get('digest', '') for l in lines if 'PROBE_DIGEST:' in l and 'final=1' in l), '')
     endgame_audit = {row['house']: row for line in lines if 'CAMPAIGN_ENDGAME_AUDIT:' in line
                      for row in [parse(line, 'CAMPAIGN_ENDGAME_AUDIT:')]}
@@ -898,7 +904,8 @@ def play(args, scratch, binary, game):
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
                            'drawn': int(p.drawn) if p else '', 'start': h.get('start', ''),
                            'crush_kills': h.get('crush_kills', ''), 'credits': h.get('credits', ''),
-                           'population': h.get('population', ''), 'land_value': h.get('land_value', '')})
+                           'population': h.get('population', ''), 'land_value': h.get('land_value', ''),
+                           'switch_activity': activity.get(h['house'], '')})
     samples = {}
     for line in lines:
         for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_LANDMARKS:'):

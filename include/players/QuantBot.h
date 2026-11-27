@@ -46,6 +46,7 @@ class Harvester;
 #include <players/AIDecisionLog.h>
 #include <dunecity/SpatialFields.h>
 #include <dunecity/ParkTerrainPolicy.h>
+#include <players/RedevelopmentPolicy.h>
 
 #include <DataTypes.h>
 #include <algorithm>
@@ -2181,6 +2182,28 @@ private:
     /// City redevelopment for land value (default off; QuantBotRedevelop.cpp, RedevelopmentPolicy.h):
     /// RoadLaneParks, LotParks and PollutionRelocation, each its own [Force Concentration] switch.
     void chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);
+    /// A redevelopment order followed from choice to placement to its effect on the lots it is for.
+    struct RedevelopmentOrder {
+        int kind = 0;
+        Uint32 item = NONE_ID;
+        Coord site = Coord::Invalid();
+        Uint32 oldZone = NONE_ID;                    ///< PollutionRelocation: the zone to demolish once placed.
+        Uint32 orderCycle = 0, placedCycle = 0;
+        std::vector<std::pair<Coord, int>> lots;     ///< Affected own R/C lots and their land value at the order.
+    };
+    std::vector<RedevelopmentOrder> redevelopmentOrders;  ///< Not saved (see QuantBotRedevelop.cpp).
+    RedevelopmentPolicy::Activity redevelopmentActivity;
+    Uint32 nextRelocationSearch = 0, nextParkSearch = 0;
+    /// Set around PollutionRelocation's site search: Industrial siting then keeps clear of our homes.
+    bool industrySeparationSearch = false;
+    void noteRedevelopmentOrder(int kind, Uint32 item, Coord site, Uint32 oldZone, Coord effectCentre);
+    void updateRedevelopmentOrders();
+    void noteIndustryPlaced(Coord site);
+    std::vector<std::pair<Coord, int>> redevelopmentLots(Coord centre, int reach, Coord skip) const;
+public:
+    /// What the redevelopment switches did this game (SCENARIO_SWITCH_ACTIVITY, the probe).
+    const RedevelopmentPolicy::Activity& getRedevelopmentActivity() const { return redevelopmentActivity; }
+private:
     Coord findLaneParkSite(int* gain = nullptr);
     Coord findLotParkSite(int* gain = nullptr, bool* lotCleared = nullptr);
     bool findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, int& newHarm);

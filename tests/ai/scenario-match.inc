@@ -377,6 +377,13 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
                 house->getKillValue(), house->getLossValue(), house->getNumDestroyedStructures(),
                 house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes,
                 track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()), population, landValue);
+        // What the house's QuantBot redevelopment switches did (houses.csv switch_activity).
+        for (const auto& player : house->getPlayerList())
+            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                SDL_Log("SCENARIO_SWITCH_ACTIVITY: house=%d %s", house->getHouseID(),
+                        bot->getRedevelopmentActivity().format().c_str());
+                break;
+            }
     }
     std::string outcome;
     int winnerTeam = winner;
