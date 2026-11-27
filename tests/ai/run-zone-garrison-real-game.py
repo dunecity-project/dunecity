@@ -139,7 +139,7 @@ for r in rows:
     if r['event'] in ('order', 'entered', 'died_on_way', 'refused_at_zone', 'refused_at_order', 'order_ended') and r.get('unit'):
         events[(r['seed'], r['unit'])].append((int(r['cycle'] or 0), r['event'], r.get('why', '')))
 for key, seq in events.items():
-    seq.sort()
+    seq.sort(key=lambda item: item[0])   # by cycle, keeping log order within a cycle (an order and its entry share one)
     for i, (cycle, event, why) in enumerate(seq):
         if event != 'order':
             continue
