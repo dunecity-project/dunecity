@@ -1226,6 +1226,14 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-turret-front-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/turret-front-probe)
         set_tests_properties(turret_front_probe PROPERTIES TIMEOUT 2400 PROCESSORS 2)
+        # Stefan's turret drill demonstration as the acceptance test (CLAUDE.md "Asked-for behaviour",
+        # rule 3): his save tests/saves/data/seewhatidid-dunecity.dls.gz played on 23 minutes with
+        # TurretDrill on and off; the drill must reach half his footprint by minute 95 (new turrets, mass,
+        # stand-off, damage, Ordos structures lost) and beat the control. tests/ai/turret-drill-save.py.
+        dunecity_add_test(headless nightly NAME turret_drill_save COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/turret-drill-save.py
+            --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/turret-drill-save)
+        set_tests_properties(turret_drill_save PROPERTIES TIMEOUT 2700 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)
