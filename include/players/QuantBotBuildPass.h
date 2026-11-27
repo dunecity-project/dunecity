@@ -319,6 +319,7 @@ struct QuantBot::BuildPass {
     int economyProjectReserve{};
     /// EconomyFirst (default off): cash unit producers leave for the yards this pass.
     int economyFirstHold{};
+    bool economyFirstActive{};       ///< EconomyFirst acts this pass (the Starport is held even under threat)
     int economyFirstMcvsOrdered{};   ///< MCVs EconomyFirst ordered this pass (the yard target counts them)
     Coord economyProjectSite = Coord::Invalid();
     bool economyProjectOrdered{};

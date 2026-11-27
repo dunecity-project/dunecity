@@ -16,6 +16,7 @@
 //                    value stamps add up - and it is saved for, not bought from spare cash only.
 
 #include <players/UnitMixPolicy.h>
+#include <data.h>
 
 #include <algorithm>
 
@@ -94,7 +95,12 @@ inline int economyFirstYards(int minute) { return minute < 15 ? 4 : minute < 20 
 /// While the switch is on and no enemy ground unit is near our buildings, unit producers leave this
 /// much cash for the yards (his balance at minute 31 was 22,848 against the AIs' 0-820).
 constexpr int kEconomyFirstHold = 10000;
-/// An enemy ground unit this close to one of our buildings releases the hold (the base is defended).
+/// An enemy ground unit this close to one of these releases the hold for the factories (the base is defended).
+inline bool economyFirstCoreAsset(int item) {
+    return item == Structure_ConstructionYard || item == Structure_HeavyFactory || item == Structure_HighTechFactory
+        || item == Structure_LightFactory || item == Structure_Barracks || item == Structure_WOR
+        || item == Structure_StarPort || item == Structure_NuclearPlant || item == Structure_Palace;
+}
 constexpr int kEconomyFirstThreatTiles = 12;
 /// The switch stands down once the house's city has his minute-31 population.
 constexpr int kEconomyFirstPopulation = 6734;

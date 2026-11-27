@@ -65,6 +65,7 @@ bool QuantBot::economyLogEnabled() const {
 void QuantBot::planEconomyFirst(BuildPass& pass) {
     namespace L = CityLessonsPolicy;
     pass.economyFirstHold = 0;
+    pass.economyFirstActive = false;
     auto& lessons = cityLessons;
     const auto* sim = currentGame->getCitySimulation();
     const int houseID = getHouse()->getHouseID();
@@ -106,11 +107,15 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
             const int before = pass.cityYardTarget;
             pass.cityYardTarget = std::max(pass.cityYardTarget, L::economyFirstYards(minute));
             if (pass.yardLimit > 0) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.yardLimit);
-            // An enemy ground unit near one of our buildings releases the hold: the base is defended.
+            // An enemy ground unit near a yard, factory, Starport, Nuclear Plant or Palace releases the hold for
+            // the factories: the base is defended. (Near any building, the first smoke runs released it in half
+            // the passes: a 92-zone city always has an enemy near some lot.)
+            pass.economyFirstActive = true;
             bool threat = false;
             for (const auto& contact : visibleGroundTurretThreats) {
                 for (const auto* structure : getStructureList()) {
-                    if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+                    if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+                        || !L::economyFirstCoreAsset(structure->getItemID())) continue;
                     if (blockDistance(contact.at, structure->getClosestPoint(contact.at)) <= L::kEconomyFirstThreatTiles) {
                         threat = true;
                         break;
@@ -134,7 +139,7 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
 
 bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
     const Uint32 producer = turn.pBuilder->getItemID();
-    if (pass.economyFirstHold <= 0 || (producer != Structure_HeavyFactory && producer != Structure_StarPort)) return false;
+    if (!pass.economyFirstActive || (producer != Structure_HeavyFactory && producer != Structure_StarPort)) return false;
     // The Starport buys nothing while the hold is on: its bargains ignored the hold (smoke run 3 at 251bb9ba8,
     // 14,900 -> 8,800 credits in one pass). Stefan's Starport bought him an MCV.
     if (producer == Structure_StarPort) return true;
