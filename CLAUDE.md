@@ -137,6 +137,96 @@ If those fail because the local build tree is stale or target names differ, insp
 
 The main trap: solving a 3x3 art/rendering problem by accidentally changing the 2x2 gameplay architecture. Don’t step on the rake. It has teeth.
 
+## Player features: real assertion tests through the player's own path
+
+Stefan, 2026-11-27, after trying Zone Garrisons, Hospital Care and capture in a game: "nothing to do with
+infantry actually works. you need to make sure you include REAL assert tests to make sure the things you add
+actually work. please ensure this is written into your guidelines".
+
+A gameplay feature is not done, and must not be reported as working, until all of these hold:
+
+1. **An assertion test that drives the player's own path.** Select the units, press the actual command button
+   or hotkey (the sidebar/unit-panel widget, not a hand-built `Command` or a direct method call), click the
+   map target through the same click handler a mouse click uses (`Game::handleSelectedObjects*Click`, cursor
+   mode, `CursorManager`), run real game cycles, and `assert` the observable result: owner changed, unit inside
+   the zone, health went up, the unit did *not* go to a Repair Yard, the button is visible and enabled. A probe
+   that calls the internal function the button would call proves the function, not the feature.
+2. **Every user-visible part has its own assert:** the button or hotkey exists in the state the player is in
+   (city game, the unit type selected, the rule on), its tooltip, the cursor accepting the target, the command
+   reaching the unit, the result, and the undo/exit path (Evacuate, cancel). Include the negative cases the
+   player will try (own building, enemy building, full, no Hospital).
+3. **Asserts fail the test.** A probe that prints counts or writes a CSV is evidence, not a test. The CTest
+   registration must exit non-zero when any assertion fails, and must run headless (dummy driver) on AWS so it is
+   in the integration or nightly tier, never as a GUI run on the Air.
+4. **Proven in the build the player will run.** Before telling Stefan to try something, check that the app he
+   is running contains the commit (`CFBundleShortVersionString`, the staging tag or `build.json` source SHA). If it
+   does not, say so first; never let him test a feature in a build that does not have it.
+5. **Report what was not exercised.** If a path could only be checked below the UI (for example a real mouse in a
+   window), say exactly which part was not proven; do not describe the feature as working.
+
+Existing features without such tests (Zone Garrisons, Hospital Care, Trooper anti-air, Saboteur Hunt, Carryall
+manual drop) get them before any further change to them is reported done.
+
+## AI behaviours: prove the switch actually does its job before its score counts
+
+Stefan, 2026-11-27: "i have a feeling the reason you think none of these things work is because you aren't
+actually doing that. you are thinking you are testing these ideas but not actually implementing them. of course
+the test for its usefulness will fail if you aren't actually doing it. you need much much more tests to prove you
+have actually implemented a feature and this needs to be baled into your guidelines and hindsight".
+
+He was right: on 2026-11-27 several switches were reported "level, stays off" although they barely ran
+(TurretCreep "never fired" on rs192, AdvancingTurrets "never fired" on 3waysplit, PollutionRelocation moved one
+zone in 30 minutes, ZoneGarrison needed two orders per entry because other controllers pulled soldiers away).
+A score from a switch that did not run is not a measurement of the idea.
+
+Before any OFF/ON score is reported, and before a switch is left off "because it was level":
+
+1. **Activation asserts.** A test (CTest, headless, exits non-zero on failure) sets up the situation the behaviour
+   is for and asserts that with the switch ON it acts (the orders, builds, demolitions, captures, trips it is
+   meant to make, by count) and with it OFF it does not. One case per trigger condition, plus the cases where it
+   must not act.
+2. **Proximate-effect asserts.** The same test asserts the immediate thing the behaviour is supposed to achieve,
+   not just that it ran: land value of the affected lots rises after a redevelopment, the captured zone changes
+   owner, the turret actually stands at the front and fires, the soldier ends inside the zone, the patient's
+   health rises. An action that is cancelled, re-ordered by another controller or placed somewhere else fails.
+3. **Activation in the measured games.** Every OFF/ON report states, per arm and per map, how often the behaviour
+   fired per house-game and how often it reached its proximate effect, read from match log lines. An arm that
+   fired in fewer than half of its house-games, or whose actions mostly failed, is reported as **not tested**,
+   never as "level", and the trigger or the conflicting controller is fixed and the arm run again.
+4. **No silent override.** Check that no other controller (waves, defence pulls, formations, retreat, city build
+   passes skipped in combat) cancels or redirects the behaviour's orders; count redirections in the log.
+5. Only then does the default rule (95% interval of the paired score above 0) decide the default.
+
+## Asked-for behaviour: an acceptance list first, and the harness refuses untested verdicts
+
+Stefan, 2026-11-27, after building by hand (Palaces for land value, a Rocket Turret line, turrets massed into
+an enemy base) what the AI switches had been reported as trying: "i ask you to try things. you say you do and it
+doesn't work so then i do it and it does. that tells me you aren't actually trying the thing. you think you are
+but you are not. you need more assertions".
+
+What went wrong: the request ("turrets used offensively, a line that moves forward") was turned into cautious
+rules (12 turrets at most, 10 tiles off enemy buildings, only where one enemy turret reaches), the rules almost
+never triggered, and the level score was reported as the idea's result. Nothing checked the built behaviour
+against the words of the request.
+
+1. **Acceptance list before code.** Quote the request and write, for each thing asked, the observable fact that
+   would show it happening in a game, with a number: "at least N turrets standing inside the enemy base's
+   footprint within M minutes", "average land value of lots within 8 tiles of a new Palace rises by X". Put the
+   list in the HANDOVER entry. Caps, stand-off distances and trigger conditions that the request did not ask for
+   are listed as **deviations** with their reason; a deviation that stops the asked-for thing from happening is
+   not allowed.
+2. **One assert per acceptance line**, in a headless CTest that exits non-zero, run in a real game (bundled map or
+   Stefan's save), not a hand-built toy position only. The final report is a table: request line, test name,
+   measured value, pass or fail. A line without a passing test is reported as **not done**.
+3. **A human demonstration is the acceptance test.** When Stefan shows it working in a save, the AI with the
+   switch on is started from his earlier save (or the same map and position) and must reach the measured footprint
+   of what he did (how many, where, how fast, what the enemy lost) within a stated tolerance. Until it does, the
+   idea has not been tried, whatever the score says.
+4. **The harness enforces it.** A play-style label that turns on a switch declares its activation event in the
+   match log. `vanilla-match.py --report` (and `scenario-matrix.py`, `play-style-matrix.py`) print the fire and
+   success rate per arm and give the verdict **NOT TESTED** in place of level/better/worse when the behaviour
+   reached its effect in fewer than half of the arm's house-games. No hand-written summary may override it.
+
 ## AI changes: mandatory regression matches
 
 Every AI or unit-behaviour change (QuantBot, AI Player, units, combat, pathfinding, AI-facing
