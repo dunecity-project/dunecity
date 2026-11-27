@@ -40,6 +40,7 @@
 #include <players/ParkDistrictPolicy.h>
 #include <players/CityPlacementPolicy.h>
 #include <players/RedevelopmentPolicy.h>
+#include <chrono>
 
 using QuantBotInternal::cityRoadImpact;
 using QuantBotInternal::wouldLandlockNeighbouringZone;
@@ -49,6 +50,16 @@ bool ownLot(const StructureBase* s, const House* house) {
     return s->getOwner() == house && s->getHealth() > 0
         && (s->getItemID() == Structure_ZoneResidential || s->getItemID() == Structure_ZoneCommercial);
 }
+
+/// Adds the wall-clock time of a redevelopment search to the house's activity (the cost line).
+struct SearchClock {
+    long& total;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    explicit SearchClock(long& t) : total(t) {}
+    ~SearchClock() {
+        total += long(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
+    }
+};
 
 int centreDistance(Coord a, Coord sa, Coord b, Coord sb) {
     // Doubled centres keep 2x2 and odd footprints exact in integers.
@@ -124,6 +135,7 @@ bool QuantBot::redevelopmentSiteHeld(Uint32 item, Coord site) const {
 
 /// RoadLaneParks: the spare-lane road tile where a Park adds the most land value to our R/C lots.
 Coord QuantBot::findLaneParkSite(int* gainOut) {
+    SearchClock clock(redevelopmentActivity.searchMicros);
     if (gainOut) *gainOut = 0;
     AITelemetry::PerformanceScope perfScope("ai.findLaneParkSite", getGameCycleCount(), getHouse()->getHouseID());
     const Map& map = getMap();
@@ -211,6 +223,7 @@ Coord QuantBot::findLaneParkSite(int* gainOut) {
 /// not road, adding land value); else the cheapest own R/C lot whose parks would add the most
 /// land value to the house's other lots. \a lotCleared is set when the site is a standing lot.
 Coord QuantBot::findLotParkSite(int* gainOut, bool* lotCleared) {
+    SearchClock clock(redevelopmentActivity.searchMicros);
     if (gainOut) *gainOut = 0;
     if (lotCleared) *lotCleared = false;
     AITelemetry::PerformanceScope perfScope("ai.findLotParkSite", getGameCycleCount(), getHouse()->getHouseID());
@@ -279,6 +292,7 @@ Coord QuantBot::findLotParkSite(int* gainOut, bool* lotCleared) {
 /// PollutionRelocation: the own Industrial zone whose pollution costs our R/C lots the most, and
 /// where the house's own Industrial siting would put it instead.
 bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, int& newHarm) {
+    SearchClock clock(redevelopmentActivity.searchMicros);
     AITelemetry::PerformanceScope perfScope("ai.findPollutionRelocation", getGameCycleCount(), getHouse()->getHouseID());
     zoneID = NONE_ID; site = Coord::Invalid(); harm = newHarm = 0;
     const Map& map = getMap();
@@ -441,6 +455,8 @@ void QuantBot::noteRedevelopmentOrder(int kind, Uint32 item, Coord site, Uint32 
     // footprint excluded; a cleared lot is excluded as it goes).
     order.lots = redevelopmentLots(effectCentre, kind == R::Relocation ? R::kRelocationEffectReach : R::kParkEffectReach,
                                    kind == R::LotClear ? site : Coord::Invalid());
+    const auto& pollutionMap = currentGame->getCitySimulation()->getPollutionDensityMap();
+    for (const auto& lot : order.lots) order.pollution.push_back(pollutionMap.worldGet(lot.first.x, lot.first.y));
     redevelopmentOrders.push_back(std::move(order));
     ++redevelopmentActivity.ordered[kind];
     // Per-event match-log lines (tests/ai/activation-events.json counts them per play style).
@@ -470,7 +486,17 @@ void QuantBot::updateRedevelopmentOrders() {
                         R::kindName(o.kind), o.site.x, o.site.y, cycle);
                 if (o.kind == R::Relocation) {
                     auto* old = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(o.oldZone));
-                    if (old && old->getOwner() == getHouse()) {
+                    const bool demolish = old && old->getOwner() == getHouse();
+                    int homes = 1000000;
+                    for (const auto* s : getStructureList())
+                        if (ownLot(s, getHouse()))
+                            homes = std::min(homes, CityPlacementPolicy::footprintDistance(o.site.x, o.site.y, 2, 2,
+                                s->getLocation().x, s->getLocation().y, s->getStructureSize().x, s->getStructureSize().y));
+                    SDL_Log("REDEVELOP: house=%d event=moved kind=relocation x=%d y=%d from_x=%d from_y=%d home_distance=%d "
+                            "old_demolished=%d cycle=%u", getHouse()->getHouseID(), o.site.x, o.site.y,
+                            demolish ? old->getLocation().x : -1, demolish ? old->getLocation().y : -1,
+                            homes == 1000000 ? -1 : homes, int(demolish), cycle);
+                    if (demolish) {
                         traceDecision("pollution_relocation_done", AITelemetry::Record().set("zone", o.oldZone)
                             .set("x", o.site.x).set("y", o.site.y));
                         old->demolish();
@@ -487,14 +513,18 @@ void QuantBot::updateRedevelopmentOrders() {
             }
         } else if (cycle - o.placedCycle >= MILLI2CYCLES(R::kEffectDelayMs)) {
             // The lots still standing, before and after.
-            long before = 0, after = 0;
+            long before = 0, after = 0, pollutionBefore = 0, pollutionAfter = 0;
             int n = 0;
-            for (const auto& [lot, value] : o.lots) {
+            const auto& pollutionMap = currentGame->getCitySimulation()->getPollutionDensityMap();
+            for (size_t i = 0; i < o.lots.size(); ++i) {
+                const auto& [lot, value] = o.lots[i];
                 const auto* object = getMap().getTile(lot.x, lot.y)->getNonInfantryGroundObject();
                 if (!object || !object->isAStructure() || object->getOwner() != getHouse()
                     || !ownLot(static_cast<const StructureBase*>(object), getHouse())) continue;
                 before += value;
                 after += landValue.worldGet(lot.x, lot.y);
+                pollutionBefore += i < o.pollution.size() ? o.pollution[i] : 0;
+                pollutionAfter += pollutionMap.worldGet(lot.x, lot.y);
                 ++n;
             }
             if (n > 0) {
@@ -502,9 +532,14 @@ void QuantBot::updateRedevelopmentOrders() {
                 redevelopmentActivity.before10[o.kind] += before * 10 / n;
                 redevelopmentActivity.after10[o.kind] += after * 10 / n;
                 if (after > before) ++redevelopmentActivity.raised[o.kind];
+                redevelopmentActivity.pollutionBefore10[o.kind] += pollutionBefore * 10 / n;
+                redevelopmentActivity.pollutionAfter10[o.kind] += pollutionAfter * 10 / n;
+                if (pollutionAfter < pollutionBefore) ++redevelopmentActivity.cleaner[o.kind];
             }
-            SDL_Log("REDEVELOP: house=%d event=effect kind=%s raised=%d lots=%d before=%ld after=%ld cycle=%u",
-                    getHouse()->getHouseID(), R::kindName(o.kind), int(n > 0 && after > before), n, before, after, cycle);
+            SDL_Log("REDEVELOP: house=%d event=effect kind=%s raised=%d cleaner=%d lots=%d before=%ld after=%ld "
+                    "pollution_before=%ld pollution_after=%ld cycle=%u", getHouse()->getHouseID(), R::kindName(o.kind),
+                    int(n > 0 && after > before), int(n > 0 && pollutionAfter < pollutionBefore), n, before, after,
+                    pollutionBefore, pollutionAfter, cycle);
             traceDecision("redevelopment_effect", AITelemetry::Record().set("kind", R::kindName(o.kind))
                 .set("x", o.site.x).set("y", o.site.y).set("lots", n).set("before", before).set("after", after));
             it = redevelopmentOrders.erase(it);

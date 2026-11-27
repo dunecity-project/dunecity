@@ -2203,6 +2203,7 @@ private:
         Uint32 oldZone = NONE_ID;                    ///< PollutionRelocation: the zone to demolish once placed.
         Uint32 orderCycle = 0, placedCycle = 0;
         std::vector<std::pair<Coord, int>> lots;     ///< Affected own R/C lots and their land value at the order.
+        std::vector<int> pollution;                  ///< Their pollution at the order.
     };
     std::vector<RedevelopmentOrder> redevelopmentOrders;  ///< Not saved (see QuantBotRedevelop.cpp).
     RedevelopmentPolicy::Activity redevelopmentActivity;

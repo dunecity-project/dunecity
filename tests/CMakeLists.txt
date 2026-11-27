@@ -1061,6 +1061,15 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-lessons-probe)
         set_tests_properties(quantbot_city_lessons PROPERTIES TIMEOUT 1500 PROCESSORS 2)
+        # Stefan's redevelopment request on his own save (tests/saves/data/low-dunecity.dls.gz, "see mba
+        # save low"): five arms continue it 20 minutes and one assert per line of the request is checked
+        # (Industrial zones moved and demolished, Parks built and lifting land value, Parks as roads with
+        # no unit speed, fewer second-lane roads, paths out of the base kept, search cost). Prints the
+        # acceptance table; docs/formations.md "Redevelopment for land value".
+        dunecity_add_test(headless nightly NAME quantbot_redevelop_low_save COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/land-value-continuation.py --ctest
+            --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/redevelop-low-save)
+        set_tests_properties(quantbot_redevelop_low_save PROPERTIES TIMEOUT 2400 PROCESSORS 5)
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): Stefan's
         # "All against Atreides" setup played to the end - vanilla, Atreides QuantBot Brutal
         # (local spectator) against four AI Player (hard) houses, his Game Options (unit and

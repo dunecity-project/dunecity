@@ -64,6 +64,11 @@ struct Activity {
     int ordered[KindCount]{}, placed[KindCount]{}, lost[KindCount]{}, checked[KindCount]{}, raised[KindCount]{};
     /// Land value summed over the effect reads: affected lots' mean before and after, times 10.
     long before10[KindCount]{}, after10[KindCount]{};
+    /// The same reads for pollution: summed means times 10, and reads where it fell.
+    long pollutionBefore10[KindCount]{}, pollutionAfter10[KindCount]{};
+    int cleaner[KindCount]{};
+    /// Wall-clock time spent in the redevelopment searches (not game state; the cost line).
+    long searchMicros = 0;
     /// Own Industrial zones placed, and those within kIndustrySeparationTiles of an own R/C lot.
     int industryPlaced = 0, industryNearHomes = 0;
     /// Own R/C lots placed, and those within kIndustrySeparationTiles of an own polluter.
@@ -78,11 +83,13 @@ struct Activity {
             out += n + "_ordered=" + std::to_string(ordered[k]) + " " + n + "_placed=" + std::to_string(placed[k])
                 + " " + n + "_lost=" + std::to_string(lost[k]) + " " + n + "_checked=" + std::to_string(checked[k])
                 + " " + n + "_raised=" + std::to_string(raised[k]) + " " + n + "_before10=" + std::to_string(before10[k])
-                + " " + n + "_after10=" + std::to_string(after10[k]) + " ";
+                + " " + n + "_after10=" + std::to_string(after10[k]) + " " + n + "_cleaner=" + std::to_string(cleaner[k])
+                + " " + n + "_pollution_before10=" + std::to_string(pollutionBefore10[k])
+                + " " + n + "_pollution_after10=" + std::to_string(pollutionAfter10[k]) + " ";
         }
         out += "industry_placed=" + std::to_string(industryPlaced) + " industry_near_homes="
             + std::to_string(industryNearHomes) + " homes_placed=" + std::to_string(homesPlaced)
-            + " homes_near_industry=" + std::to_string(homesNearIndustry);
+            + " homes_near_industry=" + std::to_string(homesNearIndustry) + " search_us=" + std::to_string(searchMicros);
         for (const auto& [reason, n] : reasons) out += " why_" + reason + "=" + std::to_string(n);
         return out;
     }

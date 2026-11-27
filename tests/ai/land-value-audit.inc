@@ -13,6 +13,8 @@
 #include <dunecity/CitySimulation.h>
 #include <structures/StructureBase.h>
 #include <players/QuantBot.h>
+#include <players/RedevelopmentPolicy.h>
+#include <string_view>
 #include <map>
 
 namespace LandValueAudit {
@@ -182,6 +184,71 @@ inline void report(Game& game, const char* phase) {
     }
 }
 
+/// Whether a ground unit can leave the yard for the map's edge: 4-connected over tiles with no
+/// structure and no mountain, from the tiles around its footprint (Stefan: "remove some roads as
+/// long as we maintain paths out of the base").
+inline bool yardHasPathOut(const StructureBase* yard) {
+    const int w = currentGameMap->getSizeX(), h = currentGameMap->getSizeY();
+    auto open = [&](int x, int y) {
+        const Tile* t = currentGameMap->getTile(x, y);
+        return !t->isMountain() && !t->hasAStructure();
+    };
+    std::vector<uint8_t> seen(size_t(w) * h, 0);
+    std::vector<int> stack;
+    const Coord o = yard->getLocation(), size = yard->getStructureSize();
+    for (int y = o.y - 1; y <= o.y + size.y; ++y)
+        for (int x = o.x - 1; x <= o.x + size.x; ++x)
+            if (currentGameMap->tileExists(x, y) && open(x, y) && !seen[size_t(y) * w + x]) {
+                seen[size_t(y) * w + x] = 1;
+                stack.push_back(y * w + x);
+            }
+    while (!stack.empty()) {
+        const int i = stack.back(), x = i % w, y = i / w;
+        stack.pop_back();
+        if (x == 0 || y == 0 || x == w - 1 || y == h - 1) return true;
+        const int next[4][2] = {{x + 1, y}, {x - 1, y}, {x, y + 1}, {x, y - 1}};
+        for (const auto& n : next) {
+            const size_t j = size_t(n[1]) * w + n[0];
+            if (seen[j] || !open(n[0], n[1])) continue;
+            seen[j] = 1;
+            stack.push_back(int(j));
+        }
+    }
+    return false;
+}
+
+/// The redevelopment acceptance readings (land-value-continuation.py --ctest): every own Construction
+/// Yard's path out; at the end every own Park as a road tile (a road connection, no unit road speed,
+/// its road side neighbours still joined without it) and each QuantBot's switch counters.
+inline void redevelopAudit(Game& game, const char* phase) {
+    for (int hid = 0; hid < NUM_HOUSES; ++hid) {
+        const House* house = game.getHouse(hid);
+        if (!house) continue;
+        for (const auto* s : structureList)
+            if (s->getOwner() == house && s->getItemID() == Structure_ConstructionYard && s->getHealth() > 0)
+                SDL_Log("YARD_PATH_AUDIT: phase=%s house=%d x=%d y=%d path_out=%d", phase, hid, s->getLocation().x,
+                        s->getLocation().y, int(yardHasPathOut(s)));
+        if (std::string_view(phase) != "end") continue;
+        for (const auto* s : structureList) {
+            if (s->getOwner() != house || s->getItemID() != Structure_Park) continue;
+            const Coord p = s->getLocation();
+            constexpr int r = RedevelopmentPolicy::kPassageWindow, side = 2 * r + 1;
+            bool road[side * side];
+            for (int dy = -r; dy <= r; ++dy) for (int dx = -r; dx <= r; ++dx)
+                road[(dy + r) * side + dx + r] = currentGameMap->tileExists(p.x + dx, p.y + dy)
+                    && currentGameMap->getTile(p.x + dx, p.y + dy)->isRoad();
+            const Tile* t = currentGameMap->getTile(p.x, p.y);
+            SDL_Log("PARK_AUDIT: house=%d x=%d y=%d road_connection=%d unit_road=%d roads_joined=%d", hid, p.x, p.y,
+                    int(t->isRoadConnection()), int(t->isRoad()), int(RedevelopmentPolicy::sidesStayConnected(road)));
+        }
+        for (const auto& player : house->getPlayerList())
+            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                SDL_Log("SCENARIO_SWITCH_ACTIVITY: house=%d %s", hid, bot->getRedevelopmentActivity().format().c_str());
+                break;
+            }
+    }
+}
+
 inline void run(Game& game, Uint32 end) {
     // A continuation of a save runs this many minutes past its own clock (land-value-continuation.py).
     if (const char* extra = std::getenv("BALANCE_LAND_VALUE_AUDIT_EXTRA"))
@@ -195,12 +262,14 @@ inline void run(Game& game, Uint32 end) {
     const char* every = std::getenv("BALANCE_LAND_VALUE_AUDIT_EVERY");
     const Uint32 step = MILLI2CYCLES(60000) * Uint32(std::max(1, every ? std::atoi(every) : 5));
     report(game, "loaded");
+    redevelopAudit(game, "loaded");
     Uint32 next = game.getGameCycleCount() + step;
     while (game.getGameCycleCount() < end && !game.finished) {
         game.updateGameState();
         if (game.getGameCycleCount() >= next) { report(game, "periodic"); next += step; }
     }
     report(game, "end");
+    redevelopAudit(game, "end");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: level=1 seed=%u attack_percent=100 partner=hard enemy=hard cycle=%u outcome=land_value_audit",
             game.getGameInitSettings().getRandomSeed(), game.getGameCycleCount());
 }
