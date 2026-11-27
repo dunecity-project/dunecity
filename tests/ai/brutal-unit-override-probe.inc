@@ -373,10 +373,48 @@ int runBrutalUnitOverrideProbe() {
     data[Unit_Harvester][houseID].enabled = savedWorker;
     data[Unit_Carryall][houseID].enabled = savedTransport;
     results.close();
-    SDL_Log("BRUTAL_UNIT_OVERRIDE_PROBE_PASS: %s (heavy=yes air=%s imports=%s builder_authority=yes"
-            " unlimited_item=%s)", mod.c_str(),
-            airExercised ? "asserted" : "not_in_catalogue",
-            importsExercised ? "asserted" : "not_in_catalogue", getItemNameByID(unlimited).c_str());
+    const std::string unlimitedName = getItemNameByID(unlimited);
+
+    // 9. A finished match leaves no local pair behind, and a second match starts in the same
+    //    process. pLocalHouse and pLocalPlayer pointed into the first match's house and player;
+    //    left set, the next match's map loader saw a non-null pLocalPlayer, and a new House at
+    //    the old address made UnitBase::deploy call the freed player. That crashed Stefan's
+    //    1.0.880 on starting a new Custom Game after an eleven-hour session (2026-11-28).
+    require(pLocalHouse == game->getHouse(HOUSE_ATREIDES) && pLocalPlayer != nullptr,
+            "The fixture's human is not the local player of the first match");
     game.reset(); currentGame = nullptr;
+    require(pLocalPlayer == nullptr, "A finished match left pLocalPlayer pointing at its freed player");
+    require(pLocalHouse == nullptr, "A finished match left pLocalHouse pointing at its freed house");
+    {
+        // The second match is watched, not played: no house has a human, so nothing sets the
+        // local pair while the map's units are placed.
+        auto second = std::make_unique<Game>();
+        currentGame = second.get();
+        GameInitSettings again("override.ini", mapData, "Second match in one session", true,
+                               settings.gameOptions);
+        again.randomSeed = 92;
+        again.setLocalSpectator(true);
+        GameInitSettings::HouseInfo first(HOUSE_ATREIDES, 1);
+        first.addPlayerInfo({"Brutal bot one", "qBotBrutal"});
+        again.addHouseInfo(first);
+        GameInitSettings::HouseInfo other(HOUSE_ORDOS, 2);
+        other.addPlayerInfo({"Brutal bot two", "qBotBrutal"});
+        again.addHouseInfo(other);
+        second->initGame(again);
+        require(second->getHouse(HOUSE_ATREIDES) && second->getHouse(HOUSE_ORDOS),
+                "The second match did not load both houses");
+        require(second->isObserving(), "The second match is not an observed match");
+        require(pLocalHouse == nullptr, "An observed match has a local house");
+        require(pLocalPlayer != nullptr && pLocalPlayer->getHouse() == nullptr,
+                "An observed match has no detached view player");
+        second.reset(); currentGame = nullptr;
+        require(pLocalPlayer == nullptr && pLocalHouse == nullptr,
+                "A finished observed match left its local pair set");
+    }
+
+    SDL_Log("BRUTAL_UNIT_OVERRIDE_PROBE_PASS: %s (heavy=yes air=%s imports=%s builder_authority=yes"
+            " unlimited_item=%s second_match=yes)", mod.c_str(),
+            airExercised ? "asserted" : "not_in_catalogue",
+            importsExercised ? "asserted" : "not_in_catalogue", unlimitedName.c_str());
     return -1;
 }

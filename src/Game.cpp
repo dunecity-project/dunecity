@@ -312,6 +312,10 @@ bool getTornieStructurePlacementPreview(int itemID, StructurePlacementPreview& p
 } // namespace
 
 Game::Game() {
+    // One match at a time: nothing from an earlier match may be the local pair of this one,
+    // also when that match never reached its destructor's reset (see ~Game).
+    pLocalPlayer = nullptr;
+    pLocalHouse = nullptr;
     localPlayerName = settings.general.playerName;
 
     // City-sim features are gated by the active mod. A savegame load may
@@ -741,7 +745,13 @@ Game::~Game() {
         spatialGrid.reset();
     }
 
-    if(spectatorViewPlayer) { pLocalPlayer=nullptr; spectatorViewPlayer.reset(); }
+    // The local pair points into this match's house and player, which are gone with it. Left
+    // set, the next match's map loader saw a non-null pLocalPlayer, and a new House allocated
+    // at the old pLocalHouse's address made UnitBase::deploy call the freed player: the crash
+    // on starting a second game in one session (1.0.880, 2026-11-28).
+    pLocalPlayer = nullptr;
+    pLocalHouse = nullptr;
+    spectatorViewPlayer.reset();
     delete currentGameMap;
     currentGameMap = nullptr;
     delete screenborder;
