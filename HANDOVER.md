@@ -1,3 +1,60 @@
+## 2026-11-27 - Zone Garrisons: Soldiers and Troopers occupy R/C/I zones with the capture order (protocol 144, save 9900)
+
+Stefan, 2026-11-27: "i want infantry and troopers to be able to occupy friendly and enemy R/I/C - using the
+capture command. if they enter it the building needs a garasioned look with sandbags added to it like in C&C and
+it now is owned by the house that occupies it. AI can also garasion its own buildings defensively when under
+attack or when enemy is looking to caputre the building - this will make infantry far more valuable."
+Commits `513531d5d` (feature), `2f0ebb38d` (build fix: two hunks staged into the wrong place), `52ba57f47` and
+`fa60fc5ea` (probe), `d89b7a9c4` (QuantBot churn fix), `57074f6c5` (bolder sandbags). Full rules:
+`docs/zone-garrisons.md`. Evidence: `~/Documents/projects/outputs/zone-garrison-20261127/`.
+
+- **Match rule Zone Garrisons**, default on (bit 5 of the MOD18 city rules byte, set only when off; INI key
+  `Zone Garrisons`). A Soldier or Trooper sent with the capture order to an own R/C/I zone walks in from any
+  neighbouring tile (four a zone); an empty enemy zone is walked into and becomes its house's (owner, tiles,
+  power draw, counts move; density, residents, overlay and health stay). An ally's zone is refused. Inside,
+  soldiers are hidden like Carryall cargo and fire out with their own weapons at the nearest visible enemy unit
+  (kills credited to them). A zone enemy soldiers hold can't be entered: a capture order fires on it, and every
+  hit on a held zone also takes half off the first soldier inside, so attackers shoot it empty and walk in.
+  Evacuate button (`CMD_ZONE_EVACUATE`, owner only); an emptied zone stays with its owner; a destroyed, sold or
+  demolished zone puts its soldiers out beside the ruin. Off: zones are captured as before.
+- **Look.** Sandbags drawn in code over the 2x2 lot (original art): two staggered courses on every side with a
+  firing slit, the house colour along the front, an olive helmet per soldier. Zone panel: `Garrison: n/4`.
+  Pictures: `pictures/garrison-zoom0..2.png` and `garrison-zoom2-closeup.png` (dummy-driver software renderer,
+  from `57074f6c5`).
+- **Choices where the request left room:** four soldiers a zone (one a tile); allies' zones never taken or
+  shared; cover halves damage to the front soldier instead of immunity; garrisons shoot units, not buildings;
+  soldiers enter from any adjacent tile, never standing on the building.
+- **Save 9900** (a zone's garrison, target, search clock), **protocol 144**. The redevelopment session took
+  143, the worm 145/9901, hospitals 146/9902, the turret front 147.
+- **QuantBot `ZoneGarrison`, default OFF** (`QuantBotGarrison.cpp`; play style `zone-garrison`): garrisons own
+  zones enemies close on (7 tiles; a capture-capable soldier counts triple), releases them when none is within
+  11, takes empty enemy zones within 5 tiles of its soldiers, at most 6 orders a house a pass. Stateless.
+  `Player`'s order helpers now leave a soldier on its way into a zone alone (`garrisonBound`): QuantBot never
+  used capture mode before, so nothing changes with the switch off.
+- **Measured** (`rs160-dunecity`, four Brutal QuantBots, seeds 9101-9148, 45 min, AWS):
+  - Self-play ON, 12 games each version: v1 (`2979efc5d`) 22,055 orders for 4,393 entries and 752 zones
+    taken (soldiers re-ordered every pass by the army, defence and formation passes, or at zones with no free
+    side); v2 (`d89b7a9c4`) 8,729 orders, 5,211 entries, 884 zones taken, 2,669 releases.
+  - Mixed OFF/ON, 288 games each version (paired by game, `match_score.py`):
+
+    | Version | ON score | OFF score | Difference (95% CI) | Wins ON / OFF | Time-outs |
+    |---|---:|---:|---|---:|---:|
+    | v1 `2979efc5d` | -0.117 | -0.067 | -0.050 (-0.13..+0.03) | 68 / 76 | 144/288 |
+    | v2 `d89b7a9c4` | -0.101 | -0.079 | -0.022 (-0.11..+0.06) | 73 / 76 | 139/288 |
+
+    Level both times, with the same alive-at-time-out share (37/37%, 36/36%). The default rule needs the
+    interval above 0, so **ZoneGarrison stays off**. The player-facing rule is on.
+- **Tests.** `zone_garrison_probe` (headless nightly; 11 cases: own zone, take, fire out, assault, evacuate,
+  destroyed, ally, containment, save/load, rule off, pictures): passed at `fa60fc5ea`
+  (`20261127T122335-ctest-ba19a0`). `CoopGameSettingsTestCase` protocol 144 round trip; command tables.
+- **Gates:** at `a4422b571` (all garrison code and both AI fixes): the four AI gates 4/4 (`20261127T124057-ctest-51a7a5`); the nightly tier `-L nightly -LE gui` 257/257 (`20261127T124102-ctest-dd0940`; seven tests failed in 0.0-0.1 s on `aws` and passed on `aws-mel2`, a worker fault); `perf_regression` on the Mini 126.3 s (`20261127T124111-ctest-89a399`). `57074f6c5` (bolder sandbags, drawing only) after them: `zone_garrison_probe` passed (`20261127T124256-ctest-fae6d9`).
+- **Next release notes:** "Infantry can garrison city zones: send Soldiers or Troopers with the capture order
+  into your own Residential, Commercial or Industrial zones (four each) to fire out from behind sandbags, or
+  into an enemy zone nobody holds to take it. Shoot a held zone to empty it. Evacuate brings them out.
+  Multiplayer protocol 144, save format 9900."
+- **Not verified:** a real windowed game (pictures are the dummy driver's renderer); a human player's capture
+  clicks and the Evacuate button in a live game (the probe drives the same commands).
+
 ## 2026-11-27 - The Fremen Palace calls a sandworm its house controls (Fremen Palace Worm, protocol 145, save 9901)
 
 Stefan, 2026-11-27: "i want freeman house to get a worm as its palace special - it has full control over the
