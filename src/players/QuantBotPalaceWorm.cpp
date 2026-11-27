@@ -155,10 +155,19 @@ void QuantBot::managePalaceWorm(const Sandworm* worm) {
         }
     }
     if(prey != nullptr) {
-        if(worm->getAttackMode() != HUNT) doSetAttackMode(worm, HUNT);
+        // Each tick that QuantBot gives a hunt order (Hunt mode, or a new target) logs one line. A worm
+        // already chewing on something it found in Guard only gets the mode: that is a hunt order too.
+        bool ordered = false;
+        if(worm->getAttackMode() != HUNT) {
+            doSetAttackMode(worm, HUNT);
+            ordered = true;
+        }
         const auto* current = worm->getTarget();
         if(current == nullptr || !worm->canAttack(current)) {
             doAttackObject(worm, prey, false);
+            ordered = true;
+        }
+        if(ordered) {
             // Read by tests/ai/palace-worm-report.py: hunts per house-game, and whether they led to a meal.
             SDL_Log("PALACE_WORM: event=hunt house=%d object=%u x=%d y=%d prey=%u item=%d price=%d kills=%d cycles_left=%d cycle=%u",
                     getHouse()->getHouseID(), worm->getObjectID(), prey->getLocation().x, prey->getLocation().y,
