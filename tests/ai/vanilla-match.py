@@ -78,7 +78,8 @@ MAPS = {
     'sihaya-pip': '2P - 128x31 - 1v1 - Sihaya-Pip.ini',
     'x-factor': '2P - 32x32 - X-Factor.ini',
 }
-HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
+HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5,
+                 'neutral': 6}
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 FFA_HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar')
 KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
