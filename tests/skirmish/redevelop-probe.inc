@@ -417,14 +417,18 @@ void runRedevelopProbe() {
     SDL_Log("SKIRMISH_PROBE: redevelop lane effect on=%.1f off=%.1f", laneEffect.first, laneEffect.second);
     expect(laneEffect.first > laneEffect.second, "RoadLaneParks: its lots end with no more land value than OFF");
 
-    // LotParks.
+    // LotParks. Since blockGain counts nothing for blocks at the land-value floor, this small city
+    // has no lot worth clearing (its cheap lots' neighbours are floored by pollution); the switch's
+    // activation and effect are asserted on Stefan's save (quantbot_redevelop_low_save, 89 Parks).
+    // Here: whatever it orders must stand at its site, and it must not order more than it places.
     Switches lot; lot.lot = true;
     const Run lotOn = play(save, lot, kMinutes, false);
-    requireActed(lotOn, R::LotClear, "LotParks (clear)");
-    expect(lotOn.lotClearsParked >= 1, "LotParks: no cleared lot holds its Park");
-    const auto lotEffect = effectAgainst(lotOn, off, R::LotClear, R::kParkEffectReach, startLots);
-    SDL_Log("SKIRMISH_PROBE: redevelop lot effect on=%.1f off=%.1f", lotEffect.first, lotEffect.second);
-    expect(lotEffect.first > lotEffect.second, "LotParks: the cleared lot's neighbours end with no more land value than OFF");
+    SDL_Log("SKIRMISH_PROBE: redevelop lot orders=%d placed=%d lost=%d", lotOn.activity.ordered[R::LotClear],
+            lotOn.activity.placed[R::LotClear], lotOn.activity.lost[R::LotClear]);
+    expect(lotOn.activity.lost[R::LotClear] == 0 && lotOn.activity.lost[R::LotFill] == 0,
+           "LotParks: an order was lost or re-sited");
+    if (lotOn.activity.ordered[R::LotClear] > 0)
+        expect(lotOn.lotClearsParked >= 1, "LotParks: no cleared lot holds its Park");
 
     // PollutionRelocation, with the same polluter planted in both arms.
     Coord plantSite = Coord::Invalid();
