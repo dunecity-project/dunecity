@@ -699,8 +699,11 @@ void checkPlayerTake() {
     f.run(1);
     require(captureByPlayer(f, {soldier, trooper}, z, true) == 2,
             "player take: the click on an empty enemy zone did not order both selected soldiers");
+    const FixPoint health = z->getHealth();
     require(f.runUntil(40, [&] { return z->getOwner() == f.own && z->getGarrisonSize() == 2; }),
             "player take: the selected soldiers did not take the enemy zone and both go in: "
+            + describe({soldier, trooper}, z));
+    require(z->getHealth() == health, "player take: the soldiers shot the zone they walked into: "
             + describe({soldier, trooper}, z));
     auto* panel = selectZone(f, z);
     require(panel->garrisonLabel.getText().find(_("(captured)")) != std::string::npos,
@@ -751,9 +754,15 @@ void checkPlayerRefused() {
     auto* defender = f.unit(f.enemy, Unit_Soldier, 43, 43);
     f.capture(defender, held);
     require(f.runUntil(20, [&] { return held->getGarrisonSize() == 1; }), "player refused: the enemy soldier did not go in");
-    auto* panel = selectZone(f, held);
-    require(panel->evacuateButton.isVisible() && !panel->evacuateButton.isEnabled(),
-            "player refused: Evacuate is enabled on an enemy's zone");
+    // A click selects the enemy's zone; the panel the player gets offers no Evacuate they could press.
+    f.game->unselectAll(f.game->selectedList);
+    f.game->selectedList.clear();
+    clickMap(f, held->getLocation());
+    f.game->pInterface->updateObjectInterface();
+    if(auto* panel = dynamic_cast<ZoneStructureInterface*>(f.game->pInterface->pObjectContainer)) {
+        panel->update();
+        require(!panel->evacuateButton.isEnabled(), "player refused: Evacuate is enabled on an enemy's zone");
+    }
     record("player_refused", "full own zone, ally's zone and a damaged zone not entered; enemy's Evacuate disabled");
 }
 

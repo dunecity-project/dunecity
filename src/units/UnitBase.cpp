@@ -879,6 +879,13 @@ void UnitBase::releaseTarget() {
 
 void UnitBase::engageTarget() {
 
+    // Zone Garrisons: a zone can change hands while a soldier walks to it (a comrade took it first),
+    // so its friendliness is read now, not when the order was given; otherwise the soldier would drop
+    // the order below because it "cannot attack" what is now its own house's zone.
+    const auto* captureZone = attackMode == CAPTURE && ZoneStructure::garrisonsEnabled()
+        ? dynamic_cast<const ZoneStructure*>(target.getObjPointer()) : nullptr;
+    if(captureZone != nullptr) targetFriendly = captureZone->getOwner()->getTeamID() == owner->getTeamID();
+
     if(target && (target.getObjPointer() == nullptr)) {
         // the target does not exist anymore
         releaseTarget();
@@ -989,6 +996,9 @@ void UnitBase::engageTarget() {
             setDestination(targetLocation);
             targetAngle = INVALID;
             if(attackMode == SABOTAGE) return;
+            // A soldier walks into a zone; it never shoots the building it is taking or joining (it
+            // still fires on a zone enemy soldiers hold: captureTargetHeld).
+            if(captureZone != nullptr) return;
         } else if(isTracked() && target.getObjPointer()->isInfantry() && !targetFriendly && currentGameMap->tileExists(targetLocation) && !currentGameMap->getTile(targetLocation)->isMountain() && forced) {
             // we squash the infantry unit because we are forced to
             setDestination(targetLocation);
