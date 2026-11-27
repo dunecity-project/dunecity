@@ -47,6 +47,7 @@
 
 #include <sand.h>
 #include <globals.h>
+#include <structures/ZoneStructure.h>
 
 
 Player::Player(House* associatedHouse, const std::string& playername) : pHouse(associatedHouse), playerID(0), playername(playername) {
@@ -128,6 +129,16 @@ const House* Player::getHouse(int houseID) const {
 }
 
 namespace {
+
+/// Zone Garrisons: a soldier the AI sent into a zone (capture order) keeps that order; no other
+/// controller re-routes it before it is inside or the order ends. Otherwise the army, defence and
+/// formation passes pulled it away every pass and it was ordered back the next (2026-11-27
+/// self-play: 3,421 orders for 663 entries in one game).
+bool garrisonBound(const UnitBase* unit) {
+    return unit->getAttackMode() == CAPTURE && ZoneStructure::garrisonsEnabled()
+        && dynamic_cast<const ZoneStructure*>(unit->getTarget()) != nullptr;
+}
+
 /// An AI player's army order addressed to a Saboteur. True when it must not be applied: with
 /// the match rule on, a released Saboteur keeps its own hunt until it has blown something up.
 bool saboteurRefuses(const ObjectBase* pObject, const char* order, const char* caller) {
@@ -430,6 +441,7 @@ void Player::doAttackObject(const TurretBase* pTurret, const ObjectBase* pTarget
 
 void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(garrisonBound(pUnit)) return;
         if(saboteurRefuses(pUnit, "move", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Pos(x, y, bForced);
@@ -441,6 +453,7 @@ void Player::doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced, const
 
 void Player::doHuntToward(const UnitBase* pUnit, int x, int y, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(garrisonBound(pUnit)) return;
         if(saboteurRefuses(pUnit, "hunt_toward", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doHuntToward(x, y);
@@ -469,7 +482,7 @@ std::vector<const UnitBase*> ownActiveUnits(const std::vector<const UnitBase*>& 
                                             const char* order, const char* caller, bool countApplied) {
     std::vector<const UnitBase*> own;
     for(const UnitBase* unit : units) {
-        if(unit == nullptr || unit->getOwner() != house || !unit->isActive()) continue;
+        if(unit == nullptr || unit->getOwner() != house || !unit->isActive() || garrisonBound(unit)) continue;
         if(unit->getItemID() == Unit_Saboteur && (countApplied || Saboteur::keepsOwnHunt())
            && saboteurRefuses(unit, order, caller)) continue;
         own.push_back(unit);
@@ -539,6 +552,7 @@ void Player::doFormUp(const std::vector<const UnitBase*>& units, const char* cal
 
 void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(garrisonBound(pUnit)) return;
         if(saboteurRefuses(pUnit, "move_to_object", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doMove2Object(pTargetObject);
@@ -550,6 +564,7 @@ void Player::doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObjec
 
 void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(garrisonBound(pUnit)) return;
         if(saboteurRefuses(pUnit, "attack_position", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackPos(x, y, bForced);
@@ -561,6 +576,7 @@ void Player::doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced, cons
 
 void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObject, bool bForced, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(garrisonBound(pUnit)) return;
         if(saboteurRefuses(pUnit, "attack_object", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackObject(pTargetObject, bForced);
@@ -572,6 +588,7 @@ void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObje
 
 void Player::doSetAttackMode(const UnitBase* pUnit, ATTACKMODE attackMode, const char* caller) const {
     if(pUnit->getOwner() == getHouse() && pUnit->isActive()) {
+        if(garrisonBound(pUnit)) return;
         if(saboteurRefuses(pUnit, "attack_mode", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doSetAttackMode(attackMode);

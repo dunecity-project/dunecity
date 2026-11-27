@@ -40,6 +40,22 @@ ZoneStructure* zoneOnTile(const Map& map, int x, int y) {
     return dynamic_cast<ZoneStructure*>(map.getTile(x, y)->getGroundObject());
 }
 
+/// A soldier can only enter from a tile beside the zone (diagonals too): one in a city block
+/// packed on every side never gets there and was ordered at it again every pass.
+bool hasOpenSide(const Map& map, const ZoneStructure* zone) {
+    const Coord at = zone->getLocation();
+    const Coord size = zone->getStructureSize();
+    for (int y = at.y - 1; y <= at.y + size.y; ++y) {
+        for (int x = at.x - 1; x <= at.x + size.x; ++x) {
+            if (x >= at.x && x < at.x + size.x && y >= at.y && y < at.y + size.y) continue;
+            if (!map.tileExists(x, y)) continue;
+            const Tile* tile = map.getTile(x, y);
+            if (!tile->hasANonInfantryGroundObject() && tile->infantryNotFull()) return true;
+        }
+    }
+    return false;
+}
+
 bool garrisonSoldier(const UnitBase* unit) {
     return unit->getItemID() == Unit_Soldier || unit->getItemID() == Unit_Trooper;
 }
@@ -63,8 +79,12 @@ void QuantBot::updateZoneGarrisons() {
         if (unit->getOwner() == house) {
             if (!garrisonSoldier(unit) || !unit->isRespondable()) continue;
             if (unit->getAttackMode() == CAPTURE) {
-                if (const auto* zone = dynamic_cast<const ZoneStructure*>(unit->getTarget()))
+                if (const auto* zone = dynamic_cast<const ZoneStructure*>(unit->getTarget())) {
                     ++pending[zone->getObjectID()];
+                    continue;
+                }
+                // Its zone is gone or the order ended without a target: back to the army.
+                doSetAttackMode(unit, AREAGUARD);
                 continue;
             }
             soldiers.push_back(unit);
@@ -122,6 +142,7 @@ void QuantBot::updateZoneGarrisons() {
     for (const auto& [negPoints, id] : ranked) {
         if (orders >= kMaxOrdersPerPass) break;
         ZoneStructure* zone = zones[id];
+        if (!hasOpenSide(map, zone)) continue;
         const int want = std::min(DuneCity::ZoneGarrison::kCapacity, (-negPoints + 1) / 2);
         int have = zone->getGarrisonSize() + pending[id];
         while (have < want && orders < kMaxOrdersPerPass) {
@@ -171,7 +192,7 @@ void QuantBot::updateZoneGarrisons() {
                 const ZoneStructure* zone = zoneOnTile(map, x, y);
                 if (zone == nullptr || zone->getOwner()->getTeamID() == team || zone->isGarrisoned()
                     || pending[zone->getObjectID()] > 0 || !zone->isVisible(team)
-                    || !zone->mayEnterGarrison(soldier)) continue;
+                    || !zone->mayEnterGarrison(soldier) || !hasOpenSide(map, zone)) continue;
                 const FixPoint distance = blockDistance(at, zone->getClosestPoint(at));
                 if (distance > kOffenceRadius) continue;
                 if (distance < bestDistance || (distance == bestDistance && zone->getObjectID() < best->getObjectID())) {
