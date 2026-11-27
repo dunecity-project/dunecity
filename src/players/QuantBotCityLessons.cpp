@@ -154,9 +154,14 @@ bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
         ordered = upgradeWithLogging(pass, turn, __LINE__);
     } else what = "unavailable";
     pass.money -= held;
-    if (ordered) SDL_Log("ECONOMY_FIRST: house=%d event=%s ordered=%d capacity=%d yard_target=%d credits=%d cycle=%u",
+    // Every order, and the first refused MCV of each minute (why the yards did not come).
+    const Uint32 minute = getGameCycleCount() / MILLI2CYCLES(60000);
+    if (ordered || cityLessons.economyFirstRefusedMinute != minute + 1) {
+        if (!ordered) cityLessons.economyFirstRefusedMinute = minute + 1;
+        SDL_Log("ECONOMY_FIRST: house=%d event=%s ordered=%d capacity=%d yard_target=%d credits=%d cycle=%u",
             getHouse()->getHouseID(), what, int(ordered), pass.cityConstructionCapacity, pass.cityYardTarget,
             getHouse()->getCredits(), getGameCycleCount());
+    }
     return true;
 }
 

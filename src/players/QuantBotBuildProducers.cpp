@@ -340,7 +340,10 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const bool techInstallment = pass.techSavings
         && turn.installmentProject != NONE_ID && turn.installmentProject == spendingItem;
     if (!compositionAdmits(pass, itemID) || !spendingAdmits(pass, spendingItem, quotedPrice)) return false;
-    if (itemID==Unit_MCV && !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID())) {
+    // EconomyFirst's MCV is paid from its own hold (QuantBot::economyFirstMcv); the opening-capital test that
+    // kept every AI house on Stefan's Air map at one yard does not apply to it.
+    const bool economyFirstMcvOrder = itemID==Unit_MCV && rule && std::string_view(rule)=="economy_first_mcv";
+    if (itemID==Unit_MCV && !economyFirstMcvOrder && !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID())) {
         traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
             .set("builder",turn.pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
             .set("price",quotedPrice).set("projected_cash",pass.cashFlow.projectedCash)

@@ -2204,6 +2204,7 @@ private:
         Uint32 lastEconomyLog = 0;
         bool economyFirstStoodDown = false, economyFirstFootprintLogged = false, economyFirstRichLogged = false;
         int economyFirstHoldPasses = 0, economyFirstThreatPasses = 0;
+        Uint32 economyFirstRefusedMinute = 0;   ///< 1 + the minute of the last refused MCV logged
         int economyFirstStartZones = -1;   ///< zones at the first pass (the map's prebuilt city)
     } cityLessons;
     bool ownPalaceAt(Coord site) const;
