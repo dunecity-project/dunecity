@@ -133,6 +133,11 @@ WORM_ROW_FIELDS = KEY + ('event',) + WORM_FIELDS
 # reordered, stalled).
 HOSPITAL_FIELDS = ('house', 'object', 'item', 'hp', 'max_hp', 'hospital', 'why', 'cycle')
 HOSPITAL_ROW_FIELDS = KEY + ('event',) + HOSPITAL_FIELDS
+# One row per city house a city year (CITY_ZONE_CHURN, CityEffectsRuntime.cpp): its zone counts and
+# how often its zones changed density, population and Hospital/Church overlay that year.
+ZONE_FIELDS = ('house', 'year', 'cycle', 'days', 'r', 'c', 'i', 'hospitals', 'churches', 'hospital_days',
+               'hosp_on', 'hosp_off', 'church_on', 'church_off', 'grew', 'declined', 'pop_changes')
+ZONE_ROW_FIELDS = KEY + ZONE_FIELDS
 # Rocket Turrets at the front (include/players/TurretFrontPolicy.h): every city house's turret count,
 # upkeep and population every two minutes (ledger), each front order (front: rule front_reinforce,
 # turret_creep or turret_advance) and each rear turret retired (retire). tests/ai/turret-front-report.py.
@@ -462,6 +467,9 @@ def play(args, scratch, binary, key):
             hospital.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
                              **{f: data.get(f, '') for f in HOSPITAL_FIELDS}})
     append(results / 'hospital.csv', HOSPITAL_ROW_FIELDS, hospital)
+    zones = [{**dict(zip(KEY, key)), **{f: d.get(f, '') for f in ZONE_FIELDS}}
+             for d in (parse(l, 'CITY_ZONE_CHURN:') for l in lines if 'CITY_ZONE_CHURN:' in l)]
+    append(results / 'zones.csv', ZONE_ROW_FIELDS, zones)
     turrets = []
     for l in lines:
         for marker, event in TURRET_EVENTS:

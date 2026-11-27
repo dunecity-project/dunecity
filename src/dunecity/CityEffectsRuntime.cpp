@@ -1467,6 +1467,12 @@ void CitySimulation::runZoneGrowth() {
         cityPopulation[ownerHouse] += finalPopulation - initialPopulation
             + (n.pStruct->getItemID()==Structure_Palace ? getPalaceCommercialPopulation(n.level) : 0) - palaceBefore;
         const bool populationChanged = finalPopulation != initialPopulation;
+        if (n.pZone && ownerHouse >= 0 && ownerHouse < kMaxCityHouses) {
+            auto& churn = zoneChurn_[ownerHouse];
+            if (n.level > initialLevel) ++churn.grew;
+            else if (n.level < initialLevel) ++churn.declined;
+            if (populationChanged) ++churn.popChanges;
+        }
         // Observe the decision without changing its rolls, score or ordering.
         if (AITelemetry::log().enabled() && (populationChanged || lastProcessedDay_ % 96u == 0)) {
             const bool supplySatisfied = initialLevel == 0 || (n.role == CityRole::Residential
@@ -1658,6 +1664,7 @@ void CitySimulation::runZoneGrowth() {
             auto* zone = n.pZone;
             if (!zone) continue;
             const int h = ownerSlot(n.pStruct);
+            const auto overlayBefore = zone->getCivicOverlay();
             if (n.role == CityRole::Residential && HospitalCare::keepsHospital(zone)) {
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
                 if (n.level > 0 && h >= 0) resIndex[h]++;
@@ -1675,10 +1682,50 @@ void CitySimulation::runZoneGrowth() {
                 }
                 resIndex[h]++;
             }
+            const auto overlayAfter = zone->getCivicOverlay();
+            if (overlayAfter != overlayBefore && h >= 0) {
+                auto& churn = zoneChurn_[h];
+                if (overlayBefore == ZoneStructure::CivicOverlay::Hospital) ++churn.hospitalOff;
+                if (overlayBefore == ZoneStructure::CivicOverlay::Church) ++churn.churchOff;
+                if (overlayAfter == ZoneStructure::CivicOverlay::Hospital) ++churn.hospitalOn;
+                if (overlayAfter == ZoneStructure::CivicOverlay::Church) ++churn.churchOn;
+            }
             if (zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None)
                 overlays.emplace_back(zone->getObjectID(), static_cast<uint8_t>(zone->getCivicOverlay()));
         }
         hospitalCare_.setOverlays(std::move(overlays));
+    }
+
+    // CITY_ZONE_CHURN, once a city year per house with zones: how often its zones changed
+    // density, population and civic overlay. Logging only.
+    {
+        int zones[kMaxCityHouses][3] = {};
+        int hospitals[kMaxCityHouses] = {}, churches[kMaxCityHouses] = {};
+        for (const auto& n : nodes) {
+            if (!n.pZone || !n.pStruct->getOwner()) continue;
+            const int h = n.pStruct->getOwner()->getHouseID();
+            if (h < 0 || h >= kMaxCityHouses) continue;
+            const int r = n.role == CityRole::Residential ? 0 : n.role == CityRole::Commercial ? 1 : 2;
+            ++zones[h][r];
+            if (n.pZone->getCivicOverlay() == ZoneStructure::CivicOverlay::Hospital) ++hospitals[h];
+            if (n.pZone->getCivicOverlay() == ZoneStructure::CivicOverlay::Church) ++churches[h];
+        }
+        const bool yearEnd = lastProcessedDay_ % kCityDaysPerYear == 0;
+        for (int h = 0; h < kMaxCityHouses; ++h) {
+            auto& churn = zoneChurn_[h];
+            churn.hospitalDays += hospitals[h];
+            ++churn.censuses;
+            if (!yearEnd) continue;
+            if (zones[h][0] + zones[h][1] + zones[h][2] > 0) {
+                SDL_Log("CITY_ZONE_CHURN: house=%d year=%u cycle=%u days=%d r=%d c=%d i=%d hospitals=%d churches=%d "
+                        "hospital_days=%d hosp_on=%d hosp_off=%d church_on=%d church_off=%d grew=%d declined=%d pop_changes=%d",
+                        h, lastProcessedDay_ / kCityDaysPerYear, currentGame->getGameCycleCount(), churn.censuses,
+                        zones[h][0], zones[h][1], zones[h][2], hospitals[h], churches[h], churn.hospitalDays,
+                        churn.hospitalOn, churn.hospitalOff, churn.churchOn, churn.churchOff,
+                        churn.grew, churn.declined, churn.popChanges);
+            }
+            churn = ZoneChurn{};
+        }
     }
 }
 

@@ -292,6 +292,16 @@ private:
     /// after a load puts the saved census overlays back on their zones. CityEffectsRuntime.cpp.
     void runHospitalCare();
     bool hospitalOverlaysPending_ = false; ///< Set by load(); not serialized.
+
+    /// Zone type changes a house's city made this city year, logged once a year as
+    /// CITY_ZONE_CHURN (vanilla-match.py zones.csv). Logging only: never read by the simulation,
+    /// not serialized (a loaded game starts its year's counts at zero).
+    struct ZoneChurn {
+        int grew = 0, declined = 0, popChanges = 0;
+        int hospitalOn = 0, hospitalOff = 0, churchOn = 0, churchOff = 0;
+        int hospitalDays = 0, censuses = 0;
+    };
+    ZoneChurn zoneChurn_[kMaxCityHouses] = {};
 };
 
 } // namespace DuneCity
