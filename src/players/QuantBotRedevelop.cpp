@@ -365,7 +365,17 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
         if (site.isValid()) rule = "lane_park";
     }
     if (!site.isValid()) return;
-    // A cleared lot is demolished when the order is accepted (QuantBot::redevelopmentZones).
+    if (rule == std::string_view("lot_park_clear")) {
+        // The lot goes now, its first Park takes the origin tile and the fill step plants the rest.
+        auto* zone = dynamic_cast<ZoneStructure*>(getMap().getTile(site.x, site.y)->getNonInfantryGroundObject());
+        if (!zone || zone->getOwner() != getHouse() || zone->getLocation() != site) return;
+        traceDecision("lot_park_cleared", AITelemetry::Record().set("zone", zone->getObjectID())
+            .set("item", zone->getItemID()).set("x", site.x).set("y", site.y)
+            .set("land_value", currentGame->getCitySimulation()->getLandValueMap().worldGet(site.x, site.y))
+            .set("density", getMap().getTile(site.x, site.y)->getCityZoneDensity()).set("gain", gain));
+        pass.itemCount[zone->getItemID()]--;
+        zone->demolish();
+    }
     yardTurn.itemID = Structure_Park;
     yardTurn.crimeServiceSite = site;
     yardTurn.structureRule = rule;

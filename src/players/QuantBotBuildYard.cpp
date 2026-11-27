@@ -3659,7 +3659,10 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
             cancelFoundations();
             return true;
         }
-        if (!foundations.empty()) yardTurn.placeLocations->push_back(selectedPlaceLocation);
+        // A Park needs no foundation, but the site its rule chose (a spare lane, a cleared lot,
+        // a district block) is the point of the order: keep it rather than re-searching at placement.
+        if (!foundations.empty() || (yardTurn.itemID == Structure_Park && yardTurn.crimeServiceSite.isValid()))
+            yardTurn.placeLocations->push_back(selectedPlaceLocation);
 
         if (produceItemWithLogging(pass, turn, yardTurn.itemID, __LINE__, yardTurn.structureRule)) {
             if (pass.cityLandValueServices && yardTurn.itemID==Structure_PoliceStation)
