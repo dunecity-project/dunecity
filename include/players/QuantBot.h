@@ -2199,6 +2199,7 @@ private:
     void noteRedevelopmentOrder(int kind, Uint32 item, Coord site, Uint32 oldZone, Coord effectCentre);
     void updateRedevelopmentOrders();
     void noteIndustryPlaced(Coord site);
+    void noteHomePlaced(Coord site);
     /// Whether a pending redevelopment order of \a item is waiting for \a site (the yard holds it).
     bool redevelopmentSiteHeld(Uint32 item, Coord site) const;
     std::vector<std::pair<Coord, int>> redevelopmentLots(Coord centre, int reach, Coord skip) const;

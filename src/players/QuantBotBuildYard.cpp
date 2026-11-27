@@ -4219,6 +4219,8 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
             traceDecision("placement_result", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y).set("success", placed));
             if (placed && itemToBePlaced == Structure_ZoneIndustrial) noteIndustryPlaced(location);
+            if (placed && (itemToBePlaced == Structure_ZoneResidential || itemToBePlaced == Structure_ZoneCommercial))
+                noteHomePlaced(location);
             if (placed && itemToBePlaced != Structure_Slab1 && itemToBePlaced != Structure_Slab4
                 && itemToBePlaced != Structure_Road) {
                 // How close the base grows to the enemy's (protocol 141): clear tiles between the new

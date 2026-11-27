@@ -815,6 +815,8 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool needCityDistances = citySim && (newSensitive || newPolluter);
     const bool separateIndustry = citySim && itemID == Structure_ZoneIndustrial
         && (botConfig().force.industrySeparation || industrySeparationSearch);
+    // HomeSeparation (default off): no new R/C lot within the same reach of an own polluter.
+    const bool separateHomes = citySim && newSensitive && cityZonePlacement && botConfig().force.homeSeparation;
     bool cityDistancesReady=false;
     auto& nearestResidential=placementDistances.nearestResidential;
     auto& nearestCommercial=placementDistances.nearestCommercial;
@@ -1610,7 +1612,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                     const int separation=pollutionSeparation.footprint(placeLocationX,placeLocationY,newSizeX,newSizeY);
                     // IndustrySeparation (default off) and every PollutionRelocation site: no new
                     // Industrial zone within the pollution stamp's reach of an own R/C lot.
-                    if (separateIndustry && RedevelopmentPolicy::industryTooCloseToHomes(separation)) {
+                    if ((separateIndustry || separateHomes) && RedevelopmentPolicy::industryTooCloseToHomes(separation)) {
                         ++pollutionRejected;
                         continue;
                     }

@@ -514,6 +514,24 @@ void QuantBot::updateRedevelopmentOrders() {
     }
 }
 
+/// Every own R/C lot placed: whether it landed within kIndustrySeparationTiles of an own polluter.
+void QuantBot::noteHomePlaced(Coord site) {
+    const Coord size = getStructureSize(Structure_ZoneResidential);
+    int nearest = 1000000;
+    for (const auto* s : getStructureList()) {
+        if (s->getOwner() != getHouse() || s->getHealth() <= 0
+            || DuneCity::getPollutionEmission(s->getItemID(), DuneCity::getStructureMaxLevel(s->getItemID())) <= 0) continue;
+        const Coord o = s->getLocation(), other = s->getStructureSize();
+        nearest = std::min(nearest, CityPlacementPolicy::footprintDistance(site.x, site.y, size.x, size.y,
+                                                                           o.x, o.y, other.x, other.y));
+    }
+    ++redevelopmentActivity.homesPlaced;
+    const bool near = RedevelopmentPolicy::industryTooCloseToHomes(nearest);
+    if (near) ++redevelopmentActivity.homesNearIndustry;
+    SDL_Log("HOME_PLACED: house=%d separated=%d near_industry=%d industry_distance=%d x=%d y=%d", getHouse()->getHouseID(),
+            int(botConfig().force.homeSeparation), int(near), nearest == 1000000 ? -1 : nearest, site.x, site.y);
+}
+
 /// Every own Industrial zone placed: whether it landed within kIndustrySeparationTiles of an own R/C lot.
 void QuantBot::noteIndustryPlaced(Coord site) {
     const Coord size = getStructureSize(Structure_ZoneIndustrial);

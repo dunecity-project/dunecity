@@ -218,9 +218,10 @@ TEST_CASE("Redevelopment switches: default off and outside the native config has
     REQUIRE_FALSE(native.force.lotParks);
     REQUIRE_FALSE(native.force.pollutionRelocation);
     REQUIRE_FALSE(native.force.industrySeparation);
+    REQUIRE_FALSE(native.force.homeSeparation);
     for (bool QuantBotConfig::ForceSettings::*flag : {&QuantBotConfig::ForceSettings::roadLaneParks,
              &QuantBotConfig::ForceSettings::lotParks, &QuantBotConfig::ForceSettings::pollutionRelocation,
-             &QuantBotConfig::ForceSettings::industrySeparation}) {
+             &QuantBotConfig::ForceSettings::industrySeparation, &QuantBotConfig::ForceSettings::homeSeparation}) {
         QuantBotConfig arm = native;
         arm.force.*flag = true;
         CHECK(arm.getConfigHash() != native.getConfigHash());

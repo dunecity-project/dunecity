@@ -11,9 +11,10 @@
 //   PollutionRelocation  a polluting Industrial zone is planted among the bot's homes in both arms;
 //                        ON builds a new one clear of the homes, then demolishes the polluter, and
 //                        those homes end with more land value than OFF, where the polluter stands.
-//   IndustrySeparation   the industry is grown by 16 zones sited by the bot's own siting: ON
+//   IndustrySeparation   the industry is grown by 40 zones sited by the bot's own siting: ON
 //                        sites none within 5 tiles of an own R/C lot, OFF some, and the bot's
 //                        homes end with less pollution and more land value than OFF.
+//   HomeSeparation       the same with 16 Residential lots against the bot's polluters.
 // Every count comes from QuantBot::getRedevelopmentActivity(), the counters the measured games log
 // (SCENARIO_SWITCH_ACTIVITY). Included inside skirmish-probe.inc (SKIRMISH_PROBE_CASE=city-redevelop).
 
@@ -52,7 +53,7 @@ std::unique_ptr<Game> load(const std::string& save) {
     return game;
 }
 
-struct Switches { bool lane = false, lot = false, relocate = false, separate = false; };
+struct Switches { bool lane = false, lot = false, relocate = false, separate = false, homes = false; };
 
 void configure(QuantBot* bot, Switches s) {
     auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
@@ -60,6 +61,7 @@ void configure(QuantBot* bot, Switches s) {
     config->force.lotParks = s.lot;
     config->force.pollutionRelocation = s.relocate;
     config->force.industrySeparation = s.separate;
+    config->force.homeSeparation = s.homes;
     config->force.parkDistricts = false;
     bot->configOverride = config;
 }
@@ -256,40 +258,54 @@ Run play(const std::string& save, Switches switches, int minutes, bool plant, Co
     return run;
 }
 
-/// Mean land value and pollution at the bot's homes after its industry grew by kSeparationZones
-/// zones sited by QuantBot::findPlaceLocation with IndustrySeparation on or off.
-constexpr int kSeparationZones = 16;
+/// The bot's own siting (QuantBot::findPlaceLocation) asked for \a zones sites of \a item in a row,
+/// each built (Industrial at full density): how many landed within 5 tiles of the other side (homes
+/// for Industrial, own polluters for R), and the homes' mean land value and pollution two minutes
+/// later. \a on turns on IndustrySeparation (Industrial) or HomeSeparation (Residential).
 struct Separation { int placed = 0, near = 0; double landValue = 0, pollution = 0; };
 
-Separation separationRun(const std::string& save, bool on) {
+/// Nearest own polluter to a 2x2 lot at @a site (1 = touching).
+int polluterDistance(const House* house, Coord site) {
+    int nearest = 1000000;
+    for(const StructureBase* s : structureList)
+        if(s->getOwner() == house && s->getHealth() > 0
+           && DuneCity::getPollutionEmission(s->getItemID(), DuneCity::getStructureMaxLevel(s->getItemID())) > 0)
+            nearest = std::min(nearest, CityPlacementPolicy::footprintDistance(site.x, site.y, 2, 2,
+                s->getX(), s->getY(), s->getStructureSizeX(), s->getStructureSizeY()));
+    return nearest;
+}
+
+Separation separationRun(const std::string& save, Uint32 item, bool on, int zones) {
     auto game = load(save);
     Bot b = findBot(*game);
     Switches switches;
-    switches.separate = on;
+    (item == Structure_ZoneIndustrial ? switches.separate : switches.homes) = on;
     configure(b.bot, switches);
     game->winFlags = game->loseFlags = 0;
     Separation out;
-    std::vector<Uint32> zones;
     const int level = DuneCity::getStructureMaxLevel(Structure_ZoneIndustrial);
-    for (int k = 0; k < kSeparationZones; ++k) {
-        b.bot->placementCache.erase(Structure_ZoneIndustrial);
-        const Coord site = b.bot->findPlaceLocation(Structure_ZoneIndustrial);
+    std::vector<Uint32> ids;
+    for (int k = 0; k < zones; ++k) {
+        b.bot->placementCache.erase(item);
+        const Coord site = b.bot->findPlaceLocation(item);
         if (!site.isValid()) break;
-        StructureBase* zone = b.house->placeStructure(NONE_ID, Structure_ZoneIndustrial, site.x, site.y, false, true);
+        const int distance = item == Structure_ZoneIndustrial ? homeDistance(b.house, site) : polluterDistance(b.house, site);
+        StructureBase* zone = b.house->placeStructure(NONE_ID, item, site.x, site.y, false, true);
         if (!zone) break;
-        for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx)
-            currentGameMap->getTile(site.x + dx, site.y + dy)->setCityZoneDensity(level);
-        zones.push_back(zone->getObjectID());
-        const int distance = homeDistance(b.house, site);
+        if (item == Structure_ZoneIndustrial) {
+            for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx)
+                currentGameMap->getTile(site.x + dx, site.y + dy)->setCityZoneDensity(level);
+            ids.push_back(zone->getObjectID());
+        }
         out.near += R::industryTooCloseToHomes(distance);
         ++out.placed;
-        SDL_Log("SKIRMISH_PROBE: redevelop separation on=%d zone=(%d,%d) home_distance=%d", on, site.x, site.y, distance);
+        SDL_Log("SKIRMISH_PROBE: redevelop separation item=%u on=%d zone=(%d,%d) distance=%d", item, on, site.x, site.y, distance);
     }
     const Uint32 end = game->getGameCycleCount() + MILLI2CYCLES(2 * 60 * 1000);
     while (game->getGameCycleCount() < end) {
         game->updateGameState();
         if (game->getGameCycleCount() % MILLI2CYCLES(1000) != 0) continue;
-        for (Uint32 id : zones)
+        for (Uint32 id : ids)
             if (const auto* z = game->getObjectManager().getObject(id))
                 for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx)
                     currentGameMap->getTile(z->getLocation().x + dx, z->getLocation().y + dy)->setCityZoneDensity(level);
@@ -418,17 +434,30 @@ void runRedevelopProbe() {
     // IndustrySeparation. Left alone the start city builds one Industrial zone in eight minutes,
     // and the ordinary siting already puts it clear of the homes while clear ground is in reach.
     // The switch matters when that ground runs out, as in a grown city, so each arm grows the
-    // industry: it asks the bot's own siting for an Industrial site kSeparationZones times, building
+    // industry: it asks the bot's own siting for an Industrial site 40 times, building
     // each (at full density), then plays two minutes and reads the homes.
-    const Separation sepOff = separationRun(save, false), sepOn = separationRun(save, true);
-    SDL_Log("SKIRMISH_PROBE: redevelop separation placed on=%d off=%d near_homes on=%d off=%d home_pollution on=%.1f off=%.1f "
+    const Separation sepOff = separationRun(save, Structure_ZoneIndustrial, false, 40);
+    const Separation sepOn = separationRun(save, Structure_ZoneIndustrial, true, 40);
+    SDL_Log("SKIRMISH_PROBE: redevelop industry separation placed on=%d off=%d near_homes on=%d off=%d home_pollution on=%.1f off=%.1f "
             "home_land_value on=%.1f off=%.1f", sepOn.placed, sepOff.placed, sepOn.near, sepOff.near, sepOn.pollution,
             sepOff.pollution, sepOn.landValue, sepOff.landValue);
-    expect(sepOn.placed >= kSeparationZones / 2, "IndustrySeparation: the siting found too few Industrial sites");
+    expect(sepOn.placed >= 20, "IndustrySeparation: the siting found too few Industrial sites");
     expect(sepOn.near == 0, "IndustrySeparation: an Industrial zone was sited within 5 tiles of a home");
     expect(sepOff.near >= 1, "IndustrySeparation: OFF never sited an Industrial zone near a home, so the test proves nothing");
     expect(sepOn.pollution < sepOff.pollution, "IndustrySeparation: the homes are no cleaner than OFF");
     expect(sepOn.landValue > sepOff.landValue, "IndustrySeparation: the homes end with no more land value than OFF");
+
+    // HomeSeparation: the same with 16 new Residential lots against the bot's polluters.
+    const Separation homeOff = separationRun(save, Structure_ZoneResidential, false, 16);
+    const Separation homeOn = separationRun(save, Structure_ZoneResidential, true, 16);
+    SDL_Log("SKIRMISH_PROBE: redevelop home separation placed on=%d off=%d near_polluters on=%d off=%d home_pollution on=%.1f off=%.1f "
+            "home_land_value on=%.1f off=%.1f", homeOn.placed, homeOff.placed, homeOn.near, homeOff.near, homeOn.pollution,
+            homeOff.pollution, homeOn.landValue, homeOff.landValue);
+    expect(homeOn.placed >= 8, "HomeSeparation: the siting found too few Residential sites");
+    expect(homeOn.near == 0, "HomeSeparation: a Residential lot was sited within 5 tiles of a polluter");
+    expect(homeOff.near >= 1, "HomeSeparation: OFF never sited a Residential lot near a polluter, so the test proves nothing");
+    expect(homeOn.pollution < homeOff.pollution, "HomeSeparation: the homes are no cleaner than OFF");
+    expect(homeOn.landValue > homeOff.landValue, "HomeSeparation: the homes end with no more land value than OFF");
 
     std::string all;
     for (const auto& f : failures) all += (all.empty() ? "" : "; ") + f;

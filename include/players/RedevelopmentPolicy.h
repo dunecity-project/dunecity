@@ -66,6 +66,8 @@ struct Activity {
     long before10[KindCount]{}, after10[KindCount]{};
     /// Own Industrial zones placed, and those within kIndustrySeparationTiles of an own R/C lot.
     int industryPlaced = 0, industryNearHomes = 0;
+    /// Own R/C lots placed, and those within kIndustrySeparationTiles of an own polluter.
+    int homesPlaced = 0, homesNearIndustry = 0;
     /// Why searches did or did not produce an order (gate blocks, searches, rejections), by name.
     std::map<std::string, int> reasons;
     void note(const char* reason, int n = 1) { reasons[reason] += n; }
@@ -79,7 +81,8 @@ struct Activity {
                 + " " + n + "_after10=" + std::to_string(after10[k]) + " ";
         }
         out += "industry_placed=" + std::to_string(industryPlaced) + " industry_near_homes="
-            + std::to_string(industryNearHomes);
+            + std::to_string(industryNearHomes) + " homes_placed=" + std::to_string(homesPlaced)
+            + " homes_near_industry=" + std::to_string(homesNearIndustry);
         for (const auto& [reason, n] : reasons) out += " why_" + reason + "=" + std::to_string(n);
         return out;
     }

@@ -309,6 +309,7 @@ struct QuantBotConfig {
         bool lotParks;                         ///< A low-value own R/C lot cleared for parks that lift its neighbours.
         bool pollutionRelocation;              ///< An Industrial zone polluting our R/C lots rebuilt away from them.
         bool industrySeparation;               ///< No new Industrial zone within 5 tiles of an own R/C lot.
+        bool homeSeparation;                   ///< No new R/C lot within 5 tiles of an own polluter.
         bool landmarkAnchoring;                ///< R/C lots fill a landmark's reach, industry stays out; sites count room.
         bool palaceDenseClearing;              ///< A Palace/Stadium site may demolish own R/C lots of any density.
         bool palaceTurrets;                    ///< Every Palace keeps a Rocket Turret (anti-air) within 5 tiles, never saved for.
