@@ -12,5 +12,10 @@
   "palace-worm-2": {"fire": ["PALACE_WORM: event=hunt"], "success": ["PALACE_WORM: event=ate"]},
   "city-launcher-army": {"fire": ["LAUNCHER_ARMY: applied=1"], "success": ["LAUNCHER_ARMY: met=1"]},
   "low-value-palaces": {"fire": ["LOW_VALUE_PALACE: event=placed"], "success": ["LOW_VALUE_PALACE: event=effect met=1"]},
-  "hospital-infantry": {"fire": ["HOSPITAL_CARE: event=sent why=quiet"], "success": ["HOSPITAL_CARE: event=healed"]}
+  "hospital-infantry": {"fire": ["HOSPITAL_CARE: event=sent why=quiet"], "success": ["HOSPITAL_CARE: event=healed"]},
+  "road-lane-parks": {"fire": ["REDEVELOP: event=ordered kind=lane_park"], "success": ["REDEVELOP: event=effect kind=lane_park raised=1"]},
+  "lot-parks": {"fire": ["REDEVELOP: event=ordered kind=lot_clear", "REDEVELOP: event=ordered kind=lot_fill"], "success": ["REDEVELOP: event=effect kind=lot_clear raised=1", "REDEVELOP: event=effect kind=lot_fill raised=1"]},
+  "pollution-relocation": {"fire": ["REDEVELOP: event=ordered kind=relocation"], "success": ["REDEVELOP: event=effect kind=relocation raised=1"]},
+  "industry-separation": {"fire": ["INDUSTRY_PLACED: separated=1"], "success": ["INDUSTRY_PLACED: separated=1 near_homes=0"]},
+  "redevelop-all": {"fire": ["REDEVELOP: event=ordered kind=lane_park", "REDEVELOP: event=ordered kind=lot_clear", "REDEVELOP: event=ordered kind=lot_fill", "REDEVELOP: event=ordered kind=relocation", "INDUSTRY_PLACED: separated=1"], "success": ["REDEVELOP: event=effect kind=lane_park raised=1", "REDEVELOP: event=effect kind=lot_clear raised=1", "REDEVELOP: event=effect kind=lot_fill raised=1", "REDEVELOP: event=effect kind=relocation raised=1", "INDUSTRY_PLACED: separated=1 near_homes=0"]}
 }
