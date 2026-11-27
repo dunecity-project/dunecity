@@ -166,26 +166,37 @@ TEST_CASE("ParkDistricts: default off and outside the native config hash", "[ai]
     REQUIRE(parks.getConfigHash() == native.getConfigHash());
 }
 
+namespace {
+/// A 9x9 passage window from rows of '.' (open) and '#' (closed); the centre is (4,4).
+std::vector<char> passageWindow(const std::vector<std::string>& rows) {
+    std::vector<char> open;
+    for (const auto& row : rows) for (char c : row) open.push_back(c == '.');
+    return open;
+}
+bool passes(const std::vector<std::string>& rows) {
+    REQUIRE(rows.size() == 9);
+    const auto open = passageWindow(rows);
+    bool cells[81];
+    for (int i = 0; i < 81; ++i) cells[i] = open[i];
+    return RedevelopmentPolicy::sidesStayConnected(cells);
+}
+}
+
 TEST_CASE("Redevelopment: a spare lane is parked only while every path through it stays open", "[ai][park][roads]") {
-    using RedevelopmentPolicy::ringKeepsPassage;
-    // Ring order N, NE, E, SE, S, SW, W, NW.
-    const bool all[8] = {true, true, true, true, true, true, true, true};
-    CHECK(ringKeepsPassage(all));
-    // One lane of a two-lane east-west strip: the tile's south row (SE, S, SW) and its own row
-    // continue; north is a lot. Blocking it leaves W -> SW -> S -> SE -> E open.
-    const bool laneEdge[8] = {false, false, true, true, true, true, true, false};
-    CHECK(ringKeepsPassage(laneEdge));
-    // A one-lane road: only W and E open. Blocking it cuts the road.
-    const bool oneLane[8] = {false, false, true, false, false, false, true, false};
-    CHECK_FALSE(ringKeepsPassage(oneLane));
-    // A dead end needs no passage through it.
-    const bool deadEnd[8] = {false, false, false, false, false, false, true, false};
-    CHECK(ringKeepsPassage(deadEnd));
-    // Diagonal neighbours alone do not join two sides.
-    const bool corner[8] = {true, false, false, false, true, false, false, false};
-    CHECK_FALSE(ringKeepsPassage(corner));
-    const bool joined[8] = {true, true, true, false, false, false, false, false};
-    CHECK(ringKeepsPassage(joined));
+    REQUIRE(RedevelopmentPolicy::kPassageWindow == 4);
+    const std::string closed = "#########", lane = ".........";
+    // A two-lane strip: the other lane carries the traffic around the Park.
+    CHECK(passes({closed, closed, closed, closed, lane, lane, closed, closed, closed}));
+    // One lane: the Park would cut it.
+    CHECK_FALSE(passes({closed, closed, closed, closed, lane, closed, closed, closed, closed}));
+    // A dead end: nothing passes through.
+    CHECK(passes({closed, closed, closed, closed, ".....####", closed, closed, closed, closed}));
+    // A one-lane side road joining the strip at the tile: only the tile joins them.
+    CHECK_FALSE(passes({"####.####", "####.####", "####.####", "####.####", lane, lane, closed, closed, closed}));
+    // A two-lane side road: it reaches the strip beside the tile.
+    CHECK(passes({"###..####", "###..####", "###..####", "###..####", lane, lane, closed, closed, closed}));
+    // A crossing of two two-lane strips.
+    CHECK(passes({"###..####", "###..####", "###..####", "###..####", lane, lane, "###..####", "###..####", "###..####"}));
 }
 
 TEST_CASE("Redevelopment: pollution harm, relocation and lot-park thresholds", "[ai][park][pollution]") {

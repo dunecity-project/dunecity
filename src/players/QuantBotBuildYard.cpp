@@ -3470,7 +3470,12 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
     const bool economySite = yardTurn.structureRule
         && (std::string_view(yardTurn.structureRule) == "turret_cluster"
             || std::string_view(yardTurn.structureRule) == "palace_district"
-            || std::string_view(yardTurn.structureRule) == "park_district");
+            || std::string_view(yardTurn.structureRule) == "park_district"
+            // Redevelopment (default off; QuantBotRedevelop.cpp): the site is the point of the order.
+            || std::string_view(yardTurn.structureRule) == "lane_park"
+            || std::string_view(yardTurn.structureRule) == "lot_park_clear"
+            || std::string_view(yardTurn.structureRule) == "lot_park_fill"
+            || std::string_view(yardTurn.structureRule) == "pollution_relocation");
     if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite
         && !coreDefenceSite && !fieldSite && !economySite)
         yardTurn.crimeServiceSite = Coord::Invalid();
@@ -4005,6 +4010,15 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                     yardTurn.placeLocations->pop_front();
                     clearPlacementCache();
                 }
+                placementIssueHandled = true;
+            } else if (redevelopmentSiteHeld(itemToBePlaced, location)) {
+                // A redevelopment order's site is its whole point: wait for it to clear (an
+                // evacuated garrison, a passing unit) rather than build somewhere it does nothing.
+                // The order is dropped after RedevelopmentPolicy::kOrderTimeoutMs, and then this
+                // finished building is placed by the ordinary search.
+                noteHeld();
+                if (pass.emitStatsLog) tracePlacementIssue("placement_deferred", "redevelopment_site_blocked", location);
+                location = Coord::Invalid();
                 placementIssueHandled = true;
             } else {
                 // Try another legal site if this one was blocked. The

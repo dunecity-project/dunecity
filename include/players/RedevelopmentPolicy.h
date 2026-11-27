@@ -97,29 +97,36 @@ inline bool relocationPays(int harm, int newHarm) {
     return harm >= kRelocateMinHarm && newHarm * 2 <= harm;
 }
 
-/// Whether blocking a tile keeps every path that crossed it. \a ring holds whether each of its eight
-/// neighbours is open, clockwise from north (N, NE, E, SE, S, SW, W, NW); consecutive ring tiles are
-/// side neighbours. A 4-connected path through the tile enters and leaves by two side neighbours, so
-/// the block is safe when every open side neighbour lies in one run of open ring tiles. Local and
-/// exact for 4-connected movement; conservative for units, which may also move diagonally.
-inline bool ringKeepsPassage(const bool ring[8]) {
-    int start = -1;
-    for (int i = 0; i < 8; ++i) if (!ring[i]) { start = i; break; }
-    if (start < 0) return true;              // all open: one ring
-    int runsWithSide = 0;
-    bool inRun = false, runHasSide = false;
-    for (int k = 1; k <= 8; ++k) {
-        const int i = (start + k) % 8;
-        if (ring[i]) {
-            if (!inRun) { inRun = true; runHasSide = false; }
-            runHasSide = runHasSide || i % 2 == 0;
-        } else if (inRun) {
-            runsWithSide += runHasSide;
-            inRun = false;
+/// Window (tiles each side) in which a spare-lane Park must leave its neighbours connected.
+constexpr int kPassageWindow = 4;
+
+/// Whether the open side neighbours of the centre tile of a (2r+1)x(2r+1) window still reach one
+/// another over open tiles, 4-connected, with the centre blocked and without leaving the window.
+/// \a open is row-major, r = kPassageWindow.
+inline bool sidesStayConnected(const bool* open) {
+    constexpr int r = kPassageWindow, side = 2 * r + 1, centre = r * side + r;
+    const int sides[4] = {centre - side, centre + 1, centre + side, centre - 1};
+    int first = -1;
+    for (int s : sides) if (open[s]) { first = s; break; }
+    if (first < 0) return true;
+    bool seen[side * side] = {};
+    int stack[side * side], top = 0;
+    stack[top++] = first;
+    seen[first] = true;
+    while (top > 0) {
+        const int i = stack[--top], cx = i % side, cy = i / side;
+        const int next[4][2] = {{cx + 1, cy}, {cx - 1, cy}, {cx, cy + 1}, {cx, cy - 1}};
+        for (const auto& n : next) {
+            if (n[0] < 0 || n[1] < 0 || n[0] >= side || n[1] >= side) continue;
+            const int j = n[1] * side + n[0];
+            if (j == centre || seen[j] || !open[j]) continue;
+            seen[j] = true;
+            stack[top++] = j;
         }
     }
-    if (inRun) runsWithSide += runHasSide;
-    return runsWithSide <= 1;
+    for (int s : sides) if (open[s] && !seen[s]) return false;
+    return true;
 }
+
 }
 #endif

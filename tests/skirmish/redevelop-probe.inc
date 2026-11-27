@@ -162,10 +162,11 @@ Coord polluterSite(const House* house) {
     return best;
 }
 
-Run play(const std::string& save, Switches switches, int minutes, bool plant, Coord* plantSite = nullptr) {
+Run play(const std::string& save, Switches switches, int minutes, bool plant, Coord* plantSite = nullptr, int credits = 0) {
     auto game = load(save);
     Bot b = findBot(*game);
     configure(b.bot, switches);
+    if (credits > 0) b.house->addCredits(FixPoint(credits));
     auto* sim = game->getCitySimulation();
     Uint32 plantID = NONE_ID;
     if(plant) {
@@ -366,19 +367,22 @@ void runRedevelopProbe() {
     expect(!plantLots.empty() && onPollution < offPollution, "PollutionRelocation: the polluter's neighbours are no cleaner than OFF");
     expect(onValue > offValue, "PollutionRelocation: the polluter's neighbours end with no more land value than OFF");
 
-    // IndustrySeparation.
+    // IndustrySeparation. The start city builds no Industrial zone in six minutes on its own
+    // money, so both arms get the same 20,000 credits and eight minutes to grow.
+    const Run sepOff = play(save, {}, 8, false, nullptr, 20000);
     Switches separate; separate.separate = true;
-    const Run sepOn = play(save, separate, kMinutes, false);
+    const Run sepOn = play(save, separate, 8, false, nullptr, 20000);
     requireIdle(sepOn, "IndustrySeparation (no redevelopment orders)");
+    SDL_Log("SKIRMISH_PROBE: redevelop separation industry on=%d (near %d) off=%d (near %d) home_pollution on=%.1f off=%.1f "
+            "home_land_value on=%.1f off=%.1f homes on=%d off=%d", sepOn.activity.industryPlaced, sepOn.activity.industryNearHomes,
+            sepOff.activity.industryPlaced, sepOff.activity.industryNearHomes, sepOn.homePollution, sepOff.homePollution,
+            sepOn.homeLandValue, sepOff.homeLandValue, sepOn.homes, sepOff.homes);
     expect(sepOn.activity.industryPlaced >= 1, "IndustrySeparation: the bot placed no Industrial zone to test");
     expect(sepOn.activity.industryNearHomes == 0, "IndustrySeparation: an Industrial zone landed within 5 tiles of a home");
-    SDL_Log("SKIRMISH_PROBE: redevelop separation industry on=%d (near %d) off=%d (near %d) home_pollution on=%.1f off=%.1f "
-            "home_land_value on=%.1f off=%.1f", sepOn.activity.industryPlaced, sepOn.activity.industryNearHomes,
-            off.activity.industryPlaced, off.activity.industryNearHomes, sepOn.homePollution, off.homePollution,
-            sepOn.homeLandValue, off.homeLandValue);
-    expect(off.activity.industryNearHomes >= 1, "IndustrySeparation: OFF placed no Industrial zone near a home, so the test proves nothing");
-    expect(sepOn.homePollution < off.homePollution, "IndustrySeparation: the homes are no cleaner than OFF");
-    expect(sepOn.homeLandValue > off.homeLandValue, "IndustrySeparation: the homes end with no more land value than OFF");
+    expect(sepOff.activity.industryNearHomes >= 1, "IndustrySeparation: OFF placed no Industrial zone near a home, so the test proves nothing");
+    expect(sepOn.homePollution < sepOff.homePollution, "IndustrySeparation: the homes are no cleaner than OFF");
+    expect(sepOn.homeLandValue > sepOff.homeLandValue, "IndustrySeparation: the homes end with no more land value than OFF");
+
     std::string all;
     for (const auto& f : failures) all += (all.empty() ? "" : "; ") + f;
     skirmishRequire(failures.empty(), all);

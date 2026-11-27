@@ -97,17 +97,29 @@ DuneCity::ParkTerrainPolicy QuantBot::plannedParkTerrain() const {
     return terrain;
 }
 
-/// Whether a Park at (x, y) keeps every unit path and every road path that crossed the tile.
+/// Whether a Park at (x, y) keeps every unit path and every road path that crossed the tile: the
+/// open (respectively road) side neighbours of the tile still reach one another, without it, inside
+/// the 9x9 window around it (RedevelopmentPolicy::sidesStayConnected). A path that turned through the
+/// tile can then go around it. (The first version only looked at the eight neighbours and refused
+/// every tile where a side road joined a two-lane strip: 11 of 11 candidates in the probe.)
 bool QuantBot::parkKeepsPassage(int x, int y) const {
-    static const int DX[8] = {0, 1, 1, 1, 0, -1, -1, -1}, DY[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
-    bool open[8], road[8];
-    for (int i = 0; i < 8; ++i) {
-        const int nx = x + DX[i], ny = y + DY[i];
-        const Tile* tile = getMap().tileExists(nx, ny) ? getMap().getTile(nx, ny) : nullptr;
-        open[i] = tile && !tile->isMountain() && !tile->hasAStructure() && !overlapsReservedStructure(nx, ny, 1, 1);
-        road[i] = tile && tile->isRoad();
-    }
-    return RedevelopmentPolicy::ringKeepsPassage(open) && RedevelopmentPolicy::ringKeepsPassage(road);
+    const Map& map = getMap();
+    constexpr int r = RedevelopmentPolicy::kPassageWindow, side = 2 * r + 1;
+    bool open[side * side], road[side * side];
+    for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx) {
+            const int nx = x + dx, ny = y + dy, i = (dy + r) * side + (dx + r);
+            const Tile* tile = map.tileExists(nx, ny) ? map.getTile(nx, ny) : nullptr;
+            open[i] = tile && !tile->isMountain() && !tile->hasAStructure() && !overlapsReservedStructure(nx, ny, 1, 1);
+            road[i] = tile && tile->isRoad();
+        }
+    return RedevelopmentPolicy::sidesStayConnected(open) && RedevelopmentPolicy::sidesStayConnected(road);
+}
+
+bool QuantBot::redevelopmentSiteHeld(Uint32 item, Coord site) const {
+    return std::any_of(redevelopmentOrders.begin(), redevelopmentOrders.end(), [&](const RedevelopmentOrder& o) {
+        return o.placedCycle == 0 && o.item == item && o.site == site;
+    });
 }
 
 /// RoadLaneParks: the spare-lane road tile where a Park adds the most land value to our R/C lots.
