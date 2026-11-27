@@ -293,9 +293,12 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
     const bool relocateWindow = force.pollutionRelocation && inWindow(cycle, R::kRelocatePeriodMs, R::kRelocateWindowMs);
     const bool parkWindow = (force.roadLaneParks || force.lotParks) && inWindow(cycle, R::kParkSearchPeriodMs, R::kParkSearchWindowMs);
     if (!relocateWindow && !parkWindow) return;
+    // Not gated on pass.defendingEconomy: in a long war some enemy is always firing at some
+    // building of ours (low.dls: 85% of windows), while redevelopment happens inside the city and
+    // every site finder refuses a site under danger (dangerAt).
     if (!pass.citySimEnabled || gameMode != GameMode::Custom || pass.redevelopmentSearched
         || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
-        || pass.defendingEconomy || pass.airEngaged || pass.groundThreatAsset.isValid()) {
+        || pass.airEngaged || pass.groundThreatAsset.isValid()) {
         // Why a window passed without a search (only inside the windows, so a few records a period).
         if (!pass.redevelopmentSearched)
             traceDecision("redevelopment_gate", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
@@ -355,8 +358,6 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
     if (force.lotParks) {
         bool cleared = false;
         site = findLotParkSite(&gain, &cleared);
-        // Clearing a lot gives up its tax: only with money in hand beyond the park itself.
-        if (site.isValid() && cleared && pass.money < 2000) site = Coord::Invalid();
         if (site.isValid()) rule = cleared ? "lot_park_clear" : "lot_park_fill";
     }
     if (!site.isValid() && force.roadLaneParks) {
