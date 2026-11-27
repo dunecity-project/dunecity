@@ -2156,6 +2156,9 @@ private:
     /// hold against unit producers until the city has his population. Logs ECONOMY_FIRST lines.
     bool economyFirstEnabled() const;
     void planEconomyFirst(BuildPass& pass);
+    /// EconomyFirst: while the house is short of its yard target, a Heavy Factory or Starport buys only the
+    /// MCV (a Heavy Factory orders it, upgrading first if it must, from the held cash). True: nothing else.
+    bool economyFirstMcv(BuildPass& pass, BuilderTurn& turn);
     /// ECONOMY_STATE every game minute (switch on, or DUNECITY_TEST_ECONOMY_LOG=1 for every QuantBot
     /// house): the control arm logs the same numbers.
     void logEconomyState(const BuildPass& pass);

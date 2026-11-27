@@ -85,6 +85,7 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     if (queueCampaignWindtrap(pass, turn, 0)) return;
     if (buildCampaignRepairYard(pass, turn)) return;
     reserveBuilderCash(pass, turn);
+    if (economyFirstMcv(pass, turn)) return;
     if (buildCityHarvesterReplacement(pass, turn)) return;
     if (turn.pBuilder->getItemID() != Structure_ConstructionYard && buildTechSavings(pass, turn)) return;
     if (buildCapitalUnits(pass, turn)) return;
@@ -1182,11 +1183,9 @@ void QuantBot::reserveBuilderCash(BuildPass& pass, BuilderTurn& turn) {
     if (producer != Structure_ConstructionYard)
         protectedCash = std::max({protectedCash, pass.turretClusterReserve, pass.economyProjectReserve,
                                   pass.turretDrillReserve});
-    // EconomyFirst (default off): unit producers leave the hold for the yards. A Heavy Factory or Starport
-    // keeps its cash while the house is short of its yard target, so it can buy the MCV.
-    if (producer != Structure_ConstructionYard && pass.economyFirstHold > 0
-        && !((producer == Structure_HeavyFactory || producer == Structure_StarPort)
-             && pass.cityConstructionCapacity < pass.cityYardTarget))
+    // EconomyFirst (default off): unit producers leave the hold for the yards (the Heavy Factory's MCV is
+    // ordered from it in economyFirstMcv).
+    if (producer != Structure_ConstructionYard && pass.economyFirstHold > 0)
         protectedCash = std::max(protectedCash, pass.economyFirstHold);
     turn.reserve.reserved = pass.money - QuantBotBuildPolicy::spendableCredits(pass.money,protectedCash);
     pass.money -= turn.reserve.reserved;

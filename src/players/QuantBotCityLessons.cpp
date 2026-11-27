@@ -132,6 +132,34 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
     if (pass.citySimEnabled && economyLogEnabled()) logEconomyState(pass);
 }
 
+bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
+    const Uint32 producer = turn.pBuilder->getItemID();
+    if (pass.economyFirstHold <= 0 || (producer != Structure_HeavyFactory && producer != Structure_StarPort)
+        || pass.cityConstructionCapacity + pass.economyFirstMcvsOrdered >= pass.cityYardTarget) return false;
+    if (producer == Structure_StarPort) return true;   // held: its cash is the yards'
+    const auto* builder = turn.pBuilder;
+    if (builder->isUpgrading() || builder->isOnHold() || builder->getProductionQueueSize() > 0
+        || getHouse()->isGroundUnitLimitReached()) return true;
+    // The held cash is the MCV's: give it back for this order only.
+    const int held = turn.reserve.reserved;
+    pass.money += held;
+    bool ordered = false;
+    const char* what = "mcv";
+    if (campaignAvailableToBuild(builder, Unit_MCV)) {
+        ordered = produceItemWithLogging(pass, turn, Unit_MCV, __LINE__, "economy_first_mcv");
+        if (ordered) ++pass.economyFirstMcvsOrdered;
+    } else if (builder->getCurrentUpgradeLevel() < builder->getMaxUpgradeLevel()
+               && getHouse()->getCredits() >= builder->getUpgradeCost()) {
+        what = "upgrade";
+        ordered = upgradeWithLogging(pass, turn, __LINE__);
+    } else what = "unavailable";
+    pass.money -= held;
+    if (ordered) SDL_Log("ECONOMY_FIRST: house=%d event=%s ordered=%d capacity=%d yard_target=%d credits=%d cycle=%u",
+            getHouse()->getHouseID(), what, int(ordered), pass.cityConstructionCapacity, pass.cityYardTarget,
+            getHouse()->getCredits(), getGameCycleCount());
+    return true;
+}
+
 void QuantBot::logEconomyState(const BuildPass& pass) {
     const auto* sim = currentGame->getCitySimulation();
     const Uint32 now = getGameCycleCount();

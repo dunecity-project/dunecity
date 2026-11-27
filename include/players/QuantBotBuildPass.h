@@ -319,6 +319,7 @@ struct QuantBot::BuildPass {
     int economyProjectReserve{};
     /// EconomyFirst (default off): cash unit producers leave for the yards this pass.
     int economyFirstHold{};
+    int economyFirstMcvsOrdered{};   ///< MCVs EconomyFirst ordered this pass (the yard target counts them)
     Coord economyProjectSite = Coord::Invalid();
     bool economyProjectOrdered{};
     /// Beyond the core limits: bought only from cash kSpareCashReserve above its price, never saved for.

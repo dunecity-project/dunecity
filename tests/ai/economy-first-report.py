@@ -100,7 +100,7 @@ def main():
         met = sum(first[k]['footprint_met'] > 0 for k in keys)
         down = sum(first[k]['stood_down'] > 0 for k in keys)
         rich = sum(first[k]['spice_rich'] > 0 for k in keys)
-        spice = [num(min(states[k], key=lambda r: num(r['cycle']))['spice']) for k in keys if states[k]]
+        spice = [num(min(states[k], key=lambda r: num(r['cycle'])).get('spice')) for k in keys if states[k]]
         verdict = '' if label == 'default' else (' (tested)' if met * 2 >= len(keys) else ' **NOT TESTED**')
         out.append(f'| {label} | {len(keys)} | {fired} | {met}{verdict} | {down} | {rich} | '
                    f'{statistics.median(spice) if spice else "-"} |')
