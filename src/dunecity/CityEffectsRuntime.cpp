@@ -1,3 +1,4 @@
+#include <map>
 #include <dunecity/CityStructurePopulation.h>
 #include <units/UnitBase.h>
 #include <dunecity/PoliceCoveragePolicy.h>
@@ -1614,21 +1615,20 @@ void CitySimulation::runZoneGrowth() {
         hs.churchCount   = computeChurchCount(newRes);
     }
 
-    // Designate residential zones as hospitals/churches. Cap overlays: at most 1 hospital per 8
-    // populated res zones and 1 church per 8 zones, so they appear as sparse civic landmarks
-    // rather than covering every zone. Spread evenly across zones.
+    // Civic overlays: which Residential zones are Hospitals and Churches. The quota is as before
+    // (one per kResPopPerHospital residents, at most one per 8 populated zones, at least one), but
+    // an overlay now stays on its zone. It used to be re-picked every census as every Nth populated
+    // zone, so any zone growing, emptying or being built moved every Hospital (Stefan, 2026-11-27:
+    // "the building type keeps changing from hospital to something else"). Now a house gains or
+    // loses at most one Hospital and one Church per spacing, and only a Hospital or Church older
+    // than its minimum lifetime is taken away (HospitalCare.h, "Civic overlay pacing"; Micropolis
+    // zone.cpp removes a surplus one with a 1-in-20 chance a city day).
     //
-    // Each house's own counts place its own overlays. This used the local player's counts for
-    // every house, which differed between peers and spectators; Hospitals heal infantry now
-    // (dunecity/HospitalCare.h), so the designation is simulation state and must be the same
-    // everywhere. A Hospital a soldier is healing at, waiting at, walking or flying to stays a
-    // Hospital (HospitalCare::keepsHospital) and counts against its house's quota first.
+    // Each house's own counts place its own overlays, the same on every peer. A Hospital a soldier
+    // is healing at, waiting at, walking or flying to stays a Hospital (HospitalCare::keepsHospital).
     {
+        const uint32_t today = lastProcessedDay_ + 1;   // +1: 0 is "never" in the pacing record
         int populatedResZones[kMaxCityHouses] = {};
-        int hospRemain[kMaxCityHouses] = {};
-        int churRemain[kMaxCityHouses] = {};
-        int stride[kMaxCityHouses] = {};
-        int resIndex[kMaxCityHouses] = {};
         auto ownerSlot = [](const StructureBase* s) {
             const House* owner = s->getOwner();
             const int h = owner ? owner->getHouseID() : -1;
@@ -1640,48 +1640,105 @@ void CitySimulation::runZoneGrowth() {
             if (h >= 0 && n.role == CityRole::Residential && n.level > 0)
                 populatedResZones[h]++;
         }
-        for (int h = 0; h < kMaxCityHouses; ++h) {
-            const int maxHosp = std::max(1, populatedResZones[h] / 8);
-            const int maxChur = std::max(1, populatedResZones[h] / 8);
-            hospRemain[h] = std::min(houseState_[h].hospitalCount, maxHosp);
-            churRemain[h] = std::min(houseState_[h].churchCount, maxChur);
-        }
-        // Locked Hospitals first: they keep the overlay and use up the quota.
-        for (const auto& n : nodes) {
-            if (!n.pZone || n.role != CityRole::Residential) continue;
-            const int h = ownerSlot(n.pStruct);
-            if (h >= 0 && HospitalCare::keepsHospital(n.pZone) && hospRemain[h] > 0) --hospRemain[h];
-        }
-        for (int h = 0; h < kMaxCityHouses; ++h) {
-            // Spacing: place a hospital every N zones, a church offset halfway between
-            stride[h] = (hospRemain[h] + churRemain[h] > 0)
-                ? std::max(2, populatedResZones[h] / (hospRemain[h] + churRemain[h]))
-                : 0;
-        }
-
-        HospitalCareState::Overlays overlays;
+        auto days = hospitalCare_.overlayDays();
+        const auto sinceOf = [&](const ZoneStructure* zone) {
+            const auto it = days.find(zone->getObjectID());
+            return it != days.end() && it->second != 0 ? it->second : today;
+        };
+        struct Civic { ZoneStructure* zone; uint32_t since; bool locked; };
+        std::vector<Civic> hospitals[kMaxCityHouses], churches[kMaxCityHouses];
+        std::vector<ZoneStructure*> candidates[kMaxCityHouses];
+        std::map<const ZoneStructure*, ZoneStructure::CivicOverlay> before;
         for (const auto& n : nodes) {
             auto* zone = n.pZone;
             if (!zone) continue;
             const int h = ownerSlot(n.pStruct);
-            const auto overlayBefore = zone->getCivicOverlay();
-            if (n.role == CityRole::Residential && HospitalCare::keepsHospital(zone)) {
+            before[zone] = zone->getCivicOverlay();
+            if (n.role == CityRole::Residential && h >= 0 && HospitalCare::keepsHospital(zone)) {
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
-                if (n.level > 0 && h >= 0) resIndex[h]++;
+                hospitals[h].push_back({zone, sinceOf(zone), true});
             } else if (h < 0 || n.role != CityRole::Residential || n.level <= 0) {
+                // Lost, retyped or emptied: an overlay is drawn only on a populated zone.
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
+            } else if (zone->getCivicOverlay() == ZoneStructure::CivicOverlay::Hospital) {
+                hospitals[h].push_back({zone, sinceOf(zone), false});
+            } else if (zone->getCivicOverlay() == ZoneStructure::CivicOverlay::Church) {
+                churches[h].push_back({zone, sinceOf(zone), false});
             } else {
-                if (stride[h] > 0 && hospRemain[h] > 0 && (resIndex[h] % stride[h] == 0)) {
-                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
-                    --hospRemain[h];
-                } else if (stride[h] > 0 && churRemain[h] > 0 && (resIndex[h] % stride[h] == stride[h] / 2)) {
-                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::Church);
-                    --churRemain[h];
-                } else {
-                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
-                }
-                resIndex[h]++;
+                candidates[h].push_back(zone);
             }
+        }
+        const auto due = [&](uint32_t last, uint32_t spacing) { return last == 0 || today - last >= spacing; };
+        // The candidate farthest from the house's Hospitals and Churches, so they spread over the
+        // city as the stride did; ties go to the first in map order.
+        const auto pickCandidate = [&](int h) -> ZoneStructure* {
+            ZoneStructure* best = nullptr;
+            long bestScore = -1;
+            for (auto* zone : candidates[h]) {
+                long nearest = std::numeric_limits<long>::max();
+                for (const auto* list : {&hospitals[h], &churches[h]})
+                    for (const auto& c : *list) {
+                        const long dx = zone->getLocation().x - c.zone->getLocation().x;
+                        const long dy = zone->getLocation().y - c.zone->getLocation().y;
+                        nearest = std::min(nearest, dx * dx + dy * dy);
+                    }
+                if (nearest > bestScore) { best = zone; bestScore = nearest; }
+            }
+            if (best) candidates[h].erase(std::find(candidates[h].begin(), candidates[h].end(), best));
+            return best;
+        };
+        // The youngest unlocked one past its minimum lifetime (ties: the later zone in map order).
+        const auto pickSurplus = [&](std::vector<Civic>& list, uint32_t minLife) -> ZoneStructure* {
+            auto chosen = list.end();
+            for (auto it = list.begin(); it != list.end(); ++it) {
+                if (it->locked || today - it->since < minLife) continue;
+                if (chosen == list.end() || it->since >= chosen->since) chosen = it;
+            }
+            if (chosen == list.end()) return nullptr;
+            ZoneStructure* zone = chosen->zone;
+            list.erase(chosen);
+            return zone;
+        };
+        for (int h = 0; h < kMaxCityHouses; ++h) {
+            const int quota = std::max(1, populatedResZones[h] / 8);
+            const int hospitalTarget = std::min(houseState_[h].hospitalCount, quota);
+            const int churchTarget = std::min(houseState_[h].churchCount, quota);
+            auto& changes = hospitalCare_.houseChanges(static_cast<size_t>(h));
+            const int hospitalCount = static_cast<int>(hospitals[h].size());
+            if (hospitalCount < hospitalTarget && due(changes.hospital, kHospitalAddSpacingDays)) {
+                if (ZoneStructure* zone = pickCandidate(h)) {
+                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
+                    hospitals[h].push_back({zone, today, false});
+                    changes.hospital = today;
+                }
+            } else if (hospitalCount > hospitalTarget && due(changes.hospital, kHospitalRemoveSpacingDays)) {
+                if (ZoneStructure* zone = pickSurplus(hospitals[h], kHospitalMinLifeDays)) {
+                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
+                    changes.hospital = today;
+                }
+            }
+            const int churchCount = static_cast<int>(churches[h].size());
+            if (churchCount < churchTarget && due(changes.church, kChurchAddSpacingDays)) {
+                if (ZoneStructure* zone = pickCandidate(h)) {
+                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::Church);
+                    churches[h].push_back({zone, today, false});
+                    changes.church = today;
+                }
+            } else if (churchCount > churchTarget && due(changes.church, kChurchRemoveSpacingDays)) {
+                if (ZoneStructure* zone = pickSurplus(churches[h], kChurchMinLifeDays)) {
+                    zone->setCivicOverlay(ZoneStructure::CivicOverlay::None);
+                    changes.church = today;
+                }
+            }
+        }
+
+        HospitalCareState::Overlays overlays;
+        HospitalCareState::OverlayDays overlayDays;
+        for (const auto& n : nodes) {
+            auto* zone = n.pZone;
+            if (!zone) continue;
+            const int h = ownerSlot(n.pStruct);
+            const auto overlayBefore = before[zone];
             const auto overlayAfter = zone->getCivicOverlay();
             if (overlayAfter != overlayBefore && h >= 0) {
                 auto& churn = zoneChurn_[h];
@@ -1690,10 +1747,13 @@ void CitySimulation::runZoneGrowth() {
                 if (overlayAfter == ZoneStructure::CivicOverlay::Hospital) ++churn.hospitalOn;
                 if (overlayAfter == ZoneStructure::CivicOverlay::Church) ++churn.churchOn;
             }
-            if (zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None)
-                overlays.emplace_back(zone->getObjectID(), static_cast<uint8_t>(zone->getCivicOverlay()));
+            if (overlayAfter != ZoneStructure::CivicOverlay::None) {
+                overlays.emplace_back(zone->getObjectID(), static_cast<uint8_t>(overlayAfter));
+                overlayDays[zone->getObjectID()] = overlayAfter == overlayBefore ? sinceOf(zone) : today;
+            }
         }
         hospitalCare_.setOverlays(std::move(overlays));
+        hospitalCare_.setOverlayDays(std::move(overlayDays));
     }
 
     // CITY_ZONE_CHURN, once a city year per house with zones: how often its zones changed

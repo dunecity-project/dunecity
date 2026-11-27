@@ -112,9 +112,9 @@ ZoneStructure* chooseHospital(const HospitalCareState& care, const UnitBase* uni
 
 /// Walk to the spot; ask for a Carryall when it is a flight away. The forced move keeps the
 /// soldier from turning aside to fight on the way, as a player's move order does.
-void travel(GroundUnit* unit, const Coord& spot) {
+void travel(GroundUnit* unit, const Coord& spot, bool mayFly = true) {
     unit->doMove2Pos(spot, true);
-    if(unit->getOwner()->hasCarryalls() && blockDistance(unit->getLocation(), spot) >= MIN_CARRYALL_LIFT_DISTANCE) {
+    if(mayFly && unit->getOwner()->hasCarryalls() && blockDistance(unit->getLocation(), spot) >= MIN_CARRYALL_LIFT_DISTANCE) {
         unit->requestCarryall();
     }
 }
@@ -127,7 +127,8 @@ void logEvent(const char* event, const UnitBase* unit, Uint32 unitID, Uint32 hos
             currentGame->getGameCycleCount());
 }
 
-bool dispatch(HospitalCareState& care, GroundUnit* unit, ZoneStructure* zone, const char* why) {
+/// \a mayFly false: a player's walk-in order walks, as it was given.
+bool dispatch(HospitalCareState& care, GroundUnit* unit, ZoneStructure* zone, const char* why, bool mayFly = true) {
     const Coord spot = chooseSpot(care, zone, unit->getLocation());
     if(spot.isInvalid()) return false;
     HospitalTrip trip;
@@ -141,9 +142,27 @@ bool dispatch(HospitalCareState& care, GroundUnit* unit, ZoneStructure* zone, co
     if(besideZone(zone, unit->getLocation())) {
         unit->doMove2Pos(unit->getLocation(), false);
     } else {
-        travel(unit, spot);
+        travel(unit, spot, mayFly);
     }
     return true;
+}
+
+/// Ends a trip: a soldier holding its bed gets back the mode it had (a player's order already chose
+/// one), and one line for match logs.
+void finishTrip(HospitalCareState& care, Uint32 id, const char* why) {
+    const auto* t = care.trip(id);
+    auto* left = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(id));
+    if(left && t && t->priorMode != 0xff && left->getAttackMode() == HOLD && left->getHealth() > 0)
+        left->doSetAttackMode(static_cast<ATTACKMODE>(t->priorMode));
+    logEvent(std::string(why) == "healed" ? "healed" : "ended", left, id, t ? t->hospitalID : 0, why);
+    care.cancel(id);
+}
+
+/// A Hospital in the census roster (not only drawn as one) that the house may heal at.
+bool rosterHospital(const HospitalCareState& care, const ZoneStructure* zone, const House* owner) {
+    if(!usableZone(zone, owner)) return false;
+    const auto entry = std::make_pair(zone->getObjectID(), static_cast<uint8_t>(ZoneStructure::CivicOverlay::Hospital));
+    return std::find(care.overlays().begin(), care.overlays().end(), entry) != care.overlays().end();
 }
 
 /// A human house always; an AI house only when its QuantBot has HospitalInfantry on.
@@ -214,6 +233,64 @@ void considerAutomatic(GroundUnit* unit) {
     auto& care = *state();
     if(care.trip(unit->getObjectID())) return;
     if(ZoneStructure* zone = chooseHospital(care, unit, 0, false)) dispatch(care, unit, zone, "auto");
+}
+
+ZoneStructure* walkInHospital(const UnitBase* unit, const StructureBase* target, const Coord& tile, int tiles) {
+    if(!enabled() || !canBeHealed(unit) || unit->getHealth() >= unit->getMaxHealth() || unit->isPickedUp()) {
+        return nullptr;
+    }
+    const House* owner = unit->getOwner();
+    if(owner->isAI() && !botSends(owner)) return nullptr;
+    const auto& care = *state();
+    if(target != nullptr) {
+        auto* zone = dynamic_cast<ZoneStructure*>(const_cast<StructureBase*>(target));
+        return rosterHospital(care, zone, owner) ? zone : nullptr;
+    }
+    if(tile.isInvalid()) return nullptr;
+    ZoneStructure* best = nullptr;
+    int bestDistance = 0;
+    for(const auto& [id, overlay] : care.overlays()) {
+        if(overlay != static_cast<uint8_t>(ZoneStructure::CivicOverlay::Hospital)) continue;
+        ZoneStructure* zone = zoneByID(id);
+        if(!usableZone(zone, owner)) continue;
+        // Chebyshev distance from the tile to the 2x2 footprint: 0 on it, 1 beside it.
+        const Coord& o = zone->getLocation();
+        const int dx = std::max({o.x - tile.x, tile.x - (o.x + zone->getStructureSizeX() - 1), 0});
+        const int dy = std::max({o.y - tile.y, tile.y - (o.y + zone->getStructureSizeY() - 1), 0});
+        const int distance = std::max(dx, dy);
+        if(distance <= tiles && (!best || distance < bestDistance)) { best = zone; bestDistance = distance; }
+    }
+    return best;
+}
+
+bool walkIn(UnitBase* unitBase, ZoneStructure* zone) {
+    auto* unit = dynamic_cast<GroundUnit*>(unitBase);
+    auto* care = state();
+    if(!unit || !zone || !care) return false;
+    if(const auto* trip = care->trip(unit->getObjectID())) {
+        if(trip->hospitalID == zone->getObjectID()) {
+            // Ordered to the Hospital it is already going to: the walk to its tile stands, and a
+            // healing soldier stays in its bed.
+            if(trip->stage == HospitalTrip::Stage::Healing || besideZone(zone, unit->getLocation())) {
+                unit->doMove2Pos(unit->getLocation(), false);
+            } else {
+                travel(unit, Coord(trip->spotX, trip->spotY), false);
+            }
+            return true;
+        }
+        finishTrip(*care, unit->getObjectID(), "reordered");
+    }
+    return dispatch(*care, unit, zone, "walkin", false);
+}
+
+bool replacesRepairYard(const UnitBase* unit) {
+    return unit != nullptr && unit->isInfantry() && enabled();
+}
+
+RepairButton repairButtonFor(const UnitBase* unit) {
+    if(!replacesRepairYard(unit)) return RepairButton::RepairYard;
+    if(!canBeHealed(unit)) return RepairButton::CannotHeal;
+    return chooseHospital(*state(), unit, 0, false) ? RepairButton::Hospital : RepairButton::NeedsHospital;
 }
 
 bool keepsHospital(const ZoneStructure* zone) {
@@ -369,18 +446,7 @@ void update() {
             }
         }
     }
-    for(const auto& [id, why] : ended) {
-        const auto* t = care->trip(id);
-        // A soldier leaving its bed gets back the mode it had (a player's order already chose one).
-        if(auto* left = dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(id))) {
-            if(t && t->priorMode != 0xff && left->getAttackMode() == HOLD && left->getHealth() > 0)
-                left->doSetAttackMode(static_cast<ATTACKMODE>(t->priorMode));
-        }
-        logEvent(std::string(why) == "healed" ? "healed" : "ended",
-                 currentGame->getObjectManager().getObject(id) ? dynamic_cast<UnitBase*>(currentGame->getObjectManager().getObject(id)) : nullptr,
-                 id, t ? t->hospitalID : 0, why);
-        care->cancel(id);
-    }
+    for(const auto& [id, why] : ended) finishTrip(*care, id, why);
     for(const auto& [unitID, hospitalID] : redirect) {
         auto* unit = dynamic_cast<GroundUnit*>(currentGame->getObjectManager().getObject(unitID));
         ZoneStructure* zone = zoneByID(hospitalID);

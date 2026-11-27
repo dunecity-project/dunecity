@@ -35,6 +35,7 @@
 #include <misc/CursorAppearance.h>
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
 #include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
+#include <dunecity/HospitalCare.h>
 #include <GUI/ObjectInterfaces/FormationBar.h>
 #include <FormationOrders.h>
 
@@ -368,6 +369,7 @@ protected:
         bool bShowDeploy = false;
         bool bShowDevastate = false;
         bool bShowRepair = false;
+        bool bCanRepair = false, bSoldiers = false, bVehicles = false;   // Hospital Care: see below
         bool bShowCarryallDrop = false;
         int ownGroundUnits = 0;
 
@@ -402,6 +404,11 @@ protected:
 
                 if(pUnit->getHealth() < pUnit->getMaxHealth()){
                     bShowRepair = true;
+                    // Infantry under Hospital Care heal only at a Hospital (HospitalCare.h).
+                    using DuneCity::HospitalCare::RepairButton;
+                    const RepairButton repair = DuneCity::HospitalCare::repairButtonFor(pUnit);
+                    if(repair == RepairButton::RepairYard || repair == RepairButton::Hospital) bCanRepair = true;
+                    if(repair != RepairButton::RepairYard) bSoldiers = true; else bVehicles = true;
                 }
 
                 if(pUnit->canCaptureStructures()) bShowCapture = true;
@@ -434,6 +441,12 @@ protected:
         deployButton.setVisible(bShowDeploy);
         destructButton.setVisible(bShowDevastate);
         sendToRepairButton.setVisible(bShowRepair);
+        sendToRepairButton.setEnabled(bCanRepair);
+        {
+            const std::string tip = (!bSoldiers || bVehicles) ? UnitCommandTooltips::repairUnit()
+                : bCanRepair ? UnitCommandTooltips::healAtHospital() : UnitCommandTooltips::needsHospital();
+            if(sendToRepairButton.getTooltipText() != tip) sendToRepairButton.setTooltipText(tip);
+        }
         carryallDropButton.setVisible(bShowCarryallDrop && currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops);
         actionBar.refresh();
         formationBar.refresh(ownGroundUnits >= FormationOrders::kMinPlayerGroup);

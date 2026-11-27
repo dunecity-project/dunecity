@@ -81,3 +81,38 @@ TEST_CASE("Hospital care state refuses a damaged stream", "[city][hospital][save
     HospitalCareState loaded;
     REQUIRE_THROWS(loaded.load(in));
 }
+
+TEST_CASE("Civic overlay pacing round-trips through a save after the hospital state", "[city][hospital][save]") {
+    HospitalCareState care;
+    care.setOverlays({{40, 1}, {41, 2}});
+    care.setOverlayDays({{40, 97}, {41, 12}});
+    care.houseChanges(0).hospital = 97;
+    care.houseChanges(2).church = 12;   // house 1 never changed: zeros in between
+    REQUIRE(care.houseChanges().size() == 3);
+
+    OMemoryStream out;
+    out.open();
+    care.save(out);
+    care.savePacing(out);
+    out.writeUint32(0xfeedbeefu);
+    IMemoryStream in(out.getData(), out.getDataLength());
+    HospitalCareState loaded;
+    loaded.setOverlayDays({{7, 1}});   // replaced, not merged
+    loaded.load(in);
+    loaded.loadPacing(in);   // replaces the pacing record, as load() replaces the trips
+    REQUIRE(in.readUint32() == 0xfeedbeefu);
+    REQUIRE(loaded.overlays() == care.overlays());
+    REQUIRE(loaded.overlayDays() == care.overlayDays());
+    REQUIRE(loaded.houseChanges() == care.houseChanges());
+    REQUIRE(loaded.houseChanges()[1].hospital == 0);
+}
+
+TEST_CASE("Civic overlay pacing refuses an impossible house count", "[city][hospital][save]") {
+    OMemoryStream out;
+    out.open();
+    out.writeUint32(0);       // no overlay days
+    out.writeUint32(65);      // more houses than any game has
+    IMemoryStream in(out.getData(), out.getDataLength());
+    HospitalCareState loaded;
+    REQUIRE_THROWS(loaded.loadPacing(in));
+}

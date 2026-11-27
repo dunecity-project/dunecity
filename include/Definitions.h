@@ -260,7 +260,12 @@
 //       (DuneCity::HospitalCareState): the census's civic overlays (zone id, Hospital or Church)
 //       and every soldier's Hospital trip (soldier, Hospital, tile, stage, carried, start cycle).
 //       An older save has none; its first census designates the overlays again.
-#define SAVEGAMEVERSION     9903
+// 9904: Civic overlay pacing: after the hospital state, the city day each Hospital and Church
+//       overlay was put on its zone and each house's last Hospital and Church change
+//       (HospitalCareState::savePacing). An older save's overlays count from the day it loads.
+#define SAVEGAMEVERSION     9904
+/// First save with the civic overlay pacing record (Hospitals and Churches stay on their zones).
+#define SAVEGAMEVERSION_CIVIC_PACING 9904
 /// First save with a captured zone's original owner (Zone Garrisons: an emptied captured zone returns).
 #define SAVEGAMEVERSION_ZONE_GARRISON_RETURN 9903
 /// First save with the Hospital trips and civic overlays (Hospital Care).

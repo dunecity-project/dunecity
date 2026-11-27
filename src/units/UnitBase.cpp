@@ -17,6 +17,7 @@
  */
 
 #include <units/UnitBase.h>
+#include <dunecity/HospitalCare.h>
 #include <units/Trooper.h>
 #include <structures/ZoneStructure.h>
 #include <Achievements/AchievementEvents.h>
@@ -2512,7 +2513,9 @@ void UnitBase::setTarget(const ObjectBase* newTarget) {
         && (pNewTarget->getItemID() == Structure_RepairYard)
         // An explicit move onto the captor's repair yard must not turn into a repair trip
         // for a deviated unit: without the booking it never reaches setGettingRepaired().
-        && isEligibleForRepair()) {
+        && isEligibleForRepair()
+        // Infantry under Hospital Care are healed at Hospitals; a yard never repairs them.
+        && !DuneCity::HospitalCare::replacesRepairYard(this)) {
         static_cast<RepairYard*>(pNewTarget)->book();
         goingToRepairYard = true;
     }

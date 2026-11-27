@@ -90,6 +90,16 @@ inline std::string returnHarvester() {
 inline std::string repairUnit() {
     return withHotkey(_("Repair"), Hotkeys::Action::Repair, _("send this unit to a repair yard"));
 }
+/// Infantry in a city game with Hospital Care (dunecity/HospitalCare.h, repairButtonFor).
+inline std::string healAtHospital() {
+    return withHotkey(_("Heal"), Hotkeys::Action::Repair, _("send this soldier to a Hospital"));
+}
+inline std::string needsHospital() {
+    return _("Needs a Hospital: soldiers heal only at a Hospital, which a city of 256 residents gets");
+}
+inline std::string saboteurCannotHeal() {
+    return _("A Saboteur cannot be healed");
+}
 
 /// The unit panel's formation buttons (docs/formations.md): Off, then the shapes in
 /// FormationPlanner::Shape order. A shape also forms the selected units up where they stand.

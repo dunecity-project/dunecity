@@ -30,6 +30,7 @@
 #include <misc/CursorAppearance.h>
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
 #include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
+#include <dunecity/HospitalCare.h>
 #include <GUI/HBox.h>
 #include <GUI/VBox.h>
 
@@ -249,7 +250,8 @@ protected:
     void OnSendToRepair() {
         ObjectBase* pObject = currentGame->getObjectManager().getObject(objectID);
         GroundUnit* pGroundUnit = dynamic_cast<GroundUnit*>(pObject);
-        if((pGroundUnit != nullptr) && (pGroundUnit->getHealth() < pGroundUnit->getMaxHealth())) {
+        if((pGroundUnit != nullptr) && (pGroundUnit->getHealth() < pGroundUnit->getMaxHealth())
+           && sendToRepairButton.isEnabled()) {
             pGroundUnit->handleSendToRepairClick();
         }
     }
@@ -345,6 +347,17 @@ protected:
         spiceBloomButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_SpiceBloom);
         carryallDropButton.setVisible(currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops && pObject->getOwner()->hasCarryalls());
         sendToRepairButton.setVisible(pObject->getHealth() < pObject->getMaxHealth());
+        {
+            // Infantry under Hospital Care heal only at a Hospital: no Hospital, no order.
+            using DuneCity::HospitalCare::RepairButton;
+            const RepairButton repair = DuneCity::HospitalCare::repairButtonFor(dynamic_cast<const UnitBase*>(pObject));
+            sendToRepairButton.setEnabled(repair == RepairButton::RepairYard || repair == RepairButton::Hospital);
+            const std::string tip = repair == RepairButton::RepairYard ? UnitCommandTooltips::repairUnit()
+                : repair == RepairButton::Hospital ? UnitCommandTooltips::healAtHospital()
+                : repair == RepairButton::NeedsHospital ? UnitCommandTooltips::needsHospital()
+                : UnitCommandTooltips::saboteurCannotHeal();
+            if(sendToRepairButton.getTooltipText() != tip) sendToRepairButton.setTooltipText(tip);
+        }
         actionBar.refresh();
 
         UnitBase* pUnit = dynamic_cast<UnitBase*>(pObject);

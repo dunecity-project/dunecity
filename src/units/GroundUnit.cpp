@@ -421,8 +421,11 @@ void GroundUnit::doRepair() {
         return;
     }
 
-    // Infantry in a city game go to a Hospital; without one they fall back to a Repair Yard.
-    if(isInfantry() && DuneCity::HospitalCare::sendToHospital(this)) {
+    // Infantry in a city game with Hospital Care go to a Hospital and nowhere else: with no
+    // Hospital (or a Saboteur) the order does nothing. A Repair Yard never repaired a soldier
+    // (InfantryBase::checkPos does not run the yard arrival above), it only walked there.
+    if(DuneCity::HospitalCare::replacesRepairYard(this)) {
+        DuneCity::HospitalCare::sendToHospital(this);
         return;
     }
 

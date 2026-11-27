@@ -507,7 +507,12 @@
 //      zone returns to its original owner once its garrison is gone, and soldiers thrown out of a
 //      destroyed zone lose half their hit points. A 147 peer would desync. Save format 9903 (a
 //      captured zone's original owner). The Soldier's default price is 30 (ObjectData).
-#define NETWORK_PROTOCOL_VERSION            148
+// 149: Hospitals and Churches stay on their zones: a house gains or loses at most one Hospital a
+//      quarter year / a year (one Church a quarter / half year), only one older than four (two)
+//      city years is removed; the census no longer re-picks them every city day. A wounded
+//      soldier given a move order onto or beside an own Hospital, or right-clicking it, heals
+//      there (walk-in). A 148 peer would desync. Save format 9904 (civic overlay pacing).
+#define NETWORK_PROTOCOL_VERSION            149
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

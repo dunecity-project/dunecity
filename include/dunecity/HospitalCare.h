@@ -82,6 +82,30 @@ constexpr int kHospitalContactScanTiles = 9;
 /// default speed) is abandoned: the route is blocked. A Soldier needs about 300 cycles a tile.
 constexpr uint32_t kHospitalTripStallCycles = 3750;
 
+// Civic overlay pacing (CitySimulation::runZoneGrowth), in city days (48 a city year: a game minute,
+// two with Slow City Year). Stefan, 2026-11-27: "make buildings change type much slower, especially
+// hospitals the building type keeps changing from hospital to something else". The census used to
+// re-pick every Hospital and Church each city day as every Nth populated zone, so any zone growing
+// or emptying moved them. Micropolis (zone.cpp doHospitalChurch, makeHospital) keeps a Hospital
+// until there are too many, then removes each surplus one with a 1-in-20 chance a city day, and
+// adds at most one every two days. Here an overlay stays on its zone; a house gains or loses at
+// most one Hospital (and one Church) per spacing, and only one older than its minimum lifetime is
+// taken away.
+/// A Hospital stays at least four city years (eight game minutes with Slow City Year).
+constexpr uint32_t kHospitalMinLifeDays = 4 * 48;
+/// A house gets at most one new Hospital a quarter year...
+constexpr uint32_t kHospitalAddSpacingDays = 12;
+/// ...and loses at most one surplus Hospital a city year.
+constexpr uint32_t kHospitalRemoveSpacingDays = 48;
+/// A Church stays at least two city years; one new Church a quarter year, one removed a half year.
+constexpr uint32_t kChurchMinLifeDays = 2 * 48;
+constexpr uint32_t kChurchAddSpacingDays = 12;
+constexpr uint32_t kChurchRemoveSpacingDays = 24;
+/// A move order ending on or beside an own Hospital (Chebyshev distance to the footprint) walks a
+/// wounded soldier in to heal; a formation slot counts within two tiles, as a group spreads out.
+constexpr int kHospitalWalkInTiles = 1;
+constexpr int kHospitalWalkInFormationTiles = 2;
+
 /// One soldier's claim on a Hospital.
 struct HospitalTrip {
     enum class Stage : uint8_t { Travelling = 0, Waiting = 1, Healing = 2 };
@@ -146,7 +170,52 @@ public:
     const QuietClocks& quietSince() const { return quietSince_; }
     void setQuietSince(QuietClocks clocks) { quietSince_ = std::move(clocks); }
 
-    void clear() { trips_.clear(); overlays_.clear(); quietSince_.clear(); }
+    /// Civic overlay pacing: the city day (+1; 0 unknown) each overlay was put on its zone, and per
+    /// house the day (+1; 0 never) of its last Hospital and Church change. Saved from
+    /// SAVEGAMEVERSION_CIVIC_PACING (savePacing / loadPacing, after the block above).
+    using OverlayDays = std::map<uint32_t, uint32_t>;
+    struct HouseChanges { uint32_t hospital = 0, church = 0; bool operator==(const HouseChanges& o) const { return hospital == o.hospital && church == o.church; } };
+    const OverlayDays& overlayDays() const { return overlayDays_; }
+    void setOverlayDays(OverlayDays days) { overlayDays_ = std::move(days); }
+    const std::vector<HouseChanges>& houseChanges() const { return houseChanges_; }
+    HouseChanges& houseChanges(size_t house) {
+        if(houseChanges_.size() <= house) houseChanges_.resize(house + 1);
+        return houseChanges_[house];
+    }
+
+    void clear() { trips_.clear(); overlays_.clear(); quietSince_.clear(); clearPacing(); }
+    void clearPacing() { overlayDays_.clear(); houseChanges_.clear(); }
+
+    void savePacing(OutputStream& stream) const {
+        stream.writeUint32(static_cast<Uint32>(overlayDays_.size()));
+        for(const auto& [zone, day] : overlayDays_) {
+            stream.writeUint32(zone);
+            stream.writeUint32(day);
+        }
+        stream.writeUint32(static_cast<Uint32>(houseChanges_.size()));
+        for(const auto& h : houseChanges_) {
+            stream.writeUint32(h.hospital);
+            stream.writeUint32(h.church);
+        }
+    }
+
+    void loadPacing(InputStream& stream) {
+        clearPacing();
+        const Uint32 dayCount = stream.readUint32();
+        stream.requireReadableElements(dayCount, 8);
+        for(Uint32 i = 0; i < dayCount; ++i) {
+            const Uint32 zone = stream.readUint32();
+            overlayDays_[zone] = stream.readUint32();
+        }
+        const Uint32 houses = stream.readUint32();
+        if(houses > 64) throw std::runtime_error("Invalid civic pacing house count.");
+        stream.requireReadableElements(houses, 8);
+        houseChanges_.resize(houses);
+        for(auto& h : houseChanges_) {
+            h.hospital = stream.readUint32();
+            h.church = stream.readUint32();
+        }
+    }
 
     void save(OutputStream& stream) const {
         stream.writeUint32(static_cast<Uint32>(overlays_.size()));
@@ -174,7 +243,7 @@ public:
     }
 
     void load(InputStream& stream) {
-        clear();
+        trips_.clear(); overlays_.clear(); quietSince_.clear();
         const Uint32 overlayCount = stream.readUint32();
         stream.requireReadableElements(overlayCount, 5);
         for(Uint32 i = 0; i < overlayCount; ++i) {
@@ -212,6 +281,8 @@ private:
     Trips trips_;
     Overlays overlays_;
     QuietClocks quietSince_;
+    OverlayDays overlayDays_;
+    std::vector<HouseChanges> houseChanges_;
 };
 
 /// Game-side rules (src/dunecity/HospitalCare.cpp). All of them are no-ops outside a city game or
@@ -242,6 +313,31 @@ bool canBeHealed(const UnitBase* unit);
 /// it is far. Returns false when there is no Hospital, so the caller can fall back to a Repair
 /// Yard. A soldier already on a trip keeps it (idempotent: a Carryall's pickup repeats the order).
 bool sendToHospital(GroundUnit* unit);
+
+/// Walk-in (Stefan, 2026-11-27: "allow a infrantry or trooper to be walked / moved into a hospital
+/// to heal"): the own Hospital a player's order walks this wounded soldier into, or nullptr.
+/// \a target is the order's object (a right-click on the Hospital, or the Capture cursor on it);
+/// otherwise \a tile, the order's destination, must be on the Hospital or within \a tiles of it.
+/// Human houses; an AI house only with QuantBot HospitalInfantry on. Full health, a Saboteur or
+/// the rule off: nullptr, and the order is an ordinary one.
+ZoneStructure* walkInHospital(const UnitBase* unit, const StructureBase* target, const Coord& tile, int tiles);
+/// Puts the soldier on a trip to \a zone (keeping a trip it already has there). True on a trip.
+bool walkIn(UnitBase* unit, ZoneStructure* zone);
+
+/// In a city game with Hospital Care on, infantry are healed at Hospitals only: no repair order,
+/// bot or Carryall pickup sends a soldier to a Repair Yard (Stefan, 2026-11-27: "the repair request
+/// for infantry take them to repair factory"). A Repair Yard never repaired infantry: they stood
+/// beside it. With the rule off, or outside a city game, the old order stands.
+bool replacesRepairYard(const UnitBase* unit);
+
+/// What the unit panel's Repair button can do for this unit.
+enum class RepairButton : uint8_t {
+    RepairYard,     ///< The ordinary repair order (vehicles; infantry without the rule).
+    Hospital,       ///< A soldier with an own Hospital to go to.
+    NeedsHospital,  ///< A soldier whose house has no Hospital: the button is disabled.
+    CannotHeal,     ///< A Saboteur: no Hospital heals it, and no Repair Yard either.
+};
+RepairButton repairButtonFor(const UnitBase* unit);
 
 /// The automatic rule, checked by update() every kHospitalRecheckCycles for every soldier while
 /// its house has a Hospital (InfantryBase::checkPos does not run GroundUnit's): a human house's

@@ -71,11 +71,12 @@ def play(binary, out, tag, case):
     (profile / 'Dune City.ini').write_text(BASE_INI, encoding='utf-8')
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1', HOSPITAL_CARE_OUT=str(run),
-               HOSPITAL_CARE_CASE=case)
+               HOSPITAL_CARE_CASE=case,
+               HOSPITAL_CARE_METROPOLIS=str(root / 'data/maps/multiplayer/4P - 192x192 - Metropolis.ini'))
     logfile = run / 'run.log'
     with logfile.open('w') as log:
         subprocess.run([str(binary), '--window', '--showlog'], cwd=run, env=env, stdout=log, stderr=subprocess.STDOUT,
-                       check=True, timeout=1200)
+                       check=True, timeout=2400)
     lines = logfile.read_text(errors='replace').splitlines()
     records = [line[line.index('HOSPITAL_CARE_PROBE_'):] for line in lines if 'HOSPITAL_CARE_PROBE_' in line]
     if any('HOSPITAL_CARE_PROBE_FAIL' in line for line in records) or not records or records[-1] != 'HOSPITAL_CARE_PROBE_PASS':
@@ -88,7 +89,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--build-dir', type=Path, default=root / 'build')
     parser.add_argument('--output-dir', type=Path)
-    parser.add_argument('--case', default='', help='run one check only (cap, overflow, lock, carryall, auto, save)')
+    parser.add_argument('--case', default='', help='run one check only (cap, overflow, lock, carryall, auto, bot_quiet, save, ui_repair, walkin, ui_no_hospital, ui_beds, ui_carryall, pacing, metropolis)')
     args = parser.parse_args()
     build = args.build_dir.resolve()
     out = args.output_dir.resolve() if args.output_dir else Path(tempfile.mkdtemp(prefix='dunecity-hospital-care-'))

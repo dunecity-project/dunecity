@@ -1,3 +1,4 @@
+#include <dunecity/HospitalCare.h>
 #include <structures/ZoneStructure.h>
 /*
  *  This file is part of Dune Legacy.
@@ -205,6 +206,12 @@ void Command::executeCommand() const {
             // An unshifted order replaces the queue and becomes its front, so a later Shift
             // order runs after it.
             if(validIntent) unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, Coord((int) parameter[1], (int) parameter[2])));
+            // A wounded soldier moved onto or beside an own Hospital heals there (HospitalCare.h).
+            if(validIntent) {
+                if(auto* hospital = DuneCity::HospitalCare::walkInHospital(unit, nullptr,
+                        Coord((int) parameter[1], (int) parameter[2]), DuneCity::kHospitalWalkInTiles))
+                    DuneCity::HospitalCare::walkIn(unit, hospital);
+            }
         } break;
 
         case CMD_UNIT_MOVE2OBJECT: {
@@ -221,6 +228,12 @@ void Command::executeCommand() const {
                 unit->doMove2Object((int) parameter[1]);
             });
             if(validIntent) unit->recordPlayerOrder(UnitOrder::on(UnitOrderType::MoveToObject, parameter[1]));
+            // Right-clicking an own Hospital with a wounded soldier walks it in to heal.
+            if(validIntent) {
+                if(auto* hospital = DuneCity::HospitalCare::walkInHospital(unit,
+                        dynamic_cast<const StructureBase*>(target), Coord::Invalid(), 0))
+                    DuneCity::HospitalCare::walkIn(unit, hospital);
+            }
         } break;
 
         case CMD_UNIT_ATTACKPOS: {
@@ -287,6 +300,15 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(parameter[1]));
+            // The Capture cursor on an own Hospital with a wounded soldier: it heals there instead
+            // of entering the zone (a healthy one still enters it as a garrison).
+            if(auto* hospital = DuneCity::HospitalCare::walkInHospital(pInfantry, pStructure, Coord::Invalid(), 0)) {
+                pInfantry->leaveHoldForOrder();
+                pInfantry->leaveFormation();
+                pInfantry->clearOrderQueue();
+                DuneCity::HospitalCare::walkIn(pInfantry, hospital);
+                break;
+            }
             const auto* pZone = dynamic_cast<const ZoneStructure*>(pStructure);
             const bool validIntent = pZone != nullptr && ZoneStructure::garrisonsEnabled()
                 ? pInfantry->canCaptureStructures()
@@ -757,6 +779,13 @@ case CMD_INFANTRY_CAPTURE: {
             });
             // Like a plain move, it replaces the order queue and becomes its front.
             unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, destination));
+            // A group moved beside an own Hospital: its wounded soldiers heal there (the slots
+            // spread round the clicked tile, so a slot counts within two tiles).
+            if(kind == static_cast<Uint32>(FormationOrders::OrderKind::Move)) {
+                if(auto* hospital = DuneCity::HospitalCare::walkInHospital(unit, nullptr, destination,
+                        DuneCity::kHospitalWalkInFormationTiles))
+                    DuneCity::HospitalCare::walkIn(unit, hospital);
+            }
         } break;
 
         case CMD_UNIT_FORMATION_HUNT: {

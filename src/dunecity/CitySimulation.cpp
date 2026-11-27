@@ -152,6 +152,8 @@ void CitySimulation::load(InputStream& stream) {
     // census designates the Hospitals again.
     hospitalCare_.clear();
     if (loadedVersion >= SAVEGAMEVERSION_HOSPITAL_CARE) hospitalCare_.load(stream);
+    // Civic overlay pacing; an older save's overlays count their age from the day it loads.
+    if (loadedVersion >= SAVEGAMEVERSION_CIVIC_PACING) hospitalCare_.loadPacing(stream);
     hospitalOverlaysPending_ = true;
 }
 
@@ -176,6 +178,7 @@ void CitySimulation::save(OutputStream& stream) const {
     }
     saveCrimeUnrest(stream,crimeUnrestProgress_);
     hospitalCare_.save(stream);
+    hospitalCare_.savePacing(stream);
 }
 
 void CitySimulation::saveObserverRuntime(OutputStream& stream) const {
