@@ -23,6 +23,14 @@ using ParkProbe::ownLot;
 
 struct Bot { QuantBot* bot = nullptr; House* house = nullptr; };
 
+/// Checks after the setup are collected, so one run reports every switch; the probe fails at the end.
+std::vector<std::string> failures;
+void expect(bool ok, const std::string& what) {
+    if (ok) return;
+    SDL_Log("SKIRMISH_PROBE_CHECK_FAIL: %s", what.c_str());
+    failures.push_back(what);
+}
+
 Bot findBot(Game& game) {
     Bot found;
     for(int h = 0; h < NUM_HOUSES && !found.bot; ++h)
@@ -230,7 +238,7 @@ Run play(const std::string& save, Switches switches, int minutes, bool plant, Co
     if(switches.lane)
         for(const Order& o : run.orders)
             if(o.kind == R::LanePark && std::find(run.parks.begin(), run.parks.end(), o.site) != run.parks.end())
-                skirmishRequire(roadNeighboursConnected(o.site), "A lane Park cut a road path between its neighbours");
+                expect(roadNeighboursConnected(o.site), "A lane Park cut a road path between its neighbours");
     // IndustrySeparation: no new Industrial zone next to the bot's homes, checked against the end map.
     if(switches.separate)
         for(const Coord c : run.newIndustry)
@@ -261,16 +269,16 @@ std::pair<double, double> effectAgainst(const Run& on, const Run& off, int kind,
 
 void requireActed(const Run& run, int kind, const char* name) {
     const auto& a = run.activity;
-    skirmishRequire(a.ordered[kind] >= 1, std::string(name) + ": the switch never ordered");
-    skirmishRequire(a.placed[kind] >= 1, std::string(name) + ": no order stood at its chosen site");
-    skirmishRequire(a.lost[kind] * 2 <= a.ordered[kind], std::string(name) + ": most orders were lost or re-sited");
-    skirmishRequire(a.checked[kind] >= 1 && a.raised[kind] * 2 >= a.checked[kind],
+    expect(a.ordered[kind] >= 1, std::string(name) + ": the switch never ordered");
+    expect(a.placed[kind] >= 1, std::string(name) + ": no order stood at its chosen site");
+    expect(a.lost[kind] * 2 <= a.ordered[kind], std::string(name) + ": most orders were lost or re-sited");
+    expect(a.checked[kind] >= 1 && a.raised[kind] * 2 >= a.checked[kind],
                     std::string(name) + ": the lots it was for did not gain land value");
 }
 
 void requireIdle(const Run& run, const char* name) {
     for(int k = 0; k < R::KindCount; ++k)
-        skirmishRequire(run.activity.ordered[k] == 0, std::string(name) + ": a redevelopment order with every switch off");
+        expect(run.activity.ordered[k] == 0, std::string(name) + ": a redevelopment order with every switch off");
 }
 
 void runRedevelopProbe() {
@@ -314,7 +322,7 @@ void runRedevelopProbe() {
     // Every switch off: the baseline every ON arm is read against, and proof nothing fires.
     const Run off = play(save, {}, kMinutes, false);
     requireIdle(off, "all off");
-    skirmishRequire(off.parks.empty(), "The bot built a Park with every park switch off");
+    expect(off.parks.empty(), "The bot built a Park with every park switch off");
 
     // RoadLaneParks.
     Switches lane; lane.lane = true;
@@ -322,27 +330,27 @@ void runRedevelopProbe() {
     requireActed(laneOn, R::LanePark, "RoadLaneParks");
     const auto laneEffect = effectAgainst(laneOn, off, R::LanePark, R::kParkEffectReach, startLots);
     SDL_Log("SKIRMISH_PROBE: redevelop lane effect on=%.1f off=%.1f", laneEffect.first, laneEffect.second);
-    skirmishRequire(laneEffect.first > laneEffect.second, "RoadLaneParks: its lots end with no more land value than OFF");
+    expect(laneEffect.first > laneEffect.second, "RoadLaneParks: its lots end with no more land value than OFF");
 
     // LotParks.
     Switches lot; lot.lot = true;
     const Run lotOn = play(save, lot, kMinutes, false);
     requireActed(lotOn, R::LotClear, "LotParks (clear)");
-    skirmishRequire(lotOn.lotClearsParked >= 1, "LotParks: no cleared lot holds its Park");
+    expect(lotOn.lotClearsParked >= 1, "LotParks: no cleared lot holds its Park");
     const auto lotEffect = effectAgainst(lotOn, off, R::LotClear, R::kParkEffectReach, startLots);
     SDL_Log("SKIRMISH_PROBE: redevelop lot effect on=%.1f off=%.1f", lotEffect.first, lotEffect.second);
-    skirmishRequire(lotEffect.first > lotEffect.second, "LotParks: the cleared lot's neighbours end with no more land value than OFF");
+    expect(lotEffect.first > lotEffect.second, "LotParks: the cleared lot's neighbours end with no more land value than OFF");
 
     // PollutionRelocation, with the same polluter planted in both arms.
     Coord plantSite = Coord::Invalid();
     const Run relocOff = play(save, {}, kMinutes, true, &plantSite);
     requireIdle(relocOff, "relocation off");
-    skirmishRequire(relocOff.plantStanding, "With PollutionRelocation off the planted polluter went away");
+    expect(relocOff.plantStanding, "With PollutionRelocation off the planted polluter went away");
     Switches relocate; relocate.relocate = true;
     const Run relocOn = play(save, relocate, kMinutes, true);
     requireActed(relocOn, R::Relocation, "PollutionRelocation");
-    skirmishRequire(!relocOn.plantStanding, "PollutionRelocation left the planted polluter standing");
-    skirmishRequire(R::industryTooCloseToHomes(relocOn.relocationHomeDistance) == false,
+    expect(!relocOn.plantStanding, "PollutionRelocation left the planted polluter standing");
+    expect(R::industryTooCloseToHomes(relocOn.relocationHomeDistance) == false,
                     "PollutionRelocation: the replacement zone stands within 5 tiles of a home");
     std::vector<Coord> plantLots;
     for(const Coord l : startLots)
@@ -355,22 +363,25 @@ void runRedevelopProbe() {
     SDL_Log("SKIRMISH_PROBE: redevelop relocation lots=%zu land_value on=%.1f off=%.1f pollution on=%.1f off=%.1f",
             plantLots.size(), onValue / std::max<size_t>(1, plantLots.size()), offValue / std::max<size_t>(1, plantLots.size()),
             onPollution / std::max<size_t>(1, plantLots.size()), offPollution / std::max<size_t>(1, plantLots.size()));
-    skirmishRequire(!plantLots.empty() && onPollution < offPollution, "PollutionRelocation: the polluter's neighbours are no cleaner than OFF");
-    skirmishRequire(onValue > offValue, "PollutionRelocation: the polluter's neighbours end with no more land value than OFF");
+    expect(!plantLots.empty() && onPollution < offPollution, "PollutionRelocation: the polluter's neighbours are no cleaner than OFF");
+    expect(onValue > offValue, "PollutionRelocation: the polluter's neighbours end with no more land value than OFF");
 
     // IndustrySeparation.
     Switches separate; separate.separate = true;
     const Run sepOn = play(save, separate, kMinutes, false);
     requireIdle(sepOn, "IndustrySeparation (no redevelopment orders)");
-    skirmishRequire(sepOn.activity.industryPlaced >= 1, "IndustrySeparation: the bot placed no Industrial zone to test");
-    skirmishRequire(sepOn.activity.industryNearHomes == 0, "IndustrySeparation: an Industrial zone landed within 5 tiles of a home");
+    expect(sepOn.activity.industryPlaced >= 1, "IndustrySeparation: the bot placed no Industrial zone to test");
+    expect(sepOn.activity.industryNearHomes == 0, "IndustrySeparation: an Industrial zone landed within 5 tiles of a home");
     SDL_Log("SKIRMISH_PROBE: redevelop separation industry on=%d (near %d) off=%d (near %d) home_pollution on=%.1f off=%.1f "
             "home_land_value on=%.1f off=%.1f", sepOn.activity.industryPlaced, sepOn.activity.industryNearHomes,
             off.activity.industryPlaced, off.activity.industryNearHomes, sepOn.homePollution, off.homePollution,
             sepOn.homeLandValue, off.homeLandValue);
-    skirmishRequire(off.activity.industryNearHomes >= 1, "IndustrySeparation: OFF placed no Industrial zone near a home, so the test proves nothing");
-    skirmishRequire(sepOn.homePollution < off.homePollution, "IndustrySeparation: the homes are no cleaner than OFF");
-    skirmishRequire(sepOn.homeLandValue > off.homeLandValue, "IndustrySeparation: the homes end with no more land value than OFF");
+    expect(off.activity.industryNearHomes >= 1, "IndustrySeparation: OFF placed no Industrial zone near a home, so the test proves nothing");
+    expect(sepOn.homePollution < off.homePollution, "IndustrySeparation: the homes are no cleaner than OFF");
+    expect(sepOn.homeLandValue > off.homeLandValue, "IndustrySeparation: the homes end with no more land value than OFF");
+    std::string all;
+    for (const auto& f : failures) all += (all.empty() ? "" : "; ") + f;
+    skirmishRequire(failures.empty(), all);
 }
 
 } // namespace RedevelopProbe

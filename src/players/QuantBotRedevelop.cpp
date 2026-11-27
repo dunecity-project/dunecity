@@ -171,14 +171,20 @@ Coord QuantBot::findLaneParkSite(int* gainOut) {
     constexpr size_t kChecked = 48;
     Coord best = Coord::Invalid();
     int bestGain = 0, checked = 0;
+    auto& why = redevelopmentActivity;
+    why.note("lane_search");
+    why.note("lane_spare_tiles", lanes);
+    why.note("lane_candidates", int(candidates.size()));
     for (size_t i = 0; i < candidates.size() && i < kChecked && !best.isValid(); ++i) {
         const auto& c = candidates[i];
         ++checked;
-        if (overlapsReservedStructure(c.x, c.y, 1, 1) || !placeableAmongOwnUnits(c.x, c.y, 1, 1, Structure_Park)
-            || dangerAt(Coord(c.x, c.y)) > 0 || !parkKeepsPassage(c.x, c.y)
-            || !cityRoadImpact(map, c.x, c.y, 1, 1, Structure_Park).preservesConnections
-            || wouldLandlockNeighbouringZone(map, houseID, c.x, c.y, 1, 1, nullptr)
-            || !preservesGroundAccess(Structure_Park, Coord(c.x, c.y))) continue;
+        if (overlapsReservedStructure(c.x, c.y, 1, 1)) { why.note("lane_reject_reserved"); continue; }
+        if (!placeableAmongOwnUnits(c.x, c.y, 1, 1, Structure_Park)) { why.note("lane_reject_placeable"); continue; }
+        if (dangerAt(Coord(c.x, c.y)) > 0) { why.note("lane_reject_danger"); continue; }
+        if (!parkKeepsPassage(c.x, c.y)) { why.note("lane_reject_passage"); continue; }
+        if (!cityRoadImpact(map, c.x, c.y, 1, 1, Structure_Park).preservesConnections) { why.note("lane_reject_city_road"); continue; }
+        if (wouldLandlockNeighbouringZone(map, houseID, c.x, c.y, 1, 1, nullptr)) { why.note("lane_reject_landlock"); continue; }
+        if (!preservesGroundAccess(Structure_Park, Coord(c.x, c.y))) { why.note("lane_reject_ground_access"); continue; }
         best = Coord(c.x, c.y);
         bestGain = c.gain;
     }
@@ -229,6 +235,7 @@ Coord QuantBot::findLotParkSite(int* gainOut, bool* lotCleared) {
         return fill;
     }
     // Clear: the low-value lot whose four parks add the most to the other lots.
+    redevelopmentActivity.note("lot_search");
     Coord best = Coord::Invalid();
     int bestGain = 0, candidates = 0, bestValue = 0;
     for (const auto* s : getStructureList()) {
@@ -241,14 +248,16 @@ Coord QuantBot::findLotParkSite(int* gainOut, bool* lotCleared) {
         if (value > R::kLotParkMaxValue || density > R::kLotParkMaxDensity) continue;
         ++candidates;
         const int gain = parkSourceLotGain(terrain, o.x, o.y, R::kLotParkSources * DuneCity::kParkLandValueBonus, o);
-        if (gain < R::kLotParkMinGain || gain <= bestGain) continue;
-        if (overlapsReservedStructure(o.x, o.y, 2, 2) || dangerAt(o, Coord(2, 2)) > 0) continue;
+        if (gain < R::kLotParkMinGain) { redevelopmentActivity.note("lot_reject_gain"); continue; }
+        if (gain <= bestGain) continue;
+        if (overlapsReservedStructure(o.x, o.y, 2, 2) || dangerAt(o, Coord(2, 2)) > 0) { redevelopmentActivity.note("lot_reject_site"); continue; }
         best = o;
         bestGain = gain;
         bestValue = value;
     }
     if (gainOut) *gainOut = bestGain;
     if (lotCleared) *lotCleared = best.isValid();
+    redevelopmentActivity.note("lot_cheap_lots", candidates);
     traceDecision("lot_park_site", AITelemetry::Record().set("valid", best.isValid()).set("fill", false)
         .set("x", best.x).set("y", best.y).set("gain", bestGain).set("land_value", bestValue)
         .set("candidates", candidates));
@@ -281,7 +290,7 @@ bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, i
         const int h = harmAt(o, s->getStructureSize(), e, Coord::Invalid());
         if (h > harm) { harm = h; zoneID = s->getObjectID(); emission = e; }
     }
-    if (zoneID == NONE_ID || harm < RedevelopmentPolicy::kRelocateMinHarm) return false;
+    if (zoneID == NONE_ID || harm < RedevelopmentPolicy::kRelocateMinHarm) { redevelopmentActivity.note("relocate_no_harm"); return false; }
     // The new site keeps clear of our homes whatever IndustrySeparation says: a relocation that
     // moved the polluter next to other lots would be no relocation.
     placementCache.erase(Structure_ZoneIndustrial);
@@ -289,9 +298,10 @@ bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, i
     site = findPlaceLocation(Structure_ZoneIndustrial);
     industrySeparationSearch = false;
     placementCache.erase(Structure_ZoneIndustrial);
-    if (!site.isValid()) return false;
+    if (!site.isValid()) { redevelopmentActivity.note("relocate_no_site"); return false; }
     newHarm = harmAt(site, getStructureSize(Structure_ZoneIndustrial), emission, Coord::Invalid());
-    return RedevelopmentPolicy::relocationPays(harm, newHarm);
+    if (!RedevelopmentPolicy::relocationPays(harm, newHarm)) { redevelopmentActivity.note("relocate_not_paying"); return false; }
+    return true;
 }
 
 void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn) {
@@ -309,6 +319,12 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
     if (!pass.citySimEnabled || gameMode != GameMode::Custom || pass.redevelopmentSearched
         || yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic
         || pass.airEngaged || pass.groundThreatAsset.isValid()) {
+        if (!pass.redevelopmentSearched) {
+            auto& why = redevelopmentActivity;
+            if (!pass.citySimEnabled || gameMode != GameMode::Custom) why.note("gate_not_city_custom");
+            else if (yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic) why.note("gate_yard_busy");
+            else why.note("gate_threat");
+        }
         if (!pass.redevelopmentSearched)
             traceDecision("redevelopment_gate", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
                 .set("item", yardTurn.itemID).set("rule", yardTurn.structureRule ? yardTurn.structureRule : "")
@@ -331,6 +347,8 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
         Uint32 zoneID = NONE_ID;
         Coord site = Coord::Invalid();
         int harm = 0, newHarm = 0;
+        redevelopmentActivity.note("relocate_search");
+        if (pass.money < price) redevelopmentActivity.note("relocate_no_money");
         const bool found = pass.money >= price && findPollutionRelocation(zoneID, site, harm, newHarm);
         traceDecision("pollution_relocation_search", AITelemetry::Record().set("money", pass.money)
             .set("price", price).set("zone", zoneID).set("harm", harm).set("new_harm", newHarm)
@@ -352,12 +370,13 @@ void QuantBot::chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardT
     }
 
     if (!parkDue) return;
-    if (pass.orderedThisTick.count(Structure_Park)
-        || !campaignAvailableToBuild(turn.pBuilder, Structure_Park)) return;
+    auto& why = redevelopmentActivity;
+    if (pass.orderedThisTick.count(Structure_Park)) { why.note("park_ordered_this_tick"); return; }
+    if (!campaignAvailableToBuild(turn.pBuilder, Structure_Park)) { why.note("park_not_buildable"); return; }
     // One park at a time: the next is chosen against the terrain the last one added.
-    if (pass.itemCount[Structure_Park] != getHouse()->getNumItems(Structure_Park)) return;
+    if (pass.itemCount[Structure_Park] != getHouse()->getNumItems(Structure_Park)) { why.note("park_pending"); return; }
     const int price = currentGame->objectData.data[Structure_Park][getHouse()->getHouseID()].price;
-    if (pass.money < price) return;
+    if (pass.money < price) { why.note("park_no_money"); return; }
     pass.redevelopmentSearched = true;
     nextParkSearch = cycle + MILLI2CYCLES(R::kParkSearchPeriodMs);
     int gain = 0;

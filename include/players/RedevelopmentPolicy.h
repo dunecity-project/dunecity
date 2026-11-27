@@ -2,6 +2,7 @@
 #define REDEVELOPMENT_POLICY_H
 #include <algorithm>
 #include <cstdlib>
+#include <map>
 #include <string>
 namespace RedevelopmentPolicy {
 // R's demand ceiling is2000; C/I1500. Compare equal fractions equally.
@@ -65,6 +66,9 @@ struct Activity {
     long before10[KindCount]{}, after10[KindCount]{};
     /// Own Industrial zones placed, and those within kIndustrySeparationTiles of an own R/C lot.
     int industryPlaced = 0, industryNearHomes = 0;
+    /// Why searches did or did not produce an order (gate blocks, searches, rejections), by name.
+    std::map<std::string, int> reasons;
+    void note(const char* reason, int n = 1) { reasons[reason] += n; }
     std::string format() const {
         std::string out;
         for (int k = 0; k < KindCount; ++k) {
@@ -74,8 +78,10 @@ struct Activity {
                 + " " + n + "_raised=" + std::to_string(raised[k]) + " " + n + "_before10=" + std::to_string(before10[k])
                 + " " + n + "_after10=" + std::to_string(after10[k]) + " ";
         }
-        return out + "industry_placed=" + std::to_string(industryPlaced) + " industry_near_homes="
+        out += "industry_placed=" + std::to_string(industryPlaced) + " industry_near_homes="
             + std::to_string(industryNearHomes);
+        for (const auto& [reason, n] : reasons) out += " why_" + reason + "=" + std::to_string(n);
+        return out;
     }
 };
 
