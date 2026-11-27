@@ -141,7 +141,12 @@ void InfantryBase::doCaptureStructure(const StructureBase* pStructure) {
     if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
        zone != nullptr && ZoneStructure::garrisonsEnabled() && canCaptureStructures()) {
         const bool own = zone->getOwner()->getTeamID() == getOwner()->getTeamID();
-        if(own && !zone->mayEnterGarrison(this)) return;
+        if(own && !zone->mayEnterGarrison(this)) {
+            SDL_Log("ZONE_GARRISON: event=refused_at_order house=%d unit=%u item=%d zone=%u occupants=%d health=%d max_health=%d cycle=%u",
+                    owner->getHouseID(), objectID, itemID, zone->getObjectID(), zone->getGarrisonSize(),
+                    zone->getHealth().lround(), zone->getMaxHealth(), currentGame->getGameCycleCount());
+            return;
+        }
         // A soldier already beside the zone walks straight in.
         if(!moving && location.isValid()
            && blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance

@@ -136,7 +136,7 @@ outcomes = Counter()
 by_why = defaultdict(Counter)
 events = defaultdict(list)   # (seed, unit) -> [(cycle, event)]
 for r in rows:
-    if r['event'] in ('order', 'entered', 'died_on_way', 'refused_at_zone', 'order_ended') and r.get('unit'):
+    if r['event'] in ('order', 'entered', 'died_on_way', 'refused_at_zone', 'refused_at_order', 'order_ended') and r.get('unit'):
         events[(r['seed'], r['unit'])].append((int(r['cycle'] or 0), r['event'], r.get('why', '')))
 for key, seq in events.items():
     seq.sort()
@@ -145,18 +145,26 @@ for key, seq in events.items():
             continue
         nxt = next((e for c, e, w in seq[i + 1:] if c >= cycle), None)
         result = {'entered': 'entered', 'died_on_way': 'died on the way', 'refused_at_zone': 'refused at the door',
+                  'refused_at_order': 'refused when given',
                   'order_ended': 'ended by the controller', 'order': 'taken away', None: 'walking at the end'}[nxt]
         outcomes[result] += 1
         by_why[why][result] += 1
 orders = sum(outcomes.values())
 refused = sum(count('redirect_refused'))
 taken_away = outcomes['taken away']
-own = sum(by_why[w][o] for w in ('defend', 'front', 'reinforce') for o in by_why[w])
-own_in = sum(by_why[w]['entered'] for w in ('defend', 'front', 'reinforce'))
+# Own-zone orders (defend, front, reinforce) whose soldier lived and whose zone still stood: these went
+# in unless something stopped them, so their orders per entry is the "close to 1" Stefan's request means.
+# Soldiers killed under fire on the way, and zones lost meanwhile, are counted and shown, not hidden.
+OWN = ('defend', 'front', 'reinforce')
+own_live = sum(n for w in OWN for o, n in by_why[w].items() if o not in ('died on the way', 'ended by the controller'))
+own_in = sum(by_why[w]['entered'] for w in OWN)
+own_died = sum(by_why[w]['died on the way'] for w in OWN)
 per_entry = orders / max(1, len(entered))
 accept('A9 no other controller pulls a soldier away on its way in',
-       refused >= 1 and taken_away <= 0.02 * orders and own_in >= 0.75 * own,
-       f'{orders} orders: {dict(outcomes)}; {taken_away} taken away; own-zone orders {own_in}/{own} went in; '
+       refused >= 1 and taken_away <= 0.02 * orders and own_in >= 0.85 * own_live,
+       f'{orders} orders: {dict(outcomes)}; {taken_away} taken away ({100 * taken_away / max(1, orders):.1f}%); '
+       f'own-zone orders of living soldiers to standing zones {own_in}/{own_live} went in '
+       f'({own_live / max(1, own_in):.2f} orders per entry; {own_died} more died under fire on the way); '
        f'{refused} other controllers\' orders refused; {per_entry:.2f} orders per entry '
        f'(by behaviour: { {w: dict(c) for w, c in by_why.items()} })')
 
