@@ -264,6 +264,9 @@ inline void hunt(const std::string& ownerClass) {
     const Uint32 wormID = worm->getObjectID();
     require(!worm->canAttack(onRock), f.label + ": the worm may go for a Tank on rock");
     if(ownerClass == "HumanPlayer") worm->doSetAttackMode(HUNT);
+    // An AI house's worm comes out of the Palace already in Hunt (Palace::summonPalaceWorm); QuantBot's
+    // own hunt orders are asserted by the ai-level cases.
+    else require(worm->getAttackMode() == HUNT, f.label + ": the AI house's worm did not come out hunting");
     const Uint32 a = tankA->getObjectID(), b = tankB->getObjectID(), r = onRock->getObjectID(), q = friendQuad->getObjectID();
     const int seconds = f.runUntil(wormID, 120, [&] { return !f.alive(a) && !f.alive(b); });
     require(!f.alive(a) && !f.alive(b), f.label + ": the hunting worm did not eat both Tanks on the sand");

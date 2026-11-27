@@ -115,7 +115,9 @@ def check_case_events(text):
             event = line.split('PALACE_WORM: event=', 1)[1].split()[0]
             cases[label][event] = cases[label].get(event, 0) + 1
     want = {  # label: {event: (min, max)}
-        'qBotHard/hunt': {'hunt': (1, None), 'ate': (2, 2)},
+        # The AI's worm leaves the Palace in Hunt and finds these Tanks itself; QuantBot's hunt orders
+        # (event=hunt) are counted in the ai-level cases.
+        'qBotHard/hunt': {'ate': (2, 2)},
         'qBotHard/bloom-near-refinery': {'hunt': (0, 0), 'bloom_order': (1, None), 'bloom': (1, 1)},
         'qBotHard/ai-level-1': {'hunt': (1, None), 'ate': (2, 2), 'bloom_order': (1, None), 'bloom': (1, 1)},
         'qBotHard/ai-level-0': {'hunt': (0, 0), 'ate': (0, 0), 'bloom_order': (1, None), 'bloom': (1, 1), 'spice': (1, 1)},
