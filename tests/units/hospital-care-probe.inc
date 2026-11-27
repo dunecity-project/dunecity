@@ -1179,16 +1179,33 @@ void checkMetropolis() {
     // 4. A Carryall flies a soldier six or more tiles from the Hospital.
     {
         if(!home->hasCarryalls()) parkCarryall(home, freeTileNear(hospital->getLocation(), 6, 30));
-        Coord at = Coord::Invalid();
-        for(int r = 20; r <= 60 && at.isInvalid(); r += 4) {
-            const Coord c = freeTileNear(hospital->getLocation(), r, r + 3);
-            if(c.isInvalid()) continue;
-            bool far = true;
+        // Inside the home city (an own building within 3 tiles), 16+ tiles from every enemy
+        // building (Metropolis has 928 missile turrets: a soldier set down near a belt dies), and
+        // 8+ tiles from every own Hospital, so the order is a flight.
+        const auto safeFar = [&](const Coord& c) {
+            bool ownNear = false;
+            for(StructureBase* structure : structureList) {
+                const int d = blockDistance(c, structure->getClosestPoint(c));
+                if(structure->getOwner() == home) { if(d <= 3) ownNear = true; }
+                else if(d < 16) return false;
+            }
+            if(!ownNear) return false;
             for(auto* z : hospitalsOf(home))
-                if(blockDistance(c, z->getClosestPoint(c)) < 8) far = false;
-            if(far) at = c;
-        }
-        require(at.isValid(), "Metropolis: no free tile 8+ tiles from every Hospital");
+                if(blockDistance(c, z->getClosestPoint(c)) < 8) return false;
+            return true;
+        };
+        Coord at = Coord::Invalid();
+        for(int r = 8; r <= 60 && at.isInvalid(); ++r)
+            for(int dy = -r; dy <= r && at.isInvalid(); ++dy)
+                for(int dx = -r; dx <= r && at.isInvalid(); ++dx) {
+                    if(std::max(std::abs(dx), std::abs(dy)) != r) continue;
+                    const Coord c(hospital->getLocation().x + dx, hospital->getLocation().y + dy);
+                    if(!currentGameMap->tileExists(c)) continue;
+                    const Tile* t = currentGameMap->getTile(c);
+                    if(t->hasAnObject() || t->isMountain() || !t->isRock()) continue;
+                    if(safeFar(c)) at = c;
+                }
+        require(at.isValid(), "Metropolis: no free tile in the home city 8+ tiles from every Hospital");
         auto* flyer = soldier(home, at, 1, Unit_Trooper);
         flyer->setHealth(FixPoint(std::max(1, flyer->getMaxHealth() / 4)));
         panel = dynamic_cast<UnitInterface*>(select(*game, {flyer->getObjectID()}));
