@@ -59,14 +59,17 @@ TEST_CASE("TurretFront: the four rules", "[ai][turret-front][policy]") {
     REQUIRE_FALSE(TF::armyAhead(23, 24));
     REQUIRE(TF::behindArmy(22, 20));
     REQUIRE_FALSE(TF::behindArmy(21, 20));
-    // The belt: forward of the edge, along it only while short, behind the army, clear of turrets.
-    REQUIRE(TF::beltSite(20, 24, 6, 6, 15, 4, 2, 0));
-    REQUIRE(TF::beltSite(24, 24, 3, 6, 15, 4, 2, 0));
-    REQUIRE_FALSE(TF::beltSite(24, 24, 6, 6, 15, 4, 2, 0));
-    REQUIRE_FALSE(TF::beltSite(25, 24, 0, 6, 15, 4, 2, 0));
-    REQUIRE_FALSE(TF::beltSite(16, 24, 0, 6, 15, 4, 2, 0));   // in the army's midst
-    REQUIRE_FALSE(TF::beltSite(3, 24, 0, 6, 0, 4, 2, 0));     // beside an enemy building
-    REQUIRE_FALSE(TF::beltSite(20, 24, 0, 6, 15, 4, 2, 1));   // an enemy turret reaches it
+    // The belt: along the edge while short of its width, forward once wide; behind the army when the
+    // army is ahead; clear of enemy buildings and turrets. No army needed.
+    REQUIRE(TF::beltSite(24, 24, 3, 6, 0, 4, 0));             // widening along the edge
+    REQUIRE(TF::beltSite(23, 24, 3, 6, 0, 4, 0));             // or a tile ahead of it
+    REQUIRE_FALSE(TF::beltSite(20, 24, 3, 6, 0, 4, 0));       // not forward while short
+    REQUIRE(TF::beltSite(20, 24, 6, 6, 0, 4, 0));             // forward once wide, no army
+    REQUIRE_FALSE(TF::beltSite(24, 24, 6, 6, 0, 4, 0));       // not sideways once wide
+    REQUIRE_FALSE(TF::beltSite(25, 24, 0, 6, 0, 4, 0));       // never behind the edge
+    REQUIRE_FALSE(TF::beltSite(16, 24, 6, 6, 17, 4, 0));      // in the army's midst
+    REQUIRE_FALSE(TF::beltSite(3, 24, 6, 6, 0, 4, 0));        // beside an enemy building
+    REQUIRE_FALSE(TF::beltSite(20, 24, 6, 6, 0, 4, 1));       // an enemy turret reaches it
     REQUIRE(TF::kBeltEnemyStandoff < 10);                     // 3waysplit's bases stand within 10
     REQUIRE(TF::advanceSiteScore(22, 24, 2) > TF::advanceSiteScore(23, 24, 4));
     // (c) defenders' value in range first, a reaching enemy turret costs 3,000 credits of them.

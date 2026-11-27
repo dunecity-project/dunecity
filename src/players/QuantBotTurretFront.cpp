@@ -403,7 +403,7 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
         }
     }
 
-    // (b) AdvancingTurrets: a belt at the enemy-facing edge, moved forward behind the army.
+    // (b) AdvancingTurrets: a line at the enemy-facing edge, kBeltGoal wide, then a step forward.
     if (advance && buildUp && enemyKnown && turretFrontPlan.site.isInvalid() && !anchors.empty()) {
         const Coord edgeAnchor = anchors.front();
         std::vector<int> lead;
@@ -415,40 +415,38 @@ void QuantBot::scanTurretFront(BuildPass& pass, bool reinforce, bool advance, bo
         }
         turretFrontPlan.edge = edge;
         turretFrontPlan.armyUnits = int(lead.size());
+        // Behind the army while it stands ahead of the edge; otherwise the line moves on its own.
+        int behindLimit = 0;
         if (int(lead.size()) >= TF::kArmyLeadRank) {
             std::nth_element(lead.begin(), lead.begin() + (TF::kArmyLeadRank - 1), lead.end());
             const int armyLead = lead[TF::kArmyLeadRank - 1];
             turretFrontPlan.armyLead = armyLead;
-            const int belt = int(ownTurretSum.around(edgeAnchor.x, edgeAnchor.y, TF::kBeltTiles));
-            if (TF::armyAhead(armyLead, edge)) {
-                int bestScore = std::numeric_limits<int>::min();
-                Coord best = Coord::Invalid();
-                const int window = BUILDRANGE + 1;
-                int examined = 0;
-                for (const Coord a : anchors) {
-                    if (distAt(a.x, a.y) > edge + 2 || examined >= TF::kCreepAnchors) break;
-                    ++examined;
-                    for (int y = std::max(0, a.y - window); y <= std::min(h - 1, a.y + window + 3); ++y)
-                        for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
-                            const int d = distAt(x, y);
-                            // Forward progress, or a sideways tile while the belt is still short;
-                            // behind the army, clear of every known enemy turret.
-                            if (d > edge) continue;
-                            if (!TF::beltSite(d, edge, belt, beltGoal(), armyLead, beltStandoff(), beltBehindArmy(),
-                                              int(enemyTurretSum.around(x, y, TF::kEnemyTurretReachTiles)))) continue;
-                            const int score = TF::advanceSiteScore(d, edge, nearestOwnTurret(x, y));
-                            if (score <= bestScore || !legal(x, y)) continue;
-                            bestScore = score; best = Coord(x, y);
-                        }
+            if (TF::armyAhead(armyLead, edge)) behindLimit = armyLead + beltBehindArmy();
+        }
+        const int belt = int(ownTurretSum.around(edgeAnchor.x, edgeAnchor.y, TF::kBeltTiles));
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        const int window = BUILDRANGE + 1;
+        int examined = 0;
+        for (const Coord a : anchors) {
+            if (distAt(a.x, a.y) > edge + 2 || examined >= TF::kCreepAnchors) break;
+            ++examined;
+            for (int y = std::max(0, a.y - window); y <= std::min(h - 1, a.y + window + 3); ++y)
+                for (int x = std::max(0, a.x - window); x <= std::min(w - 1, a.x + window + 3); ++x) {
+                    const int d = distAt(x, y);
+                    if (!TF::beltSite(d, edge, belt, beltGoal(), behindLimit, beltStandoff(),
+                                      int(enemyTurretSum.around(x, y, TF::kEnemyTurretReachTiles)))) continue;
+                    const int score = TF::advanceSiteScore(d, edge, nearestOwnTurret(x, y));
+                    if (score <= bestScore || !legal(x, y)) continue;
+                    bestScore = score; best = Coord(x, y);
                 }
-                if (best.isValid()) {
-                    turretFrontPlan.site = best;
-                    turretFrontPlan.mode = TurretFrontMode::Advance;
-                    turretFrontPlan.anchor = edgeAnchor;
-                    turretFrontPlan.cover = belt;
-                    turretFrontPlan.goal = beltGoal();
-                }
-            }
+        }
+        if (best.isValid()) {
+            turretFrontPlan.site = best;
+            turretFrontPlan.mode = TurretFrontMode::Advance;
+            turretFrontPlan.anchor = edgeAnchor;
+            turretFrontPlan.cover = belt;
+            turretFrontPlan.goal = beltGoal();
         }
     }
 

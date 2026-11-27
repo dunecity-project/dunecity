@@ -20,7 +20,8 @@
 //                   stands at least six tiles east of the base's first eastern edge, and never
 //                   within reach of the enemy Rocket Turret
 //   advance-off     the same with the switch off: no advance order
-//   advance-noarmy  switch on, no army ahead of the base: no advance order
+//   advance-noarmy  switch on, no army at all: the line still forms and moves forward (it needs no
+//                   army; the first version's army-lead trigger kept it from moving)
 //   creep-on        an own outpost 9 tiles from Quads guarding the enemy base: TurretCreep places
 //                   a turret within range of them, which stands and fires on them
 //   creep-off       the same with the switch off: no creep order
@@ -200,6 +201,24 @@ std::string countText(const QuantBot::TurretFrontCounts& c) {
            + std::to_string(c.engaged) + ", missed " + std::to_string(c.missed);
 }
 
+/// What the bot's turret front and yards stood at, logged with every failure.
+void diagnose(const Fixture& f) {
+    const auto& p = f.bot->turretFrontPlan;
+    SDL_Log("TURRET_FRONT_PROBE_DIAG: plan active=%d ordered=%d mode=%d site=%d,%d edge=%d scan_cycle=%u blocked=%d/%d/%d/%d/%d/%d "
+            "credits=%d power=%d/%d threats=%zu cycle=%u",
+            int(p.active), int(p.ordered), int(p.mode), p.site.x, p.site.y, p.edge, f.bot->turretFrontScanCycle,
+            f.bot->turretFrontBlocked[0], f.bot->turretFrontBlocked[1], f.bot->turretFrontBlocked[2],
+            f.bot->turretFrontBlocked[3], f.bot->turretFrontBlocked[4], f.bot->turretFrontBlocked[5],
+            f.own->getCredits(), f.own->getProducedPower(), f.own->getPowerRequirement(),
+            f.bot->visibleGroundTurretThreats.size(), currentGame->getGameCycleCount());
+    for(const StructureBase* s : structureList)
+        if(s->getOwner() == f.own && s->isABuilder()) {
+            const auto* b = static_cast<const BuilderBase*>(s);
+            SDL_Log("TURRET_FRONT_PROBE_DIAG: builder item=%u queue=%d producing=%u upgrade=%d/%d", s->getItemID(),
+                    b->getProductionQueueSize(), b->getCurrentProducedItem(), b->getCurrentUpgradeLevel(), b->getMaxUpgradeLevel());
+        }
+}
+
 std::vector<const StructureBase*> rocketTurrets(House* house) {
     std::vector<const StructureBase*> out;
     for(const StructureBase* s : structureList)
@@ -212,9 +231,12 @@ int health(Uint32 id) {
     return object ? int(lround(object->getHealth())) : 0;
 }
 
-/// Plays until \a done or \a cycles; returns the cycles played.
+/// Plays until \a done or \a cycles; returns the cycles played. The bot's cash is topped up to
+/// 5,000 whenever it falls below (a mid-game income; the fixture has no harvesting economy, and the
+/// bot otherwise spends its starting credits on its base before the case's situation matters).
 template<typename Done> int play(Fixture& f, int cycles, Done done) {
     for(int c = 0; c < cycles; ++c) {
+        if(f.own->getCredits() < 5000) f.own->addCredits(FixPoint(5000 - f.own->getCredits()));
         f.game->updateGameState();
         if(c % 64 == 0 && done()) return c;
     }
@@ -250,6 +272,7 @@ void reinforce(bool on, bool far) {
         record(name, "no reinforcement in " + std::to_string(played) + " cycles");
         return;
     }
+    if(c.ordered == 0) diagnose(f);
     require(c.ordered > 0, name + ": no reinforcement ordered under attack (" + countText(c) + ")");
     require(c.placed > 0, name + ": no ordered turret stood at its site (" + countText(c) + ")");
     require(c.engaged > 0, name + ": no reinforcement turret fired on a unit (" + countText(c) + ")");
@@ -288,11 +311,6 @@ void advance(bool on, bool army) {
     const int played = play(f, 12000, [&] { return c.placed >= 4 && furthestEast() >= baseEast + 6; });
     if(!on) {
         require(totalOrders(f) == 0, name + ": front orders with the switch off");
-        record(name, "no advance order in " + std::to_string(played) + " cycles");
-        return;
-    }
-    if(!army) {
-        require(c.ordered == 0, name + ": a belt was ordered with no army ahead of the base");
         record(name, "no advance order in " + std::to_string(played) + " cycles");
         return;
     }

@@ -22,10 +22,10 @@
 
     (a) FrontTurrets: an own building cluster with visible enemy ground units on it gets Rocket
         Turrets beside it until the local cover matches the attackers' value.
-    (b) AdvancingTurrets: while the army's lead stands ahead of the base's edge facing the nearest
-        enemy, a belt of turrets is kept at that edge and extended toward the enemy, behind the army
-        and outside the reach of every known enemy turret. Each turret extends the build range and
-        is itself the new edge, so the belt moves forward with the army.
+    (b) AdvancingTurrets: a line of turrets at the base's edge facing the nearest enemy, kBeltGoal
+        wide, that steps toward the enemy once it is that wide; behind the army while the army
+        stands ahead of it, and outside the reach of every known enemy turret. Each turret extends
+        the build range and is itself the new edge, so the line moves forward.
     (c) TurretCreep: turrets placed within range of the enemy's defenders (visible enemy combat
         units near the enemy's buildings), where at most one enemy turret reaches. Turrets fire on
         units only (Turrets Can Fire On Buildings is off by default), so creep goes for what they
@@ -172,12 +172,15 @@ constexpr int kBeltEnemyStandoff = 4;
 constexpr int kEnemyTurretReachTiles = 9;
 inline bool armyAhead(int armyLead, int edge) { return armyLead + kArmyLeadTiles <= edge; }
 inline bool behindArmy(int site, int armyLead) { return site >= armyLead + kBehindArmyTiles; }
-/// A belt site at enemy distance \a site: forward of the edge, or along it while the belt there is
-/// short; behind the army; clear of enemy buildings by the standoff and of every enemy turret.
-inline bool beltSite(int site, int edge, int belt, int goal, int armyLead, int standoff, int behind,
-                     int enemyTurretsInReach) {
-    if (site > edge || (site == edge && belt >= goal)) return false;
-    return site >= standoff && site >= armyLead + behind && enemyTurretsInReach == 0;
+/// A belt site at enemy distance \a site: along the edge (or one tile ahead) while the line there is
+/// short of \a goal, forward of the edge once it is that wide; behind the army when the army stands
+/// ahead (\a behindLimit, 0 otherwise); clear of enemy buildings by the standoff and of every enemy
+/// turret. No army is needed: the line moves forward on its own (Stefan's "maginot line which
+/// moves forward"; the army lead the first version required kept it from moving).
+inline bool beltSite(int site, int edge, int belt, int goal, int behindLimit, int standoff, int enemyTurretsInReach) {
+    if (site > edge) return false;
+    if (belt < goal ? site < edge - 1 : site >= edge) return false;
+    return site >= standoff && site >= behindLimit && enemyTurretsInReach == 0;
 }
 /// Site score for the belt: tiles gained toward the enemy first, then spacing.
 inline int advanceSiteScore(int site, int edge, int nearestOwnTurret) {
