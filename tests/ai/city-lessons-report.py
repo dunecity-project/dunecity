@@ -75,8 +75,9 @@ def number(value, default=0.0):
 
 
 def collect(directories):
-    games, houses, lessons, mixes, units = [], [], [], [], []
+    games, houses, lessons, mixes, units, turrets = [], [], [], [], [], []
     for directory in directories:
+        turrets += rows(directory, 'turrets.csv')
         games += rows(directory, 'games.csv')
         houses += rows(directory, 'houses.csv')
         lessons += rows(directory, 'lessons.csv')
@@ -93,7 +94,8 @@ def collect(directories):
                                              front_placed=0, front_survived=0, front_effects=0, front_enemy=[],
                                              fielded=[], by72=0, front_by72=0, lots72=None,
                                              expiry=collections.Counter(), no_site=collections.Counter(),
-                                             blocked=collections.Counter())
+                                             blocked=collections.Counter(), drill_engaged=0,
+                                             economy_met=False, max_yards=0)
     names = {v: k for k, v in HOUSE_NUMBERS.items()}
     for row in lessons:
         house = row['house'] if row['house'] in HOUSE_NUMBERS else names.get(int(number(row['house'], -1)), row['house'])
@@ -102,6 +104,14 @@ def collect(directories):
             continue
         m = per[slot]
         early = number(row.get('cycle'), 0) <= 72 * CYCLES_PER_MINUTE
+        if row['kind'] == 'economy_first':
+            m['economy_met'] = m['economy_met'] or (row['event'] == 'footprint' and row['met'] == '1')
+            continue
+        if row['kind'] == 'economy_state':
+            m['max_yards'] = max(m['max_yards'], int(number(row.get('yards'), 0)))
+            continue
+        if row['kind'] == 'build_order':
+            continue
         if row['kind'] == 'city_lots':
             if early:
                 m['lots72'] = (number(row['lots']), number(row['low_lots']), number(row['lv_now']))
@@ -152,12 +162,37 @@ def collect(directories):
             per[slot]['launchers_lost'] = number(u['lost'])
         elif u['name'] == 'Palace':
             per[slot]['palace_damage'] = number(u['damage_value'])
+    for row in turrets:
+        slot = (key(row), row['house'])
+        if slot in per and row.get('event') == 'engaged' and row.get('rule') == 'turret_drill':
+            per[slot]['drill_engaged'] += 1
     for slot, row in final.items():
         built = [number(v) for v in row['built'].split('/')][:VEHICLE_SLOTS]
         total = sum(built)
         per[slot].update(vehicle_built=total, launcher_share=(built[LAUNCHER_SLOT] / total) if total else 0.0,
                          ornithopter_built=built[ORNITHOPTER_SLOT])
+    for m in per.values():
+        m['checks'] = in_game_checks(m)
     return per
+
+
+def in_game_checks(m):
+    """Stefan, 2026-11-28: "we need assertions during the game to ensure the ai is actually doing the bahaviour
+    we ask for". Per house-game, each switched-on behaviour of the label: did it do the thing asked and reach
+    its effect in this game? {behaviour: passed}."""
+    label, checks = m['label'], {}
+    if 'launcher' in label or 'lessons' in label:
+        checks['launcher'] = m.get('launcher_share', 0) >= 0.5 and m.get('ornithopter_built', 0) == 0
+    if 'low-value' in label or 'city-lessons' in label:
+        checks['palace'] = any(rise >= MIN_RISE and stands for rise, stands in m['effects'])
+    if 'front-palace' in label:
+        checks['front palace'] = m['front_survived'] > 0
+    if 'drill' in label:
+        checks['drill'] = m['drill_engaged'] > 0
+    if 'economy-first' in label:
+        # A second yard deployed and, by minute 10, an MCV ordered and 10 zones added (ECONOMY_FIRST footprint met=1).
+        checks['economy first'] = m['economy_met'] and m['max_yards'] >= 2
+    return checks
 
 
 def main():
@@ -173,6 +208,7 @@ def main():
     for (game, house), m in per.items():
         by_game[game].append((house, m))
     pairs = collections.defaultdict(list)
+    asserted_pairs = collections.defaultdict(list)   # only games where every behaviour of the arm passed
     for game, members in by_game.items():
         if len(members) < 2:
             continue
@@ -186,9 +222,11 @@ def main():
             control = [m for _, m in members if m['label'] == args.control]
             for label in labels - {args.control}:
                 cand = [m for _, m in members if m['label'] == label]
-                pairs[label].append((members[0][1], (statistics.mean(m['score'] for m in cand),
-                                     statistics.mean(m['score'] for m in control),
-                                     any(m['drawn'] for m in cand), any(m['drawn'] for m in control))))
+                pair = (statistics.mean(m['score'] for m in cand), statistics.mean(m['score'] for m in control),
+                        any(m['drawn'] for m in cand), any(m['drawn'] for m in control))
+                pairs[label].append((members[0][1], pair))
+                if all(all(m['checks'].values()) for m in cand):
+                    asserted_pairs[label].append((members[0][1], pair))
 
     def table(select, title):
         out = [f'\n## {title}\n',
@@ -242,6 +280,27 @@ def main():
                 f'{(statistics.mean(fielded) if fielded else float("nan")):.0%} ({fielded_ok}/{n} >= 60%) | '
                 f'{statistics.mean([m.get("launchers_lost", 0) for m in members]):.0f} | '
                 f'{statistics.mean([m.get("palace_damage", 0) for m in members]):.0f} | {", ".join(verdicts) or "-"} |')
+        out += ['', f'In-game assertions ({title}): each switched-on behaviour did the thing asked in that house-game '
+                '(Launchers >= 50% of vehicles built and no Ornithopter; EconomyFirst: a second yard deployed, an MCV and 10 zones added by minute 10; a low-value Palace whose lots rose 10+ with '
+                'it standing; a front Palace standing after 5 minutes; a drill turret that engaged). A score built '
+                'mostly on house-games that failed is NOT TESTED.', '',
+                '| arm | house-games | passed, per behaviour | passed, all behaviours | score diff, all games | '
+                'score diff, games where every behaviour passed | verdict |', '|---|---:|---|---:|---|---|---|']
+        for label in labels:
+            if label == args.control:
+                continue
+            members = [m for m in chosen.values() if m['label'] == label]
+            n = len(members)
+            names = sorted({b for m in members for b in m['checks']})
+            per_b = ', '.join(f"{b} {sum(m['checks'].get(b, False) for m in members)}/{n}" for b in names) or '-'
+            all_ok = sum(1 for m in members if m['checks'] and all(m['checks'].values()))
+            def fmt(ps):
+                c = match_score.compare(ps, 2026) if ps else None
+                return (f'{c.difference:+.3f} [{c.low:+.3f}, {c.high:+.3f}] ({len(ps)} games)', c) if c else ('-', None)
+            all_text, _ = fmt([p for first, p in pairs.get(label, []) if select(first)])
+            ok_text, ok_cmp = fmt([p for first, p in asserted_pairs.get(label, []) if select(first)])
+            verdict = ('NOT TESTED' if names and all_ok * 2 < n else (ok_cmp.verdict if ok_cmp else '-'))
+            out.append(f'| {label} | {n} | {per_b} | {all_ok}/{n} | {all_text} | {ok_text} | {verdict} |')
         return out
 
     def acceptance(select, title):
