@@ -1544,7 +1544,12 @@ void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, Yard
     pass.economyProjectOrdered = true;
     yardTurn.itemID = item;
     yardTurn.crimeServiceSite = palace ? pass.economyProjectSite : Coord::Invalid();
-    yardTurn.structureRule = palace ? "palace_district" : "nuclear_consolidation";
+    // LowValuePalaces / FrontPalaces name their own rule: their planned site is kept to placement.
+    const bool lessonSite = palace && ((cityLessons.palace.active && cityLessons.palace.site == pass.economyProjectSite)
+        || (cityLessons.front.active && cityLessons.front.site == pass.economyProjectSite));
+    yardTurn.structureRule = !palace ? "nuclear_consolidation"
+        : !lessonSite ? "palace_district"
+        : cityLessons.front.active && cityLessons.front.site == pass.economyProjectSite ? "front_palace" : "low_value_palace";
     yardTurn.skipRemainingStructureLogic = true;
     traceDecision("economy_project", AITelemetry::Record().set("builder", turn.pBuilder->getObjectID())
         .set("item", item).set("x", pass.economyProjectSite.x).set("y", pass.economyProjectSite.y)
@@ -3678,7 +3683,12 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         const bool keepsChosenSite = yardTurn.crimeServiceSite.isValid()
             && (yardTurn.itemID == Structure_Park
                 || (yardTurn.itemID == Structure_ZoneIndustrial && yardTurn.structureRule
-                    && std::string_view(yardTurn.structureRule) == "pollution_relocation"));
+                    && std::string_view(yardTurn.structureRule) == "pollution_relocation")
+                // LowValuePalaces / FrontPalaces: the planned site is the behaviour (their first test runs
+                // showed every Palace placed elsewhere by the placement re-search).
+                || (yardTurn.itemID == Structure_Palace && yardTurn.structureRule
+                    && (std::string_view(yardTurn.structureRule) == "low_value_palace"
+                        || std::string_view(yardTurn.structureRule) == "front_palace")));
         if (!foundations.empty() || keepsChosenSite)
             yardTurn.placeLocations->push_back(selectedPlaceLocation);
 

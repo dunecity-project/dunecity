@@ -410,7 +410,7 @@ QuantBotConfig::QuantBotConfig() {
     // Stefan, 2026-11-27, seewhatidid: "added more palaces to improve land ... built a lot of launchers"
     // (CityLessonsPolicy.h). Off until measured.
     force.cityLauncherArmy = false;
-    force.cityLauncherArmyBps = CityLessonsPolicy::kLauncherArmyBps;
+    force.cityLauncherArmyBps = 7000;   // CityLessonsPolicy::kLauncherArmyBps (a literal: genome_model.py reads these defaults)
     force.lowValuePalaces = false;
     force.frontPalaces = false;
     force.palaceWorm = 1;           // Stefan, 2026-11-27: the Fremen Palace worm hunts, else blooms near the base

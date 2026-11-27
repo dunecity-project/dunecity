@@ -5589,6 +5589,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             else if (cityInfantryItem(pass, item) && !pass.cityAntiAirInfantryDemand
                 && !(pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item))) reason="no_observed_air";
             else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, value)) reason="infantry_quota_satisfied";
+            else if (item==Unit_Ornithopter && pass.citySimEnabled && cityLauncherArmyEnabled()) reason="city_launcher_army";
             else if (item==Unit_Ornithopter && int64_t(pass.itemCount[item]+1)*value*10000
                 > int64_t(pass.militaryValue+value)*2000) reason="air_composition_cap";
             else if (score<=0) reason="military_limit";

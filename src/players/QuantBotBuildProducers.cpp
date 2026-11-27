@@ -1575,6 +1575,8 @@ void QuantBot::buildHighTechFactory(BuildPass& pass, BuilderTurn& turn) {
     air.upgrading = turn.pBuilder->isUpgrading();
     air.airLimit = getHouse()->isAirUnitLimitReached();
     air.ornithopterAvailable = campaignAvailableToBuild(turn.pBuilder,ornithopter);
+    // CityLauncherArmy (CityLessonsPolicy.h): a city army buys no Ornithopters at all.
+    if (pass.citySimEnabled && cityLauncherArmyEnabled()) air.ornithopterAvailable = false;
     air.carryallAvailable = campaignAvailableToBuild(turn.pBuilder,Unit_Carryall);
     air.canUpgrade = turn.pBuilder->getCurrentUpgradeLevel() < turn.pBuilder->getMaxUpgradeLevel()
         && vanillaBoomUpgradeAdmitted(pass, turn.pBuilder);

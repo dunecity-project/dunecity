@@ -164,7 +164,7 @@ bool QuantBot::planFrontPalace(BuildPass& pass) {
     if (cityLessons.lastFrontPlan != 0 && now - cityLessons.lastFrontPlan < MILLI2CYCLES(L::kFrontPalaceIntervalMs))
         return false;
     const auto* sim = currentGame->getCitySimulation();
-    if (!sim) return false;
+    if (!sim || sim->getHouseState(getHouse()->getHouseID()).avgLandValue <= 0) return false;
     const int w = getMap().getSizeX(), h = getMap().getSizeY();
     // Distance to the nearest enemy building (Chebyshev, capped beyond the band).
     std::vector<uint8_t> seed(size_t(w) * h, 0);
@@ -246,6 +246,9 @@ bool QuantBot::planLowValuePalace(BuildPass& pass) {
         pass.economyProjectReserve = price;
         return true;
     }
+    // Before the first land-value scan every lot reads 0: plan only once the city has values.
+    if (const auto* s = currentGame->getCitySimulation(); !s || s->getHouseState(getHouse()->getHouseID()).avgLandValue <= 0)
+        return false;
     const Coord site = findPalaceDistrictSite(Structure_Palace, L::kMinLowLots, true);
     if (site.isInvalid()) return false;
     const auto* sim = currentGame->getCitySimulation();
