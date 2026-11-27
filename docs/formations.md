@@ -2207,7 +2207,7 @@ times out. Elsewhere placement is level; on the generated ladder maps the seat k
 interval touches 0 from above), but the screen does not clear the default rule. A next step would be the
 lobby at 240 minutes and parks combined with the economy package, where land value already pays.
 
-### Redevelopment for land value (`RoadLaneParks`, `LotParks`, `PollutionRelocation`, 2026-11-27, default off)
+### Redevelopment for land value (`RoadLaneParks`, `LotParks`, `PollutionRelocation`, `IndustrySeparation`, 2026-11-27, default off)
 
 Stefan, from the Spectator view of a Brutal AI city (the Air's `low.dls`): "there's still lots of low
 value ... the AI could benefit from demolishing and rebuilding to either remove pollution from an area
@@ -2234,51 +2234,79 @@ second lane: every building paves a one-tile ring, so two lots two tiles apart l
 A Park is a road connection for the city (zone access and traffic) but gives units no road speed.
 
 **Switches** (`QuantBotRedevelop.cpp`, `RedevelopmentPolicy.h`; play styles `road-lane-parks`,
-`lot-parks`, `pollution-relocation`, `redevelop-all`). Searches run one second in every eight (two
-in every 120 for relocation), not on every yard pass, and not during an air raid or a ground threat
-to an asset. Border fighting no longer stops them (in `low.dls` some enemy fired at some building in
-85% of the windows).
-- `RoadLaneParks`: a Park on a road tile of a 2x2 square of our road (ours, or unowned beside our
-  buildings), where it adds at least 4 land value to our R/C blocks, and only if every road path and
-  every unit path through the tile stays open (`RedevelopmentPolicy::ringKeepsPassage`, a local test
-  on the eight neighbours, plus the city road and landlock checks).
-- `LotParks`: clears an own R/C lot of land value <= 64 and density <= 1 whose four Parks would add
-  at least 24 land value to the house's other lots; its first Park takes the lot, the next fill it.
-- `PollutionRelocation`: the Industrial zone whose pollution costs our R/C lots the most (at least
-  40) is rebuilt where Industrial siting puts it, when that costs at most half as much.
+`lot-parks`, `pollution-relocation`, `industry-separation`, `redevelop-all`). A search is due once its
+period has passed (8 s for parks, 30 s for relocation) and runs on the next idle yard pass, not during an
+air raid or a ground threat to an asset; border fighting does not stop it.
+- `RoadLaneParks`: a Park on a road tile of a 2x2 square of our road where it adds at least 4 land
+  value to our R/C blocks, if the tile's open and road side neighbours still reach one another inside
+  the 9x9 window without it (`RedevelopmentPolicy::sidesStayConnected`), plus the city road and landlock
+  checks.
+- `LotParks`: an own R/C lot of land value <= 64 and density <= 1 whose four Parks would add at least 24
+  land value to the house's other lots; the yard's redevelopment route clears it once the Park order is
+  accepted, and the next Parks fill it.
+- `PollutionRelocation`: the Industrial zone whose pollution costs our R/C lots the most (at least 40) is
+  rebuilt at an Industrial site clear of our homes; the old zone is demolished only once the new one
+  stands.
+- `IndustrySeparation`: no new Industrial zone within 5 tiles (footprint to footprint) of an own R/C lot.
+  A `HomeSeparation` switch (no new R/C lot within 5 tiles of an own polluter) was tried the same day and
+  removed: the probe's homes beside polluters had pollution 35 and land value 79 against the city's
+  average home at 72 and 64, so refusing them lowers the average.
 
-Cost: in the 30-minute continuation the lane search took 11 ms a call (max 12 ms), the lot search
-6 ms, against 15 ms for one `findPlaceLocation` that runs thousands of times. `perf_regression`
-passed with the shipped defaults.
+**Proof the switches act** (CLAUDE.md "AI behaviours: prove the switch actually does its job"). Each order
+is followed (`updateRedevelopmentOrders`): placed at its chosen site, or lost after 3 minutes (cancelled,
+released or re-sited), and 30 s after it stands the land value of the lots it was for is read against its
+value at the order. Per house the counters, with why-counters for every gate and site rejection, are
+logged as `SCENARIO_SWITCH_ACTIVITY` (houses.csv `switch_activity`); per event as `REDEVELOP:`,
+`INDUSTRY_PLACED:` and `HOME_PLACED:` lines (`tests/ai/activation-events.json`). The headless probe
+`skirmish_generator_probe_city-redevelop_1024x768` (`tests/skirmish/redevelop-probe.inc`) replays one
+saved DuneCity start per arm:
 
-**Screens** (seat-only `--seat-style`, paired by game against a control at the same commit, AWS;
-final round at `7ace04b61`; results `~/Documents/projects/outputs/redevelop-20261127/`, `analyse_v4.py`,
-`screen-v4.md`). Score is the placement difference, 95% bootstrap; city columns are the seat's end
-of game land value, population and credits where both seats survive.
+| Switch | ON acted | its lots, ON vs OFF |
+|---|---|---|
+| RoadLaneParks | 4 orders, 3 standing at their tiles, 3 of 3 effect reads raised, every road neighbour still connected | land value 131 vs 129 |
+| LotParks | 1 lot cleared and 3 fills, all standing | 82.1 vs 81.7 |
+| PollutionRelocation (a polluter planted among the homes) | 5 of 5 relocations standing 6 to 8 tiles from homes, 4 of 4 raised | land value 151 vs 92, pollution 8 vs 80 |
+| IndustrySeparation (only ground near homes left) | 0 of 8 sites near homes, against 8 of 8 OFF | the homes beside OFF's sites: land value 23 vs 7, pollution 155 vs 186 |
 
-| Arm | Stefan's lobby (24, 120 min) score / land value / population | weak seat (144) score / land value / population | ladder + skirmish + CY (108) score | all (276) score |
+With every switch off nothing fires. What the probe found on the way, all fixed: `placeYardChoice`
+dropped the chosen site of every rule outside an allowlist, so every lane, lot and relocation order was
+re-sited by the ordinary search (LotParks built 5 Parks, none at a chosen site); the first passage test
+looked only at the eight neighbours and refused 11 of 11 lane candidates; the fixed 2-in-120-second search
+window missed the idle yard (PollutionRelocation fired once in 30 minutes); and a lot cleared at the order
+was lost when the order was released. On open ground the ordinary Industrial siting already kept 40 of 40
+new zones 6 to 9 tiles from the homes, ON and OFF alike.
+
+**Screens v5** (seat-only `--seat-style`, paired by game against a control at `e940e96c5`, AWS, 276
+games an arm; `~/Documents/projects/outputs/redevelop-20261127/`, `analyse_v5.py`, `screen-v5.md`). Score
+is the placement difference, 95% bootstrap; land value where both seats survive.
+
+| Arm | lobby (24) land value / population | weak seat (144) score | ladder + skirmish + CY (108) score / land value | all (276) score |
 |---|---|---|---|---|
-| RoadLaneParks | 0 / +0.9 [-0.0, +2.0] / +0.0k | -0.071 [-0.168, +0.023] / -0.7 / **-1.7k** | -0.005 | -0.039 [-0.093, +0.013] |
-| LotParks | 0 / **+1.7 [+0.7, +2.8]** / **-0.9k** | -0.037 [-0.083, +0.002] / **-1.8** / **-2.0k** | +0.010 | -0.016 [-0.041, +0.007] |
-| PollutionRelocation | 0 / **-4.4 [-5.5, -3.3]** / **+2.5k [+1.6, +3.4]** | +0.000 / -0.1 / +0.1k | -0.007 | -0.003 [-0.008, +0.000] |
-| all three | 0 / -1.2 / -0.7k | -0.036 / -0.1 / -0.8k | -0.012 | -0.024 [-0.074, +0.026] |
+| RoadLaneParks | **+1.5 [+0.3, +2.8]** / +0.3k | +0.002 [-0.121, +0.126] | -0.056 / +0.5 | -0.021 [-0.104, +0.062] |
+| LotParks | **+1.2 [+0.1, +2.7]** / -0.8k | +0.003 [-0.044, +0.048] | +0.062 [-0.019, +0.148] / +0.6 | +0.026 [-0.013, +0.067] |
+| PollutionRelocation | **-2.0 [-3.1, -0.8]** / **+3.7k** | +0.010 [-0.007, +0.028] | -0.004 / +0.1 | +0.004 [-0.006, +0.013] |
+| IndustrySeparation | 0 / 0 (not tested) | -0.041 [-0.089, +0.002] | **+0.039 [+0.002, +0.090]** / **+2.1 [+0.6, +3.6]** | -0.006 [-0.036, +0.024] |
+| all four | -0.1 / +0.3k | -0.046 [-0.168, +0.074] | -0.019 / **+4.7 [+1.8, +7.4]** | -0.032 [-0.109, +0.047] |
 
-Every lobby game times out with all four houses alive, at 120 minutes and at 240 (48 more games
-each for PollutionRelocation and all three, at `b19c288bb`: score 0, land value -4.0 and -2.7,
-population **+1.8k** and **+1.9k**), so placement cannot separate the arms there. In the
-`low.dls` continuation (30 minutes, all houses one style) RoadLaneParks turned 73 of house 0's
-second-lane tiles into Parks and raised its lot land value from 111 to 117; LotParks cleared 69 of
-house 4's lots and cost it 1,170 residents for +1 lot land value; PollutionRelocation moved one
-zone. Its search seldom runs in a warring city (it needs twice an Industrial zone's price in hand and
-non-negative industrial demand) and, in a city this mixed, seldom finds a site with half the harm.
+Every lobby game times out with all four houses alive, so its score is 0. Fire counts in the seat's
+house-games (orders / standing at their site / lost; effect reads that raised the lots' land value):
 
-**Decision.** All three stay off: no arm's score interval is above 0, LotParks and RoadLaneParks
-cost population on the weak seat, and PollutionRelocation trades about 4 land value for about
-2,000 residents without changing a result. The rule Parks Count As Roads stays on: it is Stefan's
-rule, the default AI builds no Parks (ParkDistricts is off), and its tests pass. The fixable cause
-the measurement points at is industrial siting itself: new Industrial zones placed beyond the
-5-tile pollution reach of R/C lots, so that relocation is not needed; and more Palaces/Stadiums,
-whose 8-tile reach misses most low lots.
+| Arm | lobby | weak seat | ladder + skirmish + CY |
+|---|---|---|---|
+| RoadLaneParks | 24/24 games; 828 / 578 / 231; 466 of 578 | 140/144; 2,925 / 2,906 / 10; 1,673 of 2,853 | 107/108; 2,513 / 2,473 / 14; 1,431 of 2,369 |
+| LotParks | 24/24; 684 / 682 / 2; 468 of 682 | 91/144; 556 / 550 / 6; 261 of 538 | 67/108; 542 / 528 / 7; 286 of 498 |
+| PollutionRelocation | 24/24; 265 / 264 / 1; 254 of 264 | **37/144, not tested**; 86 / 54 / 18 | **31/108, not tested**; 89 / 78 / 5 |
+| IndustrySeparation (Industrial zones near homes) | **not tested**: the seat built no Industrial zone | 140/144; 16 of 2,973 near homes (control 909 of 3,355) | 108/108; 6 of 3,317 (control 820 of 3,613) |
+
+PollutionRelocation searched in every one of its non-firing house-games on the weak-seat and ladder
+maps; in 89 of 107 and 65 of 77 every search found no zone costing its homes 40 land value (or no money):
+those cities had nothing to relocate. IndustrySeparation builds about 10% fewer Industrial zones.
+
+**Decision.** All four stay off: no arm's all-games interval is above 0. They now demonstrably act, so
+these are measurements of the ideas: the park switches lift Stefan's lobby land value by about 1.5 without
+changing a result; PollutionRelocation, where it has work, trades 2 land value for 3,700 residents;
+IndustrySeparation is the only arm with a positive interval on a set (ladder + skirmish + CY, +0.039, land
+value +2.1) and the weak seat leans the other way (-0.041), so it is the candidate for a longer screen.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 

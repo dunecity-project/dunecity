@@ -1,3 +1,35 @@
+## 2026-11-27 - Redevelopment switches proven to act, re-measured with fire counts; IndustrySeparation added; all stay OFF
+
+Stefan, 2026-11-27: "i have a feeling the reason you think none of these things work is because you aren't
+actually doing that ... you need much much more tests to prove you have actually implemented a feature". He was
+right about these switches. Commits `96d8bf9b4` (the counters, due-search trigger, relocation built then
+demolished, IndustrySeparation and the probe: that commit carries another session's message because it took my
+staged index), `d2f92f512`, `5c891c405`, `cd8eba149`, `1f61881b5`, `8e520fdcd`, `e940e96c5`, and the
+activation registry entries. Evidence: `~/Documents/projects/outputs/redevelop-20261127/` (`screen-v5.md`,
+`analyse_v5.py`). Full write-up: docs/formations.md "Redevelopment for land value".
+
+- **Why the earlier "level" results measured nothing.** `placeYardChoice` dropped the chosen site of every rule
+  outside an allowlist, so every lane, lot and relocation order was re-sited by the ordinary search; the
+  spare-lane passage test refused every junction tile; the 2-in-120-second relocation window missed the idle
+  yard; a lot cleared at the order was lost when the order was released. All fixed.
+- **Proof.** `skirmish_generator_probe_city-redevelop_1024x768` (nightly): each switch ON acts at its chosen site
+  and lifts the lots it is for above the OFF arm from one saved start (relocation: land value 151 vs 92); OFF
+  never acts. Per-house counters with why-counters: `SCENARIO_SWITCH_ACTIVITY`, houses.csv `switch_activity`,
+  and `REDEVELOP:` / `INDUSTRY_PLACED:` / `HOME_PLACED:` lines registered in `tests/ai/activation-events.json`.
+- **Screens v5** (276 games an arm, `e940e96c5`): RoadLaneParks and LotParks fire in 97-100% / 62-100% of
+  house-games and lift the lobby's land value by about 1.5 (significant), scores level. PollutionRelocation fires
+  in every lobby game (254 of 264 relocations raised their lots; land value -2.0, population +3.7k) but is
+  **not tested** on the weak-seat and ladder maps (fired in 26% and 29%: no zone cost its homes 40).
+  IndustrySeparation cuts Industrial zones near homes from 909 to 16 and 820 to 6; ladder set **+0.039
+  [+0.002, +0.090]**, weak seat -0.041, all -0.006; **not tested** in the lobby (no Industrial zone built).
+  No all-games interval above 0: all stay off. IndustrySeparation is the candidate for a longer screen.
+- HomeSeparation (no new R/C lot within 5 tiles of a polluter) was added and removed the same day: the homes it
+  refused were cleaner and worth more than the average home.
+- Gates at `e940e96c5`: the four AI gates passed, `perf_regression` passed on the Mini. Nightly 251/262: every
+  failure is another session's (7 genome/sweep tests on `CityLessonsPolicy::kLauncherArmyBps` from `5f6a3b266`,
+  `zone_garrison_probe`, `palace_worm_probe`, `palace_worm_real_game`, `quantbot_city_lessons`); the
+  redevelopment and park probes and `dunelegacy_tests` pass.
+
 ## 2026-11-27 - Rocket Turrets at the front: four QuantBot switches measured, all stay OFF; the upkeep-inclusive turret return
 
 Stefan, 2026-11-27: "as you can see rocket turrets have an amazing return. houses should try use them offensively
