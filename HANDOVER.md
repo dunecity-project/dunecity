@@ -1,3 +1,83 @@
+## 2026-11-27 - The Fremen Palace calls a sandworm its house controls (Fremen Palace Worm, protocol 145, save 9901)
+
+Stefan, 2026-11-27: "i want freeman house to get a worm as its palace special - it has full control over the
+worm and can eat enemy units with it via hunt, or can explode to create spice where the ai wants near its base".
+Commits `5c9ecb9ab` (rule, worm, UI, AI, tests), `46a783a7e` (nearest sand, burst on expiry, AI timing),
+`01db4bfd9`, `c3bd624e8`, `0a169ff2a` (probe and two engine fixes it found), `ce65f24dd` (Civ Wars save test).
+Evidence: `~/Documents/projects/outputs/palace-worm-20261127/` (`report-v1.txt`, `v2/report.txt`, `v3/report.txt`).
+
+- **Match rule Fremen Palace Worm** (default on; INI key "Fremen Palace Worm"; bit 7 of the MOD18 city rules byte,
+  set only when off, so the byte is now full and no value is refused). A Fremen Palace (house fallback Fremen,
+  not the Tornie family) calls a `Unit_Sandworm` owned by its house (`Sandworm::createPalaceWorm`). Off, and for
+  Atreides either way, the Palace calls Fremen warriors as before.
+- **Rules** (`include/units/PalaceWormRules.h`): charge 5 minutes as before (the Atreides/Ordos cadence; a worm is
+  strong on sand and useless against an army on rock, so not a 10-minute Death Hand weapon); one worm a house at
+  a time (a second Palace keeps its charge); it surfaces on the sand tile nearest the Palace; life 3 game minutes
+  (then it dives; one on its way to a bloom bursts where it is) or 6 meals (a wild worm sleeps after 3); beaten
+  to half health it leaves, the only ending counted as a loss. **Rock**: it never leaves sand; Hunt takes only
+  units standing on sand in its own sand region, map-wide; a move onto rock stops at the sand's edge.
+- **Control**: a human's worm waits in Guard and takes Move/Attack/Guard/Hunt orders. **Spice Bloom** (unit panel
+  button, `CursorMode_SpiceBloom`, `CMD_SANDWORM_SPICEBLOOM`): it travels to the spot (a spot on rock moves to the
+  nearest reachable sand within 6 tiles; deeper is refused) and bursts into a radius-4 spice field with a thick
+  centre (about 50 tiles, ~5,500 spice). A Move, Attack, Guard or Stop order cancels it.
+- **A worm can now belong to a player.** The `|| Unit_Sandworm` exemption in every `canAttack` (ObjectBase,
+  Trooper, Soldier, Launchers, Ornithopter, Rocket Turret, Scoutpost) is `ObjectBase::isWildSandworm` (owned by
+  the Natives), so its own side never shoots it and enemies attack it like any unit they see; its bite spares
+  its owner's team (`Map::damage`); `Game::retagSandwormsToNatives` skips it. Its meals go through
+  `handleDamage`, so they are credited to its house: Stats shows a Sandworm row with its kills and hit points,
+  and the house's kill counts include the victims (`palace_worm_probe` checks both).
+- **QuantBot** (`QuantBotPalaceWorm.cpp`; config `PalaceWorm`, default 1, hashed only when not 1): each pass it
+  hunts the most valuable enemy cluster on its sand it can reach in time (value >= 250 credits); with none, with
+  one meal left, or when the trip home (twice the straight line plus 20 s) would use up its life, it bursts at the
+  sand site within 14 (else 30) tiles of a refinery that gains the most plain sand, away from enemies. 0 = burst
+  at once, 2 = hunt only (play styles `@palace-worm-0`, `@palace-worm-2`). An AI Player's worm hunts.
+- **Engine fixes the probe found**: while a worm eats, `findTarget` finds nothing and `UnitBase::targeting` drops
+  a hunter with no target to Guard (two tiles of sight), so a human's hunting worm stopped after one meal; a
+  Palace worm now waits out its meal before searching (wild worms unchanged). The worm's life ran only in an
+  unfinished game (copied from the shimmer drawing), which only the probe's decided two-house fixture noticed.
+- **Save 9901**: a sandworm saves whether it is a Palace worm, its life left and its bloom target after its Civ
+  Wars origin. **Protocol 145** (new command, rule bit, friendly-fire change). Taken in order with the parallel
+  sessions: redevelopment 143, garrison 144/9900, this 145/9901, hospital 146/9902, turret front 147.
+
+**Measured** (`tests/ai/palace-worm-report.py`, `vanilla-match.py` now writes `worms.csv`): `rs160-dunecity`, four
+QuantBot Brutal houses (Fremen, Harkonnen, Atreides, Ordos; Fortress starts include a Palace), 45 minutes, game
+options `fremen-worm-off.ini` (warriors, the control) / `fremen-worm-on.ini`, Fremen's placement score paired by seed.
+
+| Run (source) | Arm | Games | Fremen placement vs warriors (95% interval) | Worms: bloom / expired / sated / beaten |
+|---|---|---:|---|---|
+| v1 (`fb6958544`) | hunt, else bloom (1) | 40 | +0.071 (-0.056 to +0.202) | 143 / 145 / 23 / 103 |
+| v1 | bloom only (0) | 40 | +0.038 (-0.096 to +0.177) | 382 / 61 / 16 / 38 |
+| v1 | hunt only (2) | 40 | -0.054 (-0.208 to +0.106) | 0 / 103 / 212 / 107 |
+| v2 (`46a783a7e`) | hunt, else bloom (1) | 80 | +0.011 (-0.109 to +0.138) | 583 / 100 / 4 / 232 |
+| v2 | bloom only (0) | 80 | -0.028 (-0.119 to +0.064); wins -0.050 (-0.100 to -0.013) | 921 / 103 / 0 / 73 |
+| **v3 (`0a169ff2a`, final)** | **hunt, else bloom (1)** | **80** | **-0.021 (-0.132 to +0.090)** | **563 / 103 / 7 / 260** |
+
+Final run: 971 worms, 2,581 meals, 684,390 credits of enemy units eaten (about 8,550 a game, 265 a meal);
+Fremen wins 9 -> 6 (-0.037, -0.113 to +0.037); time-outs 51.2% -> 55.0% (no difference shown). The worm is
+**level with the warriors** on the placement rule: neither better nor worse at 80 paired games. It ships as the
+default because Stefan asked for it as the Fremen special, not because it beat the control; the old warriors
+remain one INI switch away. Tuning: hunting alone eats the most and scores lowest; bursting at once wins fewer
+games; hunt-then-bloom is the default. v1 -> v2 cut unused worms from a third to a tenth. Only Fortress Brutal
+was measured; Hard, `/weak` and other starts were not.
+
+**Tests.** `palace_worm_probe` (new, headless nightly, vanilla and dunecity): control (surfaces at 24,31 beside
+the Palace, move order through the command, stops at rock, own Trooper may not target it, a second charge waits),
+Hunt for a human and a QuantBot owner (both Tanks on sand eaten, the one on rock and its own Quad spared; 2
+kills credited), Spice Bloom (deep rock refused, rock snapped to sand, a move cancels it, the command bursts it
+into 47 spice tiles, not lost), life (180 s, out of time on the way bursts, 6 meals sated, beaten = lost),
+QuantBot bursting beside its refinery, full save/load of a worm on its way to burst, warriors with the rule off
+and for Atreides. `CoopGameSettingsTestCase` round-trips bit 7; `QuantBotStrategyTestCase` the PalaceWorm knob;
+the Civ Wars legacy-worm check now cuts the 9901 bytes too and checks a 9881-9900 record.
+
+**Gates.** The four AI gates passed on `0a169ff2a` (AWS `20261127T110956-ctest-ed281f`, 4/4); `perf_regression`
+passed on the Mini at `0a169ff2a` (131 s, PERF_BUDGET_OK). Nightly `-L nightly -LE gui` at `0a169ff2a`
+(`20261127T110952-ctest-e9d2ca`): 253/257; `palace_worm_probe` passed; the two `civilization_wars_probe_civ-1v1`
+failures were this change's save bytes in that test's legacy record (fixed in `ce65f24dd`; rerun
+`20261127T113435-ctest-6f6888`: all eight Civ Wars probes and `palace_worm_probe`, 9/9 passed); `zone_garrison_probe` ("a soldier did not come out of the ruin") and
+`turret_target_probe` (its probe main did not compile) belong to the garrison and turret-front changes and were
+reported to those sessions (turret: probe runner lacked `-fno-access-control`, fixed in `2f58b959f`; garrison:
+its "destroyed" case killed the soldier with the zone's damage, fixed in `fa60fc5ea`).
+
 ## 2026-11-27 - City redevelopment for land value: Parks Count As Roads (protocol 143); three QuantBot switches, all off
 
 Stefan, 2026-11-27, from the Spectator view of a Brutal AI city (the Air's `low.dls`): "there's still lots of low
