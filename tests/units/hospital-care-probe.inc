@@ -1051,11 +1051,14 @@ void checkMetropolis() {
     pressKey(*game, SDLK_r);
     require(commandCount(*game) == queued + 1, "Metropolis: the R hotkey did not queue the order");
     const Coord earlyAt = early->getLocation();
-    const int bookingsBefore = yard->getNumBookings();
+    // The played city's own damaged vehicles book its Repair Yard too: the asserts are on the soldier.
     for(int i = 0; i < 600 && hospitalsOf(home).empty(); ++i) {
         game->updateGameState();
-        require(!early->goingToRepairYard && yard->getNumBookings() == bookingsBefore,
-                "Metropolis: the repair order sent a soldier for the Repair Yard");
+        require(!early->goingToRepairYard, "Metropolis: the repair order sent the soldier for the Repair Yard");
+        require(early->getTarget() == nullptr || early->getTarget()->getItemID() != Structure_RepairYard,
+                "Metropolis: the soldier targets a Repair Yard");
+        require(early->getDestination().isInvalid() || early->getDestination() == earlyAt,
+                "Metropolis: the soldier was given somewhere to go");
     }
     require(early->getLocation() == earlyAt && !care().trip(early->getObjectID()),
             "Metropolis: a soldier moved on a repair order with no Hospital");
