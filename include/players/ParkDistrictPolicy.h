@@ -22,8 +22,12 @@ constexpr int kLotReach = 2 * DuneCity::kParkTerrainBlockSize - 1;
 
 inline int parkCap(int lots) { return lots < kMinLots ? 0 : lots / kLotsPerPark; }
 
-/// Land value a park adds to one block, never past the land-value ceiling.
+/// Land value a park adds to one block, never past the land-value ceiling. A block at the floor (1)
+/// gains nothing: its pollution already outweighs its value by an unknown amount, so a park's few
+/// points are lost under the clamp (on Stefan's low.dls, LotParks cleared lots for such neighbours and
+/// their land value moved +0.1 a lot).
 inline int blockGain(int landValue, int marginalGain) {
+    if (landValue <= 1) return 0;
     return std::min(std::max(0, DuneCity::kMaxLandValue - landValue), std::max(0, marginalGain));
 }
 

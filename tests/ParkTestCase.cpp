@@ -253,3 +253,10 @@ TEST_CASE("Redevelopment activity: every switch's counters reach the match log",
     CHECK(line.find("lot_fill_lost=0") != std::string::npos);
     CHECK(line.find("industry_placed=5 industry_near_homes=1") != std::string::npos);
 }
+
+TEST_CASE("ParkDistrictPolicy: a block at the land-value floor gains nothing from a park", "[ai][park]") {
+    CHECK(ParkDistrictPolicy::blockGain(1, 15) == 0);
+    CHECK(ParkDistrictPolicy::blockGain(0, 15) == 0);
+    CHECK(ParkDistrictPolicy::blockGain(2, 15) == 15);
+    CHECK(ParkDistrictPolicy::blockGain(DuneCity::kMaxLandValue - 5, 15) == 5);
+}
