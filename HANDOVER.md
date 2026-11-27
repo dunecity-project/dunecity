@@ -1,3 +1,97 @@
+## 2026-11-28 - Lessons from Stefan's Metropolis save (seewhatidid): LowValuePalaces, FrontPalaces, CityLauncherArmy proven and measured; all stay OFF
+
+Stefan, 2026-11-27: "i saved a game seewhatidid on the mba for metropolis where i added more palaces to improve
+land, added rocket turrets as a maginot and built a lot of launchers. and my ai is doing better than its
+opponents. why is it i can do these things but you can't? analyse the save and the logs and come up with ai
+behaviour to test. make sure you are actually doing what is asked and not just imagining you are doing it."
+The turret line is the turret-front entry above. This entry covers the Palaces and the Launchers. Commits
+`266584f5a`, `c2b2e1c7e`, `2477d8a29`, `86dcb77ea`, `b32015479`, `1e4224cc0`, `b4f427671`, `e603c584f`.
+Evidence: `~/Documents/projects/outputs/seewhatidid-20261127/` (`analysis/acceptance-list.md` holds his
+measured footprint; `measure/report-e603c584f.txt`, `measure/NOTES.md`).
+
+**What he did** (read from his saves by the game at minutes 72, 95 and 120; `analysis/acceptance-list.md`):
+- 19 Palaces by minute 72 and 26 by minute 95. They stood on the enemy side of his city, 10-31 tiles from enemy
+  buildings and behind his turret clumps. His low-value lots (land value 80 or less) were 9% of his R/C lots at
+  minute 72; the AI houses had 30-51%.
+- Launchers were 83% of his combat vehicles at minute 72. He lost 1,052 Launchers by minute 120.
+- Across every house and 24 AI-vs-AI games, Launchers returned 2.5 credits of damage per credit spent.
+  Siege Tank 1.5, Tank 0.8, Ornithopter 0.4.
+
+**Switches** (QuantBotConfig [Force Concentration], default off; play styles `default@low-value-palaces`,
+`default@front-palaces`, `default@city-launcher-army`, `default@city-lessons` = Launchers + LowValuePalaces):
+- LowValuePalaces plans a Palace on the site with the most low-value R/C lots in reach (6 or more). This counts
+  lots another Palace already reaches, because stamps add up. The Palace is saved for, and the zones under the
+  site are cleared.
+- FrontPalaces plans a Palace 10-31 tiles from the nearest enemy building, with 3 or more own Rocket Turrets
+  within 10 tiles that are nearer the enemy, and 6 or more own lots in reach. At most one plan every 2 minutes.
+- CityLauncherArmy moves the vehicle mix's Ornithopter share into Launchers and keeps Launchers at least 70% of
+  the mix.
+
+**Acceptance** (`quantbot_city_lessons`, headless nightly CTest that exits non-zero, passed on AWS at
+`e603c584f`, job `20261128T065755-ctest-dc727b`, 609 s). The measured lines come from Metropolis, brutal, his
+options, 120 minutes, 24 house-games per arm against 216 control house-games:
+
+| His action | Test / measure | Measured (`e603c584f`) | His | Result |
+|---|---|---|---|---|
+| more Palaces | CTest: ON places the Palace on its planned site, its 6+ low lots +10 two minutes later; OFF plans none | passes | - | pass |
+| ... the pace | low-value Palaces by minute 72, 15+ in half the house-games | median 17.5 (6-33), 16/24 house-games | 19 | pass |
+| ... "to improve land" | lots of each placed Palace rise 10+ | 418/441, mean +60 | - | pass |
+| ... the result | low-value lot share at minute 72 of 20% or less, in half the house-games | median 23%, 8/20 house-games (control 35%); city-lessons arm 22%, 6/13 | 9% | **not met** |
+| ... mean lot land value, minute 72 | - | 119 (control 98) | 176 | measured |
+| Palaces on the enemy side behind turrets | CTest: front Palace placed 10-31 tiles from the enemy with 3+ turrets ahead, standing after 5 minutes | passes | - | pass |
+| ... the pace | front Palaces by minute 72 | median 18, 387/432 standing after 5 min | 19 | pass |
+| a lot of Launchers | CTest: in 10 minutes Launchers at least 50% of vehicle value built, no Ornithopter | passes | - | pass |
+| ... the army | fielded Launcher share from minute 50, 60%+ in half the house-games | 70%, 14/24 (city-lessons arm) | 83% | pass |
+| ... the losses | Launchers lost per house-game | 1,057 (control 364) | 1,052 by m120 | measured |
+
+**Activation per arm** (`vanilla-match.py` lessons log, every arm fired in 24/24 house-games unless noted):
+
+| Arm | Metropolis | rs192-dunecity 4P |
+|---|---|---|
+| LowValuePalaces | 21.5 planned / 18.6 placed / 2.7 expired per game, 418/441 rose 10+ | 9.5 / 6.9 / 2.5, 152/163 rose 10+ |
+| FrontPalaces | 20.9 planned / 18.3 placed, 387/432 standing at 5 min | **NOT TESTED**: 2.1 / 1.3, no site in 522 searches with 3 turrets ahead in the band |
+| city-lessons (both) | Launchers 24/24, Palaces 21.3 placed | Launchers 24/24, Palaces 5.5 placed |
+| CityLauncherArmy alone (`266584f5a`) | 24/24, fielded 71% | 24/24, fielded 74% |
+
+**Scores** (placement score, paired against control, 95% interval):
+
+| Arm | Metropolis | rs192 4P | All games |
+|---|---|---|---|
+| LowValuePalaces | +0.059 [-0.331, +0.441] level | -0.069 [-0.429, +0.297] level | -0.005 level |
+| FrontPalaces | +0.030 [-0.331, +0.394] level | not tested | -0.002 level |
+| city-lessons | -0.163 [-0.544, +0.252] level | -0.104 [-0.468, +0.229] level | -0.134 level |
+| CityLauncherArmy (`266584f5a`) | **-0.397 [-0.689, -0.113] loses** | -0.067 [-0.475, +0.340] level | - |
+
+**Decision.** All three stay OFF. No interval is above 0, so no Fortress or /weak check was needed.
+CityLauncherArmy loses on Metropolis on its own. It fields his share and loses his number of Launchers
+(1,006 a game against control 390), but without his turret line in front of them.
+
+**What it took to make the Palaces land** (each was a measured cause, not a guess):
+1. `c2b2e1c7e`: the yard did not know the lesson sites and cleared them for other buildings.
+2. `86dcb77ea`: ground access was judged with the low-value zones still standing.
+3. `b32015479`: the next plan waited for the last effect.
+4. `e603c584f`: sites inside a reactor blast area were refused by the yard. This was 143 of 207 expired plans.
+Placed per Metropolis game: 0.1, then 7.2, 9.9, 14.2 and 18.6.
+
+**Deviations:**
+- LowValuePalaces places by low-value lots wherever they are. He placed his on the enemy side; FrontPalaces is
+  that placement.
+- The lesson site search differs from the shipped `palace_district` search in three ways. It judges ground
+  access with the cleared zones removed. It keeps out of reactor blast areas, and the shipped search still does
+  not. It skips a site whose plan expired for 10 minutes.
+- FrontPalaces needs 3 own turrets ahead. On rs192 the AI's turrets are rarely in that band, so the arm is not
+  tested there.
+
+**Not done:** the low-value lot share is 23% against the 20% line. A lesson Palace lifts its lots from a median
+32 to 89. In 165 of 441 groups the mean stays 80 or less, because lots that start near 0 need a second Palace
+over them. Plans also slow after minute 36 (gaps of 1-3 minutes); the cause of the slowdown is not logged.
+
+**Gates** (default-off paths; the e603c584f change runs only with a lesson switch on):
+- at `b4f427671`: the four AI gates passed (`20261128T060038-ctest-76b14f`), and the nightly tier passed 265/265
+  (`20261128T060042-ctest-68b321`). `perf_regression` passed on the Mini after a full rebuild.
+- at `e603c584f`: the four AI gates passed (`20261128T082727-ctest-98db4c`), the nightly tier passed 265/265
+  (`20261128T082731-ctest-3162dd`), and `perf_regression` passed on the Mini (123 s).
+
 ## 2026-11-28 - Fremen Palace worm: real assertion tests through the player's path, the AI's worm no longer taken by the base defence, re-measured (v4)
 
 Stefan, 2026-11-27: "i want freeman house to get a worm as its palace special - it has full control over the

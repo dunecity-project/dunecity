@@ -2327,6 +2327,32 @@ changing a result; PollutionRelocation, where it has work, trades 2 land value f
 IndustrySeparation is the only arm with a positive interval on a set (ladder + skirmish + CY, +0.039, land
 value +2.1) and the weak seat leans the other way (-0.041), so it is the candidate for a longer screen.
 
+
+### What Stefan did on Metropolis (`LowValuePalaces`, `FrontPalaces`, `CityLauncherArmy`, 2026-11-28, default off)
+
+Stefan's save seewhatidid (Metropolis, brutal) beat its opponents with three things the AI did not do: more
+Palaces for land value (19 he added by minute 72), Palaces on the enemy side behind his Rocket Turret clumps, and
+an army of Launchers (83% of his combat vehicles at minute 72). Launchers return the most damage per credit of any
+unit in every house of that save and in 24 AI-vs-AI Metropolis games: 2.5 credits of damage per credit, against
+Siege Tank 1.5, Tank 0.8, Ornithopter 0.4. Code: `src/players/QuantBotCityLessons.cpp`,
+`include/players/CityLessonsPolicy.h`; test `quantbot_city_lessons` (nightly, headless).
+
+- **LowValuePalaces** picks the site with the most R/C lots at land value 80 or less in a Palace's reach (6 or
+  more), whether or not another Palace reaches them, saves for it and clears the zones under it. One plan at a
+  time; a plan that does not stand within 5 minutes expires and its site is skipped for 10 minutes. The lesson
+  site search judges ground access with the cleared zones removed and keeps out of reactor blast areas (the yard
+  refuses those sites; that was 143 of 207 expired plans before `e603c584f`).
+- **FrontPalaces** puts one 10-31 tiles from the nearest enemy building, with 3+ own Rocket Turrets nearer the
+  enemy within 10 tiles, at most every 2 minutes.
+- **CityLauncherArmy** moves the Ornithopter share of the vehicle mix into Launchers and keeps them at 70% or more.
+
+Measured at `e603c584f` (Metropolis, 120 min, 24 house-games per arm): LowValuePalaces places 18.6 Palaces a game
+(17.5 by minute 72, his 19), each lifting its lots by about 60, and cuts the low-value lot share at minute 72 from
+35% to 23% (his 9%); FrontPalaces places 18 by minute 72, 90% standing five minutes later; CityLauncherArmy fields
+70% Launchers and loses 1,000 of them a game. Scores are level for both Palace switches and the combined arm;
+CityLauncherArmy alone loses on Metropolis (-0.397 [-0.689, -0.113]). FrontPalaces is not tested on rs192: the
+AI's turrets rarely stand in the band. HANDOVER 2026-11-28 has the acceptance table.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first
