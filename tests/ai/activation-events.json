@@ -9,5 +9,6 @@
   "turret-drill": {"fire": ["TURRET_FRONT: rule=turret_drill"], "success": ["TURRET_FRONT_ENGAGED: rule=turret_drill"]},
   "palace-worm-1": {"fire": ["PALACE_WORM: event=hunt", "PALACE_WORM: event=bloom_order"], "success": ["PALACE_WORM: event=ate", "PALACE_WORM: event=spice"]},
   "palace-worm-0": {"fire": ["PALACE_WORM: event=bloom_order"], "success": ["PALACE_WORM: event=spice"]},
-  "palace-worm-2": {"fire": ["PALACE_WORM: event=hunt"], "success": ["PALACE_WORM: event=ate"]}
+  "palace-worm-2": {"fire": ["PALACE_WORM: event=hunt"], "success": ["PALACE_WORM: event=ate"]},
+  "hospital-infantry": {"fire": ["HOSPITAL_CARE: event=sent why=quiet"], "success": ["HOSPITAL_CARE: event=healed"]}
 }
