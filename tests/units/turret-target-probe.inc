@@ -11,6 +11,8 @@
 //   on    with the option on, the same turrets damage the enemy building or zone (the protocol 146
 //         behaviour)
 #include <Command.h>
+#include <FileClasses/INIFile.h>
+#include <globals.h>
 #include <CommandManager.h>
 #include <Game.h>
 #include <GameInitSettings.h>
@@ -184,6 +186,51 @@ void checkOff(const std::string& mapData) {
                   + std::to_string(zone) + "->" + std::to_string(lowest[1]));
 }
 
+/// The options INI: the current key round-trips, an INI with only the earlier inverted key
+/// "Turrets Target Units Only" keeps working, the current key wins when both are present, and an
+/// INI with neither leaves the rule alone.
+void checkIni() {
+    const std::string section = "Game Options";
+    for(const bool value : {false, true}) {
+        SettingsClass::GameOptionsClass written;
+        written.turretsFireOnBuildings = value;
+        INIFile config(false, std::string());
+        writeGameOptionsToConfig(config, section, written);
+        require(config.hasKey(section, "Turrets Can Fire On Buildings")
+                && !config.hasKey(section, "Turrets Target Units Only"), "The options INI does not write the current key");
+        SettingsClass::GameOptionsClass read;
+        read.turretsFireOnBuildings = !value;
+        applyGameOptionsFromConfig(config, section, read);
+        require(read.turretsFireOnBuildings == value && read.getHash() == written.getHash(),
+                "Turrets Can Fire On Buildings did not round-trip through the options INI");
+    }
+    for(const bool unitsOnly : {false, true}) {
+        INIFile config(false, std::string());
+        config.setBoolValue(section, "Turrets Target Units Only", unitsOnly);
+        SettingsClass::GameOptionsClass read;
+        read.turretsFireOnBuildings = unitsOnly;   // the opposite of what the old key means
+        applyGameOptionsFromConfig(config, section, read);
+        require(read.turretsFireOnBuildings == !unitsOnly, "The earlier key Turrets Target Units Only was not read, inverted");
+    }
+    {
+        INIFile config(false, std::string());
+        config.setBoolValue(section, "Turrets Target Units Only", false);
+        config.setBoolValue(section, "Turrets Can Fire On Buildings", false);
+        SettingsClass::GameOptionsClass read;
+        read.turretsFireOnBuildings = true;
+        applyGameOptionsFromConfig(config, section, read);
+        require(!read.turretsFireOnBuildings, "The earlier key won over Turrets Can Fire On Buildings");
+    }
+    {
+        INIFile config(false, std::string());
+        config.setBoolValue(section, "Hospital Care", true);
+        SettingsClass::GameOptionsClass read;
+        applyGameOptionsFromConfig(config, section, read);
+        require(!read.turretsFireOnBuildings, "An INI without either key changed the turret rule");
+    }
+    record("ini", "current key round-trips; earlier key read inverted; current key wins; neither leaves the default");
+}
+
 } // namespace TurretTargetProbe
 
 int runTurretTargetProbe() {
@@ -198,6 +245,7 @@ int runTurretTargetProbe() {
     const std::string mapData = fixtureMap();
     gChecks.open(gOut + "/checks.csv");
     gChecks << "check,detail\n";
+    checkIni();
     checkOn(mapData);
     checkOff(mapData);
     gChecks.close();

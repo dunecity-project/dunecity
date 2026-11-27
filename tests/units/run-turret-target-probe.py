@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Turrets Can Fire On Buildings (protocol 147, default off), in the existing native build.
 
+First the options INI: the current key round-trips and the earlier inverted key "Turrets Target
+Units Only" is still read when the current one is absent.
+
 Runs tests/units/turret-target-probe.inc: with the option off (the default) a Rocket Turret and a Gun
 Turret beside an enemy Wind Trap and Residential zone never damage them, by their own search or by
 an attack order, and do shoot an enemy Quad; with the option on they damage the building or zone.

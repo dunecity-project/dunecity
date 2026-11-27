@@ -1,7 +1,6 @@
 #include <catch2/catch_all.hpp>
 #include <GameInitSettings.h>
 #include <FileClasses/FileManager.h>
-#include <FileClasses/INIFile.h>
 #include <MapSeed.h>
 #include <globals.h>
 #include <SpiceIncome.h>
@@ -1872,58 +1871,19 @@ TEST_CASE("Turrets Can Fire On Buildings defaults off and its on state is hashed
     }
 }
 
-TEST_CASE("Turrets Can Fire On Buildings: INI round trip, the earlier inverted key and the option string",
+TEST_CASE("Turrets Can Fire On Buildings: the options hash names the rule only when it is on",
           "[turret][settings]") {
-    const std::string section = "Game Options";
-    SECTION("the current key round-trips through the options INI") {
-        const bool value = GENERATE(false, true);
-        SettingsClass::GameOptionsClass written;
-        written.turretsFireOnBuildings = value;
-        INIFile config(false, std::string());
-        writeGameOptionsToConfig(config, section, written);
-        REQUIRE(config.hasKey(section, "Turrets Can Fire On Buildings"));
-        REQUIRE_FALSE(config.hasKey(section, "Turrets Target Units Only"));
-        SettingsClass::GameOptionsClass read;
-        read.turretsFireOnBuildings = !value;
-        applyGameOptionsFromConfig(config, section, read);
-        REQUIRE(read.turretsFireOnBuildings == value);
-        REQUIRE(read.getHash() == written.getHash());
-    }
-    SECTION("an INI with only the earlier key keeps working, inverted") {
-        const bool unitsOnly = GENERATE(false, true);
-        INIFile config(false, std::string());
-        config.setBoolValue(section, "Turrets Target Units Only", unitsOnly);
-        SettingsClass::GameOptionsClass read;
-        applyGameOptionsFromConfig(config, section, read);
-        REQUIRE(read.turretsFireOnBuildings == !unitsOnly);
-    }
-    SECTION("the current key wins over the earlier one") {
-        INIFile config(false, std::string());
-        config.setBoolValue(section, "Turrets Target Units Only", false);
-        config.setBoolValue(section, "Turrets Can Fire On Buildings", false);
-        SettingsClass::GameOptionsClass read;
-        read.turretsFireOnBuildings = true;
-        applyGameOptionsFromConfig(config, section, read);
-        REQUIRE_FALSE(read.turretsFireOnBuildings);
-    }
-    SECTION("an INI with neither key leaves the rule as it was") {
-        INIFile config(false, std::string());
-        config.setBoolValue(section, "Hospital Care", true);
-        SettingsClass::GameOptionsClass read;
-        applyGameOptionsFromConfig(config, section, read);
-        REQUIRE_FALSE(read.turretsFireOnBuildings);
-    }
-    SECTION("the options hash names the rule only when it is on") {
-        // getHash() spells out only the non-default state, so the default hash (and every saved
-        // or networked setup that plays it) is the same as before the rule existed.
-        SettingsClass::GameOptionsClass defaults;
-        auto on = defaults;
-        on.turretsFireOnBuildings = true;
-        auto back = on;
-        back.turretsFireOnBuildings = false;
-        REQUIRE(on.getHash() != defaults.getHash());
-        REQUIRE(back.getHash() == defaults.getHash());
-    }
+    // getHash() spells out only the non-default state, so the default hash (and every saved or
+    // networked setup that plays it) is the same as before the rule existed. The INI round trip
+    // and the earlier key's fallback are checked in turret_target_probe (globals.cpp is not linked
+    // into this binary).
+    SettingsClass::GameOptionsClass defaults;
+    auto on = defaults;
+    on.turretsFireOnBuildings = true;
+    auto back = on;
+    back.turretsFireOnBuildings = false;
+    REQUIRE(on.getHash() != defaults.getHash());
+    REQUIRE(back.getHash() == defaults.getHash());
 }
 
 TEST_CASE("Tornie-only player limits apply to writers and received direct lobby settings",
