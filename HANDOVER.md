@@ -51,8 +51,9 @@ minutes in five arms at once (off, road-lane-parks, lot-parks, pollution-relocat
 **Not done.** Moving factories (none in his save; Refineries and Airports are not moved). Palaces belong to the
 seewhatidid-ai session's LowValuePalaces (`quantbot_city_lessons`), coordinated so that it is built once.
 
-Gates at the final commit: the four AI gates are running on AWS (see below), `perf_regression` passed (Mini), and
-`dunelegacy_tests` and both skirmish probes passed.
+Gates at the final code commit `dda235ff0`, all on the Mini, where AWS was full of other sessions' games: the four
+AI gates passed (job `20261127T211933-ctest-747924`), as did `perf_regression`, `dunelegacy_tests`, both skirmish
+probes and `quantbot_redevelop_low_save`.
 
 ## 2026-11-27 - Redevelopment switches proven to act, re-measured with fire counts; IndustrySeparation added; all stay OFF
 
