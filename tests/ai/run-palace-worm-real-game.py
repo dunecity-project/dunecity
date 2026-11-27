@@ -5,9 +5,13 @@ Stefan, 2026-11-27: "i want freeman house to get a worm as its palace special - 
 over the worm and can eat enemy units with it via hunt, or can explode to create spice where the ai
 wants near its base", and the AI behaviour tweaked to use it.
 
-Plays QuantBot Brutal free-for-alls on a bundled multiplayer map (default: 4P Deserted, Fremen,
-Harkonnen, Atreides, Ordos) through tests/ai/vanilla-match.py, with the rule on and, for one seed,
-off, and asserts each acceptance line from the PALACE_WORM lines of the match log (worms.csv):
+Plays QuantBot Brutal free-for-alls through tests/ai/vanilla-match.py, with the rule on and, for one
+seed, off, and asserts each acceptance line from the PALACE_WORM lines of the match log (worms.csv).
+The map is the game's own Random Skirmish, 4 players, 160x160, DuneCity (rs160-dunecity, Fremen,
+Harkonnen, Atreides, Ordos), the set-up of the OFF/ON measurement and of quantbot_ffa_army_deploys:
+there the Fremen house starts with a Palace and its first charge is due at 5 minutes. On the bundled
+4P Deserted map the Fremen QuantBot never builds a Palace before it is wiped out (18 minutes, seed
+7301), so no worm is ever called there; the player's path on Deserted is asserted by the probe.
 
   A1 the Fremen Palace calls a worm the Fremen house owns, in every game with the rule on;
   A2 the rule off calls none (the Palace calls the Fremen warriors);
@@ -23,6 +27,7 @@ UI in tests/units/run-palace-worm-probe.py.
 """
 import argparse
 import csv
+import shutil
 import statistics
 import subprocess
 import sys
@@ -33,8 +38,8 @@ root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', default=str(root / 'build'))
 parser.add_argument('--output-dir', type=Path, required=True)
-parser.add_argument('--map', default='deserted')
-parser.add_argument('--seeds', nargs='+', type=int, default=[7301, 7302])
+parser.add_argument('--map', default='rs160-dunecity')
+parser.add_argument('--seeds', nargs='+', type=int, default=[9101, 9102, 9103])
 parser.add_argument('--minutes', type=int, default=45)
 parser.add_argument('--jobs', type=int, default=3)
 parser.add_argument('--reuse', action='store_true', help='Only check the tables already in --output-dir')
@@ -60,6 +65,9 @@ def table(tag, name):
 
 
 if not args.reuse:
+    # vanilla-match.py resumes from the games.csv it finds; a rerun must not count another build's games.
+    for tag in ('worm-on', 'worm-off'):
+        shutil.rmtree(out / tag, ignore_errors=True)
     play('worm-on', 'fremen-worm-on.ini', args.seeds)
     play('worm-off', 'fremen-worm-off.ini', args.seeds[:1])
 
