@@ -26,6 +26,8 @@ rs160-vanilla): a generated multiplayer Random Skirmish map with one start per h
 Fortress with a 20,000-credit army and in DuneCity a 40,000 city (Rock High, Spice Medium) -
 Stefan's 4P DuneCity free-for-all - from the seed (map seed and match seed), played in that mod
 with --game-options (default his options, tests/performance/data/stefan-game-options.ini).
+A bundled map plays the harness default mod (vanilla, no city) unless --map-mod names one:
+--map-mod dunecity --houses harkonnen sardaukar neutral --maps 3waysplit is Stefan's 3P city game.
 
 Army role metrics may be unavailable in observer-only samples (roles_measured=0 or negative
 role values). Reports show those reserve metrics as unmeasured, retaining raw position statistics.
@@ -363,6 +365,8 @@ def play(args, scratch, binary, key):
                     '--game-options', str(args.game_options or SKIRMISH_OPTIONS)]
     else:
         command += ['--custom-map', str(game_map(name, scratch))]
+        if args.map_mod:
+            command += ['--mod', 'Dune2R' if args.map_mod == 'dune2r' else args.map_mod]
         if args.game_options:
             command += ['--game-options', str(args.game_options)]
     if not args.ai_telemetry:
@@ -980,6 +984,8 @@ parser.add_argument('--ffa', help='Free-for-all: one label for self-play, two la
 parser.add_argument('--game-options', type=Path,
                     help='[Game Options] INI for every game (default: the lobby defaults; rs<size>-<mod> maps: '
                          'tests/performance/data/stefan-game-options.ini)')
+parser.add_argument('--map-mod', help='The mod a bundled (not rs<size>-<mod>) map plays, e.g. dunecity for the '
+                    '3waysplit city game; default the harness default (vanilla, no city simulation)')
 parser.add_argument('--control', help='FFA report: the label every other label is compared with (default the second --ffa label)')
 parser.add_argument('--baseline-tag', help='Report: compare with this tag (another code version, e.g. the last release): '
                                            '1v1 pairings side by side in the same setup; a one-label FFA game by game '
