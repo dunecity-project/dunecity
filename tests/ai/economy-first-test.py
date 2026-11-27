@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """EconomyFirst acts, reaches its proximate effect, and stays quiet where it must (CTest economy_first).
 
+This is the ACTIVATION test (CLAUDE.md "AI behaviours" rules 1-2), with its own small fixed numbers: the switch
+invests in yards and zones before units when on, does nothing when off or on a spice-rich map. It is NOT the
+acceptance test. Stefan's footprint from his game is the acceptance table in tests/ai/economy-first-report.py
+(written before the measured games), where a line the AI does not reach is reported "not met".
+
 Stefan, 2026-11-28, after his last Air game ("i did the building for the ai and we obliterated the enemy
 opponents"): "yes the ai needs to escape the poverty trap on low / no spice maps". CLAUDE.md, "AI behaviours"
 rules 1-2 and "Asked-for behaviour" rule 2: a headless real game on his own map (tests/ai/maps/4P - 192x192 -
