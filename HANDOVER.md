@@ -439,7 +439,7 @@ minutes in five arms at once (off, road-lane-parks, lot-parks, pollution-relocat
 | ... "to remove pollution from an area" | `quantbot_redevelop_low_save` | the homes round a moved zone cleaner in 6 of 6 reads | PASS |
 | ... more land value there | `quantbot_redevelop_low_save` | raised in 4 of 6 reads (need half) | PASS |
 | "moving factories" | - | no switch moves one (the save has no Dune factory; besides Industrial zones its polluters are 1-2 Refineries and an Airport a house) | NOT DONE |
-| "adding in more palaces" / "destroying and adding palaces" | `quantbot_city_lessons` (LowValuePalaces, seewhatidid-ai session) | not mine; that test failed in my nightly at `e940e96c5` | NOT DONE here |
+| "adding in more palaces" / "destroying and adding palaces" | `quantbot_city_lessons` (LowValuePalaces, seewhatidid-ai session; real games on Metropolis and rs192, not his save) | passed on AWS at `86dcb77ea` (job `20261128T014319-ctest-7d7220`): ON places the Palace on its planned site of 6+ lots at land value 80 or less, those lots +10 two minutes later; OFF never plans one. Screen: 9.9 Palaces a game on Metropolis, lots +60 (225/237 rose 10+); 3.7 on rs192, +61; score level | pass (built by that session) |
 | "adding in more ... parks" (spare lanes) | `quantbot_redevelop_low_save` | 182 Parks standing on their chosen lane tiles (need 10) | PASS |
 | "adding in more ... parks" (cleared lots) | `quantbot_redevelop_low_save` | 89 Parks on cleared lots (need 5) | PASS |
 | ... "as a way to also increase value" (lane Parks) | `quantbot_redevelop_low_save` | raised in 118 of 178 reads (need half) | PASS |
@@ -469,7 +469,9 @@ minutes in five arms at once (off, road-lane-parks, lot-parks, pollution-relocat
 - A lot is cleared only at land value 64 or less, density 1 or less, and 24 total gain.
 
 **Not done.** Moving factories (none in his save; Refineries and Airports are not moved). Palaces belong to the
-seewhatidid-ai session's LowValuePalaces (`quantbot_city_lessons`), coordinated so that it is built once.
+seewhatidid-ai session's LowValuePalaces (`quantbot_city_lessons`), coordinated so that it is built once; that
+test passed at `86dcb77ea` (2026-11-28). The shipped PalaceDistricts rule still re-sites 2-9 Palaces a house
+(`planned_site_blocked`); that is not caused by the redevelopment switches, which are off in that test.
 
 Gates at the final code commit `dda235ff0`, all on the Mini, where AWS was full of other sessions' games: the four
 AI gates passed (job `20261127T211933-ctest-747924`), as did `perf_regression`, `dunelegacy_tests`, both skirmish

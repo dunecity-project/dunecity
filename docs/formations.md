@@ -2319,7 +2319,7 @@ Fixes it forced:
 - a Park that became the only unit link is removed and its road restored;
 - `ParkDistrictPolicy::blockGain` counts nothing for blocks at the land-value floor.
 
-Not done: moving factories (none in that save); Palaces are LowValuePalaces (`quantbot_city_lessons`).
+Not done: moving factories (none in that save); Palaces are LowValuePalaces (`quantbot_city_lessons`, passed at `86dcb77ea`).
 
 **Decision.** All four stay off: no arm's all-games interval is above 0. They now demonstrably act, so
 these are measurements of the ideas: the park switches lift Stefan's lobby land value by about 1.5 without
