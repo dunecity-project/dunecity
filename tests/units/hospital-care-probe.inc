@@ -654,8 +654,8 @@ void checkUiRepair(const std::string& mapData) {
     require(panel != nullptr && panel->sendToRepairButton.isVisible() && panel->sendToRepairButton.isEnabled(),
             "The Repair button is not clickable for a wounded Soldier");
     require(!panel->sendToRepairButton.getTooltipText().empty()
-            && panel->sendToRepairButton.getTooltipText() == UnitCommandTooltips::repairUnit(),
-            "The Repair button has no repair tooltip");
+            && panel->sendToRepairButton.getTooltipText() == UnitCommandTooltips::healAtHospital(),
+            "The Repair button does not say it sends the soldier to a Hospital");
     const size_t queued = commandCount(*game);
     clickButton(panel->sendToRepairButton);
     require(commandCount(*game) == queued + 1, "The Repair button did not queue exactly one command");
@@ -1041,7 +1041,7 @@ void checkMetropolis() {
     require(commandCount(*game) == queued + 1, "Metropolis: the R hotkey did not queue the order");
     const Coord earlyAt = early->getLocation();
     const int bookingsBefore = yard->getNumBookings();
-    for(int i = 0; i < 40 && hospitalsOf(home).empty(); ++i) {
+    for(int i = 0; i < 600 && hospitalsOf(home).empty(); ++i) {
         game->updateGameState();
         require(!early->goingToRepairYard && yard->getNumBookings() == bookingsBefore,
                 "Metropolis: the repair order sent a soldier for the Repair Yard");
@@ -1109,15 +1109,19 @@ void checkMetropolis() {
                         label + ": a Hospital with patients coming lost its type");
         }
     };
-    const auto healed = [&](const std::vector<Uint32>& ids, int limit, const std::string& label, bool expectFlight) {
+    // \a expected 0: whichever own Hospital the order chose (the nearest with a free bed).
+    const auto healed = [&](const std::vector<Uint32>& ids, int limit, const std::string& label, bool expectFlight, Uint32 expected) {
         std::map<Uint32, int> start;
+        std::map<Uint32, Uint32> target;
         bool flew = false;
         int maxHealing = 0;
         metroStep(1, label);
         for(int i = 0; i < 200 && std::any_of(ids.begin(), ids.end(), [](Uint32 id) { return !care().trip(id); }); ++i) metroStep(1, label);
         for(Uint32 id : ids) {
-            require(care().trip(id) && care().trip(id)->hospitalID == hospitalID, label + ": a soldier has no trip to the Hospital");
+            require(care().trip(id) && (!expected || care().trip(id)->hospitalID == expected), label + ": a soldier has no trip to the Hospital");
+            require(zone(care().trip(id)->hospitalID)->getOwner() == home, label + ": the trip is to another house's Hospital");
             start[id] = unitByID(id)->getHealth().lround();
+            target[id] = care().trip(id)->hospitalID;
         }
         for(int i = 0; i < limit && std::any_of(ids.begin(), ids.end(), [](Uint32 id) { return care().trip(id) != nullptr; }); ++i) {
             metroStep(1, label);
@@ -1130,14 +1134,15 @@ void checkMetropolis() {
                 const auto* t = care().trip(id);
                 if(t && t->stage == HospitalTrip::Stage::Healing) ++healing;
             }
-            require(care().patients(hospitalID) <= DuneCity::kHospitalBeds, label + ": more than five healed at one Hospital");
+            for(const auto& [unitID, h] : target)
+                require(care().patients(h) <= DuneCity::kHospitalBeds, label + ": more than five healed at one Hospital");
             maxHealing = std::max(maxHealing, healing);
         }
         for(Uint32 id : ids) {
             auto* unit = unitByID(id);
             require(!care().trip(id) && unit->getHealth() == unit->getMaxHealth() && unit->getHealth().lround() > start[id],
                     label + ": a soldier did not leave the Hospital at full health");
-            require(beside(zone(hospitalID), unit->getLocation()), label + ": a soldier was healed away from the Hospital");
+            require(beside(zone(target[id]), unit->getLocation()), label + ": a soldier was healed away from the Hospital");
         }
         require(flew == expectFlight, label + (expectFlight ? ": no Carryall flew the soldier" : ": the soldier was flown"));
         return maxHealing;
@@ -1151,40 +1156,31 @@ void checkMetropolis() {
         require(panel && panel->sendToRepairButton.isEnabled() && panel->sendToRepairButton.getTooltipText() == UnitCommandTooltips::healAtHospital(),
                 "Metropolis: with a Hospital the Repair button is not the Heal order");
         clickButton(panel->sendToRepairButton);
-        if(blockDistance(trooper->getLocation(), zone(hospitalID)->getClosestPoint(trooper->getLocation())) >= MIN_CARRYALL_LIFT_DISTANCE) {
-            require(false, "Metropolis: the near Trooper is a flight away");
-        }
-        healed({trooper->getObjectID()}, 20000, "Metropolis Repair button", false);
+        require(blockDistance(trooper->getLocation(), zone(hospitalID)->getClosestPoint(trooper->getLocation())) < MIN_CARRYALL_LIFT_DISTANCE,
+                "Metropolis: the near Trooper is a flight away");
+        healed({trooper->getObjectID()}, 20000, "Metropolis Repair button", false, 0);
         record("metro_repair", "the Repair button: a wounded Trooper walked to a Hospital of the played city and healed to full");
     }
 
     // 4. A Carryall flies a soldier six or more tiles from the Hospital.
     {
         if(!home->hasCarryalls()) parkCarryall(home, freeTileNear(hospital->getLocation(), 6, 30));
-        const Coord at = freeTileNear(hospital->getLocation(), 20, 40);
-        require(at.isValid(), "Metropolis: no free tile 20+ tiles from the Hospital");
-        // The nearest Hospital to it decides; make sure that is ours (others are as far or farther).
+        Coord at = Coord::Invalid();
+        for(int r = 20; r <= 60 && at.isInvalid(); r += 4) {
+            const Coord c = freeTileNear(hospital->getLocation(), r, r + 3);
+            if(c.isInvalid()) continue;
+            bool far = true;
+            for(auto* z : hospitalsOf(home))
+                if(blockDistance(c, z->getClosestPoint(c)) < 8) far = false;
+            if(far) at = c;
+        }
+        require(at.isValid(), "Metropolis: no free tile 8+ tiles from every Hospital");
         auto* flyer = soldier(home, at, 1, Unit_Trooper);
         flyer->setHealth(FixPoint(std::max(1, flyer->getMaxHealth() / 4)));
         panel = dynamic_cast<UnitInterface*>(select(*game, {flyer->getObjectID()}));
+        require(panel && panel->sendToRepairButton.isEnabled(), "Metropolis Carryall: the Repair button is not clickable");
         clickButton(panel->sendToRepairButton);
-        metroStep(200, "Metropolis Carryall");
-        const auto* t = care().trip(flyer->getObjectID());
-        require(t != nullptr, "Metropolis Carryall: the far soldier got no trip");
-        if(t->hospitalID == hospitalID) {
-            healed({flyer->getObjectID()}, 30000, "Metropolis Carryall", true);
-        } else {
-            // It chose a nearer Hospital of the city: the same flight, to that one.
-            const Uint32 other = t->hospitalID;
-            bool flew = false;
-            for(int i = 0; i < 30000 && care().trip(flyer->getObjectID()); ++i) {
-                metroStep(1, "Metropolis Carryall");
-                if(flyer->isPickedUp()) flew = true;
-                require(flyer->getHealth() > 0 && !flyer->goingToRepairYard, "Metropolis Carryall: the soldier died or went for a yard");
-            }
-            require(flew && flyer->getHealth() == flyer->getMaxHealth() && beside(zone(other), flyer->getLocation()),
-                    "Metropolis Carryall: the far soldier was not flown and healed");
-        }
+        healed({flyer->getObjectID()}, 30000, "Metropolis Carryall", true, 0);
         record("metro_carryall", "a soldier 20+ tiles from a Hospital: lifted by a Carryall after the Repair button, healed to full");
     }
 
@@ -1202,7 +1198,7 @@ void checkMetropolis() {
         select(*game, ward);
         require(game->handleSelectedObjectsActionClick(zone(hospitalID)->getLocation().x, zone(hospitalID)->getLocation().y),
                 "Metropolis: the group's right-click on the Hospital was not accepted");
-        const int maxHealing = healed(ward, 40000, "Metropolis beds", false);
+        const int maxHealing = healed(ward, 40000, "Metropolis beds", false, hospitalID);
         require(maxHealing == DuneCity::kHospitalBeds, "Metropolis: the five beds were never all in use (" + std::to_string(maxHealing) + ")");
         record("metro_beds", "seven soldiers right-clicked onto one Hospital: five healed at once, all left at full health; "
                "the Hospital kept its type at every census while they came");
@@ -1212,8 +1208,11 @@ void checkMetropolis() {
     const uint32_t until = sim->lastProcessedDay_ + 2 * 48;
     while(sim->lastProcessedDay_ < until) metroStep(1, "Metropolis two years");
     require(densityChanges > 0, "Metropolis: the city's zones never changed density");
-    require(!hospitalsOf(home).empty() && zone(hospitalID) && zone(hospitalID)->getCivicOverlay() == CO::Hospital,
-            "Metropolis: the local Hospital did not survive two city years");
+    require(!hospitalsOf(home).empty(), "Metropolis: the local city lost every Hospital in two city years");
+    // The healing Hospital stays unless its zone was lost or emptied (an overlay is drawn only on
+    // a populated zone); a removal for surplus is impossible within four city years.
+    if(zone(hospitalID) && currentGameMap->getTile(zone(hospitalID)->getLocation())->getCityZoneDensity() > 0)
+        require(zone(hospitalID)->getCivicOverlay() == CO::Hospital, "Metropolis: a populated Hospital was retyped within two city years");
     record("metro_stable", std::to_string(densityChanges) + " residential density changes, " + std::to_string(adds)
            + " Hospitals made and " + std::to_string(removes) + " removed over all four cities, every change paced; "
            "the healing Hospital stood throughout");

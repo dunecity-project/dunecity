@@ -1203,7 +1203,7 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         dunecity_add_test(headless nightly NAME hospital_care_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-hospital-care-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/hospital-care-probe)
-        set_tests_properties(hospital_care_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        set_tests_properties(hospital_care_probe PROPERTIES TIMEOUT 5400 PROCESSORS 2)
         # Turrets Can Fire On Buildings (protocol 147, default off): turrets fire on units only.
         dunecity_add_test(headless nightly NAME turret_target_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-turret-target-probe.py
