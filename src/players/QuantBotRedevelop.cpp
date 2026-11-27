@@ -412,6 +412,9 @@ void QuantBot::noteRedevelopmentOrder(int kind, Uint32 item, Coord site, Uint32 
                                    kind == R::LotClear ? site : Coord::Invalid());
     redevelopmentOrders.push_back(std::move(order));
     ++redevelopmentActivity.ordered[kind];
+    // Per-event match-log lines (tests/ai/activation-events.json counts them per play style).
+    SDL_Log("REDEVELOP: house=%d event=ordered kind=%s x=%d y=%d cycle=%u", getHouse()->getHouseID(),
+            R::kindName(kind), site.x, site.y, getGameCycleCount());
 }
 
 /// Once a second: an order whose building stands at its site counts as placed (a relocation then
@@ -432,6 +435,8 @@ void QuantBot::updateRedevelopmentOrders() {
                 && static_cast<const StructureBase*>(object)->getLocation() == o.site) {
                 o.placedCycle = cycle;
                 ++redevelopmentActivity.placed[o.kind];
+                SDL_Log("REDEVELOP: house=%d event=placed kind=%s x=%d y=%d cycle=%u", getHouse()->getHouseID(),
+                        R::kindName(o.kind), o.site.x, o.site.y, cycle);
                 if (o.kind == R::Relocation) {
                     auto* old = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(o.oldZone));
                     if (old && old->getOwner() == getHouse()) {
@@ -442,6 +447,8 @@ void QuantBot::updateRedevelopmentOrders() {
                 }
             } else if (cycle - o.orderCycle > MILLI2CYCLES(R::kOrderTimeoutMs)) {
                 ++redevelopmentActivity.lost[o.kind];
+                SDL_Log("REDEVELOP: house=%d event=lost kind=%s x=%d y=%d cycle=%u", getHouse()->getHouseID(),
+                        R::kindName(o.kind), o.site.x, o.site.y, cycle);
                 traceDecision("redevelopment_lost", AITelemetry::Record().set("kind", R::kindName(o.kind))
                     .set("x", o.site.x).set("y", o.site.y));
                 it = redevelopmentOrders.erase(it);
@@ -465,6 +472,8 @@ void QuantBot::updateRedevelopmentOrders() {
                 redevelopmentActivity.after10[o.kind] += after * 10 / n;
                 if (after > before) ++redevelopmentActivity.raised[o.kind];
             }
+            SDL_Log("REDEVELOP: house=%d event=effect kind=%s raised=%d lots=%d before=%ld after=%ld cycle=%u",
+                    getHouse()->getHouseID(), R::kindName(o.kind), int(n > 0 && after > before), n, before, after, cycle);
             traceDecision("redevelopment_effect", AITelemetry::Record().set("kind", R::kindName(o.kind))
                 .set("x", o.site.x).set("y", o.site.y).set("lots", n).set("before", before).set("after", after));
             it = redevelopmentOrders.erase(it);
@@ -485,5 +494,8 @@ void QuantBot::noteIndustryPlaced(Coord site) {
                                                                            o.x, o.y, lotSize.x, lotSize.y));
     }
     ++redevelopmentActivity.industryPlaced;
-    if (RedevelopmentPolicy::industryTooCloseToHomes(nearest)) ++redevelopmentActivity.industryNearHomes;
+    const bool near = RedevelopmentPolicy::industryTooCloseToHomes(nearest);
+    if (near) ++redevelopmentActivity.industryNearHomes;
+    SDL_Log("INDUSTRY_PLACED: house=%d separated=%d near_homes=%d home_distance=%d x=%d y=%d", getHouse()->getHouseID(),
+            int(botConfig().force.industrySeparation), int(near), nearest == 1000000 ? -1 : nearest, site.x, site.y);
 }
