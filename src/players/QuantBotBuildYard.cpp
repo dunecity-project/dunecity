@@ -21,6 +21,7 @@
 #include "QuantBotInternal.h"
 #include <cstdlib>
 #include <players/QuantBotBuildPass.h>
+#include <players/CityLessonsPolicy.h>
 #include <structures/Airport.h>
 #include <dunecity/CityAircraftPolicy.h>
 #include <string_view>
