@@ -1,15 +1,15 @@
 // Included only by run-turret-target-probe.py, never by the shipped game.
 //
-// Turrets Target Units Only (protocol 147, default on): Rocket and Gun Turrets fire on units only,
-// as the original game's turret script did, never on buildings or city zones. Each check is a fresh
+// Turrets Can Fire On Buildings (protocol 147, default off): Rocket and Gun Turrets fire on units
+// only, as the original game's turret script did, never on buildings or city zones. Each check is a fresh
 // city game on a bare rock map, played by Game::updateGameState() alone; the attack order goes
 // through the command manager as a player's click does (CMD_TURRET_ATTACKOBJECT).
 //
-//   on    an enemy Wind Trap and an enemy Residential zone three tiles from an own Rocket Turret and
+//   default (off) an enemy Wind Trap and an enemy Residential zone three tiles from an own Rocket Turret and
 //         Gun Turret take no damage, by the turrets' own search or by an attack order on each; an
 //         enemy Quad driven up beside them is shot
-//   off   with the rule off, the same turrets damage the enemy building or zone (the protocol 146
-//         behaviour the experiment arms keep)
+//   on    with the option on, the same turrets damage the enemy building or zone (the protocol 146
+//         behaviour)
 #include <Command.h>
 #include <CommandManager.h>
 #include <Game.h>
@@ -71,7 +71,7 @@ std::string fixtureMap() {
 /// (it cannot repair what is hit).
 std::unique_ptr<Game> newGame(const std::string& mapData, bool unitsOnly) {
     auto options = gModOptions;
-    options.turretsTargetUnitsOnly = unitsOnly;
+    options.turretsFireOnBuildings = !unitsOnly;
     options.immortalHumanPlayer = false;
     GameInitSettings init("turret-target.ini", mapData, "Turret target", true, options);
     init.randomSeed = 4711;
@@ -88,8 +88,8 @@ std::unique_ptr<Game> newGame(const std::string& mapData, bool unitsOnly) {
     game->initGame(init);
     game->bReplay = false;
     game->initializeGameLoop();
-    require(game->getGameInitSettings().getGameOptions().turretsTargetUnitsOnly == unitsOnly,
-            "The game did not keep its Turrets Target Units Only rule");
+    require(game->getGameInitSettings().getGameOptions().turretsFireOnBuildings == !unitsOnly,
+            "The game did not keep its Turrets Can Fire On Buildings rule");
     return game;
 }
 
@@ -140,7 +140,7 @@ std::vector<int> play(Fixture& f, const std::vector<Uint32>& watched, int cycles
             const auto* target = turret->getTarget();
             // An attack order sets the target; the turret's next update must drop a building.
             held[t] = target != nullptr && target->isAStructure() ? held[t] + 1 : 0;
-            if(f.game->getGameInitSettings().getGameOptions().turretsTargetUnitsOnly)
+            if(!f.game->getGameInitSettings().getGameOptions().turretsFireOnBuildings)
                 require(held[t] <= 2, "A turret kept a building as its target");
         }
     }
@@ -179,7 +179,7 @@ void checkOff(const std::string& mapData) {
     Fixture f = build(mapData, false);
     const int trap = health(f.trap), zone = health(f.zone);
     const auto lowest = play(f, {f.trap, f.zone}, 600);
-    require(lowest[0] < trap || lowest[1] < zone, "With the rule off no turret fired on a building");
+    require(lowest[0] < trap || lowest[1] < zone, "With the option on no turret fired on a building");
     record("off", "building " + std::to_string(trap) + "->" + std::to_string(lowest[0]) + ", zone "
                   + std::to_string(zone) + "->" + std::to_string(lowest[1]));
 }
@@ -194,7 +194,7 @@ int runTurretTargetProbe() {
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "Turret tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    require(gModOptions.turretsTargetUnitsOnly, "Turrets Target Units Only is not on by default");
+    require(!gModOptions.turretsFireOnBuildings, "Turrets Can Fire On Buildings is not off by default");
     const std::string mapData = fixtureMap();
     gChecks.open(gOut + "/checks.csv");
     gChecks << "check,detail\n";

@@ -236,6 +236,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(&rocketTurretsNeedPowerCheckbox);
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
+    turretsFireOnBuildingsCheckbox.setText(_("Turrets Can Fire On Buildings"));
+    turretsFireOnBuildingsCheckbox.setTooltipText(_("If checked Rocket and Gun Turrets also fire on buildings and city zones. Unchecked they fire on units only, as in Dune II."));
+    turretsFireOnBuildingsCheckbox.setChecked(gameOptions.turretsFireOnBuildings);
+    vboxRight.addWidget(&turretsFireOnBuildingsCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
     onlyOnePalaceCheckbox.setText(_("Only One Palace per House"));
     onlyOnePalaceCheckbox.setTooltipText(_("If checked only one palace can be build per house."));
     onlyOnePalaceCheckbox.setChecked(gameOptions.onlyOnePalace);
@@ -348,6 +354,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
     gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();
+    gameOptions.turretsFireOnBuildings = turretsFireOnBuildingsCheckbox.isChecked();
     gameOptions.sandwormsRespawn = sandwormsRespawnCheckbox.isChecked();
     gameOptions.killedSandwormsDropSpice = killedSandwormsDropSpiceCheckbox.isChecked();
     gameOptions.manualCarryallDrops = manualCarryallDropsCheckbox.isChecked();

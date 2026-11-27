@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Turrets Target Units Only (protocol 147), in the existing native build.
+"""Turrets Can Fire On Buildings (protocol 147, default off), in the existing native build.
 
-Runs tests/units/turret-target-probe.inc: with the rule on (the default) a Rocket Turret and a Gun
+Runs tests/units/turret-target-probe.inc: with the option off (the default) a Rocket Turret and a Gun
 Turret beside an enemy Wind Trap and Residential zone never damage them, by their own search or by
-an attack order, and do shoot an enemy Quad; with the rule off they damage the building or zone.
+an attack order, and do shoot an enemy Quad; with the option on they damage the building or zone.
 The whole probe runs twice and must log the same checks both times.
 
 Outputs in --output-dir: checks.csv and run.log per run.

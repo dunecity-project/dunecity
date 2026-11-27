@@ -499,10 +499,10 @@
 //      a Hospital with a patient keeps its overlay; the civic overlays are now designated per house
 //      (they used the local player's counts). QuantBot switch HospitalInfantry (default off). A 145
 //      peer would desync. Save format 9902 (hospital trips and overlays).
-// 147: match rule Turrets Target Units Only (default on, bit 5 of the MOD20 starting tech level byte,
-//      set only when off): Rocket and Gun Turrets fire on units only, never on buildings or zones, as
+// 147: match rule Turrets Can Fire On Buildings (default off, bit 5 of the MOD20 starting tech level
+//      byte, set only when on): by default Rocket and Gun Turrets fire on units only, never on buildings or zones, as
 //      in the original game. A 146 peer would desync. Save format unchanged (the bit is in the
-//      settings stream; a save made before protocol 147 loads with the rule on).
+//      settings stream; a save made before protocol 147 loads with turrets firing on units only).
 #define NETWORK_PROTOCOL_VERSION            147
 
 // Mod transfer limits

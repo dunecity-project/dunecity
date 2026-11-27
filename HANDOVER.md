@@ -1,3 +1,28 @@
+## 2026-11-27 - Turrets fire on units only; Game Rules option "Turrets Can Fire On Buildings" (default off, protocol 147)
+
+Stefan, 2026-11-27: "rocket turrets cannot fire on enemy buildings - this did not happenin the original - only on
+units. make this default behaviour", "same with gun turrets", and "i don't want turrets shoot only uinits to be
+assessed. i want it to be implemented. we can add a option for "turrets can fire on buildings" as an option that
+can be turned on but it should be off by default, as in dune 2 by default turrets could not attack enemy
+buildings". Commits `2979efc5d` (rule, protocol 147), `2f58b959f` (probe build fix), and the rename commit
+that adds this entry.
+
+- **Default:** Rocket and Gun Turrets fire on units only: never on buildings or city zones, by their own search,
+  in retaliation or on a player's attack order (`TurretBase::targetAllowed`; Scoutposts unchanged). The original
+  game's turret script searched units alone, for both turret types. This is the implemented default, not a
+  measured choice.
+- **Option `Turrets Can Fire On Buildings`**, off by default, a checkbox in Game Rules (right column, under
+  Rocket-Turrets Need Power) and INI key `Turrets Can Fire On Buildings`. On, turrets also fire on buildings, as
+  up to protocol 146. The earlier key `Turrets Target Units Only` (its inverse) is still read when the new key
+  is absent (`applyGameOptionsFromConfig`, `main.cpp`, `ModManager`), so older INI files and mods keep working.
+- **Wire and hash:** bit 5 of the MOD20 byte, set only when the option is on. That is the same bit, with the same
+  meaning on the wire, as before the rename, so no protocol bump beyond 147. The options hash spells the rule
+  out only when on (`/turretsFireOnBuildings=1`), so default setups keep their hash.
+- **Tests:** `CoopGameSettingsTestCase` (wire bit, pre-MOD20 streams, INI round trip, old-key fallback, hash),
+  `turret_target_probe` (default: a building and a zone beside both turrets stay at full health while an enemy
+  Quad is shot; option on: they are damaged), and `menu_navigation_probe` (the checkbox is on screen in both the
+  vanilla and the Tornie-family layout, off by default, and switches that rule alone).
+
 ## 2026-11-27 - Zone Garrisons: Soldiers and Troopers occupy R/C/I zones with the capture order (protocol 144, save 9900)
 
 Stefan, 2026-11-27: "i want infantry and troopers to be able to occupy friendly and enemy R/I/C - using the

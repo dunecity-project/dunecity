@@ -206,7 +206,7 @@ void TurretBase::doAttackObject(const ObjectBase* pObject) {
 
 bool TurretBase::targetAllowed(const ObjectBase* object) {
     return object == nullptr || !object->isAStructure()
-        || !currentGame->getGameInitSettings().getGameOptions().turretsTargetUnitsOnly;
+        || currentGame->getGameInitSettings().getGameOptions().turretsFireOnBuildings;
 }
 
 bool TurretBase::canAttack(const ObjectBase* object) const {

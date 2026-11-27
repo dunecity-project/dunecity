@@ -274,6 +274,21 @@ void verifyResearchPaceMenus(const CustomPlaySetup& fixture) {
         menuRequire(initial.researchPaceDropDownBox.getSelectedEntryIntData() == static_cast<int>(TechResearch::Pace::Normal),
                     "Game Rules does not initially show Normal Research Pace");
     }
+    {
+        // Turrets Can Fire On Buildings: off by default, on screen, and checking it changes that
+        // rule alone.
+        GameOptionsWindow rules(defaults);
+        requireResearchMenuBounds(rules, rules.turretsFireOnBuildingsCheckbox);
+        menuRequire(!rules.turretsFireOnBuildingsCheckbox.isChecked(),
+                    "Game Rules show Turrets Can Fire On Buildings on by default");
+        rules.turretsFireOnBuildingsCheckbox.setChecked(true);
+        rules.rememberDefaults.setChecked(false);
+        rules.onOK();
+        auto expected = defaults;
+        expected.turretsFireOnBuildings = true;
+        menuRequire(rules.getGameOptions() == expected,
+                    "Game Rules did not turn Turrets Can Fire On Buildings on, or changed another rule");
+    }
     for(const auto pace : {TechResearch::Pace::Fast, TechResearch::Pace::Normal,
                            TechResearch::Pace::Slow, TechResearch::Pace::VerySlow}) {
         auto expected = defaults;
@@ -401,6 +416,10 @@ void verifyResearchPaceMenus(const CustomPlaySetup& fixture) {
         requireResearchMenuBounds(options, options.damageLowersLandValueCheckbox);
         requireResearchMenuBounds(options, options.mountainSceneryCheckbox);
         requireResearchMenuBounds(options, options.unpoweredZonesVacateCheckbox);
+        // Turrets Can Fire On Buildings (default off) fits the family layout too.
+        requireResearchMenuBounds(options, options.turretsFireOnBuildingsCheckbox);
+        menuRequire(!options.turretsFireOnBuildingsCheckbox.isChecked(),
+                    "Game Rules show Turrets Can Fire On Buildings on by default");
         chooseResearchMenuPace(options, options.researchPaceDropDownBox, TechResearch::Pace::Normal,
                               "family-research-pace-Tornie");
     }

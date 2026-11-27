@@ -1003,6 +1003,8 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
         }
         
         std::string line;
+        // "Turrets Target Units Only" (the rule's first key, its inverse) counts only without the current key.
+        bool turretsFireOnBuildingsKey = false;
         while (std::getline(file, line)) {
             // Skip comments and empty lines
             if (line.empty() || line[0] == '#' || line[0] == ';') continue;
@@ -1071,7 +1073,11 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Parks Count As Roads") result.parksCountAsRoads = parseBool(value);
             else if (key == "Saboteur Hunt") result.saboteurHunt = parseBool(value);
             else if (key == "Hospital Care") result.hospitalCare = parseBool(value);
-            else if (key == "Turrets Target Units Only") result.turretsTargetUnitsOnly = parseBool(value);
+            else if (key == "Turrets Can Fire On Buildings") {
+                result.turretsFireOnBuildings = parseBool(value);
+                turretsFireOnBuildingsKey = true;
+            }
+            else if (key == "Turrets Target Units Only" && !turretsFireOnBuildingsKey) result.turretsFireOnBuildings = !parseBool(value);
             else if (key == "Starport Population") result.starportPopulation = parseBool(value);
             else if (key == "Immortal Human Player") result.immortalHumanPlayer = parseBool(value);
             else if (key == "City Effects") result.cityEffects = parseBool(value);

@@ -94,6 +94,7 @@ private:
     Checkbox mountainSceneryCheckbox;
     Checkbox unpoweredZonesVacateCheckbox;
     Checkbox rocketTurretsNeedPowerCheckbox;        ///< If checked rocket turrets are dysfunctional on power shortage
+    Checkbox turretsFireOnBuildingsCheckbox;        ///< If checked Rocket and Gun Turrets also fire on buildings (default off, as in Dune II)
     Checkbox sandwormsRespawnCheckbox;              ///< If checked killed sandworms respawn after some time
     Checkbox killedSandwormsDropSpiceCheckbox;      ///< If checked killed sandworms drop some spice
     Checkbox manualCarryallDropsCheckbox;           ///< If checked player can request carryall to transport units

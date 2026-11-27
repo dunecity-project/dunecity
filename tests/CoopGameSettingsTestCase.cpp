@@ -1824,27 +1824,28 @@ TEST_CASE("Hospital Care defaults on and its off state is hashed and carried in 
     }
 }
 
-TEST_CASE("Turrets Target Units Only defaults on and its off state is hashed and carried in bit 5 of the MOD20 byte",
+TEST_CASE("Turrets Can Fire On Buildings defaults off and its on state is hashed and carried in bit 5 of the MOD20 byte",
           "[turret][network][save]") {
     SettingsClass::GameOptionsClass defaults;
-    REQUIRE(defaults.turretsTargetUnitsOnly);
-    auto off = defaults;
-    off.turretsTargetUnitsOnly = false;
-    REQUIRE(off != defaults);
-    REQUIRE(off.getHash() != defaults.getHash());
+    REQUIRE_FALSE(defaults.turretsFireOnBuildings);
+    auto on = defaults;
+    on.turretsFireOnBuildings = true;
+    REQUIRE(on != defaults);
+    REQUIRE(on.getHash() != defaults.getHash());
 
     auto original = makeCoop(false, true);
     auto options = original.getGameOptions();
     options.startTechLevel = GENERATE(0, 9);
     options.hospitalCare = GENERATE(true, false);
-    options.turretsTargetUnitsOnly = GENERATE(true, false);
+    options.turretsFireOnBuildings = GENERATE(false, true);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    // The default rule leaves the byte as protocol 146 wrote it.
+    // The default rule leaves the byte as protocol 146 wrote it; on is the bit the earlier
+    // "Turrets Target Units Only" off state set, so the wire format is unchanged by the rename.
     REQUIRE(static_cast<Uint8>(encoded.back())
             == static_cast<Uint8>(options.startTechLevel | (options.hospitalCare ? 0 : 0x40)
-                                  | (options.turretsTargetUnitsOnly ? 0 : 0x20)));
+                                  | (options.turretsFireOnBuildings ? 0x20 : 0)));
 
     SECTION("every state round-trips") {
         saved.writeUint32(0xabcdef01u);
@@ -1854,19 +1855,73 @@ TEST_CASE("Turrets Target Units Only defaults on and its off state is hashed and
         REQUIRE(restored.getGameOptions().getHash() == options.getHash());
         REQUIRE(input.readUint32() == 0xabcdef01u);
     }
-    SECTION("a stream older than MOD20 plays the rule") {
+    SECTION("a stream older than MOD20 plays turrets on units only") {
         auto bytes = encoded;
         bytes[encoded.rfind("KDOM")] = 'J';
         bytes.resize(bytes.size() - Mod20Bytes);
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
-        REQUIRE(restored.getGameOptions().turretsTargetUnitsOnly);
+        REQUIRE_FALSE(restored.getGameOptions().turretsFireOnBuildings);
     }
-    SECTION("the off bit does not admit a tech level above 9") {
+    SECTION("the on bit does not admit a tech level above 9") {
         auto bytes = encoded;
         bytes.back() = static_cast<char>(0x20 | 10);
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("Turrets Can Fire On Buildings: INI round trip, the earlier inverted key and the option string",
+          "[turret][settings]") {
+    const std::string section = "Game Options";
+    SECTION("the current key round-trips through the options INI") {
+        const bool value = GENERATE(false, true);
+        SettingsClass::GameOptionsClass written;
+        written.turretsFireOnBuildings = value;
+        INIFile config(false, std::string());
+        writeGameOptionsToConfig(config, section, written);
+        REQUIRE(config.hasKey(section, "Turrets Can Fire On Buildings"));
+        REQUIRE_FALSE(config.hasKey(section, "Turrets Target Units Only"));
+        SettingsClass::GameOptionsClass read;
+        read.turretsFireOnBuildings = !value;
+        applyGameOptionsFromConfig(config, section, read);
+        REQUIRE(read.turretsFireOnBuildings == value);
+        REQUIRE(read.getHash() == written.getHash());
+    }
+    SECTION("an INI with only the earlier key keeps working, inverted") {
+        const bool unitsOnly = GENERATE(false, true);
+        INIFile config(false, std::string());
+        config.setBoolValue(section, "Turrets Target Units Only", unitsOnly);
+        SettingsClass::GameOptionsClass read;
+        applyGameOptionsFromConfig(config, section, read);
+        REQUIRE(read.turretsFireOnBuildings == !unitsOnly);
+    }
+    SECTION("the current key wins over the earlier one") {
+        INIFile config(false, std::string());
+        config.setBoolValue(section, "Turrets Target Units Only", false);
+        config.setBoolValue(section, "Turrets Can Fire On Buildings", false);
+        SettingsClass::GameOptionsClass read;
+        read.turretsFireOnBuildings = true;
+        applyGameOptionsFromConfig(config, section, read);
+        REQUIRE_FALSE(read.turretsFireOnBuildings);
+    }
+    SECTION("an INI with neither key leaves the rule as it was") {
+        INIFile config(false, std::string());
+        config.setBoolValue(section, "Hospital Care", true);
+        SettingsClass::GameOptionsClass read;
+        applyGameOptionsFromConfig(config, section, read);
+        REQUIRE_FALSE(read.turretsFireOnBuildings);
+    }
+    SECTION("the options hash names the rule only when it is on") {
+        // getHash() spells out only the non-default state, so the default hash (and every saved
+        // or networked setup that plays it) is the same as before the rule existed.
+        SettingsClass::GameOptionsClass defaults;
+        auto on = defaults;
+        on.turretsFireOnBuildings = true;
+        auto back = on;
+        back.turretsFireOnBuildings = false;
+        REQUIRE(on.getHash() != defaults.getHash());
+        REQUIRE(back.getHash() == defaults.getHash());
     }
 }
 

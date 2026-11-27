@@ -932,7 +932,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "Parks Count As Roads", settings.gameOptions.parksCountAsRoads);
     myINIFile.setBoolValue("Game Options", "Saboteur Hunt", settings.gameOptions.saboteurHunt);
     myINIFile.setBoolValue("Game Options", "Hospital Care", settings.gameOptions.hospitalCare);
-    myINIFile.setBoolValue("Game Options", "Turrets Target Units Only", settings.gameOptions.turretsTargetUnitsOnly);
+    myINIFile.setBoolValue("Game Options", "Turrets Can Fire On Buildings", settings.gameOptions.turretsFireOnBuildings);
     myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 
