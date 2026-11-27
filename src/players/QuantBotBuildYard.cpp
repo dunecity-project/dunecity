@@ -1473,6 +1473,7 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         }
     }
     if (lowValuePalacesEnabled()) trackLowValuePalaces();
+    if (frontPalacesEnabled()) trackFrontPalaces();
     if (force.palaceDistricts && pass.economyProject == NONE_ID && pass.stablePower) {
         // Every R+C district gets a Palace where one can be built (one only with the Only One Palace
         // option); a house that cannot build one yet gets its one Stadium (Stefan: "we only need one
@@ -1490,7 +1491,9 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         const bool firstLandmark = force.landmarkAnchoring && pass.itemCount[Structure_Palace] + pass.itemCount[Structure_Stadium] == 0;
         // LowValuePalaces (default off; QuantBotCityLessons.cpp): a Palace saved for where most of our
         // low-value lots are, reached by another landmark or not; it takes the project first.
-        if (!pending && palaceBuildable && lowValuePalacesEnabled()) planLowValuePalace(pass);
+        // FrontPalaces (default off; Stefan's placement): Palaces on the enemy side behind our turrets.
+        if (!pending && palaceBuildable && frontPalacesEnabled()) planFrontPalace(pass);
+        if (pass.economyProject == NONE_ID && !pending && palaceBuildable && lowValuePalacesEnabled()) planLowValuePalace(pass);
         if (pass.economyProject == NONE_ID && !pending && palaceBuildable
             && lots >= (firstLandmark ? Force::kLandmarkFirstLots : Force::kPalaceOutnumberedMinLots)
             && pass.itemCount[Structure_Palace] < Force::outnumberedPalaceCap(lots)) {

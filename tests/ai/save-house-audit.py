@@ -8,8 +8,12 @@ Save] SHA256 and GzipBase64; the queue carries its bytes). Each arm loads the sa
 dummy driver and logs SAVE_HOUSE_AUDIT rows (tests/ai/save-house-audit.inc) per house - players, credits,
 city, units and structures by type, Palaces with the land value of their lots, Rocket Turrets against the
 enemy - with each house's UNIT_ECONOMY combat record (houses.jsonl, units.csv). With --extra-minutes the
-AI plays on and is audited every 10 minutes and at the end. Arm 'audit' plays the shipped defaults; any
-other arm is a QuantBot play style (tests/ai/play-styles/<arm>.ini) for every house.
+AI plays on and is audited every 10 minutes, at each --audit-at minute and at the end. Arm 'audit' plays
+the shipped defaults; any other --arms name is a QuantBot play style (tests/ai/play-styles/<arm>.ini) for
+every house. --arm NAME:HOUSE=STYLE[,HOUSE=STYLE][;buildings=0|1] is a named arm in which only those
+houses play those styles (the others keep the shipped defaults), optionally with match rule Turrets Can
+Fire On Buildings set (a 1.0.880 save let turrets hit buildings), e.g.
+    --arm drill-bld:0=turret-drill;buildings=1 --arm control-bld:;buildings=1 --extra-minutes 48 --audit-at 23 48
 """
 import argparse
 import base64
@@ -51,8 +55,21 @@ def append(path, fields, rows):
         writer.writerows(rows)
 
 
+def arm_specs(args):
+    """{name: (house styles 'h=style,h=style', buildings rule '' / '0' / '1')} of the --arm options."""
+    specs = {}
+    for spec in args.arm:
+        name, _, rest = spec.partition(':')
+        styles, _, rule = rest.partition(';')
+        buildings = rule.split('=', 1)[1] if rule.startswith('buildings=') else ''
+        if not name or (rule and not rule.startswith('buildings=')) or buildings not in ('', '0', '1'):
+            raise ValueError('--arm NAME:HOUSE=STYLE[,HOUSE=STYLE][;buildings=0|1], got ' + spec)
+        specs[name] = (styles, buildings)
+    return specs
+
+
 def schedule(args):
-    return [(arm,) for arm in args.arms]
+    return [(arm,) for arm in list(args.arms) + list(arm_specs(args))]
 
 
 def frozen_save(args):
@@ -99,11 +116,20 @@ def play(args, scratch, binary, key):
     env = dict(os.environ, BALANCE_SAVE_HOUSE_AUDIT='1')
     if args.extra_minutes:
         env['BALANCE_SAVE_HOUSE_AUDIT_EXTRA'] = str(args.extra_minutes)
+    if args.audit_at:
+        env['BALANCE_SAVE_HOUSE_AUDIT_AT'] = ','.join(str(m) for m in args.audit_at)
+    specs = arm_specs(args)
+    if arm in specs:
+        styles, buildings = specs[arm]
+        if styles:
+            env['BALANCE_HOUSE_STYLES'] = styles
+        if buildings:
+            env['BALANCE_TURRETS_FIRE_ON_BUILDINGS'] = buildings
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--prebuilt-probe', str(binary), '--output-dir', str(run), '--load-save', str(saved),
                '--save-profile', str(source_profile), '--mod', 'dunecity', '--minutes', '1440',
                '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--capture-mib', str(args.capture_mib)]
-    if arm != 'audit':
+    if arm != 'audit' and arm not in specs:
         command += ['--scenario-style', arm]
     started = time.time()
     process = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True)
@@ -164,7 +190,9 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', default=str(root / 'build-int'))
 parser.add_argument('--results')
 parser.add_argument('--game-options', help='Frozen save input; required for play, not shared probe compilation')
-parser.add_argument('--arms', nargs='+', default=['audit'])
+parser.add_argument('--arms', nargs='*', default=['audit'])
+parser.add_argument('--arm', action='append', default=[], help='NAME:HOUSE=STYLE[,HOUSE=STYLE][;buildings=0|1]')
+parser.add_argument('--audit-at', nargs='+', type=int, default=[], help='Minutes after the load to audit at')
 parser.add_argument('--extra-minutes', type=int, default=0)
 parser.add_argument('--wall-timeout', type=int, default=5400)
 parser.add_argument('--capture-mib', type=int, default=256)

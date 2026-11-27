@@ -18,6 +18,11 @@
 //   4. ON's Palace stands on that site (same location, not placed elsewhere), and two minutes later
 //      the mean land value of those lots has risen by at least kMinRise.
 //   5. ON does not plan the same lots again once they are no longer low.
+//  FrontPalaces (a third house, FRONT, only this switch on; Stefan's placement)
+//   6. FRONT plans a Palace whose centre the probe itself finds 10-31 tiles from the nearest enemy
+//      building with at least 3 own Rocket Turrets within 10 tiles that stand nearer the enemy; OFF
+//      plans none.
+//   7. That Palace stands on its planned site and still stands 5 minutes later (met=1).
 #include <players/CityLessonsPolicy.h>
 #include <players/QuantBotBuildPass.h>
 
@@ -33,13 +38,15 @@ void runCityLessonsProbe(Game& game) {
         if (House* house = game.getHouse(h))
             for (const auto& player : house->getPlayerList())
                 if (auto* bot = dynamic_cast<QuantBot*>(player.get())) bots.push_back(bot);
-    require(bots.size() >= 2, "The fixture needs two QuantBot city houses");
+    require(bots.size() >= 3, "The fixture needs three QuantBot city houses");
     QuantBot* on = bots[0];
     QuantBot* off = bots[1];
-    for (auto* bot : {on, off}) {
+    QuantBot* frontBot = bots[2];
+    for (auto* bot : {on, off, frontBot}) {
         bot->gameMode = QuantBot::GameMode::Custom;
         bot->difficulty = QuantBot::Difficulty::Brutal;
-        require(!bot->botConfig().force.cityLauncherArmy && !bot->botConfig().force.lowValuePalaces,
+        require(!bot->botConfig().force.cityLauncherArmy && !bot->botConfig().force.lowValuePalaces
+                && !bot->botConfig().force.frontPalaces,
                 "The switches are not off by default");
         require(bot->botConfig().force.palaceDistricts, "PalaceDistricts is not on by default");
     }
@@ -48,13 +55,20 @@ void runCityLessonsProbe(Game& game) {
     onConfig->force.cityLauncherArmy = true;
     onConfig->force.lowValuePalaces = true;
     on->configOverride = onConfig;
+    auto frontConfig = std::make_shared<QuantBotConfig>(frontBot->botConfig());
+    frontConfig->force.frontPalaces = true;
+    frontBot->configOverride = frontConfig;
+    require(frontBot->frontPalacesEnabled() && !on->frontPalacesEnabled() && !off->frontPalacesEnabled(),
+            "FrontPalaces did not reach the bots");
+    House* frontHouse = const_cast<House*>(frontBot->getHouse());
+    frontHouse->addCredits(20000);
     require(on->cityLauncherArmyEnabled() && on->lowValuePalacesEnabled() && !off->cityLauncherArmyEnabled()
             && !off->lowValuePalacesEnabled(), "The switches did not reach the bots");
     House* onHouse = const_cast<House*>(on->getHouse());
     House* offHouse = const_cast<House*>(off->getHouse());
     SDL_Log("CITY_LESSONS_PROBE: on=%d off=%d", onHouse->getHouseID(), offHouse->getHouseID());
 
-    // Built value per type before the run, to measure what the 10 minutes add.
+    // Built value per type before the run, to measure what the 14 minutes add.
     auto built = [&](const House* house, Uint32 item) {
         return int64_t(house->getNumBuiltItems(item)) * game.objectData.data[item][house->getHouseID()].price;
     };
@@ -85,7 +99,28 @@ void runCityLessonsProbe(Game& game) {
     auto* sim = game.getCitySimulation();
     struct Seen { bool planned = false, placed = false, effect = false; Coord site = Coord::Invalid();
                   std::vector<Coord> lots; int lvBefore = 0, lvAfter = 0; Uint32 placedCycle = 0; } seen;
-    const Uint32 end = game.getGameCycleCount() + MILLI2CYCLES(10 * 60000);
+    struct FrontSeen { bool planned = false, placed = false, survived = false; Coord site = Coord::Invalid();
+                       Uint32 placedCycle = 0; } front;
+    // The probe's own reading of a front site: nearest enemy building and own turrets ahead of it.
+    auto frontReading = [&](Coord centre, int* enemyTiles, int* ahead) {
+        auto nearestEnemy = [&](Coord c) {
+            int best = 9999;
+            for (const auto* s : structureList) {
+                if (!s->getOwner() || s->getOwner()->getTeamID() == frontHouse->getTeamID() || s->getItemID() == Structure_Wall) continue;
+                const Coord o = s->getLocation(), z = s->getStructureSize();
+                for (int y = o.y; y < o.y + z.y; ++y) for (int x = o.x; x < o.x + z.x; ++x)
+                    best = std::min(best, std::max(std::abs(x - c.x), std::abs(y - c.y)));
+            }
+            return best;
+        };
+        *enemyTiles = nearestEnemy(centre);
+        *ahead = 0;
+        for (const auto* s : structureList)
+            if (s->getOwner() == frontHouse && s->getItemID() == Structure_RocketTurret
+                && std::max(std::abs(s->getLocation().x - centre.x), std::abs(s->getLocation().y - centre.y)) <= L::kFrontPalaceCoverTiles
+                && nearestEnemy(s->getLocation()) < *enemyTiles) ++*ahead;
+    };
+    const Uint32 end = game.getGameCycleCount() + MILLI2CYCLES(14 * 60000);
     onHouse->addCredits(20000);   // the Palace is saved for; make the saving short, not the choice
     while (game.getGameCycleCount() < end && !game.finished) {
         game.updateGameState();
@@ -125,10 +160,35 @@ void runCityLessonsProbe(Game& game) {
         if (seen.effect && on->cityLessons.palace.active && !on->cityLessons.palace.placed)
             // 5. A later plan is not the same lots again.
             require(on->cityLessons.palace.site != seen.site, "The bot planned the same Palace site again");
+        const auto& fw = frontBot->cityLessons.front;
+        if (!front.planned && fw.active) {
+            front.planned = true;
+            front.site = fw.site;
+            int enemyTiles = 0, ahead = 0;
+            frontReading(fw.site + Coord(1, 1), &enemyTiles, &ahead);
+            SDL_Log("CITY_LESSONS_PROBE: front planned site=(%d,%d) bot enemy_tiles=%d turrets_ahead=%d probe enemy_tiles=%d turrets_ahead=%d lots=%d",
+                    fw.site.x, fw.site.y, fw.enemyTiles, fw.turretsAhead, enemyTiles, ahead, int(fw.lots.size()));
+            require(enemyTiles >= L::kFrontPalaceMinEnemyTiles && enemyTiles <= L::kFrontPalaceMaxEnemyTiles,
+                    "The front Palace site is not 10-31 tiles from the nearest enemy building");
+            require(ahead >= L::kFrontPalaceTurretsAhead, "The front Palace site has fewer than 3 own turrets ahead of it");
+            require(int(fw.lots.size()) >= L::kFrontPalaceMinLots, "The front Palace site reaches too few own lots");
+        }
+        if (front.planned && !front.placed && fw.active && fw.placed && fw.site == front.site) {
+            front.placed = true;
+            front.placedCycle = game.getGameCycleCount();
+            require(frontBot->ownPalaceAt(front.site), "The front Palace the bot reports placed is not on its site");
+        }
+        if (front.placed && !front.survived && game.getGameCycleCount() >= front.placedCycle + MILLI2CYCLES(L::kFrontPalaceSurvivalMs)) {
+            front.survived = frontBot->ownPalaceAt(front.site);
+            SDL_Log("CITY_LESSONS_PROBE: front Palace at (%d,%d) standing after 5 minutes: %d", front.site.x, front.site.y,
+                    int(front.survived));
+            require(front.survived, "The front Palace did not survive 5 minutes");
+        }
+        require(off->cityLessons.frontPlanned == 0 && on->cityLessons.frontPlanned == 0, "A house without FrontPalaces planned one");
         require(off->cityLessons.palacesPlanned == 0, "OFF planned a low-value Palace");
         require(off->cityLessons.launcherArmyPasses == 0, "OFF held the Launcher mix");
     }
-    // 2. What ON built in the 10 minutes.
+    // 2. What ON built in the 14 minutes.
     const int64_t onVehicles = vehicleBuilt(onHouse) - onVehicles0, onLaunchers = built(onHouse, Unit_Launcher) - onLaunchers0;
     const int onOrni = onHouse->getNumBuiltItems(Unit_Ornithopter) - onOrni0;
     const int64_t offVehicles = vehicleBuilt(offHouse) - offVehicles0, offLaunchers = built(offHouse, Unit_Launcher) - offLaunchers0;
@@ -136,12 +196,15 @@ void runCityLessonsProbe(Game& game) {
             (long long)onVehicles, (long long)onLaunchers, onOrni, on->cityLessons.launcherArmyPasses,
             (long long)offVehicles, (long long)offLaunchers);
     require(on->cityLessons.launcherArmyPasses > 10, "ON held the Launcher mix in too few build passes");
-    require(onVehicles > 0, "ON built no vehicles in ten minutes");
+    require(onVehicles > 0, "ON built no vehicles in fourteen minutes");
     require(onLaunchers * 2 >= onVehicles, "Launchers are less than half of the vehicle value ON built");
     require(onOrni == 0, "ON built an Ornithopter with CityLauncherArmy on");
     require(seen.planned, "ON never planned a low-value Palace");
     require(seen.placed, "ON's planned Palace never stood on its site");
     require(seen.effect, "ON's Palace effect was never read");
     require(seen.lvAfter - seen.lvBefore >= L::kMinRise, "The low lots' land value did not rise after the Palace");
+    require(front.planned, "FRONT never planned a front Palace");
+    require(front.placed, "FRONT's planned Palace never stood on its site");
+    require(front.survived, "FRONT's Palace was not checked 5 minutes after placement");
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=city_lessons outcome=passed");
 }

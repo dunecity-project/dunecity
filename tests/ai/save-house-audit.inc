@@ -122,13 +122,23 @@ inline void report(Game& game, const char* phase) {
 
 inline void run(Game& game) {
     report(game, "loaded");
-    // Optionally play on with the AI and audit again (BALANCE_SAVE_HOUSE_AUDIT_EXTRA minutes).
+    // Play on with the AI (BALANCE_SAVE_HOUSE_AUDIT_EXTRA minutes) and audit every 10 minutes, at each of
+    // BALANCE_SAVE_HOUSE_AUDIT_AT (minutes after the load, "23,48") and at the end.
     if (const char* extra = std::getenv("BALANCE_SAVE_HOUSE_AUDIT_EXTRA")) {
-        const Uint32 end = game.getGameCycleCount() + MILLI2CYCLES(60000) * Uint32(std::max(0, std::atoi(extra)));
-        Uint32 next = game.getGameCycleCount() + MILLI2CYCLES(60000) * 10;
+        const Uint32 start = game.getGameCycleCount(), minute = MILLI2CYCLES(60000);
+        const Uint32 end = start + minute * Uint32(std::max(0, std::atoi(extra)));
+        std::vector<Uint32> at;
+        if (const char* list = std::getenv("BALANCE_SAVE_HOUSE_AUDIT_AT")) {
+            std::istringstream input(list);
+            std::string item;
+            while (std::getline(input, item, ',')) if (!item.empty()) at.push_back(start + minute * Uint32(std::stoi(item)));
+        }
+        Uint32 next = start + minute * 10;
+        size_t nextAt = 0;
         while (game.getGameCycleCount() < end && !game.finished) {
             game.updateGameState();
-            if (game.getGameCycleCount() >= next) { report(game, "periodic"); next += MILLI2CYCLES(60000) * 10; }
+            if (game.getGameCycleCount() >= next) { report(game, "periodic"); next += minute * 10; }
+            if (nextAt < at.size() && game.getGameCycleCount() >= at[nextAt]) { report(game, "at"); ++nextAt; }
         }
         report(game, "end");
     }

@@ -47,6 +47,27 @@ constexpr int kPlanExpiryMs = 300000;
 /// The effect counts as reached when the lots rose by this much with the Palace still standing.
 constexpr int kMinRise = 10;
 
+/// FrontPalaces: Stefan's placement in seewhatiddid/moremaginot. His 26 Palaces stood on the enemy
+/// side of his city, 10-31 tiles from the nearest enemy building, behind his own Rocket Turret clumps,
+/// and all survived while his house lost 27 others; he added 19 by minute 72 and 26 by minute 95.
+constexpr int kFrontPalaceMinEnemyTiles = 10, kFrontPalaceMaxEnemyTiles = 31;
+/// Own Rocket Turrets within kFrontPalaceCoverTiles of the site and nearer the enemy than it.
+constexpr int kFrontPalaceTurretsAhead = 3;
+constexpr int kFrontPalaceCoverTiles = 10;
+/// Own R/C lots in reach (his: 11-35).
+constexpr int kFrontPalaceMinLots = 6;
+/// At most one new site this often (his pace: 19 by minute 72, 7 more by minute 95).
+constexpr int kFrontPalaceIntervalMs = 120000;
+/// Its effect - still standing - is read this long after it was placed.
+constexpr int kFrontPalaceSurvivalMs = 300000;
+
+/// FrontPalaces: may a Palace centred where the nearest enemy building is enemyTiles away, with
+/// turretsAhead own turrets covering it from the enemy side, go there?
+inline bool frontPalaceCentre(int enemyTiles, int turretsAhead) {
+    return enemyTiles >= kFrontPalaceMinEnemyTiles && enemyTiles <= kFrontPalaceMaxEnemyTiles
+        && turretsAhead >= kFrontPalaceTurretsAhead;
+}
+
 inline bool lowLot(int landValue) { return landValue <= kLowLandValue; }
 
 } // namespace CityLessonsPolicy

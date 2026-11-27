@@ -51,13 +51,24 @@ TEST_CASE("LowValuePalaces: low-value lots are those at or below the line", "[ai
     REQUIRE(L::kEffectDelayMs < L::kPlanExpiryMs);
 }
 
-TEST_CASE("City lessons: both switches default off, round trip and hash only when on", "[ai][city-lessons][config]") {
+TEST_CASE("FrontPalaces: a centre 10-31 tiles from the enemy with three own turrets ahead", "[ai][city-lessons][policy]") {
+    REQUIRE(L::frontPalaceCentre(10, 3));
+    REQUIRE(L::frontPalaceCentre(31, 5));
+    REQUIRE_FALSE(L::frontPalaceCentre(9, 5));
+    REQUIRE_FALSE(L::frontPalaceCentre(32, 5));
+    REQUIRE_FALSE(L::frontPalaceCentre(16, 2));
+    REQUIRE(L::kFrontPalaceSurvivalMs > L::kEffectDelayMs);
+}
+
+TEST_CASE("City lessons: the switches default off, round trip and hash only when on", "[ai][city-lessons][config]") {
     const QuantBotConfig defaults;
     REQUIRE_FALSE(defaults.force.cityLauncherArmy);
     REQUIRE_FALSE(defaults.force.lowValuePalaces);
+    REQUIRE_FALSE(defaults.force.frontPalaces);
     REQUIRE(defaults.force.cityLauncherArmyBps == L::kLauncherArmyBps);
     std::vector<std::string> hashes{defaults.getConfigHash()};
-    for (const char* body : {"CityLauncherArmy=true\n", "LowValuePalaces=true\n", "CityLauncherArmy=true\nCityLauncherArmyBps=6000\n"}) {
+    for (const char* body : {"CityLauncherArmy=true\n", "LowValuePalaces=true\n", "FrontPalaces=true\n",
+                             "CityLauncherArmy=true\nCityLauncherArmyBps=6000\n"}) {
         const auto path = std::filesystem::temp_directory_path() / "quantbot-city-lessons.ini";
         {
             std::ofstream file(path);
@@ -65,7 +76,7 @@ TEST_CASE("City lessons: both switches default off, round trip and hash only whe
         }
         QuantBotConfig loaded;
         REQUIRE(loaded.applyOverrides(path.string()));
-        REQUIRE(int(loaded.force.cityLauncherArmy) + int(loaded.force.lowValuePalaces) == 1);
+        REQUIRE(int(loaded.force.cityLauncherArmy) + int(loaded.force.lowValuePalaces) + int(loaded.force.frontPalaces) == 1);
         for (const auto& hash : hashes) REQUIRE(loaded.getConfigHash() != hash);
         hashes.push_back(loaded.getConfigHash());
         REQUIRE(loaded.save(path.string()));

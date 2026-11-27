@@ -16,6 +16,11 @@ Activation, per house-game of an arm (CLAUDE.md "AI behaviours: prove the switch
   palace fired       house-games with at least one Palace placed on its planned site
   palace effect      mean land-value rise of the planned lots two minutes after placement, and the
                      share of effects that rose by 10 or more with the Palace still standing
+  front palaces      FRONT_PALACE planned/placed per house-game, median distance of the planned sites
+                     to the nearest enemy building, and Palaces still standing 5 minutes after placement
+  fielded Launchers  Launchers' share of the combat vehicle value the house fields from minute 50 on
+                     (mix.csv army; Stefan fielded 83%), and Launchers lost per house-game
+  Palace weapon      the house's Palace damage value (units.csv; only Harkonnen's Death Hand hits)
 An arm whose behaviour fired in fewer than half its house-games is NOT TESTED, whatever its score.
 """
 import argparse
@@ -54,12 +59,13 @@ def number(value, default=0.0):
 
 
 def collect(directories):
-    games, houses, lessons, mixes = [], [], [], []
+    games, houses, lessons, mixes, units = [], [], [], [], []
     for directory in directories:
         games += rows(directory, 'games.csv')
         houses += rows(directory, 'houses.csv')
         lessons += rows(directory, 'lessons.csv')
         mixes += rows(directory, 'mix.csv')
+        units += rows(directory, 'units.csv')
     key = lambda row: tuple(row[k] for k in KEY)  # noqa: E731
     played = {key(g) for g in games if not g.get('error')}
     per = {}
@@ -67,7 +73,9 @@ def collect(directories):
         if key(h) in played:
             per[(key(h), h['house'])] = dict(label=h['label'], tag=h['tag'], map=h['map'],
                                              eliminated=h['eliminated_s'] or None, launcher_passes=0,
-                                             planned=0, placed=0, expired=0, effects=[])
+                                             planned=0, placed=0, expired=0, effects=[], front_planned=0,
+                                             front_placed=0, front_survived=0, front_effects=0, front_enemy=[],
+                                             fielded=[])
     names = {v: k for k, v in HOUSE_NUMBERS.items()}
     for row in lessons:
         house = row['house'] if row['house'] in HOUSE_NUMBERS else names.get(int(number(row['house'], -1)), row['house'])
@@ -77,6 +85,15 @@ def collect(directories):
         m = per[slot]
         if row['kind'] == 'launcher_army':
             m['launcher_passes'] += 1
+        elif row['kind'] == 'front_palace':
+            if row['event'] == 'planned':
+                m['front_planned'] += 1
+                m['front_enemy'].append(number(row['enemy_tiles']))
+            elif row['event'] == 'placed':
+                m['front_placed'] += 1
+            elif row['event'] == 'effect':
+                m['front_effects'] += 1
+                m['front_survived'] += row['met'] == '1'
         elif row['kind'] == 'low_value_palace':
             if row['event'] in ('planned', 'placed', 'expired'):
                 m[row['event']] += 1
@@ -87,6 +104,20 @@ def collect(directories):
         slot = (key(row), row['house'])
         if slot in per and (slot not in final or number(row['minute']) >= number(final[slot]['minute'])):
             final[slot] = row
+    for row in mixes:
+        slot = (key(row), row['house'])
+        if slot in per and number(row['minute']) >= 50:
+            army = [number(v) for v in row['army'].split('/')][:VEHICLE_SLOTS]
+            if sum(army) > 0:
+                per[slot]['fielded'].append(army[LAUNCHER_SLOT] / sum(army))
+    for u in units:
+        slot = (key(u), names.get(int(number(u['house'], -1)), u['house']))
+        if slot not in per or u['phase'] not in ('match_end', 'end'):
+            continue
+        if u['name'] == 'Launcher':
+            per[slot]['launchers_lost'] = number(u['lost'])
+        elif u['name'] == 'Palace':
+            per[slot]['palace_damage'] = number(u['damage_value'])
     for slot, row in final.items():
         built = [number(v) for v in row['built'].split('/')][:VEHICLE_SLOTS]
         total = sum(built)
@@ -129,8 +160,9 @@ def main():
         out = [f'\n## {title}\n',
                '| arm | house-games | score diff vs control [95%] | verdict | time-outs | launcher fired | passes/game | '
                'Launcher share built | >=50% & no Orni | palace fired | planned/placed/expired per game | '
-               'mean rise | rose >=10 | activation |',
-               '|---|---:|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---|']
+               'mean rise | rose >=10 | front planned/placed per game | front enemy tiles | front standing 5 min | '
+               'fielded Launcher share m50+ | Launchers lost | Palace weapon damage | activation |',
+               '|---|---:|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|']
         chosen = {slot: m for slot, m in per.items() if select(m)}
         labels = sorted({m['label'] for m in chosen.values()}, key=lambda l: (l != args.control, l))
         for label in labels:
@@ -148,12 +180,19 @@ def main():
             rose = sum(1 for rise, stands in effects if rise >= MIN_RISE and stands)
             shares = [m['launcher_share'] for m in members if 'launcher_share' in m]
             uses_launcher = 'launcher' in label or 'lessons' in label
-            uses_palace = 'palace' in label or 'lessons' in label
+            uses_palace = 'low-value' in label or 'lessons' in label
+            uses_front = 'front-palace' in label
+            front_fired = sum(1 for m in members if m['front_placed'] > 0)
+            front_enemy = sorted(d for m in members for d in m['front_enemy'])
+            fielded = [statistics.mean(m['fielded']) for m in members if m['fielded']]
+            fielded_ok = sum(1 for m in members if m['fielded'] and statistics.mean(m['fielded']) >= 0.6)
             verdicts = []
             if uses_launcher:
                 verdicts.append('launcher ' + ('tested' if launcher_fired * 2 >= n else 'NOT TESTED'))
             if uses_palace:
                 verdicts.append('palace ' + ('tested' if palace_fired * 2 >= n else 'NOT TESTED'))
+            if uses_front:
+                verdicts.append('front palace ' + ('tested' if front_fired * 2 >= n else 'NOT TESTED'))
             out.append(
                 f'| {label} | {n} | {diff} | {comparison.verdict if comparison else "-"} | '
                 f'{(sum(timed) / len(timed)) if timed else float("nan"):.0%} | {launcher_fired}/{n} | '
@@ -162,7 +201,13 @@ def main():
                 f'{sum(m["planned"] for m in members) / max(1, n):.1f}/{sum(m["placed"] for m in members) / max(1, n):.1f}/'
                 f'{sum(m["expired"] for m in members) / max(1, n):.1f} | '
                 f'{(statistics.mean(r for r, _ in effects) if effects else float("nan")):+.1f} | '
-                f'{rose}/{len(effects)} | {", ".join(verdicts) or "-"} |')
+                f'{rose}/{len(effects)} | '
+                f'{sum(m["front_planned"] for m in members) / max(1, n):.1f}/{sum(m["front_placed"] for m in members) / max(1, n):.1f} | '
+                f'{front_enemy[len(front_enemy) // 2] if front_enemy else float("nan"):.0f} | '
+                f'{sum(m["front_survived"] for m in members)}/{sum(m["front_effects"] for m in members)} | '
+                f'{(statistics.mean(fielded) if fielded else float("nan")):.0%} ({fielded_ok}/{n} >= 60%) | '
+                f'{statistics.mean([m.get("launchers_lost", 0) for m in members]):.0f} | '
+                f'{statistics.mean([m.get("palace_damage", 0) for m in members]):.0f} | {", ".join(verdicts) or "-"} |')
         return out
 
     out = ['# Lessons from Stefan\'s Metropolis save: score and activation', '',

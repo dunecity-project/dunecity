@@ -11,6 +11,7 @@
   "palace-worm-0": {"fire": ["PALACE_WORM: event=bloom_order"], "success": ["PALACE_WORM: event=spice"]},
   "palace-worm-2": {"fire": ["PALACE_WORM: event=hunt"], "success": ["PALACE_WORM: event=ate"]},
   "city-launcher-army": {"fire": ["LAUNCHER_ARMY: applied=1"], "success": ["LAUNCHER_ARMY: met=1"]},
+  "front-palaces": {"fire": ["FRONT_PALACE: event=placed"], "success": ["FRONT_PALACE: event=effect met=1"]},
   "low-value-palaces": {"fire": ["LOW_VALUE_PALACE: event=placed"], "success": ["LOW_VALUE_PALACE: event=effect met=1"]},
   "hospital-infantry": {"fire": ["HOSPITAL_CARE: event=sent why=quiet"], "success": ["HOSPITAL_CARE: event=healed"]},
   "road-lane-parks": {"fire": ["REDEVELOP: event=ordered kind=lane_park"], "success": ["REDEVELOP: event=effect kind=lane_park raised=1"]},

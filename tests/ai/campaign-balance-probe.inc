@@ -574,6 +574,29 @@ int runCampaignBalanceProbe() {
                 if (House* house = game->getHouse(h))
                     for (const auto& player : house->getPlayerList())
                         if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
+    // Per-house play styles, "house=style,house=style" (save-house-audit.py --arm; e.g. Stefan's house 0
+    // continuing his save with turret-drill while the others keep the shipped defaults).
+    if (const char* styles = std::getenv("BALANCE_HOUSE_STYLES"); styles && *styles) {
+        std::istringstream input(styles);
+        std::string entry;
+        while (std::getline(input, entry, ',')) {
+            const auto eq = entry.find('=');
+            if (eq == std::string::npos) throw std::runtime_error("BALANCE_HOUSE_STYLES needs house=style entries");
+            House* house = game->getHouse(std::stoi(entry.substr(0, eq)));
+            if (!house) throw std::runtime_error("BALANCE_HOUSE_STYLES names a house that is not in the game");
+            int bots = 0;
+            for (const auto& player : house->getPlayerList())
+                if (auto* bot = dynamic_cast<QuantBot*>(player.get())) { FormationDuel::applyStyle(*bot, entry.substr(eq + 1).c_str()); ++bots; }
+            if (bots == 0) throw std::runtime_error("BALANCE_HOUSE_STYLES names a house without a QuantBot");
+            SDL_Log("HOUSE_STYLE: house=%s style=%s bots=%d", entry.substr(0, eq).c_str(), entry.substr(eq + 1).c_str(), bots);
+        }
+    }
+    // Match rule Turrets Can Fire On Buildings for a continuation (a 1.0.880 save let turrets hit buildings).
+    if (const char* rule = std::getenv("BALANCE_TURRETS_FIRE_ON_BUILDINGS"); rule && *rule) {
+        const_cast<SettingsClass::GameOptionsClass&>(game->getGameInitSettings().getGameOptions()).turretsFireOnBuildings
+            = std::atoi(rule) != 0;
+        SDL_Log("TURRET_RULE: turrets_fire_on_buildings=%d", int(game->getGameInitSettings().getGameOptions().turretsFireOnBuildings));
+    }
     if (const char* style = std::getenv("BALANCE_HELPER_STYLE"); style && *style) {
         if (!scenario || !scenarioSides.empty() || loadSave || customMap || std::getenv("BALANCE_SCENARIO_STYLE"))
             throw std::runtime_error("Helper style requires an authored campaign without a global treatment");

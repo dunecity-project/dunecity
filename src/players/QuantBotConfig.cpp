@@ -412,6 +412,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityLauncherArmy = false;
     force.cityLauncherArmyBps = CityLessonsPolicy::kLauncherArmyBps;
     force.lowValuePalaces = false;
+    force.frontPalaces = false;
     force.palaceWorm = 1;           // Stefan, 2026-11-27: the Fremen Palace worm hunts, else blooms near the base
     force.buildUpToEnemy = true;    // Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings"
     force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
@@ -970,6 +971,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "CityLauncherArmy", force.cityLauncherArmy);
         iniFile.setIntValue("Force Concentration", "CityLauncherArmyBps", force.cityLauncherArmyBps);
         iniFile.setBoolValue("Force Concentration", "LowValuePalaces", force.lowValuePalaces);
+        iniFile.setBoolValue("Force Concentration", "FrontPalaces", force.frontPalaces);
         iniFile.setBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
         iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
         iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
@@ -1355,6 +1357,7 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.cityLauncherArmyBps = std::clamp(iniFile.getIntValue("Force Concentration", "CityLauncherArmyBps",
         force.cityLauncherArmyBps), CityLessonsPolicy::kLauncherArmyMinBps, CityLessonsPolicy::kLauncherArmyMaxBps);
     force.lowValuePalaces = iniFile.getBoolValue("Force Concentration", "LowValuePalaces", force.lowValuePalaces);
+    force.frontPalaces = iniFile.getBoolValue("Force Concentration", "FrontPalaces", force.frontPalaces);
     force.extraAirports = iniFile.getBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
     // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
     force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
@@ -2137,6 +2140,7 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.cityLauncherArmy) addNamed("cityLauncherArmy", force.cityLauncherArmy);
     if (force.cityLauncherArmyBps != CityLessonsPolicy::kLauncherArmyBps) addNamed("cityLauncherArmyBps", force.cityLauncherArmyBps);
     if (force.lowValuePalaces) addNamed("lowValuePalaces", force.lowValuePalaces);
+    if (force.frontPalaces) addNamed("frontPalaces", force.frontPalaces);
     // On is the default (protocol 137); only off is hashed, so the default config keeps its hash.
     if (!force.extraAirports) addNamed("extraAirports", force.extraAirports);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);

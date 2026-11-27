@@ -530,7 +530,8 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
     return range && !zones.empty() && zones.size() <= 4;
 }
 
-Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLots) {
+Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLots,
+                                       const std::vector<uint8_t>* allowedCentres) {
     AITelemetry::PerformanceScope perfScope("ai.findPalaceDistrictSite", getGameCycleCount(), getHouse()->getHouseID());
     namespace Force = ForceConcentrationPolicy;
     if (!currentGame->isCitySimEnabled()) return Coord::Invalid();
@@ -557,6 +558,7 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLo
             const auto* sim = currentGame->getCitySimulation();
             reached = !sim || !CityLessonsPolicy::lowLot(sim->getLandValueMap().worldGet(o.x, o.y));
         }
+        if (allowedCentres) reached = false;   // FrontPalaces: every lot in reach (stamps add up)
         if (!reached && o.x >= 0 && o.y >= 0 && o.x < w && o.y < h) at(o.x + 1, o.y + 1) += 1;
     }
     for (int y = 1; y <= h; ++y) for (int x = 1; x <= w; ++x) at(x, y) += at(x - 1, y) + at(x, y - 1) - at(x - 1, y - 1);
@@ -569,7 +571,7 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLo
     auto lotsAround = [&](int cx, int cy) { return window(sum, cx, cy, reach); };
     // LandmarkAnchoring: free buildable tiles inside build range and outside every landmark's reach
     // are room for the district to grow into, a lot per kLandmarkRoomTilesPerLot tiles.
-    const bool anchoring = botConfig().force.landmarkAnchoring && !lowValueLots;
+    const bool anchoring = botConfig().force.landmarkAnchoring && !lowValueLots && !allowedCentres;
     std::vector<int> room;
     if (anchoring) {
         auto prefix = [&](std::vector<int>& grid) {
@@ -597,6 +599,7 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLo
     std::vector<Candidate> candidates;
     for (int y = 0; y + size.y <= h; ++y)
         for (int x = 0; x + size.x <= w; ++x) {
+            if (allowedCentres && !(*allowedCentres)[size_t(y + 1) * w + x + 1]) continue;
             const int lots = lotsAround(x + 1, y + 1);
             const int roomLots = anchoring ? window(room, x + 1, y + 1, reach) / Force::kLandmarkRoomTilesPerLot : 0;
             // Existing lots pay at once; room only once it is zoned.

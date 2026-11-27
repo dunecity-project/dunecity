@@ -158,10 +158,12 @@ TURRET_ROW_FIELDS = KEY + ('event', 'label') + TURRET_FIELDS
 # Lessons from Stefan's Metropolis save (include/players/CityLessonsPolicy.h): every stats pass
 # CityLauncherArmy held the vehicle mix (kind launcher_army) and every LowValuePalaces plan, placement,
 # effect and expiry (kind low_value_palace, its event). tests/ai/city-lessons-report.py.
-LESSON_EVENTS = (('LAUNCHER_ARMY:', 'launcher_army'), ('LOW_VALUE_PALACE:', 'low_value_palace'))
+LESSON_EVENTS = (('LAUNCHER_ARMY:', 'launcher_army'), ('LOW_VALUE_PALACE:', 'low_value_palace'),
+                 ('FRONT_PALACE:', 'front_palace'))
 LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 'launchers', 'ornithopters',
                  'launcher_value', 'vehicle_value', 'x', 'y', 'low_lots', 'lots_standing', 'lv_before', 'lv_now',
-                 'lv_after', 'rise', 'palace_stands', 'palaces', 'credits', 'wait_s', 'cycle')
+                 'lv_after', 'rise', 'palace_stands', 'palaces', 'credits', 'wait_s', 'met', 'enemy_tiles',
+                 'turrets_ahead', 'cycle')
 LESSON_ROW_FIELDS = KEY + ('kind', 'label') + LESSON_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on

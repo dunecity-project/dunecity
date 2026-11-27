@@ -332,6 +332,7 @@ struct QuantBotConfig {
         bool cityLauncherArmy;                 ///< City games: no Ornithopter share, Launchers at least cityLauncherArmyBps of the vehicle mix.
         int cityLauncherArmyBps;               ///< That floor, 3000-9500 (default 7000). Hashed only when not the default.
         bool lowValuePalaces;                  ///< A Palace saved for where most own R/C lots of land value <= 80 are, reached or not.
+        bool frontPalaces;                     ///< Palaces on the enemy side of the city, 10-31 tiles from enemy buildings, behind own turrets.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.
