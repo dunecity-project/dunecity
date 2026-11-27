@@ -3483,7 +3483,11 @@ void QuantBot::vetYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
             || std::string_view(yardTurn.structureRule) == "lane_park"
             || std::string_view(yardTurn.structureRule) == "lot_park_clear"
             || std::string_view(yardTurn.structureRule) == "lot_park_fill"
-            || std::string_view(yardTurn.structureRule) == "pollution_relocation");
+            || std::string_view(yardTurn.structureRule) == "pollution_relocation"
+            // LowValuePalaces / FrontPalaces (default off; QuantBotCityLessons.cpp): the planned site is the
+            // behaviour. Without these two the site was cleared here and the Palace placed by the general search.
+            || std::string_view(yardTurn.structureRule) == "low_value_palace"
+            || std::string_view(yardTurn.structureRule) == "front_palace");
     if (yardTurn.itemID != Structure_RocketTurret && yardTurn.itemID != Structure_PoliceStation && !protectedSite
         && !coreDefenceSite && !fieldSite && !economySite)
         yardTurn.crimeServiceSite = Coord::Invalid();
