@@ -272,6 +272,8 @@ void ZoneStructure::updateGarrison() {
     if(garrison_.empty() || owner == nullptr || currentGameMap == nullptr || getLocation().isInvalid()) return;
     // Below the threshold the garrison leaves on its own (any with no free tile around stay and
     // try again next cycle); a captured zone goes back to its original owner as they do.
+    // A zone at 0 waits for destroy(), which throws its soldiers out of the ruin hurt.
+    if(getHealth() <= 0) return;
     if(tooDamagedToHold()) {
         evacuateGarrison();
         if(garrison_.empty()) return;

@@ -22,12 +22,25 @@
 // rule off      with Zone Garrisons off, a capture order on an own zone does nothing and an enemy zone
 //               is not entered
 // picture       garrison.png: a garrisoned zone beside an empty one, for a person to look at
+//
+// The player's own path (CLAUDE.md, "Player features"): units selected as a click selects them, the
+// unit panel's real Capture button pressed (and the C key), the zone clicked with a real SDL mouse
+// event through Game::doInput, game cycles run, and the zone panel's real Evacuate button pressed:
+// player own zone    one Soldier: button, cursor, click, inside, panel count, Evacuate, out
+// player take        a Soldier and a Trooper selected together take an empty enemy zone with the C key;
+//                    the panel says captured; Evacuate hands the zone back
+// player refused     a full own zone, an ally's zone and a zone below the threshold are not entered;
+//                    an enemy's garrisoned zone shows Evacuate disabled
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
 #include <Tile.h>
 #include <Command.h>
 #include <ScreenBorder.h>
+#include <GameInterface.h>
+#include <GUI/ObjectInterfaces/MultiUnitInterface.h>
+#include <GUI/ObjectInterfaces/UnitInterface.h>
+#include <GUI/ObjectInterfaces/ZoneStructureInterface.h>
 #include <FileClasses/LoadSavePNG.h>
 #include <mod/ModManager.h>
 #include <players/Player.h>
@@ -529,6 +542,197 @@ void checkPicture() {
     record("picture", "garrison-zoom0..2.png: 3 soldiers in an own R zone (left), 1 in a taken C zone (below)");
 }
 
+
+// --- The player's own path -------------------------------------------------------------------
+
+int queued(Game& game, CMDTYPE type) {
+    int count = 0;
+    for(const auto& [cycle, slot] : game.cmdManager.timeslot)
+        for(const auto& command : slot) if(command.getCommandID() == type) ++count;
+    return count;
+}
+
+/// Selects UNITS as a selection click does and opens their real side panel.
+ObjectInterface* selectUnits(Fixture& f, const std::vector<UnitBase*>& units) {
+    Game& game = *f.game;
+    require(game.pInterface != nullptr, f.label + ": the game has no interface");
+    game.unselectAll(game.selectedList);
+    game.selectedList.clear();
+    for(UnitBase* u : units) {
+        game.selectedList.insert(u->getObjectID());
+        u->setSelected(true);
+    }
+    game.selectionChanged();
+    game.setCursorMode(Game::CursorMode_Normal);
+    game.pInterface->updateObjectInterface();
+    return game.pInterface->pObjectContainer;
+}
+
+/// The Capture button of the unit panel the player sees for the selection.
+SymbolButton* captureButtonOf(ObjectInterface* panel) {
+    if(auto* one = dynamic_cast<UnitInterface*>(panel)) return &one->captureButton;
+    if(auto* many = dynamic_cast<MultiUnitInterface*>(panel)) return &many->captureButton;
+    return nullptr;
+}
+
+/// A real left-button press and release on the widget, as the mouse sends it.
+void press(Widget& button) {
+    button.handleMouseLeft(5, 5, true);
+    button.handleMouseLeft(5, 5, false);
+}
+
+/// A real SDL mouse click on TILE of the map view, through Game::doInput.
+void clickMap(Fixture& f, Coord tile, Uint8 button = SDL_BUTTON_LEFT) {
+    currentGameMap->viewMap(f.own->getHouseID(), tile, 6);
+    screenborder->setNewScreenCenter(Coord(tile.x * TILESIZE + TILESIZE / 2, tile.y * TILESIZE + TILESIZE / 2));
+    const int x = screenborder->world2screenX(tile.x * TILESIZE + TILESIZE / 2);
+    const int y = screenborder->world2screenY(tile.y * TILESIZE + TILESIZE / 2);
+    require(screenborder->isScreenCoordInsideMap(x, y), f.label + ": the click point is outside the map view");
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    SDL_Event event{};
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.button = button;
+    event.button.x = x;
+    event.button.y = y;
+    require(SDL_PushEvent(&event) == 1, f.label + ": the mouse press was rejected");
+    event.type = SDL_MOUSEBUTTONUP;
+    require(SDL_PushEvent(&event) == 1, f.label + ": the mouse release was rejected");
+    f.game->doInput();
+}
+
+/// Presses Capture on the selection's panel (or the C key) and clicks ZONE; returns the capture
+/// commands the click queued.
+int captureByPlayer(Fixture& f, const std::vector<UnitBase*>& units, const ZoneStructure* zone, bool key = false) {
+    Game& game = *f.game;
+    ObjectInterface* panel = selectUnits(f, units);
+    SymbolButton* button = captureButtonOf(panel);
+    require(button != nullptr, f.label + ": the selection has no unit panel with a Capture button");
+    require(button->isVisible() && button->isEnabled(), f.label + ": the Capture button is not shown and enabled");
+    require(button->getTooltipText().find(_("Capture")) != std::string::npos,
+            f.label + ": the Capture button's tooltip does not say Capture");
+    if(key) {
+        SDL_KeyboardEvent keyEvent{};
+        keyEvent.type = SDL_KEYDOWN;
+        keyEvent.keysym.sym = SDLK_c;
+        game.handleKeyInput(keyEvent);
+        require(game.currentCursorMode == Game::CursorMode_Capture, f.label + ": the C key did not open the Capture cursor");
+    } else {
+        press(*button);
+        require(game.currentCursorMode == Game::CursorMode_Capture, f.label + ": the Capture button did not open its cursor");
+        panel->update();
+        require(button->getToggleState(), f.label + ": the Capture button does not show it is active");
+    }
+    const int before = queued(game, CMD_INFANTRY_CAPTURE);
+    clickMap(f, zone->getLocation());
+    require(game.currentCursorMode == Game::CursorMode_Normal, f.label + ": the Capture cursor stayed open after the click");
+    return queued(game, CMD_INFANTRY_CAPTURE) - before;
+}
+
+/// Selects ZONE with a real click on it and returns its real panel.
+ZoneStructureInterface* selectZone(Fixture& f, const ZoneStructure* zone) {
+    Game& game = *f.game;
+    game.unselectAll(game.selectedList);
+    game.selectedList.clear();
+    game.setCursorMode(Game::CursorMode_Normal);
+    clickMap(f, zone->getLocation());
+    require(game.selectedList.size() == 1 && game.selectedList.count(zone->getObjectID()) == 1,
+            f.label + ": a click on the zone did not select it");
+    game.pInterface->updateObjectInterface();
+    auto* panel = dynamic_cast<ZoneStructureInterface*>(game.pInterface->pObjectContainer);
+    require(panel != nullptr && panel->update(), f.label + ": selecting the zone did not open its panel");
+    return panel;
+}
+
+void checkPlayerOwnZone() {
+    Fixture f("player own zone");
+    auto* z = f.zone(f.own, Structure_ZoneResidential, 24, 24);
+    auto* soldier = f.unit(f.own, Unit_Soldier, 20, 25);
+    f.run(1);
+    require(captureByPlayer(f, {soldier}, z) == 1, "player own zone: the click on an own zone queued no capture order");
+    require(f.runUntil(30, [&] { return z->getGarrisonSize() == 1; }), "player own zone: the Soldier never went inside");
+    require(hidden(soldier) && z->getOwner() == f.own, "player own zone: the Soldier is not hidden inside an own zone");
+    auto* panel = selectZone(f, z);
+    require(panel->garrisonLabel.isVisible() && panel->garrisonLabel.getText().find("1/4") != std::string::npos
+                && panel->garrisonLabel.getText().find(_("(captured)")) == std::string::npos,
+            "player own zone: the zone panel does not show Garrison 1/4: " + panel->garrisonLabel.getText());
+    require(panel->evacuateButton.isVisible() && panel->evacuateButton.isEnabled(),
+            "player own zone: the Evacuate button is not shown and enabled");
+    const int before = queued(*f.game, CMD_ZONE_EVACUATE);
+    press(panel->evacuateButton);
+    require(queued(*f.game, CMD_ZONE_EVACUATE) == before + 1, "player own zone: Evacuate queued no command");
+    require(f.runUntil(5, [&] { return !z->isGarrisoned(); }), "player own zone: Evacuate did not empty the zone");
+    require(onMapBeside(soldier, z, 2) && soldier->isRespondable() && z->getOwner() == f.own,
+            "player own zone: the Soldier did not come out beside its own zone");
+    panel->update();
+    require(!panel->evacuateButton.isVisible(), "player own zone: Evacuate is still shown on an empty zone");
+    record("player_own_zone", "Capture button, map click, inside, panel 1/4, Evacuate button, out; zone kept");
+}
+
+void checkPlayerTake() {
+    Fixture f("player take");
+    auto* z = f.zone(f.enemy, Structure_ZoneCommercial, 40, 24, 2);
+    auto* soldier = f.unit(f.own, Unit_Soldier, 35, 24);
+    auto* trooper = f.unit(f.own, Unit_Trooper, 35, 25);
+    f.run(1);
+    require(captureByPlayer(f, {soldier, trooper}, z, true) == 2,
+            "player take: the click on an empty enemy zone did not order both selected soldiers");
+    require(f.runUntil(40, [&] { return z->getOwner() == f.own && z->getGarrisonSize() == 2; }),
+            "player take: the selected soldiers did not take the enemy zone and both go in");
+    auto* panel = selectZone(f, z);
+    require(panel->garrisonLabel.getText().find(_("(captured)")) != std::string::npos,
+            "player take: the zone panel does not say the zone is captured: " + panel->garrisonLabel.getText());
+    require(panel->evacuateButton.isVisible() && panel->evacuateButton.isEnabled(),
+            "player take: Evacuate is not offered on the captured zone");
+    press(panel->evacuateButton);
+    require(f.runUntil(5, [&] { return !z->isGarrisoned(); }), "player take: Evacuate did not empty the captured zone");
+    require(z->getOwner() == f.enemy, "player take: the evacuated captured zone did not go back to its owner");
+    require(onMapBeside(soldier, z, 2) && onMapBeside(trooper, z, 2), "player take: the soldiers did not come out");
+    record("player_take", "Soldier + Trooper, C key, map click: zone taken, panel says captured, Evacuate hands it back");
+}
+
+void checkPlayerRefused() {
+    Fixture f("player refused");
+    // A full own zone.
+    auto* full = f.zone(f.own, Structure_ZoneResidential, 20, 20);
+    for(int i = 0; i < DuneCity::ZoneGarrison::kCapacity; ++i) {
+        auto* s = f.unit(f.own, Unit_Soldier, 19, 19 + i);
+        f.capture(s, full);
+    }
+    require(f.runUntil(40, [&] { return full->getGarrisonSize() == DuneCity::ZoneGarrison::kCapacity; }),
+            "player refused: the zone did not fill");
+    auto* fifth = f.unit(f.own, Unit_Soldier, 16, 20);
+    f.run(1);
+    captureByPlayer(f, {fifth}, full);
+    f.run(10);
+    require(fifth->isActive() && !hidden(fifth) && full->getGarrisonSize() == DuneCity::ZoneGarrison::kCapacity,
+            "player refused: a fifth soldier went into a full zone");
+    // An ally's zone.
+    auto* allied = f.zone(f.ally, Structure_ZoneResidential, 50, 12);
+    auto* visitor = f.unit(f.own, Unit_Soldier, 46, 12);
+    f.run(1);
+    captureByPlayer(f, {visitor}, allied);
+    f.run(15);
+    require(!allied->isGarrisoned() && allied->getOwner() == f.ally && visitor->isActive(),
+            "player refused: an ally's zone was entered or taken");
+    // A zone below the threshold.
+    auto* damaged = f.zone(f.own, Structure_ZoneIndustrial, 30, 40);
+    damaged->setHealth(damaged->getMaxHealth() * ZoneStructure::evacuateHealthPercent() / 100 - 1);
+    auto* late = f.unit(f.own, Unit_Soldier, 27, 40);
+    f.run(1);
+    captureByPlayer(f, {late}, damaged);
+    f.run(15);
+    require(!damaged->isGarrisoned() && late->isActive(), "player refused: a soldier went into a zone below the threshold");
+    // An enemy's garrisoned zone: its panel shows the garrison but not an Evacuate we may press.
+    auto* held = f.zone(f.enemy, Structure_ZoneResidential, 44, 44);
+    auto* defender = f.unit(f.enemy, Unit_Soldier, 43, 43);
+    f.capture(defender, held);
+    require(f.runUntil(20, [&] { return held->getGarrisonSize() == 1; }), "player refused: the enemy soldier did not go in");
+    auto* panel = selectZone(f, held);
+    require(panel->evacuateButton.isVisible() && !panel->evacuateButton.isEnabled(),
+            "player refused: Evacuate is enabled on an enemy's zone");
+    record("player_refused", "full own zone, ally's zone and a damaged zone not entered; enemy's Evacuate disabled");
+}
+
 } // namespace ZoneGarrisonProbe
 
 int runZoneGarrisonProbe() {
@@ -544,7 +748,7 @@ int runZoneGarrisonProbe() {
     int failed = 0;
     for(auto check : {checkOwnZone, checkTake, checkFireOut, checkAssault, checkEvacuate, checkDestroyed,
                       checkReturn, checkLowHealth, checkAlly, checkContainment, checkSave, checkRuleOff,
-                      checkPicture}) {
+                      checkPlayerOwnZone, checkPlayerTake, checkPlayerRefused, checkPicture}) {
         try {
             check();
         } catch(const std::exception&) {
@@ -552,7 +756,7 @@ int runZoneGarrisonProbe() {
             currentGame = nullptr;
         }
     }
-    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 13 cases");
-    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 13 cases failed", failed);
+    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 16 cases");
+    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 16 cases failed", failed);
     return -1;
 }
