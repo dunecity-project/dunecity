@@ -823,6 +823,7 @@ void QuantBot::update() {
     updateZoneGarrisons();
     // Redevelopment orders: placed at their site or lost, then their effect on the lots read.
     updateRedevelopmentOrders();
+    keepParkPassages();
     // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
     if (!fighterOnly()) keepPlannedSitesClear();
 

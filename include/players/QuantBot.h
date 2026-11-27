@@ -2215,6 +2215,10 @@ private:
     /// for RedevelopmentPolicy::kRelocatedFromMs). Not saved.
     std::vector<std::pair<Coord, Uint32>> relocatedFrom;
     bool nearRelocatedFrom(int x, int y) const;
+    /// RoadLaneParks / LotParks: once a game second, an own Park whose open side neighbours no longer
+    /// meet without it (later building closed the way round) is demolished and its tile made road.
+    void keepParkPassages();
+    bool parkKeepsUnitPassage(int x, int y) const;
     void noteRedevelopmentOrder(int kind, Uint32 item, Coord site, Uint32 oldZone, Coord effectCentre);
     void updateRedevelopmentOrders();
     void noteIndustryPlaced(Coord site);

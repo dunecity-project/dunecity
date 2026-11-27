@@ -277,8 +277,10 @@ def acceptance(args):
     lane_sites = {(e['x'], e['y']) for e in events('road-lane-parks', 'REDEVELOP:', event='placed', kind='lane_park')}
     cut = [p for p in parks if (p['x'], p['y']) in lane_sites and p.get('units_joined') != '1']
     joined = [p for p in parks if (p['x'], p['y']) in lane_sites]
+    retired = len(events('road-lane-parks', 'REDEVELOP:', event='retired'))
     line('"as long as we maintain paths out of the base" (around each lane Park)', t,
-         '%d of %d lane Parks leave units no way round them (need 0)' % (len(cut), len(joined)),
+         '%d of %d lane Parks standing leave units no way round them (need 0); %d retired when later building closed the way'
+         % (len(cut), len(joined), retired),
          bool(joined) and not cut)
     yards = {}
     for e in events('road-lane-parks', 'YARD_PATH_AUDIT:'):

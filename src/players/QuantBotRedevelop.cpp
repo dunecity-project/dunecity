@@ -127,6 +127,41 @@ bool QuantBot::parkKeepsPassage(int x, int y) const {
     return RedevelopmentPolicy::sidesStayConnected(open) && RedevelopmentPolicy::sidesStayConnected(road);
 }
 
+void QuantBot::keepParkPassages() {
+    const auto& force = botConfig().force;
+    if ((!force.roadLaneParks && !force.lotParks) || getGameCycleCount() % MILLI2CYCLES(1000) != 0) return;
+    std::vector<StructureBase*> cut;
+    for (const auto* s : getStructureList())
+        if (s->getOwner() == getHouse() && s->getItemID() == Structure_Park && s->getHealth() > 0
+            && !parkKeepsUnitPassage(s->getLocation().x, s->getLocation().y))
+            cut.push_back(const_cast<StructureBase*>(s));
+    for (auto* park : cut) {
+        const Coord p = park->getLocation();
+        SDL_Log("REDEVELOP: house=%d event=retired kind=park x=%d y=%d cycle=%u", getHouse()->getHouseID(), p.x, p.y,
+                getGameCycleCount());
+        redevelopmentActivity.note("park_retired_for_passage");
+        park->demolish();
+        if (auto* tile = currentGameMap->getTile(p.x, p.y)) {
+            tile->setDestroyedStructureTile(DestroyedStructure_None);
+            tile->setRoad(true);
+        }
+    }
+}
+
+/// Whether units can still get round the Park at (x, y): its open side neighbours meet over open
+/// ground without it, inside the passage window (the Park itself blocks units).
+bool QuantBot::parkKeepsUnitPassage(int x, int y) const {
+    const Map& map = getMap();
+    constexpr int r = RedevelopmentPolicy::kPassageWindow, side = 2 * r + 1;
+    bool open[side * side];
+    for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx) {
+            const Tile* tile = map.tileExists(x + dx, y + dy) ? map.getTile(x + dx, y + dy) : nullptr;
+            open[(dy + r) * side + (dx + r)] = tile && !tile->isMountain() && !tile->hasAStructure();
+        }
+    return RedevelopmentPolicy::sidesStayConnected(open);
+}
+
 bool QuantBot::nearRelocatedFrom(int x, int y) const {
     const Uint32 cycle = getGameCycleCount();
     for (const auto& [site, when] : relocatedFrom)
