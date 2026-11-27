@@ -21,6 +21,15 @@ Activation, per house-game of an arm (CLAUDE.md "AI behaviours: prove the switch
   fielded Launchers  Launchers' share of the combat vehicle value the house fields from minute 50 on
                      (mix.csv army; Stefan fielded 83%), and Launchers lost per house-game
   Palace weapon      the house's Palace damage value (units.csv; only Harkonnen's Death Hand hits)
+Acceptance against Stefan's save (analysis/acceptance-list.md), per arm:
+  by m72             lesson Palaces placed by game minute 72 per house-game (median; his 19, target 15) and
+                     house-games reaching 15
+  low-lot share m72  the house's low-value lots over its R/C lots at the last CITY_LOTS line by minute 72
+                     (his 9%, target 20% or less; the AIs in his game 30-51%), and the mean land value
+  expiry causes      over the expired plans, the build passes it was pending behind another Palace, held
+                     saving, pre-empted, ordered, and held off its site
+  front no site      FRONT_PALACE no_site lines by reason (turrets: fewer than 3; band: no tile 10-31 from
+                     the enemy with turrets ahead; site: no buildable site there)
 An arm whose behaviour fired in fewer than half its house-games is NOT TESTED, whatever its score.
 """
 import argparse
@@ -40,6 +49,7 @@ HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardau
 VEHICLE_SLOTS = 10
 LAUNCHER_SLOT, ORNITHOPTER_SLOT = 2, 6
 MIN_RISE = 10
+CYCLES_PER_MINUTE = 3750
 
 
 def rows(directory, name):
@@ -75,7 +85,8 @@ def collect(directories):
                                              eliminated=h['eliminated_s'] or None, launcher_passes=0,
                                              planned=0, placed=0, expired=0, effects=[], front_planned=0,
                                              front_placed=0, front_survived=0, front_effects=0, front_enemy=[],
-                                             fielded=[])
+                                             fielded=[], by72=0, front_by72=0, lots72=None,
+                                             expiry=collections.Counter(), no_site=collections.Counter())
     names = {v: k for k, v in HOUSE_NUMBERS.items()}
     for row in lessons:
         house = row['house'] if row['house'] in HOUSE_NUMBERS else names.get(int(number(row['house'], -1)), row['house'])
@@ -83,6 +94,20 @@ def collect(directories):
         if slot not in per:
             continue
         m = per[slot]
+        early = number(row.get('cycle'), 0) <= 72 * CYCLES_PER_MINUTE
+        if row['kind'] == 'city_lots':
+            if early:
+                m['lots72'] = (number(row['lots']), number(row['low_lots']), number(row['lv_now']))
+            continue
+        if row['event'] == 'placed' and early:
+            m['by72' if row['kind'] == 'low_value_palace' else 'front_by72'] += 1
+        if row['event'] == 'expired':
+            for cause in ('pending', 'saving', 'preempted', 'ordered', 'held'):
+                m['expiry'][cause] += number(row.get(cause + '_passes'), 0) > 0
+            m['expiry']['plans'] += 1
+        if row['event'] == 'no_site':
+            m['no_site'][row.get('reason') or '?'] += 1
+            continue
         if row['kind'] == 'launcher_army':
             m['launcher_passes'] += 1
         elif row['kind'] == 'front_palace':
@@ -210,11 +235,37 @@ def main():
                 f'{statistics.mean([m.get("palace_damage", 0) for m in members]):.0f} | {", ".join(verdicts) or "-"} |')
         return out
 
+    def acceptance(select, title):
+        out = [f'\n### Acceptance, {title}\n',
+               '| arm | house-games | low-value Palaces by m72 (median, range) | >= 15 by m72 | front Palaces by m72 | '
+               'low-lot share m72 (median) | <= 20% | mean land value m72 | expired plans: pending/saving/preempted/ordered/held | '
+               'front no site: turrets/band/site |',
+               '|---|---:|---|---:|---:|---:|---:|---:|---|---|']
+        chosen = [m for m in per.values() if select(m)]
+        for label in sorted({m['label'] for m in chosen}, key=lambda l: (l != args.control, l)):
+            members = [m for m in chosen if m['label'] == label]
+            n = len(members)
+            by72 = sorted(m['by72'] for m in members)
+            shares = sorted(low / lots for lots, low, _ in (m['lots72'] for m in members if m['lots72']) if lots)
+            lv = [v for _, _, v in (m['lots72'] for m in members if m['lots72'])]
+            ex = sum((m['expiry'] for m in members), collections.Counter())
+            ns = sum((m['no_site'] for m in members), collections.Counter())
+            out.append(
+                f'| {label} | {n} | {statistics.median(by72):.1f} ({by72[0]}-{by72[-1]}) | {sum(b >= 15 for b in by72)}/{n} | '
+                f'{statistics.median(m["front_by72"] for m in members):.1f} | '
+                f'{(statistics.median(shares) if shares else float("nan")):.0%} | {sum(x <= 0.2 for x in shares)}/{len(shares)} | '
+                f'{(statistics.mean(lv) if lv else float("nan")):.0f} | '
+                f'{ex["plans"]}: {ex["pending"]}/{ex["saving"]}/{ex["preempted"]}/{ex["ordered"]}/{ex["held"]} | '
+                f'{ns["turrets"]}/{ns["band"]}/{ns["site"]} |')
+        return out
+
     out = ['# Lessons from Stefan\'s Metropolis save: score and activation', '',
            match_score.describe(args.scoring, args.draw_score, 0)]
     out += table(lambda m: True, 'All games')
     for map_name in sorted({m['map'] for m in per.values()}):
         out += table(lambda m, mp=map_name: m['map'] == mp, map_name)
+    for map_name in sorted({m['map'] for m in per.values()}):
+        out += acceptance(lambda m, mp=map_name: m['map'] == mp, map_name)
     text = '\n'.join(out) + '\n'
     if args.output:
         args.output.write_text(text)

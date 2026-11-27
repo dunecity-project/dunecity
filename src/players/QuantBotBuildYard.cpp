@@ -1474,6 +1474,7 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
     }
     if (lowValuePalacesEnabled()) trackLowValuePalaces();
     if (frontPalacesEnabled()) trackFrontPalaces();
+    if (currentGame->isCitySimEnabled()) logCityLots();
     if (force.palaceDistricts && pass.economyProject == NONE_ID && pass.stablePower) {
         // Every R+C district gets a Palace where one can be built (one only with the Only One Palace
         // option); a house that cannot build one yet gets its one Stadium (Stefan: "we only need one
@@ -1492,6 +1493,10 @@ void QuantBot::planCityEconomyProjects(BuildPass& pass) {
         // LowValuePalaces (default off; QuantBotCityLessons.cpp): a Palace saved for where most of our
         // low-value lots are, reached by another landmark or not; it takes the project first.
         // FrontPalaces (default off; Stefan's placement): Palaces on the enemy side behind our turrets.
+        if (pending) {   // why a lesson plan waits (logged at its expiry)
+            if (cityLessons.palace.active && !cityLessons.palace.placed) ++cityLessons.palace.pendingPasses;
+            if (cityLessons.front.active && !cityLessons.front.placed) ++cityLessons.front.pendingPasses;
+        }
         if (!pending && palaceBuildable && frontPalacesEnabled()) planFrontPalace(pass);
         if (pass.economyProject == NONE_ID && !pending && palaceBuildable && lowValuePalacesEnabled()) planLowValuePalace(pass);
         if (pass.economyProject == NONE_ID && !pending && palaceBuildable
@@ -1528,13 +1533,18 @@ void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, Yard
     // reactor capacity: while the civic is missing the valve for the zones we already own is
     // pinned at 0, so saving for a Palace or a reactor first buys growth that cannot happen
     // (quantbot_growth_installments case 0). The yard goes on to those rules instead.
-    if (yardTurn.civicClaimsYard || yardTurn.urgentProtection) return;
+    auto* lessonWatch = pass.economyProject == Structure_Palace ? lessonWatchAt(pass.economyProjectSite) : nullptr;
+    if (yardTurn.civicClaimsYard || yardTurn.urgentProtection) {
+        if (lessonWatch) ++lessonWatch->preemptedPasses;
+        return;
+    }
     const Uint32 item = pass.economyProject;
     const bool palace = item == Structure_Palace || item == Structure_Stadium;
     // Beyond the core limits: only from spare cash, never saved for (the yard goes on as usual).
     if (pass.economyProjectSpareOnly && pass.money < int(currentGame->objectData.data[item][getHouse()->getHouseID()].price)
             + std::max(ForceConcentrationPolicy::kSpareCashReserve, pass.cityWorkingReserve)) return;
     if (pass.money < pass.economyProjectReserve) {
+        if (lessonWatch) ++lessonWatch->savingPasses;
         yardTurn.skipRemainingStructureLogic = true;
         yardTurn.serviceSavingHold = true;
         yardTurn.structureRule = palace ? "save_palace_district" : "save_nuclear_consolidation";
@@ -1542,6 +1552,7 @@ void QuantBot::chooseYardEconomyProject(BuildPass& pass, BuilderTurn& turn, Yard
     }
     if (!palace && findPlaceLocation(item).isInvalid()) return;
     pass.economyProjectOrdered = true;
+    if (lessonWatch) ++lessonWatch->orderedPasses;
     yardTurn.itemID = item;
     yardTurn.crimeServiceSite = palace ? pass.economyProjectSite : Coord::Invalid();
     // LowValuePalaces / FrontPalaces name their own rule: their planned site is kept to placement.
@@ -4039,6 +4050,7 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                 // to clear (traffic on its road tiles) until the plan expires (CityLessonsPolicy::kPlanExpiryMs);
                 // then the watch ends and this Palace is placed by the ordinary search.
                 noteHeld();
+                if (auto* watch = lessonWatchAt(location)) ++watch->heldPasses;
                 if (pass.emitStatsLog) tracePlacementIssue("placement_deferred", "lesson_palace_site_blocked", location);
                 location = Coord::Invalid();
                 placementIssueHandled = true;

@@ -2176,12 +2176,29 @@ private:
             Uint32 plannedCycle = 0, placedCycle = 0;
             int lvBefore = 0;
             int enemyTiles = 0, turretsAhead = 0;   // FrontPalaces only
+            // Why a plan did not stand, logged when it expires: build passes it was the economy project,
+            // passes another Palace was pending, the yard held it saving, a civic or urgent protection came
+            // first, the yard ordered it, and its finished Palace was held off a blocked site.
+            int projectPasses = 0, pendingPasses = 0, savingPasses = 0, preemptedPasses = 0, orderedPasses = 0,
+                heldPasses = 0;
         } palace, front;
-        Uint32 lastFrontPlan = 0;
+        /// Placed Palaces whose effect is not read yet: the next plan does not wait for it (Stefan placed 19
+        /// in 43 minutes; one plan at a time until the effect was read reached 8.5 by minute 72 at 86dcb77ea).
+        std::vector<PalaceWatch> palaceEffects, frontEffects;
+        /// Sites whose plan expired and when: neither switch plans within 2 tiles of one for 10 minutes.
+        std::vector<std::pair<Coord, Uint32>> expiredSites;
+        Uint32 lastFrontPlan = 0, lastLotsLog = 0;
     } cityLessons;
     bool ownPalaceAt(Coord site) const;
-    void trackPalaceWatch(CityLessonsState::PalaceWatch& watch, const char* tag, Uint32 effectDelayMs, bool riseCounts,
-                          int& placedCount);
+    /// A lesson Palace site whose plan expired lately lies within 2 tiles of \a pos.
+    bool nearExpiredLessonSite(Coord pos) const;
+    /// CITY_LOTS: every few game minutes, our R/C lots, how many are low value and their mean land
+    /// value (every QuantBot house in a city game, switch on or off, so arms compare with the control).
+    void logCityLots();
+    /// The watch whose plan is this site (LowValuePalaces or FrontPalaces), nullptr when none.
+    CityLessonsState::PalaceWatch* lessonWatchAt(Coord site);
+    void trackPalaceWatch(CityLessonsState::PalaceWatch& watch, std::vector<CityLessonsState::PalaceWatch>& effects,
+                          const char* tag, Uint32 effectDelayMs, bool riseCounts, int& placedCount);
     /// ParkDistricts (default off; docs/formations.md "Parks in the districts", QuantBotParks.cpp):
     /// a Park when one is due (ParkDistrictPolicy) and a site raises our R/C land value enough.
     void chooseYardParkDistrict(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);

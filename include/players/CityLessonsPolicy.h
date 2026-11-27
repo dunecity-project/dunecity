@@ -46,6 +46,12 @@ constexpr int kEffectDelayMs = 120000;
 constexpr int kPlanExpiryMs = 300000;
 /// The effect counts as reached when the lots rose by this much with the Palace still standing.
 constexpr int kMinRise = 10;
+/// A site whose plan expired is not planned again (within this many tiles) for this long: at 86dcb77ea
+/// the same site was planned and expired again (Metropolis 9444, Ordos at (26,59) twice).
+constexpr int kExpiredSiteMs = 600000;
+constexpr int kExpiredSiteTiles = 2;
+/// CITY_LOTS: each house's lots, low-value lots and mean land value are logged this often.
+constexpr int kLotsLogMs = 180000;
 
 /// FrontPalaces: Stefan's placement in seewhatiddid/moremaginot. His 26 Palaces stood on the enemy
 /// side of his city, 10-31 tiles from the nearest enemy building, behind his own Rocket Turret clumps,

@@ -553,10 +553,13 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLo
         const Coord o = structure->getLocation();
         bool reached = false;
         for (const Coord c : palaces) reached = reached || std::max(std::abs(c.x - o.x), std::abs(c.y - o.y)) <= reach;
-        // LowValuePalaces: the low-value lots, reached or not (Palace stamps add up).
+        // LowValuePalaces: the low-value lots, reached or not (Palace stamps add up), except those a placed
+        // lesson Palace has not lifted yet (its effect is still pending; the next plan does not wait for it).
         if (lowValueLots) {
             const auto* sim = currentGame->getCitySimulation();
             reached = !sim || !CityLessonsPolicy::lowLot(sim->getLandValueMap().worldGet(o.x, o.y));
+            for (const auto& placed : cityLessons.palaceEffects)
+                reached = reached || std::find(placed.lots.begin(), placed.lots.end(), o) != placed.lots.end();
         }
         if (allowedCentres) reached = false;   // FrontPalaces: every lot in reach (stamps add up)
         if (!reached && o.x >= 0 && o.y >= 0 && o.x < w && o.y < h) at(o.x + 1, o.y + 1) += 1;
@@ -620,7 +623,8 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLo
         // the yard re-checks it at placement after the demolition, and a site that opened a passage there was
         // refused (quantbot_city_lessons, 2477d8a29: ground_access_kept=0 on every retry).
         const bool lessonSearch = lowValueLots || allowedCentres;
-        if (overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
+        if ((lessonSearch && nearExpiredLessonSite(pos))
+            || overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
             || dangerAt(pos, size) > 0 || !preservesGroundAccess(item, pos, lessonSearch && redevelop ? &cleared : nullptr)
             || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, item).preservesConnections) continue;
         // Each demolished lot costs kPalaceClearLotCost; with PalaceDenseClearing a denser lot costs its

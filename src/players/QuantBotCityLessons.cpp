@@ -15,7 +15,10 @@
 //   LowValuePalaces   LOW_VALUE_PALACE: event=planned (a site and its low lots), placed (a Palace
 //                     stands there), effect (the same lots' mean land value 2 minutes later; met=1
 //                     when it rose by kMinRise with the Palace standing) or expired (no Palace within
-//                     5 minutes of the plan).
+//                     5 minutes of the plan; why: the passes it was saved for, pre-empted, ordered, held).
+//                     The next plan does not wait for the effect; a site that expired is not planned
+//                     again for 10 minutes.
+//   CITY_LOTS         every 3 game minutes, every QuantBot house: R/C lots, low-value lots, mean land value.
 //   FrontPalaces      FRONT_PALACE: the same events; its effect is read 5 minutes after placement and
 //                     met=1 when the Palace still stands there (Stefan's survived, the AI's did not).
 // Nothing here is saved: a loaded game plans again on its first pass.
@@ -100,15 +103,53 @@ bool QuantBot::ownPalaceAt(Coord site) const {
     return false;
 }
 
-/// One Palace watch (LowValuePalaces or FrontPalaces): placed on its site, expired, or its effect read.
-void QuantBot::trackPalaceWatch(CityLessonsState::PalaceWatch& watch, const char* tag, Uint32 effectDelayMs,
-                                bool riseCounts, int& placedCount) {
+bool QuantBot::nearExpiredLessonSite(Coord pos) const {
+    const Uint32 now = getGameCycleCount();
+    for (const auto& [site, cycle] : cityLessons.expiredSites)
+        if (now - cycle < MILLI2CYCLES(CityLessonsPolicy::kExpiredSiteMs)
+            && std::max(std::abs(site.x - pos.x), std::abs(site.y - pos.y)) <= CityLessonsPolicy::kExpiredSiteTiles) return true;
+    return false;
+}
+
+QuantBot::CityLessonsState::PalaceWatch* QuantBot::lessonWatchAt(Coord site) {
+    if (cityLessons.palace.active && cityLessons.palace.site == site) return &cityLessons.palace;
+    if (cityLessons.front.active && cityLessons.front.site == site) return &cityLessons.front;
+    return nullptr;
+}
+
+void QuantBot::logCityLots() {
+    const auto* sim = currentGame->getCitySimulation();
+    const Uint32 now = getGameCycleCount();
+    if (!sim || (cityLessons.lastLotsLog != 0 && now - cityLessons.lastLotsLog < MILLI2CYCLES(CityLessonsPolicy::kLotsLogMs)))
+        return;
+    cityLessons.lastLotsLog = now;
+    int lots = 0, low = 0;
+    long long sum = 0;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || (structure->getItemID() != Structure_ZoneResidential && structure->getItemID() != Structure_ZoneCommercial)) continue;
+        const Coord o = structure->getLocation();
+        const int lv = sim->getLandValueMap().worldGet(o.x, o.y);
+        ++lots;
+        low += int(CityLessonsPolicy::lowLot(lv));
+        sum += lv;
+    }
+    SDL_Log("CITY_LOTS: house=%d event=lots lots=%d low_lots=%d lv_now=%d palaces=%d cycle=%u", getHouse()->getHouseID(),
+            lots, low, lots ? int(sum / lots) : 0, getHouse()->getNumItems(Structure_Palace), now);
+}
+
+/// One Palace watch (LowValuePalaces or FrontPalaces): placed on its site or expired; then the effect of
+/// each placed one is read in turn while the next plan goes ahead.
+void QuantBot::trackPalaceWatch(CityLessonsState::PalaceWatch& watch, std::vector<CityLessonsState::PalaceWatch>& effects,
+                                const char* tag, Uint32 effectDelayMs, bool riseCounts, int& placedCount) {
     QuantBot& bot = *this;
     namespace L = CityLessonsPolicy;
-    if (!watch.active) return;
     const Uint32 now = bot.getGameCycleCount();
     const int houseID = bot.getHouse()->getHouseID();
-    if (!watch.placed) {
+    auto& expired = cityLessons.expiredSites;
+    expired.erase(std::remove_if(expired.begin(), expired.end(),
+        [&](const auto& e) { return now - e.second >= MILLI2CYCLES(L::kExpiredSiteMs); }), expired.end());
+    if (watch.active && !watch.placed) {
         if (ownPalaceAt(watch.site)) {
             watch.placed = true;
             watch.placedCycle = now;
@@ -119,33 +160,41 @@ void QuantBot::trackPalaceWatch(CityLessonsState::PalaceWatch& watch, const char
                     "turrets_ahead=%d wait_s=%u cycle=%u", tag, houseID, watch.site.x, watch.site.y, standing,
                     watch.lvBefore, lv, watch.enemyTiles, watch.turretsAhead,
                     (now - watch.plannedCycle) * GAMESPEED_DEFAULT / 1000, now);
+            effects.push_back(watch);
+            watch = {};
         } else if (now - watch.plannedCycle >= MILLI2CYCLES(L::kPlanExpiryMs)) {
-            SDL_Log("%s: house=%d event=expired x=%d y=%d low_lots=%d lv_before=%d cycle=%u",
-                    tag, houseID, watch.site.x, watch.site.y, int(watch.lots.size()), watch.lvBefore, now);
+            const int price = currentGame->objectData.data[Structure_Palace][houseID].price;
+            SDL_Log("%s: house=%d event=expired x=%d y=%d low_lots=%d lv_before=%d credits=%d price=%d project_passes=%d "
+                    "pending_passes=%d saving_passes=%d preempted_passes=%d ordered_passes=%d held_passes=%d cycle=%u",
+                    tag, houseID, watch.site.x, watch.site.y, int(watch.lots.size()), watch.lvBefore,
+                    bot.getHouse()->getCredits(), price, watch.projectPasses, watch.pendingPasses, watch.savingPasses,
+                    watch.preemptedPasses, watch.orderedPasses, watch.heldPasses, now);
+            expired.emplace_back(watch.site, now);
             watch = {};
         }
-        return;
     }
-    if (now - watch.placedCycle < MILLI2CYCLES(effectDelayMs)) return;
-    int standing = 0;
-    const int lv = bot.lowValueLotsMean(watch.lots, &standing);
-    const bool stands = ownPalaceAt(watch.site);
-    // met=1: the Palace still stands and (LowValuePalaces) its lots rose by kMinRise or more.
-    const bool met = stands && (!riseCounts || lv - watch.lvBefore >= L::kMinRise);
-    SDL_Log("%s: house=%d event=effect met=%d x=%d y=%d low_lots=%d lots_standing=%d lv_before=%d lv_after=%d "
-            "rise=%d palace_stands=%d cycle=%u", tag, houseID, int(met), watch.site.x, watch.site.y,
-            int(watch.lots.size()), standing, watch.lvBefore, lv, lv - watch.lvBefore, int(stands), now);
-    watch = {};
+    for (auto it = effects.begin(); it != effects.end();) {
+        if (now - it->placedCycle < MILLI2CYCLES(effectDelayMs)) { ++it; continue; }
+        int standing = 0;
+        const int lv = bot.lowValueLotsMean(it->lots, &standing);
+        const bool stands = ownPalaceAt(it->site);
+        // met=1: the Palace still stands and (LowValuePalaces) its lots rose by kMinRise or more.
+        const bool met = stands && (!riseCounts || lv - it->lvBefore >= L::kMinRise);
+        SDL_Log("%s: house=%d event=effect met=%d x=%d y=%d low_lots=%d lots_standing=%d lv_before=%d lv_after=%d "
+                "rise=%d palace_stands=%d cycle=%u", tag, houseID, int(met), it->site.x, it->site.y,
+                int(it->lots.size()), standing, it->lvBefore, lv, lv - it->lvBefore, int(stands), now);
+        it = effects.erase(it);
+    }
 }
 
 void QuantBot::trackLowValuePalaces() {
-    trackPalaceWatch(cityLessons.palace, "LOW_VALUE_PALACE", CityLessonsPolicy::kEffectDelayMs, true,
-                     cityLessons.palacesPlaced);
+    trackPalaceWatch(cityLessons.palace, cityLessons.palaceEffects, "LOW_VALUE_PALACE", CityLessonsPolicy::kEffectDelayMs,
+                     true, cityLessons.palacesPlaced);
 }
 
 void QuantBot::trackFrontPalaces() {
-    trackPalaceWatch(cityLessons.front, "FRONT_PALACE", CityLessonsPolicy::kFrontPalaceSurvivalMs, false,
-                     cityLessons.frontPlaced);
+    trackPalaceWatch(cityLessons.front, cityLessons.frontEffects, "FRONT_PALACE", CityLessonsPolicy::kFrontPalaceSurvivalMs,
+                     false, cityLessons.frontPlaced);
 }
 
 bool QuantBot::planFrontPalace(BuildPass& pass) {
@@ -154,6 +203,7 @@ bool QuantBot::planFrontPalace(BuildPass& pass) {
     const int price = currentGame->objectData.data[Structure_Palace][getHouse()->getHouseID()].price;
     if (watch.active) {
         if (watch.placed) return false;
+        ++watch.projectPasses;
         pass.economyProject = Structure_Palace;
         pass.economyProjectSite = watch.site;
         pass.economyProjectSpareOnly = false;
@@ -181,7 +231,14 @@ bool QuantBot::planFrontPalace(BuildPass& pass) {
         for (int y = o.y; y < o.y + s.y; ++y) for (int x = o.x; x < o.x + s.x; ++x)
             if (x >= 0 && y >= 0 && x < w && y < h) seed[size_t(y) * w + x] = 1;
     }
-    if (turrets.size() < size_t(L::kFrontPalaceTurretsAhead)) return false;
+    // Why no front site this time, once per interval (rs192 at 86dcb77ea: planned in 11 of 24 house-games).
+    auto noSite = [&](const char* reason, int allowedTiles) {
+        cityLessons.lastFrontPlan = now;
+        SDL_Log("FRONT_PALACE: house=%d event=no_site reason=%s turrets=%d allowed_tiles=%d credits=%d cycle=%u",
+                    getHouse()->getHouseID(), reason, int(turrets.size()), allowedTiles, getHouse()->getCredits(), now);
+        return false;
+    };
+    if (turrets.size() < size_t(L::kFrontPalaceTurretsAhead)) return noSite("turrets", 0);
     const auto enemy = TurretFrontPolicy::chebyshevDistance(seed, w, h, L::kFrontPalaceMaxEnemyTiles + 1);
     auto enemyAt = [&](Coord c) { return int(enemy[size_t(c.y) * w + c.x]); };
     std::vector<int> turretEnemy;
@@ -198,10 +255,10 @@ bool QuantBot::planFrontPalace(BuildPass& pass) {
                 && turretEnemy[i] < d;
         if (L::frontPalaceCentre(d, ahead)) { allowed[size_t(y) * w + x] = 1; ++allowedTiles; }
     }
-    cityLessons.lastFrontPlan = now;
-    if (allowedTiles == 0) return false;
+    if (allowedTiles == 0) return noSite("band", 0);
     const Coord site = findPalaceDistrictSite(Structure_Palace, L::kFrontPalaceMinLots, false, &allowed);
-    if (site.isInvalid()) return false;
+    if (site.isInvalid()) return noSite("site", allowedTiles);
+    cityLessons.lastFrontPlan = now;
     const Coord centre = site + Coord(1, 1);
     std::vector<Coord> lots;
     for (const auto* structure : getStructureList())
@@ -236,10 +293,11 @@ bool QuantBot::planLowValuePalace(BuildPass& pass) {
     namespace L = CityLessonsPolicy;
     auto& watch = cityLessons.palace;
     const int price = currentGame->objectData.data[Structure_Palace][getHouse()->getHouseID()].price;
-    // One site at a time, until its effect is read: a planned site stays the project (saved for)
-    // until its Palace stands or the plan expires.
+    // One site at a time: a planned site stays the project (saved for) until its Palace stands or the
+    // plan expires; its effect is read later (palaceEffects) while the next plan goes ahead.
     if (watch.active) {
         if (watch.placed) return false;
+        ++watch.projectPasses;
         pass.economyProject = Structure_Palace;
         pass.economyProjectSite = watch.site;
         pass.economyProjectSpareOnly = false;
@@ -260,7 +318,10 @@ bool QuantBot::planLowValuePalace(BuildPass& pass) {
         if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
             || (structure->getItemID() != Structure_ZoneResidential && structure->getItemID() != Structure_ZoneCommercial)) continue;
         const Coord o = structure->getLocation();
-        if (std::max(std::abs(o.x - centre.x), std::abs(o.y - centre.y)) <= ForceConcentrationPolicy::kPalaceReachTiles
+        bool pendingLift = false;   // a placed lesson Palace whose effect is not read yet covers it
+        for (const auto& placed : cityLessons.palaceEffects)
+            pendingLift = pendingLift || std::find(placed.lots.begin(), placed.lots.end(), o) != placed.lots.end();
+        if (!pendingLift && std::max(std::abs(o.x - centre.x), std::abs(o.y - centre.y)) <= ForceConcentrationPolicy::kPalaceReachTiles
             && L::lowLot(sim->getLandValueMap().worldGet(o.x, o.y))) lots.push_back(o);
     }
     if (int(lots.size()) < L::kMinLowLots) return false;

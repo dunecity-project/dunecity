@@ -98,7 +98,8 @@ void runCityLessonsProbe(Game& game) {
     // 3-5 are read as the game runs: the first plan, its placement and its effect.
     auto* sim = game.getCitySimulation();
     struct Seen { bool planned = false, placed = false, effect = false; Coord site = Coord::Invalid();
-                  std::vector<Coord> lots; int lvBefore = 0, lvAfter = 0; Uint32 placedCycle = 0; } seen;
+                  std::vector<Coord> lots; int lvBefore = 0, lvAfter = 0; Uint32 placedCycle = 0;
+                  bool nextBeforeEffect = false; } seen;
     struct FrontSeen { bool planned = false, placed = false, survived = false; Coord site = Coord::Invalid();
                        Uint32 placedCycle = 0; } front;
     // The probe's own reading of a front site: nearest enemy building and own turrets ahead of it.
@@ -144,7 +145,11 @@ void runCityLessonsProbe(Game& game) {
                     watch.site.x, watch.site.y, int(watch.lots.size()), low, watch.lvBefore, game.getGameCycleCount());
             require(low >= L::kMinLowLots, "The planned Palace site has fewer low-value lots than the minimum");
         }
-        if (seen.planned && !seen.placed && watch.active && watch.placed && watch.site == seen.site) {
+        // The bot reports a placement by moving the watch to palaceEffects (the next plan goes ahead at once).
+        auto reportedPlaced = [](const auto& effects, Coord site) {
+            return std::any_of(effects.begin(), effects.end(), [&](const auto& e) { return e.site == site; });
+        };
+        if (seen.planned && !seen.placed && reportedPlaced(on->cityLessons.palaceEffects, seen.site)) {
             seen.placed = true;
             seen.placedCycle = game.getGameCycleCount();
             bool stands = false;
@@ -157,9 +162,20 @@ void runCityLessonsProbe(Game& game) {
             seen.lvAfter = on->lowValueLotsMean(seen.lots, nullptr);
             SDL_Log("CITY_LESSONS_PROBE: effect lv_before=%d lv_after=%d", seen.lvBefore, seen.lvAfter);
         }
-        if (seen.effect && on->cityLessons.palace.active && !on->cityLessons.palace.placed)
-            // 5. A later plan is not the same lots again.
+        if (seen.placed && on->cityLessons.palace.active && !on->cityLessons.palace.placed) {
+            // 5. A later plan is not the same site, and while the first effect is pending not the same lots.
             require(on->cityLessons.palace.site != seen.site, "The bot planned the same Palace site again");
+            if (!seen.effect) {
+                if (!seen.nextBeforeEffect) {
+                    seen.nextBeforeEffect = true;
+                    SDL_Log("CITY_LESSONS_PROBE: next plan before the first effect site=(%d,%d) cycle=%u",
+                            on->cityLessons.palace.site.x, on->cityLessons.palace.site.y, game.getGameCycleCount());
+                }
+                for (const Coord lot : on->cityLessons.palace.lots)
+                    require(std::find(seen.lots.begin(), seen.lots.end(), lot) == seen.lots.end(),
+                            "A plan made while the first Palace's effect was pending reuses its lots");
+            }
+        }
         const auto& fw = frontBot->cityLessons.front;
         if (!front.planned && fw.active) {
             front.planned = true;
@@ -173,7 +189,7 @@ void runCityLessonsProbe(Game& game) {
             require(ahead >= L::kFrontPalaceTurretsAhead, "The front Palace site has fewer than 3 own turrets ahead of it");
             require(int(fw.lots.size()) >= L::kFrontPalaceMinLots, "The front Palace site reaches too few own lots");
         }
-        if (front.planned && !front.placed && fw.active && fw.placed && fw.site == front.site) {
+        if (front.planned && !front.placed && reportedPlaced(frontBot->cityLessons.frontEffects, front.site)) {
             front.placed = true;
             front.placedCycle = game.getGameCycleCount();
             require(frontBot->ownPalaceAt(front.site), "The front Palace the bot reports placed is not on its site");
