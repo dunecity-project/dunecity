@@ -1,6 +1,7 @@
 #include <catch2/catch_all.hpp>
 #include <GameInitSettings.h>
 #include <FileClasses/FileManager.h>
+#include <FileClasses/INIFile.h>
 #include <MapSeed.h>
 #include <globals.h>
 #include <SpiceIncome.h>
