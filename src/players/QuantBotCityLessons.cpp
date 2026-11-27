@@ -68,8 +68,19 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
     auto& lessons = cityLessons;
     const auto* sim = currentGame->getCitySimulation();
     const int houseID = getHouse()->getHouseID();
+    int livingHouses = 0;
+    for (int h = 0; h < NUM_HOUSES; ++h)
+        if (const auto* other = currentGame->getHouse(h); other && other->isAlive()) ++livingHouses;
+    const bool lowSpice = L::lowSpiceMap(lastCalculatedSpice, livingHouses);
     if (economyFirstEnabled() && pass.citySimEnabled && sim && gameMode == GameMode::Custom
-        && !lessons.economyFirstStoodDown) {
+        && !lessons.economyFirstStoodDown && !lowSpice && !lessons.economyFirstRichLogged) {
+        // A spice-rich map: Stefan asked for low / no spice maps only.
+        lessons.economyFirstRichLogged = true;
+        SDL_Log("ECONOMY_FIRST: house=%d event=spice_rich spice=%d houses=%d cycle=%u", houseID, lastCalculatedSpice,
+                livingHouses, getGameCycleCount());
+    }
+    if (economyFirstEnabled() && pass.citySimEnabled && sim && gameMode == GameMode::Custom
+        && !lessons.economyFirstStoodDown && lowSpice) {
         const int population = sim->getHouseState(houseID).getTotalPop();
         const int minute = int(getGameCycleCount() / MILLI2CYCLES(60000));
         const auto* house = getHouse();
@@ -136,7 +147,7 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
     SDL_Log("ECONOMY_STATE: house=%d credits=%d yards=%d mcvs=%d yard_target=%d capacity=%d refinery_bays=%d "
             "yard_refineries=%d zones_r=%d zones_c=%d zones_i=%d nuclear=%d windtraps=%d palaces=%d police=%d "
             "rocket_turrets=%d heavy_factories=%d population=%d tax_per_min=%d power=%d/%d unit_built=%d "
-            "structure_built=%d hold=%d cycle=%u", houseID, house->getCredits(),
+            "structure_built=%d hold=%d spice=%d cycle=%u", houseID, house->getCredits(),
             house->getNumItems(Structure_ConstructionYard), house->getNumItems(Unit_MCV), pass.cityYardTarget,
             pass.cityConstructionCapacity, getAIRefineryBays(), pass.cityYardRefineries,
             house->getNumItems(Structure_ZoneResidential), house->getNumItems(Structure_ZoneCommercial),
@@ -145,7 +156,7 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
             house->getNumItems(Structure_PoliceStation), house->getNumItems(Structure_RocketTurret),
             house->getNumItems(Structure_HeavyFactory), state.getTotalPop(), taxPerMinute,
             house->getProducedPower(), house->getPowerRequirement(), house->getUnitBuiltValue(),
-            house->getStructureBuiltValue(), pass.economyFirstHold, now);
+            house->getStructureBuiltValue(), pass.economyFirstHold, lastCalculatedSpice, now);
 }
 
 bool QuantBot::lowValuePalacesEnabled() const {

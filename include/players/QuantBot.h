@@ -2199,7 +2199,7 @@ private:
         std::vector<std::pair<Coord, Uint32>> expiredSites;
         Uint32 lastFrontPlan = 0, lastLotsLog = 0;
         Uint32 lastEconomyLog = 0;
-        bool economyFirstStoodDown = false, economyFirstFootprintLogged = false;
+        bool economyFirstStoodDown = false, economyFirstFootprintLogged = false, economyFirstRichLogged = false;
         int economyFirstHoldPasses = 0, economyFirstThreatPasses = 0;
         int economyFirstStartZones = -1;   ///< zones at the first pass (the map's prebuilt city)
     } cityLessons;

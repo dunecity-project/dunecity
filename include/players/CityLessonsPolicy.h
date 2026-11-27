@@ -98,6 +98,13 @@ constexpr int kEconomyFirstHold = 10000;
 constexpr int kEconomyFirstThreatTiles = 12;
 /// The switch stands down once the house's city has his minute-31 population.
 constexpr int kEconomyFirstPopulation = 6734;
+/// Stefan's scope (2026-11-28: "the ai needs to escape the poverty trap on low / no spice maps"): the switch
+/// acts only while the spice left on the map is below this much per living house (one starting purse of
+/// his game; his map had none). On a spice-rich map it does nothing.
+constexpr int kEconomyFirstSpicePerHouse = 20000;
+inline bool lowSpiceMap(int mapSpice, int livingHouses) {
+    return mapSpice < kEconomyFirstSpicePerHouse * std::max(1, livingHouses);
+}
 /// The proximate effect, read at minute 10: half the zones he added by then (76 ordered: 33 R, 8 C, 35 I;
 /// counted from the first pass) and his four yards.
 constexpr int kEconomyFirstCheckMinute = 10, kEconomyFirstZones = 38, kEconomyFirstCheckYards = 4;
