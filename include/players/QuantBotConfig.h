@@ -326,6 +326,10 @@ struct QuantBotConfig {
         bool advancingTurrets;                 ///< (b) A turret belt at the enemy-facing edge, moved forward behind the army.
         bool turretCreep;                      ///< (c) Turrets within range of enemy buildings where at most one enemy turret reaches.
         bool rearTurretRetire;                 ///< (d) Turrets far from every enemy are sold or demolished, cutting police upkeep.
+        /// Lessons from Stefan's Metropolis save seewhatidid (default off until measured; CityLessonsPolicy.h).
+        bool cityLauncherArmy;                 ///< City games: no Ornithopter share, Launchers at least cityLauncherArmyBps of the vehicle mix.
+        int cityLauncherArmyBps;               ///< That floor, 3000-9500 (default 7000). Hashed only when not the default.
+        bool lowValuePalaces;                  ///< A Palace saved for where most own R/C lots of land value <= 80 are, reached or not.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

@@ -2140,7 +2140,34 @@ private:
     /// PalaceDistricts: the site for \a item (Palace or Stadium) with the most R+C lots within
     /// kPalaceReachTiles that no Palace or Stadium reaches yet (at least kPalaceDistrictMinLots), its
     /// footprint free or only own lots of low density, fewest such lots first; invalid when none.
-    Coord findPalaceDistrictSite(Uint32 item, int minLots);
+    /// With lowValueLots (LowValuePalaces) the lots counted are those of land value at most
+    /// CityLessonsPolicy::kLowLandValue, whether or not a landmark reaches them, and no room is counted.
+    Coord findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLots = false);
+    /// Lessons from Stefan's Metropolis save seewhatidid (default off; QuantBotCityLessons.cpp,
+    /// CityLessonsPolicy.h). Each logs what it did: LAUNCHER_ARMY and LOW_VALUE_PALACE lines.
+    bool cityLauncherArmyEnabled() const;
+    bool lowValuePalacesEnabled() const;
+    /// CityLauncherArmy: this pass's vehicle mix without Ornithopters and Launchers floored.
+    void applyCityLauncherArmy(BuildPass& pass);
+    /// LowValuePalaces: plan (or keep planning) a Palace on the site with most low-value lots in
+    /// reach as this pass's economy project; true when it set the project.
+    bool planLowValuePalace(BuildPass& pass);
+    /// LowValuePalaces: the planned Palace placed, expired, or its effect read two minutes later.
+    void trackLowValuePalaces();
+    /// Mean land value of those of \a lots still standing as our zones (standing receives how many).
+    int lowValueLotsMean(const std::vector<Coord>& lots, int* standing) const;
+    /// Not saved: a loaded game plans again on its first pass.
+    struct CityLessonsState {
+        int launcherArmyPasses = 0;
+        int palacesPlanned = 0, palacesPlaced = 0;
+        struct PalaceWatch {
+            bool active = false, placed = false;
+            Coord site = Coord::Invalid();
+            std::vector<Coord> lots;
+            Uint32 plannedCycle = 0, placedCycle = 0;
+            int lvBefore = 0;
+        } palace;
+    } cityLessons;
     /// ParkDistricts (default off; docs/formations.md "Parks in the districts", QuantBotParks.cpp):
     /// a Park when one is due (ParkDistrictPolicy) and a site raises our R/C land value enough.
     void chooseYardParkDistrict(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);

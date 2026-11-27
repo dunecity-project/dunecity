@@ -166,6 +166,7 @@ target_sources(dunelegacy_tests
         ParkTestCase.cpp
         CityAircraftPolicyTestCase.cpp
         TurretFrontPolicyTestCase.cpp
+        CityLessonsPolicyTestCase.cpp
         RendererSizeTestCase.cpp
         HotkeysTestCase.cpp
         CursorAppearanceTestCase.cpp
@@ -1045,6 +1046,16 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/singleplayer/5P - 128x128 - All against Atreides.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/wind-trap-retirement-probe)
         set_tests_properties(quantbot_wind_trap_retirement PROPERTIES TIMEOUT 180 PROCESSORS 2)
+        # Lessons from Stefan's Metropolis save seewhatidid (include/players/CityLessonsPolicy.h):
+        # CityLauncherArmy and LowValuePalaces act when on, never when off, and reach their effect
+        # (Launchers half the vehicle value built, no Ornithopter; the Palace on its planned site and
+        # its low lots' land value up 10 or more). tests/ai/city-lessons-probe.inc.
+        dunecity_add_test(headless nightly NAME quantbot_city_lessons COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --city-lessons-probe --repeatable
+            --level 9 --mod dunecity --local-spectator --partner-difficulty brutal --enemy-difficulty brutal
+            --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-lessons-probe)
+        set_tests_properties(quantbot_city_lessons PROPERTIES TIMEOUT 1500 PROCESSORS 2)
         # MANDATORY for every AI/unit-behaviour change (AGENTS.md, CLAUDE.md): Stefan's
         # "All against Atreides" setup played to the end - vanilla, Atreides QuantBot Brutal
         # (local spectator) against four AI Player (hard) houses, his Game Options (unit and

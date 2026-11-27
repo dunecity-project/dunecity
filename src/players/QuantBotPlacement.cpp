@@ -18,6 +18,7 @@
 // QuantBot structure placement: city lots, reserved and recently lost footprints, redevelopment,
 // turrets, batteries and battery clearance.
 
+#include <players/CityLessonsPolicy.h>
 #include "QuantBotInternal.h"
 #include <players/RocketTurretPolicy.h>
 
@@ -529,7 +530,7 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
     return range && !zones.empty() && zones.size() <= 4;
 }
 
-Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
+Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLots) {
     AITelemetry::PerformanceScope perfScope("ai.findPalaceDistrictSite", getGameCycleCount(), getHouse()->getHouseID());
     namespace Force = ForceConcentrationPolicy;
     if (!currentGame->isCitySimEnabled()) return Coord::Invalid();
@@ -551,6 +552,11 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
         const Coord o = structure->getLocation();
         bool reached = false;
         for (const Coord c : palaces) reached = reached || std::max(std::abs(c.x - o.x), std::abs(c.y - o.y)) <= reach;
+        // LowValuePalaces: the low-value lots, reached or not (Palace stamps add up).
+        if (lowValueLots) {
+            const auto* sim = currentGame->getCitySimulation();
+            reached = !sim || !CityLessonsPolicy::lowLot(sim->getLandValueMap().worldGet(o.x, o.y));
+        }
         if (!reached && o.x >= 0 && o.y >= 0 && o.x < w && o.y < h) at(o.x + 1, o.y + 1) += 1;
     }
     for (int y = 1; y <= h; ++y) for (int x = 1; x <= w; ++x) at(x, y) += at(x - 1, y) + at(x, y - 1) - at(x - 1, y - 1);
@@ -563,7 +569,7 @@ Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots) {
     auto lotsAround = [&](int cx, int cy) { return window(sum, cx, cy, reach); };
     // LandmarkAnchoring: free buildable tiles inside build range and outside every landmark's reach
     // are room for the district to grow into, a lot per kLandmarkRoomTilesPerLot tiles.
-    const bool anchoring = botConfig().force.landmarkAnchoring;
+    const bool anchoring = botConfig().force.landmarkAnchoring && !lowValueLots;
     std::vector<int> room;
     if (anchoring) {
         auto prefix = [&](std::vector<int>& grid) {

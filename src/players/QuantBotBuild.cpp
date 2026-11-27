@@ -3076,6 +3076,10 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     if (botConfig().force.vanillaArmyCounters && QuantBotArmyCounterPolicy::active(vanillaFfaTuningGame(),
             currentGame->getGameInitSettings().getInitialSpiceTilePermille()) && !armyCountersMapExcluded())
         pass.unitMix = vanillaArmyCounterMix(pass, pass.unitMix);
+    // CityLauncherArmy (default off; Stefan's Metropolis save seewhatidid, CityLessonsPolicy.h): in a
+    // city game, while a factory can build Launchers, no Ornithopter share and Launchers floored.
+    if (pass.citySimEnabled && available[2] && launcherProductionAvailable && cityLauncherArmyEnabled())
+        applyCityLauncherArmy(pass);
     // Damage-based learning does not value air deterrence, so protect a minimum
     // mobile anti-air share while a visible hostile wing is active.
     // The floor only exists while hostile aircraft are genuinely visible and

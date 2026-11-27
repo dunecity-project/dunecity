@@ -18,6 +18,8 @@
 #include "starport-economy-probe.inc"
 #include "city-placement-probe.inc"
 #include "land-value-audit.inc"
+#include "save-house-audit.inc"
+#include "city-lessons-probe.inc"
 #include "controls-probe.inc"
 #include "stats-ui-probe.inc"
 #include "sourceforge-regressions-probe.inc"
@@ -484,6 +486,10 @@ int runCampaignBalanceProbe() {
         runForceConcentrationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (std::getenv("BALANCE_CITY_LESSONS_PROBE")) {
+        runCityLessonsProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_WIND_TRAP_PROBE")) {
         runWindTrapRetirementProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
@@ -587,6 +593,11 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_FACTORY_CONTINUATION")) {
         runFactoryContinuation(*game, minutes);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_SAVE_HOUSE_AUDIT")) {
+        SaveHouseAudit::run(*game);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }
