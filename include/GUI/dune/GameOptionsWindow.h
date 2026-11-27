@@ -120,6 +120,7 @@ private:
     Label researchPaceLabel;
     DropDownBox researchPaceDropDownBox;
     Checkbox trooperAntiAirCheckbox;
+    HBox alliedHBox;                                ///< Tornie family: Allied control and Allied construction on one row
     Checkbox alliedControlCheckbox;
     Checkbox alliedBuildingCheckbox;
     Checkbox easyModeCheckbox;

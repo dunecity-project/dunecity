@@ -1,3 +1,66 @@
+## 2026-11-27 - Rocket Turrets at the front: four QuantBot switches measured, all stay OFF; the upkeep-inclusive turret return
+
+Stefan, 2026-11-27: "as you can see rocket turrets have an amazing return. houses should try use them offensively
+and also try increase the amount of them on front lines under attack, run a subagent to test out different
+approaches to a maginot line which moves forward. keep in mind though that the listed return of 7.4x for rocket
+turrets is slightly misleading given the ongoing cost in the budget for them (15% of police)". Commits
+`5f258d385`, `faf6ab1e0` (build fix), `fc0aa393d`, `853d0c9f9`, `103437ac3`, `d68ca645e` (switches, ledger,
+report); `cafa5968e` and `d754b2dc1` (`vanilla-match.py` plays 3waysplit as a city game: Neutral is a house,
+`--map-mod dunecity`). Evidence: `~/Documents/projects/outputs/turret-front-20261127/` (`report.md` rs192,
+`report-3waysplit.md`).
+
+- **The upkeep.** A Rocket Turret costs 15 credits a city year in the police budget (`getPoliceAnnualCost`; a
+  Police Station is 100), scaled by police funding and paid every cycle. That is 7.5 credits a game minute with
+  Slow City Year (the default), 15 without. A turret standing 33 minutes has paid its price again. The end-of-game
+  return (damage value / price x built) ignores both the upkeep and the turrets the map starts with
+  (3waysplit: Harkonnen 336, Sardaukar 610, Neutral 711).
+  - Stefan's 1.0.880 3waysplit game (4h39m, turrets could still hit buildings): Sardaukar (winner) listed 7.4x,
+    4.3x counting map turrets, **0.94x with upkeep**; Harkonnen 15.2x / 8.8x / 2.1x; Neutral 18.9x / 8.7x / 2.1x.
+    Upkeep was 76-78% of every house's turret cost; the winner ended with 1,099 turrets, about 8,200 credits a
+    minute.
+  - Today's default (turrets fire on units only), 3waysplit city games, 150 min, Brutal, control houses (144
+    house-games): listed 18.1x, 5.2x counting map turrets, **1.26x with upkeep**; upkeep 76% of the cost
+    (Harkonnen 2.16x, Sardaukar 1.35x, Neutral 0.88x). Not a controlled comparison with Stefan's game (other
+    version, shorter games), and the units-only rule is the implemented default, not a measured choice.
+- **Switches** (`[Force Concentration]`, `QuantBotTurretFront.cpp`, `TurretFrontPolicy.h`, play styles
+  `front-turrets`, `advancing-turrets`, `turret-creep`, `rear-turret-retire`, `moving-line` = advancing +
+  retire, `turret-front-all`; env overrides `DUNECITY_TEST_*` for experiments). All default OFF.
+  - (a) `FrontTurrets`: an own building cluster with visible enemy ground units on it gets Rocket Turrets until
+    local cover matches the attackers' value (2 + 1 per 400 credits, at most 10).
+  - (b) `AdvancingTurrets`: while the army's lead stands 4+ tiles ahead of the base's enemy-facing edge, a belt
+    of 6 turrets is kept at that edge and extended toward the enemy, 3 tiles behind the army, never within 10
+    tiles of an enemy building.
+  - (c) `TurretCreep`: turrets within range of enemy buildings' surroundings where at most one enemy turret
+    reaches (12 at most). With turrets firing on units only, they cover the army's advance and shoot the
+    defenders, not the buildings.
+  - (d) `RearTurretRetire`: every 2 minutes up to 4 turrets at least 28 tiles from every enemy building and 16
+    tiles behind the house's own front edge, with no enemy unit within 16, are sold (demolished where selling
+    is off), keeping the house's coverage need, at least 12, and air cover by Airports and Palaces.
+  - `TURRET_LEDGER` (every city house, every 2 minutes: turrets, police funding, upkeep, credits, population),
+    `TURRET_FRONT` and `TURRET_RETIRE` lines feed `turrets.csv`; `tests/ai/turret-front-report.py` makes the
+    per-arm table. perf_regression passed at `d68ca645e` with the defaults and with all four switches on.
+- **Measured** (one switch house against two default houses, labels rotated, `match_score.py` placement):
+
+  | Arm | rs192 3P (36 or 18 games) | 3waysplit city, 150 min (12 games) | Return with upkeep (arm / control, 3waysplit) | Note |
+  |---|---|---|---|---|
+  | front-turrets | +0.000 [-0.375, +0.417] | +0.104 [+0.000, +0.260] | 1.37x incl. map turrets / 1.26x | 397 orders a house-game on 3waysplit; credits up |
+  | advancing-turrets | -0.167 [-0.542, +0.167] | +0.000 (never fired) | = control | the army never stood 4 tiles ahead of the edge on 3waysplit |
+  | turret-creep | never fired | +0.000 [+0.000, +0.000] | 1.76x (built-only basis) | rs192 bases are 29-120 tiles apart |
+  | rear-turret-retire | never fired alone | -0.125 [-0.375, +0.000] | 1.61x (built-only basis) | 151 retired a house-game on 3waysplit, all demolished |
+  | moving-line | -0.125 [-0.500, +0.250] | -0.125 [-0.375, +0.000] | 1.61x (built-only basis) | on 3waysplit only the retire part fired |
+  | turret-front-all | -0.125 [-0.458, +0.250] | **+0.427 [+0.104, +0.802]** | 1.42x / 1.26x | see below |
+
+  Time-outs: 0% on rs192 (games end by minute 59); 92-100% on 3waysplit, 75% with all four on.
+- **Decision: all four stay OFF.** No single switch beats the control on either map. All four together beat it on
+  3waysplit, but only through the four games where Neutral (the strongest start) had them and eliminated both
+  others; with Harkonnen or Sardaukar holding them the games timed out. On rs192 the same arm is level and halves
+  the house's population (1,040 against 2,094) and credits. Pooled over both maps: +0.013 [-0.286, +0.326].
+  Fortress and `/weak` were not run. A confirmation would need more 3waysplit seeds with the arm on Harkonnen and
+  Sardaukar, plus Fortress and `/weak`.
+- **Upkeep effect of the switches:** front turrets and all-on lower upkeep's share of turret cost (76% to 63-69%)
+  because the turrets they build fight; rear retirement removes about 150 map turrets a house-game but did not
+  help placement.
+
 ## 2026-11-27 - Turrets fire on units only; Game Rules option "Turrets Can Fire On Buildings" (default off, protocol 147)
 
 Stefan, 2026-11-27: "rocket turrets cannot fire on enemy buildings - this did not happenin the original - only on
@@ -12,7 +75,9 @@ that adds this entry.
   game's turret script searched units alone, for both turret types. This is the implemented default, not a
   measured choice.
 - **Option `Turrets Can Fire On Buildings`**, off by default, a checkbox in Game Rules (right column, under
-  Rocket-Turrets Need Power) and INI key `Turrets Can Fire On Buildings`. On, turrets also fire on buildings, as
+  Rocket-Turrets Need Power; in the Tornie-family layout Allied control and Allied construction share a row and
+  Building sales moves to the left column, so both columns keep 14 rows in the 430px frame) and INI key
+  `Turrets Can Fire On Buildings`. On, turrets also fire on buildings, as
   up to protocol 146. The earlier key `Turrets Target Units Only` (its inverse) is still read when the new key
   is absent (`applyGameOptionsFromConfig`, `main.cpp`, `ModManager`), so older INI files and mods keep working.
 - **Wire and hash:** bit 5 of the MOD20 byte, set only when the option is on. That is the same bit, with the same

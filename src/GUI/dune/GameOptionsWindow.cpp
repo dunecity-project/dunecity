@@ -199,15 +199,23 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     if(ModManager::instance().isTornieFamilyContentActive()) {
+        // The two allied rules share a row and Building sales sits in this column, so both columns
+        // keep 14 rows inside the crest-safe 430px frame with Turrets Can Fire On Buildings added.
         alliedControlCheckbox.setText(_("Allied control"));
         alliedControlCheckbox.setTooltipText(_("Allies may command each other's units and buildings. Ownership and credits remain separate."));
         alliedControlCheckbox.setChecked(gameOptions.alliedControl);
-        vboxLeft.addWidget(&alliedControlCheckbox);
-        vboxLeft.addWidget(VSpacer::create(ruleGap));
+        alliedHBox.addWidget(&alliedControlCheckbox);
+        alliedHBox.addWidget(HSpacer::create(6));
         alliedBuildingCheckbox.setText(_("Allied construction"));
         alliedBuildingCheckbox.setTooltipText(_("Extend construction range from allied land without sharing ownership or credits."));
         alliedBuildingCheckbox.setChecked(gameOptions.alliedBuilding);
-        vboxLeft.addWidget(&alliedBuildingCheckbox);
+        alliedHBox.addWidget(&alliedBuildingCheckbox);
+        vboxLeft.addWidget(&alliedHBox);
+        vboxLeft.addWidget(VSpacer::create(ruleGap));
+        sellingBuildingsCheckbox.setText(_("Building sales"));
+        sellingBuildingsCheckbox.setTooltipText(_("Sell buildings for 50% of their purchase and upgrade costs; Easy campaign allies receive 75%."));
+        sellingBuildingsCheckbox.setChecked(gameOptions.sellingBuildings);
+        vboxLeft.addWidget(&sellingBuildingsCheckbox);
         vboxLeft.addWidget(VSpacer::create(ruleGap));
     }
 
@@ -280,11 +288,6 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
     if(ModManager::instance().isTornieFamilyContentActive()) {
-        sellingBuildingsCheckbox.setText(_("Building sales"));
-        sellingBuildingsCheckbox.setTooltipText(_("Sell buildings for 50% of their purchase and upgrade costs; Easy campaign allies receive 75%."));
-        sellingBuildingsCheckbox.setChecked(gameOptions.sellingBuildings);
-        vboxRight.addWidget(&sellingBuildingsCheckbox);
-        vboxRight.addWidget(VSpacer::create(ruleGap));
         easyModeCheckbox.setText(_("Easy campaign"));
         easyModeCheckbox.setTooltipText(_("Start at mission 2, reduce purchase prices by 25 credits and grant 500 extra starting credits in the first mission. Co-op allies share these benefits."));
         easyModeCheckbox.setChecked(gameOptions.easyMode);
