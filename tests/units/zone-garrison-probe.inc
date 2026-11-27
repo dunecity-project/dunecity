@@ -304,7 +304,9 @@ void checkDestroyed() {
     const Uint32 zoneID = z->getObjectID();
     std::vector<Uint32> ids;
     for(auto* s : soldiers) ids.push_back(s->getObjectID());
-    z->handleDamage(100000, NONE_ID, f.enemy);
+    // The building's own damage path, without the garrison's cover split: a hit this large would
+    // also kill the soldier at the front (cover, not immunity), and this case is about coming out.
+    z->StructureBase::handleDamage(100000, NONE_ID, f.enemy);
     require(f.runUntil(5, [&] { return !f.alive(zoneID); }), "destroyed: the zone did not go");
     for(const Uint32 id : ids) {
         auto* s = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(id));
