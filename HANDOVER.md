@@ -1,3 +1,65 @@
+## 2026-11-27 - Zone Garrisons follow-up: 30-credit Soldier, garrisons leave below 60%, captured zones return, capture AI switches (protocol 148, save 9903)
+
+Stefan, 2026-11-27: "ok make 2 changes. 1 make infantry cost 30 credits. next make troopers and infantry
+evacuate buildings with an evacuate when it gets below X% health (test different). if the building explodes
+they are ejectedb ut are damaged. if units evacuate the building returns to its original owners control.
+also try behaviour where the ai tries capuring undefended buildings or mass spamming infantry to try capture
+buildings". Commits `780ac0988` (rules, switches), `893c5acc0` (player-path probe; a zone at 0 health leaves
+its soldiers to destroy()), `02d76ddb5` (a soldier beside its zone enters on any cycle), `16fb9f8ac` (60%),
+`d50947a36` (docs), `c46f29fad` (a soldier keeps its order when a comrade takes the zone, never shoots its zone).
+Full rules and tables: `docs/zone-garrisons.md`. Evidence: `~/Documents/projects/outputs/zone-garrison-followup-20261127/`.
+
+- **Soldier price 30** (`config/ObjectData.ini.default`, was 60): DuneCity, vanilla and Dune2R content. Mods
+  with their own ObjectData (Tornie, ArcaKev, Jericho and Lite forms, community mods) keep their prices.
+- **Garrisons leave a zone below 60% health** (`kEvacuateHealthPercent`), and nobody enters or takes a zone that
+  damaged. `DUNECITY_TEST_GARRISON_EVACUATE_PERCENT` overrides it for experiments only. Measured at 0/25/40/60
+  (288 mixed games each, all three AI switches on in one arm): placement -0.046 / -0.002 / -0.064 / +0.009, all
+  level; exchange value flat; soldiers out alive per entry 53% / 59% / 59% / 65%; garrisons caught in an
+  exploding zone 14 / 2.2 / 0.7 / 0.9 a game (29 traced self-play games). 60 keeps the most soldiers alive.
+- **Thrown out of a ruin:** soldiers lose half their maximum hit points, never below 1.
+- **Captured zones return** to the house they were taken from once the garrison is gone (Evacuate, low
+  health, or the last soldier killed), unless that house is defeated. Saved (9903). Zone panel: `(captured)`.
+- **Three capture bugs the player-path test found** (all fixed): a soldier only tried its zone on the cycle it
+  stopped moving; a soldier sent at an enemy zone dropped its order when a comrade took the zone first (its
+  cached `targetFriendly` was stale and `canAttack` on an own zone failed); and soldiers walking into an empty
+  enemy zone shot it on the way (the Dune Legacy capture branch falls through to firing; a zone was at 183/200
+  when taken). A capture-ordered soldier now enters on any cycle it stands within reach, re-reads its zone's
+  owner, and never fires on its zone unless enemy soldiers hold it.
+- **QuantBot:** a captured zone keeps its garrison (release empties own zones only). New switches, default OFF:
+  `ZoneCaptureRaid` (free soldiers take empty enemy zones with no enemy unit or turret near) and
+  `ZoneCaptureLevy` (Barracks train up to 16 Soldiers that walk into the nearest enemy zones). Paired against
+  `default`, 288 games each on `rs160-dunecity` Brutal: ZoneGarrison -0.009 (-0.09..+0.08), raid -0.016
+  (-0.10..+0.07), levy -0.027 (-0.11..+0.05), all three +0.009 (-0.07..+0.09). All level: **all stay off.**
+  Extra maps, 72 games each at `16fb9f8ac`: raid on `rs192-dunecity` (start from nothing) +0.028
+  (-0.12..+0.18), levy +0.011 (-0.14..+0.16); Metropolis (`--maps metropolis --map-mod dunecity`) raid +0.022
+  (-0.10..+0.14), levy -0.032 (-0.16..+0.09), 59-60 of 72 time-outs. Level everywhere.
+- **Player-path test** (CLAUDE.md, "Player features"): `zone_garrison_probe` now selects units, presses the unit
+  panel's real Capture button and the C key, clicks the zone with a real SDL mouse event through
+  `Game::doInput`, and presses the zone panel's real Evacuate button: own zone in and out, a Soldier and a
+  Trooper taking an enemy zone (panel says captured, Evacuate hands it back), full / ally / damaged zones
+  refused, an enemy's Evacuate disabled. 16 cases.
+- **Why "nothing to do with infantry works":** no tag or staging build contains Zone Garrisons. v1.0.880 was
+  tagged at 01:49 on 2026-11-27, the feature landed at 09:52; `/Applications/DuneCity.app` on the Mini is
+  1.0.788. Stefan needs a build from `c46f29fad` or later to try it.
+- **Gates at `c46f29fad`:** the four AI gates passed, with `zone_garrison_probe` 16/16
+  (`20261127T201946-ctest-de3733`). `perf_regression` on the Mini passed, 128.7 s
+  (`20261127T201959-ctest-85329e`). Nightly `-L nightly -LE gui`: 259/263 (`20261127T201953-ctest-bb738a`).
+  The 4 failures are other sessions' work in progress, failing in their own runs too:
+  - `palace_worm_probe` and `palace_worm_real_game`: no worm called.
+  - `quantbot_redevelop_low_save`: 2 of 149 lane Parks unjoined.
+  - `quantbot_city_lessons`: "ON's planned Palace never stood on its site". Added at `5f6a3b266`, it has
+    failed in every run since; no run without this follow-up exists.
+- **Queue:**
+  - Jobs at a new revision waited 1-2 h with no tree. Trees are reused only once no game runs on them, and
+    long backlogs never let that happen.
+  - `aws` was stopped mid-batch ("user-initiated stop"), losing 19 of 48 trace sets.
+  - `aws` kept retrying a source that cannot build (`3698f1d`, `formation-duel.py` probe) every 30 minutes.
+- **Next release notes:** "Soldiers cost 30 credits. A garrison leaves a zone below 60% health, and soldiers
+  thrown out of a destroyed zone are hurt. A captured zone goes back to its owner when its garrison leaves or
+  dies. Multiplayer protocol 148, save format 9903."
+- **Not verified:** a real windowed game with a person's mouse (the probe drives the same widgets and SDL
+  events on the dummy driver).
+
 ## 2026-11-27 - Redevelopment: Stefan's request as an acceptance list, asserted on his save (`quantbot_redevelop_low_save`)
 
 Stefan: "there's still lots of low value see mba save low. the AI could benefit from demolishing and rebuilding to

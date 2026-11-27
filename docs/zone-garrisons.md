@@ -76,8 +76,11 @@ capture buildings"
 - **Evacuation threshold**, the rules above. `DUNECITY_TEST_GARRISON_EVACUATE_PERCENT` overrides it for
   experiments only (read once per process, never part of the match rules).
 - **Entering.** A capture-ordered soldier enters on any cycle it stands within reach of its zone, not only the
-  cycle it stopped (`InfantryBase::checkPos`). Before, the second of two soldiers sent at one enemy zone was
-  left standing beside it once the first had taken it.
+  cycle it stopped (`InfantryBase::checkPos`). It reads its zone's owner every cycle, so it keeps the order when
+  a comrade takes the zone first (its cached friendliness made it drop the order). It never fires on the zone it
+  walks into: the Dune Legacy capture branch falls through to firing, which classic captures need for red
+  health; it fires only on a zone enemy soldiers hold (`UnitBase::engageTarget`). The player-path test found
+  all three.
 
 ### Evacuation threshold
 
