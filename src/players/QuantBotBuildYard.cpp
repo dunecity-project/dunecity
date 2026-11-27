@@ -775,6 +775,14 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         if (yardTurn.itemID!=NONE_ID) yardTurn.structureRule="dedicated_city_growth";
     }
 
+    // EconomyFirst (default off): an idle yard zones in Stefan's mix whatever the demand valves say, while zones
+    // are under his share of the yard's orders (QuantBot::economyFirstZone).
+    if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && !yardTurn.civicClaimsYard
+        && pass.economyFirstHold > 0 && turn.pBuilder->getProductionQueueSize() == 0) {
+        const Uint32 zone = economyFirstZone(pass);
+        if (zone != NONE_ID) { yardTurn.itemID = zone; yardTurn.structureRule = "economy_first_zone"; }
+    }
+
     // Skip build order if something is already queued
     if (turn.pBuilder->getProductionQueueSize() > 0) {
         yardTurn.skipRemainingStructureLogic = true;

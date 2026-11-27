@@ -2159,6 +2159,9 @@ private:
     /// EconomyFirst: while the house is short of its yard target, a Heavy Factory or Starport buys only the
     /// MCV (a Heavy Factory orders it, upgrading first if it must, from the held cash). True: nothing else.
     bool economyFirstMcv(BuildPass& pass, BuilderTurn& turn);
+    /// EconomyFirst: the zone an idle yard orders now (his R/I/C mix), NONE_ID while zones already have his
+    /// share of the yard's orders, power is short or none is affordable or placeable.
+    Uint32 economyFirstZone(BuildPass& pass);
     /// ECONOMY_STATE every game minute (switch on, or DUNECITY_TEST_ECONOMY_LOG=1 for every QuantBot
     /// house): the control arm logs the same numbers.
     void logEconomyState(const BuildPass& pass);
@@ -2204,6 +2207,8 @@ private:
         Uint32 lastEconomyLog = 0;
         bool economyFirstStoodDown = false, economyFirstFootprintLogged = false, economyFirstRichLogged = false;
         int economyFirstHoldPasses = 0, economyFirstThreatPasses = 0;
+        int economyFirstYardOrders = 0;
+        std::array<int, 3> economyFirstZoneOrders{};   ///< R, C, I ordered by the yard while the switch acted
         Uint32 economyFirstRefusedMinute = 0;   ///< 1 + the minute of the last refused MCV logged
         int economyFirstStartZones = -1;   ///< zones at the first pass (the map's prebuilt city)
     } cityLessons;

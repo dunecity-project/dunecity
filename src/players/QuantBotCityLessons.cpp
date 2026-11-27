@@ -134,9 +134,11 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
 
 bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
     const Uint32 producer = turn.pBuilder->getItemID();
-    if (pass.economyFirstHold <= 0 || (producer != Structure_HeavyFactory && producer != Structure_StarPort)
-        || pass.cityConstructionCapacity + pass.economyFirstMcvsOrdered >= pass.cityYardTarget) return false;
-    if (producer == Structure_StarPort) return true;   // held: its cash is the yards'
+    if (pass.economyFirstHold <= 0 || (producer != Structure_HeavyFactory && producer != Structure_StarPort)) return false;
+    // The Starport buys nothing while the hold is on: its bargains ignored the hold (smoke run 3 at 251bb9ba8,
+    // 14,900 -> 8,800 credits in one pass). Stefan's Starport bought him an MCV.
+    if (producer == Structure_StarPort) return true;
+    if (pass.cityConstructionCapacity + pass.economyFirstMcvsOrdered >= pass.cityYardTarget) return false;
     const auto* builder = turn.pBuilder;
     if (builder->isUpgrading() || builder->isOnHold() || builder->getProductionQueueSize() > 0
         || getHouse()->isGroundUnitLimitReached()) return true;
@@ -163,6 +165,30 @@ bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
             getHouse()->getCredits(), getGameCycleCount());
     }
     return true;
+}
+
+Uint32 QuantBot::economyFirstZone(BuildPass& pass) {
+    namespace L = CityLessonsPolicy;
+    auto& lessons = cityLessons;
+    const auto& orders = lessons.economyFirstZoneOrders;
+    const int zones = orders[0] + orders[1] + orders[2];
+    if (int64_t(zones) * 10000 > int64_t(L::kEconomyFirstZoneShareBps) * lessons.economyFirstYardOrders) return NONE_ID;
+    if (getHouse()->getProducedPower() - getHouse()->getPowerRequirement() < 24) return NONE_ID;
+    static constexpr Uint32 kZones[3] = {Structure_ZoneResidential, Structure_ZoneCommercial, Structure_ZoneIndustrial};
+    const int mixTotal = L::kEconomyFirstZoneMix[0] + L::kEconomyFirstZoneMix[1] + L::kEconomyFirstZoneMix[2];
+    // Most behind his mix first, then the next.
+    std::array<int, 3> order{0, 1, 2};
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        const int64_t da = int64_t(L::kEconomyFirstZoneMix[a]) * (zones + 1) - int64_t(orders[a]) * mixTotal;
+        const int64_t db = int64_t(L::kEconomyFirstZoneMix[b]) * (zones + 1) - int64_t(orders[b]) * mixTotal;
+        return da != db ? da > db : a < b;
+    });
+    for (const int k : order) {
+        const Uint32 zone = kZones[k];
+        if (buildingCapitalCost(pass, zone) > pass.money) continue;
+        if (findPlaceLocation(zone).isValid()) return zone;
+    }
+    return NONE_ID;
 }
 
 void QuantBot::logEconomyState(const BuildPass& pass) {

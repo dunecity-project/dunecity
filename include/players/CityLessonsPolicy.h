@@ -98,6 +98,10 @@ constexpr int kEconomyFirstHold = 10000;
 constexpr int kEconomyFirstThreatTiles = 12;
 /// The switch stands down once the house's city has his minute-31 population.
 constexpr int kEconomyFirstPopulation = 6734;
+/// His zone orders by minute 31 (134 R, 93 C, 101 I) and zones' share of his yard orders in the first ten
+/// minutes (76 zones of 113 orders: about 70%).
+constexpr int kEconomyFirstZoneMix[3] = {134, 93, 101};
+constexpr int kEconomyFirstZoneShareBps = 7000;
 /// Stefan's scope (2026-11-28: "the ai needs to escape the poverty trap on low / no spice maps"): the switch
 /// acts only while the spice left on the map is below this much per living house (one starting purse of
 /// his game; his map had none). On a spice-rich map it does nothing.

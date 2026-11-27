@@ -427,6 +427,13 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if (accepted) {
         // BUILD_ORDER (EconomyFirst evidence; switch on, or DUNECITY_TEST_ECONOMY_LOG=1): what each producer
         // bought, by which rule, from how much cash. Slabs and roads are left out.
+        if (pass.economyFirstHold > 0 && turn.pBuilder->getItemID() == Structure_ConstructionYard
+            && itemID != Structure_Slab1 && itemID != Structure_Slab4 && itemID != Structure_Road) {
+            ++cityLessons.economyFirstYardOrders;
+            if (itemID == Structure_ZoneResidential) ++cityLessons.economyFirstZoneOrders[0];
+            if (itemID == Structure_ZoneCommercial) ++cityLessons.economyFirstZoneOrders[1];
+            if (itemID == Structure_ZoneIndustrial) ++cityLessons.economyFirstZoneOrders[2];
+        }
         if (currentGame && currentGame->isCitySimEnabled() && itemID != Structure_Slab1 && itemID != Structure_Slab4
             && itemID != Structure_Road && economyLogEnabled())
             SDL_Log("BUILD_ORDER: house=%d producer=%d item=%d rule=%s price=%d credits=%d cycle=%u",
