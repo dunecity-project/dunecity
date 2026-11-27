@@ -101,6 +101,9 @@ struct Fixture {
 
     Sandworm* worm() const { return Palace::findPalaceWorm(owner); }
 
+    /// The Fremen player's id, as its commands carry it (the local player may be the enemy).
+    Uint8 ownerPlayerID() const { return owner->getPlayerList().front()->getPlayerID(); }
+
     /// The real special weapon: Palace::doSpecialWeapon() -> Palace::summonPalaceWorm().
     Sandworm* release() {
         for(int i = 0; i < 5; ++i) game->updateGameState();
@@ -162,7 +165,7 @@ inline void control() {
             f.label + ": a second Palace charge called another worm or was used up");
 
     // A move order through the network command, as a player sends it.
-    Command(pLocalPlayer->getPlayerID(), CMD_UNIT_MOVE2POS, wormID, 40, 20, 1).executeCommand();
+    Command(f.ownerPlayerID(), CMD_UNIT_MOVE2POS, wormID, 40, 20, 1).executeCommand();
     int seconds = f.runUntil(wormID, 60, [&] { return worm->getLocation() == Coord(40, 20); });
     require(worm->getLocation() == Coord(40, 20), f.label + ": the worm did not reach its move order");
     SDL_Log("PALACE_WORM_CASE: %s surfaced at 24,31 beside the Palace and reached 40,20 in %d s", f.label.c_str(), seconds);
@@ -216,7 +219,7 @@ inline void spiceBloom() {
     // The player's order, through the network command.
     const Coord spot(40, 22);
     require(f.spiceTilesAround(spot, PalaceWorm::kBloomRadius) == 0, f.label + ": the fixture already has spice");
-    Command(pLocalPlayer->getPlayerID(), CMD_SANDWORM_SPICEBLOOM, wormID, spot.x, spot.y).executeCommand();
+    Command(f.ownerPlayerID(), CMD_SANDWORM_SPICEBLOOM, wormID, spot.x, spot.y).executeCommand();
     require(worm->getBloomTarget() == spot, f.label + ": the Spice Bloom command did not reach the worm");
     const int seconds = f.runUntil(wormID, 60, [&] { return !f.alive(wormID); });
     require(!f.alive(wormID), f.label + ": the worm never burst");
