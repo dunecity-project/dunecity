@@ -3894,6 +3894,10 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                 .set("recent_loss_nearby", site.isValid() && nearRecentStructureLoss(site.x, site.y, size.x, size.y))
                 .set("enemy_fire_risk", dangerAt(site,size)).set("recent_loss_risk", dangerAt(site,size,true))
                 .set("reactor_clearance", site.isValid() && reactorClearance(itemToBePlaced,site))
+                .set("own_units_clear", site.isValid() && placeableAmongOwnUnits(site.x, site.y, size.x, size.y, itemToBePlaced))
+                .set("road_connections_kept", site.isValid()
+                    && cityRoadImpact(getMap(), site.x, site.y, size.x, size.y, itemToBePlaced).preservesConnections)
+                .set("ground_access_kept", site.isValid() && preservesGroundAccess(itemToBePlaced, site))
                 .set("placement_quality",placementScoreDetails[itemToBePlaced]).set("planned_locations_remaining", yardTurn.placeLocations->size()).set("tiles", tiles));
         };
 
@@ -4027,6 +4031,16 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                     yardTurn.placeLocations->pop_front();
                     clearPlacementCache();
                 }
+                placementIssueHandled = true;
+            } else if (itemToBePlaced == Structure_Palace
+                       && ((cityLessons.palace.active && !cityLessons.palace.placed && cityLessons.palace.site == location)
+                           || (cityLessons.front.active && !cityLessons.front.placed && cityLessons.front.site == location))) {
+                // LowValuePalaces / FrontPalaces (default off): the planned site is the behaviour. Wait for it
+                // to clear (traffic on its road tiles) until the plan expires (CityLessonsPolicy::kPlanExpiryMs);
+                // then the watch ends and this Palace is placed by the ordinary search.
+                noteHeld();
+                if (pass.emitStatsLog) tracePlacementIssue("placement_deferred", "lesson_palace_site_blocked", location);
+                location = Coord::Invalid();
                 placementIssueHandled = true;
             } else if (redevelopmentSiteHeld(itemToBePlaced, location)) {
                 // A redevelopment order's site is its whole point: wait for it to clear (an
