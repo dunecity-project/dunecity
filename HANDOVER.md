@@ -1,3 +1,110 @@
+## 2026-11-28 - Turret front v2/v3: every switch proven to fire, the turret drill, NOT TESTED verdicts; acceptance list
+
+Stefan, 2026-11-27, after the first measurement: "i have a feeling the reason you think none of these things work is
+because you aren't actually doing that ... you need much much more tests to prove you have actually implemented a
+feature"; "i just build turrets into their base as a mass and they carved a hole in the ebemy base. you have
+definitely not been trialling this properly"; "i ask you to try things. you say you do and it doesn't work so then i
+do it and it does ... you need more assertions". Commits `2204d67b7` and `96d8bf9b4` (activation harness),
+`d2234a3fc`, `18c0cfb2d`, `d3db38e2a`, `df1bc9a02` (triggers, drill, order tracking). Evidence:
+`~/Documents/projects/outputs/turret-front-v3-20261127/`, `turret-front-v4-20261127/`; Stefan's footprint:
+`~/Documents/projects/outputs/seewhatidid-20261127/analysis/acceptance-list.md` (seewhatidid session).
+
+- **Why v1 measured nothing.** In the v1 games below, `AdvancingTurrets` waited for the army to stand 4 tiles ahead
+  of the base edge, which never happened on 3waysplit. `TurretCreep` needed bases within reach, which rs192 never
+  had. `RearTurretRetire` never fired on rs192. No switch logged whether its turrets reached their effect. The v1
+  "level" verdicts for those cells are corrected to NOT TESTED in the entry below.
+- **Activation harness (CLAUDE.md "Asked-for behaviour", rule 4).**
+  - `tests/ai/activation.py` reads `tests/ai/activation-events.json`, where a play style declares the log lines
+    that show its switch fired and the lines that show it reached its effect.
+  - `vanilla-match.py` counts them per house-game into `activation.csv`.
+  - `vanilla-match.py --report`, `play-style-matrix.py` and `turret-front-report.py` print each arm's fire and
+    effect rates. The verdict reads **NOT TESTED** when the effect was reached in under half the house-games.
+  - `quantbot_activation_report` (8 unit tests, one a real `--report` run) asserts that an arm with zero events
+    reads NOT TESTED.
+  - Registered by: the turret front (7 styles), worm, redevelop, city lessons; hospital is pending.
+- **Order tracking.** Every turret-front order is followed:
+  - `TURRET_FRONT_PLACED`: the site holds an own Rocket Turret.
+  - `TURRET_FRONT_ENGAGED`: that turret's target is an enemy unit. This line is the effect event.
+  - `TURRET_FRONT_MISSED`: not placed within 3 minutes.
+  - `TURRET_FRONT_STATE` (every 2 minutes) logs the edge, the army lead, per-mode ordered/placed/engaged/missed,
+    and why waiting sites went unbuilt (not reached, yard busy, unavailable, site gone, power, funds).
+- **Trigger fixes.**
+  - (b) The belt no longer waits for the army. It holds 6 turrets within 12 tiles of the base's front edge and
+    then advances one tile at a time. It may not widen past its goal, and it keeps 4 tiles from enemy buildings
+    and out of reach of enemy turrets.
+  - (c) Creep targets the visible enemy defenders and has no 12-turret cap.
+  - (e) New `TurretDrill` (default off, play styles `turret-drill`; `drillhit` = the same with turrets firing on
+    buildings):
+    - starts once the base edge is within 24 tiles of an enemy building;
+    - builds a touching mass of Rocket Turrets 4 to 12 tiles from enemy buildings, where at most one enemy turret
+      reaches, nearest first, then most target value in range, then most own turrets touching;
+    - has no count cap; it scans every 2 s while drilling;
+    - spends down to 1,000 credits;
+    - while a drill site waits, no factory spends that turret's price plus 1,000 credits.
+- **Headless probe `turret_front_probe`** (nightly; 16 cases; each runs twice and the two runs must match):
+  AWS, `df1bc9a02`, gate job `20261127T230643-ctest-0d75cc`, all 16 pass:
+
+  | case | switch on: what it must do | measured |
+  |---|---|---|
+  | reinforce-on / -off / -far | a turret beside the attacked Refinery; none when off or when the attack is far | 1 ordered, placed, engaged; none; none |
+  | advance-on / -noarmy / -off | the belt moves toward the enemy without waiting for the army | 12 placed, 4 side by side, moved 32 tiles (with and without an army); none |
+  | creep-on / -off / -covered | a turret in reach of the enemy defenders, which then fall; none when off or covered by enemy turrets | 1 placed, engaged, defenders 520 → 504; none; none |
+  | retire-on / -off | rear turrets sold, front and Palace turrets kept | 4 of 20 rear retired, front 4/4 and Palace 2/2 standing; all 26 standing |
+  | drill-on | a touching mass placed into the enemy base, which kills the defenders | 12 ordered, 11 placed, 8 engaged; nearest 4 tiles, 7 touching; defenders 520 → 0; 88 unit targets, 0 building targets |
+  | drill-buildings | the same with "Turrets Can Fire On Buildings" on | 11 placed; enemy buildings 800 → 190; 54 building targets |
+  | drill-turrets | the mass forms against a base with enemy turrets | 10 placed, 7 touching, 4 tiles from an enemy building |
+  | drill-off / -far | no drill order when off, or when no enemy building is within 24 tiles | none; none |
+- **Acceptance list** (each request line, what shows it, the test, the measured value):
+  | request line | observable, with a number | test | measured | result |
+  |---|---|---|---|---|
+  | "houses should try use them offensively" | turrets placed in reach of enemy units/buildings, and the enemy falls | `turret_front_probe` drill-on, creep-on; games | probe: drill defenders 520 → 0, creep 520 → 504; games: drill fired in 100% of Metropolis and 3waysplit house-games (54% on rs192), 80-88% of orders placed, 93-99% of those engaged | PASS (probe and Metropolis/3waysplit); rs192 fires in only 54% |
+  | "increase the amount of them on front lines under attack" | a turret beside the attacked building; none when off or the attack is far | `turret_front_probe` reinforce-on/-off/-far; games | probe: 1 ordered, placed, engaged; none; none. Games: fired 92-100%, 77-96% placed, 97-98% engaged; Metropolis +0.528 [+0.05, +0.93] | PASS |
+  | "a maginot line which moves forward" | the belt holds 6 turrets and advances toward the enemy, with or without an army | `turret_front_probe` advance-on/-noarmy/-off; games | probe: 12 placed, moved 32 tiles both ways; games (moving-line): advance fired 100% on every map, 68-83% placed, 90-99% engaged; score level (-0.128 [-0.35, +0.10]) | PASS for the behaviour; no score gain |
+  | "they carved a hole in the enemy base" (Stefan's seewhatidid save, minute 72 → 95) | the AI from his save reaches his footprint within half: ≥ 38 new turrets, ≥ 80% touching, median stand-off 8-14, ≥ 9 within 8 tiles, ≥ 154k R-Turret damage and above control, ≥ 138 Ordos structures lost and above control | `turret_drill_save` (new, nightly, AWS) | AWS `20261128T015523-ctest-9aa34e` at `cafd31f9a`: 226 ordered, 184 placed, 183 engaged (control 0 ordered); 188 new (control 28); 90% touching; median 10 (control 15); 39 within 8 (control 0); 393k damage, 1,397 kills (control 231k); Ordos lost 280 (control 234), all enemies 652 (599). Same numbers as the demonstration job, so the run is deterministic | PASS, 8/8 (`TURRET_DRILL_ACCEPTANCE: 0 failed`) |
+  | the same with "Turrets Can Fire On Buildings" on | as above | demonstration job `20261127T230553-tf-demo0c-b726e5` (one game per arm) | m95: 160 new, 88% touching, median 10, 33 within 8, 401k damage; Ordos lost 162 vs control-bld 200 | FAIL on Ordos lost (the turrets spread fire across all enemies: 671 structures lost in all) |
+  | "the listed return of 7.4x ... is slightly misleading given the ongoing cost" | the report shows return after upkeep beside the listed one | `turret-front-report.py` columns `upkeep paid`, `return with upkeep` | control 6.51x listed → 1.64x with upkeep (v3, 48 games); drill 5.54x → 1.70x vs 6.13x → 1.43x (v4) | PASS (reported) |
+  | turret creep toward enemy defenders | a turret within reach of visible enemy defenders | `turret_front_probe` creep-on/-off/-covered; games | probe passes; games fired 100% on Metropolis and 3waysplit, **29% on rs192** | PASS in probe; NOT TESTED on rs192 |
+  | rear turrets retire as the line moves | rear turrets sold, front and Palace turrets kept | `turret_front_probe` retire-on/-off; games | probe: 4 of 20 rear sold, front 4/4 and Palace 2/2 kept; games: fired 100% on 3waysplit, **0% Metropolis, 12% rs192** | PASS in probe; **NOT TESTED in games** |
+  | turrets fire on units only by default | with the option off no building targets; with it on, building targets | `turret_target_probe`, `turret_front_probe` drill-on vs drill-buildings | 88 unit / 0 building targets off; 54 building targets on | PASS |
+- **Measured games** (one switch house against default houses, labels rotated, Brutal, Stefan's game options):
+  Return with upkeep counts each standing turret's police upkeep (15% of police) over the game.
+
+  | arm (games per map: Metropolis 12, 3waysplit 12, rs192 24) | pooled score diff [95% CI] | verdict | time-outs | return listed → with upkeep | per map |
+  |---|---|---|---:|---|---|
+  | front-turrets (reinforce) | +0.141 [-0.07, +0.36] | level | 38% | 5.42x → 1.58x | Metropolis **beats** +0.528 [+0.05, +0.93]; 3waysplit 12/12 time-outs; rs192 level +0.019 |
+  | moving-line (advance + retire) | -0.128 [-0.35, +0.10] | level | 33% | 6.23x → 1.72x | retire part not tested on Metropolis (0%) and rs192 (12%) |
+  | turret-creep | +0.264 [+0.002, +0.505] | beats (pooled) | 27% | 5.47x → 1.65x | Metropolis **beats** +0.535 [+0.08, +0.91]; 3waysplit **beats** +0.50 [+0.125, +0.875]; rs192 **NOT TESTED** (29%) |
+  | turret-front-all | +0.110 [-0.13, +0.34] | level | 33% | 4.89x → 1.69x | retire part not tested on Metropolis (8%) and rs192 (29%); advance 42% on 3waysplit |
+  | turret-drill (v4, `df1bc9a02`) | +0.031 [-0.19, +0.25] | level | 33% | 5.54x → 1.70x (control 6.13x → 1.43x) | Metropolis -0.060 [-0.55, +0.44]; 3waysplit 11/12 time-outs, no difference; rs192 +0.093 [-0.28, +0.44], fired 54%. Ends with 4.4k credits vs 26.8k |
+  | drillhit (drill, buildings fire on) | +0.013 [-0.20, +0.22] | level | 33% | 5.16x → 1.68x (control 6.30x → 1.51x) | Metropolis -0.058; 3waysplit 11/12 time-outs; rs192 +0.056, fired 54% |
+
+  v3 control: 6.51x listed → 1.64x with upkeep. Every row's activation table is in the two report files.
+- **Deviations from Stefan's play, with reasons:**
+  - Drill start: only when the base edge is within 24 tiles of an enemy building. Stefan started his mass from
+    where his base already touched theirs. On rs192 this fires in 54% of house-games (bases further apart). Not a
+    blocker in his position (the save test fires), but it limits the drill on large maps.
+  - Stand-off 4 to 12 tiles from enemy buildings: his median was 10, the drill's 10-11. Kept.
+  - At most one enemy turret in reach of a site: stops the mass being built under a turret wall; his save had none
+    in reach. Kept, flagged.
+  - 1,000-credit reserve and factory hold: needed for the yard to build at all (most unbuilt sites were "yard busy").
+  - The demonstration is one game per arm, so it is a single sample; the CTest repeats it nightly.
+  - With buildings fire on, the drill's turrets spread across all three enemies, so Ordos (house 2) lost fewer
+    structures than in the control (162 vs 200) though all enemies lost 671. Not fixed.
+- **Decision:** No switch becomes a default; all stay off.
+  - **Creep** is a candidate: beats the control pooled and on Metropolis and 3waysplit, but rs192 is NOT TESTED
+    (29%) and only Brutal was run; Fortress and /weak are not run. It stays off until those pass.
+  - **Retire** is NOT TESTED in games (0-29% outside 3waysplit). The parts of moving-line and turret-front-all
+    that depend on it are not measured.
+  - **Drill** reaches Stefan's footprint from his save (`turret_drill_save`) and in its own Metropolis/3waysplit
+    games fires every time, but scores level: it spends the house down to ~4k credits and the extra kills do not
+    turn into placements. Reinforce and advance are level.
+  - Gates at `df1bc9a02` (AWS `20261127T230643-ctest-0d75cc`): the four AI gates, `turret_front_probe`,
+    `turret_target_probe` and `quantbot_activation_report` pass. `dunelegacy_tests` failed on the hotkey change
+    (`62481c681`), fixed in `db2dd887b`. Nightly `20261127T230648-ctest-7fcfe1`: 258/264; the six failures belong
+    to other sessions (hotkeys, quantbot_city_lessons, zone_garrison_real_game, palace_worm_probe/_real_game).
+    `perf_regression` passed on the Mini with every switch on (123.72 s).
+  - `cafd31f9a` adds `turret_drill_save` and Stefan's save as `tests/saves/data/seewhatidid-dunecity.dls.gz`.
+
 ## 2026-11-28 - Zone Garrisons: Garrison button, no pulling soldiers away, Troopers reinforce, house-to-house switches; acceptance list and real-game test
 
 Stefan, 2026-11-27: "and sto the ai pulling soldiers away on their way in"; "also allow troopers to reinforce
