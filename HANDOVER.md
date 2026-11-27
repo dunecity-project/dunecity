@@ -149,7 +149,7 @@ activation registry entries. Evidence: `~/Documents/projects/outputs/redevelop-2
   `zone_garrison_probe`, `palace_worm_probe`, `palace_worm_real_game`, `quantbot_city_lessons`); the
   redevelopment and park probes and `dunelegacy_tests` pass.
 
-## 2026-11-27 - Rocket Turrets at the front: four QuantBot switches measured, all stay OFF; the upkeep-inclusive turret return
+## 2026-11-27 - Rocket Turrets at the front: four QuantBot switches, first measurement (v1; corrected by the v2/v3 entry), all stay OFF; the upkeep-inclusive turret return
 
 Stefan, 2026-11-27: "as you can see rocket turrets have an amazing return. houses should try use them offensively
 and also try increase the amount of them on front lines under attack, run a subagent to test out different
@@ -190,19 +190,21 @@ report); `cafa5968e` and `d754b2dc1` (`vanilla-match.py` plays 3waysplit as a ci
   - `TURRET_LEDGER` (every city house, every 2 minutes: turrets, police funding, upkeep, credits, population),
     `TURRET_FRONT` and `TURRET_RETIRE` lines feed `turrets.csv`; `tests/ai/turret-front-report.py` makes the
     per-arm table. perf_regression passed at `d68ca645e` with the defaults and with all four switches on.
-- **Measured** (one switch house against two default houses, labels rotated, `match_score.py` placement):
+- **Measured** (one switch house against two default houses, labels rotated, `match_score.py` placement). **Correction
+  (v2/v3 entry):** v1 logged no effect events, so no cell below shows the switch reached its effect; cells where
+  the switch never fired are NOT TESTED, not level, and the v1 triggers of (b) and (c) were replaced:
 
   | Arm | rs192 3P (36 or 18 games) | 3waysplit city, 150 min (12 games) | Return with upkeep (arm / control, 3waysplit) | Note |
   |---|---|---|---|---|
   | front-turrets | +0.000 [-0.375, +0.417] | +0.104 [+0.000, +0.260] | 1.37x incl. map turrets / 1.26x | 397 orders a house-game on 3waysplit; credits up |
-  | advancing-turrets | -0.167 [-0.542, +0.167] | +0.000 (never fired) | = control | the army never stood 4 tiles ahead of the edge on 3waysplit |
-  | turret-creep | never fired | +0.000 [+0.000, +0.000] | 1.76x (built-only basis) | rs192 bases are 29-120 tiles apart |
-  | rear-turret-retire | never fired alone | -0.125 [-0.375, +0.000] | 1.61x (built-only basis) | 151 retired a house-game on 3waysplit, all demolished |
+  | advancing-turrets | -0.167 [-0.542, +0.167] | NOT TESTED (never fired) | = control | the army never stood 4 tiles ahead of the edge on 3waysplit |
+  | turret-creep | NOT TESTED (never fired) | +0.000 [+0.000, +0.000] | 1.76x (built-only basis) | rs192 bases are 29-120 tiles apart |
+  | rear-turret-retire | NOT TESTED (never fired alone) | -0.125 [-0.375, +0.000] | 1.61x (built-only basis) | 151 retired a house-game on 3waysplit, all demolished |
   | moving-line | -0.125 [-0.500, +0.250] | -0.125 [-0.375, +0.000] | 1.61x (built-only basis) | on 3waysplit only the retire part fired |
   | turret-front-all | -0.125 [-0.458, +0.250] | **+0.427 [+0.104, +0.802]** | 1.42x / 1.26x | see below |
 
   Time-outs: 0% on rs192 (games end by minute 59); 92-100% on 3waysplit, 75% with all four on.
-- **Decision: all four stay OFF.** No single switch beats the control on either map. All four together beat it on
+- **Decision: all four stay OFF.** No switch that fired beats the control on either map. All four together beat it on
   3waysplit, but only through the four games where Neutral (the strongest start) had them and eliminated both
   others; with Harkonnen or Sardaukar holding them the games timed out. On rs192 the same arm is level and halves
   the house's population (1,040 against 2,094) and credits. Pooled over both maps: +0.013 [-0.286, +0.326].
