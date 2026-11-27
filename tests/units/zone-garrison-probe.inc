@@ -29,8 +29,8 @@
 // player own zone    one Soldier: button, cursor, click, inside, panel count, Evacuate, out
 // player take        a Soldier and a Trooper selected together take an empty enemy zone with the C key;
 //                    the panel says captured; Evacuate hands the zone back
-// player refused     a full own zone, an ally's zone and a zone below the threshold are not entered;
-//                    an enemy's garrisoned zone shows Evacuate disabled
+// player refused     a full own zone, an ally's zone (the cursor refuses the click) and a zone below the
+//                    threshold are not entered; an enemy's garrisoned zone shows Evacuate disabled
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -600,9 +600,26 @@ void clickMap(Fixture& f, Coord tile, Uint8 button = SDL_BUTTON_LEFT) {
     f.game->doInput();
 }
 
+/// What a unit and a zone are doing, for a failure message.
+std::string describe(const std::vector<UnitBase*>& units, const ZoneStructure* z) {
+    std::string text = "zone owner " + std::to_string(z->getOwner()->getHouseID()) + " inside "
+        + std::to_string(z->getGarrisonSize()) + " health " + std::to_string(z->getHealth().lround())
+        + " original " + std::to_string(z->getGarrisonOriginalOwner()) + ";";
+    for(const UnitBase* u : units) {
+        const Coord at = u->getLocation();
+        text += " unit " + std::to_string(u->getObjectID()) + (hidden(u) ? " inside" : "") + " at "
+            + std::to_string(at.x) + "," + std::to_string(at.y) + " mode " + std::to_string(int(u->getAttackMode()))
+            + " target " + std::to_string(u->getTarget() ? u->getTarget()->getObjectID() : 0)
+            + (u->isMoving() ? " moving" : " still") + " health " + std::to_string(u->getHealth().lround()) + ";";
+    }
+    return text;
+}
+
 /// Presses Capture on the selection's panel (or the C key) and clicks ZONE; returns the capture
-/// commands the click queued.
-int captureByPlayer(Fixture& f, const std::vector<UnitBase*>& units, const ZoneStructure* zone, bool key = false) {
+/// commands the click queued. ACCEPTED: the click is on a target the cursor takes (an own zone or an
+/// enemy's); a click on anything else leaves the Capture cursor open, as for every order cursor.
+int captureByPlayer(Fixture& f, const std::vector<UnitBase*>& units, const ZoneStructure* zone, bool key = false,
+                    bool accepted = true) {
     Game& game = *f.game;
     ObjectInterface* panel = selectUnits(f, units);
     SymbolButton* button = captureButtonOf(panel);
@@ -624,7 +641,13 @@ int captureByPlayer(Fixture& f, const std::vector<UnitBase*>& units, const ZoneS
     }
     const int before = queued(game, CMD_INFANTRY_CAPTURE);
     clickMap(f, zone->getLocation());
-    require(game.currentCursorMode == Game::CursorMode_Normal, f.label + ": the Capture cursor stayed open after the click");
+    if(accepted) {
+        require(game.currentCursorMode == Game::CursorMode_Normal, f.label + ": the Capture cursor stayed open after the click");
+    } else {
+        require(game.currentCursorMode == Game::CursorMode_Capture && queued(game, CMD_INFANTRY_CAPTURE) == before,
+                f.label + ": a click on a target the cursor refuses queued an order or closed the cursor");
+        game.setCursorMode(Game::CursorMode_Normal);   // as the player's right click cancels it
+    }
     return queued(game, CMD_INFANTRY_CAPTURE) - before;
 }
 
@@ -677,7 +700,8 @@ void checkPlayerTake() {
     require(captureByPlayer(f, {soldier, trooper}, z, true) == 2,
             "player take: the click on an empty enemy zone did not order both selected soldiers");
     require(f.runUntil(40, [&] { return z->getOwner() == f.own && z->getGarrisonSize() == 2; }),
-            "player take: the selected soldiers did not take the enemy zone and both go in");
+            "player take: the selected soldiers did not take the enemy zone and both go in: "
+            + describe({soldier, trooper}, z));
     auto* panel = selectZone(f, z);
     require(panel->garrisonLabel.getText().find(_("(captured)")) != std::string::npos,
             "player take: the zone panel does not say the zone is captured: " + panel->garrisonLabel.getText());
@@ -710,7 +734,7 @@ void checkPlayerRefused() {
     auto* allied = f.zone(f.ally, Structure_ZoneResidential, 50, 12);
     auto* visitor = f.unit(f.own, Unit_Soldier, 46, 12);
     f.run(1);
-    captureByPlayer(f, {visitor}, allied);
+    captureByPlayer(f, {visitor}, allied, false, false);
     f.run(15);
     require(!allied->isGarrisoned() && allied->getOwner() == f.ally && visitor->isActive(),
             "player refused: an ally's zone was entered or taken");

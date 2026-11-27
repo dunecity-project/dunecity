@@ -243,6 +243,23 @@ bool InfantryBase::canPass(int xPos, int yPos) const {
 }
 
 void InfantryBase::checkPos() {
+    // Zone Garrisons: a capture-ordered soldier standing beside its zone walks in (and an enemy zone
+    // nobody holds becomes its house's); a zone enemy soldiers hold is fired on instead. Checked on
+    // every cycle the soldier stands within reach, not only the cycle it stopped: one that stopped a
+    // step short, or whose zone changed hands after it stopped, would otherwise wait there forever.
+    if(attackMode == CAPTURE && !moving && ZoneStructure::garrisonsEnabled() && location.isValid()) {
+        if(auto* zone = dynamic_cast<ZoneStructure*>(target.getObjPointer())) {
+            if(blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance
+               && !zone->heldAgainst(this)) {
+                if(zone->enterGarrison(this)) return;
+                // Full, too damaged, or no longer ours to enter: the order ends here.
+                setTarget(nullptr);
+                doSetAttackMode(GUARD);
+                return;
+            }
+        }
+    }
+
     if(moving && !justStoppedMoving) {
         if(++walkFrame > 39) {
             walkFrame = 0;
@@ -267,21 +284,6 @@ void InfantryBase::checkPos() {
             }
         } else if(currentGameMap->getTile(location)->isSpecialBloom()){
             currentGameMap->getTile(location)->triggerSpecialBloom(getOwner());
-        }
-
-        // Zone Garrisons: a capture-ordered soldier beside its zone walks in (and an enemy zone
-        // nobody holds becomes its house's). A zone enemy soldiers hold is fired on instead.
-        if(attackMode == CAPTURE && ZoneStructure::garrisonsEnabled()) {
-            if(auto* zone = dynamic_cast<ZoneStructure*>(target.getObjPointer())) {
-                if(blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance) {
-                    if(zone->heldAgainst(this)) return;
-                    if(zone->enterGarrison(this)) return;
-                    // Full, or no longer ours to enter: the order ends here.
-                    setTarget(nullptr);
-                    doSetAttackMode(GUARD);
-                }
-                return;
-            }
         }
 
         //check to see if close enough to blow up target
