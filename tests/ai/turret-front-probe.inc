@@ -338,6 +338,10 @@ void advance(bool on, bool army) {
         record(name, "no advance order in " + std::to_string(played) + " cycles");
         return;
     }
+    SDL_Log("TURRET_FRONT_PROBE_DIAG: bot=%p own=%p counts advance=%s", static_cast<void*>(f.bot),
+            static_cast<void*>(f.own), countText(counts(f, QuantBot::TurretFrontMode::Advance)).c_str());
+    for(const auto& player : f.own->getPlayerList())
+        SDL_Log("TURRET_FRONT_PROBE_DIAG: player %p", static_cast<void*>(player.get()));
     require(c.ordered > 0, name + ": no belt ordered with the army ahead (" + countText(c) + ")");
     require(belt.size() >= 8, name + ": the line did not stand, eight belt turrets wanted, "
                               + std::to_string(belt.size()) + " (" + countText(c) + ")");

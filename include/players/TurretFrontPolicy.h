@@ -157,7 +157,7 @@ inline int reinforceSiteScore(int toAttack, int toAnchor, int nearestOwnTurret, 
 
 /// Own turrets within this many tiles of the edge's anchor, and no deeper than one tile behind the
 /// edge, make the line's width.
-constexpr int kBeltTiles = 6;
+constexpr int kBeltTiles = 12;   // six turrets two tiles apart fit on one side of the anchor
 /// The belt wanted at the edge.
 constexpr int kBeltGoal = 6;
 /// The army counts as ahead of the edge when its lead stands this many tiles nearer the enemy.
