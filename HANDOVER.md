@@ -1,3 +1,94 @@
+## 2026-11-28 - Hospitals: slow, paced type changes; walk-in healing; infantry never use a Repair Yard (protocol 149, save 9904)
+
+Stefan, 2026-11-27: "also make buildings change type much slower, especially hospitals the building type keeps changing
+from hospital to something else in the games... this doesn't seem correct. recheck the metropolis souce and ensure we
+are not changing building type too frequently as it doesn't seem right, also make hospitals change slower. and allow a
+infrantry or trooper to be walked / moved into a hospital to heal. curently this does not work." Then: "the repair
+request for infantry take them to repair factory". Commits fc2241edb (churn logging), 3698f1d10, 09f82e271, 2f280589a,
+0004ddb72, 88f72f8ce, ac6ba9ed6, 15e3779b6, 862049370, 80e8407a5, 3ddbbd523. Not released. Evidence:
+`~/Documents/projects/outputs/zone-churn-20261127/` (`churn.py` reads the `CITY_ZONE_CHURN` lines of `zones.csv`).
+
+**What was wrong.** The census re-picked the Hospital and Church overlays every city day by a stride over the house's
+populated R zones. Any zone added or lost shifted the stride, so the overlay moved even though no zone changed. It was
+not zone growth: our R/C/I density changes are no faster than Micropolis (below).
+
+**Micropolis checked (`../simcity`, read-only).** Micropolis has Hospitals as separate zones: `makeHospital` turns
+one empty R zone into a Hospital when `needHospital > 0` (hospitalPop vs resPop >> 8), at most one per valve update;
+`doHospitalChurch` removes a surplus one with `getRandom(20) == 0` per cityTime, so a surplus one lasts ~20 city
+days, and one that is needed is never moved. `doResidential` evaluates a zone 1 time in 8 per cityTime and grows with
+P ~ (6388 + z)/65536 or declines (z < 350) with P ~ (6388 - z)/65536: about 1.0-1.4 density changes per zone per city
+year. Ours measured 0.46 (Stefan's 4P map) and 0.48 (Metropolis) per zone per city year, so zone growth is
+unchanged.
+
+**Rules now** (`include/dunecity/HospitalCare.h`, `src/dunecity/CityEffectsRuntime.cpp`):
+- An overlay stays on its zone. It leaves only when the zone is lost, retyped or empty, and never while locked (a
+  soldier walks to, flies to, waits at or heals at it).
+- Per house, at most one Hospital is added per 12 city days (a quarter year), on the eligible zone farthest from the
+  house's other civic zones; a surplus one is removed at most one per 48 city days and only after it has stood 4 city
+  years (192 days), youngest first. Churches: one added per 12 days, one removed per 24, minimum life 2 years.
+- The pacing state (each overlay's day made, each house's last add/remove) is saved: save 9904.
+- **Walk-in:** a move order (Move button, right-click, group move) that ends on or beside an own Hospital
+  (Chebyshev 1; a formation slot within 2 tiles) books a bed and heals there, as the Repair button would, but on foot.
+  Also the right-click (`MOVE2OBJECT`) and the Capture cursor on an own Hospital. Player commands; an AI house only
+  with HospitalInfantry. Protocol 149 (the command handlers changed what a move does).
+- **No Repair Yard for infantry** with Hospital Care in a city game: the order, the AI and the Carryall pickup send
+  soldiers only to Hospitals (`HospitalCare::replacesRepairYard`). No Hospital: the order does nothing and the button
+  is disabled with "Needs a Hospital: soldiers heal only at a Hospital, which a city of 256 residents gets". All beds
+  full: they wait. Rule off or no city: the old Repair Yard behaviour. This replaces "With no Hospital it falls back
+  to a Repair Yard" in the 2026-11-27 Hospital Care entry.
+
+**Before / after in real games** (12 games each, brutal QuantBots, 45 minutes; before at fc2241edb, after at
+86dcb77ea):
+
+| Measure (per house, city years) | 4P map before | 4P map after | Metropolis before | Metropolis after |
+|---|---|---|---|---|
+| Hospital type changes per Hospital per city year | 4.03 | **0.17** | 14.34 | **0.17** |
+| Hospitals made per Hospital per city year | 2.06 | 0.14 | 7.23 | 0.17 |
+| Hospitals removed per Hospital per city year | 1.96 | **0.03** | 7.11 | **0.005** |
+| Hospital-days per removal (expected life) | 24 days | 1,493 days | 7 days | 10,407 days |
+| Church changes per R zone per city year | 0.492 | 0.019 | 1.642 | 0.013 |
+| R/C/I density changes per zone per city year | 0.46 | 0.48 | 0.48 | 0.49 |
+| Hospitals per house (mean) | 7.35 | 7.31 | 29.5 | 20.6 |
+
+Hospital changes are 24x (4P) and 84x (Metropolis) slower; removals 61x and 1,400x slower. A game is ~16 (4P) and
+~22 (Metropolis) city years per house. Micropolis removes a surplus Hospital after ~20 city days on average; ours
+now keeps one for years. Zone density changes are unchanged (they were already about half Micropolis's 1.0-1.4).
+Metropolis houses hold fewer Hospitals at a time (20.6 vs 29.5) because new ones come one per quarter year (listed under deviations). Rows from `zones.csv`; job ids 20261127T171017,
+20261127T171025 (before), 20261128T023227, 20261128T023233 (after).
+
+**Acceptance list** (CLAUDE.md "Asked-for behaviour"). Every test runs a real game headless and exits non-zero on a
+failed assert; all are cases of `hospital_care_probe` (`tests/units/hospital-care-probe.inc`). Values are from the
+AWS nightly at df1bc9a02 (job 20261127T230648-ctest-7fcfe1, aws-mel2), which contains all the commits above.
+
+| # | Stefan asked | Observable fact | Test (case) | Measured | Result |
+|---|---|---|---|---|---|
+| 1 | "troopers and infantry ... healed ... via a hospital R zone" | Repair button on a wounded Trooper in the played Metropolis city: walks to a Hospital, leaves at full health; on a small map it walks past a nearer Repair Yard | metro_repair, ui_repair | health 100% after the trip; 1 click = 1 command | pass |
+| 2 | "carryalls can also pick them up" | Repair button on a soldier 20+ tiles (Metropolis) / 35 tiles (small map) from a Hospital: lifted by a Carryall, healed beside it | metro_carryall, ui_carryall, carryall | lifted at cycle 327, healed at 837 (carryall case) | pass |
+| 3 | "a single hispital can heal up to 5 men at a time" | 7 wounded soldiers on one Hospital: never more than 5 heal at once, the rest wait, all 7 leave at full health | metro_beds, ui_beds, cap | max healing 5, 2 waited | pass |
+| 4 | "while a hospital is healing ... walking ... carryalled ... it cannot change type" | 0 type changes on a Hospital at every census while soldiers walk to, fly to, wait at or heal at it | lock_healed, metro_beds, pacing (days 185-205) | 0 changes; 118 patient visits on the first Hospital | pass |
+| 5 | "make buildings change type much slower, especially hospitals" / "recheck the metropolis souce" | Hospital changes per Hospital per city year in real games, before vs after; none removed within 192 city days; at most one change per house per census | AWS churn games; pacing; metro_stable | Hospital changes per Hospital per city year 4.03 -> 0.17 (4P), 14.34 -> 0.17 (Metropolis); pacing case: 3 made a quarter year apart, 2 removed after 4 years a year apart, never two a census; metro_stable: 36 made, 0 removed | pass |
+| 6 | "allow a infrantry or trooper to be walked / moved into a hospital to heal" | Right-click onto its Hospital, Move button beside it, group move: heals to full. Not for a healthy soldier, a move 4 tiles off, an enemy Hospital, a Saboteur, or with the rule off | walkin_rightclick, walkin_move, walkin_group, walkin_not, walkin_rule_off | 1 + 1 + 3 soldiers at 100%; 0 walk-ins in the 4 negative cases | pass |
+| 7 | "the repair request for infantry take them to repair factory" | Hospital Care, no Hospital: button disabled ("Needs a Hospital"); button, R hotkey and right-click on the Repair Yard leave the soldier where it stood; also in the played Metropolis city before its first census; rule off: books the yard as before | ui_no_hospital, metro_no_hospital, ui_no_hospital_rule_off | 0 Repair Yard bookings, 0 tiles moved | pass |
+| 8 | QuantBot HospitalInfantry (activation and effect) | Switch on: a quiet wounded bot soldier is sent and healed; off: none in 3000 cycles | bot_quiet, bot_off; AWS screen | sent 537 cycles after the enemy left; 32.1 sent / 27.7 healed per ON house-game, 0 OFF | pass (stays off: level) |
+
+**Deviations** (not asked for; none stops the asked-for thing):
+- A Hospital is an R zone the census marks, one per 256 residents, at most one per 8 populated zones (Micropolis's
+  resPop >> 8). A city below 256 residents has none; the button then says so.
+- Walk-in counts only a move ending on or beside the Hospital (2 tiles for a formation slot); a soldier walking past
+  a Hospital is not diverted.
+- The Saboteur is not healed (one-use demolition unit); its button says "cannot be healed".
+- A fast-growing city reaches its Hospital quota over several quarter years rather than at once.
+
+**HospitalInfantry** (QuantBot, off) is registered with the activation harness
+(`tests/ai/activation-events.json`: fire `HOSPITAL_CARE: event=sent why=quiet`, success `event=healed`). In the
+out-of-contact screen it sent 32.1 and healed 27.7 soldiers per ON house-game (0 OFF); level result, stays off.
+
+**Verification.** `hospital_care_probe` (27 cases) passed on AWS (nightly df1bc9a02 and again at 7825a34bb); the four
+AI gates, `save_roundtrip_probe`, `repair_return_probe`, `carryall_flight_probe` passed in the same nightly;
+`perf_regression` passed on the Mini at 3ddbbd523 (125.59 s). The nightly's six failures are other features'
+(zone_garrison_real_game, quantbot_city_lessons, palace_worm_probe/real_game, and the hotkey tests the Zone Garrisons
+`I` key broke, fixed in db2dd887b).
+
 ## 2026-11-27 - Zone Garrisons follow-up: 30-credit Soldier, garrisons leave below 60%, captured zones return, capture AI switches (protocol 148, save 9903)
 
 Stefan, 2026-11-27: "ok make 2 changes. 1 make infantry cost 30 credits. next make troopers and infantry
@@ -435,7 +526,7 @@ set only when off; the level mask is now 0x3F, bits 4-5 of that byte are free).
   can be healed.
 - The repair order (sidebar button/hotkey, `CMD_UNIT_SENDTOREPAIR` -> `GroundUnit::doRepair`) sends a wounded
   soldier to the nearest own Hospital with a bed not yet claimed by five, else the nearest one. With no Hospital
-  it falls back to a Repair Yard as before.
+  it fell back to a Repair Yard (replaced 2026-11-28: infantry never use a Repair Yard; see that entry).
 - The soldier walks (forced move) to a free tile beside the 2x2 zone; 6+ tiles away it also asks for a Carryall,
   whose ordinary pickup flies it there. Beside the Hospital it heals standing up and holds its bed (HOLD: fires at
   enemies in range, never chases off); its own mode comes back when it leaves.
