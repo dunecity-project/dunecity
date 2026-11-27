@@ -132,6 +132,10 @@ void QuantBot::planTurretFront(BuildPass& pass) {
     const Uint32 now = getGameCycleCount();
     if (pass.citySimEnabled) logTurretLedger(now);
     trackTurretFrontOrders(now);
+    // The last pass had a site waiting that no yard turn even looked at.
+    if (turretFrontPlan.active && !turretFrontPlan.ordered && !turretFrontYardSeen)
+        ++turretFrontBlocked[BlockNotReached];
+    turretFrontYardSeen = false;
     const bool reinforce = frontTurretsEnabled(), advance = advancingTurretsEnabled();
     const bool creep = turretCreepEnabled(), retire = rearTurretRetireEnabled(), drill = turretDrillEnabled();
     if (!reinforce && !advance && !creep && !retire && !drill) return;
@@ -505,10 +509,13 @@ void QuantBot::logTurretFrontState(Uint32 now) {
     const auto& a = turretFrontCounts[size_t(TurretFrontMode::Advance)];
     const auto& d = turretFrontCounts[size_t(TurretFrontMode::Drill)];
     SDL_Log("TURRET_FRONT_STATE: house=%d edge=%d army_lead=%d army_units=%d mode=%d "
-            "reinforce=%d/%d/%d/%d creep=%d/%d/%d/%d advance=%d/%d/%d/%d drill=%d/%d/%d/%d retired=%d cycle=%u",
+            "reinforce=%d/%d/%d/%d creep=%d/%d/%d/%d advance=%d/%d/%d/%d drill=%d/%d/%d/%d retired=%d "
+            "blocked=%d/%d/%d/%d/%d/%d cycle=%u",
             getHouse()->getHouseID(), turretFrontPlan.edge, turretFrontPlan.armyLead, turretFrontPlan.armyUnits,
             int(turretFrontPlan.mode), r.ordered, r.placed, r.engaged, r.missed, c.ordered, c.placed, c.engaged, c.missed,
-            a.ordered, a.placed, a.engaged, a.missed, d.ordered, d.placed, d.engaged, d.missed, turretRetired, now);
+            a.ordered, a.placed, a.engaged, a.missed, d.ordered, d.placed, d.engaged, d.missed, turretRetired,
+            turretFrontBlocked[BlockNotReached], turretFrontBlocked[BlockYardBusy], turretFrontBlocked[BlockUnavailable],
+            turretFrontBlocked[BlockSiteGone], turretFrontBlocked[BlockPower], turretFrontBlocked[BlockFunds], now);
 }
 
 void QuantBot::trackTurretFrontOrders(Uint32 now) {
@@ -559,16 +566,19 @@ void QuantBot::chooseYardTurretFront(BuildPass& pass, BuilderTurn& turn, YardTur
     namespace Air = QuantBotAirDefencePolicy;
     // One order per pass across all yards, from cash beyond the economy's reserve; the yard never
     // saves for it. The site waits from the last scan and is checked again here.
-    if (!turretFrontPlan.active || turretFrontPlan.ordered || yardTurn.itemID != NONE_ID
-        || yardTurn.skipRemainingStructureLogic
-        || !campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)) return;
+    if (!turretFrontPlan.active || turretFrontPlan.ordered) return;
+    turretFrontYardSeen = true;
+    if (yardTurn.itemID != NONE_ID || yardTurn.skipRemainingStructureLogic) { ++turretFrontBlocked[BlockYardBusy]; return; }
+    if (!campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)) { ++turretFrontBlocked[BlockUnavailable]; return; }
     const Coord site = turretFrontPlan.site;
     if (!placeableAmongOwnUnits(site.x, site.y, 1, 1, Structure_RocketTurret) || overlapsReservedStructure(site.x, site.y, 1, 1)) {
+        ++turretFrontBlocked[BlockSiteGone];
         turretFrontPlan.site = Coord::Invalid();
         turretFrontPlan.active = false;
         return;
     }
     if (!hasPowerBufferForTurret(pass)) {
+        ++turretFrontBlocked[BlockPower];
         // As the Airport ring: no turret the house cannot power, one Wind Trap first.
         if (!powerGenerationPending(pass) && campaignAvailableToBuild(turn.pBuilder, Structure_WindTrap)
             && Air::affordable(pass.money, buildingCapitalCost(pass, Structure_WindTrap), turretFrontPlan.reserve)
@@ -580,11 +590,11 @@ void QuantBot::chooseYardTurretFront(BuildPass& pass, BuilderTurn& turn, YardTur
         }
         return;
     }
-    if (!getHouse()->hasPower()) return;
+    if (!getHouse()->hasPower()) { ++turretFrontBlocked[BlockPower]; return; }
     int cost = purchasePrice(turn.pBuilder, Structure_RocketTurret);
     for (const auto& slab : foundationOrders(turn.pBuilder, Structure_RocketTurret, site))
         cost += purchasePrice(turn.pBuilder, slab.item);
-    if (!Air::affordable(pass.money, cost, turretFrontPlan.reserve)) return;
+    if (!Air::affordable(pass.money, cost, turretFrontPlan.reserve)) { ++turretFrontBlocked[BlockFunds]; return; }
     const char* rule = turretFrontRule(turretFrontPlan.mode);
     turretFrontPlan.ordered = true;
     yardTurn.itemID = Structure_RocketTurret;

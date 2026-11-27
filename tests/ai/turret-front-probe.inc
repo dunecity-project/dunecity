@@ -46,6 +46,7 @@
 #include <players/QuantBot.h>
 #include <players/QuantBotConfig.h>
 #include <players/TurretFrontPolicy.h>
+#include <structures/BuilderBase.h>
 #include <structures/StructureBase.h>
 #include <structures/TurretBase.h>
 #include <units/UnitBase.h>
@@ -168,7 +169,10 @@ UnitBase* unit(House* house, int item, int x, int y) {
 /// The own base every case starts from: a Construction Yard, a Radar, a Refinery and power, in the
 /// west (x 6..18, y 26..37).
 void ownBase(Fixture& f) {
-    place(f.own, Structure_ConstructionYard, 10, 28);
+    // A fully upgraded yard, as in a mid-game base: Rocket Turrets need the upgrade.
+    auto* yard = static_cast<BuilderBase*>(place(f.own, Structure_ConstructionYard, 10, 28));
+    yard->curUpgradeLev = yard->getMaxUpgradeLevel();
+    yard->updateBuildList();
     place(f.own, Structure_Radar, 13, 28);
     place(f.own, Structure_Refinery, 14, 32);
     for(int i = 0; i < 6; ++i) place(f.own, Structure_WindTrap, 6 + 2 * (i % 2), 26 + 2 * (i / 2) + (i / 2));
@@ -360,7 +364,9 @@ void retire(bool on) {
     Fixture f = newGame(false, false, false, on);
     // The base's front is at x 30..40 (Construction Yard, Refinery, power, 4 turrets); its rear,
     // x 2..12, holds 20 turrets and a Palace with 2 beside it. The enemy is at x 118.
-    place(f.own, Structure_ConstructionYard, 34, 28);
+    auto* yard = static_cast<BuilderBase*>(place(f.own, Structure_ConstructionYard, 34, 28));
+    yard->curUpgradeLev = yard->getMaxUpgradeLevel();
+    yard->updateBuildList();
     place(f.own, Structure_Refinery, 37, 32);
     for(int i = 0; i < 8; ++i) place(f.own, Structure_WindTrap, 30 + 2 * (i % 2), 22 + 3 * (i / 2));
     place(f.own, Structure_Palace, 4, 50);

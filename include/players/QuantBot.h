@@ -2320,6 +2320,12 @@ private:
     std::array<TurretFrontCounts, 5> turretFrontCounts{};   ///< by TurretFrontMode
     bool turretDrilling = false;                              ///< (e) the last scan found a drill site
     int turretRetired = 0;                                    ///< (d) turrets sold or demolished
+    /// Why a waiting front site was not ordered on a pass (no silent override; TURRET_FRONT_STATE):
+    /// the yard never reached the front step, it already had an item, turrets were not buildable,
+    /// the site went, power, or funds.
+    enum TurretFrontBlock { BlockNotReached, BlockYardBusy, BlockUnavailable, BlockSiteGone, BlockPower, BlockFunds, BlockCount };
+    std::array<int, BlockCount> turretFrontBlocked{};
+    bool turretFrontYardSeen = false;                         ///< chooseYardTurretFront ran this pass
     void trackTurretFrontOrders(Uint32 now);
     /// The TURRET_FRONT rule name of an order's mode (front_reinforce, turret_creep, ...).
     static const char* turretFrontRule(TurretFrontMode mode);
