@@ -2207,6 +2207,79 @@ times out. Elsewhere placement is level; on the generated ladder maps the seat k
 interval touches 0 from above), but the screen does not clear the default rule. A next step would be the
 lobby at 240 minutes and parks combined with the economy package, where land value already pays.
 
+### Redevelopment for land value (`RoadLaneParks`, `LotParks`, `PollutionRelocation`, 2026-11-27, default off)
+
+Stefan, from the Spectator view of a Brutal AI city (the Air's `low.dls`): "there's still lots of low
+value ... the AI could benefit from demolishing and rebuilding to either remove pollution from an area
+... or by adding in more palaces or parks ... it has lots of 2 lane roads which is a waste".
+
+**What holds the value down** (`tests/ai/land-value-audit.inc`, `land-value-continuation.py`; the
+save at minute 17 of its clock, three city houses). A lot's land value is the Micropolis sum: a
+distance term `(34 - d/2) * 4` to its cluster's zone centre, park terrain and sand, minus pollution
+and 20 for crime over 190, plus the Palace/Stadium stamp. The audit recomputes the distance term and
+reads the rest from the live maps.
+
+| House | R/C lots | lot land value | lots <= 80 | their mean pollution | of them polluted >= 20 | mean distance term | distance term <= 40 | outside every Palace/Stadium reach | crime > 190 | road tiles in a 2x2 road square |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 386 | 110 | 159 | 147 | 146 | 58 | 42 | 138 | 0 | 479 of 1,505 |
+| 4 | 755 | 84 | 444 | 87 | 277 | 28 | 324 | 388 | 0 | 702 of 2,595 |
+| 6 | 821 | 84 | 493 | 70 | 258 | 24 | 388 | 432 | 0 | 619 of 2,485 |
+
+The low lots are polluted, far from their city's centre and outside every landmark's reach, all at
+once; parks add about 7 to each. The polluters are Industrial zones (about 300 a house, no
+factories), mixed through about 800 R/C lots. Crime plays no part. A quarter of the road tiles are a
+second lane: every building paves a one-tile ring, so two lots two tiles apart leave a two-lane strip.
+
+**Rule: Parks Count As Roads** (default on, protocol 143; docs/city-economy-balance.md, "Parks").
+A Park is a road connection for the city (zone access and traffic) but gives units no road speed.
+
+**Switches** (`QuantBotRedevelop.cpp`, `RedevelopmentPolicy.h`; play styles `road-lane-parks`,
+`lot-parks`, `pollution-relocation`, `redevelop-all`). Searches run one second in every eight (two
+in every 120 for relocation), not on every yard pass, and not during an air raid or a ground threat
+to an asset. Border fighting no longer stops them (in `low.dls` some enemy fired at some building in
+85% of the windows).
+- `RoadLaneParks`: a Park on a road tile of a 2x2 square of our road (ours, or unowned beside our
+  buildings), where it adds at least 4 land value to our R/C blocks, and only if every road path and
+  every unit path through the tile stays open (`RedevelopmentPolicy::ringKeepsPassage`, a local test
+  on the eight neighbours, plus the city road and landlock checks).
+- `LotParks`: clears an own R/C lot of land value <= 64 and density <= 1 whose four Parks would add
+  at least 24 land value to the house's other lots; its first Park takes the lot, the next fill it.
+- `PollutionRelocation`: the Industrial zone whose pollution costs our R/C lots the most (at least
+  40) is rebuilt where Industrial siting puts it, when that costs at most half as much.
+
+Cost: in the 30-minute continuation the lane search took 11 ms a call (max 12 ms), the lot search
+6 ms, against 15 ms for one `findPlaceLocation` that runs thousands of times. `perf_regression`
+passed with the shipped defaults.
+
+**Screens** (seat-only `--seat-style`, paired by game against a control at the same commit, AWS;
+final round at `7ace04b61`; results `~/Documents/projects/outputs/redevelop-20261127/`, `analyse_v4.py`,
+`screen-v4.md`). Score is the placement difference, 95% bootstrap; city columns are the seat's end
+of game land value, population and credits where both seats survive.
+
+| Arm | Stefan's lobby (24, 120 min) score / land value / population | weak seat (144) score / land value / population | ladder + skirmish + CY (108) score | all (276) score |
+|---|---|---|---|---|
+| RoadLaneParks | 0 / +0.9 [-0.0, +2.0] / +0.0k | -0.071 [-0.168, +0.023] / -0.7 / **-1.7k** | -0.005 | -0.039 [-0.093, +0.013] |
+| LotParks | 0 / **+1.7 [+0.7, +2.8]** / **-0.9k** | -0.037 [-0.083, +0.002] / **-1.8** / **-2.0k** | +0.010 | -0.016 [-0.041, +0.007] |
+| PollutionRelocation | 0 / **-4.4 [-5.5, -3.3]** / **+2.5k [+1.6, +3.4]** | +0.000 / -0.1 / +0.1k | -0.007 | -0.003 [-0.008, +0.000] |
+| all three | 0 / -1.2 / -0.7k | -0.036 / -0.1 / -0.8k | -0.012 | -0.024 [-0.074, +0.026] |
+
+Every lobby game times out with all four houses alive, at 120 minutes and at 240 (48 more games
+each for PollutionRelocation and all three, at `b19c288bb`: score 0, land value -4.0 and -2.7,
+population **+1.8k** and **+1.9k**), so placement cannot separate the arms there. In the
+`low.dls` continuation (30 minutes, all houses one style) RoadLaneParks turned 73 of house 0's
+second-lane tiles into Parks and raised its lot land value from 111 to 117; LotParks cleared 69 of
+house 4's lots and cost it 1,170 residents for +1 lot land value; PollutionRelocation moved one
+zone. Its search seldom runs in a warring city (it needs twice an Industrial zone's price in hand and
+non-negative industrial demand) and, in a city this mixed, seldom finds a site with half the harm.
+
+**Decision.** All three stay off: no arm's score interval is above 0, LotParks and RoadLaneParks
+cost population on the weak seat, and PollutionRelocation trades about 4 land value for about
+2,000 residents without changing a result. The rule Parks Count As Roads stays on: it is Stefan's
+rule, the default AI builds no Parks (ParkDistricts is off), and its tests pass. The fixable cause
+the measurement points at is industrial siting itself: new Industrial zones placed beyond the
+5-tile pollution reach of R/C lots, so that relocation is not needed; and more Palaces/Stadiums,
+whose 8-tile reach misses most low lots.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first

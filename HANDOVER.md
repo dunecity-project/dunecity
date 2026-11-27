@@ -1,3 +1,43 @@
+## 2026-11-27 - City redevelopment for land value: Parks Count As Roads (protocol 143); three QuantBot switches, all off
+
+Stefan, 2026-11-27, from the Spectator view of a Brutal AI city (the Air's `low.dls`): "there's still lots of low
+value ... the AI could benefit from demolishing and rebuilding to either remove pollution from an area buy moving
+factories and industrial zones to different areas or by adding in more palaces or parks. count a park as a road
+(without the movement bonus) ... it has lots of 2 lane roads which is a waste. we can remove some roads as long as
+we maintain paths out of the base". Commits 3342d22d9 (rule, switches, tests, audit), fb21024c1 (the save's mod
+revision fixture), b19c288bb, b3ca03cad, f04996622, 7ace04b61 (fixes found by the save runs), 33e44a746 (docs).
+Not released. Full write-up: docs/formations.md, "Redevelopment for land value". Evidence:
+`~/Documents/projects/outputs/redevelop-20261127/` (`low-save.ini` is the frozen save, `screen-v4.md`, `save7/`).
+
+- **Why the land value is low** (`tests/ai/land-value-audit.inc`): in the three Brutal cities the low lots
+  (<= 80; 159, 444 and 493 of 386, 755 and 821 R/C lots) carry pollution 70-147, three quarters of them sit so far
+  from their city's centre that the distance term gives <= 40, and 87% lie outside every Palace/Stadium reach.
+  Crime plays no part. The polluters are ~300 Industrial zones a house mixed through the lots (no factories). A
+  quarter of the road tiles are a second lane (every building paves a one-tile ring).
+- **Rule Parks Count As Roads** (default on; MOD18 city-rules bit 6, set only when off; protocol 143; save format
+  unchanged): a Park is a road connection for city traffic and zone access (`Tile::isRoadConnection`), never for
+  unit speed. Tests: `ParkTestCase`, `CoopGameSettingsTestCase` (protocol 143), `city-park` skirmish probe (a lot
+  whose last road tile becomes a Park keeps traffic access on, loses it off, no unit road flag) - passed on AWS.
+- **QuantBot switches**, `[Force Concentration]`, all default off (`QuantBotRedevelop.cpp`, `RedevelopmentPolicy.h`,
+  play styles `road-lane-parks`, `lot-parks`, `pollution-relocation`, `redevelop-all`): RoadLaneParks (Parks on the
+  spare lane of two-lane strips, every road and unit path through the tile kept by a local ring test), LotParks
+  (clear a cheap own lot for Parks that lift its neighbours), PollutionRelocation (rebuild the most harmful
+  Industrial zone where Industrial siting puts it). Searches run in short game-time windows: 11 ms (lane) and 6 ms
+  (lot) a call, at most once per 8 s a house.
+- **Measured and left off.** Final screens at 7ace04b61, 276 paired games an arm: no score interval above 0
+  (RoadLaneParks -0.039, LotParks -0.016, PollutionRelocation -0.003, all three -0.024). LotParks: lobby land value
+  +1.7 but population -0.9k, weak seat -2.0k; RoadLaneParks: weak seat -1.7k. PollutionRelocation: lobby land value
+  -4.4, population +2.5k (and +1.8k at 240 minutes), placement unchanged. In `low.dls` RoadLaneParks raised house 0's
+  lot land value 111 -> 117 in 30 minutes.
+- **Gates:** the four AI gates passed on AWS at 3342d22d9 (20261127T095515-ctest-d85748); `perf_regression` passed on
+  the Mini at f04996622 (20261127T110338-ctest-e54bb7); nightly tier `-L nightly -LE gui` at 7ace04b61 is job
+  20261127T114821-ctest-12c4b7 (result below once in).
+- **Next lever** (not done): site new Industrial zones beyond the 5-tile pollution reach of R/C lots, and more
+  landmarks where low lots lie outside every reach.
+- Harness: `tests/ai/land-value-continuation.py --freeze SAVE INI` freezes a save; `--game-options INI` continues it
+  per arm on the queue. The save's mod revision lives in `tests/saves/data/workshop/revisions/f7ffc687...`.
+  scenario-matrix `houses.csv` now carries end-of-game credits, population and land value.
+
 ## 2026-11-27 - Hospitals heal infantry: five beds, a type lock, Carryall delivery (Hospital Care, protocol 146, save 9902)
 
 Stefan, 2026-11-27: "i want troopers and infantry to be able to be healed / repaied via a hospital R zone -
