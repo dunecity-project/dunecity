@@ -35,6 +35,7 @@
 #include <Tile.h>
 #include <Command.h>
 #include <mod/ModManager.h>
+#include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
 #include <structures/Palace.h>
 #include <structures/StructureBase.h>
@@ -102,6 +103,14 @@ struct Fixture {
         enemy = game->getHouse(HOUSE_HARKONNEN);
         require(owner != nullptr && enemy != nullptr, label + ": fixture houses missing");
         require(owner->isAI() == !humanOwner, label + ": owner is not the requested kind of player");
+        if(humanOwner) {
+            // The enemy is a second HumanPlayer only so that it stands still, and a local game makes
+            // every HumanPlayer it loads the local one (the last wins). A skirmish has one human: the
+            // owner, as it is when Stefan plays Fremen.
+            for(const auto& player : owner->getPlayerList())
+                if(auto* human = dynamic_cast<HumanPlayer*>(player.get())) { pLocalHouse = owner; pLocalPlayer = human; }
+            require(pLocalHouse == owner && pLocalPlayer != nullptr, label + ": the owner is not the local player");
+        }
         require(game->getGameInitSettings().getGameOptions().fremenPalaceWorm == rule, label + ": the rule did not reach the match");
         const Coord site = bundledMap ? palaceSiteNearOwnArmy() : Coord(10, 30);
         palace = static_cast<Palace*>(owner->placeStructure(NONE_ID, Structure_Palace, site.x, site.y, true, true));
