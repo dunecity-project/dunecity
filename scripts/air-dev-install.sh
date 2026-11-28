@@ -22,7 +22,7 @@
 # The previous app is kept in /tmp/dunecity-dev-<sha> on the Air.
 set -euo pipefail
 
-DEV_SWITCHES=()
+DEV_SWITCHES=(EconomyFirst EconomyFirstUnitPacing RepairReturnCheck)
 HOST=${DUNECITY_AIR_HOST:-Stefans-MacBook-Air.local}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 BIN=$REPO/build-int/bin
