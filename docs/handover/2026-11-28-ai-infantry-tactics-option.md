@@ -196,3 +196,38 @@ revealed, and saves offscreen top/bottom PNGs for DuneCity/Tornie in all three U
 skins at 640x480 and Air 960x600 logical at 2x/3x physical scale. The research UI
 bounds helper now accounts for the viewport's actual scroll offset.
 Real-screen/touch scrolling remains unverified.
+
+## Captured tax and occupied-capture targeted green
+
+- Tested commit: `a4b59dcbeda3f0b115337f73740addcc3acaac16` (parent
+  `4bd6f788cebd5a24cbb5c5ba3eb44ef5199b66d8`).
+- AWS job: `20261128T202002-captured-tax-and-lock-v8-255d4e`; terminal report read at
+  **2026-11-28 20:23:15 AEDT**. **9/9 passed**, 2m47s submission-to-completion:
+  `rts_controls_tests`, `captured_zone_tax_probe`, `occupied_zone_capture_probe`,
+  `zone_garrison_identity_probe`, `garrison_capture_option_probe`,
+  `zone_garrison_stats_probe`, `zone_garrison_probe`, `infantry_zone_capture_probe`,
+  `zone_trooper_rush_probe`.
+- Tax: all six human/QuantBot R/C/I cases completed original/captured/released/retaken windows,
+  16 real budget ticks each: **384 exact conserved payouts** to the current holder, zero to the
+  other houses. Existing production tax accounting was already correct; no duplicate payout
+  implementation was added.
+- Permission/menu: default city ON, INI/settings retention and vanilla-hidden assertions passed.
+  With configured tactics OFF and the permission ON, AI occupied **5** and captured **1**;
+  with configured tactics ON and permission OFF, both counts were **0**. Human ON occupied
+  own/enemy zones and captured; OFF did neither. The checkbox was fully visible at
+  `(31,362,314,24)` without needing a wheel event; checkbox and OK used real window input.
+- Capture authority: all **8** occupied-target cases and all **52** full garrison cases passed,
+  including mixed allied crews, actual owner reinforcement, live Capture cancellation and a
+  separately issued Attack with real attacker damage credit.
+- Native capture: **17/17 eligible captures**, **13** properly excluded engagements and **0**
+  infantry-inflicted damage on eligible captures; all three genuinely purchased squad children
+  completed physical entry. The independent power-timer witness accounts for background loss.
+  Preserved Rush: **16/16 entries**, all 16 orders within 1s, **4** near entries within 20s and
+  **12** far deviations, with protected-role assertions retained.
+- Stefan: "if a building is already garrisoned by the enemy then it cant be captured it can only
+  be attacked". The ownership-change regression quotes this rule and tests the corresponding
+  live cancellation plus credited explicit Attack, not the retired Capture-as-Assault behavior.
+- This is the bounded targeted green, not a claim for the four AI gates or broad nightly on
+  this SHA. Integration/qualification owns those subsequent checks. Real-screen menu appearance
+  and the installed Air build remain unverified by this worker. No new save state was introduced;
+  the integrator owns any protocol allocation.
