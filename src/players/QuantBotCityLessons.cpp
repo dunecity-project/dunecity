@@ -152,11 +152,16 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
                 // His opening zones (19 in the first three minutes) while they are not yet ordered.
                 const int zoneOrders = lessons.economyFirstZoneOrders[0] + lessons.economyFirstZoneOrders[1]
                     + lessons.economyFirstZoneOrders[2];
-                const int openingZones = minute < L::kEconomyFirstOpeningMinutes
-                    ? std::max(0, L::kEconomyFirstOpeningZones - zoneOrders) * data[Structure_ZoneResidential][houseID].price : 0;
+                // An opening target is unfinished work, not a timer that abandons it at minute three.
+                const int zonePrice = data[Structure_ZoneResidential][houseID].price;
+                const int openingZones = std::max(0, L::kEconomyFirstOpeningZones - zoneOrders) * zonePrice;
                 const int need = missing * data[Unit_MCV][houseID].price
                     + (powerShort ? data[Structure_NuclearPlant][houseID].price : 0) + openingZones;
                 pass.economyFirstHold = std::min(need, L::economyFirstHold(getHouse()->getCredits()));
+                // Keep just the next unfinished opening plot's price even in a poor treasury. Otherwise every
+                // trickle of tax buys a unit installment and the last opening plots never get their turn.
+                if (openingZones > 0)
+                    pass.economyFirstHold = std::max(pass.economyFirstHold, std::min(zonePrice, getHouse()->getCredits()));
                 ++lessons.economyFirstHoldPasses;
             }
             // His Palaces (3 by minute 3, 6 by 10, 8 by 20, 15 by 31): planned as the city economy project while the
@@ -180,6 +185,13 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
                                 getHouse()->getCredits(), getGameCycleCount());
                     }
                 }
+            }
+            // A due defensive turret is the defence, not optional army spending. Protect its next price
+            // from unit producers even during a core threat; ordinary emergency/civic yard choices still win.
+            if (economyFirstTurretsEnabled()
+                && lessons.economyFirstTurretOrders < L::economyFirstTurretTarget(getGameCycleCount(), MILLI2CYCLES(60000))) {
+                const int price = currentGame->objectData.data[Structure_RocketTurret][houseID].price;
+                pass.economyFirstHold = std::max(pass.economyFirstHold, std::min(price, getHouse()->getCredits()));
             }
             if (pass.emitStatsLog)
                 SDL_Log("ECONOMY_FIRST: house=%d event=pass yard_target=%d was=%d capacity=%d hold=%d threat=%d credits=%d "

@@ -118,7 +118,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--build-dir', required=True)
     parser.add_argument('--results', required=True)
-    parser.add_argument('--variant', choices=VARIANTS, default='B')
+    parser.add_argument('--variant', choices=VARIANTS, default='A')
     args = parser.parse_args()
     Path(args.results).mkdir(parents=True, exist_ok=True)
     others = [('atreides', 'default'), ('ordos', 'default'), ('mercenary', 'default')]

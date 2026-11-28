@@ -303,7 +303,8 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     const bool economyPort = turn.pBuilder->getItemID() == Structure_StarPort;
     const int pacing = economyFirstUnitPacing();
     const bool paced = economyUnit && (pacing == 1 || (pacing == 2 && economyPort))
-        && !cityLessons.economyFirstThreatNow;
+        && !cityLessons.economyFirstThreatNow
+        && !((pass.airEngaged || pass.cityAntiAirInfantryDemand) && QuantBotBuildPolicy::rocketInfantry(itemID));
     const int allowance = paced
         ? CityLessonsPolicy::economyFirstUnitAllowance(getGameCycleCount(), MILLI2CYCLES(60000))
         : std::numeric_limits<int>::max();

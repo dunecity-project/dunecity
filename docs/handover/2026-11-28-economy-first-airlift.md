@@ -43,3 +43,7 @@ Pending implementation and committed-source measurements. Inherited ef-runway 1b
 ## Opening save/checkpoint state (next batch)
 
 Integrator allocated save 9906 / protocol 155 after the 9905 / 153 garrison core and independently reserved garrison loss-path protocol 154. Accepted unit/Starport spend, zone/turret order counts and policy latches now append to QuantBot's existing stream instead of resetting on reload. Scheduled material identities are ordered, persisted builder IDs. Older streams consume no new tail and retain their previous empty-counter defaults. The MCV probe round-trips the real full QuantBot stream byte-for-byte for this state, checks exact consumption, and reads an exact 9905 prefix without inventing a tail. A focused `city_lessons_policy` CTest selects the existing [city-lessons] unit/config cases. Queue outcomes are recorded separately once observed.
+
+## Immediate base-A playtest correction
+
+The canonical `economy_first` entry tests A (EconomyFirst on, both optional opening variants off). Rocket infantry responding to observed air is not blocked by unit pacing; ordinary units retain their cap. Unfinished opening-zone work retains the next plot price rather than expiring at minute three. The experimental single-qualified-yard upgrade heuristic is absent: its C fixture lost nine yards and it is not recommended. C/E growth shortfalls remain recorded game results; no probe expectation is lowered. Coordinator directs the Air DEV_SWITCHES copy from C to A while the five-arm FFA experiment proceeds.
