@@ -168,7 +168,7 @@ def iso_time(value):
     return dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
 
 
-def package_decision(sha, green, existing, runs, now, manual=False, current_run=None):
+def package_decision(sha, green, existing):
     """Never substitute an older green head or rebuild an existing immutable set."""
     full_sha(sha)
     if existing:
@@ -177,12 +177,6 @@ def package_decision(sha, green, existing, runs, now, manual=False, current_run=
         return False, 'no-new-inputs: ' + snapshot_tag(sha)
     if not green:
         return False, 'staging head has no successful integration CI: ' + sha
-    for item in runs:
-        if str(item['id']) == str(current_run):
-            continue
-        if item.get('display_title', '').startswith('Staging packages'):
-            if not manual and now - iso_time(item['created_at']) < dt.timedelta(hours=2):
-                return False, f'two-hour debounce: producing run {item["id"]}'
     return True, 'green staging snapshot selected'
 
 
@@ -240,11 +234,23 @@ def reusable_macos_run(sha):
     return str(qualified['id']) if len(packages) == 1 and not packages[0]['expired'] else ''
 
 
+def require_staging_qualification(receipt, sha):
+    """Public staging requires green AWS execution of the entire frozen plan."""
+    qualification = receipt.get('qualification', {})
+    linux = qualification.get('linux', {})
+    if (receipt.get('qualificationWorkflow') != QUALIFY_WORKFLOW
+            or receipt.get('sourceCommit') != sha or qualification.get('status') != 'success'
+            or linux.get('sourceCommit') != sha or not linux.get('queueJob')
+            or not qualification.get('tests') or linux.get('tests') != qualification['tests']):
+        raise ValueError('Public staging requires a green exact-source AWS qualification for every planned test')
+
+
 def validate_staging_receipts(manifest, publication=None):
     """Validate immutable API receipts; package producer HEAD need not be game source."""
     sha = full_sha(manifest['sourceCommit'])
     fields = {'qualificationRunId', 'qualificationRunAttempt', 'qualificationSourceCommit',
-              'producerSourceCommit', 'producerEvent', 'producerHeadBranch', 'producerWorkflowPath'}
+              'producerSourceCommit', 'producerEvent', 'producerHeadBranch', 'producerWorkflowPath',
+              'headlessQualificationRunId', 'headlessQualificationRunAttempt'}
     if not fields.issubset(manifest):
         raise ValueError('Staging snapshot lacks explicit source qualification/producer receipts')
     if manifest['qualificationSourceCommit'] != sha:
@@ -259,6 +265,14 @@ def validate_staging_receipts(manifest, publication=None):
             or qualified['repository']['full_name'] != repository()
             or not integration_green(qualified, qjobs, sha)):
         raise ValueError('Source integration qualification is not independently successful')
+    with tempfile.TemporaryDirectory(prefix='staging-qualification-') as temporary:
+        directory = Path(temporary)
+        receipt = reuse_qualification(argparse.Namespace(
+            sha=sha, directory=directory, run_id=manifest['headlessQualificationRunId'],
+            run_attempt=manifest['headlessQualificationRunAttempt']))
+        require_staging_qualification(receipt, sha)
+        if any(manifest.get('sha256', {}).get(name) != digest(directory / name) for name in QUALIFY_FILES):
+            raise ValueError('Staging snapshot qualification hashes differ from the frozen AWS receipt')
     pid, pattempt = int(manifest['runId']), int(manifest['runAttempt'])
     if pid <= 0 or pattempt <= 0:
         raise ValueError('Invalid package producer run/attempt')
@@ -279,9 +293,10 @@ def validate_staging_receipts(manifest, publication=None):
             or producer['head_branch'] != manifest['producerHeadBranch']
             or producer['path'] != manifest['producerWorkflowPath']):
         raise ValueError('Package producer is not independently successful/trusted')
+    input_jobs = CI_JOBS | {'staging-nightly'}
     outcomes = {name: [job['conclusion'] for job in pjobs if job['name'] == name]
-                for name in CI_JOBS | {'dev-release'}}
-    if any(outcomes[name] != ['success'] for name in CI_JOBS):
+                for name in input_jobs | {'dev-release'}}
+    if any(outcomes[name] != ['success'] for name in input_jobs):
         raise ValueError('Package producer input jobs did not all succeed at the frozen attempt')
     if live_inputs:
         live = [job for job in pjobs if job['name'] == 'dev-release']
@@ -309,7 +324,7 @@ def validate_staging_receipts(manifest, publication=None):
     live = [job for job in jobs if job['name'] == 'dev-release']
     if ((live_retry and (len(live) != 1 or live[0]['status'] != 'in_progress' or live[0]['conclusion'] is not None))
             or (not live_retry and [job['conclusion'] for job in live] != ['success'])
-            or any(job['name'] in CI_JOBS and job['conclusion'] != 'success' for job in jobs)):
+            or any(job['name'] in input_jobs and job['conclusion'] != 'success' for job in jobs)):
         raise ValueError('Package producer publication retry contains failed/skipped required jobs')
 
 
@@ -496,9 +511,6 @@ def plan(args):
         sha = full_sha(inputs.get('staging_sha') or head)
         if sha != head and api(f'repos/{repository()}/compare/{sha}...{head}')['status'] not in ('ahead', 'identical'):
             raise ValueError('Manual staging SHA must belong to the integration branch history')
-        runs = workflow_runs()
-        green = any(item['head_sha'] == sha and item['head_branch'] == STAGING
-                    and item['event'] == 'push' and item['conclusion'] == 'success' for item in runs)
         receipt = inputs.get('integration_run_id')
         if receipt:
             if not receipt.isdigit():
@@ -508,11 +520,12 @@ def plan(args):
                 raise ValueError('Integration receipt belongs to another workflow')
             jobs = api(f'repos/{repository()}/actions/runs/{receipt}/jobs?per_page=100')['jobs']
             green = integration_green(source_run, jobs, sha)
+        else:
+            green = any(item['head_sha'] == sha and item['head_branch'] == STAGING
+                        and item['event'] == 'push' and item['conclusion'] == 'success' for item in workflow_runs())
         existing = optional_release(snapshot_tag(sha))
         require_unretired_staging(sha, existing)
-        package, reason = package_decision(sha, green, existing, runs,
-                                          dt.datetime.now(dt.timezone.utc), manual=name == 'workflow_dispatch',
-                                          current_run=os.environ.get('GITHUB_RUN_ID'))
+        package, reason = package_decision(sha, green, existing)
         nightly = event.get('schedule') == '47 3 * * *'
         values.update(sha=sha, run=package or nightly, package=package, stable=False, staging=True,
                       tag=snapshot_tag(sha), reason=reason, tier='nightly' if nightly else 'integration')
@@ -537,8 +550,7 @@ def dispatch_staging(args):
     sha = full_sha(args.sha)
     existing = optional_release(snapshot_tag(sha))
     require_unretired_staging(sha, existing)
-    selected, reason = package_decision(sha, True, existing, workflow_runs(),
-                                       dt.datetime.now(dt.timezone.utc), current_run=os.environ.get('GITHUB_RUN_ID'))
+    selected, reason = package_decision(sha, True, existing)
     print(reason)
     if selected:
         subprocess.run(['gh', 'workflow', 'run', 'build.yml', '--repo', repository(), '--ref', STAGING,
@@ -821,7 +833,13 @@ def reuse_qualification(args):
     sha = full_sha(args.sha)
     prefix = f'repos/{repository()}'
     run_id = getattr(args, 'run_id', None)
-    runs = [qualification_api(f'{prefix}/actions/runs/{int(run_id)}')] if run_id else qualification_runs()
+    attempt = getattr(args, 'run_attempt', None)
+    if attempt is not None and (not run_id or int(run_id) <= 0 or int(attempt) <= 0):
+        raise ValueError('A frozen qualification attempt requires a positive run ID and attempt')
+    endpoint = f'{prefix}/actions/runs/{int(run_id)}' if run_id else ''
+    if attempt is not None:
+        endpoint += f'/attempts/{int(attempt)}'
+    runs = [qualification_api(endpoint)] if run_id else qualification_runs()
     # A run's head SHA is the control workflow, not necessarily its candidate.
     for producer in runs:
         if not run_id and producer.get('display_title') != 'Qualify ' + sha:
@@ -845,11 +863,62 @@ def reuse_qualification(args):
                 for name, path in paths.items():
                     shutil.copyfile(path, args.directory / name)
             print(f'Qualified {sha}: run {producer["id"]}, attempt {producer["run_attempt"]}; no build or test rerun')
-            return
+            return receipt
         except (KeyError, ValueError) as error:
             print('Ignoring unusable qualification: ' + str(error), file=sys.stderr)
     raise ValueError('No reusable headless qualification for ' + sha +
                      '; qualify this frozen integration candidate before creating a production tag')
+
+
+def wait_qualification(args):
+    """Observe qualification; never launch or replay a build or a test."""
+    sha = full_sha(args.sha)
+    if not 1 <= args.timeout_seconds <= 4800:
+        raise ValueError('Qualification observation must be bounded to 1..4800 seconds')
+    deadline = time.monotonic() + args.timeout_seconds
+    try:
+        receipt = reuse_qualification(args)
+    except ValueError as error:
+        if not str(error).startswith('No reusable headless qualification for '):
+            raise
+    else:
+        require_staging_qualification(receipt, sha)
+        return
+    ignored = set()
+    prefix = f'repos/{repository()}'
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError('No green AWS receipt observed before the staging publication deadline: ' + sha)
+        data = qualification_api(f'{prefix}/actions/workflows/qualify-release.yml/runs?per_page=100')
+        producer = next((item for item in data['workflow_runs']
+                         if item.get('display_title') == 'Qualify ' + sha and item['id'] not in ignored), None)
+        if producer is None:
+            # Workflow delivery is asynchronous. An incomplete recent page is
+            # not evidence of absence, and can never authorize publication.
+            time.sleep(min(5, remaining))
+            continue
+        qid, attempt = int(producer['id']), int(producer['run_attempt'])
+        if producer['status'] != 'completed':
+            subprocess.run(['gh', 'run', 'watch', str(qid), '--repo', repository(),
+                            '--exit-status', '--interval', '10'], timeout=remaining, check=False)
+            producer = qualification_api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}')
+        if producer['status'] != 'completed':
+            raise ValueError('Qualification observation ended before completion; public staging remains blocked')
+        jobs = qualification_api(f'{prefix}/actions/runs/{qid}/attempts/{attempt}/jobs?per_page=100')['jobs']
+        outcomes = {job['name']: job['conclusion'] for job in jobs}
+        if producer['conclusion'] == 'success' and outcomes.get('qualify') == 'success':
+            receipt = reuse_qualification(argparse.Namespace(
+                sha=sha, directory=args.directory, run_id=qid, run_attempt=attempt))
+            require_staging_qualification(receipt, sha)
+            return
+        if (outcomes.get('qualify') == 'skipped' or producer['conclusion'] == 'cancelled'
+                or outcomes.get('mini-fallback') == 'success'):
+            # Only observe an already-dispatched admission fallback. A real
+            # failure never triggers another workflow, backend or test here.
+            ignored.add(qid)
+            continue
+        raise ValueError(f'Qualification run {qid}, attempt {attempt} did not succeed; public staging remains blocked')
 
 
 def check_headless(args):
@@ -926,12 +995,12 @@ def make_manifest(args):
     required = desktop_names(version) | {BROWSER, 'DuneCity-p2p-service.tar.gz'}
     required |= {f'build-inputs-{platform}.json' for platform in
                  ('windows-x64', 'macos-arm64', 'linux-x86_64', 'emscripten')}
+    required |= set(QUALIFY_FILES)
     if args.stable:
         if args.tag != 'v' + version or not STABLE.fullmatch(args.tag):
             raise ValueError('Official package version does not match the stable tag')
         required |= {f'updates-{p}.txt' for p in ('macos-arm64', 'windows-x64', 'linux-x86_64')}
         required |= {'appcast-macos-arm64.xml', 'appcast-windows-x64.xml', 'macos-signing.json'}
-        required |= {HEADLESS_RECEIPT, HEADLESS_PLAN, HEADLESS_RESULTS}
     if required - paths.keys():
         raise ValueError('Missing required publication assets: ' + ', '.join(sorted(required - paths.keys())))
     for platform in ('windows-x64', 'macos-arm64', 'linux-x86_64', 'emscripten'):
@@ -952,6 +1021,10 @@ def make_manifest(args):
                 raise ValueError('Mac signing receipt does not match package: ' + name)
     elif args.tag != snapshot_tag(sha) or any(name.startswith(('updates-', 'appcast-')) for name in paths):
         raise ValueError('Development publication cannot contain stable feeds or a stable tag')
+    if not args.stable:
+        verify_headless_qualification(paths, sha)
+        headless = json.loads(paths[HEADLESS_RECEIPT].read_text())
+        require_staging_qualification(headless, sha)
     with tempfile.TemporaryDirectory(prefix='dunecity-browser-inputs-') as temporary:
         browser = Path(temporary)
         extract_browser(paths[BROWSER], browser)
@@ -973,7 +1046,9 @@ def make_manifest(args):
     if not args.stable:
         qualified = qualification_for(sha)
         manifest.update(qualificationRunId=qualified['id'], qualificationRunAttempt=qualified['run_attempt'],
-                        qualificationSourceCommit=qualified['head_sha'])
+                        qualificationSourceCommit=qualified['head_sha'],
+                        headlessQualificationRunId=int(headless['qualifyingRunId']),
+                        headlessQualificationRunAttempt=int(headless['qualifyingRunAttempt']))
     write_json(Path(args.directory) / MANIFEST, manifest)
     (Path(args.directory) / 'SHA256SUMS').write_text(''.join(f'{checksum}  {name}\n' for name, checksum in manifest['sha256'].items()))
 
@@ -1632,7 +1707,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest='command', required=True)
     p = commands.add_parser('select-qualification'); p.set_defaults(func=select_qualification)
-    p = commands.add_parser('reuse-qualification'); p.add_argument('--sha', required=True); p.add_argument('--directory', type=Path, required=True); p.add_argument('--run-id', type=int); p.set_defaults(func=reuse_qualification)
+    p = commands.add_parser('reuse-qualification'); p.add_argument('--sha', required=True); p.add_argument('--directory', type=Path, required=True); p.add_argument('--run-id', type=int); p.add_argument('--run-attempt', type=int); p.set_defaults(func=reuse_qualification)
+    p = commands.add_parser('wait-qualification'); p.add_argument('--sha', required=True); p.add_argument('--directory', type=Path, required=True); p.add_argument('--timeout-seconds', type=int, default=4800); p.set_defaults(func=wait_qualification)
     p = commands.add_parser('check-headless'); p.add_argument('--directory', type=Path, required=True); p.add_argument('--ctest-status', type=int, default=0); p.set_defaults(func=check_headless)
     p = commands.add_parser('plan'); p.add_argument('--output', type=Path, default=Path('selection.json')); p.set_defaults(func=plan)
     p = commands.add_parser('dispatch-staging'); p.add_argument('--sha', required=True); p.set_defaults(func=dispatch_staging)

@@ -224,10 +224,11 @@ must remain explicit; do not invent a new tag merely to prove automation.
 - Reuse one sealed fixture per source/toolchain/runtime identity, not per test
   case. Cancellation/timeout terminates and reaps the complete owned process
   group. Preserve the failed case's concise evidence, not endless raw traces.
-- Green integration batches produce immutable staging packages after the two-hour
-  debounce, with a daily safety-net and full-SHA manual dispatch. Unchanged input
-  does not create another package. Development stays `DUNECITY_RELEASE_BUILD=OFF`,
-  prerelease and never Latest. Routine Mac packages use hosted ARM64, not Mini.
+- Green integration batches immediately produce immutable staging packages, with
+  a daily safety-net and full-SHA manual dispatch. There is no fixed cooldown
+  between different source SHAs; unchanged inputs and existing drafts are reused,
+  never rebuilt. Development stays `DUNECITY_RELEASE_BUILD=OFF`, prerelease and
+  never Latest. Routine Mac packages use hosted ARM64, not Mini.
 - Browser staging commits only tiny `deploy/staging-browser.json` metadata to
   the website repository; verified immutable archives download into temporary
   storage. Never commit WASM/data snapshots into its Git history. `/play-staging`
@@ -241,6 +242,16 @@ must remain explicit; do not invent a new tag merely to prove automation.
   Mini retains bounded native integration, calibrated GUI/performance/skin and
   packaged-pointer verification. Qualification metadata, plan and JUnit digests
   must agree before Latest.
+  Public staging also requires a genuinely green AWS receipt for the exact SHA,
+  including every test in its frozen headless-nightly plan; accepted known failures,
+  partial AWS coverage and Mac-only receipts cannot publish it. `staging-nightly`
+  restores/authenticates that receipt in parallel with package assets, without the
+  staging-lifecycle or Mini build mutex. Only publication takes the lifecycle lock.
+  Its original qualifier run/attempt and all three evidence digests are frozen in
+  the publication manifest and reauthenticated by consumers. Previously published
+  snapshots remain immutable; they are not restamped as qualified under this rule.
+  Report platform CI-ready and qualified-publication times separately. Air dev
+  delivery is independent of public package qualification.
 - Freeze one candidate artifact set and required gates before production.
   Record scoped accepted known failures separately from genuinely blocking
   defects. Do not silently waive a gate or rebuild a successful artifact because

@@ -1137,9 +1137,44 @@ jobs:
             build-android-apk/app/build/outputs/apk/debug/DuneLegacy.apk
             android-version.json
 
+  # Assets and qualification run independently. The lifecycle lock protects
+  # publication only, never a wait for a worker or for test games.
+  staging-nightly:
+    needs: [select-inputs]
+    if: |
+      github.event_name != 'pull_request' &&
+      needs.select-inputs.outputs.staging == 'true' &&
+      needs.select-inputs.outputs.package == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      artifact: ${{ steps.receipt.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - name: Await authenticated exact-source AWS qualification
+        id: receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_SHA: ${{ needs.select-inputs.outputs.sha }}
+        run: |
+          python3 scripts/release-automation.py wait-qualification --sha "$STAGING_SHA" --directory qualification --timeout-seconds 4800
+          echo "artifact=DuneCity-Staging-nightly-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.receipt.outputs.artifact }}
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 90
+
   # Reuse the existing dev publisher, but publish a complete immutable source set.
   dev-release:
-    needs: [select-inputs, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos]
+    needs: [select-inputs, test-linux, relay-tests, signaling-tests, build-emscripten, build-windows, build-linux, build-macos, staging-nightly]
     if: |
       always() && !cancelled() &&
       needs.select-inputs.result == 'success' &&
@@ -1150,6 +1185,7 @@ jobs:
       needs.build-windows.result == 'success' &&
       needs.build-linux.result == 'success' &&
       needs.build-macos.result == 'success' &&
+      needs.staging-nightly.result == 'success' &&
       github.event_name != 'pull_request' && needs.select-inputs.outputs.staging == 'true' &&
       needs.select-inputs.outputs.package == 'true'
     runs-on: ubuntu-latest
@@ -1183,6 +1219,10 @@ jobs:
         with:
           name: DuneCity-Emscripten
           path: dist/browser
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.staging-nightly.outputs.artifact }}
+          path: dist/headless
       - name: Preserve exact source and publication inputs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1235,7 +1275,7 @@ jobs:
         with:
           ref: ${{ needs.select-inputs.outputs.sha }}
           persist-credentials: false
-      - name: Request a debounced green snapshot
+      - name: Request the newest green snapshot immediately
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_SHA: ${{ needs.select-inputs.outputs.sha }}
