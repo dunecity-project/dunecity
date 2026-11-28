@@ -57,6 +57,19 @@ bool QuantBot::economyFirstEnabled() const {
     return forced >= 0 ? forced == 1 : botConfig().force.economyFirst;
 }
 
+int QuantBot::economyFirstUnitPacing() const {
+    static const int forced = [] {
+        const char* text = std::getenv("DUNECITY_TEST_ECONOMY_UNIT_PACING");
+        return text && text[0] >= '0' && text[0] <= '2' && text[1] == '\0' ? text[0] - '0' : -1;
+    }();
+    return forced >= 0 ? forced : botConfig().force.economyFirstUnitPacing;
+}
+
+bool QuantBot::economyFirstTurretsEnabled() const {
+    static const int forced = envSwitch("DUNECITY_TEST_ECONOMY_TURRETS");
+    return forced >= 0 ? forced == 1 : botConfig().force.economyFirstTurrets;
+}
+
 bool QuantBot::economyLogEnabled() const {
     static const int forced = envSwitch("DUNECITY_TEST_ECONOMY_LOG");
     return forced == 1 || economyFirstEnabled();
@@ -66,6 +79,7 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
     namespace L = CityLessonsPolicy;
     pass.economyFirstHold = 0;
     pass.economyFirstActive = false;
+    cityLessons.economyFirstThreatNow = false;
     auto& lessons = cityLessons;
     const auto* sim = currentGame->getCitySimulation();
     const int houseID = getHouse()->getHouseID();
@@ -95,7 +109,7 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
             const int yards = house->getNumItems(Structure_ConstructionYard);
             SDL_Log("ECONOMY_FIRST: house=%d event=footprint met=%d half_his=%d zones=%d yards=%d mcvs=%d population=%d "
                     "credits=%d cycle=%u", houseID,
-                    int(lessons.economyFirstMcvs > 0 && zones >= L::kEconomyFirstEffectZones),
+                    int(lessons.economyFirstMcvs > 0 && lessons.economyFirstZonesPlaced >= L::kEconomyFirstEffectZones && yards >= 2),
                     int(zones >= L::kEconomyFirstZones && yards >= L::kEconomyFirstCheckYards), zones, yards,
                     lessons.economyFirstMcvs, population, house->getCredits(), getGameCycleCount());
         }
@@ -105,9 +119,9 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
                     "cycle=%u", houseID, population, getHouse()->getNumItems(Structure_ConstructionYard),
                     lessons.economyFirstHoldPasses, lessons.economyFirstThreatPasses, getGameCycleCount());
         } else {
-            // His schedule of yards; the game option's yard limit still caps it.
+            // Usable room sets build capacity; the lobby yard limit still caps it.
             const int before = pass.cityYardTarget;
-            pass.cityYardTarget = std::max(pass.cityYardTarget, L::economyFirstYards(minute));
+            pass.cityYardTarget = std::max(pass.cityYardTarget, L::economyFirstYardsForRoom(availableBaseFootprintsWide));
             if (pass.yardLimit > 0) pass.cityYardTarget = std::min(pass.cityYardTarget, pass.yardLimit);
             // An enemy ground unit near a yard, factory, Starport, Nuclear Plant or Palace releases the hold for
             // the factories: the base is defended. (Near any building, the first smoke runs released it in half
@@ -125,10 +139,47 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
                 }
                 if (threat) break;
             }
+            lessons.economyFirstThreatNow = threat;
             if (threat) ++lessons.economyFirstThreatPasses;
             else {
-                pass.economyFirstHold = L::kEconomyFirstHold;
+                // What the switch is saving for: the MCVs its yard schedule still lacks, and one Nuclear Plant
+                // while power is short; never more than half the cash above the floor (a poor house keeps its
+                // ordinary spending, the 12 tests at 54a8a1189).
+                const auto& data = currentGame->objectData.data;
+                const int missing = std::max(0, pass.cityYardTarget - pass.cityConstructionCapacity);
+                const bool powerShort = getHouse()->getProducedPower() - getHouse()->getPowerRequirement()
+                    < pass.cityPowerReserve;
+                // His opening zones (19 in the first three minutes) while they are not yet ordered.
+                const int zoneOrders = lessons.economyFirstZoneOrders[0] + lessons.economyFirstZoneOrders[1]
+                    + lessons.economyFirstZoneOrders[2];
+                const int openingZones = minute < L::kEconomyFirstOpeningMinutes
+                    ? std::max(0, L::kEconomyFirstOpeningZones - zoneOrders) * data[Structure_ZoneResidential][houseID].price : 0;
+                const int need = missing * data[Unit_MCV][houseID].price
+                    + (powerShort ? data[Structure_NuclearPlant][houseID].price : 0) + openingZones;
+                pass.economyFirstHold = std::min(need, L::economyFirstHold(getHouse()->getCredits()));
                 ++lessons.economyFirstHoldPasses;
+            }
+            // His Palaces (3 by minute 3, 6 by 10, 8 by 20, 15 by 31): planned as the city economy project while the
+            // house can pay for one, so the project's reserve keeps the price from the factories until it is ordered.
+            {
+                const auto& data = currentGame->objectData.data;
+                const auto& palace = data[Structure_Palace][houseID];
+                const bool pending = pass.itemCount[Structure_Palace] != getHouse()->getNumItems(Structure_Palace);
+                const bool onlyOne = getGameInitSettings().getGameOptions().onlyOnePalace && pass.itemCount[Structure_Palace] >= 1;
+                if (pass.economyProject == NONE_ID && !pending && !onlyOne && palace.enabled
+                    && palace.techLevel <= getHouse()->getTechLevel()
+                    && pass.itemCount[Structure_Palace] < L::economyFirstPalaces(minute)
+                    && getHouse()->getCredits() >= int(palace.price)) {
+                    const Coord site = findPalaceDistrictSite(Structure_Palace, ForceConcentrationPolicy::kPalaceOutnumberedMinLots);
+                    if (site.isValid()) {
+                        pass.economyProject = Structure_Palace;
+                        pass.economyProjectSite = site;
+                        pass.economyProjectReserve = palace.price;
+                        SDL_Log("ECONOMY_FIRST: house=%d event=palace_planned x=%d y=%d palaces=%d target=%d credits=%d cycle=%u",
+                                houseID, site.x, site.y, pass.itemCount[Structure_Palace], L::economyFirstPalaces(minute),
+                                getHouse()->getCredits(), getGameCycleCount());
+                    }
+                }
             }
             if (pass.emitStatsLog)
                 SDL_Log("ECONOMY_FIRST: house=%d event=pass yard_target=%d was=%d capacity=%d hold=%d threat=%d credits=%d "
@@ -142,20 +193,24 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
 
 bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
     const Uint32 producer = turn.pBuilder->getItemID();
-    if (!pass.economyFirstActive || (producer != Structure_HeavyFactory && producer != Structure_StarPort)) return false;
-    // The Starport buys nothing while the hold is on: its bargains ignored the hold (smoke run 3 at 251bb9ba8,
-    // 14,900 -> 8,800 credits in one pass). Stefan's Starport bought him an MCV.
-    if (producer == Structure_StarPort) return true;
+    // The Starport keeps buying: its bargains now leave the hold (buildStarPort's bargainReserve).
+    if (!pass.economyFirstActive || producer != Structure_HeavyFactory) return false;
     if (pass.cityConstructionCapacity + pass.economyFirstMcvsOrdered >= pass.cityYardTarget) return false;
     const auto* builder = turn.pBuilder;
+    // A busy or held factory, or one that cannot add a unit, does its ordinary work: blocking it here starved
+    // affordable military production (quantbot_shared-spending_dunecity at 32601bbb0).
     if (builder->isUpgrading() || builder->isOnHold() || builder->getProductionQueueSize() > 0
-        || getHouse()->isGroundUnitLimitReached()) return true;
+        || getHouse()->isGroundUnitLimitReached()) return false;
     // The held cash is the MCV's: give it back for this order only.
     const int held = turn.reserve.reserved;
     pass.money += held;
     bool ordered = false;
     const char* what = "mcv";
-    if (campaignAvailableToBuild(builder, Unit_MCV)) {
+    // The MCV skips the opening-capital test that kept the AIs at one yard, but not the working runway: production
+    // keeps max(1000, the city working reserve) after paying (quantbot_shared-spending_dunecity at 8e05c6eb5).
+    const int mcvPrice = currentGame->objectData.data[Unit_MCV][getHouse()->getHouseID()].price;
+    if (pass.money - mcvPrice < std::max(1000, pass.cityWorkingReserve)) what = "runway";
+    else if (campaignAvailableToBuild(builder, Unit_MCV)) {
         ordered = produceItemWithLogging(pass, turn, Unit_MCV, __LINE__, "economy_first_mcv");
         if (ordered) { ++pass.economyFirstMcvsOrdered; ++cityLessons.economyFirstMcvs; }
     } else if (builder->getCurrentUpgradeLevel() < builder->getMaxUpgradeLevel()
@@ -172,7 +227,8 @@ bool QuantBot::economyFirstMcv(BuildPass& pass, BuilderTurn& turn) {
             getHouse()->getHouseID(), what, int(ordered), pass.cityConstructionCapacity, pass.cityYardTarget,
             getHouse()->getCredits(), getGameCycleCount());
     }
-    return true;
+    // Only an MCV or upgrade actually ordered takes this factory's turn.
+    return ordered;
 }
 
 Uint32 QuantBot::economyFirstZone(BuildPass& pass) {
@@ -207,6 +263,26 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
         return;
     lessons.lastEconomyLog = now;
     const int houseID = getHouse()->getHouseID();
+    // MCV_LOST: an MCV manageMcv saw that is gone without deploying (deploys erase their track).
+    for (auto it = lessons.mcvTracks.begin(); it != lessons.mcvTracks.end();) {
+        if (currentGame->getObjectManager().getObject(it->first) != nullptr) { ++it; continue; }
+        const auto& tr = it->second;
+        int enemyGap = -1;
+        for (const auto* structure : getStructureList()) {
+            if (!structure->getOwner() || structure->getHealth() <= 0
+                || structure->getOwner()->getTeamID() == getHouse()->getTeamID()) continue;
+            const int gap = blockDistance(tr.last, structure->getClosestPoint(tr.last)).lround();
+            if (enemyGap < 0 || gap < enemyGap) enemyGap = gap;
+        }
+        SDL_Log("MCV_LOST: house=%d x=%d y=%d start_x=%d start_y=%d travelled=%d target_x=%d target_y=%d to_target=%d "
+                "escorts=%d hit_by=%d hit_s=%d age_s=%d enemy_tiles=%d home=%d cycle=%u", houseID, tr.last.x, tr.last.y,
+                tr.start.x, tr.start.y, tr.start.isValid() ? blockDistance(tr.start, tr.last).lround() : -1,
+                tr.target.isValid() ? tr.target.x : -1, tr.target.isValid() ? tr.target.y : -1,
+                tr.target.isValid() ? blockDistance(tr.last, tr.target).lround() : -1, tr.escorts, tr.hitBy,
+                tr.hitCycle ? int((now - tr.hitCycle) * GAMESPEED_DEFAULT / 1000) : -1,
+                int((now - (tr.born - 1)) * GAMESPEED_DEFAULT / 1000), enemyGap, int(onOwnRockFormation(tr.last)), now);
+        it = lessons.mcvTracks.erase(it);
+    }
     const auto& state = sim->getHouseState(houseID);
     const int taxPerMinute = DuneCity::annualPerMinute(DuneCity::computeAnnualTaxRevenue(state.taxBaseEighths,
         sim->getCityTax(houseID), state.avgLandValue));
@@ -214,7 +290,8 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
     SDL_Log("ECONOMY_STATE: house=%d credits=%d yards=%d mcvs=%d yard_target=%d capacity=%d refinery_bays=%d "
             "yard_refineries=%d zones_r=%d zones_c=%d zones_i=%d nuclear=%d windtraps=%d palaces=%d police=%d "
             "rocket_turrets=%d heavy_factories=%d population=%d tax_per_min=%d power=%d/%d unit_built=%d "
-            "structure_built=%d hold=%d spice=%d yards_lost=%d mcvs_lost=%d cycle=%u", houseID, house->getCredits(),
+            "structure_built=%d hold=%d spice=%d yards_lost=%d mcvs_lost=%d footprints=%d free_footprints=%d cycle=%u",
+            houseID, house->getCredits(),
             house->getNumItems(Structure_ConstructionYard), house->getNumItems(Unit_MCV), pass.cityYardTarget,
             pass.cityConstructionCapacity, getAIRefineryBays(), pass.cityYardRefineries,
             house->getNumItems(Structure_ZoneResidential), house->getNumItems(Structure_ZoneCommercial),
@@ -224,7 +301,8 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
             house->getNumItems(Structure_HeavyFactory), state.getTotalPop(), taxPerMinute,
             house->getProducedPower(), house->getPowerRequirement(), house->getUnitBuiltValue(),
             house->getStructureBuiltValue(), pass.economyFirstHold, lastCalculatedSpice,
-            house->getNumLostItems(Structure_ConstructionYard), house->getNumLostItems(Unit_MCV), now);
+            house->getNumLostItems(Structure_ConstructionYard), house->getNumLostItems(Unit_MCV), availableBaseFootprints,
+            availableBaseFootprintsWide, now);
 }
 
 bool QuantBot::lowValuePalacesEnabled() const {

@@ -1256,6 +1256,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/economy-first-test.py
             --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/economy-first)
         set_tests_properties(economy_first PROPERTIES TIMEOUT 2400 PROCESSORS 2)
+        foreach(variant A B C D E)
+            dunecity_add_test(headless nightly NAME economy_first_variant_${variant} COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/ai/economy-first-variants.py
+                --build-dir ${CMAKE_BINARY_DIR} --results ${CMAKE_BINARY_DIR}/economy-first-variant-${variant}
+                --variant ${variant})
+            set_tests_properties(economy_first_variant_${variant} PROPERTIES TIMEOUT 4800 PROCESSORS 6)
+        endforeach()
         dunecity_add_test(headless nightly NAME stalled_carryall_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-stalled-carryall-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/stalled-carryall-probe)

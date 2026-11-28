@@ -19,6 +19,7 @@
 #include <data.h>
 
 #include <algorithm>
+#include <limits>
 
 #include <cstdint>
 
@@ -90,11 +91,42 @@ inline bool lowLot(int landValue) { return landValue <= kLowLandValue; }
 /// He had 4 Construction Yards by minute 2.2, 6 by 17.4 and 9 by 22.7, and spent little on units in the
 /// first ten minutes; the three Brutal AIs each put about 15,000 of their 20,000 into units within two
 /// minutes, then stayed below 1,000 credits with one yard for the rest of the game.
-/// Yards the house aims for by game minute (his schedule).
+/// Yards the house aims for by game minute (his schedule; kept for the record and the unit test).
 inline int economyFirstYards(int minute) { return minute < 15 ? 4 : minute < 20 ? 6 : 9; }
-/// While the switch is on and no enemy ground unit is near our buildings, unit producers leave this
-/// much cash for the yards (his balance at minute 31 was 22,848 against the AIs' 0-820).
+/// The yards the switch aims for from the room at home (Stefan, 2026-11-28: extra yards are build capacity while
+/// there is room to build): one per kEconomyFirstFootprintsPerYard free 2x2 footprints on the home rock in build
+/// range, from 1 up to his 9. A house with no room left adds no yard at home; its MCVs settle new rock.
+constexpr int kEconomyFirstFootprintsPerYard = 10, kEconomyFirstMaxYards = 9;
+/// His opening (orders in his Air game): Palaces 3 by minute 3, 6 by 10, 8 by 20, 15 by 31; 19 zones in the first
+/// three minutes. The switch plans the Palaces while it can pay for one and holds the zones' price in the opening.
+inline int economyFirstPalaces(int minute) { return minute < 3 ? 3 : minute < 10 ? 6 : minute < 20 ? 8 : 15; }
+constexpr int kEconomyFirstOpeningMinutes = 3, kEconomyFirstOpeningZones = 19;
+/// Factory-value orders excluding MCVs: his 3,850 by minute 3 and 8,050 by 10; no pacing after 10.
+inline int economyFirstUnitAllowance(std::uint32_t cycle, std::uint32_t perMinute) {
+    if (cycle >= 10 * perMinute) return std::numeric_limits<int>::max();
+    if (cycle <= 3 * perMinute) return int(int64_t(3850) * cycle / (3 * perMinute));
+    return 3850 + int(int64_t(4200) * (cycle - 3 * perMinute) / (7 * perMinute));
+}
+/// New Rocket Turret orders on his schedule, interpolated between his measured marks.
+inline int economyFirstTurretTarget(std::uint32_t cycle, std::uint32_t perMinute) {
+    if (cycle < 3 * perMinute) return 0;
+    if (cycle < 10 * perMinute) return int(int64_t(29) * (cycle - 3 * perMinute) / (7 * perMinute));
+    if (cycle < 20 * perMinute) return 29 + int(int64_t(21) * (cycle - 10 * perMinute) / (10 * perMinute));
+    if (cycle < 31 * perMinute) return 50 + int(int64_t(27) * (cycle - 20 * perMinute) / (11 * perMinute));
+    return 77;
+}
+inline int economyFirstYardsForRoom(int freeFootprints) {
+    return std::clamp(1 + std::max(0, freeFootprints) / kEconomyFirstFootprintsPerYard, 1, kEconomyFirstMaxYards);
+}
+/// While the switch is on and no enemy ground unit is near our buildings, unit producers leave half the cash
+/// above kEconomyFirstHoldFloor for the yards, at most kEconomyFirstHold (his balance at minute 31 was 22,848
+/// against the AIs' 0-820). A flat 10,000 starved every affordable unit, import and factory order in a poor
+/// house (12 tests at 54a8a1189); scaled, a poor house keeps its ordinary spending.
 constexpr int kEconomyFirstHold = 10000;
+constexpr int kEconomyFirstHoldFloor = 2000;
+inline int economyFirstHold(int credits) {
+    return std::clamp((credits - kEconomyFirstHoldFloor) / 2, 0, kEconomyFirstHold);
+}
 /// An enemy ground unit this close to one of these releases the hold for the factories (the base is defended).
 inline bool economyFirstCoreAsset(int item) {
     return item == Structure_ConstructionYard || item == Structure_HeavyFactory || item == Structure_HighTechFactory

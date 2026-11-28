@@ -16,8 +16,9 @@ Asserts, with the switch ON on his map (house 6, the first MINUTES game minutes)
   fired        ECONOMY_FIRST pass lines (the switch acted)
   mcv          the Heavy Factory ordered at least MIN_MCVS MCVs by minute 5 (economy_first_mcv orders)
   yards        at least MIN_YARDS Construction Yards standing at some minute up to 5 (his: 4 by minute 2.2)
-  hold         units bought in the first 2 minutes at most half of the OFF game's (his house: few; the AIs ~18,000)
-  zones        at least MIN_ZONE_ORDERS economy_first_zone orders by minute 10
+  hold         B/C: units bought in the first 2 minutes at most half of OFF; E paces only Starport orders
+  zones        economy_first_zone counts printed, not asserted (2026-11-28: moved to idle-yard fallback to
+               preserve quantbot_no_spice_city; the zones lead comes through extra yards/ordinary demand)
   effect       zones placed by minute 10 (AI_PLACED) at least the OFF game's + MIN_ZONE_LEAD
 KNOWN SHORTFALL, printed every run and not asserted: zones standing net of losses by minute 10 >= OFF + MIN_ZONE_LEAD.
 With the hold on, the house is under-armed and loses what it builds when attacked early (seed 9461 after f7afe2384 /
@@ -41,7 +42,8 @@ SEED = 9461
 MINUTES = 11
 CYCLES_PER_MINUTE = 3750
 HOUSE = 6
-MIN_MCVS, MIN_YARDS, MIN_ZONE_ORDERS, MIN_ZONE_LEAD = 2, 3, 10, 10
+MIN_MCVS, MIN_YARDS, MIN_ZONE_LEAD = 2, 3, 10
+VARIANTS = {'A': (0, False), 'B': (1, True), 'C': (1, False), 'D': (0, True), 'E': (2, False)}
 UNIT_ITEMS = set(range(27, 48)) | set(range(50, 56))
 MCV = 34
 
@@ -62,6 +64,9 @@ def play(args, name, sides, minutes, extra):
                '--seed', str(SEED), '--capture-mib', '256', '--wall-timeout', '1800', '--path-workers', '1',
                '--no-ai-telemetry'] + extra
     env = dict(os.environ, DUNECITY_TEST_ECONOMY_LOG='1')
+    # Each house's style is the authority for this activation match, including when called by the regression arm.
+    for key in ('DUNECITY_TEST_ECONOMY_FIRST', 'DUNECITY_TEST_ECONOMY_UNIT_PACING', 'DUNECITY_TEST_ECONOMY_TURRETS'):
+        env.pop(key, None)
     result = subprocess.run(command, cwd=root, capture_output=True, text=True, env=env)
     log = out / 'run.log'
     if result.returncode != 0:
@@ -91,6 +96,11 @@ def summary(lines):
               if int(f.get('item', 0)) in (20, 21, 22) and cyc(f) <= 10 * CYCLES_PER_MINUTE]
     return dict(
         zones_placed10=len(placed),
+        paced=sum(f.get('event') == 'paced' for f in first),
+        paced_buys=sum(f.get('event') == 'unit_order' and f.get('paced') == '1' for f in first),
+        pace_violations=sum(f.get('event') == 'unit_order' and f.get('met') != '1' for f in first),
+        turret_orders=sum(f.get('event') == 'turret_order' for f in first),
+        turret_placed=sum(f.get('event') == 'turret_placed' for f in first),
         yards_lost10=int(at10[-1].get('yards_lost', 0)) if at10 else 0,
         passes=sum(f.get('event') == 'pass' for f in first),
         spice_rich=sum(f.get('event') == 'spice_rich' for f in first),
@@ -108,13 +118,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--build-dir', required=True)
     parser.add_argument('--results', required=True)
+    parser.add_argument('--variant', choices=VARIANTS, default='B')
     args = parser.parse_args()
     Path(args.results).mkdir(parents=True, exist_ok=True)
     others = [('atreides', 'default'), ('ordos', 'default'), ('mercenary', 'default')]
     air = ['--custom-map', str(MAP), '--mod', 'dunecity', '--game-options', str(OPTIONS)]
-    on = summary(play(args, 'on', [('neutral', 'default@economy-first')] + others, MINUTES, air))
+    style = f'default@economy-first-{args.variant.lower()}'
+    on = summary(play(args, 'on', [('neutral', style)] + others, MINUTES, air))
     off = summary(play(args, 'off', [('neutral', 'default@economy-first-off')] + others, MINUTES, air))
-    rich = summary(play(args, 'rich', [('neutral', 'default@economy-first'), ('atreides', 'default'),
+    rich = summary(play(args, 'rich', [('neutral', style), ('atreides', 'default'),
                                        ('ordos', 'default'), ('mercenary', 'default')], 2,
                         ['--skirmish-ffa-size', '192', '--skirmish-map-seed', str(SEED), '--mod', 'dunecity',
                          '--game-options', str(SKIRMISH_OPTIONS)]))
@@ -122,10 +134,7 @@ def main():
         ('ON fired (ECONOMY_FIRST pass lines)', on['passes'], on['passes'] > 0),
         (f'ON MCVs ordered by minute 5 >= {MIN_MCVS}', on['mcvs'], on['mcvs'] >= MIN_MCVS),
         (f'ON yards by minute 5 >= {MIN_YARDS} (his 4 by 2.2)', on['yards'], on['yards'] >= MIN_YARDS),
-        ('ON units bought in minutes 0-2 <= half of OFF', f"{on['units2']} vs {off['units2']}",
-         on['units2'] * 2 <= max(1, off['units2'])),
-        (f'ON economy_first_zone orders by minute 10 >= {MIN_ZONE_ORDERS}', on['zone_orders'],
-         on['zone_orders'] >= MIN_ZONE_ORDERS),
+
         (f'ON zones placed by minute 10 >= OFF + {MIN_ZONE_LEAD}', f"{on['zones_placed10']} vs {off['zones_placed10']}",
          on['zones_placed10'] >= off['zones_placed10'] + MIN_ZONE_LEAD),
         ('OFF: no ECONOMY_FIRST line, no economy_first order', f"{off['passes']} / {off['lesson_orders']}",
@@ -133,6 +142,19 @@ def main():
         ('spice-rich map, ON: spice_rich logged, no pass line', f"{rich['spice_rich']} / {rich['passes']}",
          rich['spice_rich'] == 1 and rich['passes'] == 0),
     ]
+    pacing, turrets = VARIANTS[args.variant]
+    if pacing:
+        checks += [('ON pacing rejects orders above the opening allowance', on['paced'], on['paced'] > 0),
+                   ('ON pacing still accepts unit orders', on['paced_buys'], on['paced_buys'] > 0),
+                   ('ON accepted paced orders never exceed their allowance', on['pace_violations'], on['pace_violations'] == 0)]
+    if pacing == 1:
+        checks.append(('ON units bought in minutes 0-2 <= half of OFF', f"{on['units2']} vs {off['units2']}",
+                       on['units2'] * 2 <= max(1, off['units2'])))
+    if turrets:
+        checks += [('ON scheduled turret orders > 0', on['turret_orders'], on['turret_orders'] > 0),
+                   ('ON scheduled defence actually stands', on['turret_placed'], on['turret_placed'] > 0)]
+    print(f"Variant {args.variant}; economy_first_zone fallback orders: {on['zone_orders']} (not asserted); "
+          f"unit spend 0-2: {on['units2']} vs OFF {off['units2']}")
     failed = 0
     print('| check | measured | result |\n|---|---|---|')
     for name, value, ok in checks:

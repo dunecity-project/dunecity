@@ -610,6 +610,7 @@ private:
     /// search can still find room for another production building. Both are
     /// refreshed by the rock survey and are part of the observer checkpoint.
     int availableBaseFootprints = 0;
+    int availableBaseFootprintsWide = -1;   ///< diagnostic: free 2x2 footprints in build range, up to 400 (ECONOMY_STATE)
     bool baseProductionRoomBlocked = false;
     Uint32 refineryQueueSince = std::numeric_limits<Uint32>::max();
     std::unordered_map<Uint32,Coord> mcvExpansionSites;
@@ -2161,12 +2162,14 @@ private:
     bool cityLauncherArmyEnabled() const;
     bool lowValuePalacesEnabled() const;
     bool frontPalacesEnabled() const;
-    /// EconomyFirst (Stefan's Air game, 2026-11-28; CityLessonsPolicy.h): yards on his schedule and a cash
-    /// hold against unit producers until the city has his population. Logs ECONOMY_FIRST lines.
+    /// EconomyFirst: space-based yard capacity and purpose-sized savings in low/no-spice cities.
+    /// Opening variants pace military orders and/or add Stefan's defensive turret schedule.
     bool economyFirstEnabled() const;
     void planEconomyFirst(BuildPass& pass);
-    /// EconomyFirst: while the house is short of its yard target, a Heavy Factory or Starport buys only the
-    /// MCV (a Heavy Factory orders it, upgrading first if it must, from the held cash). True: nothing else.
+    int economyFirstUnitPacing() const;
+    bool economyFirstTurretsEnabled() const;
+    /// An idle Heavy Factory buys a missing MCV from the hold, preserving production runway.
+    /// Only an accepted MCV/upgrade consumes this factory turn; Starports retain ordinary buying.
     bool economyFirstMcv(BuildPass& pass, BuilderTurn& turn);
     /// EconomyFirst: the zone an idle yard orders now (his R/I/C mix), NONE_ID while zones already have his
     /// share of the yard's orders, power is short or none is affordable or placeable.
@@ -2217,7 +2220,15 @@ private:
         bool economyFirstStoodDown = false, economyFirstFootprintLogged = false, economyFirstRichLogged = false;
         int economyFirstHoldPasses = 0, economyFirstThreatPasses = 0;
         int economyFirstYardOrders = 0, economyFirstMcvs = 0;
-        bool economyFirstActiveNow = false;   ///< the last build pass had EconomyFirst acting (MCVs stay home)
+        int economyFirstUnitSpend = 0, economyFirstPortSpend = 0, economyFirstTurretOrders = 0;
+        int economyFirstZonesPlaced = 0;
+        bool economyFirstThreatNow = false;
+        Uint32 economyFirstPaceLoggedMinute = 0;
+        bool economyFirstActiveNow = false;   ///< the last build pass had EconomyFirst acting
+        /// MCV_LOST evidence: each MCV seen by manageMcv (logged when it disappears without deploying).
+        struct McvTrack { Coord start = Coord::Invalid(), last = Coord::Invalid(), target = Coord::Invalid();
+                          Uint32 born = 0, hitCycle = 0; int hitBy = -1, escorts = 0; };
+        std::map<Uint32, McvTrack> mcvTracks;
         std::array<int, 3> economyFirstZoneOrders{};   ///< R, C, I ordered by the yard while the switch acted
         Uint32 economyFirstRefusedMinute = 0;   ///< 1 + the minute of the last refused MCV logged
         int economyFirstStartZones = -1;   ///< zones at the first pass (the map's prebuilt city)

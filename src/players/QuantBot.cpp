@@ -1075,6 +1075,10 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 			}
 		}
 		else if (pGroundUnit->getItemID() == Unit_MCV) {
+			if (const auto it = cityLessons.mcvTracks.find(pGroundUnit->getObjectID()); it != cityLessons.mcvTracks.end()) {
+				it->second.hitBy = pDamager->getItemID();
+				it->second.hitCycle = getGameCycleCount();
+			}
 			// A colonist under fire: its escort turns on the attacker.
 			for (const auto& entry : colonistEscorts()) {
 				if (entry.second != pGroundUnit->getObjectID()) continue;

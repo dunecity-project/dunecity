@@ -380,6 +380,16 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardAirRaidDefence(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    if (pass.economyFirstActive && economyFirstTurretsEnabled() && yardTurn.itemID == NONE_ID
+        && !yardTurn.skipRemainingStructureLogic && !yardTurn.civicClaimsYard
+        && cityLessons.economyFirstTurretOrders < CityLessonsPolicy::economyFirstTurretTarget(
+            getGameCycleCount(), MILLI2CYCLES(60000))
+        && campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)
+        && hasPowerBufferForTurret(pass)) {
+        yardTurn.itemID = Structure_RocketTurret;
+        yardTurn.structureRule = "economy_first_turret";
+        releaseUnfundedChoice();
+    }
     if (pass.economyProject != NONE_ID) {
         // NuclearConsolidation / PalaceDistricts (default off): the city economy project.
         chooseYardEconomyProject(pass, turn, yardTurn);
@@ -394,16 +404,6 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         // City redevelopment for land value (default off; QuantBotRedevelop.cpp).
         chooseYardRedevelopment(pass, turn, yardTurn);
         releaseUnfundedChoice();
-    }
-    // EconomyFirst (default on, low / no spice city maps): an idle yard zones in Stefan's mix whatever the demand
-    // valves say, while zones are under his share of the yard's orders (QuantBot::economyFirstZone). It comes after
-    // every defence chooser above (air defence, essentials, core defence, turret clusters, Airport and front
-    // turrets, air-raid defence) and the economy projects: placed first, it took the yard before any of them
-    // (turret_front_probe at 54a8a1189).
-    if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && !yardTurn.civicClaimsYard
-        && pass.economyFirstHold > 0 && turn.pBuilder->getProductionQueueSize() == 0) {
-        const Uint32 zone = economyFirstZone(pass);
-        if (zone != NONE_ID) { yardTurn.itemID = zone; yardTurn.structureRule = "economy_first_zone"; }
     }
     // Duel plans spend the opening grant differently, after real power/air
     // emergencies but before optional city growth, imports and repair support.
@@ -3605,10 +3605,15 @@ bool QuantBot::placeYardChoice(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         && !onInstallments(turn, yardTurn.itemID)
         && (!selectedPlaceLocation.isValid() || pass.money<selectedCost
             || !spendingAdmits(pass, yardTurn.itemID, selectedCost))) {
-        const Uint32 zone=affordableCityZone(pass, turn.pBuilder,pass.money);
+        Uint32 zone=affordableCityZone(pass, turn.pBuilder,pass.money);
+        const char* zoneRule="idle_city_growth";
+        // EconomyFirst (low / no spice city maps): with no demanded zone, an idle yard still zones in Stefan's mix,
+        // while zones are under his share of its orders (QuantBot::economyFirstZone). Here, after every other rule,
+        // the ordinary ladder chooses first (quantbot_no_spice_city at 32601bbb0: the zone used to take the first order).
+        if (zone==NONE_ID && pass.economyFirstActive) { zone=economyFirstZone(pass); zoneRule="economy_first_zone"; }
         if (zone!=NONE_ID) {
             yardTurn.itemID=zone;selectedPlaceLocation=findPlaceLocation(zone);
-            yardTurn.crimeServiceSite=Coord::Invalid();yardTurn.structureRule="idle_city_growth";
+            yardTurn.crimeServiceSite=Coord::Invalid();yardTurn.structureRule=zoneRule;
             yardTurn.skipRemainingStructureLogic=false;
         }
     }
@@ -4314,6 +4319,12 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
             if (!placed && itemToBePlaced == Structure_Road) yardTurn.placeLocations->push_front(location);
             traceDecision("placement_result", AITelemetry::Record().set("builder", planningBuilder)
                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y).set("success", placed));
+            if (placed && pass.economyFirstActive) {
+                if (DuneCity::isCityZoneStructure(itemToBePlaced)) ++cityLessons.economyFirstZonesPlaced;
+                if (itemToBePlaced == Structure_RocketTurret && economyFirstTurretsEnabled())
+                    SDL_Log("ECONOMY_FIRST: house=%d event=turret_placed x=%d y=%d cycle=%u", houseID,
+                        location.x, location.y, getGameCycleCount());
+            }
             if (placed && itemToBePlaced == Structure_ZoneIndustrial) noteIndustryPlaced(location);
             if (placed && (itemToBePlaced == Structure_ZoneResidential || itemToBePlaced == Structure_ZoneCommercial))
                 noteHomePlaced(location);

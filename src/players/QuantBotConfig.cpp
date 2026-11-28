@@ -413,7 +413,9 @@ QuantBotConfig::QuantBotConfig() {
     force.cityLauncherArmyBps = 7000;   // CityLessonsPolicy::kLauncherArmyBps (a literal: genome_model.py reads these defaults)
     force.lowValuePalaces = false;
     force.frontPalaces = false;
-    force.economyFirst = false;     // Stefan approved on ("Yes, turn on", 2026-11-28); off in this build: 12 behaviour tests fail with it on (HANDOVER)
+    force.economyFirst = false;     // Experimental openings (docs/handover/2026-11-28-economy-first-airlift.md).
+    force.economyFirstUnitPacing = 0;
+    force.economyFirstTurrets = false;
     force.palaceWorm = 1;           // Stefan, 2026-11-27: the Fremen Palace worm hunts, else blooms near the base
     force.buildUpToEnemy = true;    // Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings"
     force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
@@ -983,6 +985,8 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setBoolValue("Force Concentration", "LowValuePalaces", force.lowValuePalaces);
         iniFile.setBoolValue("Force Concentration", "FrontPalaces", force.frontPalaces);
         iniFile.setBoolValue("Force Concentration", "EconomyFirst", force.economyFirst);
+        iniFile.setIntValue("Force Concentration", "EconomyFirstUnitPacing", force.economyFirstUnitPacing);
+        iniFile.setBoolValue("Force Concentration", "EconomyFirstTurrets", force.economyFirstTurrets);
         iniFile.setBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
         iniFile.setIntValue("Force Concentration", "VanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);
         iniFile.setBoolValue("Force Concentration", "VanillaArmyCounters", force.vanillaArmyCounters);
@@ -1377,6 +1381,9 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
     force.lowValuePalaces = iniFile.getBoolValue("Force Concentration", "LowValuePalaces", force.lowValuePalaces);
     force.frontPalaces = iniFile.getBoolValue("Force Concentration", "FrontPalaces", force.frontPalaces);
     force.economyFirst = iniFile.getBoolValue("Force Concentration", "EconomyFirst", force.economyFirst);
+    force.economyFirstUnitPacing = std::clamp(iniFile.getIntValue("Force Concentration", "EconomyFirstUnitPacing",
+        force.economyFirstUnitPacing), 0, 2);
+    force.economyFirstTurrets = iniFile.getBoolValue("Force Concentration", "EconomyFirstTurrets", force.economyFirstTurrets);
     force.extraAirports = iniFile.getBoolValue("Force Concentration", "ExtraAirports", force.extraAirports);
     // Exactly two preregistered intensities: any value other than 10000 is the 5000 level.
     force.vanillaCoreDefenceThreatBps = QuantBotCoreDefencePolicy::level(iniFile.getIntValue(
@@ -2169,6 +2176,8 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.lowValuePalaces) addNamed("lowValuePalaces", force.lowValuePalaces);
     if (force.frontPalaces) addNamed("frontPalaces", force.frontPalaces);
     if (force.economyFirst) addNamed("economyFirst", force.economyFirst);
+    if (force.economyFirstUnitPacing) addNamed("economyFirstUnitPacing", force.economyFirstUnitPacing);
+    if (force.economyFirstTurrets) addNamed("economyFirstTurrets", force.economyFirstTurrets);
     // On is the default (protocol 137); only off is hashed, so the default config keeps its hash.
     if (!force.extraAirports) addNamed("extraAirports", force.extraAirports);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);

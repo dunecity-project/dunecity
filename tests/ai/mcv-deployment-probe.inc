@@ -494,7 +494,16 @@ void runMcvDeploymentProbe(Game& game) {
                 "The fixture formation must hold exactly its share of yards");
             require(bot->findLocalDeploySite(spare).isValid(),
                 "The home rock must still offer a yard footprint, or staying home is not the alternative");
+            // A house without EconomyFirst acting keeps the share rule.
+            bot->cityLessons.economyFirstActiveNow=false;
             require(bot->colonyMissionDue(spare),"A formation holding its share of yards kept another MCV at home");
+            // 7a3. EconomyFirst (Stefan, 2026-11-28: "if there is a lot of rock connected to main base there is no need
+            //      to expand. expansion is for when you lack space"): the same formation with its share of yards but
+            //      room left at home keeps the MCV at home.
+            bot->cityLessons.economyFirstActiveNow=true;
+            require(!bot->colonyMissionDue(spare),
+                "EconomyFirst: an MCV was sent away from a home rock with room to build (two yards, not built out)");
+            bot->cityLessons.economyFirstActiveNow=false;
             bot->manageMcv(spare);
             require(game.getObjectManager().getObject(spareID)!=nullptr,"The spare MCV deployed on the full formation");
             const auto sent=bot->mcvExpansionSites.find(spareID);
@@ -598,6 +607,11 @@ void runMcvDeploymentProbe(Game& game) {
         require(bot->colonisationMcvDue(0,0),
             "A built-out city with safe reachable rock still refused to colonise it");
         require(bot->colonyMissionDue(nullptr),"A built-out city did not treat its MCVs as colonists");
+        // 7e1. EconomyFirst: with no room at home the MCV goes to new rock however few yards the formation holds
+        //      (no MCV given, so no yard share counts).
+        bot->cityLessons.economyFirstActiveNow=true;
+        require(bot->colonyMissionDue(nullptr),"EconomyFirst: a built-out base kept its MCV at home");
+        bot->cityLessons.economyFirstActiveNow=false;
         require(bot->availableBaseRock>=48 && house->getNumItems(Structure_ConstructionYard)
                 >= QuantBotBuildPolicy::cityConstructionYardTarget(house->getCredits(),0,0,0),
             "The order below must be attributable to colonisation alone: free rock and the"

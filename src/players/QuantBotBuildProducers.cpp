@@ -24,6 +24,7 @@
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
 #include <players/StarportBuyingPolicy.h>
+#include <players/CityLessonsPolicy.h>
 
 void QuantBot::buildRepair(BuildPass& pass, const StructureBase* pStructure) {
     const int creditsBeforeUpgrade = getHouse()->getCredits();
@@ -298,6 +299,24 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     if(itemID == Unit_MCV && pass.yardLimit > 0
         && pass.itemCount[Structure_ConstructionYard] + pass.itemCount[Unit_MCV] >= pass.yardLimit) return false;
     const int quotedPrice=purchasePrice(turn.pBuilder,itemID);
+    const bool economyUnit = pass.economyFirstActive && isUnit(itemID) && itemID != Unit_MCV;
+    const bool economyPort = turn.pBuilder->getItemID() == Structure_StarPort;
+    const int pacing = economyFirstUnitPacing();
+    const bool paced = economyUnit && (pacing == 1 || (pacing == 2 && economyPort))
+        && !cityLessons.economyFirstThreatNow;
+    const int allowance = paced
+        ? CityLessonsPolicy::economyFirstUnitAllowance(getGameCycleCount(), MILLI2CYCLES(60000))
+        : std::numeric_limits<int>::max();
+    const int spent = pacing == 2 ? cityLessons.economyFirstPortSpend : cityLessons.economyFirstUnitSpend;
+    if (paced && int64_t(spent) + data[itemID][houseID].price > allowance) {
+        const Uint32 minute = getGameCycleCount() / MILLI2CYCLES(60000) + 1;
+        if (cityLessons.economyFirstPaceLoggedMinute != minute) {
+            cityLessons.economyFirstPaceLoggedMinute = minute;
+            SDL_Log("ECONOMY_FIRST: house=%d event=paced pacing=%d spent=%d allowance=%d item=%d cycle=%u",
+                houseID, pacing, spent, allowance, int(itemID), getGameCycleCount());
+        }
+        return false;
+    }
     const auto& portPolicy = botConfig().force;
     const bool portScope = (portPolicy.starportBuying > 0 || portPolicy.starportCashStockpile > 0
             || portPolicy.starportEconomyPriority > 0)
@@ -344,7 +363,10 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     // EconomyFirst's MCV is paid from its own hold (QuantBot::economyFirstMcv); the opening-capital test that
     // kept every AI house on Stefan's Air map at one yard does not apply to it.
     const bool economyFirstMcvOrder = itemID==Unit_MCV && rule && std::string_view(rule)=="economy_first_mcv";
-    if (itemID==Unit_MCV && !economyFirstMcvOrder && !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID())) {
+    const bool economyFirstRunway = !pass.capacityMcvRunway
+        || int64_t(pass.cashFlow.projectedCash) - pass.capacityMcvOrderedCost >= int64_t(quotedPrice) + pass.cashBuffer;
+    if (itemID==Unit_MCV && (economyFirstMcvOrder ? !economyFirstRunway
+        : !canFundCapacityMcv(pass,quotedPrice,turn.pBuilder->getObjectID()))) {
         traceDecision("capital_order_blocked",AITelemetry::Record().set("plan",pass.capitalDecision)
             .set("builder",turn.pBuilder->getObjectID()).set("item",itemID).set("rule",rule)
             .set("price",quotedPrice).set("projected_cash",pass.cashFlow.projectedCash)
@@ -429,9 +451,24 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     doProduceItem(turn.pBuilder, itemID);
     const bool accepted = turn.pBuilder->getProductionQueueSize() > before;
     if (accepted) {
+        if (economyUnit) {
+            cityLessons.economyFirstUnitSpend += data[itemID][houseID].price;
+            if (economyPort) cityLessons.economyFirstPortSpend += data[itemID][houseID].price;
+            if (pacing > 0)
+                SDL_Log("ECONOMY_FIRST: house=%d event=unit_order pacing=%d paced=%d spent=%d allowance=%d met=%d cycle=%u",
+                    houseID, pacing, int(paced), pacing == 2 ? cityLessons.economyFirstPortSpend
+                        : cityLessons.economyFirstUnitSpend, allowance,
+                    int(!paced || int64_t(spent) + data[itemID][houseID].price <= allowance), getGameCycleCount());
+        }
+        if (pass.economyFirstActive && itemID == Structure_RocketTurret) {
+            ++cityLessons.economyFirstTurretOrders;
+            if (rule && std::string_view(rule) == "economy_first_turret")
+                SDL_Log("ECONOMY_FIRST: house=%d event=turret_order orders=%d cycle=%u", houseID,
+                    cityLessons.economyFirstTurretOrders, getGameCycleCount());
+        }
         // BUILD_ORDER (EconomyFirst evidence; switch on, or DUNECITY_TEST_ECONOMY_LOG=1): what each producer
         // bought, by which rule, from how much cash. Slabs and roads are left out.
-        if (pass.economyFirstHold > 0 && turn.pBuilder->getItemID() == Structure_ConstructionYard
+        if (pass.economyFirstActive && turn.pBuilder->getItemID() == Structure_ConstructionYard
             && itemID != Structure_Slab1 && itemID != Structure_Slab4 && itemID != Structure_Road) {
             ++cityLessons.economyFirstYardOrders;
             if (itemID == Structure_ZoneResidential) ++cityLessons.economyFirstZoneOrders[0];
@@ -2212,9 +2249,10 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
         });
         // A bargain is still optional spending: it may not come
         // out of the cash a no-spice city needs to start earning.
+        // EconomyFirst's hold stays too: the bargains used to add the whole reserve back (smoke run 3 at 251bb9ba8).
         const int bargainReserve = pass.vanillaBoomArmy ? turn.reserve.reserved
             : std::max({harvesterInvestmentReserve(pass),
-                capitalReserve(pass, turn.pBuilder->getObjectID()),cityBootstrapReserve(pass)});
+                capitalReserve(pass, turn.pBuilder->getObjectID()),cityBootstrapReserve(pass), pass.economyFirstHold});
         for (Uint32 unit : bargains) {
             const int price = purchasePrice(turn.pBuilder,unit);
             const int value = data[unit][houseID].price;
