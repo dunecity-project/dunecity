@@ -23,6 +23,7 @@ dist/
 install/
 external/
 docs/*
+!docs/handover/
 !docs/workshop.md
 !docs/workshop-validation-738.md
 !docs/index.html

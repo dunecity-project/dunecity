@@ -6,12 +6,14 @@ Read `/Users/stefan/.config/agent-workspace/POLICY.md` on managed Macs and
 `docs/shared-agent-staging.md` before editing, building or preparing a release.
 This applies to every Codex, Claude Code and OMP session and subagent, including
 native OMP task/eval agents. Coordinate disjoint path ownership; hand off shared
-files and Git operations to the integrator. Batch accepted changes into one
-tested release rather than creating a full build environment per request.
+files and Git operations to the integrator. The main agent only reports to Stefan
+and dispatches instructions; integrator and worker subagents do implementation,
+integration, builds, deployment and tests. Contributors hand green targeted-test
+commits to the integrator. Batch pushes after extensive tests, not Air playtests.
 
 On claw.local the shared native Release lane is this checkout's **build-int**.
-Use `agent-workspace stage --project dunecity --owner FRAMEWORK:SESSION:AGENT verify`
-in Tern after committing the batch and releasing all edit claims. Its mutex
+Use `agent-workspace stage --project dunecity --owner FRAMEWORK:SESSION:AGENT build`
+after landing targeted-test-green commits and releasing all edit claims. Its mutex
 covers build/test/Git operations across frameworks. The copied `build` tree
 points to `dunecity-quantbot-split` and must not be reused here. The older generic
 `build` instructions below describe configuration mechanics, not the current
@@ -42,8 +44,10 @@ or sanitizer configurations. Do not copy or relocate configured CMake trees.
 
 ## Read first
 
-1. **`HANDOVER.md`** — state of the current, uncommitted work: what was fixed, what is still
-   open, and the diagnostics already built into `build/bin/dunecity.app`. Start here.
+1. **The coordinator's status record** (`/Users/stefan/.omp/workspaces/dunecity/STATUS.md` on claw.local): what is
+   in flight, who owns it, its test commit and job, and what is on Stefan's Air. Per-feature write-ups are in
+   `docs/handover/`. `HANDOVER.md` is frozen history through 2026-11-28; read it for older decisions, do not
+   append to it.
 2. `CLAUDE.md` — the standing architecture constraints (2x2 zone footprint, roads as tile flags,
    global power, versioning rules). Its `~/development/dunecity` and `/Users/stefanclaw/...`
    paths refer to a different machine; on this Mac the checkout is `~/Documents/projects/dunecity`.
@@ -102,11 +106,26 @@ binary outside ctest.
   untracked `.h`/`.cpp`/`.py` files and no unstaged source edits. Leaving new headers and test
   cases untracked means a release built from a tree nobody else can reproduce — 1.0.599 was
   carried as 88 modified plus 23 untracked source files before it was captured. Staging and
-  committing as you go is what keeps `HANDOVER.md` and the tree describing the same thing.
+  committing as you go is what keeps the write-up and the tree describing the same thing.
 - **Do not leave analysis markdown in the repo root.** Per-version review notes (`AI-*.md`,
   `*-REVIEW.md`, `*-ANALYSIS.md`) are session scratch and are gitignored. Fold whatever outlives
-  the session into `HANDOVER.md`; if a note is genuinely reference material, put it under `docs/`
-  with a lowercase name so it is tracked deliberately.
+  the session into the feature's `docs/handover/YYYY-MM-DD-<slug>.md`; if a note is genuinely reference material,
+  put it under `docs/` with a lowercase name so it is tracked deliberately.
+- **Playtest-first landing replaces test-before-landing.** Stefan, 2026-11-28: "the things i ask for a built
+  on mba BEFORE all the extensive testing etc. so i can play test"; "key thing is to increse the human
+  feedback loop from me". Contributors compile and pass their own targeted tests at an immutable commit,
+  then hand its SHA, job/results and green timestamp to the integrator. The integrator cherry-picks through
+  `agent-workspace run --git`, builds incrementally, and deploys to the Air before extensive testing.
+  Only after the Air handoff run nightly `-L nightly -LE gui` and the four AI gates on AWS, plus applicable
+  `perf_regression` on its required platform, on that landed HEAD. Push green batches only. Preserve failures,
+  fix forward (or locally revert game-breaking changes), rebuild and redeploy each fix.
+- **Dev builds on Stefan's Air come before full testing.** After each accepted landing and incremental
+  `build-int` build, run `AGENT_OWNER=FRAMEWORK:SESSION:AGENT scripts/air-dev-install.sh --no-build --wait`
+  asynchronously. It copies the Homebrew-linked, ad-hoc-signed app with new features enabled in its own
+  Dune City rules, never a separate mod (Stefan: "i just want it as a feature, not a mod"). Keep only features
+  not covered by the game's menu option in `DEV_SWITCHES`. Never stop his game: the swap waits for it to close.
+  Tell the coordinator the build SHA, new things to try, untested scope, and installed/waiting state; record
+  elapsed time from green own-tests to Air install in `STATUS.md`. This dev build qualifies nothing.
 
 ## Player features: real assertion tests through the player's own path
 
@@ -183,7 +202,7 @@ against the words of the request.
 1. **Acceptance list before code.** Quote the request and write, for each thing asked, the observable fact that
    would show it happening in a game, with a number: "at least N turrets standing inside the enemy base's
    footprint within M minutes", "average land value of lots within 8 tiles of a new Palace rises by X". Put the
-   list in the HANDOVER entry. Caps, stand-off distances and trigger conditions that the request did not ask for
+   list in the feature's `docs/handover/` write-up. Caps, stand-off distances and trigger conditions that the request did not ask for
    are listed as **deviations** with their reason; a deviation that stops the asked-for thing from happening is
    not allowed.
 2. **One assert per acceptance line**, in a headless CTest that exits non-zero, run in a real game (bundled map or
@@ -203,7 +222,7 @@ against the words of the request.
 Every change that can alter AI decisions or unit behaviour (anything under `src/players/`,
 `include/players/`, unit/structure/combat/pathfinding code, `QuantBot Config` defaults, game
 option semantics) must pass `quantbot_all_against_atreides` and `quantbot_scenario_matrix`
-before it is merged:
+after local landing and Air dev deployment, before a batch is pushed:
 
 ```bash
 ctest --test-dir build -R 'quantbot_all_against_atreides|quantbot_scenario_matrix' --output-on-failure
@@ -274,11 +293,11 @@ Wait for the result of every queue job you submit (games and gates alike); never
 "next" or "I will" while results are owed. Submitted through `agent-workspace run`, a job carries
 your owner id, and that is how the hooks find it. In Claude Code a background hook
 (`~/.local/share/agent-workspace/queue_watch.py`) starts a new turn in your session with a summary
-when your jobs finish, so you need no waiter of your own. Codex and OMP have no such wake: keep the
-turn open with `dunecity-queue wait JOB...`. A Stop hook refuses once to end a turn while your jobs
-run and nothing waits on them. The notice says a job finished, not that it passed: read
-`dunecity-queue report JOB` first (`~/.config/agent-workspace/POLICY.md`, "Queue jobs: wait for the
-result").
+when your jobs finish, so you need no waiter of your own. Codex keeps the turn open with
+`dunecity-queue wait JOB...`; OMP starts that command as an async bash job with `timeout: 0`.
+A Stop hook refuses once to end a turn while jobs run and nothing waits on them. The notice
+says a job finished, not that it passed: read `dunecity-queue report JOB` first
+(`~/.config/agent-workspace/POLICY.md`, "Queue jobs: wait for the result").
 
 `perf_regression` stays on the Mini: its budgets are calibrated on that machine (and it launches a
 game through the real main menu), so run it alone on a quiet Mac. Every other test that runs on the

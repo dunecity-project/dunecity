@@ -212,7 +212,7 @@ against the words of the request.
 1. **Acceptance list before code.** Quote the request and write, for each thing asked, the observable fact that
    would show it happening in a game, with a number: "at least N turrets standing inside the enemy base's
    footprint within M minutes", "average land value of lots within 8 tiles of a new Palace rises by X". Put the
-   list in the HANDOVER entry. Caps, stand-off distances and trigger conditions that the request did not ask for
+   list in the feature's `docs/handover/` write-up. Caps, stand-off distances and trigger conditions that the request did not ask for
    are listed as **deviations** with their reason; a deviation that stops the asked-for thing from happening is
    not allowed.
 2. **One assert per acceptance line**, in a headless CTest that exits non-zero, run in a real game (bundled map or

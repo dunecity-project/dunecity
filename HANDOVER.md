@@ -1,3 +1,6 @@
+> **Frozen 2026-11-28.** History only. New feature write-ups go to `docs/handover/YYYY-MM-DD-<slug>.md`; current
+> state is the coordinator's status record (`AGENTS.md`, "Read first").
+
 ## 2026-11-28 - Saboteurs Skip City Zones: Saboteurs leave R/C/I zones alone unless garrisoned (protocol 151)
 
 Stefan, 2026-11-28: "also make sabateurs not target r/i/c (not valuable enough) unless it is garissoned", then,

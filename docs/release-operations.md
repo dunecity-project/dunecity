@@ -472,7 +472,7 @@ held or untested. Never claim one channel from another channel's evidence.
 | 6 | Website pages | The release job updates links, labels and `changelog.html`. The "New in X.Y.Z" prose on `website/index.html` and `website/dune-city.html` is manual | Live pages show the new prose; Android and TestFlight labels match what is actually published |
 | 7 | iPhone/iPad (TestFlight) | `scripts/build-ios.sh --testflight` on the mini, then App Store Connect steps (below) | Build `VALID`, in the Public group, Beta App Review submitted |
 | 8 | Android | Independent version line; signed with the existing upgrade key; needs Stefan's phone (below) | Published only after a phone test and Stefan's explicit "publish" |
-| 9 | Records | `HANDOVER.md` entry (docs-only PR, `[skip ci]`); Hindsight memory | Machines per check and untested platforms are listed |
+| 9 | Records | `docs/handover/YYYY-MM-DD-release-X.Y.Z.md` (docs-only, `[skip ci]`); Hindsight memory | Machines per check and untested platforms are listed |
 
 Order: 1 → 2 → merge + tag (3) → 4 and 5 start automatically. Do 6 after the release job's
 website commit. 7 can run while 3 builds; 8 has its own gates. Cancel main's duplicate
@@ -600,7 +600,7 @@ Keep old manuals/maps and other files. No PHP upgrade is needed for static HTML.
 ## Knowledge maintenance
 
 Keep this runbook and SourceForge guide authoritative in Git; entry links exist
-in both `AGENTS.md` and `CLAUDE.md`. Put dated outcomes in `HANDOVER.md`, correcting
+in both `AGENTS.md` and `CLAUDE.md`. Put dated outcomes in `docs/handover/` (one file each; `HANDOVER.md` is frozen history), correcting
 stale current-state claims. When available, retain verified outcomes in Codex
 context-memory and deliberately promote shared engineering knowledge; memory is
 an index to evidence, not a replacement for repository documentation. Never put
