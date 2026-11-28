@@ -134,8 +134,6 @@ binary outside ctest.
   waiter, replacing it for a newer built app rather than adding a second. After handoff, only the
   service builds/deploys. New features are enabled in the app's own Dune City rules, never a separate
   mod (Stefan: "i just want it as a feature, not a mod"); only independent switches belong in `DEV_SWITCHES`.
-  The dev copy enables `GarrisonHold` and `AirliftColonists`; their shipped defaults remain OFF.
-  Actual MCV flight requires **Manual Carryall Drops** ON in **Game Rules**; OFF keeps the ground mission.
   Report source SHA, new things to try, untested scope and installed versus staged/waiting state.
   Record green-to-install and landing-to-install in `STATUS.md` (target under five minutes, with
   user-game wait identified). Service receipts are in `~/.local/state/dunecity-air-autodeploy/`.

@@ -26,7 +26,7 @@
 # The previous app is kept in /tmp/dunecity-dev-<sha> on the Air.
 set -euo pipefail
 
-DEV_SWITCHES=(EconomyFirst RepairReturnCheck SquadOrders InfantryLanes InfantryInMix GarrisonHold AirliftColonists)
+DEV_SWITCHES=(EconomyFirst RepairReturnCheck SquadOrders InfantryLanes InfantryInMix GarrisonHold)
 
 prepare_dev_app() {
     local source=$1 app=$2 sha=$3; shift 3

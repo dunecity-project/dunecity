@@ -105,7 +105,6 @@ class StagedSwapTests(unittest.TestCase):
         self.assertIn('EconomyFirst', switches)
         self.assertIn('RepairReturnCheck', switches)
         self.assertIn('GarrisonHold', switches)
-        self.assertIn('AirliftColonists', switches)
         self.assertNotIn('EconomyFirstUnitPacing', switches)
         self.assertNotIn('EconomyFirstTurrets', switches)
 
