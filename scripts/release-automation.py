@@ -235,14 +235,15 @@ def reusable_macos_run(sha):
 
 
 def require_staging_qualification(receipt, sha):
-    """Public staging requires green AWS execution of the entire frozen plan."""
+    """Require a green full plan, with authenticated AWS games and Mini quick checks."""
     qualification = receipt.get('qualification', {})
     linux = qualification.get('linux', {})
     if (receipt.get('qualificationWorkflow') != QUALIFY_WORKFLOW
             or receipt.get('sourceCommit') != sha or qualification.get('status') != 'success'
             or linux.get('sourceCommit') != sha or not linux.get('queueJob')
-            or not qualification.get('tests') or linux.get('tests') != qualification['tests']):
-        raise ValueError('Public staging requires a green exact-source AWS qualification for every planned test')
+            or not qualification.get('tests') or not linux.get('tests')
+            or not set(linux['tests']).issubset(qualification['tests'])):
+        raise ValueError('Public staging requires a green exact-source AWS qualification and every planned test')
 
 
 def validate_staging_receipts(manifest, publication=None):

@@ -242,9 +242,10 @@ must remain explicit; do not invent a new tag merely to prove automation.
   Mini retains bounded native integration, calibrated GUI/performance/skin and
   packaged-pointer verification. Qualification metadata, plan and JUnit digests
   must agree before Latest.
-  Public staging also requires a genuinely green AWS receipt for the exact SHA,
-  including every test in its frozen headless-nightly plan; accepted known failures,
-  partial AWS coverage and Mac-only receipts cannot publish it. `staging-nightly`
+  Public staging also requires a genuinely green frozen headless-nightly plan:
+  authenticated exact-SHA AWS game results plus its legitimate Mini quick checks.
+  Accepted failures, incomplete execution and Mac-only receipts cannot publish it.
+  `staging-nightly`
   restores/authenticates that receipt in parallel with package assets, without the
   staging-lifecycle or Mini build mutex. Only publication takes the lifecycle lock.
   Its original qualifier run/attempt and all three evidence digests are frozen in

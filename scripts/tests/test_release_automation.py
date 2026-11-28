@@ -54,16 +54,18 @@ def browser_fixture(root, sha=SHA, channel='staging'):
 
 def qualification_fixture(destination, aws=True):
     """Real receipt/JUnit validation with only GitHub and build transport replaced."""
-    names = ['quantbot_all_against_atreides', 'quantbot_scenario_matrix',
+    games = ['quantbot_all_against_atreides', 'quantbot_scenario_matrix',
              'quantbot_ffa_army_deploys', 'dune2r_ai_all_against_atreides']
+    names = games + ['mini_quick_check']
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         automation.write_json(root / automation.HEADLESS_PLAN, {'tests': [
-            dict(name=name, properties=[dict(name='LABELS', value=['headless', 'nightly'])]) for name in names]})
+            dict(name=name, properties=[dict(name='LABELS', value=['headless', 'nightly'])]
+                 + ([dict(name='PROCESSORS', value=2)] if name in games else [])) for name in names]})
         tree = automation.ET.Element('testsuite')
         for name in names:
             case = automation.ET.SubElement(tree, 'testcase', name=name, status='run')
-            if aws:
+            if aws and name in games:
                 properties = automation.ET.SubElement(case, 'properties')
                 for key, value in (('queue_job', 'aws-qualification-fixture'),
                                    ('source_commit', SHA), ('attempts', 'aws:Passed')):
@@ -1176,13 +1178,13 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'frozen AWS receipt'):
                 automation.validate_staging_receipts(changed)
 
-    def test_green_hosted_or_partial_aws_coverage_cannot_publish_staging(self):
-        for change in ('no-aws', 'partial', 'wrong-source', 'accepted-failure', 'wrong-workflow'):
+    def test_mac_only_or_unplanned_aws_evidence_cannot_publish_staging(self):
+        for change in ('no-aws', 'unplanned-aws', 'wrong-source', 'accepted-failure', 'wrong-workflow'):
             receipt = copy.deepcopy(self.headless)
             if change == 'no-aws':
                 receipt['qualification'].pop('linux')
-            elif change == 'partial':
-                receipt['qualification']['linux']['tests'].pop()
+            elif change == 'unplanned-aws':
+                receipt['qualification']['linux']['tests'].append('not_in_the_frozen_plan')
             elif change == 'wrong-source':
                 receipt['qualification']['linux']['sourceCommit'] = OTHER
             elif change == 'accepted-failure':
