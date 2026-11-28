@@ -939,7 +939,7 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         for (const auto* structure : getStructureList()) {
             if (!structure->getOwner() || structure->getHealth() <= 0
                 || structure->getOwner()->getTeamID() == getHouse()->getTeamID()) continue;
-            const int gap=blockDistance(location, structure->getClosestPoint(location));
+            const int gap=blockDistance(location, structure->getClosestPoint(location)).lround();
             if (enemyGap < 0 || gap < enemyGap) enemyGap=gap;
         }
         SDL_Log("MCV_DEPLOYED: house=%d x=%d y=%d enemy_tiles=%d yards=%d cycle=%u", getHouse()->getHouseID(),
