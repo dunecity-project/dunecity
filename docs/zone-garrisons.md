@@ -135,14 +135,17 @@ to Area Guard. Decision log events: `zone_garrison_order` (why `defend` / `take`
 
 ## Controls
 
-- **Capture** (C): a Soldier or Trooper sent at an own zone occupies it; at an enemy zone it takes it. With the rule
-  on in a city game the tooltip says so.
-- **Garrison** (I; Stefan, 2026-11-27: "i cant garison my own buildings there no button"): a button in the unit
-  and group panels whenever a Soldier or Trooper is selected in a city game with the rule on. Its cursor takes only
-  zones: own to occupy, enemy to take. Anywhere else the click is refused and the cursor stays open.
-- **Cursor hint:** the Capture and Garrison cursors show their symbol over a target the click would order the
-  selection at (an own or enemy zone, and for Capture an enemy building it can take). Elsewhere they show a plain
-  pointer. The Garrison icon is a house behind sandbags.
+- **Capture** (C) is the only zone order. Stefan, 2026-11-28: "capture button acts as garrison button if used on
+  own r/i/c no need for 2 different buttons, just capture".
+  - A Soldier or Trooper sent at an own R/C/I zone garrisons it; sent at an enemy zone it takes it.
+  - With the rule on in a city game, the tooltip says both.
+  - The separate Garrison button and its I key (added 2026-11-27 after "i cant garison my own buildings there no
+    button") are gone.
+  - Nothing of them was saved. A profile's old `Garrison` hotkey entry is ignored on load, and the click always
+    sent the capture command.
+- **Cursor hint:** the Capture cursor shows its symbol over a target the click would order the selection at: an
+  own or enemy zone, or an enemy building it can take. Elsewhere it shows a plain pointer, and a click there is
+  refused with the cursor kept open.
 - **Evacuate:** the zone panel's button, shown while the zone is garrisoned and enabled only for its owner.
 
 ## No pulling soldiers away

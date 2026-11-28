@@ -283,12 +283,12 @@ TEST_CASE("A customised profile is left exactly as the player saved it", "[hotke
     REQUIRE(pressed(loaded.bindings, SDLK_SEMICOLON) == Action::Stop);
     REQUIRE_FALSE(pressed(loaded.bindings, SDLK_a));
     // Commands newer than the profile keep a default only where the saved keys leave it free:
-    // B, N, K, J, Y, L, V and I are the player's, Self-destruct's Delete is not taken.
+    // B, N, K, J, Y, L and V are the player's, Self-destruct's Delete is not taken.
     for(const Action newer : {Action::Ambush, Action::Hunt, Action::Retreat, Action::Sabotage, Action::DeployMCV,
-                              Action::Heal, Action::ToggleMovementPaths, Action::Garrison})
+                              Action::Heal, Action::ToggleMovementPaths})
         REQUIRE_FALSE(loaded.bindings.get(newer).bound());
     REQUIRE(loaded.bindings.get(Action::SelfDestruct) == Binding{SDLK_DELETE, 0});
-    REQUIRE(loaded.warnings.size() == 8);
+    REQUIRE(loaded.warnings.size() == 7);
     REQUIRE(loaded.bindings.conflicts().empty());
 
     // A single saved key is a customised profile too: it wins over the newer default on it.

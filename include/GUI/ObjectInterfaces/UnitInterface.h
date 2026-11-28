@@ -94,14 +94,6 @@ protected:
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&UnitInterface::onCapture, this));
 
-        // Zone Garrisons (Stefan, 2026-11-27: "i cant garison my own buildings there no button"): the
-        // Garrison cursor; only zones are its targets (own: occupy; enemy: take).
-        garrisonButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Garrison)});
-        garrisonButton.setTooltipText(UnitCommandTooltips::garrison());
-        garrisonButton.setVisible(ZoneStructure::garrisonOrderAvailable(currentGame->getObjectManager().getObject(objectID)));
-        garrisonButton.setToggleButton(true);
-        garrisonButton.setOnClick([]() { currentGame->setCursorMode(Game::CursorMode_Garrison); });
-
         returnButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Return)});
         returnButton.setTooltipText(UnitCommandTooltips::returnHarvester());
         returnButton.setVisible(isHarvesterLikeUnit(itemID));
@@ -143,7 +135,7 @@ protected:
         movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
         actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
-            &carryallDropButton, &captureButton, &garrisonButton, &returnButton, &deployButton,
+            &carryallDropButton, &captureButton, &returnButton, &deployButton,
             &destructButton, &spiceBloomButton, &healButton, &sendToRepairButton});
         buttonVBox.addWidget(&actionBar);
 
@@ -352,8 +344,6 @@ protected:
         attackButton.setVisible(pObject->canAttack());
         healButton.setVisible(pObject->canHeal());
         captureButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Capture);
-        garrisonButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Garrison);
-        garrisonButton.setVisible(ZoneStructure::garrisonOrderAvailable(pObject));
         carryallDropButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_CarryallDrop);
         spiceBloomButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_SpiceBloom);
         carryallDropButton.setVisible(currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops && pObject->getOwner()->hasCarryalls());
@@ -397,7 +387,6 @@ protected:
     SymbolButton    attackButton;
     SymbolButton    patrolButton;
     SymbolButton    captureButton;
-    SymbolButton    garrisonButton;
     SymbolButton    returnButton;
     SymbolButton    deployButton;
     SymbolButton    destructButton;

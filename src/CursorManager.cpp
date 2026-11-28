@@ -87,9 +87,7 @@ void presentWithCursor(int mode, bool contextual) {
             case Game::CursorMode_Heal: action = Action::Heal; break;
             // Zone Garrisons: the order symbol over a target the click would take, a pointer elsewhere.
             case Game::CursorMode_Capture:
-            case Game::CursorMode_Garrison:
-                action = currentGame ? currentGame->getOrderCursorAction()
-                                     : (mode == Game::CursorMode_Garrison ? Action::Garrison : Action::Capture);
+                action = currentGame ? currentGame->getOrderCursorAction() : Action::Capture;
                 break;
             case Game::CursorMode_CarryallDrop: action = Action::Drop; break;
             case Game::CursorMode_SpiceBloom: action = Action::Drop; break;
@@ -205,11 +203,6 @@ case Game::CursorMode_Attack:
                 break;
             case Game::CursorMode_Capture:
                 if (pObject->isAUnit() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable() && pObject->canAttack() && pObject->isInfantry()) {
-                    return true;
-                }
-                break;
-            case Game::CursorMode_Garrison:
-                if (pObject->getOwner() == pLocalHouse && pObject->isRespondable() && ZoneStructure::garrisonOrderAvailable(pObject)) {
                     return true;
                 }
                 break;

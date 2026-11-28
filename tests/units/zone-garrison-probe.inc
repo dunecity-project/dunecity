@@ -779,6 +779,8 @@ void checkPlayerRefused() {
 // --- Garrison button, reinforcement, garrison weapons, no pulling away, price -----------------------
 
 void checkGarrisonButton() {
+    // Stefan, 2026-11-28: "capture button acts as garrison button if used on own r/i/c no need for 2 different
+    // buttons, just capture". Capture is the only zone order: no Garrison button or I key.
     Fixture f("garrison button");
     Game& game = *f.game;
     auto* z = f.zone(f.own, Structure_ZoneResidential, 24, 24);
@@ -787,64 +789,66 @@ void checkGarrisonButton() {
     auto* trooper = f.unit(f.own, Unit_Trooper, 20, 27);
     auto* tank = f.unit(f.own, Unit_Tank, 16, 30);
     f.run(1);
-    // One Soldier: the panel shows Garrison, with its tooltip, and Capture says it occupies zones.
-    auto* one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
-    require(one != nullptr, "garrison button: one Soldier selected opened no unit panel");
-    require(one->garrisonButton.isVisible() && one->garrisonButton.isEnabled(),
-            "garrison button: the Garrison button is not shown for a Soldier");
-    require(one->garrisonButton.getTooltipText().find(_("Garrison")) != std::string::npos
-                && one->garrisonButton.getTooltipText().find("(I)") != std::string::npos,
-            "garrison button: the tooltip does not name Garrison and its I key: " + one->garrisonButton.getTooltipText());
-    require(one->captureButton.getTooltipText().find(_("zone")) != std::string::npos,
-            "garrison button: the Capture tooltip does not mention zones: " + one->captureButton.getTooltipText());
-    // A tank alone: no Garrison button; a tank with a Soldier: the group panel shows it.
-    auto* tankPanel = dynamic_cast<UnitInterface*>(selectUnits(f, {tank}));
-    require(tankPanel != nullptr && !tankPanel->garrisonButton.isVisible(), "garrison button: shown for a tank");
-    auto* many = dynamic_cast<MultiUnitInterface*>(selectUnits(f, {tank, soldier}));
-    require(many != nullptr, "garrison button: a tank and a Soldier opened no group panel");
-    many->update();
-    require(many->garrisonButton.isVisible(), "garrison button: the group panel hides Garrison with a Soldier in it");
-    // Press it: the Garrison cursor; its symbol over an own and an enemy zone, a pointer over sand.
-    one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
-    press(one->garrisonButton);
-    require(game.currentCursorMode == Game::CursorMode_Garrison, "garrison button: pressing it did not open the Garrison cursor");
-    one->update();
-    require(one->garrisonButton.getToggleState(), "garrison button: the button does not show it is active");
-    using Action = CursorAppearance::Action;
-    require(game.orderCursorAction(Game::CursorMode_Garrison, 24, 24) == Action::Garrison,
-            "garrison button: the cursor over an own zone is not the Garrison symbol");
-    require(game.orderCursorAction(Game::CursorMode_Garrison, 41, 25) == Action::Garrison,
-            "garrison button: the cursor over an enemy zone is not the Garrison symbol");
-    require(game.orderCursorAction(Game::CursorMode_Garrison, 30, 30) == Action::Pointer,
-            "garrison button: the cursor over sand claims a target");
-    require(game.orderCursorAction(Game::CursorMode_Capture, 25, 25) == Action::Capture,
-            "garrison button: the Capture cursor over an own zone does not show it is a target");
-    // A click on sand is refused and keeps the cursor; a click on the own zone garrisons it.
-    const int before = queued(game, CMD_INFANTRY_CAPTURE);
-    clickMap(f, Coord(30, 30));
-    require(game.currentCursorMode == Game::CursorMode_Garrison && queued(game, CMD_INFANTRY_CAPTURE) == before,
-            "garrison button: a click on sand ordered something or closed the cursor");
-    clickMap(f, z->getLocation());
-    require(queued(game, CMD_INFANTRY_CAPTURE) == before + 1 && game.currentCursorMode == Game::CursorMode_Normal,
-            "garrison button: the click on an own zone queued no garrison order");
-    require(f.runUntil(30, [&] { return z->getGarrisonSize() == 1 && hidden(soldier); }),
-            "garrison button: the Soldier never went into the zone it was sent to");
-    // The I key with a Trooper selected opens the same cursor; the Trooper takes the enemy zone.
-    selectUnits(f, {trooper});
+    // Soldier and Trooper panels: Capture shown and enabled, its tooltip names garrisoning own zones; the
+    // panels hold no other zone order.
+    for(UnitBase* man : {static_cast<UnitBase*>(soldier), static_cast<UnitBase*>(trooper)}) {
+        auto* one = dynamic_cast<UnitInterface*>(selectUnits(f, {man}));
+        require(one != nullptr, "garrison button: one soldier selected opened no unit panel");
+        require(one->captureButton.isVisible() && one->captureButton.isEnabled(),
+                "garrison button: Capture is not shown for item " + std::to_string(man->getItemID()));
+        const std::string tip = one->captureButton.getTooltipText();
+        require(tip.find(_("Capture")) != std::string::npos && tip.find("(C)") != std::string::npos
+                    && tip.find(_("garrison")) != std::string::npos && tip.find(_("own")) != std::string::npos,
+                "garrison button: the Capture tooltip does not say it garrisons own zones: " + tip);
+        int zoneOrders = 0;
+        for(const auto& item : one->actionBar.containedWidgets) {
+            const auto* b = dynamic_cast<const SymbolButton*>(item.pWidget);
+            if(b && b->isVisible() && b->getTooltipText().find(_("Garrison")) == 0) ++zoneOrders;
+        }
+        require(zoneOrders == 0, "garrison button: the panel still has a Garrison button");
+    }
+    // The I key opens nothing (no Garrison command any more).
+    selectUnits(f, {soldier});
     SDL_KeyboardEvent key{};
     key.type = SDL_KEYDOWN;
     key.keysym.sym = SDLK_i;
     game.handleKeyInput(key);
-    require(game.currentCursorMode == Game::CursorMode_Garrison, "garrison button: the I key did not open the Garrison cursor");
+    require(game.currentCursorMode == Game::CursorMode_Normal, "garrison button: the I key opened a cursor");
+    // A tank alone has no Capture button.
+    auto* tankPanel = dynamic_cast<UnitInterface*>(selectUnits(f, {tank}));
+    require(tankPanel != nullptr && !tankPanel->captureButton.isVisible(), "garrison button: Capture shown for a tank");
+    // Capture's cursor: its symbol over an own and an enemy zone, a pointer over sand.
+    auto* one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
+    press(one->captureButton);
+    require(game.currentCursorMode == Game::CursorMode_Capture, "garrison button: Capture did not open its cursor");
+    using Action = CursorAppearance::Action;
+    require(game.orderCursorAction(Game::CursorMode_Capture, 24, 24) == Action::Capture,
+            "garrison button: the Capture cursor over an own zone does not show it is a target");
+    require(game.orderCursorAction(Game::CursorMode_Capture, 41, 25) == Action::Capture,
+            "garrison button: the Capture cursor over an enemy zone does not show it is a target");
+    require(game.orderCursorAction(Game::CursorMode_Capture, 30, 30) == Action::Pointer,
+            "garrison button: the Capture cursor over sand claims a target");
+    // A click on sand is refused and keeps the cursor; a click on the own zone garrisons it (panel 1/4).
+    const int before = queued(game, CMD_INFANTRY_CAPTURE);
+    clickMap(f, Coord(30, 30));
+    require(game.currentCursorMode == Game::CursorMode_Capture && queued(game, CMD_INFANTRY_CAPTURE) == before,
+            "garrison button: a click on sand ordered something or closed the cursor");
+    clickMap(f, z->getLocation());
+    require(queued(game, CMD_INFANTRY_CAPTURE) == before + 1 && game.currentCursorMode == Game::CursorMode_Normal,
+            "garrison button: the Capture click on an own zone queued no order");
+    require(f.runUntil(30, [&] { return z->getGarrisonSize() == 1 && hidden(soldier); }),
+            "garrison button: the Soldier never went into the own zone it was sent to");
+    // The C key with a Trooper selected: Capture on the enemy zone takes it.
+    selectUnits(f, {trooper});
+    key.keysym.sym = SDLK_c;
+    game.handleKeyInput(key);
+    require(game.currentCursorMode == Game::CursorMode_Capture, "garrison button: the C key did not open the Capture cursor");
     clickMap(f, foe->getLocation());
     require(f.runUntil(40, [&] { return foe->getOwner() == f.own && foe->getGarrisonSize() == 1; }),
-            "garrison button: the Trooper sent with the I key did not take the enemy zone");
-    // A tank alone: the I key does nothing.
-    selectUnits(f, {tank});
-    game.handleKeyInput(key);
-    require(game.currentCursorMode == Game::CursorMode_Normal, "garrison button: the I key opened the cursor for a tank");
-    record("garrison_button", "shown for Soldier/Trooper and a mixed group, hidden for a tank; tooltip names I; "
-           "symbol over own/enemy zone, pointer over sand; sand refused; own zone garrisoned; I key took an enemy zone");
+            "garrison button: the Trooper sent with the C key did not take the enemy zone");
+    record("garrison_button", "Capture only: shown for Soldier and Trooper, tooltip names garrisoning own zones, no "
+           "Garrison button, I opens nothing; cursor symbol over own/enemy zone, pointer over sand; sand refused; "
+           "own zone garrisoned; C key took an enemy zone");
 }
 
 void checkGarrisonButtonRuleOff() {
@@ -852,13 +856,15 @@ void checkGarrisonButtonRuleOff() {
     auto* soldier = f.unit(f.own, Unit_Soldier, 20, 25);
     f.run(1);
     auto* one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
-    require(one != nullptr && !one->garrisonButton.isVisible(), "garrison button rule off: the button is shown with the rule off");
+    require(one != nullptr && one->captureButton.isVisible(), "garrison button rule off: Capture is not shown");
+    require(one->captureButton.getTooltipText().find(_("garrison")) == std::string::npos,
+            "garrison button rule off: the Capture tooltip offers garrisons with the rule off");
     SDL_KeyboardEvent key{};
     key.type = SDL_KEYDOWN;
     key.keysym.sym = SDLK_i;
     f.game->handleKeyInput(key);
-    require(f.game->currentCursorMode != Game::CursorMode_Garrison, "garrison button rule off: the I key opened the cursor");
-    record("garrison_button_rule_off", "no button, no cursor");
+    require(f.game->currentCursorMode == Game::CursorMode_Normal, "garrison button rule off: the I key opened a cursor");
+    record("garrison_button_rule_off", "Capture without the garrison tooltip, no I key");
 }
 
 void checkReinforce() {
