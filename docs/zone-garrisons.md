@@ -69,6 +69,38 @@ courses on all four sides with the middle bag of the outer course left out as a 
 colour along the front course and an outlined olive helmet per soldier along the top wall. Original art drawn in code (no imported or C&C sprite); it scales with the zoom level. The zone
 panel shows `Garrison: n/4` and the Evacuate button while it is held.
 
+### Selected-building occupant panel (2026-11-28)
+
+Stefan: "also when clicking on the building show the icon and health bar of each unit and allow up to 5 units to garrison".
+The capacity/damage/healing rules are independent of this presentation change.
+While an own zone is occupied, its portrait area becomes a three-column/two-row
+grid: one unit portrait and its own coloured health strip per live occupant, in
+entry order, up to the capacity of five. It uses the same house-specific unit
+portraits and health colours as the existing unit interface/selection. The zone
+name, count and existing whole-garrison Evacuate button remain below. Clicking an
+icon issues no command. Empty zones have no empty slots and regain their building
+portrait. Captured zones shorten the count line to `n/5 (captured)` to fit.
+
+No extra panel height is added: the grid replaces the existing 54-pixel portrait
+area, with compact 22-pixel status/control rows keeping the full properties column
+inside the shared 640x480 logical minimum (including mobile's shared interface).
+Physical iPhone/iPad rendering and real-screen readability still need playtesting.
+
+Enemy inspection preserves `mayShowOwnerInterface()`: ordinary players get the
+generic building/owner panel, not hidden occupant identities or HP; observers/debug
+retain the existing full-panel permission. The on-map sandbags/helmets still identify
+a visible enemy garrison. Possible future policies are a visible-enemy count-only
+indicator (less information) or the full roster (reveals composition and exact HP);
+neither is silently enabled here, and neither should reveal buildings through fog.
+
+| Acceptance | Enforcement / targeted assertion |
+|---|---|
+| Five actual occupants, correct icon and independent HP | `zone_garrison_panel_probe`: real Capture widget/map click; model equals each hidden unit |
+| Live damage and healing | Same open panel after a real zone hit and normal garrison-healing game cycles |
+| Fits compact/desktop layout, paints every icon/bar | SDL dummy/software offscreen assertions and PNGs at 640x480 and 1024x768 |
+| No stale empty slots or new enemy disclosure | Real Evacuate clears roster/restores portrait; enemy map selection keeps generic inspect panel |
+
+
 **Save format 9900.** A zone saves its occupants (object ids in the order they entered), its garrison's target
 and its search clock. The soldiers themselves are saved as hidden units, as Carryall cargo is.
 

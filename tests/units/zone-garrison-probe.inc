@@ -1030,6 +1030,7 @@ void checkPrice() {
 
 #include "zone-garrison-redevelopment-probe.inc"
 #include "zone-garrison-health-probe.inc"
+#include "zone-garrison-panel-probe.inc"
 
 } // namespace ZoneGarrisonProbe
 
@@ -1042,6 +1043,11 @@ int runZoneGarrisonProbe() {
     settings.general.playerName = "Garrison tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     require(gModOptions.zoneGarrisons, "Zone Garrisons is not on by default in the Dune City mod");
+    if(std::getenv("ZONE_GARRISON_PANEL_ONLY")) {
+        checkGarrisonPanel();
+        SDL_Log("ZONE_GARRISON_PROBE_PASS: live occupant panel");
+        return -1;
+    }
     // Every case runs even after one fails, so a run shows all failures; any failure fails the probe.
     int failed = 0;
     for(auto check : {checkOwnZone, checkTake, checkFireOut, checkAssault, checkEvacuate, checkDestroyed,

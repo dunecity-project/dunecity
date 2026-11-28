@@ -1305,6 +1305,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-probe)
         set_tests_properties(zone_garrison_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
+        # The selected building's five individual portraits/HP bars: real player
+        # Capture/Evacuate paths and offscreen pixels at compact/desktop sizes.
+        dunecity_add_test(headless nightly NAME zone_garrison_panel_probe COMMAND ${CMAKE_COMMAND} -E env
+            ZONE_GARRISON_PANEL_ONLY=1 ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-panel-probe)
+        set_tests_properties(zone_garrison_panel_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
         # Zone Garrisons acceptance in real games (Stefan's 4P DuneCity map, every QuantBot Zone
         # Garrisons switch on): one ACCEPT line per request, any failure fails the test.
         dunecity_add_test(headless nightly NAME zone_garrison_real_game COMMAND ${Python3_EXECUTABLE}
