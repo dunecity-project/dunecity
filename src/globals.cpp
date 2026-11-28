@@ -189,6 +189,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.removeKey(section, "Zone Garrisons");
     config.removeKey(section, "AI Infantry Tactics");
     config.setBoolValue(section, "Garrisoning and Capturing", options.garrisoningAndCapturing);
+    config.setBoolValue(section, "All Units for All Houses", options.allUnitsForAllHouses);
     config.setBoolValue(section, "Fremen Palace Worm", options.fremenPalaceWorm);
     config.setBoolValue(section, "Parks Count As Roads", options.parksCountAsRoads);
     config.setBoolValue(section, "Saboteur Hunt", options.saboteurHunt);
@@ -272,6 +273,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("City Plane Free Per Airport", options.cityPlaneFreePerAirport);
     readBool("City Plane Crash Bombs", options.cityPlaneCrashBombs);
     readBool("Garrisoning and Capturing", options.garrisoningAndCapturing);
+    readBool("All Units for All Houses", options.allUnitsForAllHouses);
     readBool("Fremen Palace Worm", options.fremenPalaceWorm);
     readBool("Parks Count As Roads", options.parksCountAsRoads);
     readBool("Saboteur Hunt", options.saboteurHunt);

@@ -28,6 +28,7 @@
 #include <misc/FileSystem.h>
 #include <main.h>
 #include <mod/ModManager.h>
+#include <dunecity/AllUnitsRules.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -331,6 +332,24 @@ void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserCon
     delete objectDataFile;
     
     SDL_Log("ObjectData loaded from: %s", loadedPath.c_str());
+}
+
+void ObjectData::applyAllUnitsForAllHouses() {
+    for(const int unit : DuneCity::AllUnitsRules::kUnits) {
+        const int producer = DuneCity::AllUnitsRules::builderFor(unit);
+        for(auto& blueprint : data[unit]) {
+            blueprint.enabled = true;
+            blueprint.builder = producer;
+        }
+    }
+    // A factory permission is useless if its house cannot construct the producer.
+    // Harkonnen Barracks and Atreides WOR retain their usual costs and tech gates.
+    for(const int producer : {Structure_Barracks, Structure_WOR}) {
+        for(auto& blueprint : data[producer]) {
+            blueprint.enabled = true;
+            blueprint.builder = Structure_ConstructionYard;
+        }
+    }
 }
 
 void ObjectData::applyNeutralVanillaRules() {

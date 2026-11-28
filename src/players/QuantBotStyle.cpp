@@ -185,6 +185,20 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
     UnitMixPolicy::Slots slots = fieldableMixSlots();
     for (size_t i = 0; i < slots.size(); ++i) slots[i] = slots[i] || available[i];
     const auto configured = UnitMixPolicy::expandGroups(group, slots);
+    const bool sharedArsenal = currentGame->isCitySimEnabled()
+        && currentGame->getGameInitSettings().getGameOptions().allUnitsForAllHouses;
+    const auto shareSpecialPrior = [sharedArsenal](UnitMixPolicy::Weights& prior,
+                                                  const UnitMixPolicy::Slots& fieldable) {
+        if(!sharedArsenal) return;
+        // The tuned house tables predate the shared arsenal. Keep their total
+        // special budget, but do not reserve it for the old native special.
+        int64_t total = 0;
+        for(size_t s = 0; s < UnitMixPolicy::kSpecialSlots; ++s)
+            total += prior[UnitMixPolicy::kFirstSpecialSlot + s];
+        const auto shares = UnitMixPolicy::splitShare(total, UnitMixPolicy::specials(fieldable));
+        for(size_t s = 0; s < UnitMixPolicy::kSpecialSlots; ++s)
+            prior[UnitMixPolicy::kFirstSpecialSlot + s] = shares[s];
+    };
     // Without the bounds (test style): the 1.0.847 opening over this pass's producible slots.
     if (!style().startBounds) {
         const auto opening = UnitMixPolicy::openingMix(getHouse()->getTechLevel(), configured, available);
@@ -192,6 +206,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
         for (size_t i = 0; i < prior.size(); ++i) prior[i] = opening[i];
         if (const auto* mix = strategyMix())
             prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : strategyStart, mix->priorBps, available);
+        shareSpecialPrior(prior, available);
         return prior;
     }
     // The starting mix is defined over the slots the house can produce in this game (ObjectData,
@@ -205,6 +220,7 @@ UnitMixPolicy::Weights QuantBot::startingPrior(const UnitMixPolicy::Slots& avail
     // of the remembered enemy army).
     if (const auto* mix = strategyMix())
         prior = QuantBotStrategy::applyPrior(prior, mix->counter ? enemyCounterPrior() : strategyStart, mix->priorBps, slots);
+    shareSpecialPrior(prior, slots);
     const auto bounded = QuantBotStrategy::bound(prior, slots);
     UnitMixPolicy::Weights masked{};
     for (size_t i = 0; i < masked.size(); ++i) masked[i] = available[i] ? bounded[i] : 0;

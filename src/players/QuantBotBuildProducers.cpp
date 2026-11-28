@@ -2032,6 +2032,8 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                     .set("deficit_scaled",int64_t(normalHorizon)*c.targetBps-int64_t(c.committedValue)*10000)
                     .set("expansion_deficit_scaled",int64_t(expansionHorizon)*c.targetBps-int64_t(c.committedValue)*10000));
             }
+            const bool sharedArsenal = pass.citySimEnabled
+                && getGameInitSettings().getGameOptions().allUnitsForAllHouses;
             int selected = -1;
             bool expansionFallback = false;
             if (pass.techSavings) {
@@ -2043,6 +2045,11 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                 if (selected < 0 && (pass.militaryEmergency || pass.vanillaBoomArmy))
                     selected = QuantBotBuildPolicy::largestAffordableDeficit(
                         candidates, pass.militaryValue, pass.money, pass.militaryBudget);
+            } else if(sharedArsenal) {
+                // Compare post-order value to each share: an expensive small-share
+                // type must not starve behind a continually growing large deficit.
+                selected = QuantBotBuildPolicy::capacityFill(
+                    candidates, pass.militaryValue, pass.money, pass.militaryBudget);
             } else {
                 selected = QuantBotBuildPolicy::fundedDeficit(
                     candidates,pass.militaryValue,pass.money,pass.militaryBudget,pass.vehiclePlanValue);
@@ -2071,11 +2078,13 @@ void QuantBot::buildHeavyFactory(BuildPass& pass, BuilderTurn& turn) {
                     .set("selected",selected<0 ? NONE_ID : types[selected])
                     .set("reason",selected<0 ? "no_affordable_capacity"
                         : pass.techSavings ? (growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition")
+                        : sharedArsenal ? "shared_arsenal_composition"
                         : expansionFallback ? "available_factory_capacity" : "largest_affordable_deficit"));
                 lastHeavyAllocationTrace[turn.pBuilder->getObjectID()] = {allocationSignature, allocationCycle};
             }
             if (selected>=0 && produceItemWithLogging(pass, turn, types[selected],__LINE__,
                 pass.techSavings ? (growthHeld ? "existing_army_composition_after_growth_hold" : "existing_army_composition")
+                    : sharedArsenal ? "shared_arsenal_composition"
                     : expansionFallback ? "available_factory_capacity" : "largest_affordable_deficit")) {
                 ++pass.itemCount[types[selected]];
 

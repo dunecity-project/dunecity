@@ -545,7 +545,9 @@
 //      Soldier survivors. Empty structures retain their survivor rolls. No save layout change.
 // 164: Native infantry takes eligible empty zones without firing; occupied-zone Capture
 //      obeys live all-crew ownership checks and never becomes Attack. No save layout change.
-#define NETWORK_PROTOCOL_VERSION            164
+// 165: City All Units for All Houses shares ordinary producer/Starport permissions and
+//      uses MOD19 bit2; retired bit1 stays ignored. Existing saves retain their arsenal.
+#define NETWORK_PROTOCOL_VERSION            165
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

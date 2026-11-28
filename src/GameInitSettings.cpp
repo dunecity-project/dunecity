@@ -58,7 +58,7 @@ constexpr Uint32 GAMEINIT_MOD15_MARKER = 0x4D4F4446; // MODF: per-house research
 constexpr Uint32 GAMEINIT_MOD16_MARKER = 0x4D4F4447; // MODG: Starport city population requirement
 constexpr Uint32 GAMEINIT_MOD17_MARKER = 0x4D4F4448; // MODH: research pace/map area and damage land value
 constexpr Uint32 GAMEINIT_MOD18_MARKER = 0x4D4F4449; // MODI: fixed research pace and mountain scenery
-constexpr Uint32 GAMEINIT_MOD19_MARKER = 0x4D4F444A; // MODJ: technology installments
+constexpr Uint32 GAMEINIT_MOD19_MARKER = 0x4D4F444A; // MODJ: technology installments and all-house units
 constexpr Uint32 GAMEINIT_MOD20_MARKER = 0x4D4F444B; // MODK: Custom Game starting tech level
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
@@ -347,6 +347,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.researchLab = false;
     gameOptions.researchPace = TechResearch::Pace::Normal;
     gameOptions.technologyInstallments = false;
+    gameOptions.allUnitsForAllHouses = false;
     gameOptions.startTechLevel = 0;
     // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
     gameOptions.saboteurHunt = true;
@@ -532,10 +533,11 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 }
             }
             if(hasTechnologyInstallments) {
-                // Released protocol 152 also used bit 1. Ignore that retired bit: treating the
-                // whole byte as a bool would turn installments on in old saves that wrote 2.
-                const Uint8 installments = stream.readUint8();
-                gameOptions.technologyInstallments = (installments & 1) != 0;
+                // Bit 0 is installments, bit 2 is All Units for All Houses. Released protocol
+                // 152 used bit 1 for a retired rule; it must not enable either current rule.
+                const Uint8 rules = stream.readUint8();
+                gameOptions.technologyInstallments = (rules & 1) != 0;
+                gameOptions.allUnitsForAllHouses = (rules & 4) != 0;
             }
             if(hasStartTechLevel) {
                 // Refused, not clamped: both peers must play the level the host chose.
@@ -764,8 +766,10 @@ void GameInitSettings::save(OutputStream& stream) const {
         | (gameOptions.parksCountAsRoads ? 0 : 64)
         // Bit 7 (protocol 145): Fremen Palace Worm off.
         | (gameOptions.fremenPalaceWorm ? 0 : 128));
-    // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
-    stream.writeBool(gameOptions.technologyInstallments);
+    // MOD19: bit 0 is installments, bit 2 is All Units for All Houses; retired bit 1 stays clear.
+    // Older setups keep upfront payments and their house-specific unit rosters.
+    stream.writeUint8(static_cast<Uint8>((gameOptions.technologyInstallments ? 1 : 0)
+        | (gameOptions.allUnitsForAllHouses ? 4 : 0)));
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.
     // Bit 7: the Saboteur hunt is off (the default, on, leaves the byte as it was).
     stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)

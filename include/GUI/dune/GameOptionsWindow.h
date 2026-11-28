@@ -119,6 +119,7 @@ private:
     Checkbox researchLabCheckbox;
     Checkbox technologyInstallmentsCheckbox;
     DamageRulesCheckbox garrisoningAndCapturingCheckbox;
+    DamageRulesCheckbox allUnitsForAllHousesCheckbox;
     HBox researchPaceHBox;
     Label researchPaceLabel;
     DropDownBox researchPaceDropDownBox;

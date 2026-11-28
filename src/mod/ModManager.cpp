@@ -1093,6 +1093,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "City Plane Free Per Airport") result.cityPlaneFreePerAirport = parseBool(value);
             else if (key == "City Plane Crash Bombs") result.cityPlaneCrashBombs = parseBool(value);
             else if (key == "Garrisoning and Capturing") result.garrisoningAndCapturing = parseBool(value);
+            else if (key == "All Units for All Houses") result.allUnitsForAllHouses = parseBool(value);
             else if (key == "Fremen Palace Worm") result.fremenPalaceWorm = parseBool(value);
             else if (key == "Parks Count As Roads") result.parksCountAsRoads = parseBool(value);
             else if (key == "Saboteur Hunt") result.saboteurHunt = parseBool(value);

@@ -351,6 +351,7 @@ public:
                     && (cityPlaneCrashBombs == goc.cityPlaneCrashBombs)
                     && (parksCountAsRoads == goc.parksCountAsRoads)
                     && (garrisoningAndCapturing == goc.garrisoningAndCapturing)
+                    && (allUnitsForAllHouses == goc.allUnitsForAllHouses)
                     && (fremenPalaceWorm == goc.fremenPalaceWorm)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
@@ -427,6 +428,7 @@ public:
             if(!saboteurSkipsCityZones) optStr += "/saboteurSkipsCityZones=0";
             if(!hospitalCare) optStr += "/hospitalCare=0";
             if(turretsFireOnBuildings) optStr += "/turretsFireOnBuildings=1";
+            if(allUnitsForAllHouses) optStr += "/allUnitsForAllHouses=1";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -598,6 +600,10 @@ public:
         /// the legacy damaged-building capture path. Ordinary non-city capture is unchanged.
         /// INI key "Garrisoning and Capturing"; MOD18 bit 5 is set when off.
         bool        garrisoningAndCapturing = true;
+        /// City games: every house may build or import every normal unit, with its existing
+        /// technology, upgrades and prerequisites. Palace specials remain house-specific.
+        /// INI key "All Units for All Houses"; MOD19 bit 2 is set when on.
+        bool        allUnitsForAllHouses = false;
         /// A Fremen Palace calls a sandworm its house controls instead of Fremen warriors (Stefan,
         /// 2026-11-27: "i want freeman house to get a worm as its palace special"): Hunt eats enemy
         /// units on its sand, Spice Bloom bursts it into a spice field (include/units/

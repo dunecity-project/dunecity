@@ -930,6 +930,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.removeKey("Game Options", "Zone Garrisons");
     myINIFile.removeKey("Game Options", "AI Infantry Tactics");
     myINIFile.setBoolValue("Game Options", "Garrisoning and Capturing", settings.gameOptions.garrisoningAndCapturing);
+    myINIFile.setBoolValue("Game Options", "All Units for All Houses", settings.gameOptions.allUnitsForAllHouses);
     myINIFile.setBoolValue("Game Options", "Fremen Palace Worm", settings.gameOptions.fremenPalaceWorm);
     myINIFile.setBoolValue("Game Options", "Parks Count As Roads", settings.gameOptions.parksCountAsRoads);
     myINIFile.setBoolValue("Game Options", "Saboteur Hunt", settings.gameOptions.saboteurHunt);

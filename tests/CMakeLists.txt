@@ -407,6 +407,9 @@ dunecity_add_test(headless integration NAME classic_desert_ui_tests COMMAND dune
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 dunecity_add_test(headless integration NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
 dunecity_add_test(headless integration NAME garrison_capture_settings COMMAND dunelegacy_tests "[garrison-capture]")
+dunecity_add_test(headless integration NAME all_units_settings LABELS "all-units"
+    COMMAND dunelegacy_tests "[all-units]")
+set_tests_properties(all_units_settings PROPERTIES TIMEOUT 30 PROCESSORS 1)
 # Configurable command hotkeys: dispatch, WASD rule, conflicts, capture and [Hotkeys] config (misc/Hotkeys.h).
 dunecity_add_test(headless integration NAME hotkeys_tests COMMAND dunelegacy_tests "[hotkeys]")
 # The fair-start-rock seed sweep is one Catch test case per mode and map size; as one test the
@@ -1423,6 +1426,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-garrison-capture-option-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/garrison-capture-option-probe)
         set_tests_properties(garrison_capture_option_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
+        # All playable city houses: real rule widgets/INI, exact factory and starport lists,
+        # ordinary technology gates, paid sidebar deliveries, and completed QuantBot ON/OFF output.
+        dunecity_add_test(headless integration NAME all_units_all_houses_probe LABELS "all-units"
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-all-units-all-houses-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/all-units-all-houses-probe)
+        set_tests_properties(all_units_all_houses_probe PROPERTIES TIMEOUT 480 PROCESSORS 2)
         # The Saboteur hunt off against on in one binary: 96 seeded Palace releases per arm and
         # mod against turreted bases; more Saboteurs must destroy something with the rule on.
         dunecity_add_test(headless nightly NAME saboteur_effect_probe COMMAND ${Python3_EXECUTABLE}

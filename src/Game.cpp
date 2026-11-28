@@ -973,6 +973,8 @@ void Game::initGame(const GameInitSettings& newGameInitSettings) {
             randomGen.setSeed(gameInitSettings.getRandomSeed());
 
             objectData.loadFromINIFile(ModManager::instance().getActiveObjectDataPath(), false);
+            if(citySimEnabled_ && gameInitSettings.getGameOptions().allUnitsForAllHouses)
+                objectData.applyAllUnitsForAllHouses();
             AmbientAirplane::applyBalance(objectData);   // the city airplane's hit points (and test overrides)
 
             // City zones must not be buildable when the active mod doesn't

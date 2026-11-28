@@ -299,6 +299,17 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(&trooperAntiAirCheckbox);
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
+    allUnitsForAllHousesCheckbox.setVisible(ModManager::instance().isCityModeActive());
+    if(allUnitsForAllHousesCheckbox.isVisible()) {
+        allUnitsForAllHousesCheckbox.setText(_("All Units for All Houses"));
+        allUnitsForAllHousesCheckbox.setChecked(gameOptions.allUnitsForAllHouses);
+        allUnitsForAllHousesCheckbox.setExplanation(_("All Units for All Houses"),
+            _("Every playable city house can build or import every normal factory, barracks and starport unit. Normal technology levels, factory upgrades and building prerequisites still apply. Palace specials (Fremen, Saboteur and Death Hand) remain house-specific. Unchecked: each house keeps its normal unit roster."));
+        // Keep the city-only option in the right column; the shared viewport scrolls at small sizes.
+        vboxRight.addWidget(&allUnitsForAllHousesCheckbox);
+        vboxRight.addWidget(VSpacer::create(ruleGap));
+    }
+
     if(ModManager::instance().isTornieFamilyContentActive()) {
         easyModeCheckbox.setText(_("Easy campaign"));
         easyModeCheckbox.setTooltipText(_("Start at mission 2, reduce purchase prices by 25 credits and grant 500 extra starting credits in the first mission. Co-op allies share these benefits."));
@@ -367,6 +378,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.researchLab = researchLabCheckbox.isChecked();
     gameOptions.technologyInstallments = technologyInstallmentsCheckbox.isChecked();
     if(garrisoningAndCapturingCheckbox.isVisible()) gameOptions.garrisoningAndCapturing = garrisoningAndCapturingCheckbox.isChecked();
+    if(allUnitsForAllHousesCheckbox.isVisible()) gameOptions.allUnitsForAllHouses = allUnitsForAllHousesCheckbox.isChecked();
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
     gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();

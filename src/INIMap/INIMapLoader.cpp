@@ -36,6 +36,7 @@
 #include <misc/SpiceGeneration.h>
 #include <misc/ModContentPolicy.h>
 #include <INIMap/SpiceVariants.h>
+#include <dunecity/AllUnitsRules.h>
 
 #include <SpecialVehicle.h>
 
@@ -835,7 +836,21 @@ void INIMapLoader::loadHouses()
 */
 void INIMapLoader::loadChoam()
 {
+    const auto addMissingCityStock = [this]() {
+        if(!pGame->isCitySimEnabled()
+           || !pGame->getGameInitSettings().getGameOptions().allUnitsForAllHouses) return;
+        // An authored quantity (including sold out) is kept. Newly offered products
+        // start with one unit and use the ordinary CHOAM price/restock cycle.
+        for(const int unit : DuneCity::AllUnitsRules::kUnits) {
+            for(const auto& house : pGame->house) {
+                if(house && pGame->objectData.data[unit][house->getHouseID()].enabled
+                   && house->getChoam().getNumAvailable(unit) == INVALID)
+                    house->getChoam().addItem(unit, 1);
+            }
+        }
+    };
     if(!inifile->hasSection("CHOAM")) {
+        addMissingCityStock();
         return;
     }
     const bool familyContent = ModManager::instance().isTornieFamilyContentActive();
@@ -867,6 +882,7 @@ void INIMapLoader::loadChoam()
             }
         }
     }
+    addMissingCityStock();
 
 }
 

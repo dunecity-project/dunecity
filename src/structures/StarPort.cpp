@@ -28,6 +28,7 @@
 #include <SoundPlayer.h>
 #include <units/HarvesterHelpers.h>
 #include <mod/ModManager.h>
+#include <dunecity/AllUnitsRules.h>
 
 #include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
@@ -272,6 +273,8 @@ void StarPort::updateBuildList() {
 
     Choam& choam = owner->getChoam();
     const bool familyActive = ModManager::instance().isTornieFamilyContentActive();
+    const bool allUnits = currentGame->isCitySimEnabled()
+        && currentGame->getGameInitSettings().getGameOptions().allUnitsForAllHouses;
 
     for(int i = 0; itemOrder[i] != ItemID_Invalid; ++i) {
 
@@ -280,8 +283,21 @@ void StarPort::updateBuildList() {
         // Exclude ornithopters from starport in campaign games (can still build from factory)
         bool isOrnithopterInCampaign = (itemOrder[i] == Unit_Ornithopter && isCampaignGameType(currentGame->gameType)
                                         && !currentGame->getGameInitSettings().isDuneCityCampaign());
+        // The expanded city catalogue is not a shortcut past a product's normal
+        // technology or prerequisite structures. Starports have no factory upgrades.
+        bool prerequisitesMet = true;
+        if(allUnits && DuneCity::AllUnitsRules::builderFor(itemOrder[i]) != ItemID_Invalid) {
+            prerequisitesMet = objData.techLevel <= owner->getTechLevel();
+            for(int prerequisite = Structure_FirstID;
+                prerequisitesMet && prerequisite <= Structure_LastID; ++prerequisite) {
+                if(objData.prerequisiteStructuresSet[prerequisite]
+                   && owner->getNumItems(prerequisite) <= 0)
+                    prerequisitesMet = false;
+            }
+        }
 
-        if(itemOrder[i] != Unit_ChemicalCarryall && objData.enabled && (choam.getNumAvailable(itemOrder[i]) != INVALID) && !isOrnithopterInCampaign) {
+        if(itemOrder[i] != Unit_ChemicalCarryall && objData.enabled && prerequisitesMet
+           && (choam.getNumAvailable(itemOrder[i]) != INVALID) && !isOrnithopterInCampaign) {
             insertItem(buildList, iter, itemOrder[i], choam.getPrice(itemOrder[i], !familyActive));
         } else {
             removeItem(buildList, iter, itemOrder[i]);

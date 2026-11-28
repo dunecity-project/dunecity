@@ -74,6 +74,11 @@ public:
     */
     void loadFromINIFile(const std::string& filename, bool preferUserConfig = true, bool applyContentPolicy = true);
 
+    /// New city matches only: unlock ordinary production for every house without
+    /// changing prices, combat data, technology, upgrades or prerequisites.
+    /// The resulting table is saved normally; legacy saves are not rewritten.
+    void applyAllUnitsForAllHouses();
+
     /**
         Saves all stored data out into a binary stream.
         For SAVEGAMEVERSION >= 9811, writes an item count before the table

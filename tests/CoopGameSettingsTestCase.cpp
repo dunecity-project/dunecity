@@ -8,6 +8,7 @@
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 #include <mod/ModManager.h>
+#include <mod/BundledGameOptions.h>
 #include <misc/DuneCityCampaign.h>
 #include <Network/GameInitSettingsPolicy.h>
 
@@ -24,7 +25,7 @@ constexpr std::size_t Mod14Bytes = 1;
 constexpr std::size_t Mod15Bytes = 2;
 constexpr std::size_t Mod16Bytes = 1;
 constexpr std::size_t Mod18ResearchBytes = 6; // pace4 + damage1 + city-rule bits1
-constexpr std::size_t Mod19Bytes = 1; // technology-installment rule
+constexpr std::size_t Mod19Bytes = 1; // installments bit 0, all-house units bit 2; bit 1 retired
 constexpr std::size_t Mod20Bytes = 1; // Custom Game starting tech level
 constexpr std::size_t CurrentResearchBytes = Mod18ResearchBytes + Mod19Bytes + Mod20Bytes;
 constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes + CurrentResearchBytes;
@@ -1673,6 +1674,115 @@ TEST_CASE("MOD19 technology installments default off and are hashed, saved and r
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
+}
+
+TEST_CASE("All Units for All Houses is a city default only and changes match identity only when on",
+          "[all-units][city][settings]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE_FALSE(defaults.allUnitsForAllHouses);
+    REQUIRE(BundledGameOptions::vanilla().find("All Units for All Houses = false\n") != std::string::npos);
+    REQUIRE(BundledGameOptions::city().find("All Units for All Houses = true\n") != std::string::npos);
+    auto on = defaults;
+    on.allUnitsForAllHouses = true;
+    REQUIRE(on != defaults);
+    REQUIRE(on.getHash() != defaults.getHash());
+    auto off = on;
+    off.allUnitsForAllHouses = false;
+    REQUIRE(off == defaults);
+    REQUIRE(off.getHash() == defaults.getHash());
+}
+
+TEST_CASE("All Units for All Houses round-trips independently of installments and adjacent rule bytes",
+          "[all-units][network][save]") {
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.allUnitsForAllHouses = GENERATE(false, true);
+    options.technologyInstallments = GENERATE(false, true);
+    options.garrisoningAndCapturing = GENERATE(false, true);
+    options.researchLab = GENERATE(false, true);
+    options.researchPace = TechResearch::Pace::Slow;
+    options.startTechLevel = GENERATE(0, 9);
+    options.originalUnitDamage = true;
+    options.maximumNumberOfUnitsOverride = 321;
+    options.saboteurHunt = false;
+    options.saboteurSkipsCityZones = false;
+    options.hospitalCare = false;
+    options.turretsFireOnBuildings = true;
+    original.setGameOptions(options);
+    const auto encoded = initialSettingsBytes(original);
+    const auto rulesOffset = encoded.size() - Mod20Bytes - Mod19Bytes;
+    REQUIRE(static_cast<Uint8>(encoded[rulesOffset])
+            == static_cast<Uint8>((options.technologyInstallments ? 1 : 0)
+                | (options.allUnitsForAllHouses ? 4 : 0)));
+    REQUIRE((static_cast<Uint8>(encoded[rulesOffset - 1]) & 32)
+            == (options.garrisoningAndCapturing ? 0 : 32));
+    REQUIRE(static_cast<Uint8>(encoded.back()) == static_cast<Uint8>(options.startTechLevel | 0xf0));
+
+    // The retired bit is ignored even when both neighbouring live bits are set.
+    const Uint8 retiredBit = GENERATE(0, 2);
+    auto bytes = encoded;
+    bytes[rulesOffset] = static_cast<char>(static_cast<Uint8>(bytes[rulesOffset]) | retiredBit);
+    bytes.append("tail");
+    IMemoryStream input(bytes.data(), bytes.size());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+    REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    REQUIRE(input.readUint8() == static_cast<Uint8>('a'));
+    REQUIRE(input.readUint8() == static_cast<Uint8>('i'));
+    REQUIRE(input.readUint8() == static_cast<Uint8>('l'));
+    REQUIRE(input.getRemainingLength() == 0);
+    REQUIRE(initialSettingsBytes(restored) == encoded);
+}
+
+TEST_CASE("Older MOD18 MOD19 and MOD20 streams keep house rosters and ignore retired bit 1",
+          "[all-units][network][save][compatibility]") {
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.allUnitsForAllHouses = true;
+    options.technologyInstallments = true;
+    options.garrisoningAndCapturing = GENERATE(false, true);
+    options.researchLab = true;
+    options.researchPace = TechResearch::Pace::Slow;
+    options.startTechLevel = 9;
+    options.saboteurHunt = false;
+    options.saboteurSkipsCityZones = false;
+    options.hospitalCare = false;
+    options.turretsFireOnBuildings = true;
+    original.setGameOptions(options);
+    auto bytes = initialSettingsBytes(original);
+    const auto marker = bytes.rfind("KDOM");
+    REQUIRE(marker != std::string::npos);
+    const char legacyMarker = GENERATE('I', 'J', 'K');
+    const Uint8 legacyRules = GENERATE(0, 1, 2, 3);
+    bytes[marker] = legacyMarker;
+    bytes[bytes.size() - Mod20Bytes - Mod19Bytes] = static_cast<char>(legacyRules);
+    auto expected = options;
+    expected.allUnitsForAllHouses = false;
+    expected.technologyInstallments = (legacyRules & 1) != 0;
+    if(legacyMarker != 'K') {
+        bytes.resize(bytes.size() - Mod20Bytes);
+        expected.startTechLevel = 0;
+        expected.saboteurHunt = true;
+        expected.saboteurSkipsCityZones = true;
+        expected.hospitalCare = true;
+        expected.turretsFireOnBuildings = false;
+    }
+    if(legacyMarker == 'I') {
+        bytes.resize(bytes.size() - Mod19Bytes);
+        expected.technologyInstallments = false;
+    }
+    bytes.append("tail");
+    IMemoryStream input(bytes.data(), bytes.size());
+    GameInitSettings restored(input);
+    REQUIRE_FALSE(restored.getGameOptions().allUnitsForAllHouses);
+    REQUIRE(restored.getGameOptions() == expected);
+    REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
+    REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    REQUIRE(input.readUint8() == static_cast<Uint8>('a'));
+    REQUIRE(input.readUint8() == static_cast<Uint8>('i'));
+    REQUIRE(input.readUint8() == static_cast<Uint8>('l'));
+    REQUIRE(input.getRemainingLength() == 0);
 }
 
 TEST_CASE("MOD20 Custom Game tech level defaults to the map's, and is hashed, saved and required on the wire",

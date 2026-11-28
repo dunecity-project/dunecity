@@ -27,7 +27,8 @@ inline std::string vanilla() {
            "Manual Carryall Drops = false\n"
            "Maximum Number of Units Override = 0\n"
            "Maximum Number of Harvesters Override = -1\n"
-           "City Effects = false\n";
+           "City Effects = false\n"
+           "All Units for All Houses = false\n";
 }
 
 inline std::string city() {
@@ -51,7 +52,8 @@ inline std::string city() {
            "Maximum Number of Units Override = 0\n"
            "Maximum Number of Harvesters Override = -1\n"
            "Immortal Human Player = false\n"
-           "City Effects = true\n";  // dunecity mod opts in
+           "City Effects = true\n"
+           "All Units for All Houses = true\n";  // dunecity mod opts in
 }
 
 /// Write @a text to @a path byte for byte. Binary: a text-mode stream writes CRLF on Windows,
