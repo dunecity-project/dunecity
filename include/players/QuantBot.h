@@ -2222,6 +2222,7 @@ private:
         int economyFirstYardOrders = 0, economyFirstMcvs = 0;
         int economyFirstUnitSpend = 0, economyFirstPortSpend = 0, economyFirstTurretOrders = 0;
         int economyFirstZonesPlaced = 0;
+        std::set<Uint32> economyFirstTurretBuilders;   ///< accepted scheduled material, cleared by replacement or placement
         bool economyFirstThreatNow = false;
         Uint32 economyFirstPaceLoggedMinute = 0;
         bool economyFirstActiveNow = false;   ///< the last build pass had EconomyFirst acting
@@ -2233,6 +2234,8 @@ private:
         Uint32 economyFirstRefusedMinute = 0;   ///< 1 + the minute of the last refused MCV logged
         int economyFirstStartZones = -1;   ///< zones at the first pass (the map's prebuilt city)
     } cityLessons;
+    void saveEconomyFirstState(OutputStream& stream) const;
+    void loadEconomyFirstState(InputStream& stream);
     bool ownPalaceAt(Coord site) const;
     /// A lesson Palace site whose plan expired lately lies within 2 tiles of \a pos.
     bool nearExpiredLessonSite(Coord pos) const;

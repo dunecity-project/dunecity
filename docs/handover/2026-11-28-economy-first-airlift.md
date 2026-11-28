@@ -39,3 +39,7 @@ Deviations to report: the 12-tile home-threat caution (not requested by Stefan);
 ## Evidence
 
 Pending implementation and committed-source measurements. Inherited ef-runway 1bd955289defa34dd7787838fca34adbf3595c81, job 20261128T151432-ctest-8fd332: 15/17, failing shared-spending runway and economy_first (unit spend, zone-rule count, zone lead). This is not a green baseline.
+
+## Opening save/checkpoint state (next batch)
+
+Integrator allocated save 9906 / protocol 155 after the 9905 / 153 garrison core and independently reserved garrison loss-path protocol 154. Accepted unit/Starport spend, zone/turret order counts and policy latches now append to QuantBot's existing stream instead of resetting on reload. Scheduled material identities are ordered, persisted builder IDs. Older streams consume no new tail and retain their previous empty-counter defaults. The MCV probe round-trips the real full QuantBot stream byte-for-byte for this state, checks exact consumption, and reads an exact 9905 prefix without inventing a tail. A focused `city_lessons_policy` CTest selects the existing [city-lessons] unit/config cases. Queue outcomes are recorded separately once observed.

@@ -419,6 +419,7 @@ endforeach()
 dunecity_add_test(headless nightly NAME civilization_wars_tests COMMAND dunelegacy_tests "[civwars]")
 # Formation planner (docs/formations.md): determinism, layout, fallback, edges, catch-up.
 dunecity_add_test(headless integration NAME formation_planner_tests COMMAND dunelegacy_tests "[formation]")
+dunecity_add_test(headless integration NAME city_lessons_policy COMMAND dunelegacy_tests "[city-lessons]")
 dunecity_add_test(headless integration NAME original_campaign_policy COMMAND dunelegacy_tests "[campaign-ai]")
 
 # Sidebar build grid geometry (docs/sidebar-grid.md): slots, hit-testing, row scrolling.

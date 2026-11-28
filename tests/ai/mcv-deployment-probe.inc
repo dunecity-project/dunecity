@@ -17,6 +17,8 @@
 #include <Choam.h>
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
+#include <misc/IMemoryStream.h>
+#include <cstring>
 
 void runMcvDeploymentProbe(Game& game) {
     auto require=[](bool ok,const char* why){if(!ok){SDL_Log("MCV_DEPLOYMENT_FAIL: %s",why);throw std::runtime_error(why);}};
@@ -1395,6 +1397,54 @@ void runMcvDeploymentProbe(Game& game) {
                 "A unit was lost making way for the yard");
         SDL_Log("MCV_DEPLOYMENT_NOTE: boxed-in MCV deployed at %d,%d after %u cycles; %zu units made way",
             standing.x,standing.y,game.getGameCycleCount()-start,army.size());
+    }
+
+    // Save 9906: resource reservations and pacing survive disk saves and checkpoints.
+    {
+        struct RestoreOpeningState {
+            QuantBot* bot; QuantBot::CityLessonsState saved;
+            ~RestoreOpeningState() {bot->cityLessons=std::move(saved);}
+        } restoreOpeningState{bot,std::move(bot->cityLessons)};
+        bot->cityLessons={};
+        auto& state=bot->cityLessons;
+        state.economyFirstStoodDown=true;state.economyFirstFootprintLogged=true;state.economyFirstRichLogged=true;
+        state.economyFirstThreatNow=true;state.economyFirstActiveNow=true;
+        state.economyFirstHoldPasses=7;state.economyFirstThreatPasses=3;
+        state.economyFirstYardOrders=27;state.economyFirstMcvs=4;
+        state.economyFirstUnitSpend=3850;state.economyFirstPortSpend=1750;state.economyFirstTurretOrders=11;
+        state.economyFirstZonesPlaced=17;state.economyFirstZoneOrders={7,6,6};state.economyFirstStartZones=89;
+        state.lastEconomyLog=101;state.economyFirstPaceLoggedMinute=3;state.economyFirstRefusedMinute=2;
+        for (const auto* structure:structureList)
+            if (structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard)
+                state.economyFirstTurretBuilders.insert(structure->getObjectID());
+        require(!state.economyFirstTurretBuilders.empty(),"Opening save fixture needs real yard material identities");
+        const auto previousVersion=game.loadedSavegameVersion;
+        game.loadedSavegameVersion=SAVEGAMEVERSION;
+        OMemoryStream full;full.open();bot->save(full);
+        OMemoryStream policy;policy.open();bot->saveEconomyFirstState(policy);
+        IMemoryStream input(full.getData(),full.getDataLength());
+        {
+            QuantBot restored(input,const_cast<House*>(bot->getHouse()));
+            OMemoryStream restoredPolicy;restoredPolicy.open();restored.saveEconomyFirstState(restoredPolicy);
+            require(input.getRemainingLength()==0,"Opening save left unread QuantBot fields");
+            require(restoredPolicy.getDataLength()==policy.getDataLength()
+                && std::memcmp(restoredPolicy.getData(),policy.getData(),policy.getDataLength())==0,
+                "An opening reload changed accepted spending, reservation counts or policy latches");
+        }
+        // A real 9905 QuantBot stream is exactly the prefix before the new tail.
+        game.loadedSavegameVersion=SAVEGAMEVERSION_ECONOMY_FIRST_STATE-1;
+        IMemoryStream legacyInput(full.getData(),full.getDataLength()-policy.getDataLength());
+        {
+            QuantBot legacy(legacyInput,const_cast<House*>(bot->getHouse()));
+            require(legacyInput.getRemainingLength()==0,"The 9905 reader consumed a nonexistent opening tail");
+            require(legacy.cityLessons.economyFirstUnitSpend==0 && legacy.cityLessons.economyFirstPortSpend==0
+                && legacy.cityLessons.economyFirstTurretOrders==0
+                && legacy.cityLessons.economyFirstZoneOrders==std::array<int,3>{}
+                && legacy.cityLessons.economyFirstTurretBuilders.empty(),
+                "A 9905 save invented opening counters");
+        }
+        game.loadedSavegameVersion=previousVersion;
+        SDL_Log("ECONOMY_FIRST_SAVE_ASSERT: version=9906 counters_preserved=1 legacy=9905 legacy_empty=1");
     }
 
     SDL_Log("MCV_DEPLOYMENT_PASS: prompt same-rock deployment at every difficulty, one driven arrival,"

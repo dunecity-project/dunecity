@@ -265,7 +265,10 @@
 //       (HospitalCareState::savePacing). An older save's overlays count from the day it loads.
 // 9905: Garrison health: ObjectData adds GarrisonHealTime; each zone saves the
 //       damage and regeneration remainders of its occupants, in entry order.
-#define SAVEGAMEVERSION     9905
+// 9906: QuantBot persists its EconomyFirst opening spend, zone/turret orders and policy latches.
+#define SAVEGAMEVERSION     9906
+/// First save with EconomyFirst opening resource reservations and accepted material markers.
+#define SAVEGAMEVERSION_ECONOMY_FIRST_STATE 9906
 /// First save with exact garrison damage/healing remainders and the healing rate.
 #define SAVEGAMEVERSION_ZONE_GARRISON_HEALTH 9905
 /// First save with the civic overlay pacing record (Hospitals and Churches stay on their zones).

@@ -531,7 +531,8 @@
 //      10% of actual building HP lost and regenerates while inside (ObjectData
 //      GarrisonHealTime, default 60 seconds for a full heal). Old peers desync.
 //      Save 9905 preserves fractional damage and regeneration remainders.
-#define NETWORK_PROTOCOL_VERSION            153
+// 155: QuantBot checkpoint streams include EconomyFirst opening decision counters (save 9906).
+#define NETWORK_PROTOCOL_VERSION            155
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
