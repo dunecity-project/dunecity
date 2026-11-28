@@ -512,7 +512,13 @@
 //      city years is removed; the census no longer re-picks them every city day. A wounded
 //      soldier given a move order onto or beside an own Hospital, or right-clicking it, heals
 //      there (walk-in). A 148 peer would desync. Save format 9904 (civic overlay pacing).
-#define NETWORK_PROTOCOL_VERSION            149
+// 150: infantry squads (docs/infantry-squads.md): the default object table offers Infantry (three
+//      Soldiers for 50) at the Barracks and Troopers (three Troopers for 200) at the WOR, which the AI
+//      Player and campaign AI buy; in a city game a Barracks or WOR counts as a top-density
+//      Residential zone (40 residents, taxed), stamps +13 land value over 6 tiles and polices at half a
+//      Police Station's strength. QuantBot switches SquadOrders, InfantryLanes and InfantryInMix
+//      (default off). A 149 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            150
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

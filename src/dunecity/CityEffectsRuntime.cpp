@@ -1788,6 +1788,27 @@ void CitySimulation::runZoneGrowth() {
             }
             churn = ZoneChurn{};
         }
+        // CITY_INFANTRY_HOUSING, the same city year: Barracks and WOR (docs/infantry-squads.md) and the
+        // population and tax base they add. Logging only.
+        if (yearEnd) {
+            int buildings[kMaxCityHouses] = {}, housed[kMaxCityHouses] = {};
+            int population[kMaxCityHouses] = {}, tax[kMaxCityHouses] = {};
+            for (const auto& n : nodes) {
+                if (!n.pStruct->getOwner() || !isInfantryHousing(n.pStruct->getItemID())) continue;
+                const int h = n.pStruct->getOwner()->getHouseID();
+                if (h < 0 || h >= kMaxCityHouses) continue;
+                ++buildings[h];
+                if (n.level > 0) ++housed[h];
+                population[h] += getStructurePopulation(n.pStruct, n.level);
+                tax[h] += getStructureTaxBaseEighths(n.pStruct, n.level);
+            }
+            for (int h = 0; h < kMaxCityHouses; ++h) {
+                if (buildings[h] == 0) continue;
+                SDL_Log("CITY_INFANTRY_HOUSING: house=%d year=%u buildings=%d housed=%d population=%d tax_eighths=%d cycle=%u",
+                        h, lastProcessedDay_ / kCityDaysPerYear, buildings[h], housed[h], population[h], tax[h],
+                        currentGame->getGameCycleCount());
+            }
+        }
     }
 }
 

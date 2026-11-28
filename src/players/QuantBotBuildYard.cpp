@@ -125,6 +125,8 @@ void QuantBot::planYardLanes(BuildPass& pass, BuilderTurn& turn, YardTurn& yardT
         && QuantBotBuildPolicy::needsProductionLane(getHouse()->getNumItems(Structure_HeavyFactory),
             pass.itemCount[Structure_HeavyFactory], pass.activeHeavyFactoryCount, yardTurn.heavyDeficit,
             pass.money, pass.economyReserve, data[Structure_HeavyFactory][houseID].price);
+    // InfantryLanes (docs/infantry-squads.md): another Barracks or WOR by the same lane rule.
+    yardTurn.infantryBacklog = infantryLaneBacklog(pass, yardTurn.infantryLaneProducer);
     yardTurn.airBacklog = QuantBotBuildPolicy::needsAirProductionLane(
         getHouse()->getNumItems(Structure_HighTechFactory), pass.itemCount[Structure_HighTechFactory],
         pass.activeHighTechFactoryCount, pass.ornithopterCapableFactoryCount, yardTurn.airDeficit,
@@ -2701,6 +2703,13 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && campaignAvailableToBuild(turn.pBuilder,Structure_LightFactory)
         && findPlaceLocation(Structure_LightFactory).isValid()) {
         yardTurn.itemID = Structure_LightFactory; yardTurn.structureRule = "light_unit_backlog";
+    }
+    // InfantryLanes: saturated infantry production gets another Barracks or WOR, as the factories do.
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && yardTurn.infantryBacklog
+        && campaignAvailableToBuild(turn.pBuilder, yardTurn.infantryLaneProducer)
+        && findPlaceLocation(yardTurn.infantryLaneProducer).isValid()) {
+        yardTurn.itemID = yardTurn.infantryLaneProducer; yardTurn.structureRule = "infantry_unit_backlog";
+        noteInfantryLaneOrdered(yardTurn.infantryLaneProducer);
     }
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && !yardTurn.holdExtraHeavy && yardTurn.heavyBacklog
         && pass.itemCount[Structure_HeavyFactory] < 24

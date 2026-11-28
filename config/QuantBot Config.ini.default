@@ -759,6 +759,12 @@ ZoneCaptureLevy=0
 ZoneGarrisonReinforce=0
 ZoneFrontGarrison=0
 ZoneCaptureChain=0
+# Infantry squads (Stefan, 2026-11-28): infantry orders take the offer cheapest per man (the three-man
+# squad when it is; 0 = never a squad); another Barracks/WOR by the factory lane rule; in a city game the
+# Barracks/WOR build to the measured infantry share, not only against aircraft. docs/infantry-squads.md.
+SquadOrders=0
+InfantryLanes=0
+InfantryInMix=0
 # Stateless existing-composition/technology experiment; paired outcomes rejected adoption.
 # Default OFF. No saved budget, save-format change or protocol change.
 SimpleTechSavings=0

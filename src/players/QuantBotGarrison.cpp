@@ -27,6 +27,7 @@
 #include <units/InfantryBase.h>
 #include <structures/BuilderBase.h>
 #include <dunecity/ZoneGarrisonPolicy.h>
+#include <dunecity/InfantrySquadPolicy.h>
 
 #include <algorithm>
 #include <climits>
@@ -438,18 +439,25 @@ void QuantBot::updateZoneGarrisons() {
         for (const UnitBase* unit : getUnitList()) {
             if (unit->getOwner() == house && unit->getItemID() == Unit_Soldier && unit->getHealth() > 0) ++levy;
         }
-        const int price = currentGame->objectData.data[Unit_Soldier][houseID].price;
+        const auto& data = currentGame->objectData.data;
         for (const StructureBase* structure : getStructureList()) {
             if (levy >= kLevySoldiers) break;
             if (structure->getOwner() != house || structure->getItemID() != Structure_Barracks) continue;
             const auto* barracks = static_cast<const BuilderBase*>(structure);
             if (barracks->getProductionQueueSize() > 0 || barracks->isUpgrading()
-                || !barracks->isAvailableToBuild(Unit_Soldier)
-                || house->getCredits() < price + kLevyCashReserve) continue;
-            doProduceItem(barracks, Unit_Soldier);
-            ++levy;
-            SDL_Log("ZONE_GARRISON: event=levy_train house=%d barracks=%u soldiers=%d price=%d credits=%d cycle=%u",
-                    houseID, barracks->getObjectID(), levy, price, house->getCredits(), now);
+                || !barracks->isAvailableToBuild(Unit_Soldier)) continue;
+            // SquadOrders: the three-man Infantry squad when it is cheaper per man than a single Soldier.
+            Uint32 item = Unit_Soldier;
+            if (force.squadOrders && barracks->isAvailableToBuild(Unit_Infantry)
+                && DuneCity::InfantrySquad::cheaperPerMan(data[Unit_Infantry][houseID].price, 3,
+                                                      data[Unit_Soldier][houseID].price, 1)) item = Unit_Infantry;
+            const int price = data[item][houseID].price;
+            if (house->getCredits() < price + kLevyCashReserve) continue;
+            doProduceItem(barracks, item);
+            const int men = DuneCity::InfantrySquad::orderSize(item);
+            levy += men;
+            SDL_Log("ZONE_GARRISON: event=levy_train house=%d barracks=%u soldiers=%d price=%d item=%u men=%d credits=%d cycle=%u",
+                    houseID, barracks->getObjectID(), levy, price, item, men, house->getCredits(), now);
             traceDecision("zone_capture_levy_train", AITelemetry::Record().set("barracks", barracks->getObjectID())
                 .set("soldiers", levy).set("credits", house->getCredits()));
         }

@@ -18,6 +18,7 @@
  */
 
 #include <structures/BuilderBase.h>
+#include <dunecity/InfantrySquadPolicy.h>
 #include <structures/PlacementReservationPolicy.h>
 #include <structures/FactoryQueuePolicy.h>
 
@@ -935,6 +936,7 @@ bool BuilderBase::update() {
             }
 
             Coord groupDeploySpot = Coord::Invalid();
+            int placed = 0;
             for(int i = 0; i < num2Place; i++) {
                 UnitBase* newUnit = getOwner()->createUnit(finishedItemID, false,
                     ModManager::instance().isTornieFamilyContentActive() ? getTechnologyHouseID() : HOUSE_INVALID);
@@ -982,10 +984,17 @@ bool BuilderBase::update() {
 
                     // inform owner of its new unit
                     newUnit->getOwner()->informWasBuilt(newUnit);
+                    ++placed;
                     AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "unit_produced",
                         AITelemetry::Record().set("builder", getObjectID()).set("item", finishedItemID)
                             .set("object", newUnit->getObjectID()).set("x", spot.x).set("y", spot.y));
                 }
+            }
+            if(DuneCity::InfantrySquad::threeManSquad(builtItemID)) {
+                // docs/infantry-squads.md: every squad puts its three men on the map.
+                SDL_Log("INFANTRY_SQUAD: event=delivered house=%d builder=%u builder_item=%u item=%u men=%d expected=%d cycle=%u",
+                    owner->getHouseID(), getObjectID(), getItemID(), builtItemID, placed, num2Place,
+                    currentGame->getGameCycleCount());
             }
 
             // Repeat production: one more copy joins the back of the queue. It waits for
@@ -1132,6 +1141,17 @@ void BuilderBase::doProduceItem(Uint32 itemID, bool multipleMode) {
 
                 buildItem.num++;
                 currentProductionQueue.emplace_back(itemID, buildItem.price );
+                if(const int men = DuneCity::InfantrySquad::orderSize(itemID); men > 0) {
+                    // docs/infantry-squads.md: every foot-soldier order, the price paid and whether this
+                    // builder offered the three-man squad at the time (the SquadOrders assertions read it).
+                    const Uint32 squad = DuneCity::InfantrySquad::squadOf(itemID);
+                    const Uint32 squadOffer = squad != ItemID_Invalid ? squad
+                        : (DuneCity::InfantrySquad::threeManSquad(itemID) ? itemID : ItemID_Invalid);
+                    const bool squadOffered = squadOffer != ItemID_Invalid && isAvailableToBuild(squadOffer);
+                    SDL_Log("INFANTRY_ORDER: house=%d builder=%u builder_item=%u item=%u men=%d price=%d squad_offered=%d ai=%d cycle=%u",
+                        owner->getHouseID(), getObjectID(), getItemID(), itemID, men, int(buildItem.price),
+                        squadOffered ? 1 : 0, owner->isAI() ? 1 : 0, currentGame->getGameCycleCount());
+                }
                 if(currentProducedItem == ItemID_Invalid) {
                     clearProductionProgress();
                     currentProducedItem = itemID;

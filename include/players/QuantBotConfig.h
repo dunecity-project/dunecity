@@ -884,6 +884,18 @@ struct QuantBotConfig {
         /// Zone Garrisons, house to house: from every zone we hold, soldiers take the next empty enemy
         /// zone across the street, block by block. Off unless measured.
         bool zoneCaptureChain;
+        /// Infantry squads (Stefan, 2026-11-28: "the ai should use it if it wants to build these men"):
+        /// every infantry order takes the offer cheapest per man, the three-man Infantry/Troopers squad
+        /// when it is. Off: QuantBot never orders a squad. Off unless measured.
+        bool squadOrders;
+        /// "additional infantry and wor should be built if the ai needs more capacity similar to
+        /// factories": another Barracks or WOR by the Light/Heavy Factory lane rule
+        /// (QuantBotBuildPolicy::needsProductionLane). Off unless measured.
+        bool infantryLanes;
+        /// "include infantry in the calculation for what to build": in a city game the Barracks and WOR
+        /// build to the measured infantry share (UnitMixPolicy::measuredInfantryBps) as outside one, not
+        /// only against observed aircraft. Off unless measured.
+        bool infantryInMix;
         /// Stateless existing-composition/technology experiment, default OFF.
         /// Current paired outcome audits reject adoption; see HANDOVER.
         bool simpleTechSavings;

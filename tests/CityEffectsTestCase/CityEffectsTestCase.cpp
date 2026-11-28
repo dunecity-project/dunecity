@@ -270,9 +270,11 @@ TEST_CASE("Non-zone city-role buildings ALSO contribute population at their leve
     REQUIRE(getZonePopulation(Structure_Refinery, 1)       == 1);
     REQUIRE(getZonePopulation(Structure_Refinery, 2)       == 3);
     REQUIRE(getZonePopulation(Structure_Refinery, 3)       == 3);
-    // Barracks/WOR are residential high
-    REQUIRE(getZonePopulation(Structure_Barracks, 1)       == 16);
+    // Barracks/WOR are residential high, at top density from level 1 (Stefan, 2026-11-28)
+    REQUIRE(getZonePopulation(Structure_Barracks, 1)       == 40);
     REQUIRE(getZonePopulation(Structure_Barracks, 3)       == 40);
+    REQUIRE(getZonePopulation(Structure_WOR, 1)            == 40);
+    REQUIRE(getZonePopulation(Structure_Barracks, 0)       == 0);
     REQUIRE(getZonePopulation(Structure_WOR, 3)            == 40);
     // Vacant — contributes nothing
     REQUIRE(getZonePopulation(Structure_Refinery, 0)       == 0);
@@ -964,8 +966,7 @@ TEST_CASE("Government buildings retain roles without paying tax", "[city-effects
     for (const int item : {Structure_ConstructionYard, Structure_WindTrap,
             Structure_LightFactory, Structure_Refinery, Structure_Silo,
             Structure_HeavyFactory, Structure_HighTechFactory, Structure_RepairYard,
-            Structure_StarPort, Structure_Airport, Structure_Barracks,
-            Structure_WOR, Structure_Radar, Structure_IX, Structure_TechCenter,
+            Structure_StarPort, Structure_Airport, Structure_Radar, Structure_IX, Structure_TechCenter,
             Structure_PoliceStation, Structure_RocketTurret, Structure_GunTurret}) {
         CAPTURE(item);
         CHECK_FALSE(isTaxableCityStructure(item));
@@ -979,6 +980,33 @@ TEST_CASE("Government buildings retain roles without paying tax", "[city-effects
     CHECK(taxablePopulationEighths(Structure_ZoneCommercial, 5, 3) == 80);
     CHECK(taxablePopulationEighths(Structure_ZoneIndustrial, 4, 3) == 64);
     CHECK(taxablePopulationEighths(Structure_ZoneResidential, 0, 3) == 0);
+}
+
+TEST_CASE("Barracks and WOR are taxable top-density residential", "[city-effects][tax]") {
+    // Stefan, 2026-11-28: "both wor and infantry barracks count as a high density residential and is taxable".
+    // Each adds the population and the tax base of a level-3 Residential zone (40 people, 80 eighths).
+    for (const int item : {Structure_Barracks, Structure_WOR}) {
+        CAPTURE(item);
+        CHECK(isTaxableCityStructure(item));
+        CHECK(getStructureCityRole(item) == CityRole::Residential);
+        for (const int level : {1, 2, 3}) {
+            CAPTURE(level);
+            CHECK(effectiveCityLevel(item, level) == 3);
+            CHECK(getZonePopulation(item, level) == getZonePopulation(Structure_ZoneResidential, 3));
+            CHECK(taxablePopulationEighths(item, getZonePopulation(item, level), level)
+                == taxablePopulationEighths(Structure_ZoneResidential, 40, 3));
+        }
+        CHECK(taxablePopulationEighths(item, 40, 3) == 80);
+        CHECK(getZonePopulation(item, 0) == 0);   // an empty (unpowered) building houses nobody
+        // "and they moderately increase land value": a third of the Palace's stamp over 6 tiles.
+        CHECK(getParkLandValueBonus(item) == 13);
+        CHECK(getParkLandValueRadius(item) == 6);
+        CHECK_FALSE(usesParkTerrain(item));
+        CHECK(getParkLandValueBonus(item) * 3 <= getParkLandValueBonus(Structure_Palace));
+        // "and infantry and wor have 50% police effect": half a station, no upkeep of their own.
+        CHECK(getPoliceCoverage(item) * 2 == getPoliceCoverage(Structure_PoliceStation));
+        CHECK(getPoliceAnnualCost(item) == FixPoint(0));
+    }
 }
 
 TEST_CASE("Reduced infrastructure tiers cap loaded jobs and emissions", "[city-effects][role]") {

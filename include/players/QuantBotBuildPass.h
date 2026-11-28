@@ -505,6 +505,9 @@ struct QuantBot::YardTurn {
     int airDeficit{};
     bool heavyBacklog{};
     bool airBacklog{};
+    /// InfantryLanes (docs/infantry-squads.md): another Barracks or WOR is due, and which.
+    bool infantryBacklog{};
+    Uint32 infantryLaneProducer{};
 
     // startYardSelection()
     Uint32 itemID{};

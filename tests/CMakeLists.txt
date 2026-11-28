@@ -1292,6 +1292,19 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/ai/run-zone-garrison-real-game.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-real-game)
         set_tests_properties(zone_garrison_real_game PROPERTIES TIMEOUT 2400 PROCESSORS 3)
+        # Infantry squads (docs/infantry-squads.md) through the player's own path: the Barracks/WOR build
+        # lists, one click buying three men at the squad price, a Barracks/WOR from the yard list adding a
+        # top-density Residential zone's tax base.
+        dunecity_add_test(headless nightly NAME infantry_squad_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-infantry-squad-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/infantry-squad-probe)
+        set_tests_properties(infantry_squad_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
+        # Infantry squads acceptance in real games (Stefan's 4P DuneCity map, SquadOrders, InfantryLanes
+        # and InfantryInMix on): one ACCEPT line per request, any failure fails the test.
+        dunecity_add_test(headless nightly NAME infantry_squads_real_game COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-infantry-squads-real-game.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/infantry-squads-real-game)
+        set_tests_properties(infantry_squads_real_game PROPERTIES TIMEOUT 2400 PROCESSORS 3)
         # The Saboteur hunt off against on in one binary: 96 seeded Palace releases per arm and
         # mod against turreted bases; more Saboteurs must destroy something with the rule on.
         dunecity_add_test(headless nightly NAME saboteur_effect_probe COMMAND ${Python3_EXECUTABLE}

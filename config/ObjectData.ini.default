@@ -836,6 +836,24 @@ BuildTime = 32
 InfSpawnProp = 0
 Builder = Barracks
 
+[Infantry]
+# Three Soldiers in one order at a discount, as in Dune II (Stefan, 2026-11-28: "in the original dune you could
+# build three troopers for a discount"). The order deploys three individual Soldiers (BuilderBase::update).
+# Price 50 is the integrator's number (single Soldier 30; the original squad cost 100 against a 60 Soldier).
+# BuildTime is the single's, as in the original squad (mods/Tornie and mods/Jericho ObjectData.ini: Infantry 32).
+Enabled = true
+HitPoints = 20
+Price = 50
+ViewRange = 1
+WeaponDamage = 3
+WeaponRange = 2
+WeaponReloadTime = 135
+MaxSpeed = 0.56
+TurnSpeed = 0.09
+BuildTime = 32
+InfSpawnProp = 0
+Builder = Barracks
+
 [Sonic Tank]
 Enabled = true
 HitPoints = 110
@@ -892,6 +910,23 @@ WeaponDamage = 5
 WeaponRange = 5
 WeaponReloadTime = 150
 MaxSpeed = 1.12  # Dynasty normal-speed cap; see docs/unit-speeds.md
+TurnSpeed = 0.09
+BuildTime = 56
+InfSpawnProp = 0
+Builder = WOR
+
+[Troopers]
+# Three Troopers in one order at a discount (Stefan, 2026-11-28: "maybe 3 were 200 credits" - "yes"). The order
+# deploys three individual Troopers. BuildTime is the single's, as in the original squad (mods/Tornie and
+# mods/Jericho ObjectData.ini: Troopers 56).
+Enabled = true
+HitPoints = 45
+Price = 200
+ViewRange = 1
+WeaponDamage = 5
+WeaponRange = 5
+WeaponReloadTime = 150
+MaxSpeed = 1.12
 TurnSpeed = 0.09
 BuildTime = 56
 InfSpawnProp = 0

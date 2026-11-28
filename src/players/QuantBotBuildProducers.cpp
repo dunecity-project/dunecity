@@ -20,6 +20,7 @@
 // purchases) run first, then the handler for the producer's type. Construction yards are
 // in QuantBotBuildYard.cpp.
 
+#include <dunecity/InfantrySquadPolicy.h>
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
 #include <players/StarportBuyingPolicy.h>
@@ -1455,6 +1456,7 @@ Uint32 QuantBot::supportTrooperOrder(BuildPass& pass, const BuilderBase* builder
     for (const Uint32 candidate : {Unit_Trooper, Unit_Troopers}) {
         const int size = QuantBotBuildPolicy::rocketInfantrySize(candidate);
         if (pass.trooperCount + size > target || !campaignAvailableToBuild(builder, candidate)
+            || squadOrderRefusal(builder, candidate)
             || !trooperOrderAdmitted(pass, candidate, data[candidate][houseID].price)) continue;
         const int price = purchasePrice(builder, candidate);
         if (price > money) continue;
@@ -1470,6 +1472,9 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
+    // InfantryInMix (docs/infantry-squads.md): a city's WOR also buys to the measured infantry share.
+    const bool cityShare = pass.citySimEnabled && !pass.cityAntiAirInfantryDemand && botConfig().force.infantryInMix
+        && !ModManager::instance().isTornieFamilyContentActive();
     if (pass.trooperSupport) {
         const bool floorSupplier = turn.capitalSupplier
             && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_recruitment";
@@ -1490,15 +1495,17 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
             pass.infantryValue += data[item][houseID].price;
             pass.militaryValue += data[item][houseID].price;
             if (floorSupplier) pass.capitalConsumed = true;
+            return;
         }
-        return;
+        // The anti-air and armour support target is met: InfantryInMix still buys to the share below.
+        if (!cityShare) return;
     }
     // A city raises rocket infantry only while a hostile wing is actually
     // observed, and then only inside the ordinary infantry quota, because they
     // supplement the launcher share and the turrets rather than replacing them.
     // The opening bootstrap of three stays a non-city rule: a city has no
     // standing infantry role to bootstrap.
-    if ((!pass.citySimEnabled || pass.cityAntiAirInfantryDemand)
+    if ((!pass.citySimEnabled || pass.cityAntiAirInfantryDemand || cityShare)
         && !turn.pBuilder->isUpgrading()
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
@@ -1518,7 +1525,7 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
         // queued squad price is what both sides of the quota account for.
         for (Uint32 candidate : {Unit_Trooper, Unit_Troopers, Unit_Troopers5, Unit_GasInfantry, Unit_FlameTrooper}) {
             if (candidate >= Unit_Troopers5 && !ModManager::instance().isTornieFamilyContentActive()) continue;
-            if (!campaignAvailableToBuild(turn.pBuilder,candidate)) continue;
+            if (!campaignAvailableToBuild(turn.pBuilder,candidate) || squadOrderRefusal(turn.pBuilder, candidate)) continue;
             const int value = data[candidate][houseID].price;
             if (pass.vanillaBoomArmy && purchasePrice(turn.pBuilder, candidate) > pass.money) continue;
             if (candidate >= Unit_Troopers5
@@ -1527,13 +1534,22 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
             if (pass.citySimEnabled
                 && (purchasePrice(turn.pBuilder,candidate) > pass.money - pass.cityWorkingReserve
                     || !infantryQuotaAdmits(pass, value))) continue;
-            if (itemID == NONE_ID || pass.itemCount[candidate] < pass.itemCount[itemID]
+            if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()) {
+                // SquadOrders: the offer cheapest per man.
+                if (itemID == NONE_ID || DuneCity::InfantrySquad::cheaperPerMan(purchasePrice(turn.pBuilder, candidate),
+                        DuneCity::InfantrySquad::orderSize(candidate), purchasePrice(turn.pBuilder, itemID),
+                        DuneCity::InfantrySquad::orderSize(itemID))) itemID = candidate;
+            } else if (itemID == NONE_ID || pass.itemCount[candidate] < pass.itemCount[itemID]
                 || (candidate == Unit_Troopers5 && pass.itemCount[candidate] == pass.itemCount[itemID])) itemID = candidate;
         }
-        if (itemID != NONE_ID && produceItemWithLogging(pass, turn, itemID, __LINE__,
-                !pass.citySimEnabled && pass.infantryCount < 3 ? "wor_opening_sample" : "wor_existing_infantry_share")) {
+        const char* worReason = cityShare ? "city_infantry_share"
+            : !pass.citySimEnabled && pass.infantryCount < 3 ? "wor_opening_sample" : "wor_existing_infantry_share";
+        if (itemID != NONE_ID && produceItemWithLogging(pass, turn, itemID, __LINE__, worReason)) {
+            SDL_Log("INFANTRY_BUY: house=%d builder=%u item=%u reason=%s cycle=%u", getHouse()->getHouseID(),
+                turn.pBuilder->getObjectID(), itemID, worReason, currentGame->getGameCycleCount());
             pass.itemCount[itemID]++;
-            pass.infantryCount++;
+            pass.infantryCount += ModManager::instance().isTornieFamilyContentActive()
+                ? 1 : std::max(1, DuneCity::InfantrySquad::orderSize(itemID));
             pass.infantryValue += data[itemID][houseID].price;
             pass.militaryValue += data[itemID][houseID].price;
 
@@ -1545,35 +1561,50 @@ void QuantBot::buildBarracks(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
-    if (!pass.citySimEnabled
+    const bool cityShare = pass.citySimEnabled && botConfig().force.infantryInMix
+        && !ModManager::instance().isTornieFamilyContentActive();
+    if ((!pass.citySimEnabled || cityShare)
         && !turn.pBuilder->isUpgrading()
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
         && pass.money > (pass.vanillaBoomArmy || (pass.techSavings && pass.militaryEmergency) ? 0 : 300)
         && pass.militaryValue < pass.lightBudget
         && !getHouse()->isGroundUnitLimitReached()
-        && (pass.infantryCount < 3
+        && ((!pass.citySimEnabled && pass.infantryCount < 3)
             || pass.infantryValue * 100 < std::max(pass.militaryValue, 1) * pass.infantryPercent)) {
         Uint32 itemID = NONE_ID;
         for (Uint32 candidate : {Unit_Soldier, Unit_Infantry, Unit_Infantry5, Unit_GasInfantry, Unit_FlameTrooper}) {
             if (candidate >= Unit_Troopers5 && !ModManager::instance().isTornieFamilyContentActive()) continue;
+            if (squadOrderRefusal(turn.pBuilder, candidate)) continue;
+            // A city keeps its working reserve and buys inside the measured share, as the WOR does.
+            if (cityShare && (purchasePrice(turn.pBuilder, candidate) > pass.money - pass.cityWorkingReserve
+                    || !infantryQuotaAdmits(pass, data[candidate][houseID].price))) continue;
             if (pass.vanillaBoomArmy && (purchasePrice(turn.pBuilder, candidate) > pass.money
                 || int64_t(pass.militaryValue) + data[candidate][houseID].price > pass.lightBudget)) continue;
             if (candidate >= Unit_Troopers5
                 && (purchasePrice(turn.pBuilder,candidate) > pass.money
                     || int64_t(pass.militaryValue) + data[candidate][houseID].price > pass.lightBudget
                     || !infantryQuotaAdmits(pass, data[candidate][houseID].price))) continue;
-            if (campaignAvailableToBuild(turn.pBuilder,candidate)
-                && (itemID == NONE_ID || pass.itemCount[candidate] < pass.itemCount[itemID]
-                    || (candidate == Unit_Infantry5 && pass.itemCount[candidate] == pass.itemCount[itemID]))) {
+            if (!campaignAvailableToBuild(turn.pBuilder,candidate)) continue;
+            if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()) {
+                // SquadOrders: the offer cheapest per man.
+                if (itemID == NONE_ID || DuneCity::InfantrySquad::cheaperPerMan(purchasePrice(turn.pBuilder, candidate),
+                        DuneCity::InfantrySquad::orderSize(candidate), purchasePrice(turn.pBuilder, itemID),
+                        DuneCity::InfantrySquad::orderSize(itemID))) itemID = candidate;
+            } else if (itemID == NONE_ID || pass.itemCount[candidate] < pass.itemCount[itemID]
+                    || (candidate == Unit_Infantry5 && pass.itemCount[candidate] == pass.itemCount[itemID])) {
                 itemID = candidate;
             }
         }
+        const char* barracksReason = cityShare ? "city_infantry_share"
+            : pass.infantryCount < 3 ? "barracks_opening_sample" : "barracks_existing_infantry_share";
         if (itemID != NONE_ID && int64_t(pass.militaryValue)+data[itemID][houseID].price<=pass.lightBudget
-            && produceItemWithLogging(pass, turn, itemID, __LINE__,
-                pass.infantryCount < 3 ? "barracks_opening_sample" : "barracks_existing_infantry_share")) {
+            && produceItemWithLogging(pass, turn, itemID, __LINE__, barracksReason)) {
+            SDL_Log("INFANTRY_BUY: house=%d builder=%u item=%u reason=%s cycle=%u", getHouse()->getHouseID(),
+                turn.pBuilder->getObjectID(), itemID, barracksReason, currentGame->getGameCycleCount());
             pass.itemCount[itemID]++;
-            pass.infantryCount++;
+            pass.infantryCount += ModManager::instance().isTornieFamilyContentActive()
+                ? 1 : std::max(1, DuneCity::InfantrySquad::orderSize(itemID));
             pass.infantryValue += data[itemID][houseID].price;
             pass.militaryValue += data[itemID][houseID].price;
 

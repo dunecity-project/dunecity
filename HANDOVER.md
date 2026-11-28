@@ -1,3 +1,51 @@
+## 2026-11-28 - Infantry squads: three men at a discount, the AI's Barracks/WOR, taxable infantry housing (protocol 150)
+
+Stefan, 2026-11-28: "in the original dune you could build three troopers for a discount - i think maybe 3 were
+200 credits?", then: "yes and the ai should use it if it wants to build these men. also additional infantry and wor
+should be built if the ai needs more capacity similar to factories. also include infantry in the calculation for
+what to build (same performance algorithm). also both wor and infantry barracks count as a high density
+residential and is taxable" ... "and they moderately increase land value" ... "and infantry and wor have 50% police
+effect". Rules and switches: `docs/infantry-squads.md`.
+
+**Default changes (protocol 150, save format unchanged):**
+- The default object table offers **Infantry** (three Soldiers for 50, build time 32) and **Troopers** (three
+  Troopers for 200, build time 56). The build times are the singles', as in the original squads
+  (`mods/Tornie/ObjectData.ini`, `mods/Jericho/ObjectData.ini`).
+- **AI Player and the campaign AI now buy squads**, from their existing priority tables. QuantBot does not, unless
+  SquadOrders is on.
+- A **Barracks or WOR** in a city game:
+  - counts as a top-density Residential zone: 40 residents and 80 tax eighths;
+  - stamps +13 land value over 6 tiles;
+  - polices at half a Police Station's strength (coverage 500), scaled by funding and power;
+  - has no upkeep, and is not a Police Station anywhere else.
+
+Numbers that are not Stefan's (the integrator's, for him to change): Infantry 50, land value +13 over 6 tiles, no
+police upkeep.
+
+**QuantBot switches (default off; recommendation below once measured):** SquadOrders, InfantryLanes, InfantryInMix.
+Found while building:
+- In a city game the Barracks never built.
+- The WOR and the capital loop bought infantry only against observed aircraft.
+- So the measured infantry share (`938eae7c7`) never decided city infantry. InfantryInMix is that fix.
+
+### Acceptance list (one assert each; player path: `infantry_squad_probe`; real games: `infantry_squads_real_game`, three rs160-dunecity Brutal games, all three switches on)
+
+| Request | Observable fact, with its number | Test | Measured | Result |
+|---|---|---|---|---|
+| "three troopers for a discount ... 3 were 200 credits" | build lists: Soldier 30 / Infantry 50, Trooper 100 / Troopers 200; one click = exactly that price and exactly three men; one Move click sends all three; singles stay 1 man | probe build_list, troopers, infantry, singles; real_game S1 | pending | pending |
+| "the ai should use it if it wants to build these men" | >= 90% of the men QuantBot buys where a squad is offered come as squads, every house-game; switch off: 0 squad orders | real_game S2 | pending | pending |
+| "additional infantry and wor ... similar to factories" | >= 90% of infantry backlogs answered by an order within 60 s; a second Barracks/WOR stands in >= half the house-games; men delivered per minute rises after the lane in >= 75% of lanes | real_game S3 | pending | pending |
+| "include infantry in the calculation for what to build" | the infantry share moves >= 1 point off its opening in every learning house-game; >= 3 city share purchases per house-game; half the share reached by minute 20 where it is >= 2% | real_game S4 | pending | pending |
+| "count as a high density residential and is taxable" | +80 tax eighths and +40 residents per Barracks/WOR, built from the yard list with a map click; back when destroyed; every census row 80 x buildings | probe barracks_tax, wor_tax; real_game S5; CityEffectsTestCase | pending | pending |
+| "and they moderately increase land value" | nearby own lots rise > 0 and by 20-50% of a Palace's rise on the same spot | probe land_value; CityEffectsTestCase | pending | pending |
+| "and infantry and wor have 50% police effect" | coverage 0.50 (+-0.02) and crime drop 0.50 (+-0.10) of a Police Station's on the same spot, also at 50% funding | probe police; CityEffectsTestCase | pending | pending |
+
+**Deviations:**
+- A squad is three single units, not one three-man unit, so garrisons, capture, beds and the levy count men.
+- A lost squad man is valued at the single's price in the infantry score.
+- With SquadOrders on, QuantBot buys the squad only when it is cheaper per man and admitted in the same pass.
+  Otherwise it buys the single.
+
 ## 2026-11-28 - EconomyFirst: the AI out of the poverty trap on low / no spice maps (Stefan's last Air game); ON by default
 
 Stefan, 2026-11-28, about his last game on the Air: "i did the building for the ai and we obliterated the enemy

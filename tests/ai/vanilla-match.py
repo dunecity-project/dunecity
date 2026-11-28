@@ -143,8 +143,19 @@ HOSPITAL_ROW_FIELDS = KEY + ('event',) + HOSPITAL_FIELDS
 # from a garrison (fired_air) and other controllers' refused orders (redirect_refused).
 GARRISON_FIELDS = ('house', 'why', 'unit', 'item', 'zone', 'zone_house', 'occupants', 'taken', 'previous_house',
                    'holder', 'deployed', 'remaining', 'destroyed', 'low_health', 'hurt', 'health', 'max_health',
-                   'target_item', 'order', 'by', 'price', 'soldiers', 'shots', 'air_shots', 'cycle')
+                   'target_item', 'order', 'by', 'price', 'soldiers', 'shots', 'air_shots', 'men', 'cycle')
 GARRISON_ROW_FIELDS = KEY + ('event',) + GARRISON_FIELDS
+# One row per infantry-squads line (docs/infantry-squads.md): foot-soldier orders (INFANTRY_ORDER), squads
+# delivered (INFANTRY_SQUAD), the measured infantry share (INFANTRY_MIX), Barracks/WOR lanes (INFANTRY_LANE),
+# QuantBot's infantry purchases with their reason (INFANTRY_BUY) and the Barracks/WOR tax census
+# (CITY_INFANTRY_HOUSING).
+INFANTRY_KINDS = ('INFANTRY_ORDER', 'INFANTRY_SQUAD', 'INFANTRY_MIX', 'INFANTRY_LANE', 'INFANTRY_BUY',
+                  'CITY_INFANTRY_HOUSING')
+INFANTRY_FIELDS = ('house', 'event', 'builder', 'builder_item', 'item', 'men', 'expected', 'price', 'squad_offered',
+                   'ai', 'share_bps', 'opening_bps', 'learning', 'reward_milli', 'loss_milli', 'score', 'type',
+                   'infantry_value', 'military_value', 'on_share', 'producer', 'have', 'busy', 'deficit', 'credits',
+                   'count', 'reason', 'year', 'buildings', 'housed', 'population', 'tax_eighths', 'cycle')
+INFANTRY_ROW_FIELDS = KEY + ('kind',) + INFANTRY_FIELDS
 # One row per city house a city year (CITY_ZONE_CHURN, CityEffectsRuntime.cpp): its zone counts and
 # how often its zones changed density, population and Hospital/Church overlay that year.
 ZONE_FIELDS = ('house', 'year', 'cycle', 'days', 'r', 'c', 'i', 'hospitals', 'churches', 'hospital_days',
@@ -517,6 +528,14 @@ def play(args, scratch, binary, key):
             garrison.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
                              **{f: data.get(f, '') for f in GARRISON_FIELDS}})
     append(results / 'garrison.csv', GARRISON_ROW_FIELDS, garrison)
+    infantry = []
+    for l in lines:
+        for kind in INFANTRY_KINDS:
+            if kind + ':' in l:
+                data = parse(l, kind + ':')
+                infantry.append({**dict(zip(KEY, key)), 'kind': kind, **{f: data.get(f, '') for f in INFANTRY_FIELDS}})
+                break
+    append(results / 'infantry.csv', INFANTRY_ROW_FIELDS, infantry)
     zones = [{**dict(zip(KEY, key)), **{f: d.get(f, '') for f in ZONE_FIELDS}}
              for d in (parse(l, 'CITY_ZONE_CHURN:') for l in lines if 'CITY_ZONE_CHURN:' in l)]
     append(results / 'zones.csv', ZONE_ROW_FIELDS, zones)

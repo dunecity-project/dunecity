@@ -20,6 +20,7 @@
 // in QuantBotBuildYard.cpp), repair-yard and factory-loss gates, production multipliers
 // and city building management.
 
+#include <dunecity/InfantrySquadPolicy.h>
 #include "QuantBotInternal.h"
 #include <players/QuantBotBuildPass.h>
 #include <structures/Airport.h>
@@ -27,6 +28,7 @@
 #include <dunecity/CityAircraftPolicy.h>
 #include <players/QuantBotArmyCounterPolicy.h>
 #include <cstdlib>
+#include <map>
 #include <string_view>
 
 using QuantBotInternal::rocketCoverageTier;
@@ -3125,16 +3127,19 @@ void QuantBot::planUnitMix(BuildPass& pass) {
     // (the infantry the house buys) against the slots' scores; before that, an
     // untested type's share of the starting mix (the mean of its weights, as exploredScores gives an
     // untested slot). An Infantry strategy keeps its own share.
+    int mixBps = -1;
+    int64_t mixReward = 0, mixLoss = 0, mixScore = 0;
+    bool mixTroopers = false;
     if (!(pass.strategyMixProfile && pass.strategyMixProfile->infantryPercent > 0)) {
         const auto& trooper = data[Unit_Trooper][houseID];
         const bool trooperFielded = trooper.enabled && trooper.price > 0 && trooper.techLevel <= getHouse()->getTechLevel();
         const int infantryPrice = std::max(1, trooperFielded ? trooper.price : data[Unit_Soldier][houseID].price);
         int bps = 0;
+        int64_t reward = 0, loss = 0, infantryScore = 0;
         if (pass.learningUnitMix) {
             // The types the house buys: Troopers and their squads once it can field them, the
             // Barracks' foot soldiers before that. A Soldier that walks out of a destroyed building
             // was never bought, so its losses do not count against the Trooper.
-            int64_t reward = 0, loss = 0;
             static constexpr std::array<Uint32, 3> troopers{Unit_Trooper, Unit_Troopers, Unit_Troopers5};
             static constexpr std::array<Uint32, 5> soldiers{Unit_Soldier, Unit_Infantry, Unit_Infantry5,
                                                             Unit_GasInfantry, Unit_FlameTrooper};
@@ -3144,12 +3149,13 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             };
             if (trooperFielded) for (const Uint32 item : troopers) add(item);
             else for (const Uint32 item : soldiers) add(item);
-            const int64_t score = UnitMixPolicy::performanceScore(reward, loss, int64_t(infantryPrice) * 1000);
-            bps = UnitMixPolicy::measuredInfantryBps(scores, available, score, reward + loss, int64_t(infantryPrice) * 1000);
+            infantryScore = UnitMixPolicy::performanceScore(reward, loss, int64_t(infantryPrice) * 1000);
+            bps = UnitMixPolicy::measuredInfantryBps(scores, available, infantryScore, reward + loss, int64_t(infantryPrice) * 1000);
         } else {
             bps = UnitMixPolicy::measuredInfantryBps(defaults, available, 0, 0, int64_t(infantryPrice) * 1000);
         }
         pass.infantryPercent = UnitMixPolicy::measuredInfantryPercent(bps);
+        mixBps = bps; mixReward = reward; mixLoss = loss; mixScore = infantryScore; mixTroopers = trooperFielded;
     }
     allocationSnapshot.infantryQuotaBps = pass.infantryPercent * 100;
     const int rawOrnithopterBps = rawMix[kOrnithopterSlot];
@@ -3193,6 +3199,8 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.compositionArmyValue += int(pass.compositionValue[i]);
         }
     }
+    if (mixBps >= 0) logInfantryMix(pass, mixBps, pass.learningUnitMix, mixReward, mixLoss, mixScore, mixTroopers);
+    updateInfantryLanes();
     pass.trooperCount = pass.itemCount[Unit_Trooper] + 3 * pass.itemCount[Unit_Troopers]
         + (ModManager::instance().isTornieFamilyContentActive() ? 5 * pass.itemCount[Unit_Troopers5] : 0);
     int hostileArmourValue = 0;
@@ -3294,6 +3302,13 @@ void QuantBot::planUnitMix(BuildPass& pass) {
 
     if (pass.emitStatsLog) {
         logDebug("Adaptive unit mix: damage=%lld light=%d bps", static_cast<long long>(totalDamage), pass.lightVehicleBps);
+        // Infantry is one more slot of the same performance score (UnitMixPolicy::measuredInfantryBps).
+        logDebug("  Infantry: %lld/%d %f",
+            static_cast<long long>(getHouse()->getCombatReward(Unit_Trooper).total() + getHouse()->getCombatReward(Unit_Troopers).total()
+                + getHouse()->getCombatReward(Unit_Soldier).total() + getHouse()->getCombatReward(Unit_Infantry).total()) / 1000,
+            getHouse()->getNumLostItems(Unit_Trooper) * data[Unit_Trooper][houseID].price
+                + getHouse()->getNumLostItems(Unit_Soldier) * data[Unit_Soldier][houseID].price,
+            pass.infantryPercent / 100.0);
 
         logDebug("  Tank: %d/%d %f Siege: %d/%d %f Special: %d/%d %f Launch: %d/%d %f Orni: %d/%d %f",
             getHouse()->getNumItemDamageInflicted(Unit_Tank), getHouse()->getNumLostItems(Unit_Tank) * 300, pass.tankPercent.toDouble(),
@@ -5563,6 +5578,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         CapitalCandidate soldier;
         soldier.builder=builder->getObjectID();soldier.kind="military";
         int64_t bestDeficit=-1;
+        std::map<Uint32, CapitalCandidate> eligibleSquads;
         AITelemetry::Record unitOptions;
         for (const auto& offer:builder->getBuildList()) {
             const Uint32 item=offer.itemID;
@@ -5573,10 +5589,15 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // Every special has its own mix slot (and so its own share) since 9868.
             for (size_t i=0;i<mixItems.size();++i) if (mixItems[i]==item) bps=pass.unitMix[i];
             if (item==Unit_Soldier || item==Unit_Infantry || item==Unit_Trooper || item==Unit_Troopers) bps=pass.infantryPercent*100;
-            const int64_t deficit=int64_t(pass.vehiclePlanValue)*bps-int64_t(pass.itemCount[item])*value*10000;
+            // A squad's men are fielded as singles: count them, at the single's value, as the squad's commitment.
+            const Uint32 squadSingle = item==Unit_Infantry ? Unit_Soldier : item==Unit_Troopers ? Unit_Trooper : item;
+            const int64_t committed = squadSingle==item || !botConfig().force.squadOrders ? int64_t(pass.itemCount[item])*value
+                : (int64_t(pass.itemCount[squadSingle]) + 3*int64_t(pass.itemCount[item]))*data[squadSingle][houseID].price;
+            const int64_t deficit=int64_t(pass.vehiclePlanValue)*bps-committed*10000;
             int score=QuantBotSpendingPolicy::militaryScore(price,value,pass.militaryValue,pass.militaryBudget,pass.defendingEconomy);
             const char* reason="eligible";
             if (!campaignAvailableToBuild(builder,item)) reason="unavailable";
+            else if (const char* squad = squadOrderRefusal(builder, item)) reason=squad;
             else if (getHouse()->isUnitLimitReached(item)) reason="unit_limit";
             else if (port && getHouse()->getChoam().getNumAvailable(item)<=0) reason="sold_out";
             else if (port && price >= value) reason="not_discounted";
@@ -5587,7 +5608,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             // on reserving cash for troops nobody is going to order.
             else if (pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item)
                 && !trooperOrderAdmitted(pass, item, value)) reason="trooper_support_satisfied";
-            else if (cityInfantryItem(pass, item) && !pass.cityAntiAirInfantryDemand
+            else if (cityInfantryItem(pass, item) && !pass.cityAntiAirInfantryDemand && !botConfig().force.infantryInMix
                 && !(pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item))) reason="no_observed_air";
             else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, value)) reason="infantry_quota_satisfied";
             else if (item==Unit_Ornithopter && pass.citySimEnabled && cityLauncherArmyEnabled()) reason="city_launcher_army";
@@ -5603,6 +5624,19 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 soldier.proceeds=value;soldier.delay=port ? MILLI2CYCLES(30000) : data[item][houseID].buildtime*15;
                 soldier.reason=pass.defendingEconomy ? "active_defence" : "military_shortfall";bestDeficit=deficit;
             }
+            if (botConfig().force.squadOrders && DuneCity::InfantrySquad::threeManSquad(item) && score>0) {
+                CapitalCandidate& squad = eligibleSquads[item];
+                squad = soldier; squad.item=item;squad.price=price;squad.cost=price;squad.score=score;squad.proceeds=value;
+                squad.delay=port ? MILLI2CYCLES(30000) : data[item][houseID].buildtime*15;
+                squad.reason=pass.defendingEconomy ? "active_defence" : "military_shortfall";
+            }
+        }
+        // SquadOrders: when the chosen single's squad is also admitted and cheaper per man, order the squad.
+        if (botConfig().force.squadOrders && soldier.item!=NONE_ID) {
+            const Uint32 squadItem = DuneCity::InfantrySquad::squadOf(soldier.item);
+            const auto it = eligibleSquads.find(squadItem);
+            if (it != eligibleSquads.end() && DuneCity::InfantrySquad::cheaperPerMan(it->second.price, 3, soldier.price, 1))
+                soldier = it->second;
         }
         if (soldier.item!=NONE_ID) pass.capitalCandidates.push_back(soldier);
         if (AITelemetry::log().enabled()) pass.capitalUnitOptions.set(std::to_string(builder->getObjectID()),unitOptions);

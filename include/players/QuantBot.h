@@ -2237,6 +2237,30 @@ private:
     /// distance then (tenths of a tile). An order with no progress for kNoProgressSeconds ends. Not
     /// saved: after a load every peer restarts the clocks the same way.
     std::map<Uint32, std::pair<Uint32, int>> zoneGarrisonProgress_;
+    /// Infantry squads (docs/infantry-squads.md; QuantBotInfantry.cpp). SquadOrders: why QuantBot must not
+    /// order the three-man squad \a item at \a builder (nullptr: it may).
+    const char* squadOrderRefusal(const BuilderBase* builder, Uint32 item) const;
+    /// SquadOrders: the squad in place of \a single when \a builder offers it, cheaper per man, within \a money.
+    Uint32 infantryOrderFor(const BuilderBase* builder, Uint32 single, int64_t money) const;
+    /// INFANTRY_MIX, once a game minute: the measured infantry share and its score (planUnitMix).
+    void logInfantryMix(const BuildPass& pass, int bps, bool learning, int64_t reward, int64_t loss, int64_t score,
+                        bool troopers);
+    /// InfantryLanes: the producer infantry production needs (WOR once Troopers are fielded, else Barracks).
+    Uint32 infantryLaneProducer() const;
+    /// InfantryLanes: whether \a producer (set here) needs another lane, by the factory lane rule.
+    bool infantryLaneBacklog(BuildPass& pass, Uint32& producer);
+    void noteInfantryLaneOrdered(Uint32 producer);
+    /// INFANTRY_LANE standing: a lane ordered by the rule now stands.
+    void updateInfantryLanes();
+    /// Logging state of the lines above only (no decision reads it); not saved.
+    int infantryMixOpeningBps_ = -1;
+    bool infantryMixLogged_ = false;
+    Uint32 infantryMixLogCycle_ = 0;
+    std::array<Uint32, 2> infantryLaneLogCycle_{};
+    /// Lanes ordered by InfantryLanes not yet standing, and the producers counted last pass (Barracks, WOR).
+    /// Read only for the INFANTRY_LANE standing line; not saved.
+    std::array<int, 2> infantryLaneOrdered_{};
+    std::array<int, 2> infantryLaneSeen_{};
     /// City redevelopment for land value (default off; QuantBotRedevelop.cpp, RedevelopmentPolicy.h):
     /// RoadLaneParks, LotParks and PollutionRelocation, each its own [Force Concentration] switch.
     void chooseYardRedevelopment(BuildPass& pass, BuilderTurn& turn, YardTurn& yardTurn);

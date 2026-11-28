@@ -91,6 +91,10 @@ constexpr int kSupplyRadius      = 16;
 
 constexpr int kParkLandValueBonus       = 15;  // Micropolis raw park terrain contribution, before smoothing
 constexpr int kStadiumLandValueBonus   = 40;  // Stadium provides a much larger boost
+/// Barracks and WOR "moderately increase land value" (Stefan, 2026-11-28). Moderate is the integrator's number:
+/// a third of the Palace's stamp, over 6 tiles instead of 8. It stacks with every other stamp (capped).
+constexpr int kInfantryHousingLandValueBonus = kStadiumLandValueBonus / 3;
+constexpr int kInfantryHousingLandValueRadius = 6;
 constexpr int kSandLandValueBonus       = 8;   // Per-tile direct stampFalloff
 /// Per-tile contribution to the block-smoothed terrain feature map. Box-
 /// smoothed twice and added to the SC-style land-value base, this is the
@@ -101,6 +105,9 @@ constexpr int kSandTerrainRawBonus      = 40;
 constexpr int kPoliceCoverageFull       = 1000; // Micropolis MAX_POLICE_STATION_EFFECT
 constexpr int kPoliceCoverageGunTurret  = 150; // 15% of a police station
 constexpr int kPoliceCoverageRocketTurret = kPoliceCoverageFull * 15 / 100;  // 15% of police-station coverage.
+/// Barracks and WOR police their streets at half a Police Station's strength (Stefan, 2026-11-28: "and infantry
+/// and wor have 50% police effect"): the same diffusion, funding and power scaling, no upkeep of their own.
+constexpr int kPoliceCoverageInfantryHousing = kPoliceCoverageFull / 2;
 
 constexpr int kMaxLandValue = 250;
 
@@ -211,14 +218,23 @@ inline int getStructureMaxLevel(int itemID) {
     }
 }
 
-/// Private zones pay tax. The Palace is the sole government exception, with
-/// both R and C income. Fiscal status is independent of employment role.
-inline bool isTaxableCityStructure(int itemID) {
-    return itemID == Structure_ZoneResidential || itemID == Structure_ZoneCommercial
-        || itemID == Structure_ZoneIndustrial || itemID == Structure_Palace;
+/// Private zones pay tax, and so do the Palace (its residential population) and infantry housing.
+/// Fiscal status is independent of employment role.
+/// Barracks and WOR house infantry as top-density residential and pay tax as a level-3 Residential zone does
+/// (Stefan, 2026-11-28: "both wor and infantry barracks count as a high density residential and is taxable").
+inline bool isInfantryHousing(int itemID) {
+    return itemID == Structure_Barracks || itemID == Structure_WOR;
 }
 
+inline bool isTaxableCityStructure(int itemID) {
+    return itemID == Structure_ZoneResidential || itemID == Structure_ZoneCommercial
+        || itemID == Structure_ZoneIndustrial || itemID == Structure_Palace || isInfantryHousing(itemID);
+}
+
+/// The density a city-role structure counts at. Infantry housing is top density from the day it stands (an
+/// occupied, powered building: any level above 0); everything else is capped at its tier.
 inline int effectiveCityLevel(int itemID, int level) {
+    if (isInfantryHousing(itemID) && level > 0) return getStructureMaxLevel(itemID);
     return std::clamp(level, 0, getStructureMaxLevel(itemID));
 }
 
@@ -297,6 +313,8 @@ inline int getPoliceCoverage(int itemID) {
         case Structure_PoliceStation:   return kPoliceCoverageFull;
         case Structure_GunTurret:       return kPoliceCoverageGunTurret;
         case Structure_RocketTurret:    return kPoliceCoverageRocketTurret;
+        case Structure_Barracks:
+        case Structure_WOR:             return kPoliceCoverageInfantryHousing;
         default:                        return 0;
     }
 }
@@ -337,12 +355,15 @@ inline int getParkLandValueBonus(int itemID) {
         case Structure_RocketTurret:    return kParkLandValueBonus;
         case Structure_Stadium:         return kStadiumLandValueBonus;
         case Structure_Palace:          return kStadiumLandValueBonus;   // civic building — large boost
+        case Structure_Barracks:
+        case Structure_WOR:             return kInfantryHousingLandValueBonus;   // moderate
         default:                        return 0;
     }
 }
 
 inline int getParkLandValueRadius(int itemID) {
     if (itemID == Structure_Stadium || itemID == Structure_Palace) return 8;
+    if (itemID == Structure_Barracks || itemID == Structure_WOR) return kInfantryHousingLandValueRadius;
     // Conservative candidate-search bound, not a radial gameplay bonus.
     return kParkTerrainSearchRadius;
 }
@@ -616,7 +637,10 @@ constexpr int kZoneTaxMultiplier = 2;
 inline int taxablePopulationEighths(int itemID, int population, [[maybe_unused]] int level) {
     population = std::max(0, population);
     switch (itemID) {
-        case Structure_ZoneResidential: return population * kZoneTaxMultiplier;
+        case Structure_ZoneResidential:
+        case Structure_Barracks:        // taxed as a Residential zone of the same population
+        case Structure_WOR:
+            return population * kZoneTaxMultiplier;
         case Structure_ZoneCommercial:
         case Structure_ZoneIndustrial: return population * 8 * kZoneTaxMultiplier;
         case Structure_Palace:
