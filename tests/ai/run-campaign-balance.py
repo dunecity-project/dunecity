@@ -800,6 +800,14 @@ else:
         compile_command[compile_command.index('-o')+1] = '@OBJECT@'
         compile_command[compile_command.index('-c')+1] = '@SOURCE@'
         compile_command.append('-fno-access-control')
+        if not MACOS:
+            # ccache can rewrite the generated source to a build-relative path.
+            # Map both spellings: random publication directories must not enter
+            # __FILE__/debug strings or change an otherwise identical probe hash.
+            compile_command.extend(
+                f'{flag}={prefix}=tests/ai/generated'
+                for flag in ('-ffile-prefix-map', '-fmacro-prefix-map')
+                for prefix in ('@STAGING@', '@RELATIVE_STAGING@'))
         if native_trackpad_probe:
             compile_command.append('-DMAC_TRACKPAD_PROBE=1')
             # Keep Cocoa's global Point/FileInfo types out of the game's C++ TU.
@@ -860,6 +868,7 @@ else:
             remove_tree(entry)
             staging = Path(tempfile.mkdtemp(prefix='staging-', dir=cache))
             names = {'@SOURCE@': str(staging/'balance-main.cpp'), '@OBJECT@': str(staging/('balance-main'+object_suffix)),
+                     '@RELATIVE_STAGING@': os.path.relpath(staging, build),
                      '@BINARY@': str(staging/executable), '@STAGING@': str(staging),
                      '@NATIVE_OBJECT@': str(staging/'mac-trackpad-events.o')}
             def fill(arg):

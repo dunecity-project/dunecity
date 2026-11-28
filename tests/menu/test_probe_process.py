@@ -1,4 +1,5 @@
 """Real child-tree cancellation and sealed fixture cache boundary regressions."""
+import ast
 import concurrent.futures
 import copy
 import hashlib
@@ -375,6 +376,92 @@ class FixtureIdentityTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'seal differs'):
                 prepare(True)
             self.assertTrue(current.with_name('build.log').is_file())
+
+
+class LinuxProbeReproducibilityTests(unittest.TestCase):
+    """Exercise the production compiler mapping without running a game."""
+    @classmethod
+    def setUpClass(cls):
+        source = Path(__file__).resolve().parents[1] / 'ai/run-campaign-balance.py'
+        tree = ast.parse(source.read_text())
+        cls.mapping = next(node for node in ast.walk(tree)
+                           if isinstance(node, ast.If)
+                           and isinstance(node.test, ast.UnaryOp)
+                           and isinstance(node.test.op, ast.Not)
+                           and isinstance(node.test.operand, ast.Name)
+                           and node.test.operand.id == 'MACOS'
+                           and any(isinstance(value, ast.Constant)
+                                   and value.value == '-ffile-prefix-map'
+                                   for value in ast.walk(node)))
+        cls.names = next(node for node in ast.walk(tree)
+                         if isinstance(node, ast.Assign)
+                         and any(isinstance(target, ast.Name) and target.id == 'names'
+                                 for target in node.targets)
+                         and any(isinstance(value, ast.Constant)
+                                 and value.value == '@RELATIVE_STAGING@'
+                                 for value in ast.walk(node)))
+        cls.fill = next(node for node in ast.walk(tree)
+                        if isinstance(node, ast.FunctionDef) and node.name == 'fill')
+
+    def mapped_command(self, build, staging, command, *, macos=False):
+        namespace = dict(MACOS=macos, compile_command=list(command), os=os,
+                         build=build, staging=staging, executable='balance-probe',
+                         object_suffix='.o')
+        for node in (self.mapping, self.names, self.fill):
+            exec(compile(ast.Module(body=[node], type_ignores=[]), '<probe-mapping>', 'exec'),
+                 namespace)
+        return [namespace['fill'](argument) for argument in namespace['compile_command']]
+
+    def test_linux_maps_absolute_and_ccache_relative_paths(self):
+        build = Path('/worker/w6/build')
+        staging = build / 'balance-probe-cache/staging-random'
+        command = self.mapped_command(build, staging, ['clang++', '-O3'])
+        self.assertEqual(command[:2], ['clang++', '-O3'])
+        self.assertEqual(command[2:], [
+            f'{flag}={prefix}=tests/ai/generated'
+            for flag in ('-ffile-prefix-map', '-fmacro-prefix-map')
+            for prefix in (str(staging), 'balance-probe-cache/staging-random')])
+        self.assertFalse(any('@' in argument for argument in command))
+
+    def test_macos_command_is_unchanged(self):
+        build = Path('/worker/build')
+        staging = build / 'balance-probe-cache/staging-random'
+        self.assertEqual(self.mapped_command(build, staging, ['clang++', '-O3'], macos=True),
+                         ['clang++', '-O3'])
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux native probe compiler')
+    def test_independent_roots_and_staging_names_produce_identical_native_bytes(self):
+        compiler = shutil.which('clang++') or shutil.which('c++')
+        self.assertIsNotNone(compiler, 'Native probe contract requires a C++ compiler')
+        hashes = []
+        with tempfile.TemporaryDirectory() as directory:
+            for worker in ('w0', 'w4', 'w6'):
+                build = Path(directory) / worker / 'build'
+                staging = build / 'balance-probe-cache' / ('staging-random-' + worker)
+                staging.mkdir(parents=True)
+                main = staging / 'balance-main.cpp'
+                game = staging / 'balance-game.cpp'
+                main.write_text('#include <cstdio>\nconst char* game_file();\n'
+                                'int main() { std::puts(__FILE__); std::puts(game_file()); }\n')
+                game.write_text('const char* game_file() { return __FILE__; }\n')
+                # Cover both the original absolute spelling and ccache's relative spelling.
+                for relative in (False, True):
+                    objects = []
+                    for source in (main, game):
+                        target = source.with_suffix('.o')
+                        argument = os.path.relpath(source, build) if relative else str(source)
+                        command = self.mapped_command(build, staging,
+                                                      [compiler, '-O2', '-c', argument, '-o', str(target)])
+                        subprocess.run(command, cwd=build, check=True, capture_output=True)
+                        objects.append(str(target))
+                    binary = staging / 'balance-probe'
+                    subprocess.run([compiler, *objects, '-o', str(binary)], cwd=build,
+                                   check=True, capture_output=True)
+                    observed = subprocess.check_output([str(binary)], text=True)
+                    self.assertEqual(observed, 'tests/ai/generated/balance-main.cpp\n'
+                                               'tests/ai/generated/balance-game.cpp\n')
+                    hashes.append(hashlib.sha256(binary.read_bytes()).hexdigest())
+        self.assertEqual(len(set(hashes)), 1, hashes)
 
 
 class PointerArtifactTests(unittest.TestCase):
