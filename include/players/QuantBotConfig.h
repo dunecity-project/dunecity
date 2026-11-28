@@ -884,6 +884,10 @@ struct QuantBotConfig {
         /// Zone Garrisons, house to house: our empty zones nearest the enemy (the front) get a
         /// garrison before anyone attacks them. Off unless measured.
         bool zoneFrontGarrison;
+        /// Independent default-OFF policy: never order occupants out of an occupied zone.
+        /// Building-owned below-30% relocation, destruction and explicit human orders still apply.
+        /// Raw preference, not one of the six bundled Garrisoning and Capturing tactics.
+        bool garrisonHold;
         /// Zone Garrisons, house to house: from every zone we hold, soldiers take the next empty enemy
         /// zone across the street, block by block. Off unless measured.
         bool zoneCaptureChain;

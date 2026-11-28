@@ -307,3 +307,9 @@ All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start
   Combat, defence, repair, escort, human and colony/wave reservations are retained; no speed boost.
   The probe requires an order within one second, at least 80% entry within 20 seconds for starts
   within ten tiles, and reports every farther travel/loss deviation plus protected-role samples.
+- `GarrisonHold=0` under Force Concentration is independent of the bundled tactics.
+  With it on, QuantBot does not order a quiet garrison out or replace its Soldiers with a Trooper.
+  Building-owned below-30% relocation, collapse injury, permission OFF and human Evacuate stay native.
+  `garrison_hold_probe` compares OFF/ON through real controller passes, preserving original IDs and
+  recording blocked-release/replacement reasons; battle arms are not yet qualified.
+  Stefan's Air dev copy enables it; shipped/default configurations remain OFF.

@@ -762,6 +762,9 @@ ZoneCaptureLevy=0
 # enemy get a garrison first; soldiers take the next enemy zone across the street from a zone we hold.
 ZoneGarrisonReinforce=0
 ZoneFrontGarrison=0
+# Independent of the six bundled tactics: never order occupants out of an occupied zone.
+# Building-owned below-30% relocation, destruction and explicit human orders still apply.
+GarrisonHold=0
 ZoneCaptureChain=0
 # Infantry squads (Stefan, 2026-11-28): always buy an available squad, saving its full price; counted
 # real air-emergency singles only (0 = legacy singles); another Barracks/WOR by the factory lane rule; the

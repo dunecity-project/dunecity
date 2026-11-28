@@ -323,7 +323,7 @@ void QuantBot::update() {
                 " configured_garrison=%d configured_front=%d configured_reinforce=%d"
                 " configured_raid=%d configured_levy=%d configured_chain=%d"
                 " garrison=%d front=%d reinforce=%d raid=%d levy=%d chain=%d"
-                " squads=%d infantry_mix=%d infantry_lanes=%d cycle=%u",
+                " hold=%d squads=%d infantry_mix=%d infantry_lanes=%d cycle=%u",
             getHouse()->getHouseID(), int(currentGame->isCitySimEnabled()), int(rules.garrisoningAndCapturing),
             int(role), int(force.zoneGarrison), int(force.zoneFrontGarrison),
             int(force.zoneGarrisonReinforce), int(force.zoneCaptureRaid), int(force.zoneCaptureLevy),
@@ -333,7 +333,7 @@ void QuantBot::update() {
             int(allowed && wantsGarrisonTactic(force.zoneCaptureRaid)),
             int(allowed && wantsGarrisonTactic(force.zoneCaptureLevy)),
             int(allowed && wantsGarrisonTactic(force.zoneCaptureChain)),
-            int(force.squadOrders), int(force.infantryInMix), int(force.infantryLanes), getGameCycleCount());
+            int(force.garrisonHold), int(force.squadOrders), int(force.infantryInMix), int(force.infantryLanes), getGameCycleCount());
     }
 
 	// Switched off by its human partner: no orders, no building, no planning.

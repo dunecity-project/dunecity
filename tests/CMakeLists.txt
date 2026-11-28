@@ -1364,6 +1364,10 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-identity-probe)
         set_tests_properties(zone_garrison_identity_probe PROPERTIES TIMEOUT 240 PROCESSORS 2)
+        dunecity_add_test(headless integration LABELS "ai;garrison" NAME garrison_hold_probe
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-garrison-hold-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/garrison-hold-probe)
+        set_tests_properties(garrison_hold_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
         # Real occupant projectiles and deaths, read back through the sidebar Stats window.
         dunecity_add_test(headless integration NAME zone_garrison_stats_probe COMMAND ${CMAKE_COMMAND} -E env
             ZONE_GARRISON_STATS_ONLY=1 ${Python3_EXECUTABLE}

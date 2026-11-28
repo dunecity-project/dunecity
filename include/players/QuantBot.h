@@ -2259,6 +2259,7 @@ private:
     void updateZoneGarrisons();
     bool spareForZoneGarrison(const UnitBase* unit) const;
     const UnitBase* rushZoneGarrison(const ZoneStructure* zone);
+    void recordZoneGarrisonHoldBlocked(const ZoneStructure* zone, bool replacement);
     /// Recent confirmed hits keep a rear shelter defended even after the attacker leaves sight.
     /// As with progress clocks, all peers restart this short-lived memory together after a load.
     std::map<Uint32, Uint32> zoneGarrisonAttacks_;
@@ -2267,6 +2268,10 @@ private:
     /// saved: after a load every peer restarts the clocks the same way.
     std::map<Uint32, std::pair<Uint32, int>> zoneGarrisonProgress_;
     bool zoneGarrisonRulesLogged_ = false; ///< Diagnostic only; restart after loading a save.
+    /// Diagnostic only, not saved or consulted for orders: quiet release (0), Soldier replacement (1).
+    std::array<Uint64, 2> zoneGarrisonHoldBlocked_{};
+    std::array<Uint32, 2> zoneGarrisonHoldLastLog_ = {
+        std::numeric_limits<Uint32>::max(), std::numeric_limits<Uint32>::max()};
     /// Strict SquadOrders: reject an ordinary single whenever its squad is available; count only genuine
     /// observed-aircraft exceptions whose three-second income forecast cannot fund a squad.
     const char* squadOrderRefusal(const BuildPass& pass, const BuilderBase* builder, Uint32 item) const;

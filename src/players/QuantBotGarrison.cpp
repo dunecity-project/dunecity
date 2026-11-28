@@ -126,6 +126,19 @@ bool QuantBot::spareForZoneGarrison(const UnitBase* unit) const {
     return target == nullptr || target->getOwner()->getTeamID() == getHouse()->getTeamID();
 }
 
+void QuantBot::recordZoneGarrisonHoldBlocked(const ZoneStructure* zone, bool replacement) {
+    const size_t reason = replacement ? 1u : 0u;
+    const Uint64 blocked = ++zoneGarrisonHoldBlocked_[reason];
+    const Uint32 now = getGameCycleCount();
+    Uint32& lastLog = zoneGarrisonHoldLastLog_[reason];
+    if (lastLog != std::numeric_limits<Uint32>::max()
+        && now - lastLog < Uint32(MILLI2CYCLES(60000))) return;
+    lastLog = now;
+    SDL_Log("ZONE_GARRISON: event=hold_blocked house=%d zone=%u why=%s occupants=%d blocked_total=%llu cycle=%u",
+        getHouse()->getHouseID(), zone->getObjectID(), replacement ? "soldier_replacement" : "quiet_release",
+        zone->getGarrisonSize(), static_cast<unsigned long long>(blocked), now);
+}
+
 const UnitBase* QuantBot::rushZoneGarrison(const ZoneStructure* zone) {
     const auto& force = botConfig().force;
     if (builderOnly() || !ZoneStructure::garrisonsEnabled()
@@ -162,6 +175,10 @@ const UnitBase* QuantBot::rushZoneGarrison(const ZoneStructure* zone) {
                 const auto* unit = dynamic_cast<const UnitBase*>(getObject(occupant));
                 return !unit || unit->getOwner() != getHouse();
             })) return nullptr;
+        if (force.garrisonHold) {
+            recordZoneGarrisonHoldBlocked(zone, true);
+            return nullptr;
+        }
         auto* shelter = const_cast<ZoneStructure*>(zone);
         const int out = shelter->evacuateGarrison(false, DuneCity::ZoneGarrison::kCapacity - 1);
         SDL_Log("ZONE_GARRISON: event=rush_replace house=%d zone=%u deployed=%d retained=%d ai_only=1 cycle=%u",
@@ -440,6 +457,10 @@ void QuantBot::updateZoneGarrisons() {
                 if (blockDistance(at, zone->getClosestPoint(at)) <= kReleaseRadius) { quiet = false; break; }
             }
             if (!quiet) continue;
+            if (force.garrisonHold) {
+                recordZoneGarrisonHoldBlocked(zone, false);
+                continue;
+            }
             const int out = zone->evacuateGarrison();
             SDL_Log("ZONE_GARRISON: event=release house=%d zone=%u deployed=%d cycle=%u", houseID, zone->getObjectID(), out, now);
             traceDecision("zone_garrison_release", AITelemetry::Record().set("zone", zone->getObjectID())

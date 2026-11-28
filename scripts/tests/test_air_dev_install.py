@@ -104,6 +104,7 @@ class StagedSwapTests(unittest.TestCase):
         switches = result.stdout.splitlines()
         self.assertIn('EconomyFirst', switches)
         self.assertIn('RepairReturnCheck', switches)
+        self.assertIn('GarrisonHold', switches)
         self.assertNotIn('EconomyFirstUnitPacing', switches)
         self.assertNotIn('EconomyFirstTurrets', switches)
 
