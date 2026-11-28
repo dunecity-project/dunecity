@@ -232,6 +232,14 @@ def qualification_for(sha, read=None):
     raise ValueError('No completed successful integration qualification for source ' + sha)
 
 
+def reusable_macos_run(sha):
+    """Reuse only an unexpired package from independently green exact-source CI."""
+    qualified = qualification_for(sha)
+    artifacts = api(f'repos/{repository()}/actions/runs/{qualified["id"]}/artifacts?per_page=100')['artifacts']
+    packages = [item for item in artifacts if item['name'] == 'DuneCity-macOS-DMG']
+    return str(qualified['id']) if len(packages) == 1 and not packages[0]['expired'] else ''
+
+
 def validate_staging_receipts(manifest, publication=None):
     """Validate immutable API receipts; package producer HEAD need not be game source."""
     sha = full_sha(manifest['sourceCommit'])
@@ -450,7 +458,7 @@ def plan(args):
                  ('windows_cache_probe', 'linux_audio_probe', 'android_package_probe', 'macos_skin_probe'))
     stable = name == 'push' and ref.startswith('refs/tags/') and bool(STABLE.fullmatch(ref[10:]))
     values = dict(sha=sha, run=True, package=stable or probes, stable=stable,
-                  staging=False, ios=False, ios_dispatch=False, tier='integration',
+                  staging=False, ios=False, ios_dispatch=False, tier='integration', macos_run='',
                   tag=ref[10:] if stable else '', reason='integration CI')
     if str(inputs.get('ios_staging', '')).lower() == 'true' or (name == 'schedule' and event.get('schedule') == IOS_CRON):
         if probes:
@@ -503,11 +511,14 @@ def plan(args):
         existing = optional_release(snapshot_tag(sha))
         require_unretired_staging(sha, existing)
         package, reason = package_decision(sha, green, existing, runs,
-                                          dt.datetime.now(dt.timezone.utc), name == 'workflow_dispatch' and not receipt,
-                                          os.environ.get('GITHUB_RUN_ID'))
+                                          dt.datetime.now(dt.timezone.utc), manual=name == 'workflow_dispatch',
+                                          current_run=os.environ.get('GITHUB_RUN_ID'))
         nightly = event.get('schedule') == '47 3 * * *'
         values.update(sha=sha, run=package or nightly, package=package, stable=False, staging=True,
                       tag=snapshot_tag(sha), reason=reason, tier='nightly' if nightly else 'integration')
+        # The nightly Mac job still owns GUI coverage; do not replace it with a copy.
+        if package and not nightly:
+            values['macos_run'] = reusable_macos_run(sha)
     if str(inputs.get('nightly_probe', '')).lower() == 'true':
         # The nightly tier otherwise runs once a day from its cron, so a defect
         # in it could not be reproduced or checked on demand.

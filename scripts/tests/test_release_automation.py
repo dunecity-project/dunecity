@@ -80,6 +80,59 @@ class StagingSelectionTests(unittest.TestCase):
         run['created_at'] = '2026-11-12T02:00:00Z'
         self.assertTrue(automation.package_decision(SHA, True, None, [run], now)[0])
 
+    def test_manual_plan_with_receipt_bypasses_only_the_scheduled_debounce(self):
+        recent = dict(id=9, display_title='Staging packages ' + OTHER,
+                      created_at=dt.datetime.now(dt.timezone.utc).isoformat())
+        source = dict(id=7, head_sha=SHA, head_branch=automation.STAGING,
+                      event='push', conclusion='success', display_title='CI integration',
+                      workflow_id=1)
+        jobs = [dict(name=name, conclusion='success') for name in automation.CI_JOBS]
+        for manual, receipt, existing, green, expected in (
+                (True, '', None, True, True), (True, '7', None, True, True),
+                (False, '', None, True, False), (True, '7', {'draft': False}, True, False),
+                (True, '7', {'draft': True}, True, False), (True, '7', None, False, False)):
+            with self.subTest(manual=manual, receipt=receipt, existing=existing, green=green), \
+                 tempfile.TemporaryDirectory() as directory:
+                event = Path(directory) / 'event.json'
+                automation.write_json(event, {'inputs': {'staging_sha': SHA, 'integration_run_id': receipt}}
+                                      if manual else {'schedule': '17 */2 * * *'})
+                selected = Path(directory) / 'selection.json'
+                def read(path):
+                    if path.endswith('/jobs?per_page=100'):
+                        return {'jobs': jobs if green else jobs[:-1]}
+                    if path.endswith('/actions/runs/7'):
+                        return source
+                    if path.endswith('/actions/workflows/build.yml'):
+                        return {'id': 1}
+                    return {'object': {'sha': SHA}}
+                with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event),
+                                GITHUB_EVENT_NAME='workflow_dispatch' if manual else 'schedule',
+                                GITHUB_REF='refs/heads/main', GITHUB_SHA=OTHER, GITHUB_RUN_ID='8',
+                                GITHUB_OUTPUT='', GITHUB_STEP_SUMMARY=''), \
+                     patch.object(automation, 'api', side_effect=read), \
+                     patch.object(automation, 'workflow_runs', return_value=[source, recent]), \
+                     patch.object(automation, 'optional_release', return_value=existing), \
+                     patch.object(automation, 'require_unretired_staging'), \
+                     patch.object(automation, 'reusable_macos_run', return_value='7'):
+                    automation.plan(argparse.Namespace(output=selected))
+                result = json.loads(selected.read_text())
+                self.assertEqual(result['package'], expected)
+                self.assertEqual(result['macos_run'], '7' if expected else '')
+
+    def test_mac_reuse_requires_green_source_and_one_unexpired_artifact(self):
+        for artifacts, expected in (
+                ([], ''), ([dict(name='DuneCity-macOS-DMG', expired=True)], ''),
+                ([dict(name='DuneCity-macOS-DMG', expired=False)], '7'),
+                ([dict(name='DuneCity-macOS-DMG', expired=False)] * 2, '')):
+            with self.subTest(artifacts=artifacts), \
+                 patch.object(automation, 'qualification_for', return_value={'id': 7}) as qualify, \
+                 patch.object(automation, 'api', return_value={'artifacts': artifacts}):
+                self.assertEqual(automation.reusable_macos_run(SHA), expected)
+                qualify.assert_called_once_with(SHA)
+        with patch.object(automation, 'qualification_for', side_effect=ValueError('not green')), \
+             self.assertRaisesRegex(ValueError, 'not green'):
+            automation.reusable_macos_run(SHA)
+
     def test_receipt_requires_every_platform_and_test_job_at_the_exact_source(self):
         source = dict(head_sha=SHA, head_branch=automation.STAGING, event='push')
         names = ['test-linux', 'relay-tests', 'signaling-tests', 'build-emscripten',
@@ -106,8 +159,11 @@ class StagingSelectionTests(unittest.TestCase):
              patch.object(automation, 'api', return_value={'object': {'sha': SHA}}), \
              patch.object(automation, 'workflow_runs', return_value=runs), \
              patch.object(automation.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'HTTP 404')), \
+             patch.object(automation, 'reusable_macos_run', return_value='') as reuse, \
              patch.object(automation, 'optional_release', return_value=existing):
             automation.plan(argparse.Namespace(output=selected))
+            if nightly:
+                reuse.assert_not_called()
         return json.loads(selected.read_text())
 
     def test_schedule_explicitly_selects_staging_not_default_branch_source(self):
@@ -124,6 +180,13 @@ class StagingSelectionTests(unittest.TestCase):
             self.assertEqual(selected['sha'], SHA)
             self.assertTrue(selected['run'])
             self.assertFalse(selected['package'])
+            self.assertEqual(selected['tier'], 'nightly')
+
+    def test_daily_nightly_keeps_its_mac_coverage_even_when_packaging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = self.scheduled_plan(directory, nightly=True)
+            self.assertTrue(selected['package'])
+            self.assertEqual(selected['macos_run'], '')
             self.assertEqual(selected['tier'], 'nightly')
 
     def nightly_probe_plan(self, directory, **inputs):
