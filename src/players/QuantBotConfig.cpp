@@ -413,7 +413,7 @@ QuantBotConfig::QuantBotConfig() {
     force.cityLauncherArmyBps = 7000;   // CityLessonsPolicy::kLauncherArmyBps (a literal: genome_model.py reads these defaults)
     force.lowValuePalaces = false;
     force.frontPalaces = false;
-    force.economyFirst = true;      // Stefan, 2026-11-28: "Yes, turn on" (his Air game; acts only on low / no spice city maps, CityLessonsPolicy.h)
+    force.economyFirst = false;     // Stefan approved on ("Yes, turn on", 2026-11-28); off in this build: 12 behaviour tests fail with it on (HANDOVER)
     force.palaceWorm = 1;           // Stefan, 2026-11-27: the Fremen Palace worm hunts, else blooms near the base
     force.buildUpToEnemy = true;    // Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings"
     force.airThreatTurrets = false; // built for Stefan's "the ai doesn't build rocket turret defenes"; measured 2026-11-24, it did not lower the bombing (QuantBotAirDefencePolicy.h)
@@ -2164,8 +2164,7 @@ std::string QuantBotConfig::getConfigHash() const {
     if (force.cityLauncherArmyBps != CityLessonsPolicy::kLauncherArmyBps) addNamed("cityLauncherArmyBps", force.cityLauncherArmyBps);
     if (force.lowValuePalaces) addNamed("lowValuePalaces", force.lowValuePalaces);
     if (force.frontPalaces) addNamed("frontPalaces", force.frontPalaces);
-    // On is the default (2026-11-28); only off is hashed, so the default config keeps its hash.
-    if (!force.economyFirst) addNamed("economyFirst", force.economyFirst);
+    if (force.economyFirst) addNamed("economyFirst", force.economyFirst);
     // On is the default (protocol 137); only off is hashed, so the default config keeps its hash.
     if (!force.extraAirports) addNamed("extraAirports", force.extraAirports);
     addNamed("vanillaCoreDefenceThreatBps", force.vanillaCoreDefenceThreatBps);

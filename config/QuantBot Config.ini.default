@@ -716,9 +716,9 @@ TurretDrill=0
 # EconomyFirst: on a low or no spice map (below 20,000 spice per living house) a city house builds its economy
 # first, as Stefan did on his Air map: Construction Yards on his schedule (4, 6 from minute 15, 9 from 20),
 # factories leave 10,000 credits for the yards unless an enemy is at the base, the Starport buys nothing, and an
-# idle yard zones in his R/C/I mix, until the city has 6,734 people (CityLessonsPolicy.h). On by default since
-# 2026-11-28 (Stefan: "Yes, turn on"); 0 = off, the old behaviour. Spice-rich maps are not affected.
-EconomyFirst=1
+# idle yard zones in his R/C/I mix, until the city has 6,734 people (CityLessonsPolicy.h). Stefan approved it on
+# (2026-11-28); off in this build until the tests that fail with it on pass (HANDOVER). Spice-rich maps never act.
+EconomyFirst=0
 # Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
 # it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
 # destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes

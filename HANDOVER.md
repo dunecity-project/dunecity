@@ -46,7 +46,7 @@ Found while building:
 - With SquadOrders on, QuantBot buys the squad only when it is cheaper per man and admitted in the same pass.
   Otherwise it buys the single.
 
-## 2026-11-28 - EconomyFirst: the AI out of the poverty trap on low / no spice maps (Stefan's last Air game); ON by default
+## 2026-11-28 - EconomyFirst: the AI out of the poverty trap on low / no spice maps (Stefan's last Air game); approved on, shipped OFF
 
 Stefan, 2026-11-28, about his last game on the Air: "i did the building for the ai and we obliterated the enemy
 opponents"; then "yes the ai needs to escape the poverty trap on low / no spice maps". His map: Random Skirmish 4P
@@ -127,7 +127,18 @@ minutes, 24 house-games, 72 control): with the switch the house reaches his minu
 control 78). Nuclear Plants 7 (his 12, 58%), Palaces 6 (his 15, 40%). Units in the first ten minutes 0 against
 the control's 11,650; 20 of 24 houses stood down at his population.
 
-**Decision: ON by default** (Stefan, 2026-11-28, "Yes, turn on", asked with this table). Its 95% interval is
+**Default reverted to OFF for this build.** Stefan approved default on ("Yes, turn on", 2026-11-28; the rule
+he was told first: the default ships only if the qualifying set is green). The nightly at `54a8a1189` and the Mini
+re-runs at `5ac9ab8ed` (after the ordering fix `a3aba2e6a`) showed 12 behaviour failures with it on, among them
+`quantbot_no_spice_income_low-cash` ("tax never became usable income"), `quantbot_no_spice_city` (the power-stall
+control did not buy the cheap import: the Starport is held), `quantbot_starport_dunecity`, `quantbot_shared-spending_dunecity`
+(the cash hold starved affordable military production), `quantbot_mcv_deployment` (no colony trip), the three
+`quantbot_air-defense_*`, `brutal_unit_override_probe`, both `local_spectator_worm_startup_*` (no view-house unit) and
+`cross_platform_city_medium` (recorded digest). So this build ships it off; the switch, the ordering fix and the
+`turret_front_probe` pin stay, and the default returns when that per-test table is clean. The scores below were
+measured on a build with these failures and do not yet justify the default.
+
+**Measured case for the default** (Stefan, 2026-11-28, asked with this table). Its 95% interval is
 above 0 on the low-spice maps (pooled +0.672), it is identical on Fortress and `/weak`, and it does not act on
 spice-rich maps. "Low / no spice" in code (`CityLessonsPolicy::lowSpiceMap`, read every build pass): the spice
 left on the whole map (`QuantBot::lastCalculatedSpice`, rescanned every 500 cycles) below 20,000 times the
