@@ -914,7 +914,9 @@ void StructureBase::destroy() {
                 Uint32 explosionID = currentGame->randomGen.getRandOf({Explosion_Large1,Explosion_Large2});
                 currentGame->getExplosionList().push_back(new Explosion(explosionID, position, owner->getHouseID()) );
 
-                if(currentGame->randomGen.rand(1,100) <= getInfSpawnProp()) {
+                // Occupied zones eject their real units; generic Soldiers would look like
+                // converted occupants. Keep the existing per-cell survivor RNG draw.
+                if(currentGame->randomGen.rand(1,100) <= getInfSpawnProp() && !suppressDestructionSurvivors_) {
                     UnitBase* pNewUnit = owner->createUnit(Unit_Soldier);
                     pNewUnit->setHealth(pNewUnit->getMaxHealth()/2);
                     pNewUnit->deploy(location + Coord(i,j));

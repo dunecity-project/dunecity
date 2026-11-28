@@ -61,6 +61,13 @@ The lock is derived from the existing occupant list; no additional option is req
   `ObjectData.ini` costs half maximum HP, rounded up. There is no minimum-one-HP guarantee:
   wounded occupants can die, leaving a normal map death and an owner-local casualty message.
   No new blast radius is introduced. A blocked perimeter uses the dying building's freed footprint.
+- The original occupant objects leave, retaining their type, exact health (apart from the
+  documented collapse injury), technology and combat identity through evacuation, relocation,
+  capture/return and save/load. A destroyed **occupied** zone does not additionally spawn the
+  generic half-health Soldiers normally rolled per building tile. Empty zones and ordinary
+  structures retain that survivor rule; the per-tile random draws are retained in either case.
+  `zone_garrison_identity_probe` checks Trooper-only and mixed garrisons through every exit,
+  counts unexpected survivors, and uses a 100% survivor control to expose this distinction.
 - **A captured zone is held only while occupied.** It remembers the house it was taken from (saved, format
   9903). Once its garrison is gone, by Evacuate, at low health or because the last soldier inside was killed, it
   returns to that house: owner, tiles, power draw and counts, as when it was taken. A house the capture
@@ -294,3 +301,9 @@ All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start
   acceptance table.
 - `CoopGameSettingsTestCase`: protocol 144 bit 5 round trip and hash; bit 7 is the first unknown city rule.
 - `CityRoadTestCase`, `NetworkHardeningTestCase`: `CMD_ZONE_EVACUATE` is the last command and acts on an owned object.
+- `zone_trooper_rush_probe` (headless integration): a free Trooper answers an own threatened shelter
+  before ordinary idle/rally work; ground/air proximity and confirmed distant hits trigger the response.
+  It prefers one Trooper per zone and replaces at most one Soldier in a full AI-only, guest-free shelter.
+  Combat, defence, repair, escort, human and colony/wave reservations are retained; no speed boost.
+  The probe requires an order within one second, at least 80% entry within 20 seconds for starts
+  within ten tiles, and reports every farther travel/loss deviation plus protected-role samples.

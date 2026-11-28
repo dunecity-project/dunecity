@@ -191,6 +191,7 @@ public:
 protected:
     bool demolishedByOwner_ = false; // transient removal cause; never survives removal
     bool selling_ = false; ///< Transient sale removal; never serialized.
+    bool suppressDestructionSurvivors_ = false; ///< Set immediately before occupied-zone ejection; never serialized.
     bool scoutpostConversion_ = false;
     int productionHouseID_ = HOUSE_INVALID; ///< Explicit faction column, never a runtime house slot.
     virtual bool usesGreenPowerAnimation() const { return false; }

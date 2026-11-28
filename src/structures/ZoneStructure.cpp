@@ -358,6 +358,7 @@ void ZoneStructure::clearZoneState() {
 }
 
 void ZoneStructure::destroy() {
+    suppressDestructionSurvivors_ = !garrison_.empty();
     // Eject and apply ordinary on-map collapse damage before the building's destruction effects.
     evacuateGarrison(true);
     clearZoneState();

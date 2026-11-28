@@ -43,6 +43,9 @@ constexpr int kThreatRadius = 7;
 constexpr int kReleaseRadius = 11;
 /// Own soldiers this close to a threatened zone answer it.
 constexpr int kResponderRadius = 12;
+/// A nearby free Trooper answers a threatened shelter before ordinary rally/idle duties.
+constexpr int kRushResponderRadius = 25;
+constexpr Uint32 kAttackedShelterHold = MILLI2CYCLES(30000);
 /// An empty enemy zone this close to one of our soldiers is taken.
 constexpr int kOffenceRadius = 5;
 /// Capture orders a house gives in one pass, all behaviours together.
@@ -113,6 +116,70 @@ bool withinZoneRadius(const ZoneStructure* zone, const Coord& at, int radius) {
 
 } // namespace
 
+bool QuantBot::spareForZoneGarrison(const UnitBase* unit) const {
+    if (unit->getOwner() != getHouse() || !unit->isActive() || !unit->isRespondable()
+        || unit->getHealth() * 2 < unit->getMaxHealth() || unit->getAttackMode() == CAPTURE
+        || unit->isAttackMoving() || unit->getAttackPos().isValid()
+        || unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::Escort, UnitRole::ColonyGuard,
+                           UnitRole::Defence, UnitRole::Wave}) != UnitRole::Free) return false;
+    const auto* target = unit->getTarget();
+    return target == nullptr || target->getOwner()->getTeamID() == getHouse()->getTeamID();
+}
+
+const UnitBase* QuantBot::rushZoneGarrison(const ZoneStructure* zone) {
+    const auto& force = botConfig().force;
+    if (builderOnly() || !ZoneStructure::garrisonsEnabled()
+        || (!wantsGarrisonTactic(force.zoneGarrison) && !wantsGarrisonTactic(force.zoneGarrisonReinforce))
+        || zone->getOwner() != getHouse() || zone->getHealth() <= 0 || zone->tooDamagedToHold()
+        || !hasOpenSide(getMap(), zone)) return nullptr;
+    for (const Uint32 id : zone->getGarrison()) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        if (unit && unit->getHealth() > 0 && unit->getItemID() == Unit_Trooper) return nullptr;
+    }
+    const UnitBase* best = nullptr;
+    FixPoint bestDistance = FixPoint(kRushResponderRadius + 1);
+    int incoming = 0;
+    for (const auto* unit : getUnitList()) {
+        if (unit->getOwner() != getHouse() || !unit->isActive() || unit->getHealth() <= 0
+            || !garrisonSoldier(unit)) continue;
+        if (unit->getAttackMode() == CAPTURE && unit->getTarget() == zone) {
+            if (unit->getItemID() == Unit_Trooper) return nullptr;
+            ++incoming;
+            continue;
+        }
+        if (unit->getItemID() != Unit_Trooper || !unit->canCaptureStructures() || !spareForZoneGarrison(unit)) continue;
+        const FixPoint distance = blockDistance(unit->getLocation(), zone->getClosestPoint(unit->getLocation()));
+        if (distance <= kRushResponderRadius && distance < bestDistance) { best = unit; bestDistance = distance; }
+    }
+    if (!best) return nullptr;
+    const Uint32 id = best->getObjectID();
+    if (zone->getGarrisonSize() + incoming >= DuneCity::ZoneGarrison::kCapacity) {
+        // Replace one Soldier, never empty a captured shelter or release a human/allied guest.
+        if (incoming || zone->getGarrisonSize() != DuneCity::ZoneGarrison::kCapacity
+            || std::any_of(getHouse()->getPlayerList().begin(), getHouse()->getPlayerList().end(),
+                [](const auto& player) { return dynamic_cast<const HumanPlayer*>(player.get()) != nullptr; })
+            || std::any_of(zone->getGarrison().begin(), zone->getGarrison().end(), [&](Uint32 occupant) {
+                const auto* unit = dynamic_cast<const UnitBase*>(getObject(occupant));
+                return !unit || unit->getOwner() != getHouse();
+            })) return nullptr;
+        auto* shelter = const_cast<ZoneStructure*>(zone);
+        const int out = shelter->evacuateGarrison(false, DuneCity::ZoneGarrison::kCapacity - 1);
+        SDL_Log("ZONE_GARRISON: event=rush_replace house=%d zone=%u deployed=%d retained=%d ai_only=1 cycle=%u",
+            getHouse()->getHouseID(), zone->getObjectID(), out, zone->getGarrisonSize(), getGameCycleCount());
+        best = dynamic_cast<const UnitBase*>(getObject(id));
+        if (!best || !spareForZoneGarrison(best)) return nullptr;
+    }
+    if (!zone->mayEnterGarrison(best)) return nullptr;
+    SDL_Log("ZONE_GARRISON: event=order house=%d why=defend unit=%u item=%d zone=%u zone_house=%d"
+            " occupants=%d rush=1 responder_distance10=%d cycle=%u",
+        getHouse()->getHouseID(), id, best->getItemID(), zone->getObjectID(), zone->getOwner()->getHouseID(),
+        zone->getGarrisonSize(), tenths(bestDistance), getGameCycleCount());
+    doCaptureStructure(static_cast<const InfantryBase*>(best), zone);
+    if (best->isActive() && best->getAttackMode() != CAPTURE) return nullptr;
+    if (best->isActive()) zoneGarrisonProgress_[id] = {getGameCycleCount(), tenths(bestDistance)};
+    return best;
+}
+
 void QuantBot::updateZoneGarrisons() {
     const auto& force = botConfig().force;
     if ((!wantsGarrisonTactic(force.zoneGarrison) && !wantsGarrisonTactic(force.zoneCaptureRaid)
@@ -167,7 +234,7 @@ void QuantBot::updateZoneGarrisons() {
                 continue;
             }
             soldiers.push_back(unit);
-        } else if (unit->getOwner()->getTeamID() != team && unit->isAGroundUnit()
+        } else if (unit->getOwner()->getTeamID() != team
                    && unit->getItemID() != Unit_Sandworm && unit->isVisible(team)
                    && (unit->canAttack() || unit->canCaptureStructures())) {
             enemies.push_back(unit);
@@ -193,9 +260,7 @@ void QuantBot::updateZoneGarrisons() {
     };
     auto available = [&](const UnitBase* soldier) {
         return std::find(used.begin(), used.end(), soldier->getObjectID()) == used.end()
-            && soldier->getHealth() * 2 >= soldier->getMaxHealth()
-            && unitRole(soldier, {UnitRole::Human, UnitRole::Repair, UnitRole::Escort, UnitRole::ColonyGuard})
-                   == UnitRole::Free;
+            && spareForZoneGarrison(soldier);
     };
     // The nearest available soldier (Troopers only with TROOPERS) within RADIUS that may enter ZONE.
     auto nearest = [&](const ZoneStructure* zone, int radius, bool troopers) -> const UnitBase* {
@@ -247,6 +312,16 @@ void QuantBot::updateZoneGarrisons() {
             zones[zone->getObjectID()] = zone;
         }
     }
+    for (auto it = zoneGarrisonAttacks_.begin(); it != zoneGarrisonAttacks_.end();) {
+        const auto* zone = dynamic_cast<const ZoneStructure*>(getObject(it->first));
+        if (!zone || zone->getOwner() != house || zone->getHealth() <= 0
+            || now - it->second >= kAttackedShelterHold) it = zoneGarrisonAttacks_.erase(it);
+        else {
+            threat[it->first] = std::max(threat[it->first], 1);
+            zones[it->first] = const_cast<ZoneStructure*>(zone);
+            ++it;
+        }
+    }
     std::vector<std::pair<int, Uint32>> ranked;
     for (const auto& [id, points] : threat) ranked.emplace_back(-points, id);
     std::sort(ranked.begin(), ranked.end());
@@ -287,6 +362,18 @@ void QuantBot::updateZoneGarrisons() {
     auto atTheFront = [&](const ZoneStructure* zone) {
         return std::any_of(front.begin(), front.end(), [&](const auto& item) { return item.second == zone; });
     };
+
+    // One Trooper in every threatened shelter before anyone receives a second responder.
+    if (wantsGarrisonTactic(force.zoneGarrison) || wantsGarrisonTactic(force.zoneGarrisonReinforce)) {
+        for (const auto& [negPoints, id] : ranked) {
+            if (orders >= kMaxOrdersPerPass) break;
+            if (const auto* responder = rushZoneGarrison(zones[id])) {
+                used.push_back(responder->getObjectID());
+                if (responder->isActive()) ++pending[id];
+                ++orders;
+            }
+        }
+    }
 
     if (wantsGarrisonTactic(force.zoneGarrison)) {
         // Defence: the most threatened zones first, the nearest free soldiers into them.
@@ -345,7 +432,8 @@ void QuantBot::updateZoneGarrisons() {
             if (structure->getOwner() != house) continue;
             auto* zone = dynamic_cast<ZoneStructure*>(const_cast<StructureBase*>(structure));
             if (zone == nullptr || !zone->isGarrisoned() || zone->getGarrisonHouse() != house
-                || zone->getGarrisonOriginalOwner() >= 0 || atTheFront(zone)) continue;
+                || zone->getGarrisonOriginalOwner() >= 0 || atTheFront(zone) || zone->tooDamagedToHold()
+                || zoneGarrisonAttacks_.count(zone->getObjectID())) continue;
             bool quiet = true;
             for (const UnitBase* enemy : enemies) {
                 const Coord at = enemy->getLocation();

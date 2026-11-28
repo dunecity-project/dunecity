@@ -1339,6 +1339,18 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-probe)
         set_tests_properties(zone_garrison_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
+        dunecity_add_test(headless integration LABELS "ai;garrison" NAME zone_trooper_rush_probe
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-infantry-zone-capture-probe.py
+            --build-dir ${CMAKE_BINARY_DIR}
+            --output-dir ${CMAKE_BINARY_DIR}/zone_trooper_rush_probe
+            --case-group rush)
+        set_tests_properties(zone_trooper_rush_probe PROPERTIES TIMEOUT 360 PROCESSORS 2)
+        # Troopers remain the original units through every garrison exit, not generic Soldiers.
+        dunecity_add_test(headless integration NAME zone_garrison_identity_probe COMMAND ${CMAKE_COMMAND} -E env
+            ZONE_GARRISON_IDENTITY_ONLY=1 ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-identity-probe)
+        set_tests_properties(zone_garrison_identity_probe PROPERTIES TIMEOUT 240 PROCESSORS 2)
         # Real occupant projectiles and deaths, read back through the sidebar Stats window.
         dunecity_add_test(headless integration NAME zone_garrison_stats_probe COMMAND ${CMAKE_COMMAND} -E env
             ZONE_GARRISON_STATS_ONLY=1 ${Python3_EXECUTABLE}

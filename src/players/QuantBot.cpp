@@ -846,10 +846,13 @@ void QuantBot::update() {
 	}
 
     updateCampaignWave();
-	checkAllUnits();
-    // Zone Garrisons (ZoneGarrison switch): soldiers into threatened own zones, out when quiet,
-    // and into empty enemy zones they pass (QuantBotGarrison.cpp).
-    updateZoneGarrisons();
+    // Threatened shelters claim free infantry before an idle/rally task can spend it elsewhere.
+    const bool rushGarrisons = ZoneStructure::garrisonsEnabled()
+        && (wantsGarrisonTactic(botConfig().force.zoneGarrison)
+            || wantsGarrisonTactic(botConfig().force.zoneGarrisonReinforce));
+    if (rushGarrisons) updateZoneGarrisons();
+    checkAllUnits();
+    if (!rushGarrisons) updateZoneGarrisons();
     // Redevelopment orders: placed at their site or lost, then their effect on the lots read.
     updateRedevelopmentOrders();
     keepParkPassages();
@@ -1023,6 +1026,15 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
     if (pObject->isAStructure()) {
         // Repair is the builder's spending; a Fighter only defends the building.
         if (!fighterOnly()) doRepair(pObject);
+        if (damage > 0 && pDamager->getOwner()->getTeamID() != getHouse()->getTeamID()
+            && ZoneStructure::garrisonsEnabled() && !builderOnly()
+            && (wantsGarrisonTactic(botConfig().force.zoneGarrison)
+                || wantsGarrisonTactic(botConfig().force.zoneGarrisonReinforce))) {
+            if (const auto* zone = dynamic_cast<const ZoneStructure*>(pObject)) {
+                zoneGarrisonAttacks_[zone->getObjectID()] = getGameCycleCount();
+                rushZoneGarrison(zone);
+            }
+        }
         // no point scrambling to defend a missile
         if(pDamager->getItemID() != Structure_Palace) {
             scrambleUnitsAndDefend(pDamager,false,pObject);

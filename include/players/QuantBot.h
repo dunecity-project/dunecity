@@ -30,6 +30,7 @@
 #include <players/QuantBotFoundationPolicy.h>
 #include <units/MCV.h>
 class Harvester;
+class ZoneStructure;
 #include <players/QuantBotConfig.h>
 #include <players/QuantBotCityCampaignPolicy.h>
 #include <players/CampaignDifficultyPolicy.h>
@@ -2254,9 +2255,13 @@ private:
     /// blocks of our R/C lots (at least ParkDistrictPolicy::kMinGain; open ground before roads that
     /// can be spared); invalid when none.  gain receives that land value.
     Coord findParkDistrictSite(int* gain = nullptr);
-    /// Zone Garrisons (ZoneGarrison switch; QuantBotGarrison.cpp): soldiers into own zones enemies
-    /// close on, out again once quiet, and into empty enemy zones they pass. Stateless.
+    /// Zone Garrisons (QuantBotGarrison.cpp): cover threatened/front zones and capture empty enemy lots.
     void updateZoneGarrisons();
+    bool spareForZoneGarrison(const UnitBase* unit) const;
+    const UnitBase* rushZoneGarrison(const ZoneStructure* zone);
+    /// Recent confirmed hits keep a rear shelter defended even after the attacker leaves sight.
+    /// As with progress clocks, all peers restart this short-lived memory together after a load.
+    std::map<Uint32, Uint32> zoneGarrisonAttacks_;
     /// Zone Garrisons: per soldier on its way into a zone, the cycle it last got closer and its
     /// distance then (tenths of a tile). An order with no progress for kNoProgressSeconds ends. Not
     /// saved: after a load every peer restarts the clocks the same way.

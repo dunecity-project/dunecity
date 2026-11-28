@@ -1196,6 +1196,7 @@ void checkPrice() {
 #include "garrison-collapse-stats.inc"
 #include "zone-garrison-panel-probe.inc"
 #include "zone-garrison-appearance-probe.inc"
+#include "zone-garrison-identity-probe.inc"
 
 } // namespace ZoneGarrisonProbe
 
@@ -1208,6 +1209,11 @@ int runZoneGarrisonProbe() {
     settings.general.playerName = "Garrison tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     require(gModOptions.garrisoningAndCapturing, "Garrisoning and Capturing is not on by default in the Dune City mod");
+    if(std::getenv("ZONE_GARRISON_IDENTITY_ONLY")) {
+        checkGarrisonIdentity();
+        SDL_Log("ZONE_GARRISON_PROBE_PASS: occupant identity across all exit paths");
+        return -1;
+    }
     if(std::getenv("ZONE_GARRISON_STATS_ONLY")) {
         checkGarrisonStats();
         SDL_Log("ZONE_GARRISON_PROBE_PASS: garrison combat statistics");

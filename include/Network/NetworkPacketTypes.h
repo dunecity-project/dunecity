@@ -541,7 +541,9 @@
 //      own cover. Combat simulation differs; no save layout change.
 // 160: Occupants are immune inside and heal over time; collapse injury uses normal on-map damage.
 //      Below30% they attempt one reachable friendly relocation per crossing. Save9907 preserves intent.
-#define NETWORK_PROTOCOL_VERSION            160
+// 163: Occupied-zone destruction ejects only its real occupants, without additional generic
+//      Soldier survivors. Empty structures retain their survivor rolls. No save layout change.
+#define NETWORK_PROTOCOL_VERSION            163
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin
