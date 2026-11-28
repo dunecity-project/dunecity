@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import test_release_automation as release_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('ios_release_automation', ROOT / 'scripts/release-automation.py')
@@ -81,12 +82,27 @@ class IosReceiptTests(unittest.TestCase):
                              path=automation.BUILD_WORKFLOW, head_sha=CONTROL,
                              head_branch='main', event='schedule', repository={'full_name': REPOSITORY})
         self.qjobs = [dict(name=name, conclusion='success') for name in automation.CI_JOBS]
-        self.pjobs = copy.deepcopy(self.qjobs) + [dict(name='dev-release', conclusion='success')]
+        self.pjobs = copy.deepcopy(self.qjobs) + [
+            dict(name=name, conclusion='success') for name in ('staging-nightly', 'dev-release')]
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        with patch.object(release_fixture.automation, 'repository', return_value=REPOSITORY):
+            _, qualification_read = release_fixture.qualification_fixture(self.root)
+        transport = patch.object(automation, 'qualification_read', side_effect=qualification_read)
+        self.qualification_transport = transport.start()
+        self.addCleanup(transport.stop)
+        policy = patch.object(automation, 'exception_policy', return_value={})
+        policy.start()
+        self.addCleanup(policy.stop)
         self.manifest = dict(sourceCommit=SHA, qualificationSourceCommit=SHA,
                              qualificationRunId=11, qualificationRunAttempt=2,
                              runId=41, runAttempt=1, producerSourceCommit=CONTROL,
                              producerEvent='schedule', producerHeadBranch='main',
-                             producerWorkflowPath=automation.BUILD_WORKFLOW)
+                             producerWorkflowPath=automation.BUILD_WORKFLOW,
+                             headlessQualificationRunId=71, headlessQualificationRunAttempt=1,
+                             sha256={name: automation.digest(self.root / name)
+                                     for name in automation.QUALIFY_FILES})
 
     def api(self, path):
         suffix = path.removeprefix(f'repos/{REPOSITORY}/')
@@ -123,6 +139,30 @@ class IosReceiptTests(unittest.TestCase):
             with self.subTest(field=field), patch.dict(self.qualification, {field: value}):
                 with self.assertRaisesRegex(ValueError, 'qualification is not'):
                     self.validate()
+
+    def test_mobile_requires_explicit_frozen_headless_receipt_identity(self):
+        for field in ('headlessQualificationRunId', 'headlessQualificationRunAttempt'):
+            with self.subTest(field=field):
+                value = self.manifest.pop(field)
+                try:
+                    with self.assertRaisesRegex(ValueError, 'explicit source qualification'):
+                        self.validate()
+                finally:
+                    self.manifest[field] = value
+
+    def test_green_ci_and_native_only_receipt_cannot_qualify_mobile(self):
+        with patch.object(release_fixture.automation, 'repository', return_value=REPOSITORY):
+            _, qualification_read = release_fixture.qualification_fixture(self.root, aws=False)
+        self.qualification_transport.side_effect = qualification_read
+        self.manifest['sha256'] = {name: automation.digest(self.root / name)
+                                   for name in automation.QUALIFY_FILES}
+        with self.assertRaisesRegex(ValueError, 'AWS'):
+            self.validate()
+
+    def test_mobile_rejects_frozen_qualification_hash_mismatch(self):
+        self.manifest['sha256'][automation.HEADLESS_RECEIPT] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'qualification hashes differ'):
+            self.validate()
 
 
 class IosSelectionTests(unittest.TestCase):
