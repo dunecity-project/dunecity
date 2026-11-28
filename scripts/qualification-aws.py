@@ -32,7 +32,7 @@ MACHINES = ('aws', 'aws-mel2')
 NAME = re.compile(r'[A-Za-z0-9_.\-]+\Z')
 SHA = re.compile(r'[0-9a-f]{40}\Z')
 # Qualification is short and gates staging; it goes ahead of research games.
-PRIORITY = 10
+PRIORITY = 110
 
 
 def properties(test):
@@ -77,7 +77,7 @@ def submit(state, run=subprocess.run, env=os.environ):
     command = ['dunecity-queue', 'ctest', '--cwd', env['GITHUB_WORKSPACE'], '--rev', state['sha'],
                '--machines', *MACHINES, '--priority', str(PRIORITY), '--purpose', 'verification',
                '--tag', 'qualify-' + env['GITHUB_RUN_ID'], '--owner', owner,
-               '-R', regex(state['aws']), '-L', 'nightly', '-LE', 'network']
+               '--no-diagnostic-retry', '-R', regex(state['aws']), '-L', 'nightly', '-LE', 'network']
     result = run(command, stdout=subprocess.PIPE, text=True, timeout=600)
     lines = result.stdout.split()
     if result.returncode != 0 or not lines:
