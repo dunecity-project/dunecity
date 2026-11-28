@@ -4,7 +4,7 @@ run-name: Qualify ${{ inputs.sha || github.event.workflow_run.head_sha }}
 on:
   workflow_run:
     workflows: [Build Dune Legacy]
-    types: [completed]
+    types: [requested]
     branches: [integrate/feature-batch]
   workflow_dispatch:
     inputs:
@@ -60,11 +60,20 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - name: Keep compiler cache outside candidate source
+        id: compiler-cache
         run: |
-          printf 'CCACHE_DIR=%s/dunecity-qualification-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
           if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            CACHE="$HOME/.cache/dunecity-qualification/ccache"
+            mkdir -p "$CACHE"
+            printf 'CCACHE_DIR=%s\n' "$CACHE" >> "$GITHUB_ENV"
+            if [ -f "$CACHE/.persistent-ready" ]; then
+              echo 'warm=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'warm=false' >> "$GITHUB_OUTPUT"
+            fi
             echo "QUALIFICATION_VCPKG_CACHE=$HOME/.cache/dunecity-qualification/vcpkg/archives" >> "$GITHUB_ENV"
           else
+            printf 'CCACHE_DIR=%s/dunecity-qualification-ccache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
             echo "QUALIFICATION_VCPKG_CACHE=$HOME/.cache/vcpkg/archives" >> "$GITHUB_ENV"
           fi
       - uses: actions/checkout@v7
@@ -80,10 +89,20 @@ jobs:
         id: macos-dependencies
         run: echo "key=$(python3 scripts/vcpkg-dependency-key.py)" >> "$GITHUB_OUTPUT"
       - name: Restore compiled Mac objects
+        if: runner.environment != 'self-hosted' || steps.compiler-cache.outputs.warm != 'true'
         uses: hendrikmuhs/ccache-action@v1
         with:
           key: ${{ runner.environment == 'self-hosted' && 'qualification-mini' || 'macos' }}-arm64-deps-v1-${{ steps.macos-dependencies.outputs.key }}
           restore-keys: ${{ runner.environment == 'self-hosted' && 'qualification-mini' || 'macos' }}-arm64
+          max-size: 2G
+          save: ${{ runner.environment != 'self-hosted' }}
+      - name: Keep the persistent Mini compiler cache ready
+        if: runner.environment == 'self-hosted'
+        run: |
+          command -v ccache >/dev/null
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          touch "$CCACHE_DIR/.persistent-ready"
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:

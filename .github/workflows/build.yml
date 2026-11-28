@@ -652,6 +652,8 @@ jobs:
     env:
       PACKAGE_BUILD: ${{ needs.select-inputs.outputs.package == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/feature-batch') }}
       DUNECITY_CANDIDATE_SOURCE: ${{ needs.select-inputs.outputs.sha }}
+      # Only the initial hosted integration producer defers DMG work; tags and reuse never do.
+      DUNECITY_MAC_DEFER_DMG: ${{ github.event_name == 'push' && github.ref == 'refs/heads/integrate/feature-batch' && needs.select-inputs.outputs.macos_run == '' && 'true' || 'false' }}
       MACOS_SKIN_PROBE: ${{ inputs.macos_skin_probe || false }}
       HOMEBREW_NO_AUTO_UPDATE: '1'
       TEST_TIER: ${{ needs.select-inputs.outputs.tier }}
@@ -677,21 +679,11 @@ jobs:
           name: DuneCity-macOS-DMG
           path: build
           digest-mismatch: error
-      - name: Require the complete reused package
+      - name: Validate and complete the reused Mac package
         if: needs.select-inputs.outputs.macos_run != ''
         env:
           SOURCE_SHA: ${{ needs.select-inputs.outputs.sha }}
-        run: |
-          test -s build/DuneCity-*-macOS.zip
-          test -s build/DuneCity-*-macOS.dmg
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          metadata = json.loads(Path('build/build-inputs-macos-arm64.json').read_text())
-          assert metadata['sourceCommit'] == os.environ['SOURCE_SHA']
-          assert metadata['releaseBuild'] == 'OFF'
-          assert metadata['configuration']['DUNECITY_RELEASE_BUILD:BOOL'] == 'OFF'
-          PY
+        run: python3 scripts/package-staging-macos.py --directory build --source-sha "$SOURCE_SHA"
       - name: Require source-bound production admission before using the Mini
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
@@ -717,6 +709,7 @@ jobs:
         with:
           key: macos-arm64-deps-v1-${{ steps.macos-dependencies.outputs.key }}
           restore-keys: macos-arm64
+          max-size: 2G
       - name: Setup vcpkg
         if: needs.select-inputs.outputs.macos_run == ''
         uses: lukka/run-vcpkg@v11
@@ -783,7 +776,8 @@ jobs:
       - name: Record Mac package inputs
         if: always() && env.PACKAGE_BUILD == 'true' && needs.select-inputs.outputs.macos_run == '' && hashFiles('build/CMakeCache.txt') != ''
         run: python3 scripts/release-automation.py record-build --platform macos-arm64 --build-root build --output build/build-inputs-macos-arm64.json
-      - name: Upload complete Mac package set
+      # Retain the collection API name for frozen consumers, even when its DMG is deferred.
+      - name: Upload Mac package inputs
         if: success() && env.PACKAGE_BUILD == 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -794,13 +788,14 @@ jobs:
             build/*-macOS.zip
             build/macos-signing.json
             build/build-inputs-macos-arm64.json
+            build/macos-dmg-deferred.json
           if-no-files-found: error
           retention-days: 30
       - name: Explain early integration artifact qualification
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/integrate/feature-batch'
         run: |
-          echo '### Early Mac staging package' >> "$GITHUB_STEP_SUMMARY"
-          echo 'DuneCity-macOS-DMG is built and Mac integration-checked for this SHA. Other CI jobs may still be running or fail. Only a successful complete CI run qualifies this SHA; immutable staging publication remains gated on all required jobs.' >> "$GITHUB_STEP_SUMMARY"
+          echo '### Early Mac staging inputs' >> "$GITHUB_STEP_SUMMARY"
+          echo 'DuneCity-macOS-DMG retains the exact app ZIP and producer-bound static SDL pointer evidence for this SHA; DMG creation and verification are deferred to staging reuse. Other CI jobs may still fail. Public staging still requires every CI job green and complete exact-SHA AWS qualification.' >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve unqualified Mac packages after a later GUI failure
         if: failure() && needs.select-inputs.outputs.package == 'true'
         uses: actions/upload-artifact@v7
@@ -811,6 +806,7 @@ jobs:
             build/*-macOS.zip
             build/macos-signing.json
             build/build-inputs-macos-arm64.json
+            build/macos-dmg-deferred.json
           if-no-files-found: warn
           retention-days: 30
 

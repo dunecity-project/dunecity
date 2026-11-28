@@ -43,6 +43,7 @@ else
         bash "$0" --leased-headless-cache "$@"
 fi
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ENV_HINTS=1
+export CCACHE_BASEDIR="$GITHUB_WORKSPACE"
 STABLE="${DUNECITY_RELEASE_BUILD:-OFF}"
 MODE="${1:-build}"
 if [ "$MODE" = release-headless-qualification ] && {
@@ -158,7 +159,8 @@ if [ "$MODE" = release-headless-qualification ]; then
     build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
     exit 0
 fi
-ctest --test-dir build --output-on-failure --no-tests=error -L integration -LE gui
+run_phase integration ctest --test-dir build --output-on-failure --no-tests=error \
+    --parallel "$CMAKE_BUILD_PARALLEL_LEVEL" -L integration -LE gui
 if [ "$STABLE" = ON ]; then
     command -v php >/dev/null || [ -x /opt/homebrew/bin/php ] || {
         echo '::error::Stable Mini lane requires PHP for the headless network tests'; exit 1; }
@@ -182,7 +184,15 @@ if [ "$STABLE" = ON ] || [ "${MACOS_SKIN_PROBE:-false}" = true ]; then
 fi
 if [ "${PACKAGE_BUILD:-false}" != true ]; then exit 0; fi
 VERSION=$(sed -n 's/^project(DuneCity VERSION \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt)
-rm -f build/*-macOS.dmg build/*-macOS.zip build/macos-signing.json
+rm -f build/*-macOS.dmg build/*-macOS.zip build/macos-signing.json \
+    build/macos-dmg-deferred.json build/macos-dmg-deferred.json.tmp
+DEFER_DMG="${DUNECITY_MAC_DEFER_DMG:-false}"
+if [ "$DEFER_DMG" = true ] && {
+    [ "$STABLE" != OFF ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ];
+}; then
+    echo '::error::DMG deferral requires dev identity on an unsigned hosted runner'
+    exit 2
+fi
 cmake --install build --prefix "$RUNNER_TEMP/dunecity-mac-install" --config Release
 if [ "$STABLE" = ON ]; then
     MAC_SIGNING_IDENTITY='Developer ID Application: Stefan van der Wel (34X7AYJZ93)'
@@ -213,7 +223,7 @@ pathlib.Path('build/macos-signing.json').write_text(json.dumps({
 PY
 else
     # Hosted staging is unsigned/ad-hoc; it never opens the Mini's signing keychain.
-    (cd build && cpack -G DragNDrop -C Release)
+    if [ "$DEFER_DMG" != true ]; then (cd build && cpack -G DragNDrop -C Release); fi
     ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/dunecity-mac-install/dunecity.app" \
         "build/DuneCity-${VERSION}-macOS.zip"
 fi
@@ -274,4 +284,28 @@ PY
         exit "$STATUS"
     fi
 fi
-bash scripts/verify-macos-dmg.sh build/DuneCity-*-macOS.dmg
+if [ "$DEFER_DMG" = true ]; then
+    # Publish only after the real ZIP and producer-bound pointer export succeeded.
+    # A partial write or failed retry must never authorize downstream DMG reuse.
+    python3 - "$VERSION" <<'PY'
+import hashlib, json, pathlib, re, subprocess, sys
+version = sys.argv[1]
+source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version) or not re.fullmatch(r'[0-9a-f]{40}', source):
+    raise SystemExit('Deferred DMG requires a numeric version and full source commit')
+archive = pathlib.Path('build') / f'DuneCity-{version}-macOS.zip'
+if not archive.is_file() or archive.stat().st_size == 0:
+    raise SystemExit('Deferred DMG requires the real packaged app ZIP')
+digest = hashlib.sha256()
+with archive.open('rb') as stream:
+    for block in iter(lambda: stream.read(1024 * 1024), b''):
+        digest.update(block)
+marker = pathlib.Path('build/macos-dmg-deferred.json')
+pending = marker.with_suffix('.json.tmp')
+pending.write_text(json.dumps(dict(schema=1, sourceCommit=source, version=version,
+                                  zip=archive.name, sha256=digest.hexdigest()), indent=2) + '\n')
+pending.replace(marker)
+PY
+else
+    bash scripts/verify-macos-dmg.sh build/DuneCity-*-macOS.dmg
+fi
