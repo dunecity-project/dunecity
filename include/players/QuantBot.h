@@ -2208,6 +2208,7 @@ private:
         bool economyFirstStoodDown = false, economyFirstFootprintLogged = false, economyFirstRichLogged = false;
         int economyFirstHoldPasses = 0, economyFirstThreatPasses = 0;
         int economyFirstYardOrders = 0, economyFirstMcvs = 0;
+        bool economyFirstActiveNow = false;   ///< the last build pass had EconomyFirst acting (MCVs stay home)
         std::array<int, 3> economyFirstZoneOrders{};   ///< R, C, I ordered by the yard while the switch acted
         Uint32 economyFirstRefusedMinute = 0;   ///< 1 + the minute of the last refused MCV logged
         int economyFirstStartZones = -1;   ///< zones at the first pass (the map's prebuilt city)

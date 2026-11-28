@@ -884,7 +884,10 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         // formation, so without this it could be sent between two equally good
         // formations, or back home, for ever.
         const bool onTrip=target.isValid()&&mcvSiteUsable(pMCV,target)&&!onOwnRockFormation(target);
-        const bool colonise=onTrip||colonyMissionDue(pMCV);
+        // EconomyFirst (default off): its yards go up at home, as Stefan's did (4 within 2.2 minutes); a colony
+        // trip is only the fallback when home has no footprint. On his map about 24 of 81 MCVs were lost
+        // before deploying.
+        const bool colonise=onTrip||(!cityLessons.economyFirstActiveNow && colonyMissionDue(pMCV));
         Coord site=onTrip ? target : colonise ? findRockExpansionSite(pMCV) : Coord::Invalid();
         choice=site.isValid() ? "colony" : "local";
         if(!site.isValid()) {
@@ -942,8 +945,10 @@ void QuantBot::manageMcv(const MCV* pMCV) {
             const int gap=blockDistance(location, structure->getClosestPoint(location)).lround();
             if (enemyGap < 0 || gap < enemyGap) enemyGap=gap;
         }
-        SDL_Log("MCV_DEPLOYED: house=%d x=%d y=%d enemy_tiles=%d yards=%d cycle=%u", getHouse()->getHouseID(),
-                location.x, location.y, enemyGap, getHouse()->getNumItems(Structure_ConstructionYard), getGameCycleCount());
+        SDL_Log("MCV_DEPLOYED: house=%d x=%d y=%d enemy_tiles=%d yards=%d choice=%s home=%d cycle=%u",
+                getHouse()->getHouseID(), location.x, location.y, enemyGap,
+                getHouse()->getNumItems(Structure_ConstructionYard), choice, int(onOwnRockFormation(location)),
+                getGameCycleCount());
     }
     if(deployed) {
         mcvExpansionSites.erase(id);

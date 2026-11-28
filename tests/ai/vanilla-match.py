@@ -182,7 +182,7 @@ LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 
                  'yards', 'mcvs', 'yard_target', 'was', 'capacity', 'refinery_bays', 'yard_refineries', 'zones_r',
                  'zones_c', 'zones_i', 'nuclear', 'windtraps', 'police', 'rocket_turrets', 'heavy_factories',
                  'population', 'tax_per_min', 'power', 'unit_built', 'structure_built', 'hold', 'threat', 'producer',
-                 'item', 'rule', 'hold_passes', 'threat_passes', 'zones', 'spice', 'houses', 'ordered', 'half_his', 'yards_lost', 'mcvs_lost', 'cycle')
+                 'item', 'rule', 'hold_passes', 'threat_passes', 'zones', 'spice', 'houses', 'ordered', 'half_his', 'yards_lost', 'mcvs_lost', 'choice', 'home', 'cycle')
 LESSON_ROW_FIELDS = KEY + ('kind', 'label') + LESSON_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on

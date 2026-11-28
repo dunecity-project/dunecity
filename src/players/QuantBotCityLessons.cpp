@@ -136,6 +136,7 @@ void QuantBot::planEconomyFirst(BuildPass& pass) {
                         pass.economyFirstHold, int(threat), getHouse()->getCredits(), population, getGameCycleCount());
         }
     }
+    lessons.economyFirstActiveNow = pass.economyFirstActive;
     if (pass.citySimEnabled && economyLogEnabled()) logEconomyState(pass);
 }
 
