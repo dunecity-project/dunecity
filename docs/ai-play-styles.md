@@ -482,6 +482,11 @@ has two factors:
 - Telemetry: the `strategy` decision plus a `QUANTBOT_STRATEGY:` log line. Harness `houses.csv` has a
   `strategy` column.
 
+The strategy and force-concentration probes construct old QuantBot blocks by removing every
+later versioned suffix: Carryall state (9894/9896) and EconomyFirst state (9906). They retain
+the old reader's exact end-of-stream checks and current-format byte-identical round trips;
+the fixture must not relabel current suffix bytes as an older save format.
+
 **Where strategies apply.** Custom Hard/Brutal only (`QuantBot::playsStrategy()`; 1.0.848's gate
 rename gave Custom Medium the strategy too, which flattened the difficulty ladder - see
 `docs/ai-scenario-matrix.md`, "Difficulty separation"). Every other bot plays Learned/Base.

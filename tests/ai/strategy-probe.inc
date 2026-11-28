@@ -115,12 +115,13 @@ inline std::string botBytes(const QuantBot& bot) {
     return std::string(out.getData(), out.getDataLength());
 }
 
-/// The Carryall manoeuvre state a QuantBot block ends with since 9894 (extended in 9896). Its
-/// length varies with the lifts under way, so every offset from the end of a block starts here.
-inline size_t airliftBytes(const QuantBot& bot) {
+/// Versioned state after the 9893 prefix: Carryall manoeuvres (9894/9896), then the
+/// EconomyFirst opening counters (9906). Both tails have variable-length records.
+inline size_t post9893Bytes(const QuantBot& bot) {
     OMemoryStream out;
     out.open();
     bot.saveAirlift(out);
+    bot.saveEconomyFirstState(out);
     return out.getDataLength();
 }
 
@@ -356,17 +357,17 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
         // strategy. Earlier blocks end with the 9865 choice and 9868 ten-slot mix.
         // SAVEGAMEVERSION 9885 appends the repair-pressure yard and start cycle after those.
         // SAVEGAMEVERSION 9894 appends the Carryall manoeuvre state after those (9896 extends it).
-        const size_t airliftTail = airliftBytes(*bot);
+        const size_t post9893Tail = post9893Bytes(*bot);
         constexpr size_t kFamilyCountBytes = sizeof(Uint32) * (Unit_TameSandworm - Structure_LastID);
         constexpr size_t kRepairPressureBytes = 2 * sizeof(Uint32);
         constexpr size_t kPriorBytes = 2 * UnitMixPolicy::kSlots, kStrategyBytes = 3 + kPriorBytes;
-        require(bytes.size() > airliftTail + kRepairPressureBytes + kFamilyCountBytes + kStrategyBytes,
+        require(bytes.size() > post9893Tail + kRepairPressureBytes + kFamilyCountBytes + kStrategyBytes,
                 "The QuantBot block lacks its strategy and versioned tails");
-        const size_t familyEnd = bytes.size() - airliftTail - kRepairPressureBytes;
-        // A 9893 block: the same bytes without the Carryall tail. It loads to the last byte with no
-        // lift under way and re-saves as a current block with an empty tail.
+        const size_t familyEnd = bytes.size() - post9893Tail - kRepairPressureBytes;
+        // A 9893 block predates both versioned tails. It loads to the last byte with no
+        // lift under way and re-saves as a current block with default later state.
         {
-            const std::string v9893 = bytes.substr(0, bytes.size() - airliftTail);
+            const std::string v9893 = bytes.substr(0, bytes.size() - post9893Tail);
             currentGame->loadedSavegameVersion = SAVEGAMEVERSION_AIRLIFT - 1;
             IMemoryStream in(v9893.data(), v9893.size());
             QuantBot restored(in, owner);
@@ -376,7 +377,7 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
             require(restored.strategyPicked && restored.strategy == bot->strategy && restored.strategyPrior == bot->strategyPrior,
                     "A 9893 block lost its strategy or its starting mix");
             currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
-            require(botBytes(restored).size() - airliftBytes(restored) == v9893.size(),
+            require(botBytes(restored).size() - post9893Bytes(restored) == v9893.size(),
                     "A loaded 9893 bot does not re-save as a current block");
         }
         const std::string before9878 = bytes.substr(0, familyEnd - kFamilyCountBytes);
@@ -414,7 +415,7 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
             if (int(specials[0]) + int(specials[1]) + int(specials[2]) <= 1)
                 require(restored.strategyPrior == bot->strategyPrior, "A one-special house's 9866 mix changed on load");
             currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
-            require(botBytes(restored).size() - airliftBytes(restored) == bytes.size() - airliftTail, "A loaded 9866 bot does not re-save as a current block");
+            require(botBytes(restored).size() - post9893Bytes(restored) == bytes.size() - post9893Tail, "A loaded 9866 bot does not re-save as a current block");
         }
         // A 9865 block: the same bytes without the starting mix. It keeps the strategy; none of the
         // 9865 mixes needs a resolved mix (a Tuned/Bounded pick here plays the configured opening).
@@ -427,7 +428,7 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
             require(restored.strategyPicked && restored.strategy == bot->strategy && restored.strategyPrior == UnitMixPolicy::Mix{},
                     "A 9865 block did not load with its strategy and no starting mix");
             currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
-            require(botBytes(restored).size() - airliftBytes(restored) == bytes.size() - airliftTail, "A loaded 9865 bot does not re-save as a current block");
+            require(botBytes(restored).size() - post9893Bytes(restored) == bytes.size() - post9893Tail, "A loaded 9865 bot does not re-save as a current block");
         }
         // A 9864 block: no strategy at all. It loads unpicked and picks the same strategy and the
         // same starting mix (the Bounded draw is a pure function of seed and house).
@@ -443,7 +444,7 @@ inline void checkBotBlocks(const Scenario& scenario, const Uint32 seed, const st
             require(restored.strategyPicked && restored.strategy == host.choices.at(house) && restored.strategyPrior == bot->strategyPrior,
                     "A 9864 block picked a different strategy or starting mix than the game did");
             currentGame->loadedSavegameVersion = SAVEGAMEVERSION;
-            require(botBytes(restored).size() - airliftBytes(restored) == bytes.size() - airliftTail, "A picked 9864 bot does not re-save as a current block");
+            require(botBytes(restored).size() - post9893Bytes(restored) == bytes.size() - post9893Tail, "A picked 9864 bot does not re-save as a current block");
         }
         currentGame->loadedSavegameVersion = savedVersion;
         ++blocks;
