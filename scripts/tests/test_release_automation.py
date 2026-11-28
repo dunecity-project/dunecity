@@ -10,10 +10,12 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives import serialization
@@ -50,6 +52,73 @@ def browser_fixture(root, sha=SHA, channel='staging'):
     return build
 
 
+def qualification_fixture(destination, aws=True):
+    """Real receipt/JUnit validation with only GitHub and build transport replaced."""
+    games = ['quantbot_all_against_atreides', 'quantbot_scenario_matrix',
+             'quantbot_ffa_army_deploys', 'dune2r_ai_all_against_atreides']
+    names = games + ['mini_quick_check']
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        automation.write_json(root / automation.HEADLESS_PLAN, {'tests': [
+            dict(name=name, properties=[dict(name='LABELS', value=['headless', 'nightly'])]
+                 + ([dict(name='PROCESSORS', value=2)] if name in games else [])) for name in names]})
+        tree = automation.ET.Element('testsuite')
+        for name in names:
+            case = automation.ET.SubElement(tree, 'testcase', name=name, status='run')
+            if aws and name in games:
+                properties = automation.ET.SubElement(case, 'properties')
+                for key, value in (('queue_job', 'aws-qualification-fixture'),
+                                   ('source_commit', SHA), ('attempts', 'aws:Passed')):
+                    automation.ET.SubElement(properties, 'property', name=key, value=value)
+        (root / automation.HEADLESS_RESULTS).write_text(automation.ET.tostring(tree, encoding='unicode'))
+        (root / 'CMakeCache.txt').write_text('DUNECITY_RELEASE_BUILD:BOOL=OFF\nDUNECITY_BUILD_TESTS:BOOL=ON\n')
+        with patch.dict(os.environ, DUNECITY_RELEASE_BUILD='OFF', PACKAGE_BUILD='false',
+                        GITHUB_RUN_ID='71', GITHUB_RUN_ATTEMPT='1', RUNNER_NAME='mini-test',
+                        RUNNER_ENVIRONMENT='self-hosted', RUNNER_ARCH='ARM64',
+                        ImageOS='macos15', ImageVersion='fixture-image'), \
+             patch.object(automation, 'exception_policy', return_value={}), \
+             patch.object(automation, 'run', side_effect=lambda *command: SHA if command[0] == 'git' else 'cmake fixture'):
+            automation.record_build(argparse.Namespace(platform='macos-arm64-headless-qualification',
+                build_root=root, output=root / automation.HEADLESS_RECEIPT))
+        destination.mkdir(parents=True, exist_ok=True)
+        for name in automation.QUALIFY_FILES:
+            shutil.copyfile(root / name, destination / name)
+    receipt = json.loads((destination / automation.HEADLESS_RECEIPT).read_text())
+    producer = dict(id=71, run_attempt=1, workflow_id=7, path=automation.QUALIFY_WORKFLOW,
+                    status='completed', conclusion='success', event='workflow_run',
+                    head_branch='main', head_sha=OTHER, head_repository={'full_name': automation.repository()},
+                    display_title='Qualify ' + SHA)
+    raw = io.BytesIO()
+    with zipfile.ZipFile(raw, 'w') as archive:
+        for name in automation.QUALIFY_FILES:
+            archive.writestr(name, (destination / name).read_bytes())
+    archive_bytes = raw.getvalue()
+    responses = {
+        'actions/runs/71/attempts/1': producer,
+        'actions/runs/71/attempts/1/jobs?per_page=100': {'jobs': [
+            dict(name=name, conclusion='success', runner_name='mini-test',
+                 labels=['self-hosted', 'macOS', 'ARM64', 'dunecity-builder'])
+            for name in ('select-candidate', 'qualify')]},
+        'actions/workflows/qualify-release.yml': {'id': 7},
+        'actions/runs/71/artifacts?per_page=100': {'total_count': 1, 'artifacts': [
+            dict(id=73, name=automation.QUALIFY_ARTIFACT + '-1', expired=False,
+                 size_in_bytes=len(archive_bytes), digest='sha256:' + hashlib.sha256(archive_bytes).hexdigest())]},
+        'actions/workflows/qualify-release.yml/runs?status=success&per_page=100&page=1': {'workflow_runs': [producer]},
+        'actions/workflows/qualify-release.yml/runs?per_page=100': {'workflow_runs': [producer]},
+    }
+    prefix = f'repos/{automation.repository()}/'
+    def read(*command):
+        if command[:2] != ('gh', 'api'):
+            raise AssertionError(command)
+        suffix = command[2].removeprefix(prefix)
+        if suffix == 'actions/artifacts/73/zip':
+            return archive_bytes
+        if suffix.startswith('contents/' + automation.QUALIFY_WORKFLOW + '?ref='):
+            return b'{"sha":"same-qualified-workflow-blob"}'
+        return json.dumps(responses[suffix]).encode()
+    return receipt, read
+
+
 class StagingSelectionTests(unittest.TestCase):
     def test_snapshot_identity_is_immutable_and_requires_full_sha(self):
         self.assertEqual(automation.snapshot_tag(SHA), automation.snapshot_tag(SHA))
@@ -60,25 +129,71 @@ class StagingSelectionTests(unittest.TestCase):
                 automation.snapshot_tag(value)
 
     def test_existing_snapshot_is_not_rebuilt_even_on_manual_request(self):
-        now = dt.datetime(2026, 11, 12, tzinfo=dt.timezone.utc)
-        selected, reason = automation.package_decision(SHA, True, {'draft': False}, [], now, manual=True)
+        selected, reason = automation.package_decision(SHA, True, {'draft': False})
         self.assertFalse(selected)
         self.assertIn('no-new-inputs', reason)
 
     def test_current_red_head_never_falls_back_to_previous_green(self):
-        now = dt.datetime(2026, 11, 12, tzinfo=dt.timezone.utc)
-        selected, reason = automation.package_decision(SHA, False, None, [], now)
+        selected, reason = automation.package_decision(SHA, False, None)
         self.assertFalse(selected)
         self.assertIn(SHA, reason)
 
-    def test_debounce_boundary_and_explicit_on_demand(self):
-        now = dt.datetime(2026, 11, 12, 4, tzinfo=dt.timezone.utc)
-        run = dict(id=7, display_title='Staging packages ' + OTHER, created_at='2026-11-12T02:00:01Z')
-        self.assertFalse(automation.package_decision(SHA, True, None, [run], now)[0])
-        self.assertTrue(automation.package_decision(SHA, True, None, [run], now, manual=True)[0])
-        self.assertTrue(automation.package_decision(SHA, True, None, [run], now, current_run=7)[0])
-        run['created_at'] = '2026-11-12T02:00:00Z'
-        self.assertTrue(automation.package_decision(SHA, True, None, [run], now)[0])
+    def test_distinct_green_inputs_are_immediately_eligible(self):
+        self.assertTrue(automation.package_decision(SHA, True, None)[0])
+        self.assertTrue(automation.package_decision(OTHER, True, None)[0])
+
+    def test_recent_publication_does_not_delay_manual_or_automatic_qualified_inputs(self):
+        recent = dict(id=9, display_title='Staging packages ' + OTHER,
+                      created_at=dt.datetime.now(dt.timezone.utc).isoformat())
+        source = dict(id=7, head_sha=SHA, head_branch=automation.STAGING,
+                      event='push', conclusion='success', display_title='CI integration',
+                      workflow_id=1)
+        jobs = [dict(name=name, conclusion='success') for name in automation.CI_JOBS]
+        for manual, receipt, existing, green, expected in (
+                (True, '', None, True, True), (True, '7', None, True, True),
+                (False, '', None, True, True), (True, '7', {'draft': False}, True, False),
+                (True, '7', {'draft': True}, True, False), (True, '7', None, False, False)):
+            with self.subTest(manual=manual, receipt=receipt, existing=existing, green=green), \
+                 tempfile.TemporaryDirectory() as directory:
+                event = Path(directory) / 'event.json'
+                automation.write_json(event, {'inputs': {'staging_sha': SHA, 'integration_run_id': receipt}}
+                                      if manual else {'schedule': '17 */2 * * *'})
+                selected = Path(directory) / 'selection.json'
+                def read(path):
+                    if path.endswith('/jobs?per_page=100'):
+                        return {'jobs': jobs if green else jobs[:-1]}
+                    if path.endswith('/actions/runs/7'):
+                        return source
+                    if path.endswith('/actions/workflows/build.yml'):
+                        return {'id': 1}
+                    return {'object': {'sha': SHA}}
+                with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event),
+                                GITHUB_EVENT_NAME='workflow_dispatch' if manual else 'schedule',
+                                GITHUB_REF='refs/heads/main', GITHUB_SHA=OTHER, GITHUB_RUN_ID='8',
+                                GITHUB_OUTPUT='', GITHUB_STEP_SUMMARY=''), \
+                     patch.object(automation, 'api', side_effect=read), \
+                     patch.object(automation, 'workflow_runs', return_value=[source, recent]), \
+                     patch.object(automation, 'optional_release', return_value=existing), \
+                     patch.object(automation, 'require_unretired_staging'), \
+                     patch.object(automation, 'reusable_macos_run', return_value='7'):
+                    automation.plan(argparse.Namespace(output=selected))
+                result = json.loads(selected.read_text())
+                self.assertEqual(result['package'], expected)
+                self.assertEqual(result['macos_run'], '7' if expected else '')
+
+    def test_mac_reuse_requires_green_source_and_one_unexpired_artifact(self):
+        for artifacts, expected in (
+                ([], ''), ([dict(name='DuneCity-macOS-DMG', expired=True)], ''),
+                ([dict(name='DuneCity-macOS-DMG', expired=False)], '7'),
+                ([dict(name='DuneCity-macOS-DMG', expired=False)] * 2, '')):
+            with self.subTest(artifacts=artifacts), \
+                 patch.object(automation, 'qualification_for', return_value={'id': 7}) as qualify, \
+                 patch.object(automation, 'api', return_value={'artifacts': artifacts}):
+                self.assertEqual(automation.reusable_macos_run(SHA), expected)
+                qualify.assert_called_once_with(SHA)
+        with patch.object(automation, 'qualification_for', side_effect=ValueError('not green')), \
+             self.assertRaisesRegex(ValueError, 'not green'):
+            automation.reusable_macos_run(SHA)
 
     def test_receipt_requires_every_platform_and_test_job_at_the_exact_source(self):
         source = dict(head_sha=SHA, head_branch=automation.STAGING, event='push')
@@ -106,8 +221,11 @@ class StagingSelectionTests(unittest.TestCase):
              patch.object(automation, 'api', return_value={'object': {'sha': SHA}}), \
              patch.object(automation, 'workflow_runs', return_value=runs), \
              patch.object(automation.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'HTTP 404')), \
+             patch.object(automation, 'reusable_macos_run', return_value='') as reuse, \
              patch.object(automation, 'optional_release', return_value=existing):
             automation.plan(argparse.Namespace(output=selected))
+            if nightly:
+                reuse.assert_not_called()
         return json.loads(selected.read_text())
 
     def test_schedule_explicitly_selects_staging_not_default_branch_source(self):
@@ -124,6 +242,13 @@ class StagingSelectionTests(unittest.TestCase):
             self.assertEqual(selected['sha'], SHA)
             self.assertTrue(selected['run'])
             self.assertFalse(selected['package'])
+            self.assertEqual(selected['tier'], 'nightly')
+
+    def test_daily_nightly_keeps_its_mac_coverage_even_when_packaging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = self.scheduled_plan(directory, nightly=True)
+            self.assertTrue(selected['package'])
+            self.assertEqual(selected['macos_run'], '')
             self.assertEqual(selected['tier'], 'nightly')
 
     def nightly_probe_plan(self, directory, **inputs):
@@ -269,6 +394,7 @@ class FrozenArtifactTests(unittest.TestCase):
                 automation.write_json(root / f'build-inputs-{platform}.json', dict(
                     sourceCommit=SHA if platform != 'macos-arm64' else OTHER,
                     releaseBuild='OFF', configuration={'DUNECITY_RELEASE_BUILD:BOOL': 'OFF'}))
+            qualification_fixture(root)
             with self.assertRaisesRegex(ValueError, 'identity mismatch: macos-arm64'):
                 automation.make_manifest(args)
 
@@ -342,6 +468,7 @@ class FrozenArtifactTests(unittest.TestCase):
                 automation.write_json(dist / f'build-inputs-{platform}.json', dict(
                     sourceCommit=SHA, releaseBuild='OFF',
                     configuration={'DUNECITY_RELEASE_BUILD:BOOL': 'OFF'}))
+            receipt, qualification_read = qualification_fixture(dist)
             artifact = dict(id=71, name='DuneCity-Emscripten', digest='sha256:' + 'c' * 64,
                             size_in_bytes=123, expired=False)
             def response(path):
@@ -353,13 +480,18 @@ class FrozenArtifactTests(unittest.TestCase):
             with patch.dict(os.environ, GITHUB_RUN_ID='41'), \
                  patch.object(automation, 'api', side_effect=response), \
                  patch.object(automation, 'qualification_for', return_value={
-                     'id': 7, 'run_attempt': 1, 'head_sha': SHA}):
+                     'id': 7, 'run_attempt': 1, 'head_sha': SHA}), \
+                 patch.object(automation, 'qualification_read', side_effect=qualification_read), \
+                 patch.object(automation, 'exception_policy', return_value={}):
                 automation.make_manifest(args)
             manifest = json.loads((dist / automation.MANIFEST).read_text())
             self.assertEqual((manifest['sourceCommit'], manifest['releaseBuild'], manifest['runId']), (SHA, 'OFF', 41))
             self.assertEqual(manifest['artifacts'][0]['id'], 71)
             self.assertEqual(manifest['qualificationSourceCommit'], SHA)
             self.assertEqual(manifest['qualificationRunId'], 7)
+            self.assertEqual(manifest['headlessQualificationRunId'], int(receipt['qualifyingRunId']))
+            self.assertEqual(manifest['headlessQualificationRunAttempt'], 1)
+            self.assertTrue(set(automation.QUALIFY_FILES).issubset(manifest['sha256']))
             self.assertEqual(manifest['producerSourceCommit'], OTHER)
             automation.verify_manifest(dist, manifest, args.tag, SHA)
 
@@ -491,12 +623,21 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
                   ('windows-x64', 'macos-arm64', 'linux-x86_64', 'emscripten')}
         for name in names:
             (self.root / name).write_bytes(('frozen package ' + name).encode())
+        self.headless, qualification_read = qualification_fixture(self.root)
+        names |= set(automation.QUALIFY_FILES)
+        qualifier_transport = patch.object(automation, 'qualification_read', side_effect=qualification_read)
+        qualifier_transport.start()
+        self.addCleanup(qualifier_transport.stop)
+        policy = patch.object(automation, 'exception_policy', return_value={})
+        policy.start()
+        self.addCleanup(policy.stop)
         self.manifest = dict(schema=1, tag=self.tag, sourceCommit=SHA, version=VERSION,
             repository=automation.repository(), releaseBuild='OFF', recipe=automation.RECIPE,
             inputIdentity=hashlib.sha256((SHA + '\n' + automation.RECIPE).encode()).hexdigest(),
             runId=41, runAttempt=1, producerSourceCommit=SHA, producerEvent='workflow_dispatch',
             producerHeadBranch=automation.STAGING, producerWorkflowPath=automation.BUILD_WORKFLOW,
             qualificationRunId=11, qualificationRunAttempt=1, qualificationSourceCommit=SHA,
+            headlessQualificationRunId=71, headlessQualificationRunAttempt=1,
             sha256={name: automation.digest(self.root / name) for name in sorted(names)})
         automation.write_json(self.root / automation.MANIFEST, self.manifest)
         (self.root / 'SHA256SUMS').write_text(''.join(
@@ -505,7 +646,7 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
         self.release = dict(id=443652159, tag_name=self.tag, target_commitish=SHA,
                             draft=True, prerelease=True,
                             assets=[self.asset(path) for path in sorted(self.root.iterdir())])
-        self.assertEqual(len(self.release['assets']), 16)
+        self.assertEqual(len(self.release['assets']), 19)
         self.template = copy.deepcopy(self.release)
         self.pointer = dict(id=442990483, tag_name='latest-dev', target_commitish=OTHER,
                             draft=False, prerelease=True, body='Historical Linux staging from ' + OTHER,
@@ -524,12 +665,13 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
         self.producer = dict(self.qualification, id=41, conclusion='failure', event='workflow_dispatch',
                              display_title='Staging packages ' + SHA)
         self.retry = dict(self.producer, run_attempt=2, conclusion='success')
-        self.input_jobs = [dict(name=name, conclusion='success') for name in sorted(automation.CI_JOBS)]
+        source_jobs = [dict(name=name, conclusion='success') for name in sorted(automation.CI_JOBS)]
+        self.input_jobs = source_jobs + [dict(name='staging-nightly', conclusion='success')]
         self.producer_jobs = self.input_jobs + [dict(name='dev-release', conclusion='failure')]
         self.retry_jobs = [dict(name='dev-release', conclusion='success')]
         self.responses = {
             'actions/runs/11/attempts/1': self.qualification,
-            'actions/runs/11/attempts/1/jobs?per_page=100': {'jobs': copy.deepcopy(self.input_jobs)},
+            'actions/runs/11/attempts/1/jobs?per_page=100': {'jobs': copy.deepcopy(source_jobs)},
             'actions/runs/41/attempts/1': self.producer,
             'actions/runs/41/attempts/1/jobs?per_page=100': {'jobs': self.producer_jobs},
             'actions/runs/41': self.retry,
@@ -1023,6 +1165,35 @@ class DraftPublicationRecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'publication retry'):
             self.qualified()
 
+    def test_publication_requires_frozen_aws_receipt_and_original_attempt(self):
+        automation.validate_staging_receipts(self.manifest)
+        for field in ('headlessQualificationRunId', 'headlessQualificationRunAttempt'):
+            changed = dict(self.manifest)
+            del changed[field]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'explicit source'):
+                automation.validate_staging_receipts(changed)
+        for name in automation.QUALIFY_FILES:
+            changed = copy.deepcopy(self.manifest)
+            changed['sha256'][name] = '0' * 64
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'frozen AWS receipt'):
+                automation.validate_staging_receipts(changed)
+
+    def test_mac_only_or_unplanned_aws_evidence_cannot_publish_staging(self):
+        for change in ('no-aws', 'unplanned-aws', 'wrong-source', 'accepted-failure', 'wrong-workflow'):
+            receipt = copy.deepcopy(self.headless)
+            if change == 'no-aws':
+                receipt['qualification'].pop('linux')
+            elif change == 'unplanned-aws':
+                receipt['qualification']['linux']['tests'].append('not_in_the_frozen_plan')
+            elif change == 'wrong-source':
+                receipt['qualification']['linux']['sourceCommit'] = OTHER
+            elif change == 'accepted-failure':
+                receipt['qualification']['status'] = 'accepted-known-failures'
+            else:
+                receipt['qualificationWorkflow'] = automation.BUILD_WORKFLOW
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'green exact-source AWS'):
+                automation.require_staging_qualification(receipt, SHA)
+
 
     def test_frozen_staging_producer_recovery_reruns_only_failed_jobs_not_platforms(self):
         self.responses['actions/runs/41'] = self.producer
@@ -1201,10 +1372,83 @@ class StagingRetentionTests(unittest.TestCase):
 
 
     def test_existing_draft_resumes_publication_instead_of_rebuilding_identical_inputs(self):
-        selected, reason = automation.package_decision(
-            SHA, True, {'draft': True}, [], dt.datetime(2026, 11, 12, tzinfo=dt.timezone.utc), manual=True)
+        selected, reason = automation.package_decision(SHA, True, {'draft': True})
         self.assertFalse(selected)
         self.assertIn('resume its producing workflow', reason)
+
+
+class StagingQualificationWaitTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.receipt, read = qualification_fixture(self.root / 'evidence')
+        transport = patch.object(automation, 'qualification_read', side_effect=read)
+        transport.start()
+        self.addCleanup(transport.stop)
+        policy = patch.object(automation, 'exception_policy', return_value={})
+        policy.start()
+        self.addCleanup(policy.stop)
+        self.args = argparse.Namespace(sha=SHA, directory=self.root / 'restored', timeout_seconds=60)
+
+    def test_ready_receipt_restores_without_another_build_test_or_watch(self):
+        with patch.object(automation.subprocess, 'run') as command:
+            automation.wait_qualification(self.args)
+        command.assert_not_called()
+        self.assertEqual({path.name for path in self.args.directory.iterdir()}, set(automation.QUALIFY_FILES))
+
+    def test_mac_only_receipt_cannot_authorize_public_staging(self):
+        _, read = qualification_fixture(self.root / 'mac-only', aws=False)
+        with patch.object(automation, 'qualification_read', side_effect=read), \
+             patch.object(automation.subprocess, 'run') as command, \
+             self.assertRaisesRegex(ValueError, 'green exact-source AWS'):
+            automation.wait_qualification(self.args)
+        command.assert_not_called()
+
+    def route(self, recent, failed=False):
+        original = automation.qualification_api
+        def response(path):
+            if 'runs?status=success' in path:
+                return {'workflow_runs': []}
+            if path.endswith('/runs?per_page=100'):
+                return {'workflow_runs': recent}
+            if failed and '/attempts/1/jobs?' in path:
+                return {'jobs': [dict(name='qualify', conclusion='failure')]}
+            return original(path)
+        return response
+
+    def test_running_qualifier_is_watched_then_frozen_evidence_is_authenticated(self):
+        producer = automation.qualification_api(f'repos/{automation.repository()}/actions/runs/71/attempts/1')
+        pending = dict(producer, status='in_progress', conclusion=None)
+        with patch.object(automation, 'qualification_api', side_effect=self.route([pending])), \
+             patch.object(automation.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as command, \
+             patch.object(automation.time, 'monotonic', side_effect=[0, 0]):
+            automation.wait_qualification(self.args)
+        command.assert_called_once()
+        self.assertEqual(command.call_args.args[0][:4], ['gh', 'run', 'watch', '71'])
+        self.assertEqual(command.call_args.kwargs['timeout'], 60)
+        for name in automation.QUALIFY_FILES:
+            self.assertEqual((self.args.directory / name).read_bytes(), (self.root / 'evidence' / name).read_bytes())
+
+    def test_failed_qualifier_blocks_without_workflow_or_test_retry(self):
+        producer = automation.qualification_api(f'repos/{automation.repository()}/actions/runs/71/attempts/1')
+        failed = dict(producer, conclusion='failure')
+        with patch.object(automation, 'qualification_api', side_effect=self.route([failed], failed=True)), \
+             patch.object(automation.subprocess, 'run') as command, \
+             self.assertRaisesRegex(ValueError, 'did not succeed'):
+            automation.wait_qualification(self.args)
+        command.assert_not_called()
+        self.assertFalse(self.args.directory.exists())
+
+    def test_missing_workflow_notification_is_bounded_and_never_authorizes_publication(self):
+        self.args.timeout_seconds = 1
+        with patch.object(automation, 'qualification_api', side_effect=self.route([])), \
+             patch.object(automation.time, 'monotonic', side_effect=[0, 0, 1]), \
+             patch.object(automation.time, 'sleep') as sleep, \
+             self.assertRaisesRegex(ValueError, 'No green AWS receipt observed'):
+            automation.wait_qualification(self.args)
+        sleep.assert_called_once_with(1)
+        self.assertFalse(self.args.directory.exists())
 
 
 class HostedHeadlessQualificationTests(unittest.TestCase):
@@ -1441,10 +1685,15 @@ class ReusableQualificationTests(HostedHeadlessQualificationTests):
             with self.assertRaisesRegex(ValueError, 'runner identity'):
                 automation.qualification_producer(receipt, SHA)
 
-    def test_mini_image_identity_includes_macos_and_xcode(self):
+    def test_mini_image_identity_names_macos_and_active_toolchain(self):
+        # Command Line Tools have no xcodebuild; asking for it must fail the test too.
+        answers = {('sw_vers', '-buildVersion'): '25G83',
+                   ('xcode-select', '-p'): '/Library/Developer/CommandLineTools',
+                   ('clang', '--version'): 'Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.6.0'}
         with patch.dict(os.environ, RUNNER_ENVIRONMENT='self-hosted'), \
-             patch.object(automation, 'run', side_effect=['24G90', 'Xcode 26.0\nBuild version 17A324']):
-            self.assertEqual(automation.qualification_image_version(), 'self-hosted:24G90:Xcode 26.0\nBuild version 17A324')
+             patch.object(automation, 'run', side_effect=lambda *command: answers[command]):
+            self.assertEqual(automation.qualification_image_version(),
+                'self-hosted:25G83:/Library/Developer/CommandLineTools:Apple clang version 21.0.0 (clang-2100.1.1.101)')
 
     def test_artifact_transport_rejects_expiry_digest_substitution_and_extra_files(self):
         raw = self.zip_evidence()
