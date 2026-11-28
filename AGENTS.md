@@ -9,12 +9,16 @@ native OMP task/eval agents. Coordinate disjoint path ownership; hand off shared
 files and Git operations to the integrator. The main agent only reports to Stefan
 and dispatches instructions; integrator and worker subagents do implementation,
 integration, builds, deployment and tests. Contributors hand green targeted-test
-commits to the integrator. Batch pushes after extensive tests, not Air playtests.
+commits to the integrator. Push bounded-green batches; exact-SHA AWS qualification
+runs extensive tests once after push and gates qualified packages/releases.
 
 On claw.local the shared native Release lane is this checkout's **build-int**.
-Use `agent-workspace stage --project dunecity --owner FRAMEWORK:SESSION:AGENT build`
-after landing targeted-test-green commits and releasing all edit claims. Its mutex
-covers build/test/Git operations across frameworks. The copied `build` tree
+The always-on Air autodeployer owns
+`agent-workspace stage --project dunecity --owner FRAMEWORK:SESSION:AGENT --wait build`
+after the integrator lands targeted-test-green commits and releases all edit claims.
+Until it is confirmed live, the integrator owns manual build/delivery. The mutex
+protects mutable staging build/test/Git inputs; Air copying and swapping take no
+project mutex. The copied `build` tree
 points to `dunecity-quantbot-split` and must not be reused here. The older generic
 `build` instructions below describe configuration mechanics, not the current
 registered staging lane. Keep separate trees for genuinely different toolchains
@@ -115,17 +119,25 @@ binary outside ctest.
   on mba BEFORE all the extensive testing etc. so i can play test"; "key thing is to increse the human
   feedback loop from me". Contributors compile and pass their own targeted tests at an immutable commit,
   then hand its SHA, job/results and green timestamp to the integrator. The integrator cherry-picks through
-  `agent-workspace run --git`, builds incrementally, and deploys to the Air before extensive testing.
-  Only after the Air handoff run nightly `-L nightly -LE gui` and the four AI gates on AWS, plus applicable
-  `perf_regression` on its required platform, on that landed HEAD. Push green batches only. Preserve failures,
-  fix forward (or locally revert game-breaking changes), rebuild and redeploy each fix.
-- **Dev builds on Stefan's Air come before full testing.** After each accepted landing and incremental
-  `build-int` build, run `AGENT_OWNER=FRAMEWORK:SESSION:AGENT scripts/air-dev-install.sh --no-build --wait`
-  asynchronously. It copies the Homebrew-linked, ad-hoc-signed app with new features enabled in its own
-  Dune City rules, never a separate mod (Stefan: "i just want it as a feature, not a mod"). Keep only features
-  not covered by the game's menu option in `DEV_SWITCHES`. Never stop his game: the swap waits for it to close.
-  Tell the coordinator the build SHA, new things to try, untested scope, and installed/waiting state; record
-  elapsed time from green own-tests to Air install in `STATUS.md`. This dev build qualifies nothing.
+  `agent-workspace run --git`; the autodeployer incrementally builds and immediately delivers each
+  successful build to the Air, never holding it for another feature or extensive testing.
+  Before pushing, require owners' targeted greens, bounded `-L integration -LE gui` on the combined
+  source and applicable Mini `perf_regression`. Broad nightly `-L nightly -LE gui` and four AI gates
+  run once after push on that exact SHA on AWS; reds block qualification/packages/releases.
+  Preserve failures, fix forward (or locally revert game-breaking changes), and immediately
+  rebuild/redeploy each accepted fix. Dormant experimental failures remain explicitly unqualified.
+- **Dev builds on Stefan's Air come before full testing.** The always-on service watches committed HEAD,
+  builds only the newest source, and delivers every successful `build-int` build immediately.
+  Provenance is `build-int/air-build.json`, never a later HEAD. While Stefan plays, stage the newest
+  app once and swap after he exits; never stop his game. Until the service is confirmed live,
+  the integrator runs `scripts/air-dev-install.sh --no-build --wait` asynchronously with exactly one
+  waiter, replacing it for a newer built app rather than adding a second. After handoff, only the
+  service builds/deploys. New features are enabled in the app's own Dune City rules, never a separate
+  mod (Stefan: "i just want it as a feature, not a mod"); only independent switches belong in `DEV_SWITCHES`.
+  Report source SHA, new things to try, untested scope and installed versus staged/waiting state.
+  Record green-to-install and landing-to-install in `STATUS.md` (target under five minutes, with
+  user-game wait identified). Service receipts are in `~/.local/state/dunecity-air-autodeploy/`.
+  This dev build qualifies nothing.
 
 ## Player features: real assertion tests through the player's own path
 
@@ -222,7 +234,7 @@ against the words of the request.
 Every change that can alter AI decisions or unit behaviour (anything under `src/players/`,
 `include/players/`, unit/structure/combat/pathfinding code, `QuantBot Config` defaults, game
 option semantics) must pass `quantbot_all_against_atreides` and `quantbot_scenario_matrix`
-after local landing and Air dev deployment, before a batch is pushed:
+during exact-SHA AWS post-push qualification, before qualified packages or releases:
 
 ```bash
 ctest --test-dir build -R 'quantbot_all_against_atreides|quantbot_scenario_matrix' --output-on-failure
