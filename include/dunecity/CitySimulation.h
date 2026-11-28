@@ -276,6 +276,8 @@ private:
     /// state, deterministic — safe in multiplayer.
     void runEffectsScans();
     void runZoneGrowth();
+    /// Rebuild population, tax base and civic counts without advancing a city day.
+    void rebuildCityCensus();
 
     /// Year-tick budget pass: walks all structures on the map, aggregates
     /// population and police cost per house, then applies (tax revenue -

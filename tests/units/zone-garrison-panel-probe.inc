@@ -19,6 +19,13 @@ void checkGarrisonPanel() {
     for(int i = 0; i < 5; ++i)
         occupants.push_back(f.unit(f.own, i % 2 ? Unit_Trooper : Unit_Soldier, 20, 22 + i));
     f.run(1);
+    // Enter already wounded: an occupied building shields its soldiers from
+    // building hits, while normal garrison healing still raises their own HP.
+    for(auto* unit : occupants) {
+        unit->handleDamage(std::max(1, unit->getMaxHealth() / 2), NONE_ID, f.enemy);
+        require(unit->getHealth() > 0 && unit->getHealth() < unit->getMaxHealth(),
+                "panel: the entrant was not wounded before Capture");
+    }
     require(captureByPlayer(f, occupants, zone) == 5, "panel: Capture did not order all five men");
     require(f.runUntil(40, [&] { return zone->getGarrisonSize() == 5; }), "panel: five men did not enter");
     panel = selectZone(f, zone);
@@ -45,16 +52,8 @@ void checkGarrisonPanel() {
     };
     checkModel();
 
-    // Wound by the production zone-hit path, not by assigning synthetic model HP.
     std::vector<FixPoint> before;
     for(const auto* unit : occupants) before.push_back(unit->getHealth());
-    zone->handleDamage(30, NONE_ID, f.enemy);
-    checkModel();
-    std::vector<FixPoint> damaged;
-    for(size_t i = 0; i < occupants.size(); ++i) {
-        require(occupants[i]->getHealth() < before[i], "panel: damage never reached an occupant");
-        damaged.push_back(occupants[i]->getHealth());
-    }
 
     auto picture = [&](int width, int height, const std::string& state) {
         const int oldWidth = getRendererWidth(), oldHeight = getRendererHeight();
@@ -114,13 +113,33 @@ void checkGarrisonPanel() {
         const std::string file = gOut + "/garrison-panel-" + state + "-"
             + std::to_string(width) + "x" + std::to_string(height) + ".png";
         require(SavePNG(image.get(), file.c_str()) == 0, "panel: cannot save full panel screenshot");
+        return image;
     };
-    picture(640, 480, "damaged");
-    picture(1024, 768, "damaged");
+    auto beforeHit = picture(640, 480, "wounded-entrants");
+    const FixPoint buildingHealth = zone->getHealth();
+    zone->handleDamage(30, NONE_ID, f.enemy);
+    require(zone->getHealth() < buildingHealth, "panel: the building hit never landed");
+    checkModel();
+    for(size_t i = 0; i < occupants.size(); ++i)
+        require(occupants[i]->getHealth() == before[i], "panel: a building hit changed protected occupant HP");
+    auto afterHit = picture(640, 480, "building-hit");
+    SDL_LockSurface(beforeHit.get());
+    SDL_LockSurface(afterHit.get());
+    bool unchanged = true;
+    for(size_t i = 0; i < panel->garrisonRoster.count; ++i) {
+        const auto rect = panel->garrisonRoster.slotRect(i, Point(4, 24));
+        for(int y = rect.y + rect.h - 5; y < rect.y + rect.h - 1; ++y)
+            for(int x = rect.x + 1; x < rect.x + rect.w - 1; ++x)
+                unchanged = unchanged && getPixel(beforeHit.get(), x, y) == getPixel(afterHit.get(), x, y);
+    }
+    SDL_UnlockSurface(afterHit.get());
+    SDL_UnlockSurface(beforeHit.get());
+    require(unchanged, "panel: a building hit changed protected occupant health-bar pixels");
+    picture(1024, 768, "building-hit");
     f.run(12);
     checkModel();
     for(size_t i = 0; i < occupants.size(); ++i)
-        require(occupants[i]->getHealth() > damaged[i], "panel: normal garrison healing never raised occupant HP");
+        require(occupants[i]->getHealth() > before[i], "panel: normal garrison healing never raised wounded entrant HP");
     picture(640, 480, "healed");
 
     // Enemy inspection keeps the existing generic/owner-name privacy gate. Hidden

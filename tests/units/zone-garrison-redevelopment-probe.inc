@@ -183,9 +183,11 @@ void checkDemolitionEjects() {
         f.run(1);
         for(size_t i = 0; i < units.size(); ++i) {
             const auto* unit = units[i];
+            const int collapseDamage = static_cast<int>((static_cast<int64_t>(unit->getMaxHealth())
+                * f.game->objectData.garrisonCollapseDamagePercent + 99) / 100);
             require(f.alive(unit->getObjectID()) && unit->isActive() && !unit->isPickedUp()
                         && currentGameMap->tileExists(unit->getLocation())
-                        && unit->getHealth().lround() == DuneCity::ZoneGarrison::healthAfterEjection(health[i], unit->getMaxHealth()),
+                        && unit->getHealth().lround() == health[i] - collapseDamage,
                     "demolition_ejects: demolition silently lost or failed to hurt an occupant");
         }
         for(int dy = 0; dy < 2; ++dy) for(int dx = 0; dx < 2; ++dx) {

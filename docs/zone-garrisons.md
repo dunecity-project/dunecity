@@ -20,7 +20,7 @@ lot, whatever its density or civic overlay.
 |---|---|
 | Own zone with room (fewer than 5 inside) | The soldier walks to it and enters from any tile touching it (`kEntryDistance` 1.5, diagonals included). Owner unchanged. |
 | Own zone, full | Refused: the order is not taken. |
-| Ally's zone | Refused. Allies' zones are never taken or shared (one house a garrison). |
+| Ally's zone | Manual Capture is refused. Automatic emergency relocation may use a friendly zone with room, without changing its owner. |
 | Enemy zone nobody holds | The soldier walks in and the zone becomes its house's: owner, tiles, power draw and building counts move; density, residents, civic overlay and health stay (`ZoneStructure::transferOwnership`). Counted as a loss for the old owner (its AI hears of it). |
 | Enemy zone enemy soldiers hold | The soldier cannot enter: it fires on the zone from weapon range (`UnitBase::captureTargetHeld`) until the garrison is gone, then walks in and takes it. |
 
@@ -34,10 +34,9 @@ reaches it fires its own weapon from that tile (`UnitBase::fireFromGarrison`: th
 rocket further out, Trooper anti-air at aircraft, the Soldier only at ground targets). Kills and damage are
 credited to the soldier's type, as in the open. Garrisons shoot units, not buildings.
 
-**Cover, not immunity.** Every occupant takes **10% of the HP the building actually loses**,
-not 10% of a projectile's raw or overkill damage. Each occupant keeps an exact fractional remainder;
-small hits do not each round up to one HP. Damage uses the ordinary attribution and death path.
-Deaths inside produce an owner-local **Garrison casualties** ticker message and a per-soldier log event.
+**Shelter.** Occupants take **no damage from hits on their building**. They retain their own
+health and healing state; there is no per-hit cover-damage remainder. Destruction is different:
+occupants are put on the map first, then take ordinary collapse damage and can die visibly.
 
 **Regeneration.** Living occupants heal continuously while inside, independently of building repairs.
 `[Map Settings] GarrisonHealTime = 60` in `ObjectData.ini` means a full heal from zero in 60 seconds
@@ -52,11 +51,16 @@ The lock is derived from the existing occupant list; no additional option is req
 - The owner's **Evacuate** button on the zone panel (`CMD_ZONE_EVACUATE`, only the owner's command is obeyed)
   deploys every soldier on free tiles beside the zone, in Guard. An own zone stays with its owner; a captured
   one goes back (below).
-- **Below 60% health** (`kEvacuateHealthPercent`) the garrison leaves on its own, and no soldier may enter or
-  take a zone that damaged.
-- A zone that is destroyed, sold or demolished puts its soldiers out beside the ruin first, each having lost
-  half its maximum hit points (rounded up, never below 1: `healthAfterEjection`); one with no free tile
-  around dies in it.
+- **Below 30% health** (`kEvacuateHealthPercent`), once per drop below the line, occupants try to
+  walk into the nearest reachable same-owner or friendly zone with room. Destination ownership
+  does not change. With no eligible destination they stay inside; the attempt is not repeated
+  until the source building recovers to at least 30% and drops below it again. This applies to
+  human and AI garrisons alike. New entry into a building below the line is refused.
+- Destruction or demolition deploys occupants before applying collapse injury through the normal
+  on-map unit damage/death path. `[Map Settings] GarrisonCollapseDamagePercent = 50` in
+  `ObjectData.ini` costs half maximum HP, rounded up. There is no minimum-one-HP guarantee:
+  wounded occupants can die, leaving a normal map death and an owner-local casualty message.
+  No new blast radius is introduced. A blocked perimeter uses the dying building's freed footprint.
 - **A captured zone is held only while occupied.** It remembers the house it was taken from (saved, format
   9903). Once its garrison is gone, by Evacuate, at low health or because the last soldier inside was killed, it
   returns to that house: owner, tiles, power draw and counts, as when it was taken. A house the capture
@@ -110,6 +114,10 @@ neither is silently enabled here, and neither should reveal buildings through fo
 **Save format 9900.** A zone saves its occupants (object ids in the order they entered), its garrison's target
 and its search clock. The soldiers themselves are saved as hidden units, as Carryall cargo is.
 
+**Current save format 9907.** Healing remainders, the once-per-crossing relocation flag, in-flight
+destination intent and the tunable collapse percentage survive save/load. The obsolete damage
+remainders in 9905/9906 are consumed for compatibility, not reapplied under the immunity rule.
+
 ## Follow-up (protocol 148, save 9903)
 
 Stefan, 2026-11-27: "ok make 2 changes. 1 make infantry cost 30 credits. next make troopers and infantry
@@ -121,8 +129,8 @@ capture buildings"
 - **Price.** The Soldier costs 30 credits (`config/ObjectData.ini.default`, was 60); the Trooper keeps 100.
   The default content is what DuneCity, vanilla and Dune2R games use. Mods with their own `ObjectData.ini`
   (Tornie, ArcaKev, Jericho and their Lite forms, the community mods) keep their authors' prices.
-- **Evacuation threshold**, the rules above. `DUNECITY_TEST_GARRISON_EVACUATE_PERCENT` overrides it for
-  experiments only (read once per process, never part of the match rules).
+- **Historical evacuation experiments** used `DUNECITY_TEST_GARRISON_EVACUATE_PERCENT`.
+  The current 30% relocation rule is deterministic match logic, not a per-process override.
 - **Entering.** A capture-ordered soldier enters on any cycle it stands within reach of its zone, not only the
   cycle it stopped (`InfantryBase::checkPos`). It reads its zone's owner every cycle, so it keeps the order when
   a comrade takes the zone first (its cached friendliness made it drop the order). It never fires on the zone it
@@ -130,7 +138,7 @@ capture buildings"
   health; it fires only on a zone enemy soldiers hold (`UnitBase::engageTarget`). The player-path test found
   all three.
 
-### Evacuation threshold
+### Historical evacuation threshold measurements
 
 `rs160-dunecity`, four Brutal QuantBots, 45 minutes, AWS, build `893c5acc0` with the threshold set by the
 experiment variable; results in `~/Documents/projects/outputs/zone-garrison-followup-20261127/`. Mixed games:
@@ -147,8 +155,8 @@ lost when the `aws` worker was stopped).
 
 Placement and exchange value are level at every threshold, and zones held at the last census do not
 separate (paired differences +2 to +5 zones, intervals about ±15). The measure that moves is soldier
-survival. 60 brings the most soldiers out alive and loses as few garrisons in exploding zones as 40, so the
-rule is 60.
+survival. These measurements selected 60% for the former damage-and-exit rule. Stefan's
+2026-11-28 shelter/30%-relocation instruction replaces that rule; this is not evidence for the new one.
 
 ## QuantBot
 
@@ -160,7 +168,7 @@ ZoneGarrison:
 
 1. **Threat.** Every visible enemy ground unit that can attack or capture within 7 tiles of one of our zones adds
    1 to it, 3 for a soldier that can capture.
-2. **Defence.** The most threatened zones first: up to `min(4, (threat + 1) / 2)` soldiers, counting those inside
+2. **Defence.** The most threatened zones first: up to `min(5, (threat + 1) / 2)` soldiers, counting those inside
    and those already ordered in. Each comes from our nearest Soldier or Trooper within 12 tiles that is at least
    half healthy and not held by a human order, the repair reserve, an escort or a colony guard.
 3. **Release.** A garrison of ours in an own zone with no visible enemy within 11 tiles comes out (a house with a
@@ -263,25 +271,24 @@ All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start
 
 ## Tests
 
-- `zone_garrison_probe` (headless nightly; `tests/units/zone-garrison-probe.inc`), 33 cases: own zone (five
+- `zone_garrison_probe` (headless nightly; `tests/units/zone-garrison-probe.inc`): own zone (five
   enter via the player's Capture button, a sixth refused, owner kept), take (zone, tiles, density and power draw move), fire out (kill credited
-  to the Trooper), assault (three Troopers shoot one held soldier out and take the zone), evacuate (owner's
-  command, an enemy's refused), destroyed (soldiers out of the ruin, each down half its hit points), return
-  (evacuated and killed garrisons hand captured zones back; an own zone stays), low health (held at the line,
-  out below it, a captured zone goes back, no entry below it), ally refused, containment, save and load (with
-  the original owner), rule off, pictures `garrison-zoom0..2.png`, and **the player's own path**: units
+  to the Trooper), assault (clear a held zone, defeat the evacuated defender, repair and capture),
+  manual evacuation (owner's command, an enemy's refused), collapse (normal damage and visible
+  deaths after deployment), captured-zone return, and exact 30% relocation boundaries with room,
+  reachability, friendly ownership, no-destination retention and saved once-per-crossing state,
+  original-owner save/load, rule-off cases, pictures `garrison-zoom0..2.png`, and **the player's own path**: units
   selected as a click selects them, the unit panel's real Capture button (and the C key), a real SDL mouse click
-  on the zone through `Game::doInput`, the zone panel's `Garrison: n/4` and `(captured)` text and its real
+  on the zone through `Game::doInput`, the zone panel's `Garrison: n/5` and `(captured)` text and its real
   Evacuate button; a full own zone, an ally's zone and a damaged zone refused; an enemy's Evacuate disabled.
 - The probe also covers:
-  - the Garrison button and the I key (shown for Soldiers, Troopers and mixed groups; hidden for a tank and with the
-    rule off; the cursor symbol; a click on sand refused; an own zone garrisoned; an enemy zone taken);
+  - Capture-only controls for Soldiers, Troopers and mixed groups, no separate Garrison button or I key,
+    correct cursor hints, sand refusal, own-zone entry and enemy-zone capture;
   - reinforcement, with mixed own and captured garrisons;
   - a garrisoned Trooper hitting an Ornithopter and a tank;
   - no pulling away (nine other controllers' orders refused; the controller's own obeyed);
   - the 30-credit Soldier in the Barracks build list.
 
-  23 cases in all.
 - `zone_garrison_real_game` (headless nightly; `tests/ai/run-zone-garrison-real-game.py`): three `rs160-dunecity`
   Brutal games with every switch on (`house-to-house`), one ACCEPT line per request (A1-A12); HANDOVER.md has the
   acceptance table.

@@ -205,6 +205,8 @@ UnitBase::UnitBase(InputStream& stream) : ObjectBase(stream) {
         slowTimer = std::max(0, stream.readSint32());
         dynastyStepTimeOffset = stream.readFixPoint();
     }
+    if(currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_ZONE_GARRISON_SHELTER)
+        garrisonRelocationTarget_ = stream.readUint32();
 
     // A spectator restores the pending work queues as well as the saved
     // units. Keep their negative queued-work sentinels until that work runs.
@@ -341,6 +343,7 @@ void UnitBase::save(OutputStream& stream) const {
     stream.writeUint32(productionHouseID);
     stream.writeSint32(slowTimer);
     stream.writeFixPoint(dynastyStepTimeOffset);
+    stream.writeUint32(garrisonRelocationTarget_);
 }
 
 // Network-only continuation state. Ordinary saved games deliberately reset this.
@@ -1615,6 +1618,7 @@ void UnitBase::leaveHoldForOrder() {
 }
 
 void UnitBase::clearOrderQueue() {
+    garrisonRelocationTarget_ = NONE_ID;
     orderQueue.clear();
     orderDispatched = false;
     orderWalkRetries = 0;
@@ -1622,6 +1626,7 @@ void UnitBase::clearOrderQueue() {
 }
 
 void UnitBase::recordPlayerOrder(const UnitOrder& order) {
+    garrisonRelocationTarget_ = NONE_ID;
     orderQueue.replace(order);
     orderDispatched = true;
     orderWalkRetries = 0;
@@ -1947,6 +1952,7 @@ void UnitBase::doAttackObject(Uint32 TargetObjectID, bool bForced) {
 }
 
 void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
+    garrisonRelocationTarget_ = NONE_ID;
     if(ModManager::instance().isTornieFamilyContentActive()) {
         if(newAttackMode == SABOTAGE && !canCaptureStructures()) return;
         if(newAttackMode == SABOTAGE || (attackMode == SABOTAGE && newAttackMode != SABOTAGE)) {
@@ -2226,6 +2232,7 @@ void UnitBase::setLocation(int xPos, int yPos) {
 }
 
 void UnitBase::setPickedUp(UnitBase* newCarrier) {
+    garrisonRelocationTarget_ = NONE_ID;
     if(selected) {
         removeFromSelectionLists();
     }
@@ -2278,6 +2285,18 @@ void UnitBase::enterGarrison() {
     attackPos.invalidate();
     attackMode = GUARD;
     destination.invalidate();
+}
+
+void UnitBase::doGarrisonRelocation(const ZoneStructure* zone) {
+    if(zone == nullptr || !ZoneStructure::garrisonsEnabled() || !isActive() || getHealth() <= 0
+       || !canCaptureStructures() || zone->getOwner()->getTeamID() != owner->getTeamID()) return;
+    clearOrderQueue();
+    cancelCarryallPickup();
+    doMove2Object(zone);
+    doSetAttackMode(CAPTURE);
+    // Set last: the ordinary order primitives deliberately revoke old relocation permission.
+    garrisonRelocationTarget_ = zone->getObjectID();
+    if(!zone->mayEnterGarrison(this)) doSetAttackMode(GUARD);
 }
 
 bool UnitBase::fireFromGarrison(const ObjectBase* pObject, const Coord& muzzle, const Coord& fromTile) {
@@ -2513,6 +2532,7 @@ void UnitBase::setSpeeds() {
 }
 
 void UnitBase::setTarget(const ObjectBase* newTarget) {
+    garrisonRelocationTarget_ = NONE_ID;
     attackPos.invalidate();
     bFollow = false;
     targetAngle = INVALID;
@@ -2998,6 +3018,7 @@ void UnitBase::stampStallProgress() {
 }
 
 void UnitBase::noteExplicitPlayerOrder() {
+    garrisonRelocationTarget_ = NONE_ID;
     stampStallProgress();
 }
 

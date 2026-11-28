@@ -969,14 +969,34 @@ void CitySimulation::reconcileLoadedMapState(uint32_t gameCycleCount) {
         hs.indValve = indValve;
     }
 
-    // Restore the saved building types before the census can replace its overlay
-    // roster. In particular, a garrison is not a Hospital patient claim.
+    // Restore saved building types before rebuilding derived city state. Loading
+    // is not a city day: it must not redevelop lots or advance civic overlay pacing.
     if(hospitalOverlaysPending_) {
         HospitalCare::applyLoadedOverlays();
         hospitalOverlaysPending_ = false;
     }
     runEffectsScans();
-    runZoneGrowth();
+    rebuildCityCensus();
+    // The blocked-demand indicator is derived, not saved. Recompute it without
+    // applying a demand-valve step or replacing the saved population history.
+    for(auto& hs : houseState_) {
+        ValveInputs vi;
+        vi.resPop = hs.resPop;
+        vi.comPop = hs.comPop;
+        vi.indPop = hs.indPop;
+        vi.prevResPop = hs.prevResPop;
+        vi.prevComPop = hs.prevComPop;
+        vi.prevIndPop = hs.prevIndPop;
+        vi.resValve = hs.resValve;
+        vi.comValve = hs.comValve;
+        vi.indValve = hs.indValve;
+        vi.taxRate = hs.taxRate;
+        vi.hasStadium = hs.hasStadium;
+        vi.hasPalace = hs.hasPalace;
+        vi.hasAirport = hs.hasAirport;
+        vi.hasStarport = hs.hasStarport;
+        hs.civicDemandBlocked = computeDemandValves(vi).civicDemandBlocked;
+    }
 
     SDL_Log("[CitySim] load-reconcile cityRoleStructures=%d zones=%d "
             "recoveredValves=%d pop R/C/I %d/%d/%d -> %d/%d/%d "
@@ -986,6 +1006,56 @@ void CitySimulation::reconcileLoadedMapState(uint32_t gameCycleCount) {
             beforeRes, beforeCom, beforeInd,
             getResPop(), getComPop(), getIndPop(),
             getResValve(), getComValve(), getIndValve());
+}
+
+void CitySimulation::rebuildCityCensus() {
+    if(!currentGameMap) return;
+    struct Census { int residential, commercial, industrial, taxBaseEighths; };
+    std::array<Census, kMaxCityHouses> census{};
+    const Map& map = *currentGameMap;
+    // Integer totals do not depend on visitation order. Use the same origin-tile
+    // inclusion as the growth scan, without allocating or sorting another roster.
+    for(const StructureBase* structure : structureList) {
+        const House* owner = structure->getOwner();
+        if(!owner) continue;
+        const int house = owner->getHouseID();
+        if(house < 0 || house >= kMaxCityHouses) continue;
+        const Coord at = structure->getLocation();
+        if(!map.tileExists(at)) continue;
+        const Tile* tile = map.getTile(at);
+        if(!tile->hasANonInfantryGroundObject() || tile->getNonInfantryGroundObject() != structure) continue;
+        const int itemID = structure->getItemID();
+        const CityRole role = getStructureCityRole(itemID);
+        if(role == CityRole::None) continue;
+        const int level = cityLevelOf(tile, structure);
+        const int population = getStructurePopulation(structure, level);
+        auto& total = census[house];
+        total.taxBaseEighths += getStructureTaxBaseEighths(structure, level);
+        switch(role) {
+            case CityRole::Residential: total.residential += population; break;
+            case CityRole::Commercial: total.commercial += population; break;
+            case CityRole::Industrial: total.industrial += population; break;
+            default: break;
+        }
+        if(itemID == Structure_Palace)
+            total.commercial += getPalaceCommercialPopulation(level);
+    }
+    for(int h = 0; h < kMaxCityHouses; ++h) {
+        auto& hs = houseState_[h];
+        const auto& total = census[h];
+        if(total.residential != hs.resPop || total.commercial != hs.comPop || total.industrial != hs.indPop) {
+            SDL_Log("[CitySim] house=%d population R:%d->%d C:%d->%d I:%d->%d total=%d",
+                    h, hs.resPop, total.residential, hs.comPop, total.commercial, hs.indPop, total.industrial,
+                    total.residential + total.commercial + total.industrial);
+        }
+        hs.resPop = total.residential;
+        hs.comPop = total.commercial;
+        hs.indPop = total.industrial;
+        hs.taxBaseEighths = total.taxBaseEighths;
+        hs.unemploymentRate = computeUnemploymentRate(hs.resPop, hs.comPop, hs.indPop);
+        hs.hospitalCount = computeHospitalCount(hs.resPop);
+        hs.churchCount = computeChurchCount(hs.resPop);
+    }
 }
 
 void CitySimulation::runZoneGrowth() {
@@ -1591,39 +1661,7 @@ void CitySimulation::runZoneGrowth() {
                 .set("terrain_rows_csv",terrain).set("road_rows_bits",roads));
     }
 
-    // Recompute population totals per house.
-    for (int h = 0; h < kMaxCityHouses; ++h) {
-        auto& hs = houseState_[h];
-        int newRes = 0, newCom = 0, newInd = 0;
-        hs.taxBaseEighths = 0;
-        for (const auto& n : nodes) {
-            if (!n.pStruct->getOwner() || n.pStruct->getOwner()->getHouseID() != h)
-                continue;
-            const int itemID = n.pStruct->getItemID();
-            const int pop = getStructurePopulation(n.pStruct, n.level);
-            hs.taxBaseEighths += getStructureTaxBaseEighths(n.pStruct, n.level);
-            switch (n.role) {
-                case CityRole::Residential: newRes += pop; break;
-                case CityRole::Commercial:  newCom += pop; break;
-                case CityRole::Industrial:  newInd += pop; break;
-                default: break;
-            }
-            if (itemID == Structure_Palace) {
-                newCom += getPalaceCommercialPopulation(n.level);
-            }
-        }
-        if (newRes != hs.resPop || newCom != hs.comPop || newInd != hs.indPop) {
-            SDL_Log("[CitySim] house=%d population R:%d->%d C:%d->%d I:%d->%d total=%d",
-                    h, hs.resPop, newRes, hs.comPop, newCom, hs.indPop, newInd,
-                    newRes + newCom + newInd);
-        }
-        hs.resPop = newRes;
-        hs.comPop = newCom;
-        hs.indPop = newInd;
-        hs.unemploymentRate = computeUnemploymentRate(newRes, newCom, newInd);
-        hs.hospitalCount = computeHospitalCount(newRes);
-        hs.churchCount   = computeChurchCount(newRes);
-    }
+    rebuildCityCensus();
 
     // Civic overlays: which Residential zones are Hospitals and Churches. The quota is as before
     // (one per kResPopPerHospital residents, at most one per 8 populated zones, at least one), but

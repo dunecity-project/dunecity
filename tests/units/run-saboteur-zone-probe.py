@@ -6,7 +6,8 @@ garissoned"; "saboteurs should skip r/i/c". In a Dune City game a Palace-release
 or QuantBot owned, goes past Residential, Commercial and Industrial zones nobody garrisons to the
 building beyond; with the rule off it blows up the nearest zone. Only the garrison decides: a fully
 built, populated zone without one is passed over, an unbuilt zone with one is taken. A garrisoned
-zone is blown up (both 20-HP Soldiers take 20 HP: 10% of the building's actual 200-HP loss); a zone
+zone is blown up; sheltered occupants take no damage until ejected, then ordinary 50%-max-HP
+collapse damage kills the wounded Soldier visibly and leaves the healthy Soldier alive. A zone
 whose garrison leaves while the Saboteur walks to it is given up; with only ungarrisoned zones about
 it takes no target; the player's own right-click on an ungarrisoned zone is obeyed
 (tests/units/saboteur-zone-probe.inc).
@@ -122,6 +123,8 @@ if text.count('SABOTEUR_ZONE_DROP:') < 2:
     problems.append('fewer than 2 SABOTEUR_ZONE_DROP lines')
 if 'SABOTEUR_ZONE_RULE: event=violation' in text:
     problems.append('a SABOTEUR_ZONE_RULE violation line')
+if text.count('interior_loss=0 survivors=1 normal_death=1 visible_death=1') != 2:
+    problems.append('both human/AI sabotage cases did not observe zero interior loss and one visible normal collapse death')
 failed = bool(problems)
 if failed != args.expect_failure:
     raise RuntimeError(('Saboteur zone probe passed although a failure was expected: ' if not failed

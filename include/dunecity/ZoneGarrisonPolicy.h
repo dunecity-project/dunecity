@@ -12,7 +12,6 @@
 
 #include <fixmath/FixPoint.h>
 
-#include <algorithm>
 #include <cstdint>
 
 /// Zone Garrisons (match rule, default on; Stefan, 2026-11-27: "i want infantry and troopers to be
@@ -31,17 +30,6 @@ inline const FixPoint kEntryDistance = 1.5_fix;
 /// Game cycles between target searches of a garrison whose last search found nothing.
 inline constexpr int kIdleSearchCycles = 8;
 
-/// Every occupant takes 10% of actual building HP lost, not raw/overkill damage.
-/// Carry sub-point damage exactly; never round each small hit up to one HP.
-inline constexpr int64_t kDamagePoint = int64_t{10} << 32;
-inline int occupantDamage(FixPoint buildingLoss, int64_t& remainder) {
-    const int64_t raw = std::max<int64_t>(0, buildingLoss.getRawValue());
-    const int64_t fraction = remainder + raw % kDamagePoint;
-    const int damage = static_cast<int>(raw / kDamagePoint + fraction / kDamagePoint);
-    remainder = fraction % kDamagePoint;
-    return damage;
-}
-
 /// Unit health already carries fractional HP. Preserve the division remainder too,
 /// so a full heal takes exactly CYCLES game cycles, independent of frame rate.
 inline FixPoint healingStep(int maxHealth, uint64_t cycles, uint64_t& remainder) {
@@ -55,23 +43,13 @@ inline FixPoint healingStep(int maxHealth, uint64_t cycles, uint64_t& remainder)
     return FixPoint::FromRawValue(static_cast<int64_t>(step));
 }
 
-/// Stefan, 2026-11-27: "make troopers and infantry evacuate buildings with an evacuate when it gets
-/// below X% health". A garrisoned zone below this share of its hit points puts its soldiers out,
-/// and a zone below it cannot be garrisoned or taken. 60, chosen from 1,152 measured games at
-/// 0/25/40/60 (docs/zone-garrisons.md, "Evacuation threshold"): placement and exchange value were
-/// level at every threshold; 60 brought most soldiers out alive (65% of entries, 53% at 0) and lost
-/// as few garrisons in exploding zones as 40. 0 would mean never.
-inline constexpr int kEvacuateHealthPercent = 60;
+/// Below 30% health, occupants attempt one move to a reachable friendly shelter.
+/// Without room elsewhere they stay inside until recovery and a later crossing.
+inline constexpr int kEvacuateHealthPercent = 30;
 
 /// Is a zone at HEALTH of MAXHEALTH too damaged to hold, at threshold PERCENT?
 inline constexpr bool belowEvacuateHealth(int health, int maxHealth, int percent) {
     return percent > 0 && int64_t(health) * 100 < int64_t(maxHealth) * percent;
-}
-
-/// "if the building explodes they are ejected but are damaged": a soldier thrown out of a ruin
-/// loses half its maximum hit points (rounded up) but always comes out alive with at least 1.
-inline constexpr int healthAfterEjection(int health, int maxHealth) {
-    return std::max(1, health - (maxHealth + 1) / 2);
 }
 
 /// What a capture order on a zone means for a soldier of house OWN (team OWNTEAM) against a zone

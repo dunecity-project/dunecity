@@ -11,8 +11,8 @@
 // rule off               the same position with the rule off: the nearest zone is blown up (the rule up
 //                        to protocol 149), so the switch is what makes the difference
 // garrisoned zone        the nearest zone holds two enemy Soldiers: it is the target and is blown up;
-//                        each Soldier takes 10% of the building's actual 200 HP loss (20 HP), so
-//                        both die through the ordinary damage path, not silently on replacement
+//                        sheltered HP is untouched, then each takes ordinary 50%-max-HP collapse damage
+//                        after ejection: the wounded Soldier dies visibly, the healthy one survives
 // garrison leaves        the garrisoned zone it is walking to is evacuated: it gives the zone up and
 //                        blows up the Wind Trap instead; the zone stands
 // garrison decides      a fully built, populated Residential zone without a garrison stands nearest and
@@ -229,15 +229,22 @@ void cityZonesSkipped(const std::string& ownerClass, bool rule) {
                          : "rule off: blew up the nearest ungarrisoned zone (the rule up to protocol 149)");
 }
 
-/// A garrisoned zone is a target like any building: the nearest, garrisoned, is blown up before a
-/// farther Wind Trap. Each 20-HP Soldier takes 10% of the actual 200-HP loss:
-/// both die, independently of the charge's overkill.
+/// The nearest garrisoned zone is blown up before a farther Wind Trap. One Soldier is wounded
+/// before the approach: only post-deployment collapse damage kills it, through normal map death.
 void garrisonedZoneTaken(const std::string& ownerClass) {
     Fixture f(ownerClass, "garrisoned-zone");
     auto* z = f.zone("garrisoned Commercial zone 4 tiles east", Structure_ZoneCommercial, 35, 30);
     z->foundationDegrades = false;
     f.building("Wind Trap 13 tiles north", Structure_WindTrap, 30, 15);
     const auto soldiers = f.garrison(z, 2);
+    auto* wounded = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(soldiers[0]));
+    auto* healthy = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(soldiers[1]));
+    require(wounded && healthy && f.game->objectData.garrisonCollapseDamagePercent == 50,
+            f.label + ": the two Soldiers or the default collapse rule are missing");
+    wounded->handleDamage(wounded->getMaxHealth() - 1, NONE_ID, nullptr);
+    const int injury = (healthy->getMaxHealth() + 1) / 2;
+    const FixPoint healthyHP = healthy->getHealth();
+    const size_t explosions = f.game->getExplosionList().size();
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
     const Uint32 zoneID = z->getObjectID();
@@ -245,16 +252,27 @@ void garrisonedZoneTaken(const std::string& ownerClass) {
     require(saboteur->getTarget() == z, f.label + ": the released Saboteur did not pick the garrisoned zone (target item "
             + std::to_string(targetItem(saboteur)) + ")");
     f.runUntilGone(saboteurID, 120);
-    f.runUntil(1, [] { return false; });    // objects destroyed in the blast are removed next cycle
     f.requireOnlyVictim(saboteurID, zoneID);
-    int killed = 0;
-    for(const Uint32 id : soldiers) {
-        const auto* soldier = f.game->getObjectManager().getObject(id);
-        require(soldier == nullptr, f.label + ": a 20-HP Soldier survived its actual-loss 20-HP damage share");
-        ++killed;
-    }
-    require(killed == 2, f.label + ": the destroyed zone did not account for both occupants");
-    record(f.label, "picked the garrisoned zone and blew it up; both Soldiers killed by 20-HP actual-loss shares; Wind Trap stands");
+    wounded = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(soldiers[0]));
+    healthy = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(soldiers[1]));
+    require(wounded && wounded->getHealth() == 0 && wounded->isVisible() && wounded->isActive()
+                && !wounded->isPickedUp() && currentGameMap->tileExists(wounded->getLocation()),
+            f.label + ": the wounded occupant did not enter the ordinary visible on-map death state");
+    require(healthy && healthy->getHealth() == healthyHP - injury && healthy->getHealth() > 0
+                && healthy->isVisible() && healthy->isActive() && !healthy->isPickedUp(),
+            f.label + ": the healthy Soldier took an interior damage share or skipped its collapse injury");
+    require(f.game->getExplosionList().size() > explosions,
+            f.label + ": neither sabotage nor building destruction produced a real explosion");
+    const Coord death = wounded->getLocation();
+    f.game->updateGameState();
+    require(!f.alive(soldiers[0]) && f.alive(soldiers[1]),
+            f.label + ": ordinary removal did not account for one dead and one surviving occupant");
+    int normalDeaths = 0;
+    for(const auto& corpse : currentGameMap->getTile(death)->deadUnits)
+        if(corpse.type == DeadUnit_Infantry) ++normalDeaths;
+    require(normalDeaths == 1, f.label + ": the ejected Soldier did not create a normal death animation");
+    record(f.label, "picked the garrisoned zone and blew it up; interior_loss=0 survivors=1 normal_death=1 visible_death=1 collapse_damage="
+           + std::to_string(injury) + "; Wind Trap stands");
 }
 
 /// Only the garrison decides, not how built up the zone is: a dense, populated Residential zone with

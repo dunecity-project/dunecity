@@ -30,6 +30,7 @@
 
 // forward declarations
 class Tile;
+class ZoneStructure;
 
 class UnitBase : public ObjectBase
 {
@@ -380,6 +381,9 @@ public:
     /// cargo is hidden (off the map, inactive, unselectable, no orders). Its health, house and
     /// weapon reload stay its own; ZoneStructure keeps the list and deploys it again.
     void enterGarrison();
+    /// A reserved automatic walk into this friendly shelter; cleared by arrival or a new order.
+    Uint32 getGarrisonRelocationTarget() const { return garrisonRelocationTarget_; }
+    void doGarrisonRelocation(const ZoneStructure* zone);
     /// The capture target is a zone enemy soldiers hold: a capture order fires on it instead.
     bool captureTargetHeld() const;
     /// Fires this garrisoned soldier's weapon at TARGET from MUZZLE (world pixels, the zone's
@@ -768,6 +772,7 @@ protected:
     bool     goingToRepairYard;      ///< Are we currently going to a repair yard?
     bool     pickedUp;               ///< Were we picked up by a carryall?
     bool     bFollow;                ///< Do we currently follow some other unit (specified by target)?
+    Uint32   garrisonRelocationTarget_ = NONE_ID; ///< saved from SAVEGAMEVERSION_ZONE_GARRISON_SHELTER
     Coord    huntTowardGoal;         ///< Where a doHuntToward() walk goes; invalid when none (SAVEGAMEVERSION 9854)
     Uint8    huntTowardRetries;      ///< Times that walk was resumed after the engine dropped it
 

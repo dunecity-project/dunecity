@@ -231,13 +231,14 @@ ZoneStructure::ZoneStructure(InputStream& stream)
         const uint64_t healCycles = static_cast<uint64_t>(healTime) * 1000 / GAMESPEED_DEFAULT;
         for(size_t i = 0; i < garrison_.size(); ++i) {
             auto& remainder = garrisonHealthRemainders_[i];
-            remainder.damage = stream.readSint64();
+            // 9905/9906 interleaved the obsolete damage debt before each healing remainder.
+            if(savegameVersion < SAVEGAMEVERSION_ZONE_GARRISON_SHELTER) stream.readSint64();
             remainder.healing = stream.readUint64();
-            if(remainder.damage < 0 || remainder.damage >= DuneCity::ZoneGarrison::kDamagePoint
-               || remainder.healing >= healCycles)
+            if(remainder.healing >= healCycles)
                 throw InputStream::error("Invalid zone garrison health remainder");
         }
     }
+    garrisonRelocationAttempted_ = savegameVersion >= SAVEGAMEVERSION_ZONE_GARRISON_SHELTER && stream.readBool();
 }
 
 int ZoneStructure::getResidentialPopulation() const {
@@ -293,9 +294,9 @@ void ZoneStructure::save(OutputStream& stream) const {
     stream.writeSint32(garrisonSearchTimer_);
     stream.writeSint32(garrisonOriginalOwner_);
     for(size_t i = 0; i < garrison_.size(); ++i) {
-        stream.writeSint64(garrisonHealthRemainders_[i].damage);
         stream.writeUint64(garrisonHealthRemainders_[i].healing);
     }
+    stream.writeBool(garrisonRelocationAttempted_);
 }
 
 bool ZoneStructure::canBePlacedAt(int x, int y, bool torch) const {
@@ -357,7 +358,7 @@ void ZoneStructure::clearZoneState() {
 }
 
 void ZoneStructure::destroy() {
-    // The soldiers inside come out of the ruin; any with no free tile around die in it.
+    // Eject and apply ordinary on-map collapse damage before the building's destruction effects.
     evacuateGarrison(true);
     clearZoneState();
     StructureBase::destroy();

@@ -43,7 +43,7 @@ parser.add_argument('--reuse', action='store_true', help='Only check the tables 
 args = parser.parse_args()
 out = args.output_dir.resolve()
 TAG = 'house-to-house'
-THRESHOLD = 60      # DuneCity::ZoneGarrison::kEvacuateHealthPercent
+THRESHOLD = 30      # DuneCity::ZoneGarrison::kEvacuateHealthPercent; exact FixPoint32 HP
 TROOPER = '44'      # Unit_Trooper
 SOLDIER = '32'      # Unit_Soldier
 
@@ -106,18 +106,48 @@ accept('A3 a Soldier costs 30 credits (every levy Soldier bought at 30)',
        f'{len(levy)} levy Soldiers trained, prices {sorted(set(r["price"] for r in levy))}')
 
 exits = [r for r in rows if r['event'] == 'exit']
-low = [r for r in exits if r['low_health'] == '1']
-low_ok = [r for r in low if int(r['health']) * 100 < THRESHOLD * int(r['max_health'])]
-accept(f'A4 a garrison leaves its zone below {THRESHOLD}% health on its own',
-       len(low) >= 3 and len(low_ok) == len(low) and sum(int(r['deployed']) for r in low) >= 3,
-       f'{len(low)} low-health exits ({len(low_ok)} below {THRESHOLD}%), '
-       f'{sum(int(r["deployed"]) for r in low)} soldiers out')
+attempts = [r for r in rows if r['event'] == 'relocation_attempt']
+departures = [r for r in rows if r['event'] == 'relocation_departure']
+arrivals = [r for r in rows if r['event'] == 'relocation_arrival']
+attempt_keys = [(r['seed'], r['source'], int(r['cycle'])) for r in attempts]
+departed_per_attempt = Counter((r['seed'], r['source'], int(r['cycle'])) for r in departures)
+critical = all(0 < int(r['health_raw']) * 100
+               < THRESHOLD * int(r['max_health']) * (1 << 32) for r in attempts)
+conserved = all(int(r['occupants']) > 0 and int(r['moving']) >= 0 and int(r['stayed']) >= 0
+                and int(r['moving']) + int(r['stayed']) == int(r['occupants'])
+                and departed_per_attempt[key] == int(r['moving'])
+                for r, key in zip(attempts, attempt_keys))
+pending_relocation = defaultdict(list)
+bad_arrivals = 0
+for r in sorted(departures + arrivals,
+                key=lambda r: (int(r['cycle']), r['event'] == 'relocation_arrival')):
+    key = r['seed'], r['unit'], r['destination']
+    if r['event'] == 'relocation_departure':
+        pending_relocation[key].append(int(r['cycle']))
+    elif pending_relocation[key] and pending_relocation[key][0] <= int(r['cycle']):
+        pending_relocation[key].pop(0)
+    else:
+        bad_arrivals += 1
+accept(f'A4 below {THRESHOLD}% a garrison tries a reachable friendly shelter; blocked occupants stay inside',
+       len(attempts) >= 3 and len(departures) >= 3 and len(arrivals) >= 1
+       and critical and conserved and not bad_arrivals
+       and len(set(attempt_keys)) == len(attempt_keys)
+       and set(departed_per_attempt) <= set(attempt_keys),
+       f'{len(attempts)} attempts, {len(departures)} actual departures, {len(arrivals)} matched arrivals, '
+       f'{sum(int(r["stayed"]) for r in attempts)} stayed sheltered, '
+       f'{sum(int(r["moving"]) == 0 for r in attempts)} no-departure attempts; '
+       f'{sum(map(len, pending_relocation.values()))} departures not yet observed arriving '
+       '(once-per-crossing/rearm and no-room progress are qualified by the bounded shelter probe)')
 
-ruins = [r for r in exits if r['destroyed'] == '1' and int(r['deployed'] or 0) > 0]
-accept('A5 soldiers thrown out of an exploding zone come out alive and hurt',
-       len(ruins) >= 1 and sum(int(r['hurt']) for r in ruins) > 0,
-       f'{len(ruins)} zones destroyed with soldiers inside, {sum(int(r["deployed"]) for r in ruins)} soldiers out, '
-       f'{sum(int(r["hurt"]) for r in ruins)} hit points lost')
+ruins = [r for r in exits if r['destroyed'] == '1' and int(r['occupants'] or 0) > 0]
+collapse_conserved = all(int(r['remaining']) == 0 and int(r['deployed']) >= 0 and int(r['killed']) >= 0
+    and int(r['occupants']) == int(r['deployed']) + int(r['killed']) and int(r['hurt']) >= 0
+    and (not r.get('living') or int(r['living']) == int(r['deployed'])) for r in ruins)
+accept('A5 explosion injury uses normal on-map damage: survivors plus deaths account for every occupant',
+       len(ruins) >= 1 and collapse_conserved and sum(int(r['hurt']) for r in ruins) > 0,
+       f'{len(ruins)} nonempty zones destroyed, {sum(int(r["occupants"]) for r in ruins)} initially inside, '
+       f'{sum(int(r["deployed"]) for r in ruins)} living after deployment/injury, '
+       f'{sum(int(r["killed"]) for r in ruins)} dead, {sum(int(r["hurt"]) for r in ruins)} actual HP lost')
 
 returned = count('returned')
 accept('A6 a captured zone goes back to its original owner when its garrison is gone, every game',

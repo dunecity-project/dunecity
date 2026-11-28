@@ -91,6 +91,36 @@ const ObjectBase* InfantryBase::findTarget() const {
 }
 
 void InfantryBase::targeting() {
+    if(garrisonRelocationTarget_ != NONE_ID) {
+        const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
+        if(!ZoneStructure::garrisonsEnabled() || zone == nullptr
+           || zone->getObjectID() != garrisonRelocationTarget_ || attackMode != CAPTURE
+           || !zone->mayEnterGarrison(this)) {
+            // A lost/hostile shelter cancels an automatic transfer, never turns it into assault.
+            setTarget(nullptr);
+            setForced(false);
+            doSetAttackMode(GUARD);
+            return;
+        }
+    }
+    if(bFollow && ZoneStructure::garrisonsEnabled()) {
+        const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
+        if(zone && zone->getOwner()->getTeamID() != owner->getTeamID()) {
+            if(attackMode == CAPTURE) {
+                // Own-zone capture orders use Follow too. Preserve their explicit intent
+                // when the target changes hands, but normalize to enemy assault.
+                bFollow = false;
+                targetFriendly = false;
+                setForced(true);
+                clearPath();
+            } else {
+                setTarget(nullptr);
+                setForced(false);
+                doSetAttackMode(GUARD);
+                return;
+            }
+        }
+    }
     if(!ModManager::instance().isTornieFamilyContentActive()
        || attackMode != SABOTAGE || !canCaptureStructures()) {
         GroundUnit::targeting();
@@ -137,6 +167,7 @@ void InfantryBase::doCaptureStructure(Uint32 targetStructureID) {
 }
 
 void InfantryBase::doCaptureStructure(const StructureBase* pStructure) {
+    garrisonRelocationTarget_ = NONE_ID;
     // Zone Garrisons: an own zone with room is occupied; an enemy zone is entered and taken, or,
     // while enemy soldiers hold it, fired on until they are gone (engageTarget).
     if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
@@ -237,7 +268,9 @@ bool InfantryBase::canPass(int xPos, int yPos) const {
             if((object != nullptr) && (object->getObjectID() == target.getObjectID())
                 && object->isAStructure()
                 && (object->getOwner()->getTeamID() != owner->getTeamID())
-                && object->isVisible(getOwner()->getTeamID())) {
+                && object->isVisible(getOwner()->getTeamID())
+                && !(canCaptureStructures() && ZoneStructure::garrisonsEnabled()
+                     && dynamic_cast<const ZoneStructure*>(object))) {
                 passable = true;
             } else {
                 passable = (!pTile->hasANonInfantryGroundObject()
@@ -250,6 +283,16 @@ bool InfantryBase::canPass(int xPos, int yPos) const {
 }
 
 void InfantryBase::checkPos() {
+    if(garrisonRelocationTarget_ != NONE_ID) {
+        const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
+        if(zone == nullptr || zone->getObjectID() != garrisonRelocationTarget_
+           || !zone->mayEnterGarrison(this)) {
+            setTarget(nullptr);
+            setForced(false);
+            doSetAttackMode(GUARD);
+            return;
+        }
+    }
     // Zone Garrisons: a capture-ordered soldier standing beside its zone walks in (and an enemy zone
     // nobody holds becomes its house's); a zone enemy soldiers hold is fired on instead. Checked on
     // every cycle the soldier stands within reach, not only the cycle it stopped: one that stopped a
@@ -296,6 +339,12 @@ void InfantryBase::checkPos() {
         } else if(currentGameMap->getTile(location)->isSpecialBloom()){
             currentGameMap->getTile(location)->triggerSpecialBloom(getOwner());
         }
+
+        // Zone entry is handled above, from beside the lot; Saboteurs have
+        // their own damage/attribution path. A stale step must not reach
+        // legacy delete-and-recreate capture or friendly-structure suicide.
+        if(ZoneStructure::garrisonsEnabled()
+           && dynamic_cast<const ZoneStructure*>(target.getObjPointer())) return;
 
         //check to see if close enough to blow up target
         if(target.getObjPointer() != nullptr

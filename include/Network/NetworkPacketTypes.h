@@ -539,7 +539,9 @@
 //      unchanged. Earlier peers cannot enforce the same permission and are refused.
 // 159: Garrison weapons launch outside their building instead of striking their
 //      own cover. Combat simulation differs; no save layout change.
-#define NETWORK_PROTOCOL_VERSION            159
+// 160: Occupants are immune inside and heal over time; collapse injury uses normal on-map damage.
+//      Below30% they attempt one reachable friendly relocation per crossing. Save9907 preserves intent.
+#define NETWORK_PROTOCOL_VERSION            160
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

@@ -151,6 +151,7 @@ HOSPITAL_ROW_FIELDS = KEY + ('event',) + HOSPITAL_FIELDS
 GARRISON_FIELDS = ('house', 'why', 'unit', 'item', 'zone', 'zone_house', 'occupants', 'taken', 'previous_house',
                    'holder', 'deployed', 'remaining', 'destroyed', 'low_health', 'hurt', 'health', 'max_health',
                    'target_item', 'order', 'by', 'price', 'soldiers', 'shots', 'air_shots', 'men', 'cycle')
+GARRISON_FIELDS += ('killed', 'living', 'source', 'destination', 'holder_house', 'health_raw', 'moving', 'stayed')
 GARRISON_ROW_FIELDS = KEY + ('event',) + GARRISON_FIELDS
 # One row per infantry-squads line (docs/infantry-squads.md): foot-soldier orders (INFANTRY_ORDER), squads
 # delivered (INFANTRY_SQUAD), the measured infantry share (INFANTRY_MIX), Barracks/WOR lanes (INFANTRY_LANE),

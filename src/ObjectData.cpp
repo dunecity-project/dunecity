@@ -29,6 +29,7 @@
 #include <main.h>
 #include <mod/ModManager.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -200,6 +201,8 @@ void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserCon
                 unitLimitSmallMap, unitLimitMediumMap, unitLimitLargeMap, unitLimitHugeMap);
     }
     garrisonHealTime = std::max(1, objectDataFile->getIntValue("Map Settings", "GarrisonHealTime", 60));
+    garrisonCollapseDamagePercent = std::clamp(
+        objectDataFile->getIntValue("Map Settings", "GarrisonCollapseDamagePercent", 50), 0, 100);
 
     // load default structure values
     ObjectDataStruct structureDefaultData[NUM_HOUSES];
@@ -379,6 +382,7 @@ void ObjectData::save(OutputStream& stream) const
     stream.writeSint32(unitLimitLargeMap);
     stream.writeSint32(unitLimitHugeMap);
     stream.writeSint32(garrisonHealTime);
+    stream.writeSint32(garrisonCollapseDamagePercent);
 }
 
 void ObjectData::load(InputStream& stream, int savedItemCount, int savedHouseCount)
@@ -444,6 +448,8 @@ void ObjectData::load(InputStream& stream, int savedItemCount, int savedHouseCou
     unitLimitHugeMap = stream.readSint32();
     garrisonHealTime = currentGame == nullptr || currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_ZONE_GARRISON_HEALTH
         ? std::max(1, stream.readSint32()) : 60;
+    garrisonCollapseDamagePercent = currentGame == nullptr || currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_ZONE_GARRISON_SHELTER
+        ? std::clamp(stream.readSint32(), 0, 100) : 50;
 }
 
 int ObjectData::loadIntValue(const INIFile& objectDataFile, const std::string& section, const std::string& key, char houseChar, int defaultValue) {
@@ -575,6 +581,7 @@ std::string ObjectData::getEffectiveHash() const {
     dataStr += std::to_string(unitLimitLargeMap);
     dataStr += std::to_string(unitLimitHugeMap);
     dataStr += ":GarrisonHealTime=" + std::to_string(garrisonHealTime);
+    dataStr += ":GarrisonCollapseDamagePercent=" + std::to_string(garrisonCollapseDamagePercent);
     
     // FNV-1a hash (consistent across platforms)
     uint64_t hash = 14695981039346656037ULL;

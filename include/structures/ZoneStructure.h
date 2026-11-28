@@ -88,10 +88,9 @@ public:
     static bool garrisonOrderAvailable(const ObjectBase* unit);
     bool isGarrisoned() const { return !garrison_.empty(); }
     int getGarrisonSize() const { return static_cast<int>(garrison_.size()); }
-    /// Occupants in entry order; each takes the same 10% damage share.
+    /// Occupants in entry order; sheltered from damage while inside.
     const std::vector<Uint32>& getGarrison() const { return garrison_; }
     struct GarrisonHealthRemainders {
-        int64_t damage = 0;   ///< Building HP in 32.32 units, less than ten HP.
         uint64_t healing = 0; ///< Remainder of the per-cycle healing division.
     };
     const std::array<GarrisonHealthRemainders, DuneCity::ZoneGarrison::kCapacity>&
@@ -104,22 +103,22 @@ public:
     bool heldAgainst(const UnitBase* unit) const;
     /// Puts UNIT inside; an enemy zone becomes UNIT's house's. False when refused.
     bool enterGarrison(UnitBase* unit);
-    /// Deploys the occupants beside the zone. Returns how many came out. DESTROYING kills
-    /// those with no free tile around; otherwise they stay inside.
-    int evacuateGarrison(bool destroying = false);
+    /// Deploys occupants beside the zone; KEEP prefers live Soldiers, then original entry order.
+    /// DESTROYING ignores KEEP and applies collapse damage after putting every occupant on the map.
+    /// Blocked occupants otherwise stay inside; keeping one preserves a captured zone's ownership.
+    int evacuateGarrison(bool destroying = false, int keep = 0);
     /// Hands the zone, its tiles, power draw and counts to NEWOWNER; city state stays. CAPTURE
     /// false is a captured zone going back to its original owner (no capture achievement).
     void transferOwnership(House* newOwner, bool capture = true);
     /// The house that owned this zone before its present garrison took it, or -1 when it is the
     /// holder's own: once that garrison is gone, by order, at low health or killed, it goes back.
     int getGarrisonOriginalOwner() const { return garrisonOriginalOwner_; }
-    /// The share of hit points below which the garrison leaves and nobody may enter (percent).
+    /// A below-threshold relocation has already been attempted since the last recovery.
+    bool hasAttemptedGarrisonRelocation() const { return garrisonRelocationAttempted_; }
+    /// Below this HP percentage, attempt one relocation; new entry is refused.
     static int evacuateHealthPercent();
     /// Too damaged to hold: below evacuateHealthPercent() of its hit points.
     bool tooDamagedToHold() const;
-
-    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
-                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
 
 private:
     void drawZoneImage();
@@ -127,6 +126,9 @@ private:
     void dropDeadOccupants();
     /// A captured zone whose garrison is gone returns to its original owner, if that house lives.
     void returnCapturedZone();
+    bool hasGarrisonSpaceFor(const UnitBase* unit) const;
+    bool mayReceiveGarrisonRelocation(const UnitBase* unit) const;
+    void relocateGarrison();
     const ObjectBase* findGarrisonTarget(int range) const;
     void drawGarrisonSandbags() const;
 
@@ -135,6 +137,7 @@ private:
     Uint32 garrisonTargetID_ = NONE_ID;     ///< saved
     Sint32 garrisonSearchTimer_ = 0;        ///< saved
     Sint32 garrisonOriginalOwner_ = -1;     ///< saved from SAVEGAMEVERSION_ZONE_GARRISON_RETURN
+    bool garrisonRelocationAttempted_ = false; ///< saved from SAVEGAMEVERSION_ZONE_GARRISON_SHELTER
     /// Shots the present garrison fired, and at aircraft: reported in the exit line of the match log
     /// only (not saved, no effect on play).
     int garrisonShots_ = 0;

@@ -66,7 +66,10 @@
 #include <fstream>
 #include <dunecity/CitySimulation.h>
 #include <dunecity/CityStructurePopulation.h>
+#include <dunecity/ResidentialPopulation.h>
 #include <misc/FileSystem.h>
+#include <misc/IMemoryStream.h>
+#include <misc/OMemoryStream.h>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -310,6 +313,8 @@ void checkFireOut() {
 void checkAssault() {
     Fixture f("assault");
     auto* z = f.zone(f.enemy, Structure_ZoneResidential, 40, 40);
+    // The defender can leave only for reachable friendly shelter; no destination means stay.
+    f.zone(f.enemy, Structure_ZoneCommercial, 12, 40);
     auto* defender = f.unit(f.enemy, Unit_Soldier, 39, 39);
     f.capture(defender, z);
     require(f.runUntil(20, [&] { return z->getGarrisonSize() == 1; }), "assault: the defender did not enter");
@@ -390,28 +395,31 @@ void checkDestroyed() {
     require(f.runUntil(20, [&] { return z->getGarrisonSize() == 2; }), "destroyed: the soldiers did not enter");
     const Uint32 zoneID = z->getObjectID();
     std::vector<Uint32> ids;
-    std::vector<int> before;
+    std::vector<FixPoint> before;
     for(auto* s : soldiers) {
         ids.push_back(s->getObjectID());
-        before.push_back(s->getHealth().lround());
+        before.push_back(s->getHealth());
     }
-    // A huge hit shares only the building's actual 200 HP loss (20 HP each),
-    // not the charge's overkill. Both Troopers survive to be ejected, hurt.
-    const int buildingHealth = z->getHealth().lround();
+    const size_t explosions = f.game->getExplosionList().size();
     z->handleDamage(100000, NONE_ID, f.enemy);
+    require(z->getGarrisonSize() == 2 && soldiers[0]->getHealth() == before[0] && soldiers[1]->getHealth() == before[1],
+            "destroyed: a lethal building hit hurt its still-sheltered occupants");
     require(f.runUntil(5, [&] { return !f.alive(zoneID); }), "destroyed: the zone did not go");
+    require(f.game->getExplosionList().size() > explosions, "destroyed: actual building explosions did not activate");
     std::string hurt;
     for(size_t i = 0; i < ids.size(); ++i) {
         auto* s = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(ids[i]));
         require(s != nullptr && s->isActive() && !s->isPickedUp() && currentGameMap->tileExists(s->getLocation()),
                 "destroyed: a soldier did not come out of the ruin");
-        require(s->isVisible() && s->getHealth().lround() == DuneCity::ZoneGarrison::healthAfterEjection(
-                    before[i] - buildingHealth / 10, s->getMaxHealth())
-                    && s->getHealth() > 0 && s->getHealth().lround() < before[i],
-                "destroyed: a soldier thrown out of the ruin did not lose half its hit points");
-        hurt += " " + std::to_string(before[i]) + "->" + std::to_string(s->getHealth().lround());
+        const int injury = static_cast<int>((int64_t{s->getMaxHealth()}
+            * f.game->objectData.garrisonCollapseDamagePercent + 99) / 100);
+        require(s->isVisible() && s->getHealth() == before[i] - injury && s->getHealth() > 0,
+                "destroyed: an ejected soldier did not receive only the configured ordinary collapse damage");
+        hurt += " " + std::to_string(before[i].lround()) + "->" + std::to_string(s->getHealth().lround());
     }
-    record("destroyed", "both Troopers out of the ruin, visible, actual-loss share then ejection damage:" + hurt);
+    record("destroyed", "interior_damage=0 explosions="
+           + std::to_string(f.game->getExplosionList().size() - explosions)
+           + " both Troopers out, visible, normal collapse damage:" + hurt);
 }
 
 /// A captured zone goes back to the house it was taken from once its garrison is gone: by the
@@ -453,13 +461,14 @@ void checkReturn() {
     record("return", "evacuated and killed garrisons hand captured zones back (count, power, tiles); an own zone stays");
 }
 
-/// Below the evacuation threshold the garrison leaves on its own (a captured zone goes back as it
-/// does), and nobody may enter or take a zone that damaged.
+/// Exactly30% holds; below30 occupants walk into available shelter, a captured zone returns,
+/// and nobody may enter or take a lot that damaged.
 void checkLowHealth() {
     Fixture f("low health");
     const int percent = ZoneStructure::evacuateHealthPercent();
     require(percent == DuneCity::ZoneGarrison::kEvacuateHealthPercent, "low health: the threshold is overridden");
     auto* z = f.zone(f.own, Structure_ZoneResidential, 20, 30);
+    auto* destination = f.zone(f.own, Structure_ZoneCommercial, 28, 30);
     std::vector<UnitBase*> soldiers;
     for(int i = 0; i < 2; ++i) {
         soldiers.push_back(f.unit(f.own, i ? Unit_Trooper : Unit_Soldier, 19, 29 + i));
@@ -473,26 +482,39 @@ void checkLowHealth() {
     require(z->getGarrisonSize() == 2, "low health: the garrison left at " + std::to_string(atLine) + "/" + std::to_string(max));
     z->setHealth(atLine - 1);
     f.run(1);
-    require(!z->isGarrisoned() && z->getOwner() == f.own, "low health: the garrison stayed in a zone below the threshold");
-    for(auto* s : soldiers) require(onMapBeside(s, z, 2) && s->getHealth() > 0, "low health: a soldier did not come out");
-    f.capture(soldiers[0], z);
-    f.run(5);
-    require(!z->isGarrisoned(), "low health: a soldier entered a zone below the threshold");
-    // A captured zone driven below the threshold goes back to its owner, and cannot be taken again.
+    require(!z->isGarrisoned() && z->getOwner() == f.own && z->hasAttemptedGarrisonRelocation(),
+            "low health: the garrison did not leave for available shelter below the threshold");
+    for(auto* s : soldiers)
+        require(s->isActive() && s->getHealth() > 0
+                    && s->getGarrisonRelocationTarget() == destination->getObjectID(),
+                "low health: a soldier did not receive a live walking relocation");
+    require(f.runUntil(30, [&] { return destination->getGarrisonSize() == 2; }),
+            "low health: the two relocated soldiers never arrived");
+    auto* refused = f.unit(f.own, Unit_Soldier, 19, 30);
+    f.capture(refused, z);
+    f.run(1);
+    require(!z->isGarrisoned() && refused->isActive(), "low health: a soldier entered a zone below the threshold");
+    // A captured zone returns when its occupants relocate into reachable friendly shelter.
     auto* foe = f.zone(f.enemy, Structure_ZoneIndustrial, 40, 30, 2);
+    auto* capturedDestination = f.zone(f.own, Structure_ZoneCommercial, 48, 30);
     auto* trooper = f.unit(f.own, Unit_Trooper, 39, 30);
     f.run(1);
     f.capture(trooper, foe);
     require(foe->getOwner() == f.own, "low health: the enemy zone was not taken");
-    foe->StructureBase::handleDamage(foe->getHealth().lround() - atLine + 1, NONE_ID, f.enemy);
+    const int foeLine = (foe->getMaxHealth() * percent + 99) / 100;
+    foe->StructureBase::handleDamage(foe->getHealth().lround() - foeLine + 1, NONE_ID, f.enemy);
     f.run(1);
-    require(!foe->isGarrisoned() && foe->getOwner() == f.enemy && onMapBeside(trooper, foe, 2),
-            "low health: a captured zone below the threshold was not left and handed back");
-    f.capture(trooper, foe);
-    f.run(5);
+    require(!foe->isGarrisoned() && foe->getOwner() == f.enemy && trooper->isActive()
+                && trooper->getGarrisonRelocationTarget() == capturedDestination->getObjectID(),
+            "low health: a captured zone did not relocate its occupant and return");
+    require(f.runUntil(30, [&] { return capturedDestination->getGarrisonSize() == 1; }),
+            "low health: the captured zone's occupant never reached its new shelter");
+    auto* retaker = f.unit(f.own, Unit_Trooper, 39, 30);
+    f.capture(retaker, foe);
+    f.run(1);
     require(foe->getOwner() == f.enemy && !foe->isGarrisoned(), "low health: a zone below the threshold was taken");
     record("low_health", "held at " + std::to_string(atLine) + "/" + std::to_string(max) + " (" + std::to_string(percent)
-           + "%), left below it; a captured zone went back; no entry below it");
+           + "%), walked below it into shelter; a captured zone went back; no entry below it");
 }
 
 void checkAlly() {
@@ -1168,8 +1190,11 @@ void checkPrice() {
 
 #include "zone-garrison-redevelopment-probe.inc"
 #include "zone-garrison-health-probe.inc"
-#include "zone-garrison-panel-probe.inc"
+#include "zone-garrison-loss-probe.inc"
+#include "zone-garrison-relocation-probe.inc"
 #include "zone-garrison-stats-probe.inc"
+#include "garrison-collapse-stats.inc"
+#include "zone-garrison-panel-probe.inc"
 #include "zone-garrison-appearance-probe.inc"
 
 } // namespace ZoneGarrisonProbe
@@ -1188,6 +1213,11 @@ int runZoneGarrisonProbe() {
         SDL_Log("ZONE_GARRISON_PROBE_PASS: garrison combat statistics");
         return -1;
     }
+    if(std::getenv("ZONE_GARRISON_COLLAPSE_STATS_ONLY")) {
+        checkGarrisonCollapseStats();
+        SDL_Log("ZONE_GARRISON_PROBE_PASS: garrison collapse statistics");
+        return -1;
+    }
     if(std::getenv("ZONE_GARRISON_PANEL_ONLY")) {
         checkGarrisonPanel();
         checkGarrisonAppearance();
@@ -1196,21 +1226,31 @@ int runZoneGarrisonProbe() {
     }
     // Every case runs even after one fails, so a run shows all failures; any failure fails the probe.
     int failed = 0;
-    for(auto check : {checkOwnZone, checkTake, checkFireOut, checkAssault, checkEvacuate, checkDestroyed,
-                      checkReturn, checkLowHealth, checkAlly, checkContainment, checkSave, checkRuleOff,
-                      checkPlayerOwnZone, checkPlayerTake, checkPlayerRefused, checkGarrisonButton,
-                      checkGarrisonButtonRuleOff, checkReinforce, checkTrooperAir, checkTrooperTank, checkNoPull,
-                      checkPrice, checkPicture, checkGrowthHeld, checkDemandDeclineHeld, checkPowerDeclineHeld,
-                      checkCivicHeld, checkDemolitionEjects, checkBundledHeld, checkOccupantDamageShare,
-                      checkGarrisonRegeneration, checkChipDamageSurvival, checkGarrisonCivicSave, checkGarrisonStats}) {
+    const auto checks = {checkOwnZone, checkTake, checkFireOut, checkAssault, checkEvacuate, checkDestroyed,
+                        checkReturn, checkLowHealth, checkAlly, checkContainment, checkSave, checkRuleOff,
+                        checkPlayerOwnZone, checkPlayerTake, checkPlayerRefused, checkGarrisonButton,
+                        checkGarrisonButtonRuleOff, checkReinforce, checkTrooperAir, checkTrooperTank, checkNoPull,
+                        checkPrice, checkPicture, checkGrowthHeld, checkDemandDeclineHeld, checkPowerDeclineHeld,
+                        checkCivicHeld, checkDemolitionEjects, checkBundledHeld, checkOccupantShelter,
+                        checkGarrisonRegeneration, checkChipDamageSurvival, checkGarrisonCivicSave,
+                        checkBloomEjection, checkOwnershipChangingFollow, checkGarrisonPartialEvacuation,
+                        checkGarrisonCollapse, checkGarrisonLegacyHealth, checkGarrisonRelocationWalking,
+                        checkGarrisonRelocationBlocked, checkGarrisonRelocationTie, checkGarrisonRelocationNoRoom,
+                        checkGarrisonRelocationReservations, checkGarrisonRelocationFriendly,
+                        checkGarrisonRelocationCrossingSave, checkGarrisonRelocationTransitSave,
+                        checkGarrisonRelocationCancellation, checkGarrisonRelocationAI,
+                        checkGarrisonRelocationDigest, checkGarrisonCaptureOwnershipChange,
+                        checkGarrisonStats, checkGarrisonCollapseStats};
+    for(auto check : checks) {
         try {
             check();
-        } catch(const std::exception&) {
-            ++failed;   // require() logged ZONE_GARRISON_PROBE_FAIL with the reason.
+        } catch(const std::exception& error) {
+            ++failed;
+            SDL_Log("ZONE_GARRISON_PROBE_EXCEPTION: %s", error.what());
             currentGame = nullptr;
         }
     }
-    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 34 cases");
-    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 34 cases failed", failed);
+    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: %zu cases", checks.size());
+    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of %zu cases failed", failed, checks.size());
     return -1;
 }

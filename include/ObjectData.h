@@ -146,6 +146,7 @@ public:
     int unitLimitLargeMap;           ///< Max units per house for large maps (between 64x64 and 128x128)
     int unitLimitHugeMap;            ///< Max units per house for huge maps (128x128 or larger)
     int garrisonHealTime = 60;       ///< Seconds for a full heal while garrisoned; Map Settings/GarrisonHealTime.
+    int garrisonCollapseDamagePercent = 50; ///< Maximum HP lost on collapse after ejection; Map Settings/GarrisonCollapseDamagePercent.
 
 private:
     int loadedItemCount = Num_ItemID; ///< runtime only, never saved

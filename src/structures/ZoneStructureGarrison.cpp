@@ -27,7 +27,6 @@
 #include <units/UnitBase.h>
 
 #include <algorithm>
-#include <cstdlib>
 
 namespace {
 
@@ -56,19 +55,12 @@ bool ZoneStructure::garrisonOrderAvailable(const ObjectBase* unit) {
 }
 
 int ZoneStructure::evacuateHealthPercent() {
-    // Threshold experiments only (tests/ai matches on the queue): DUNECITY_TEST_GARRISON_EVACUATE_PERCENT
-    // sets it for a whole process, read once (0 = never leave). Never set in a game people play: it
-    // is not part of the match rules and two players with different values would fall out of step.
-    static const int percent = [] {
-        const char* text = std::getenv("DUNECITY_TEST_GARRISON_EVACUATE_PERCENT");
-        if(text == nullptr || *text == '\0') return DuneCity::ZoneGarrison::kEvacuateHealthPercent;
-        return std::clamp(std::atoi(text), 0, 100);
-    }();
-    return percent;
+    return DuneCity::ZoneGarrison::kEvacuateHealthPercent;
 }
 
 bool ZoneStructure::tooDamagedToHold() const {
-    return DuneCity::ZoneGarrison::belowEvacuateHealth(getHealth().lround(), getMaxHealth(), evacuateHealthPercent());
+    return evacuateHealthPercent() > 0
+        && getHealth() * 100 < FixPoint(getMaxHealth()) * evacuateHealthPercent();
 }
 
 const House* ZoneStructure::getGarrisonHouse() const {
@@ -82,6 +74,9 @@ bool ZoneStructure::mayEnterGarrison(const UnitBase* unit) const {
     if(!garrisonsEnabled() || unit == nullptr || owner == nullptr || getHealth() <= 0
        || !unit->isActive() || unit->getHealth() <= 0 || !unit->canCaptureStructures()
        || getLocation().isInvalid() || tooDamagedToHold()) return false;
+    if(unit->getGarrisonRelocationTarget() == objectID || unit->getOwner() == owner)
+        return mayReceiveGarrisonRelocation(unit);
+    if(!hasGarrisonSpaceFor(unit)) return false;
     const House* garrisonHouse = getGarrisonHouse();
     const auto entry = DuneCity::ZoneGarrison::entryFor(
         unit->getOwner()->getHouseID(), unit->getOwner()->getTeamID(),
@@ -89,6 +84,152 @@ bool ZoneStructure::mayEnterGarrison(const UnitBase* unit) const {
         garrisonHouse ? garrisonHouse->getHouseID() : owner->getHouseID());
     return entry == DuneCity::ZoneGarrison::Entry::Enter
         || entry == DuneCity::ZoneGarrison::Entry::EnterAndTake;
+}
+
+
+bool ZoneStructure::hasGarrisonSpaceFor(const UnitBase* unit) const {
+    int occupied = getGarrisonSize();
+    if(occupied >= DuneCity::ZoneGarrison::kCapacity) return false;
+    for(const UnitBase* incoming : unitList) {
+        if(incoming != unit && incoming->isActive() && incoming->getHealth() > 0
+           && incoming->getGarrisonRelocationTarget() == objectID
+           && incoming->getOwner()->getTeamID() == owner->getTeamID()) {
+            if(++occupied >= DuneCity::ZoneGarrison::kCapacity) return false;
+        }
+    }
+    return true;
+}
+
+bool ZoneStructure::mayReceiveGarrisonRelocation(const UnitBase* unit) const {
+    if(unit == nullptr || owner == nullptr || !isActive() || getHealth() <= 0
+       || getLocation().isInvalid() || tooDamagedToHold()
+       || owner->getTeamID() != unit->getOwner()->getTeamID()
+       || !hasGarrisonSpaceFor(unit)) return false;
+    for(const Uint32 id : garrison_) {
+        const UnitBase* occupant = occupantUnit(id);
+        if(occupant && occupant->getHealth() > 0
+           && occupant->getOwner()->getTeamID() != unit->getOwner()->getTeamID()) return false;
+    }
+    return true;
+}
+
+void ZoneStructure::relocateGarrison() {
+    const int holderHouse = owner->getHouseID();
+    const int64_t healthRaw = getHealth().getRawValue();
+    const int maxHealth = getMaxHealth();
+    const int occupants = getGarrisonSize();
+    int moving = 0;
+    const int width = currentGameMap->getSizeX();
+    const size_t tileCount = static_cast<size_t>(width) * currentGameMap->getSizeY();
+    std::vector<int> exitOrigins;
+    std::vector<Coord> frontier;
+    static const std::array<Coord, 8> neighbours = {{
+        Coord(-1, -1), Coord(0, -1), Coord(1, -1), Coord(-1, 0),
+        Coord(1, 0), Coord(-1, 1), Coord(0, 1), Coord(1, 1)
+    }};
+
+    for(size_t i = 0; i < garrison_.size();) {
+        UnitBase* unit = occupantUnit(garrison_[i]);
+        bool hasCandidate = false;
+        for(StructureBase* structure : structureList) {
+            const auto* zone = dynamic_cast<const ZoneStructure*>(structure);
+            if(zone && zone != this && zone->mayReceiveGarrisonRelocation(unit)) {
+                hasCandidate = true;
+                break;
+            }
+        }
+        if(!hasCandidate) {
+            ++i;
+            continue;
+        }
+
+        // A multi-source flood follows the same eight-neighbour canPathThrough policy as A*.
+        // Retain the source exit for each reachable tile: deploying on a random other side
+        // of the building could strand an otherwise reachable relocation.
+        exitOrigins.assign(tileCount, -1);
+        frontier.clear();
+        if(frontier.capacity() < tileCount) frontier.reserve(tileCount);
+        for(int y = location.y - 1; y <= location.y + structureSize.y; ++y) {
+            for(int x = location.x - 1; x <= location.x + structureSize.x; ++x) {
+                if(x >= location.x && x < location.x + structureSize.x
+                   && y >= location.y && y < location.y + structureSize.y) continue;
+                if(!unit->canPathThrough(x, y)) continue;
+                const int index = y * width + x;
+                exitOrigins[index] = index;
+                frontier.emplace_back(x, y);
+            }
+        }
+        for(size_t head = 0; head < frontier.size(); ++head) {
+            const Coord at = frontier[head];
+            for(const Coord& offset : neighbours) {
+                const Coord next = at + offset;
+                if(!currentGameMap->tileExists(next)) continue;
+                const int index = next.y * width + next.x;
+                if(exitOrigins[index] >= 0 || !unit->canPathThrough(next.x, next.y)) continue;
+                exitOrigins[index] = exitOrigins[at.y * width + at.x];
+                frontier.push_back(next);
+            }
+        }
+
+        ZoneStructure* best = nullptr;
+        FixPoint bestDistance = FixPt_MAX;
+        int bestExit = -1;
+        for(StructureBase* structure : structureList) {
+            auto* zone = dynamic_cast<ZoneStructure*>(structure);
+            if(!zone || zone == this || !zone->mayReceiveGarrisonRelocation(unit)) continue;
+            const Coord targetAt = zone->getLocation();
+            const FixPoint distance = blockDistance(getClosestPoint(targetAt), zone->getClosestPoint(location));
+            if(distance > bestDistance || (distance == bestDistance && best
+               && zone->getObjectID() > best->getObjectID())) continue;
+            int exit = -1;
+            for(int y = targetAt.y - 1; y <= targetAt.y + zone->structureSize.y && exit < 0; ++y) {
+                for(int x = targetAt.x - 1; x <= targetAt.x + zone->structureSize.x; ++x) {
+                    const Coord approach(x, y);
+                    if(!currentGameMap->tileExists(approach)) continue;
+                    if(x >= targetAt.x && x < targetAt.x + zone->structureSize.x
+                       && y >= targetAt.y && y < targetAt.y + zone->structureSize.y) continue;
+                    exit = exitOrigins[y * width + x];
+                    if(exit >= 0) break;
+                }
+            }
+            if(exit < 0) continue;
+            best = zone;
+            bestDistance = distance;
+            bestExit = exit;
+        }
+        if(best == nullptr) {
+            ++i;
+            continue;
+        }
+
+        // Remove this occupant before deployment hazards can run. Unmoved occupants retain
+        // their healing fraction and remain hidden; every living departure books its own room.
+        for(size_t j = i + 1; j < garrison_.size(); ++j)
+            garrisonHealthRemainders_[j - 1] = garrisonHealthRemainders_[j];
+        garrison_.erase(garrison_.begin() + i);
+        garrisonHealthRemainders_[garrison_.size()] = {};
+        garrisonTargetID_ = NONE_ID;
+        const Coord spot(bestExit % width, bestExit / width);
+        unit->setGuardPoint(spot);
+        unit->setForced(false);
+        unit->deploy(spot);
+        if(unit->isActive() && unit->getHealth() > 0) {
+            unit->doGarrisonRelocation(best);
+            if(unit->getGarrisonRelocationTarget() == best->getObjectID()) {
+                ++moving;
+                SDL_Log("ZONE_GARRISON: event=relocation_departure house=%d holder_house=%d unit=%u source=%u destination=%u cycle=%u",
+                        unit->getOwner()->getHouseID(), holderHouse, unit->getObjectID(), objectID,
+                        best->getObjectID(), currentGame->getGameCycleCount());
+            }
+        }
+    }
+    SDL_Log("ZONE_GARRISON: event=relocation_attempt house=%d source=%u health_raw=%lld max_health=%d occupants=%d moving=%d stayed=%d cycle=%u",
+            holderHouse, objectID, static_cast<long long>(healthRaw), maxHealth, occupants, moving,
+            getGarrisonSize(), currentGame->getGameCycleCount());
+    if(garrison_.empty()) {
+        garrisonShots_ = garrisonAirShots_ = 0;
+        if(getHealth() > 0) returnCapturedZone();
+    }
 }
 
 bool ZoneStructure::heldAgainst(const UnitBase* unit) const {
@@ -99,9 +240,12 @@ bool ZoneStructure::heldAgainst(const UnitBase* unit) const {
 
 bool ZoneStructure::enterGarrison(UnitBase* unit) {
     if(!mayEnterGarrison(unit)) return false;
+    // Automatic friendly relocation shares shelter, never ownership. Manual ally entry
+    // still follows entryFor() and is refused.
     House* house = unit->getOwner();
     const bool taken = house->getTeamID() != owner->getTeamID();
     const int previousHouse = owner->getHouseID();
+    const bool relocating = unit->getGarrisonRelocationTarget() == objectID;
     if(taken) {
         // An empty zone is never a captured one (it went back when its garrison left), so the
         // house it is taken from is the one it returns to.
@@ -115,6 +259,11 @@ bool ZoneStructure::enterGarrison(UnitBase* unit) {
     SDL_Log("ZONE_GARRISON: event=entered house=%d unit=%u item=%d zone=%u taken=%d previous_house=%d occupants=%d cycle=%u",
             house->getHouseID(), unit->getObjectID(), unit->getItemID(), objectID, taken ? 1 : 0, previousHouse,
             getGarrisonSize(), currentGame->getGameCycleCount());
+    if(relocating) {
+        SDL_Log("ZONE_GARRISON: event=relocation_arrival house=%d unit=%u destination=%u occupants=%d cycle=%u",
+                house->getHouseID(), unit->getObjectID(), objectID, getGarrisonSize(),
+                currentGame->getGameCycleCount());
+    }
     if(AITelemetry::log().enabled()) {
         const Coord pos = getLocation();
         AITelemetry::log().write(currentGame->getGameCycleCount(), house->getHouseID(), -1,
@@ -126,55 +275,104 @@ bool ZoneStructure::enterGarrison(UnitBase* unit) {
     return true;
 }
 
-int ZoneStructure::evacuateGarrison(bool destroying) {
+int ZoneStructure::evacuateGarrison(bool destroying, int keep) {
     if(garrison_.empty()) return 0;
     int deployed = 0;
     int hurt = 0;
+    int killed = 0;
+    int localKilled = 0;
     const bool lowHealth = !destroying && tooDamagedToHold();
-    std::vector<Uint32> remaining;
-    const auto occupants = garrison_;
+    const int houseID = getGarrisonHouseID(garrison_);
+    const size_t count = garrison_.size();
+    std::array<Uint32, DuneCity::ZoneGarrison::kCapacity> occupants;
+    int initialLive = 0;
+    for(size_t i = 0; i < count; ++i) {
+        occupants[i] = garrison_[i];
+        const UnitBase* unit = occupantUnit(occupants[i]);
+        if(unit && unit->getHealth() > 0) ++initialLive;
+    }
+    std::array<bool, DuneCity::ZoneGarrison::kCapacity> retained{};
+    if(!destroying && keep > 0) {
+        // A Soldier courier relieves rear Troopers without dropping captured ownership.
+        for(const bool preferSoldier : {true, false}) {
+            for(size_t i = 0; i < count && keep > 0; ++i) {
+                const UnitBase* unit = occupantUnit(occupants[i]);
+                if(unit == nullptr || unit->getHealth() <= 0
+                   || (unit->getItemID() == Unit_Soldier) != preferSoldier) continue;
+                retained[i] = true;
+                --keep;
+            }
+        }
+    }
     garrison_.clear();
     garrisonTargetID_ = NONE_ID;
-    for(size_t i = 0; i < occupants.size(); ++i) {
+    // A collapsed footprint is available even when every surrounding tile is blocked.
+    // Free it before deployment so an ejected casualty follows the ordinary on-map death path.
+    if(destroying && currentGameMap != nullptr && getLocation().isValid()) {
+        for(int y = 0; y < structureSize.y; ++y)
+            for(int x = 0; x < structureSize.x; ++x)
+                if(Tile* tile = currentGameMap->getTile(location.x + x, location.y + y))
+                    tile->unassignObject(objectID);
+    }
+    for(size_t i = 0; i < count; ++i) {
         const Uint32 id = occupants[i];
         UnitBase* unit = occupantUnit(id);
-        if(unit == nullptr || unit->getHealth() <= 0) continue;
+        if(unit == nullptr) continue;
+        if(retained[i]) {
+            garrisonHealthRemainders_[garrison_.size()] = garrisonHealthRemainders_[i];
+            garrison_.push_back(id);
+            continue;
+        }
         Coord spot = Coord::Invalid();
         if(currentGameMap != nullptr && getLocation().isValid()) {
             spot = currentGameMap->findDeploySpot(unit, getLocation(), currentGame->randomGen,
                                                   Coord::Invalid(), structureSize);
+            if(destroying && spot.isInvalid() && currentGameMap->tileExists(getLocation()))
+                spot = getLocation();
         }
         if(spot.isValid() && currentGameMap->tileExists(spot)) {
             unit->setGuardPoint(spot);
             unit->setForced(false);
             unit->deploy(spot);
-            // Thrown out of the ruin: hurt, never killed (DuneCity::ZoneGarrison::healthAfterEjection).
-            if(destroying) {
-                const int before = unit->getHealth().lround();
-                unit->setHealth(DuneCity::ZoneGarrison::healthAfterEjection(before, unit->getMaxHealth()));
-                hurt += before - unit->getHealth().lround();
+            const bool hazard = unit->getHealth() <= 0;
+            if(destroying && !hazard) {
+                const FixPoint before = unit->getHealth();
+                const int damage = static_cast<int>((int64_t{unit->getMaxHealth()}
+                    * currentGame->objectData.garrisonCollapseDamagePercent + 99) / 100);
+                unit->handleDamage(damage, NONE_ID, nullptr);
+                hurt += (before - unit->getHealth()).lround();
             }
-            ++deployed;
-        } else if(destroying) {
-            unit->setHealth(0);    // Buried in the ruin; removed on its next update.
+            if(unit->getHealth() > 0) {
+                ++deployed;
+            } else {
+                // deploy() hides bloom victims. Reveal the corpse, never restore its health,
+                // so the unit's normal destruction creates the visible falling-infantry animation.
+                unit->setVisible(VIS_ALL, true);
+                ++killed;
+                if(unit->getOwner() == pLocalHouse) ++localKilled;
+                SDL_Log("ZONE_GARRISON: event=casualty house=%d zone=%u unit=%u cause=%s cycle=%u",
+                        unit->getOwner()->getHouseID(), objectID, id,
+                        hazard ? "ejection_hazard" : "collapse", currentGame->getGameCycleCount());
+            }
         } else {
-            garrisonHealthRemainders_[remaining.size()] = garrisonHealthRemainders_[i];
-            remaining.push_back(id);
+            garrisonHealthRemainders_[garrison_.size()] = garrisonHealthRemainders_[i];
+            garrison_.push_back(id);
         }
     }
-    garrison_ = std::move(remaining);
     std::fill(garrisonHealthRemainders_.begin() + garrison_.size(), garrisonHealthRemainders_.end(),
               GarrisonHealthRemainders{});
+    if(localKilled > 0)
+        currentGame->addUrgentMessageToNewsTicker(_("Garrison casualties") + ": " + std::to_string(localKilled));
     if(owner != nullptr) {
-        SDL_Log("ZONE_GARRISON: event=exit house=%d zone=%u deployed=%d remaining=%d destroyed=%d low_health=%d hurt=%d health=%d max_health=%d shots=%d air_shots=%d cycle=%u",
-                getGarrisonHouseID(occupants), objectID, deployed, getGarrisonSize(), destroying ? 1 : 0, lowHealth ? 1 : 0,
-                hurt, getHealth().lround(), getMaxHealth(), garrisonShots_, garrisonAirShots_, currentGame->getGameCycleCount());
+        SDL_Log("ZONE_GARRISON: event=exit house=%d zone=%u occupants=%d deployed=%d remaining=%d destroyed=%d low_health=%d hurt=%d killed=%d health=%d max_health=%d shots=%d air_shots=%d cycle=%u",
+                houseID, objectID, initialLive, deployed, getGarrisonSize(), destroying ? 1 : 0, lowHealth ? 1 : 0,
+                hurt, killed, getHealth().lround(), getMaxHealth(), garrisonShots_, garrisonAirShots_, currentGame->getGameCycleCount());
     }
     if(garrison_.empty()) garrisonShots_ = garrisonAirShots_ = 0;
     if(AITelemetry::log().enabled() && owner != nullptr) {
         AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "zone_garrison_exit",
-            AITelemetry::Record().set("zone", objectID).set("deployed", deployed)
-                .set("remaining", getGarrisonSize()).set("destroyed", destroying)
+            AITelemetry::Record().set("zone", objectID).set("occupants", initialLive).set("deployed", deployed)
+                .set("remaining", getGarrisonSize()).set("destroyed", destroying).set("killed", killed)
                 .set("low_health", !destroying && tooDamagedToHold())
                 .set("health", getHealth().lround()).set("max_health", getMaxHealth()));
     }
@@ -228,44 +426,38 @@ void ZoneStructure::transferOwnership(House* newOwner, bool capture) {
     if(capture) AchievementEvents::captured(newOwner, previous);
 }
 
-void ZoneStructure::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
-                                 const DeviationReward::Provenance& provenance) {
-    const FixPoint before = getHealth();
-    StructureBase::handleDamage(damage, damagerID, damagerOwner, provenance);
-    const FixPoint lost = before - getHealth();
-    if(lost <= 0 || garrison_.empty()) return;
-    // Each occupant shares only the HP the building actually lost. The normal
-    // integer damage path retains kill attribution, rewards and unit destruction.
-    for(size_t i = 0; i < garrison_.size(); ++i) {
-        if(UnitBase* unit = occupantUnit(garrison_[i]); unit && unit->getHealth() > 0) {
-            const int share = DuneCity::ZoneGarrison::occupantDamage(lost, garrisonHealthRemainders_[i].damage);
-            if(share > 0) unit->ObjectBase::handleDamage(share, damagerID, damagerOwner, provenance);
-        }
-    }
-    dropDeadOccupants();
-}
-
 void ZoneStructure::dropDeadOccupants() {
     if(garrison_.empty()) return;
     size_t live = 0;
-    int killed = 0;
+    int localKilled = 0;
     for(size_t i = 0; i < garrison_.size(); ++i) {
         const Uint32 id = garrison_[i];
-        const UnitBase* unit = occupantUnit(id);
+        UnitBase* unit = occupantUnit(id);
         if(unit && unit->getHealth() > 0) {
             garrison_[live] = id;
             garrisonHealthRemainders_[live++] = garrisonHealthRemainders_[i];
         } else {
-            ++killed;
+            if(unit != nullptr) {
+                if(unit->getOwner() == pLocalHouse) ++localKilled;
+                if(currentGameMap != nullptr && getLocation().isValid()) {
+                    const Coord spot = currentGameMap->findDeploySpot(
+                        unit, getLocation(), currentGame->randomGen, Coord::Invalid(), structureSize);
+                    if(spot.isValid() && currentGameMap->tileExists(spot)) {
+                        unit->setGuardPoint(spot);
+                        unit->deploy(spot);
+                        unit->setVisible(VIS_ALL, true);
+                    }
+                }
+            }
             SDL_Log("ZONE_GARRISON: event=casualty house=%d unit=%u item=%d zone=%u health=%d max_health=%d missing=%d cycle=%u",
-                    owner ? owner->getHouseID() : -1, id, unit ? unit->getItemID() : -1, objectID,
+                    unit ? unit->getOwner()->getHouseID() : -1, id, unit ? unit->getItemID() : -1, objectID,
                     getHealth().lround(), getMaxHealth(), unit ? 0 : 1, currentGame->getGameCycleCount());
         }
     }
     garrison_.resize(live);
     std::fill(garrisonHealthRemainders_.begin() + live, garrisonHealthRemainders_.end(), GarrisonHealthRemainders{});
-    if(killed > 0 && owner == pLocalHouse)
-        currentGame->addUrgentMessageToNewsTicker(_("Garrison casualties") + ": " + std::to_string(killed));
+    if(localKilled > 0)
+        currentGame->addUrgentMessageToNewsTicker(_("Garrison casualties") + ": " + std::to_string(localKilled));
     if(garrison_.empty()) {
         garrisonTargetID_ = NONE_ID;
         SDL_Log("ZONE_GARRISON: event=killed_out house=%d zone=%u health=%d max_health=%d shots=%d air_shots=%d cycle=%u",
@@ -329,13 +521,14 @@ const ObjectBase* ZoneStructure::findGarrisonTarget(int range) const {
 
 void ZoneStructure::updateGarrison() {
     dropDeadOccupants();
+    const bool belowThreshold = tooDamagedToHold();
+    if(!belowThreshold) garrisonRelocationAttempted_ = false;
     if(garrison_.empty() || owner == nullptr || currentGameMap == nullptr || getLocation().isInvalid()) return;
-    // Below the threshold the garrison leaves on its own (any with no free tile around stay and
-    // try again next cycle); a captured zone goes back to its original owner as they do.
-    // A zone at 0 waits for destroy(), which throws its soldiers out of the ruin hurt.
+    // Destruction owns zero-health ejection. A failed relocation is not retried until recovery.
     if(getHealth() <= 0) return;
-    if(tooDamagedToHold()) {
-        evacuateGarrison();
+    if(belowThreshold && !garrisonRelocationAttempted_) {
+        garrisonRelocationAttempted_ = true;
+        relocateGarrison();
         if(garrison_.empty()) return;
     }
 

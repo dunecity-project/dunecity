@@ -119,6 +119,10 @@ UnitLimitHugeMap = 300          # Maps 128x128 or larger (16384+ tiles)
 # Full regeneration from zero HP while infantry are inside a zone (seconds of game time).
 GarrisonHealTime = 60
 
+# Collapse injury after occupants are deployed, as a percentage of their maximum HP (rounded up).
+# Ordinary damage/death rules apply; wounded occupants can die.
+GarrisonCollapseDamagePercent = 50
+
 ### default structure ###
 
 [default structure]
