@@ -336,6 +336,7 @@ struct QuantBotConfig {
         bool economyFirst;                     ///< Low/no-spice city economy: space-based yards and purpose-sized construction savings.
         int economyFirstUnitPacing;             ///< Default 0: none; 1 all non-MCV unit orders; 2 Starport only, paced to Stefan's opening.
         bool economyFirstTurrets;               ///< Default off: Rocket Turret orders on Stefan's 3/10/20/31-minute schedule.
+        bool airliftColonists;                  ///< Default off: away MCVs get a ready held turret and, with manual drops, a Carryall.
         int vanillaCoreDefenceThreatBps;       ///< Exactly 5000 or 10000 of the strongest hostile team's live threat.
         bool vanillaArmyCounters;              ///< Default on since protocol 119; scoped by vanillaArmyCounterMapScope.
         int vanillaArmyCounterBlendBps;        ///< Exactly 5000 or 10000 counter-composition blend.

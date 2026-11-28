@@ -78,6 +78,8 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     turn.pStructure = pStructure;
     turn.pBuilder = static_cast<const BuilderBase*>(pStructure);
     beginBuilderTurn(pass, turn);
+    // A colony's material belongs to its mission, not to ordinary placement/recovery at home.
+    if (buildColonistTurret(pass, turn)) return;
     if (recoverBuilderConstruction(pass, turn)) return;
     // A selected ordinary-installment project needs no legacy yard-entry cash.
     if (pass.techSavings && cityHarvesterReplacementFloor(pass) <= pass.itemCount[Unit_Harvester]
@@ -87,6 +89,7 @@ void QuantBot::buildProducer(BuildPass& pass, const StructureBase* pStructure) {
     if (queueCampaignWindtrap(pass, turn, 0)) return;
     if (buildCampaignRepairYard(pass, turn)) return;
     reserveBuilderCash(pass, turn);
+    if (buildColonistTransport(pass, turn)) return;
     if (economyFirstMcv(pass, turn)) return;
     if (buildCityHarvesterReplacement(pass, turn)) return;
     if (turn.pBuilder->getItemID() != Structure_ConstructionYard && buildTechSavings(pass, turn)) return;

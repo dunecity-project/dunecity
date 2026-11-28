@@ -723,6 +723,10 @@ EconomyFirst=0
 EconomyFirstUnitPacing=0
 # New Rocket Turret orders: none before minute 3, 29 by 10, 50 by 20, 77 by 31; emergencies still come first.
 EconomyFirstTurrets=0
+# Away MCVs wait for a finished Rocket Turret in an existing yard; manual Carryall drops on => fly them.
+# On arrival, the held turret goes beside the new yard within 10 seconds. Core threats within 12 tiles delay departure.
+# Independent of EconomyFirst, default off pending real transport/placement and loss measurements.
+AirliftColonists=0
 # Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
 # it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
 # destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes

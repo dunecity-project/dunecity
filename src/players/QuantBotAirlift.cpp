@@ -50,6 +50,11 @@
 #include <structures/StructureBase.h>
 #include <units/Carryall.h>
 #include <units/GroundUnit.h>
+#include <units/MCV.h>
+#include <structures/BuilderBase.h>
+#include <structures/ConstructionYard.h>
+#include <structures/StarPort.h>
+#include <players/QuantBotBuildPass.h>
 
 #include <algorithm>
 #include <stdexcept>
@@ -95,7 +100,7 @@ bool QuantBot::airliftActive() const {
     return gameMode == GameMode::Custom
         && (force.airliftRearDrop || force.airliftFlankDrop || force.airliftRetreatLift || force.airliftRescue
             || force.airliftFerry || force.squadRetreatAirlift || airliftHarvesterDropActive()
-            || force.airliftPerimeterDrop || force.airliftBaseDefence || force.airliftHarvesterDefence);
+            || force.airliftPerimeterDrop || force.airliftBaseDefence || force.airliftHarvesterDefence || force.airliftColonists);
 }
 
 bool QuantBot::airliftable(const UnitBase* unit) const { return liftable(unit, getHouse()); }
@@ -147,7 +152,9 @@ int QuantBot::airliftFreeCarryalls() const {
 }
 
 bool QuantBot::orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind, Uint32 objective) {
-    if (!unit || !getMap().tileExists(drop)) return false;
+    if (!unit || !unit->isAGroundUnit() || !getMap().tileExists(drop)) return false;
+    if (kind==AirliftKind::Colonist && (!botConfig().force.airliftColonists
+        || !getGameInitSettings().getGameOptions().manualCarryallDrops || unit->getItemID()!=Unit_MCV)) return false;
     const auto* ground = static_cast<const GroundUnit*>(unit);
     const ATTACKMODE before = unit->getAttackMode();
     doMove2Pos(unit, drop.x, drop.y, true);
@@ -190,22 +197,61 @@ void QuantBot::trackAirliftJobs() {
     for (auto it = airliftJobs.begin(); it != airliftJobs.end();) {
         AirliftJob& job = it->second;
         const auto* unit = dynamic_cast<const UnitBase*>(getObject(it->first));
+        if (job.kind==AirliftKind::ColonyTurret) {
+            const auto* supplier=dynamic_cast<const BuilderBase*>(getObject(job.objective));
+            if (!supplier || supplier->getOwner()!=getHouse() || supplier->getHealth()<=0
+                || supplier->getProductionQueueSize()==0) {
+                SDL_Log("COLONIST: house=%d event=turret_unavailable mcv=%u cycle=%u", getHouse()->getHouseID(),it->first,now);
+                releaseColonistTurret(job);it=airliftJobs.erase(it);
+            } else ++it;
+            continue;
+        }
         if (!unit || unit->getOwner() != getHouse() || unit->getHealth() <= 0 || !unit->isAGroundUnit()) {
-            if (job.lifted && !job.landed) ++airliftStats.lostInLift;   // died in the air with its Carryall
-            else if (!job.lifted) ++airliftStats.lostWaiting;           // died before the Carryall came
+            if (job.kind==AirliftKind::Colonist || job.kind==AirliftKind::ColonistGround || job.kind==AirliftKind::ColonistPreparing) {
+                SDL_Log("COLONIST: house=%d event=lost mcv=%u air=%d x=%d y=%d cycle=%u",getHouse()->getHouseID(),
+                    it->first,int(job.lifted),job.drop.x,job.drop.y,now);
+                releaseColonistTurret(job);
+            }
+            if (job.lifted && !job.landed) ++airliftStats.lostInLift;
+            else if (!job.lifted && job.kind!=AirliftKind::ColonistGround && job.kind!=AirliftKind::ColonistPreparing) ++airliftStats.lostWaiting;
             it = airliftJobs.erase(it);
             continue;
         }
+        if (job.kind==AirliftKind::ColonistGround || job.kind==AirliftKind::ColonistPreparing) {
+            // Automatic engine rescue remains possible with manual drops off; count actual transport,
+            // not merely this controller's booking, rather than mislabel a carried MCV as driven.
+            if (unit->isPickedUp() && !job.lifted) {
+                job.lifted=true;
+                SDL_Log("COLONIST: house=%d event=automatic_lift mcv=%u drops=%d cycle=%u",getHouse()->getHouseID(),
+                    it->first,int(getGameInitSettings().getGameOptions().manualCarryallDrops),now);
+            }
+            if (job.lifted && !job.landed && unit->isActive() && !unit->isPickedUp()) {
+                const bool awayArrival=blockDistance(unit->getLocation(),job.drop)<=3;
+                job.lifted=awayArrival;job.landed=awayArrival;
+                SDL_Log("COLONIST: house=%d event=automatic_landed mcv=%u away=%d cycle=%u",getHouse()->getHouseID(),it->first,int(awayArrival),now);
+            }
+            ++it;continue;
+        }
         const auto* ground = static_cast<const GroundUnit*>(unit);
         if (unit->isPickedUp()) {
-            if (!job.lifted) { job.lifted = true; ++airliftStats.lifted; }
+            if (!job.lifted) {
+                job.lifted = true; ++airliftStats.lifted;
+                if (job.kind==AirliftKind::Colonist)
+                    SDL_Log("COLONIST: house=%d event=lifted mcv=%u cycle=%u",getHouse()->getHouseID(),it->first,now);
+            }
             ++it;
             continue;
         }
         if (job.lifted && !job.landed && unit->isActive()) {
             job.landed = true;
             ++airliftStats.landed;
-            if (job.kind == AirliftKind::Rear || job.kind == AirliftKind::Flank) {
+            if (job.kind==AirliftKind::Colonist) {
+                SDL_Log("COLONIST: house=%d event=landed mcv=%u x=%d y=%d target_x=%d target_y=%d cycle=%u",
+                    getHouse()->getHouseID(),it->first,unit->getX(),unit->getY(),job.drop.x,job.drop.y,now);
+                job.kind=AirliftKind::ColonistGround;
+                const_cast<UnitBase*>(unit)->setForced(false);
+                ++it;
+            } else if (job.kind == AirliftKind::Rear || job.kind == AirliftKind::Flank) {
                 // The landed part of a drop waits for the rest (updateAirliftDrop strikes).
                 if (airliftDrop.firstLanding == 0) airliftDrop.firstLanding = now;
                 ++it;
@@ -254,6 +300,11 @@ void QuantBot::trackAirliftJobs() {
                     || job.kind == AirliftKind::Ferry;
                 doSetAttackMode(unit, attacking ? HUNT : AREAGUARD);
                 ++airliftStats.cancelled;
+                if (job.kind==AirliftKind::Colonist) {
+                    SDL_Log("COLONIST: house=%d event=flight_cancelled mcv=%u cycle=%u",getHouse()->getHouseID(),it->first,now);
+                    job.kind=AirliftKind::ColonistGround;job.landed=false;
+                    ++it;continue;
+                }
                 it = airliftJobs.erase(it);
                 continue;
             }
@@ -763,7 +814,225 @@ bool QuantBot::continueAirliftRaid(const UnitBase* unit, AirliftJob& job) {
     return false;
 }
 
+bool QuantBot::airliftHolds(Uint32 id) const {
+    const auto it=airliftJobs.find(id);
+    return it!=airliftJobs.end() && it->second.kind!=AirliftKind::ColonistGround
+        && it->second.kind!=AirliftKind::ColonyTurret && it->second.kind!=AirliftKind::ColonistPreparing;
+}
+
+
+
+Coord QuantBot::colonistTurretSite(Coord yard,Uint32 supplier) const {
+    Coord best=Coord::Invalid();int bestEnemy=std::numeric_limits<int>::max(),bestGap=std::numeric_limits<int>::max();
+    for (int y=yard.y-2;y<=yard.y+3;++y) for (int x=yard.x-2;x<=yard.x+3;++x) {
+        const Coord at(x,y);
+        if (!getMap().tileExists(at) || (x>=yard.x && x<yard.x+2 && y>=yard.y && y<yard.y+2)) continue;
+        const auto* tile=getMap().getTile(at);
+        if (!tile->isRock() || tile->isMountain() || tile->hasAGroundObject() || tile->hasCityZone()) continue;
+        bool reserved=false;
+        for (const auto& entry:reservedStructures)
+            if (entry.first!=supplier && entry.second.location==at) {reserved=true;break;}
+        if (reserved) continue;
+        int enemyGap=std::numeric_limits<int>::max();
+        for (const auto* enemy:getStructureList())
+            if (enemy->getOwner() && enemy->getOwner()->getTeamID()!=getHouse()->getTeamID() && enemy->getHealth()>0)
+                enemyGap=std::min(enemyGap,blockDistance(at,enemy->getClosestPoint(at)).lround());
+        const int gap=blockDistance(at,yard).lround();
+        if (best.isInvalid() || enemyGap<bestEnemy || (enemyGap==bestEnemy && gap<bestGap)) {
+            best=at;bestEnemy=enemyGap;bestGap=gap;
+        }
+    }
+    return best;
+}
+
+void QuantBot::releaseColonistTurret(const AirliftJob& job) {
+    if (job.kind==AirliftKind::ColonistPreparing) return; // Its ordinary home work is not colony material.
+    const auto reservation=reservedStructures.find(job.objective);
+    if (reservation==reservedStructures.end() || reservation->second.item!=Structure_RocketTurret
+        || blockDistance(reservation->second.location,job.drop)>4) return;
+    if (const auto held=heldWithoutSiteSince.find(job.objective);held!=heldWithoutSiteSince.end())
+        SDL_Log("COLONIST: house=%d event=turret_released supplier=%u wait_s=%d cycle=%u",
+            getHouse()->getHouseID(),job.objective,
+            int((getGameCycleCount()-held->second)*GAMESPEED_DEFAULT/1000),getGameCycleCount());
+    if (const auto* builder=dynamic_cast<const BuilderBase*>(getObject(job.objective));builder && builder->getOwner()==getHouse())
+        doCancelItem(builder,Structure_RocketTurret);
+    reservedStructures.erase(reservation);
+    heldWithoutSiteSince.erase(job.objective);
+}
+
+bool QuantBot::prepareColonistTrip(const MCV* mcv,Coord site) {
+    if (!botConfig().force.airliftColonists || gameMode!=GameMode::Custom || !currentGame->isCitySimEnabled()
+        || !mcv || !site.isValid()) return false;
+    const Uint32 id=mcv->getObjectID(),now=getGameCycleCount();
+    auto found=airliftJobs.find(id);
+    if (found==airliftJobs.end() && onOwnRockFormation(site)) return false;
+    if (found!=airliftJobs.end() && found->second.kind==AirliftKind::Colonist) return true;
+    if (found==airliftJobs.end()) {
+        AirliftJob job;job.kind=AirliftKind::ColonistPreparing;job.drop=site;job.ordered=now;
+        found=airliftJobs.emplace(id,job).first;
+        SDL_Log("COLONIST: house=%d event=trip mcv=%u target_x=%d target_y=%d drops=%d cycle=%u",getHouse()->getHouseID(),
+            id,site.x,site.y,int(getGameInitSettings().getGameOptions().manualCarryallDrops),now);
+    }
+    auto& job=found->second;
+    if (job.kind!=AirliftKind::ColonistGround && job.kind!=AirliftKind::ColonistPreparing) return false;
+    if (job.drop!=site) {releaseColonistTurret(job);job.drop=site;job.objective=NONE_ID;job.landed=false;}
+    // An aircraft that landed slightly off the footprint finishes its short local drive normally.
+    if (job.lifted && job.landed) return false;
+    const auto* supplier=dynamic_cast<const BuilderBase*>(getObject(job.objective));
+    if (!supplier || supplier->getOwner()!=getHouse() || supplier->getHealth()<=0) {
+        releaseColonistTurret(job);
+        job.objective=NONE_ID;
+        for (const auto* structure:getStructureList()) {
+            const auto* yard=dynamic_cast<const BuilderBase*>(structure);
+            if (!yard || yard->getOwner()!=getHouse() || yard->getHealth()<=0 || yard->getItemID()!=Structure_ConstructionYard
+                || yard->isUpgrading() || yard->isOnHold()
+                || !campaignAvailableToBuild(yard,Structure_RocketTurret)) continue;
+            bool taken=false;
+            for (const auto& other:airliftJobs) if (other.first!=id && other.second.objective==yard->getObjectID()
+                && other.second.kind>=AirliftKind::Colonist) {taken=true;break;}
+            if (!taken) {supplier=yard;job.objective=yard->getObjectID();break;}
+        }
+    }
+    const auto reserved=reservedStructures.find(job.objective);
+    if (job.kind==AirliftKind::ColonistPreparing || !supplier || reserved==reservedStructures.end() || reserved->second.item!=Structure_RocketTurret
+        || blockDistance(reserved->second.location,job.drop)>4
+        || !supplier->isWaitingToPlace() || supplier->getCurrentProducedItem()!=Structure_RocketTurret) return true;
+    if (getGameInitSettings().getGameOptions().manualCarryallDrops && !job.lifted) {
+        const Uint32 supplierID=job.objective;
+        if (airliftFreeCarryalls()>0 && orderAirlift(mcv,site,AirliftKind::Colonist,supplierID)) {
+            SDL_Log("COLONIST: house=%d event=flight_order mcv=%u supplier=%u target_x=%d target_y=%d cycle=%u",
+                getHouse()->getHouseID(),id,supplierID,site.x,site.y,now);
+        }
+        return true; // Never silently drive an air arm when no aircraft is available.
+    }
+    return false;
+}
+
+bool QuantBot::buildColonistTransport(BuildPass& pass,BuilderTurn& turn) {
+    if (!botConfig().force.airliftColonists || gameMode!=GameMode::Custom
+        || !getGameInitSettings().getGameOptions().manualCarryallDrops || pass.itemCount[Unit_Carryall]>0
+        || (turn.pBuilder->getItemID()!=Structure_HighTechFactory && turn.pBuilder->getItemID()!=Structure_StarPort)
+        || turn.pBuilder->getProductionQueueSize()>0
+        || turn.pBuilder->isUpgrading() || turn.pBuilder->isOnHold()) return false;
+    for (const auto& entry:airliftJobs) if (entry.second.kind==AirliftKind::ColonistGround || entry.second.kind==AirliftKind::ColonistPreparing) {
+        const bool port=turn.pBuilder->getItemID()==Structure_StarPort;
+        if (port && (!static_cast<const StarPort*>(turn.pBuilder)->okToOrder()
+            || getHouse()->getChoam().getNumAvailable(Unit_Carryall)<=0)) return false;
+        if (campaignAvailableToBuild(turn.pBuilder,Unit_Carryall)
+            && produceItemWithLogging(pass,turn,Unit_Carryall,__LINE__,"colonist_transport")) {
+            ++pass.itemCount[Unit_Carryall];
+            if (port) doPlaceOrder(static_cast<const StarPort*>(turn.pBuilder));
+            return true;
+        }
+        break;
+    }
+    return false;
+}
+
+bool QuantBot::buildColonistTurret(BuildPass& pass,BuilderTurn& turn) {
+    if (!botConfig().force.airliftColonists || gameMode!=GameMode::Custom
+        || turn.pBuilder->getItemID()!=Structure_ConstructionYard) return false;
+    for (auto it=airliftJobs.begin();it!=airliftJobs.end();++it) {
+        auto& job=it->second;
+        if (job.kind<AirliftKind::Colonist || job.objective!=turn.pBuilder->getObjectID()) continue;
+        const Uint32 now=getGameCycleCount();
+        // Reserve the yard's next empty turn; ordinary paid home work finishes first.
+        if (job.kind==AirliftKind::ColonistPreparing && turn.pBuilder->getProductionQueueSize()>0) return false;
+        // The assignment and supplier ID survive saves in the existing AirliftJob stream.
+        // Rebuild the transient site reservation for that supplier's paid material after reload.
+        if (job.kind!=AirliftKind::ColonistPreparing && !reservedStructures.count(job.objective) && turn.pBuilder->getProductionQueueSize()>0
+            && turn.pBuilder->getCurrentProducedItem()==Structure_RocketTurret) {
+            const Coord at=colonistTurretSite(job.drop,job.objective);
+            if (at.isValid()) reservedStructures[job.objective]={Structure_RocketTurret,at};
+        }
+        const auto ownMaterial=reservedStructures.find(job.objective);
+        if (turn.pBuilder->getProductionQueueSize()>0
+            && (ownMaterial==reservedStructures.end() || ownMaterial->second.item!=Structure_RocketTurret
+                || blockDistance(ownMaterial->second.location,job.drop)>4)) {
+            // A home emergency used the uncommitted yard first. Its material is never stolen by this mission.
+            job.objective=NONE_ID;return false;
+        }
+        if (!turn.pBuilder->isWaitingToPlace()) {
+            if (turn.pBuilder->getProductionQueueSize()>0) return true;
+            if (!hasPowerBufferForTurret(pass)) return false;
+            const Coord at=colonistTurretSite(job.drop,job.objective);
+            if (!at.isValid()) return true;
+            if (produceItemWithLogging(pass,turn,Structure_RocketTurret,__LINE__,"colonist_turret")) {
+                ++pass.itemCount[Structure_RocketTurret];reservedStructures[job.objective]={Structure_RocketTurret,at};
+                heldWithoutSiteSince.erase(job.objective);
+                job.kind=AirliftKind::ColonistGround;
+                SDL_Log("COLONIST: house=%d event=turret_queued mcv=%u supplier=%u x=%d y=%d cycle=%u",getHouse()->getHouseID(),
+                    it->first,job.objective,at.x,at.y,now);
+            }
+            return true;
+        }
+        if (turn.pBuilder->getCurrentProducedItem()!=Structure_RocketTurret) {job.objective=NONE_ID;return false;}
+        if (job.kind!=AirliftKind::ColonyTurret) {
+            if (heldWithoutSiteSince.emplace(job.objective,now).second)
+                SDL_Log("COLONIST: house=%d event=turret_ready mcv=%u supplier=%u cycle=%u",getHouse()->getHouseID(),it->first,job.objective,now);
+            return true;
+        }
+        bool yardStanding=false;
+        for (const auto* yard:getStructureList())
+            if (yard->getOwner()==getHouse() && yard->getItemID()==Structure_ConstructionYard
+                && yard->getHealth()>0 && yard->getLocation()==job.drop) {yardStanding=true;break;}
+        if (!yardStanding) {
+            SDL_Log("COLONIST: house=%d event=colony_lost mcv=%u cycle=%u",getHouse()->getHouseID(),it->first,now);
+            releaseColonistTurret(job);airliftJobs.erase(it);return true;
+        }
+        if (getGameInitSettings().getGameOptions().rocketTurretsNeedPower
+            && (!getHouse()->hasPower() || !hasPowerBufferForTurret(pass))) return true;
+        Coord at=Coord::Invalid();
+        if (const auto reserved=reservedStructures.find(job.objective);reserved!=reservedStructures.end()) at=reserved->second.location;
+        if (!at.isValid() || !getMap().okayToPlaceStructure(at.x,at.y,1,1,false,getHouse(),false,Structure_RocketTurret))
+            at=colonistTurretSite(job.drop,job.objective);
+        if (!at.isValid() || !getMap().okayToPlaceStructure(at.x,at.y,1,1,false,getHouse(),false,Structure_RocketTurret)) return true;
+        const auto held=heldWithoutSiteSince.find(job.objective);
+        const int holdingSeconds=held==heldWithoutSiteSince.end() ? 0 : int((now-held->second)*GAMESPEED_DEFAULT/1000);
+        if (doPlaceStructure(static_cast<const ConstructionYard*>(turn.pBuilder),at.x,at.y)) {
+            int enemyGap=-1,yardEnemyGap=-1;
+            for (const auto* enemy:getStructureList()) if (enemy->getOwner() && enemy->getOwner()->getTeamID()!=getHouse()->getTeamID()
+                && enemy->getHealth()>0) {
+                const int gap=blockDistance(at,enemy->getClosestPoint(at)).lround();
+                if (enemyGap<0 || gap<enemyGap) enemyGap=gap;
+                const int yardGap=blockDistance(job.drop,enemy->getClosestPoint(job.drop)).lround();
+                if (yardEnemyGap<0 || yardGap<yardEnemyGap) yardEnemyGap=yardGap;
+            }
+            SDL_Log("COLONIST: house=%d event=turret_placed mcv=%u supplier=%u wait_s=%d air=%d x=%d y=%d target_x=%d target_y=%d yard_tiles=%d "
+                "enemy_tiles=%d yard_enemy_tiles=%d delay_s=%d power=%d met=%d cycle=%u",getHouse()->getHouseID(),it->first,job.objective,holdingSeconds,int(job.lifted),at.x,at.y,
+                job.drop.x,job.drop.y,blockDistance(at,job.drop).lround(),enemyGap,yardEnemyGap,
+                int((now-job.ordered)*GAMESPEED_DEFAULT/1000),int(getHouse()->hasPower()),
+                int(now-job.ordered<=MILLI2CYCLES(10000)),now);
+            reservedStructures.erase(job.objective);heldWithoutSiteSince.erase(job.objective);airliftJobs.erase(it);clearPlacementCache();
+        }
+        return true;
+    }
+    return false;
+}
+
+void QuantBot::colonistDeployed(Uint32 id,Coord site) {
+    auto it=airliftJobs.find(id);
+    if (it==airliftJobs.end() || it->second.kind!=AirliftKind::ColonistGround) return;
+    auto& job=it->second;
+    const auto* supplier=dynamic_cast<const BuilderBase*>(getObject(job.objective));
+    const bool ready=supplier && supplier->getOwner()==getHouse() && supplier->isWaitingToPlace()
+        && supplier->getCurrentProducedItem()==Structure_RocketTurret;
+    SDL_Log("COLONIST: house=%d event=deployed mcv=%u air=%d ready=%d target_x=%d target_y=%d cycle=%u",getHouse()->getHouseID(),
+        id,int(job.lifted),int(ready),site.x,site.y,getGameCycleCount());
+    job.kind=AirliftKind::ColonyTurret;job.drop=site;job.ordered=getGameCycleCount();
+}
+
 void QuantBot::updateAirlift() {
+    if (!botConfig().force.airliftColonists && !airliftJobs.empty()) {
+        for (auto it=airliftJobs.begin();it!=airliftJobs.end();) {
+            if (it->second.kind<AirliftKind::Colonist) { ++it;continue; }
+            releaseColonistTurret(it->second);
+            if (const auto* unit=dynamic_cast<const GroundUnit*>(getObject(it->first));
+                unit && unit->getOwner()==getHouse() && !unit->isPickedUp())
+                const_cast<GroundUnit*>(unit)->cancelCarryallPickup();
+            it=airliftJobs.erase(it);
+        }
+    }
     if (!airliftActive()) {
         // Switched off (a config change between a save and its reload): nothing stays held.
         if (!airliftJobs.empty() || airliftDrop.point.isValid() || airliftRaid.point.isValid()) {
@@ -826,7 +1095,7 @@ void QuantBot::loadAirlift(InputStream& stream) {
     const auto coord = [&]() { Coord v; v.x = stream.readSint32(); v.y = stream.readSint32(); return v; };
     const auto kind = [&]() {
         const Uint8 value = stream.readUint8();
-        if (value > static_cast<Uint8>(AirliftKind::PerimeterRaid)) throw std::runtime_error("Invalid airlift kind");
+        if (value > static_cast<Uint8>(AirliftKind::ColonistPreparing)) throw std::runtime_error("Invalid airlift kind");
         return static_cast<AirliftKind>(value);
     };
     const auto valid = [&](Coord p) { return p.isInvalid() || getMap().tileExists(p); };

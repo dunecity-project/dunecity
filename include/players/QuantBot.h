@@ -1637,10 +1637,11 @@ private:
     /// Held by a force controller (a split group, a muster or O's siege hold): no rally or regroup orders.
     bool forceHeld(Uint32 id) const {
         return (!musters.empty() && musterOf(id)) || (!splits.empty() && splitOf(id)) || (!siegeHeld.empty() && siegeHeld.count(id))
-            || (!airliftJobs.empty() && airliftJobs.count(id));
+            || (!airliftJobs.empty() && airliftHolds(id));
     }
     // ---- Mass Carryall manoeuvres (QuantBotAirlift.cpp; docs/formations.md) ----
-    enum class AirliftKind : Uint8 { Rear, Flank, Retreat, Rescue, Ferry, Defence, HarvesterRaid, PerimeterRaid };
+    enum class AirliftKind : Uint8 { Rear, Flank, Retreat, Rescue, Ferry, Defence, HarvesterRaid, PerimeterRaid,
+        Colonist, ColonistGround, ColonyTurret, ColonistPreparing };
     /// One unit under a lift order, from the order until it is set down (a rear or flank
     /// unit until its group strikes). Held like a split group: no rally or regroup orders.
     struct AirliftJob {
@@ -1680,6 +1681,11 @@ private:
     enum class AirliftDecline : Uint8 { None, Front, Trip, Carryalls, Group, Point };
     AirliftStats airliftStats;
     bool airliftActive() const;
+    bool airliftHolds(Uint32 id) const;
+    Coord colonistTurretSite(Coord yard, Uint32 supplier = NONE_ID) const;
+    bool prepareColonistTrip(const MCV* mcv, Coord site);
+    void colonistDeployed(Uint32 id, Coord site);
+    void releaseColonistTurret(const AirliftJob& job);
     int airliftFreeCarryalls() const;
     Coord airliftHome();
     bool orderAirlift(const UnitBase* unit, Coord drop, AirliftKind kind, Uint32 objective = NONE_ID);
@@ -2635,6 +2641,8 @@ private:
     /// Repairs a damaged structure under the repair policy.
     void buildRepair(BuildPass& pass, const StructureBase* pStructure);
     /// One producer's turn: shared rules, then its type's handler.
+    bool buildColonistTurret(BuildPass& pass, BuilderTurn& turn);
+    bool buildColonistTransport(BuildPass& pass, BuilderTurn& turn);
     void buildProducer(BuildPass& pass, const StructureBase* pStructure);
     bool buildTechSavings(BuildPass& pass, BuilderTurn& turn);
     /// Per-builder bookkeeping and status telemetry.

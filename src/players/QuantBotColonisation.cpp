@@ -853,6 +853,14 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         clearPlacementCache();
     }
     const Uint32 id=pMCV->getObjectID();
+    if (const auto lift=airliftJobs.find(id); lift!=airliftJobs.end()) {
+        if (lift->second.kind==AirliftKind::Colonist) return;
+        // A ground mission's drop is persisted by the existing airlift save format too.
+        // Reconstitute the ordinary MCV assignment if this was a reload during preparation/transit.
+        if (lift->second.kind==AirliftKind::ColonistGround && !mcvExpansionSites.count(id)) {
+            mcvExpansionSites[id]=lift->second.drop;mcvSurveyCycles[id]=getGameCycleCount();
+        }
+    }
     // MCV_LOST evidence (EconomyFirst, Stefan 2026-11-28: "the mcvs can expand whenever"): where each MCV goes,
     // so a loss before deploying can be told apart by site, distance, escort and attacker.
     if (currentGame->isCitySimEnabled() && economyLogEnabled()) {
@@ -940,6 +948,7 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         }
     }
 
+    if (target.isValid() && prepareColonistTrip(pMCV,target)) return;
     const bool atTarget=target.isValid()&&target==location;
     const bool ready=(!expansion||atTarget)&&deployableHere;
     // Read what the trace needs while the MCV still exists: a successful
@@ -951,7 +960,7 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         ^static_cast<uint64_t>(expansion?1:0);
     const bool report=ready||lastMcvTrace[id]!=signature;
     const bool couldDeploy=pMCV->canDeploy();
-    const bool ownFormation=report&&expansion&&onOwnRockFormation(location);
+    const bool ownFormation=report&&onOwnRockFormation(location);
     const int formationYards=report&&expansion ? yardsOnFormation(location) : 0;
     const bool colonyMission=report&&colonyMissionDue(pMCV);
     const bool deployed=ready&&doDeploy(pMCV);
@@ -965,12 +974,13 @@ void QuantBot::manageMcv(const MCV* pMCV) {
             const int gap=blockDistance(location, structure->getClosestPoint(location)).lround();
             if (enemyGap < 0 || gap < enemyGap) enemyGap=gap;
         }
-        SDL_Log("MCV_DEPLOYED: house=%d x=%d y=%d enemy_tiles=%d yards=%d choice=%s home=%d cycle=%u",
-                getHouse()->getHouseID(), location.x, location.y, enemyGap,
-                getHouse()->getNumItems(Structure_ConstructionYard), choice, int(onOwnRockFormation(location)),
+        SDL_Log("MCV_DEPLOYED: house=%d mcv=%u x=%d y=%d enemy_tiles=%d yards=%d choice=%s home=%d cycle=%u",
+                getHouse()->getHouseID(), id, location.x, location.y, enemyGap,
+                getHouse()->getNumItems(Structure_ConstructionYard), choice, int(ownFormation),
                 getGameCycleCount());
     }
     if(deployed) {
+        colonistDeployed(id,location);
         cityLessons.mcvTracks.erase(id);
         mcvExpansionSites.erase(id);
         mcvSurveyCycles.erase(id);

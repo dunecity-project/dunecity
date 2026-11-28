@@ -286,8 +286,8 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
             const int gap = blockDistance(tr.last, structure->getClosestPoint(tr.last)).lround();
             if (enemyGap < 0 || gap < enemyGap) enemyGap = gap;
         }
-        SDL_Log("MCV_LOST: house=%d x=%d y=%d start_x=%d start_y=%d travelled=%d target_x=%d target_y=%d to_target=%d "
-                "escorts=%d hit_by=%d hit_s=%d age_s=%d enemy_tiles=%d home=%d cycle=%u", houseID, tr.last.x, tr.last.y,
+        SDL_Log("MCV_LOST: house=%d mcv=%u x=%d y=%d start_x=%d start_y=%d travelled=%d target_x=%d target_y=%d to_target=%d "
+                "escorts=%d hit_by=%d hit_s=%d age_s=%d enemy_tiles=%d home=%d cycle=%u", houseID, it->first, tr.last.x, tr.last.y,
                 tr.start.x, tr.start.y, tr.start.isValid() ? blockDistance(tr.start, tr.last).lround() : -1,
                 tr.target.isValid() ? tr.target.x : -1, tr.target.isValid() ? tr.target.y : -1,
                 tr.target.isValid() ? blockDistance(tr.last, tr.target).lround() : -1, tr.escorts, tr.hitBy,

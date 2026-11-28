@@ -194,7 +194,7 @@ LESSON_EVENTS = (('LAUNCHER_ARMY:', 'launcher_army'), ('LOW_VALUE_PALACE:', 'low
                  ('FRONT_PALACE:', 'front_palace'), ('CITY_LOTS:', 'city_lots'),
                  # EconomyFirst (Stefan's Air game, 2026-11-28): tests/ai/economy-first-report.py.
                  ('ECONOMY_FIRST:', 'economy_first'), ('ECONOMY_STATE:', 'economy_state'), ('BUILD_ORDER:', 'build_order'),
-                 ('MCV_DEPLOYED:', 'mcv_deployed'), ('MCV_LOST:', 'mcv_lost'), ('MCV_LIFECYCLE:', 'mcv_lifecycle'))
+                 ('MCV_DEPLOYED:', 'mcv_deployed'), ('MCV_LOST:', 'mcv_lost'), ('MCV_LIFECYCLE:', 'mcv_lifecycle'), ('COLONIST:', 'colonist'))
 LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 'launchers', 'ornithopters',
                  'launcher_value', 'vehicle_value', 'x', 'y', 'low_lots', 'lots_standing', 'lv_before', 'lv_now',
                  'lv_after', 'rise', 'palace_stands', 'palaces', 'credits', 'wait_s', 'met', 'enemy_tiles',
@@ -204,7 +204,7 @@ LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 
                  'zones_c', 'zones_i', 'nuclear', 'windtraps', 'police', 'rocket_turrets', 'heavy_factories',
                  'population', 'tax_per_min', 'power', 'unit_built', 'structure_built', 'hold', 'threat', 'producer',
                  'item', 'rule', 'hold_passes', 'threat_passes', 'zones', 'spice', 'houses', 'ordered', 'half_his', 'yards_lost', 'mcvs_lost', 'choice', 'home', 'start_x', 'start_y', 'travelled', 'target_x', 'target_y', 'to_target',
-                 'escorts', 'hit_by', 'hit_s', 'age_s', 'footprints', 'free_footprints', 'pacing', 'paced', 'spent', 'allowance', 'orders', 'cycle', 'mcv', 'air')
+                 'escorts', 'hit_by', 'hit_s', 'age_s', 'footprints', 'free_footprints', 'pacing', 'paced', 'spent', 'allowance', 'orders', 'cycle', 'mcv', 'air', 'supplier', 'drops', 'ready', 'yard_tiles', 'yard_enemy_tiles', 'delay_s', 'away')
 LESSON_ROW_FIELDS = KEY + ('kind', 'label') + LESSON_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on

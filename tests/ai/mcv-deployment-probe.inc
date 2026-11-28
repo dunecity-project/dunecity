@@ -1,4 +1,6 @@
 #include <players/QuantBotBuildPass.h>
+#include <units/Carryall.h>
+#include <players/QuantBotBuildPass.h>
 // Real-engine MCV deployment fixture. Every decision here comes from
 // QuantBot::manageMcv and every yard from the production MCV::doDeploy path;
 // nothing reimplements the rules. The fixture isolates its own region: the
@@ -1517,6 +1519,160 @@ void runMcvDeploymentProbe(Game& game) {
         }
         game.loadedSavegameVersion=previousVersion;
         SDL_Log("ECONOMY_FIRST_SAVE_ASSERT: version=9906 counters_preserved=1 legacy=9905 legacy_empty=1");
+    }
+
+    // AirliftColonists: the AI's real MCV manager and producer boundary, real paid construction,
+    // Carryall pickup/drop and MCV::doDeploy. No teleporting a passenger or manufacturing a finished turret.
+    {
+        const auto savedConfig=bot->configOverride;
+        const auto savedOptions=game.gameInitSettings.gameOptions;
+        struct RestoreColonists {
+            QuantBot* bot; decltype(savedConfig) config; Game& game; decltype(savedOptions) options;
+            ~RestoreColonists() {bot->configOverride=config;game.gameInitSettings.gameOptions=options;}
+        } restoreColonists{bot,savedConfig,game,savedOptions};
+        auto config=std::make_shared<QuantBotConfig>(bot->botConfig());
+        bot->configOverride=config;
+        game.gameInitSettings.gameOptions.maximumNumberOfConstructionYardsOverride=-1;
+        game.gameInitSettings.gameOptions.rocketTurretsNeedPower=true;
+        int flown=0,driven=0,covered=0;
+        for (int arm=0;arm<4;++arm) {
+            const bool enabled=arm!=0,drops=arm!=1,economy=arm==3;
+            ++game.gameCycleCount;
+            unitList.clear();structureList.clear();
+            bot->airliftJobs.clear();bot->mcvExpansionSites.clear();bot->mcvSurveyCycles.clear();
+            bot->reservedStructures.clear();bot->builderPlaceLocations.clear();bot->recentStructureLosses.clear();
+            bot->planningBuilder=NONE_ID;bot->cityLessons.economyFirstActiveNow=economy;
+            bot->colonistEscortCycle=std::numeric_limits<Uint32>::max();
+            config->force.airliftColonists=enabled;
+            config->force.economyFirst=economy;
+            config->force.economyFirstUnitPacing=economy?1:0;
+            game.gameInitSettings.gameOptions.manualCarryallDrops=drops;
+            Coord corner=Coord::Invalid();
+            for (int y=1;y+30<currentGameMap->getSizeY() && corner.isInvalid();++y)
+                for (int x=1;x+44<currentGameMap->getSizeX() && corner.isInvalid();++x) {
+                    bool clear=true;
+                    for (int dy=0;dy<30 && clear;++dy) for (int dx=0;dx<44 && clear;++dx)
+                        if (currentGameMap->getTile(x+dx,y+dy)->hasAGroundObject()
+                            || currentGameMap->getTile(x+dx,y+dy)->hasCityZone()) clear=false;
+                    if (clear) corner=Coord(x,y);
+                }
+            require(corner.isValid(),"Colonist logistics fixture needs an empty real-map region");
+            auto at=[&](int x,int y){return corner+Coord(x,y);};
+            for (int y=0;y<30;++y) for (int x=0;x<44;++x) {
+                auto* tile=currentGameMap->getTile(at(x,y));
+                // A sand moat isolates both formations from the original map. The home rock is
+                // occupied core pads linked by one-tile spines: no spare 2x2 can stall a real away trip.
+                const bool home=(x==10 && y>=4 && y<=19) || (y==4 && x>=3 && x<=10)
+                    || (y==19 && x>=3 && x<=10) || (x>=3 && x<=4 && (y==3 || y==18))
+                    || (x>=7 && x<=8 && y==18) || (x==5 && y==3) || (x==9 && y==12);
+                const bool away=x>=25 && x<=42 && y>=1 && y<=28;
+                tile->setType((home || away) ? Terrain_Rock : Terrain_Sand);
+                tile->setRoad(false);tile->setOwner(INVALID);
+            }
+            auto* supplier=dynamic_cast<ConstructionYard*>(house->placeStructure(NONE_ID,Structure_ConstructionYard,
+                at(3,3).x,at(3,3).y,true,true));
+            require(supplier!=nullptr,"Colonist fixture needs its real existing Construction Yard");
+            house->placeStructure(NONE_ID,Structure_WindTrap,at(3,18).x,at(3,18).y,true,true);
+            house->placeStructure(NONE_ID,Structure_Radar,at(7,18).x,at(7,18).y,true,true);
+            supplier->curUpgradeLev=supplier->getMaxUpgradeLevel();supplier->updateBuildList();
+            require(supplier->isAvailableToBuild(Structure_RocketTurret),"Colonist fixture must unlock Rocket Turrets");
+            auto make=[&](Uint32 item,Coord spot) {
+                auto* unit=house->createUnit(item,true);require(unit!=nullptr,"Colonist fixture unit creation failed");
+                unit->deploy(spot);bot->doSetAttackMode(unit,AREAGUARD);unit->setForced(false);return unit;
+            };
+            auto* passenger=static_cast<MCV*>(make(Unit_MCV,at(10,11)));
+            make(Unit_Carryall,at(8,9));
+            make(Unit_Tank,at(9,12)); // The unchanged driven-trip escort admission is exercised, not bypassed.
+            const Uint32 passengerID=passenger->getObjectID();
+            const Coord destination=at(29,11);
+            bot->mcvExpansionSites[passengerID]=destination;
+            bot->mcvSurveyCycles[passengerID]=game.getGameCycleCount();
+            house->storedCredits=0;house->cityCredits=0;house->startingCredits=100000;
+            house->producedPower=10000;
+            bot->rockSurveyCycle=std::numeric_limits<Uint32>::max();
+            bot->dangerUpdated=std::numeric_limits<Uint32>::max();bot->refreshTacticalDanger();
+            require(!bot->onOwnRockFormation(destination),"Colonist fixture target must be on separate rock");
+            const Coord homeTurret=at(5,3);
+            if (arm==2) {
+                const int homeQueue=supplier->getProductionQueueSize();
+                bot->doProduceItem(supplier,Structure_RocketTurret);
+                require(supplier->getProductionQueueSize()==homeQueue+1,"Busy supplier fixture must queue real home material");
+                bot->reservedStructures[supplier->getObjectID()]={Structure_RocketTurret,homeTurret};
+                bot->builderPlaceLocations[supplier->getObjectID()].push_back(homeTurret);
+            }
+            bot->manageMcv(passenger);
+            if (!enabled) {
+                require(bot->airliftJobs.count(passengerID)==0 && !passenger->hasBookedCarrier(),
+                    "AirliftColonists OFF booked a colonist flight");
+                bool carried=false,arrived=false;
+                const Uint32 until=game.getGameCycleCount()+MILLI2CYCLES(180000);
+                while(game.getGameCycleCount()<until) {
+                    const auto* current=dynamic_cast<const MCV*>(game.getObjectManager().getObject(passengerID));
+                    if(!current) {arrived=yardNear(destination,1);break;}
+                    carried=carried || current->isPickedUp();bot->manageMcv(current);bot->updateAirlift();tick(10);
+                }
+                require(arrived && !carried && bot->airliftJobs.count(passengerID)==0,
+                    "AirliftColonists OFF did not complete a driven trip with zero actual flights");
+                SDL_Log("AIRLIFT_COLONISTS_ASSERT: enabled=0 flights=0 driven=1 deployed=1");continue;
+            }
+            bool readyBeforeArrival=false,everCarried=false,deployed=false,restoredMaterial=false,homeMaterialPlaced=arm!=2;
+            Uint32 deployedAt=0;
+            const Uint32 deadline=game.getGameCycleCount()+MILLI2CYCLES(180000);
+            while (game.getGameCycleCount()<deadline) {
+                QuantBot::BuildPass pass(0);pass.capitalChoice=-1;
+                pass.money=house->getCredits();pass.citySimEnabled=true;pass.turretPowerRequired=true;pass.rocketPowerBuffer=25;
+                pass.economyFirstActive=economy;
+                for (int item=0;item<Num_ItemID;++item) pass.itemCount[item]=house->getNumItems(item);
+                bot->buildProducer(pass,supplier);
+                const auto mission=bot->airliftJobs.find(passengerID);
+                const auto material=bot->reservedStructures.find(supplier->getObjectID());
+                const bool ready=supplier->isWaitingToPlace() && supplier->getCurrentProducedItem()==Structure_RocketTurret
+                    && mission!=bot->airliftJobs.end() && mission->second.kind!=QuantBot::AirliftKind::ColonistPreparing
+                    && material!=bot->reservedStructures.end() && blockDistance(material->second.location,destination)<=4;
+                if (ready && !deployed && !restoredMaterial) {
+                    const auto previousVersion=game.loadedSavegameVersion;
+                    game.loadedSavegameVersion=SAVEGAMEVERSION;
+                    OMemoryStream out;out.open();bot->saveAirlift(out);
+                    IMemoryStream input(out.getData(),out.getDataLength());
+                    bot->airliftJobs.clear();bot->reservedStructures.erase(supplier->getObjectID());
+                    bot->mcvExpansionSites.erase(passengerID);bot->loadAirlift(input);
+                    game.loadedSavegameVersion=previousVersion;restoredMaterial=true;
+                    require(bot->airliftJobs.count(passengerID)==1,"A colonist save lost its supplier assignment");
+                }
+                const auto* current=dynamic_cast<const MCV*>(game.getObjectManager().getObject(passengerID));
+                if (current) {
+                    everCarried=everCarried || current->isPickedUp();
+                    if (ready && current->getLocation().isValid() && bot->onOwnRockFormation(current->getLocation())) readyBeforeArrival=true;
+                    bot->manageMcv(current);
+                } else if (!deployed) {
+                    deployed=true;deployedAt=game.getGameCycleCount();
+                    require(yardNear(destination,1),"The colonist disappeared without deploying at its actual away site");
+                }
+                bot->updateAirlift();
+                bool turret=false;
+                for (const auto* structure:structureList) {
+                    if (structure->getOwner()!=house || structure->getItemID()!=Structure_RocketTurret) continue;
+                    if (blockDistance(structure->getLocation(),destination)<=4) turret=true;
+                    if (structure->getLocation()==homeTurret) homeMaterialPlaced=true;
+                }
+                if (deployed && turret) {
+                    require(game.getGameCycleCount()-deployedAt<=MILLI2CYCLES(10000),
+                        "A new colony waited more than ten seconds for its held turret");
+                    ++covered;break;
+                }
+                tick(10);
+            }
+            require(deployed,"An away MCV never deployed through the actual logistics path");
+            require(readyBeforeArrival,"The existing yard had no finished Rocket Turret before the colonist arrived");
+            require(homeMaterialPlaced,"A colonist stole the supplier's pre-existing home Rocket Turret");
+            require(covered==arm,"A deployed colony got no nearby held Rocket Turret");
+            require(everCarried==drops,"The actual MCV transport did not match Manual Carryall Drops");
+            if (drops) ++flown;else ++driven;
+            require(bot->airliftJobs.count(passengerID)==0,"Finished colony logistics kept a stale booking");
+            SDL_Log("AIRLIFT_COLONISTS_ASSERT: enabled=1 drops=%d economy=%d flown=%d ready=1 turret_under_10s=1",
+                int(drops),int(economy),int(everCarried));
+        }
+        require(flown==2 && driven==1 && covered==3,"Colonist logistics arms did not exercise every accepted rule state");
     }
 
     SDL_Log("MCV_DEPLOYMENT_PASS: prompt same-rock deployment at every difficulty, one driven arrival,"
