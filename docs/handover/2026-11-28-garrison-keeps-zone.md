@@ -94,3 +94,32 @@ No game was launched, stopped, or changed on the Air. Copied log SHA-256: `4a343
 
 Counts were unchanged after production save/load. Those zero-activation saves cannot qualify occupied-lot preservation or identify Stefan's exact observed lot. No autosave/quick-save path was found in the inspected input/save code; the constructed regression uses the real manual Save dialog. Physical Air UI/readability and the exact Air lot/type-change correlation remain unverified.
 
+## Turret-drill saved-game comparison isolation
+
+QualTriage bounded the saved `turret_drill_save` comparison change to the first garrison-health/capacity/type-lock patch, `d2ced4dcc151bff1c05a08e9874473be9abcbba1`. Its immediate parent `d3532aab32d882b1d71a6409bcdc5d59bfb68221` passed (`20261128T201517-qual-turret-garrison-parent-7e271e`); D2 failed identically on two Linux hosts (`20261128T201517-qual-turret-garrison-70ebd1`). Seven of the original eight turret assertions still passed, including 305k versus 219k Rocket Turret damage; only Ordos structures lost versus the control inverted, 282 versus 298.
+
+Retained native logs show the new garrison treatment was active, not an unused rule:
+
+| Ordos continuation | Parent entries / garrison wipes | D2 entries / garrison wipes |
+| --- | ---: | ---: |
+| Turret drill | 431 / 47 | 597 / 8 |
+| Control | 407 / 49 | 689 / 4 |
+
+Control-arm Trooper losses fell from 542 to 491, Soldier losses from 249 to 230. Both versions loaded identical Ordos population R/C/I 15474/952/955, 221 combat units, 4490 credits and 603 lots. Thus the continuation now compares materially different garrison survival/capture dynamics as well as turret construction. The garrison protection, healing, capacity and occupied-type lock are intentional player rules and are not rolled back to satisfy the old turret comparison.
+
+The turret fixture now freezes the existing public **Garrisoning and Capturing** option off in **both** arms, in the same checksummed-save input. The saved-world audit forwards that explicit `[Game Options]` section through the existing frozen-option interface. The native harness parses it once and reapplies only its declared keys after restoring the save, before game cycles and AI styles; otherwise loading replaces the earlier default/control options with the saved setup.
+
+The audit reports the actual engine rule plus held-zone/occupant counts for every house at load, periodic snapshots and the final audit. A ninth, additional acceptance line requires the rule off, no occupied zones/units and no garrison-entry events in either arm. **All original eight assertions, the 23-game-minute horizon, absolute thresholds and drill-versus-control comparisons remain unchanged.** Production garrison behavior, default enablement, type locks, save format and protocol are untouched.
+
+| Guarantee | Enforcement / evidence |
+| --- | --- |
+| The turret treatment is the only arm difference | Both arms consume the same frozen save and explicit garrison-off rule; only house 0's turret-drill style differs |
+| The pin reaches the restored engine, not merely process settings | Post-load frozen-option application and actual per-house JSON rule/count fields |
+| No garrison confound is hidden between snapshots | The additional acceptance line also requires zero native garrison-entry events over the entire continuation |
+| Turrets still produce the requested outcome | Every original mass, range, engagement, damage and enemy-loss assertion remains in place with its original bound |
+| Stefan's gameplay fix remains active outside this fixture | No shipped source or default rule changes; normal garrison/master-option probes accompany the saved-drill test |
+
+Qualification: `c0908b2eddbb890c7394c03151fd9d4c43e2b437`, AWS `20261128T210811-turret-drill-garrison-isolation-1c3966`, terminal wait success and **3/3 passed**. The saved drill passes in 715.8 seconds with all eight original checks plus the new isolation check: both arms report rule/held zones/occupants/entries **0/0/0/0**; drill versus control Ordos structure losses **292 versus 253**, Rocket Turret damage **392k versus 231k**. The drill issues 172 orders, places and engages 136 turrets, leaves 148 new turrets standing, 86% touching, median enemy distance 9 and 38 within eight tiles.
+
+The same source also passes `zone_garrison_probe` (103.9 seconds) and `garrison_capture_option_probe` (36.9 seconds). Normal enabled garrisons still activate, retain **2→2** occupants through blocked R/C/I growth and civic mutation, and permit actual growth after evacuation. The fix was handed to Integrator immediately after green was observed at **2026-11-28 21:22:36 AEDT**. These are targeted test-harness results, not a new combined-build/nightly or Air-installation qualification.
+
