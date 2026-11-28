@@ -233,6 +233,21 @@ void QuantBot::trackAirliftJobs() {
             ++it;continue;
         }
         const auto* ground = static_cast<const GroundUnit*>(unit);
+        if (job.kind==AirliftKind::Colonist && !unit->isPickedUp()) {
+            const auto* supplier=dynamic_cast<const BuilderBase*>(getObject(job.objective));
+            if (!supplier || supplier->getOwner()!=getHouse() || supplier->getHealth()<=0
+                || !supplier->isWaitingToPlace() || supplier->getCurrentProducedItem()!=Structure_RocketTurret) {
+                releaseColonistTurret(job);
+                const_cast<GroundUnit*>(ground)->cancelCarryallPickup();
+                const_cast<GroundUnit*>(ground)->setForced(false);
+                job.kind=AirliftKind::ColonistPreparing;job.objective=NONE_ID;
+                job.lifted=job.landed=false;job.ordered=now;
+                ++airliftStats.cancelled;
+                SDL_Log("COLONIST: house=%d event=flight_cancelled mcv=%u reason=supplier_lost cycle=%u",
+                    getHouse()->getHouseID(),it->first,now);
+                ++it;continue;
+            }
+        }
         if (unit->isPickedUp()) {
             if (!job.lifted) {
                 job.lifted = true; ++airliftStats.lifted;
@@ -849,12 +864,12 @@ void QuantBot::releaseColonistTurret(const AirliftJob& job) {
     if (job.kind==AirliftKind::ColonistPreparing) return; // Its ordinary home work is not colony material.
     const auto reservation=reservedStructures.find(job.objective);
     if (reservation==reservedStructures.end() || reservation->second.item!=Structure_RocketTurret
-        || blockDistance(reservation->second.location,job.drop)>4) return;
+        || (job.kind!=AirliftKind::ColonyTurret && maximumDistance(reservation->second.location,job.drop)>3)) return;
     if (const auto held=heldWithoutSiteSince.find(job.objective);held!=heldWithoutSiteSince.end())
         SDL_Log("COLONIST: house=%d event=turret_released supplier=%u wait_s=%d cycle=%u",
             getHouse()->getHouseID(),job.objective,
             int((getGameCycleCount()-held->second)*GAMESPEED_DEFAULT/1000),getGameCycleCount());
-    if (const auto* builder=dynamic_cast<const BuilderBase*>(getObject(job.objective));builder && builder->getOwner()==getHouse())
+    if (const auto* builder=dynamic_cast<const BuilderBase*>(getObject(job.objective));builder && builder->getOwner()==getHouse() && builder->getHealth()>0)
         doCancelItem(builder,Structure_RocketTurret);
     reservedStructures.erase(reservation);
     heldWithoutSiteSince.erase(job.objective);
@@ -875,13 +890,18 @@ bool QuantBot::prepareColonistTrip(const MCV* mcv,Coord site) {
     }
     auto& job=found->second;
     if (job.kind!=AirliftKind::ColonistGround && job.kind!=AirliftKind::ColonistPreparing) return false;
-    if (job.drop!=site) {releaseColonistTurret(job);job.drop=site;job.objective=NONE_ID;job.landed=false;}
+    if (job.drop!=site) {
+        releaseColonistTurret(job);
+        job.kind=AirliftKind::ColonistPreparing;job.drop=site;job.objective=NONE_ID;
+        job.lifted=job.landed=false;job.ordered=now;
+    }
     // An aircraft that landed slightly off the footprint finishes its short local drive normally.
     if (job.lifted && job.landed) return false;
     const auto* supplier=dynamic_cast<const BuilderBase*>(getObject(job.objective));
     if (!supplier || supplier->getOwner()!=getHouse() || supplier->getHealth()<=0) {
         releaseColonistTurret(job);
-        job.objective=NONE_ID;
+        // A replacement supplier has not committed colony material: finish its own paid work first.
+        job.kind=AirliftKind::ColonistPreparing;job.objective=NONE_ID;
         for (const auto* structure:getStructureList()) {
             const auto* yard=dynamic_cast<const BuilderBase*>(structure);
             if (!yard || yard->getOwner()!=getHouse() || yard->getHealth()<=0 || yard->getItemID()!=Structure_ConstructionYard
@@ -895,7 +915,7 @@ bool QuantBot::prepareColonistTrip(const MCV* mcv,Coord site) {
     }
     const auto reserved=reservedStructures.find(job.objective);
     if (job.kind==AirliftKind::ColonistPreparing || !supplier || reserved==reservedStructures.end() || reserved->second.item!=Structure_RocketTurret
-        || blockDistance(reserved->second.location,job.drop)>4
+        || maximumDistance(reserved->second.location,job.drop)>3
         || !supplier->isWaitingToPlace() || supplier->getCurrentProducedItem()!=Structure_RocketTurret) return true;
     if (getGameInitSettings().getGameOptions().manualCarryallDrops && !job.lifted) {
         const Uint32 supplierID=job.objective;
@@ -948,7 +968,7 @@ bool QuantBot::buildColonistTurret(BuildPass& pass,BuilderTurn& turn) {
         const auto ownMaterial=reservedStructures.find(job.objective);
         if (turn.pBuilder->getProductionQueueSize()>0
             && (ownMaterial==reservedStructures.end() || ownMaterial->second.item!=Structure_RocketTurret
-                || blockDistance(ownMaterial->second.location,job.drop)>4)) {
+                || (job.kind!=AirliftKind::ColonyTurret && maximumDistance(ownMaterial->second.location,job.drop)>3))) {
             // A home emergency used the uncommitted yard first. Its material is never stolen by this mission.
             job.objective=NONE_ID;return false;
         }

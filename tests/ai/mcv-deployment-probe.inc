@@ -1584,7 +1584,7 @@ void runMcvDeploymentProbe(Game& game) {
             make(Unit_Carryall,at(8,9));
             make(Unit_Tank,at(9,12)); // The unchanged driven-trip escort admission is exercised, not bypassed.
             const Uint32 passengerID=passenger->getObjectID();
-            const Coord destination=at(29,11);
+            Coord destination=at(29,11);
             bot->mcvExpansionSites[passengerID]=destination;
             bot->mcvSurveyCycles[passengerID]=game.getGameCycleCount();
             house->storedCredits=0;house->cityCredits=0;house->startingCredits=100000;
@@ -1592,7 +1592,7 @@ void runMcvDeploymentProbe(Game& game) {
             bot->rockSurveyCycle=std::numeric_limits<Uint32>::max();
             bot->dangerUpdated=std::numeric_limits<Uint32>::max();bot->refreshTacticalDanger();
             require(!bot->onOwnRockFormation(destination),"Colonist fixture target must be on separate rock");
-            const Coord homeTurret=at(5,3);
+            Coord homeTurret=at(5,3);
             if (arm==2) {
                 const int homeQueue=supplier->getProductionQueueSize();
                 bot->doProduceItem(supplier,Structure_RocketTurret);
@@ -1616,6 +1616,7 @@ void runMcvDeploymentProbe(Game& game) {
                 SDL_Log("AIRLIFT_COLONISTS_ASSERT: enabled=0 flights=0 driven=1 deployed=1");continue;
             }
             bool readyBeforeArrival=false,everCarried=false,deployed=false,restoredMaterial=false,homeMaterialPlaced=arm!=2;
+            bool retargeted=false,cornerExercised=false,supplierReplaced=false;
             Uint32 deployedAt=0;
             const Uint32 deadline=game.getGameCycleCount()+MILLI2CYCLES(180000);
             while (game.getGameCycleCount()<deadline) {
@@ -1628,7 +1629,26 @@ void runMcvDeploymentProbe(Game& game) {
                 const auto material=bot->reservedStructures.find(supplier->getObjectID());
                 const bool ready=supplier->isWaitingToPlace() && supplier->getCurrentProducedItem()==Structure_RocketTurret
                     && mission!=bot->airliftJobs.end() && mission->second.kind!=QuantBot::AirliftKind::ColonistPreparing
-                    && material!=bot->reservedStructures.end() && blockDistance(material->second.location,destination)<=4;
+                    && material!=bot->reservedStructures.end() && maximumDistance(material->second.location,destination)<=3;
+                if (arm==2 && ready && !retargeted) {
+                    const Coord diagonal=destination+Coord(3,3);
+                    require(blockDistance(diagonal,destination)>4 && maximumDistance(diagonal,destination)==3,
+                        "The ownership boundary must exercise the real diagonal selector corner");
+                    bot->reservedStructures[supplier->getObjectID()].location=diagonal;
+                    bot->buildProducer(pass,supplier);
+                    require(bot->airliftJobs.at(passengerID).objective==supplier->getObjectID(),
+                        "A legal diagonal colony reservation lost ownership of its paid material");
+                    cornerExercised=true;
+                    destination=at(35,16);bot->mcvExpansionSites[passengerID]=destination;
+                    bot->manageMcv(static_cast<const MCV*>(game.getObjectManager().getObject(passengerID)));
+                    require(bot->airliftJobs.at(passengerID).kind==QuantBot::AirliftKind::ColonistPreparing
+                        && supplier->getProductionQueueSize()==0,"Retargeting did not relinquish its old material ownership");
+                    homeTurret=at(5,4);bot->doProduceItem(supplier,Structure_RocketTurret);
+                    require(supplier->getProductionQueueSize()==1,"Retarget fixture must queue real unrelated home work");
+                    bot->reservedStructures[supplier->getObjectID()]={Structure_RocketTurret,homeTurret};
+                    bot->builderPlaceLocations[supplier->getObjectID()]={homeTurret};
+                    homeMaterialPlaced=false;retargeted=true;continue;
+                }
                 if (ready && !deployed && !restoredMaterial) {
                     const auto previousVersion=game.loadedSavegameVersion;
                     game.loadedSavegameVersion=SAVEGAMEVERSION;
@@ -1637,13 +1657,35 @@ void runMcvDeploymentProbe(Game& game) {
                     bot->airliftJobs.clear();bot->reservedStructures.erase(supplier->getObjectID());
                     bot->mcvExpansionSites.erase(passengerID);bot->loadAirlift(input);
                     game.loadedSavegameVersion=previousVersion;restoredMaterial=true;
-                    require(bot->airliftJobs.count(passengerID)==1,"A colonist save lost its supplier assignment");
+                    require(input.getRemainingLength()==0 && bot->airliftJobs.count(passengerID)==1
+                        && bot->airliftJobs.at(passengerID).objective==supplier->getObjectID(),
+                        "A colonist save lost its exact supplier assignment or stream alignment");
                 }
                 const auto* current=dynamic_cast<const MCV*>(game.getObjectManager().getObject(passengerID));
                 if (current) {
                     everCarried=everCarried || current->isPickedUp();
                     if (ready && current->getLocation().isValid() && bot->onOwnRockFormation(current->getLocation())) readyBeforeArrival=true;
                     bot->manageMcv(current);
+                    if (arm==3 && !supplierReplaced && bot->airliftJobs.count(passengerID)
+                        && bot->airliftJobs.at(passengerID).kind==QuantBot::AirliftKind::Colonist && !current->isPickedUp()) {
+                        // Actual supplier destruction while a real Carryall is booked; a real spare owns unrelated work.
+                        for(int y=3;y<5;++y) for(int x=6;x<8;++x) currentGameMap->getTile(at(x,y))->setType(Terrain_Rock);
+                        currentGameMap->getTile(at(8,3))->setType(Terrain_Rock);
+                        auto* spare=dynamic_cast<ConstructionYard*>(house->placeStructure(NONE_ID,Structure_ConstructionYard,
+                            at(6,3).x,at(6,3).y,true,true));
+                        require(spare!=nullptr,"Supplier loss fixture needs its real backup yard");
+                        spare->curUpgradeLev=spare->getMaxUpgradeLevel();spare->updateBuildList();
+                        homeTurret=at(8,3);bot->doProduceItem(spare,Structure_RocketTurret);
+                        require(spare->getProductionQueueSize()==1,"Backup supplier must own real unrelated home work");
+                        bot->reservedStructures[spare->getObjectID()]={Structure_RocketTurret,homeTurret};
+                        bot->builderPlaceLocations[spare->getObjectID()]={homeTurret};
+                        supplier->destroy();bot->updateAirlift();
+                        require(bot->airliftJobs.count(passengerID)
+                            && bot->airliftJobs.at(passengerID).kind==QuantBot::AirliftKind::ColonistPreparing
+                            && bot->airliftJobs.at(passengerID).objective==NONE_ID && !current->hasBookedCarrier(),
+                            "A lost supplier kept a flight booking or transferred material ownership");
+                        supplier=spare;supplierReplaced=true;homeMaterialPlaced=false;
+                    }
                 } else if (!deployed) {
                     deployed=true;deployedAt=game.getGameCycleCount();
                     require(yardNear(destination,1),"The colonist disappeared without deploying at its actual away site");
@@ -1652,7 +1694,7 @@ void runMcvDeploymentProbe(Game& game) {
                 bool turret=false;
                 for (const auto* structure:structureList) {
                     if (structure->getOwner()!=house || structure->getItemID()!=Structure_RocketTurret) continue;
-                    if (blockDistance(structure->getLocation(),destination)<=4) turret=true;
+                    if (maximumDistance(structure->getLocation(),destination)<=3) turret=true;
                     if (structure->getLocation()==homeTurret) homeMaterialPlaced=true;
                 }
                 if (deployed && turret) {
@@ -1662,6 +1704,8 @@ void runMcvDeploymentProbe(Game& game) {
                 }
                 tick(10);
             }
+            require(arm!=2 || (retargeted && cornerExercised),"Retarget/diagonal ownership boundary was not exercised");
+            require(arm!=3 || supplierReplaced,"Supplier-loss ownership boundary was not exercised");
             require(deployed,"An away MCV never deployed through the actual logistics path");
             require(readyBeforeArrival,"The existing yard had no finished Rocket Turret before the colonist arrived");
             require(homeMaterialPlaced,"A colonist stole the supplier's pre-existing home Rocket Turret");
