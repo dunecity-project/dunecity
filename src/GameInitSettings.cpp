@@ -350,7 +350,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.startTechLevel = 0;
     // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
     gameOptions.saboteurHunt = true;
-    gameOptions.saboteurSkipsEmptyZones = true;
+    gameOptions.saboteurSkipsCityZones = true;
     gameOptions.hospitalCare = true;
     gameOptions.turretsFireOnBuildings = false;
     // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
@@ -541,13 +541,13 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 const Uint8 packed = stream.readUint8();
                 // Bit 6 (protocol 146) is set when Hospital Care is off, bit 5 (protocol 147)
                 // when Turrets Can Fire On Buildings is on, bit 4 (protocol 151) when Saboteurs
-                // Skip Empty Zones is off. The level is the low four bits (at most 9).
+                // Skip City Zones is off. The level is the low four bits (at most 9).
                 const Uint8 level = packed & 0x0F;
                 if(level > 9)
                     throw std::runtime_error("Invalid starting tech level.");
                 gameOptions.startTechLevel = level;
                 gameOptions.saboteurHunt = (packed & 0x80) == 0;
-                gameOptions.saboteurSkipsEmptyZones = (packed & 0x10) == 0;
+                gameOptions.saboteurSkipsCityZones = (packed & 0x10) == 0;
                 gameOptions.hospitalCare = (packed & 0x40) == 0;
                 gameOptions.turretsFireOnBuildings = (packed & 0x20) != 0;
             }
@@ -771,8 +771,8 @@ void GameInitSettings::save(OutputStream& stream) const {
         | (gameOptions.hospitalCare ? 0 : 0x40)
         // Bit 5 (protocol 147): Turrets Can Fire On Buildings is on.
         | (gameOptions.turretsFireOnBuildings ? 0x20 : 0)
-        // Bit 4 (protocol 151): Saboteurs Skip Empty Zones is off.
-        | (gameOptions.saboteurSkipsEmptyZones ? 0 : 0x10)));
+        // Bit 4 (protocol 151): Saboteurs Skip City Zones is off.
+        | (gameOptions.saboteurSkipsCityZones ? 0 : 0x10)));
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {

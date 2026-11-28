@@ -1280,7 +1280,7 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-saboteur-target-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/saboteur-target-probe)
         set_tests_properties(saboteur_target_probe PROPERTIES TIMEOUT 300 PROCESSORS 2)
-        # Saboteurs Skip Empty Zones: in a city game a released Saboteur passes over zones nobody
+        # Saboteurs Skip City Zones: in a city game a released Saboteur passes over zones nobody
         # garrisons, blows up a garrisoned one, gives up one whose garrison leaves; an order is kept.
         dunecity_add_test(headless nightly NAME saboteur_zone_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-saboteur-zone-probe.py

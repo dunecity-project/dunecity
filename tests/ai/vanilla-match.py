@@ -119,7 +119,7 @@ ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
 # attack-mode changes. hit and lost rows carry its totals (orders, overwrites, refused).
 # 'target' rows are each new target (the first eight a Saboteur), with garrison (soldiers inside a target
 # zone, -1 for anything else) and own (1: its own choice, 0: an order); zone_skip / zone_drop /
-# zone_violation are the match rule Saboteurs Skip Empty Zones acting, giving up an evacuated zone, and
+# zone_violation are the match rule Saboteurs Skip City Zones acting, giving up an evacuated zone, and
 # the in-game check's failure (tests/units/saboteur-zone-report.py reads them).
 SABOTEUR_EVENTS = (('SABOTEUR_RELEASED:', 'released'), ('SABOTEUR_HIT:', 'hit'), ('SABOTEUR_LOST:', 'lost'),
                    ('SABOTEUR_ORDER:', 'order'), ('SABOTEUR_MODE:', 'mode'), ('SABOTEUR_TARGET:', 'target'),

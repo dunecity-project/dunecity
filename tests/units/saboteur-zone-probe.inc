@@ -1,4 +1,4 @@
-// Saboteurs Skip Empty Zones (GameOptionsClass::saboteurSkipsEmptyZones; Stefan, 2026-11-28: "also make
+// Saboteurs Skip City Zones (GameOptionsClass::saboteurSkipsCityZones; Stefan, 2026-11-28: "also make
 // sabateurs not target r/i/c (not valuable enough) unless it is garissoned").
 //
 // Each case runs the real Palace special weapon (Palace::doSpecialWeapon -> spawnSaboteur) and
@@ -6,8 +6,8 @@
 // destroyed. Garrisons are put in with the real capture command (CMD_INFANTRY_CAPTURE) and taken out
 // with the real Evacuate command (CMD_ZONE_EVACUATE).
 //
-// empty zones skipped    the nearest enemy Residential, Commercial and Industrial zones are empty: the
-//                        Saboteur goes past them to the Wind Trap beyond; all three zones stand
+// city zones skipped     the nearest enemy Residential, Commercial and Industrial zones hold no garrison:
+//                        the Saboteur goes past them to the Wind Trap beyond; all three zones stand
 // rule off               the same position with the rule off: the nearest zone is blown up (the rule up
 //                        to protocol 149), so the switch is what makes the difference
 // garrisoned zone        the nearest zone holds two enemy Soldiers: it is the target and is blown up;
@@ -15,9 +15,12 @@
 //                        the other out beside the ruin with half its hit points; the Wind Trap stands
 // garrison leaves        the garrisoned zone it is walking to is evacuated: it gives the zone up and
 //                        blows up the Wind Trap instead; the zone stands
-// only empty zones       nothing but empty zones: it does not go for them and waits; they stand
-// player order           (human owner) the player selects the Saboteur and right-clicks an empty enemy
-//                        zone through Game::doInput: the order is kept and the zone is blown up
+// garrison decides      a fully built, populated Residential zone without a garrison stands nearest and
+//                        an unbuilt one with no residents but a Soldier inside further off: the
+//                        Saboteur passes the full one and blows up the garrisoned one
+// only ungarrisoned     nothing but ungarrisoned zones: it does not go for them and waits; they stand
+// player order           (human owner) the player selects the Saboteur and right-clicks an ungarrisoned
+//                        enemy zone through Game::doInput: the order is kept and the zone is blown up
 //
 // Every case runs for a human and a QuantBot owner (the player order for the human only).
 #include <Command.h>
@@ -77,7 +80,7 @@ struct Fixture {
     Fixture(const std::string& ownerClass, const std::string& caseName, bool rule = true)
         : label(ownerClass + "/" + caseName) {
         auto options = gModOptions;
-        options.saboteurSkipsEmptyZones = rule;
+        options.saboteurSkipsCityZones = rule;
         options.immortalHumanPlayer = false;
         const bool humanOwner = ownerClass == "HumanPlayer";
         // The local player is the Saboteur's owner in the human cases and its victim in the AI cases.
@@ -101,8 +104,8 @@ struct Fixture {
         require(owner != nullptr && enemy != nullptr, label + ": fixture houses missing");
         require(owner->isAI() == !humanOwner, label + ": owner is not the requested kind of player");
         require(game->isCitySimEnabled(), label + ": the fixture is not a city game");
-        require(game->getGameInitSettings().getGameOptions().saboteurSkipsEmptyZones == rule,
-                label + ": the game did not keep the Saboteurs Skip Empty Zones rule of its arm");
+        require(game->getGameInitSettings().getGameOptions().saboteurSkipsCityZones == rule,
+                label + ": the game did not keep the Saboteurs Skip City Zones rule of its arm");
         require(game->getGameInitSettings().getGameOptions().zoneGarrisons, label + ": Zone Garrisons is off");
         palace = static_cast<Palace*>(owner->placeStructure(NONE_ID, Structure_Palace, 30, 30, true, true));
         require(palace != nullptr, label + ": cannot place the Palace");
@@ -113,10 +116,10 @@ struct Fixture {
         currentGame = nullptr;
     }
 
-    ZoneStructure* zone(const std::string& name, int item, int x, int y) {
+    ZoneStructure* zone(const std::string& name, int item, int x, int y, int level = 2) {
         auto* z = dynamic_cast<ZoneStructure*>(enemy->placeStructure(NONE_ID, item, x, y, true, true));
         require(z != nullptr, label + ": cannot place " + name);
-        z->setStartingLevel(2);
+        z->setStartingLevel(level);
         z->setVisible(VIS_ALL, true);
         watched.push_back({name, z->getObjectID()});
         return z;
@@ -194,10 +197,10 @@ void record(const std::string& label, const std::string& detail) {
 
 int targetItem(const UnitBase* u) { return u->getTarget() != nullptr ? u->getTarget()->getItemID() : -1; }
 
-/// Empty Residential, Commercial and Industrial zones stand between the Palace and a Wind Trap: the
+/// Ungarrisoned Residential, Commercial and Industrial zones stand between the Palace and a Wind Trap: the
 /// Saboteur goes past them to the Wind Trap. With the rule off it blows up the nearest zone.
-void emptyZonesSkipped(const std::string& ownerClass, bool rule) {
-    Fixture f(ownerClass, rule ? "empty-zones-skipped" : "rule-off", rule);
+void cityZonesSkipped(const std::string& ownerClass, bool rule) {
+    Fixture f(ownerClass, rule ? "city-zones-skipped" : "rule-off", rule);
     const auto* residential = f.zone("Residential zone 4 tiles east", Structure_ZoneResidential, 35, 30);
     f.zone("Commercial zone 5 tiles south", Structure_ZoneCommercial, 30, 36);
     f.zone("Industrial zone 6 tiles west", Structure_ZoneIndustrial, 22, 30);
@@ -208,7 +211,7 @@ void emptyZonesSkipped(const std::string& ownerClass, bool rule) {
     const ObjectBase* expected = rule ? static_cast<const ObjectBase*>(trap) : residential;
     require(saboteur->getTarget() == expected,
             f.label + ": the released Saboteur's target is item " + std::to_string(targetItem(saboteur)) + ", not "
-            + (rule ? "the Wind Trap beyond the empty zones" : "the nearest (empty) zone"));
+            + (rule ? "the Wind Trap beyond the ungarrisoned zones" : "the nearest (ungarrisoned) zone"));
     // On its way past the zones it must never switch to one of them.
     bool switched = false;
     const Uint32 victimID = expected->getObjectID();
@@ -221,8 +224,8 @@ void emptyZonesSkipped(const std::string& ownerClass, bool rule) {
     }
     require(!switched, f.label + ": on its way the Saboteur switched its target");
     f.requireOnlyVictim(saboteurID, victimID);
-    record(f.label, rule ? "went past three empty enemy zones and blew up the Wind Trap; all zones stand"
-                         : "rule off: blew up the nearest empty zone (the rule up to protocol 149)");
+    record(f.label, rule ? "went past three ungarrisoned enemy zones and blew up the Wind Trap; all zones stand"
+                         : "rule off: blew up the nearest ungarrisoned zone (the rule up to protocol 149)");
 }
 
 /// A garrisoned zone is a target like any building: the nearest, garrisoned, is blown up before a
@@ -271,6 +274,33 @@ void garrisonedZoneTaken(const std::string& ownerClass) {
     record(f.label, "picked the garrisoned zone and blew it up; garrison:" + fate + "; the Wind Trap stands");
 }
 
+/// Only the garrison decides, not how built up the zone is: a dense, populated Residential zone with
+/// nobody inside is passed over for a farther, unbuilt one (no residents) that holds a Soldier.
+void garrisonDecides(const std::string& ownerClass) {
+    Fixture f(ownerClass, "garrison-decides");
+    auto* full = f.zone("dense populated Residential zone 4 tiles east, no garrison", Structure_ZoneResidential, 35, 30, 3);
+    auto* bare = f.zone("unbuilt Residential zone 7 tiles west, one Soldier inside", Structure_ZoneResidential, 22, 30, 0);
+    f.building("Wind Trap 13 tiles north", Structure_WindTrap, 30, 15);
+    f.garrison(bare, 1);
+    require(full->getResidentialPopulation() > 0 && !full->isGarrisoned(),
+            f.label + ": the near zone is not populated and ungarrisoned (" + std::to_string(full->getResidentialPopulation())
+            + " residents)");
+    require(bare->getResidentialPopulation() == 0 && bare->isGarrisoned(),
+            f.label + ": the far zone is not unpopulated and garrisoned (" + std::to_string(bare->getResidentialPopulation())
+            + " residents)");
+    const Uint32 bareID = bare->getObjectID();
+    const int residents = full->getResidentialPopulation();
+    auto* saboteur = f.release();
+    const Uint32 saboteurID = saboteur->getObjectID();
+    f.game->updateGameState();
+    require(saboteur->getTarget() == bare, f.label + ": the released Saboteur did not pick the garrisoned unbuilt zone (target item "
+            + std::to_string(targetItem(saboteur)) + ")");
+    f.runUntilGone(saboteurID, 120);
+    f.requireOnlyVictim(saboteurID, bareID);
+    record(f.label, "passed the populated zone (" + std::to_string(residents) + " residents, no garrison) and blew up the "
+           "unbuilt zone with a Soldier inside");
+}
+
 /// The zone it is walking to loses its garrison (the enemy's Evacuate): it gives the zone up and goes
 /// for the Wind Trap.
 void garrisonLeaves(const std::string& ownerClass) {
@@ -296,9 +326,9 @@ void garrisonLeaves(const std::string& ownerClass) {
     record(f.label, "gave up the zone when its garrison left and blew up the Wind Trap; the zone stands");
 }
 
-/// Nothing but empty zones: it does not go for them.
-void onlyEmptyZones(const std::string& ownerClass) {
-    Fixture f(ownerClass, "only-empty-zones");
+/// Nothing but ungarrisoned zones: it does not go for them.
+void onlyUngarrisonedZones(const std::string& ownerClass) {
+    Fixture f(ownerClass, "only-ungarrisoned-zones");
     f.zone("Residential zone 4 tiles east", Structure_ZoneResidential, 35, 30);
     f.zone("Industrial zone 6 tiles west", Structure_ZoneIndustrial, 22, 30);
     auto* saboteur = f.release();
@@ -310,9 +340,9 @@ void onlyEmptyZones(const std::string& ownerClass) {
         const ObjectBase* t = f.alive(saboteurID) ? saboteur->getTarget() : nullptr;
         targetedZone = targetedZone || t != nullptr;
     }
-    require(f.alive(saboteurID) && !targetedZone, f.label + ": with only empty zones near the Saboteur went for one");
+    require(f.alive(saboteurID) && !targetedZone, f.label + ": with only ungarrisoned zones near the Saboteur went for one");
     for(const auto& [name, id] : f.watched) require(f.alive(id), f.label + ": " + name + " was destroyed");
-    record(f.label, "only empty zones near: no zone taken as a target in 40 s, both stand");
+    record(f.label, "only ungarrisoned zones near: no zone taken as a target in 40 s, both stand");
 }
 
 /// A real SDL mouse click on TILE of the map view, through Game::doInput.
@@ -334,16 +364,16 @@ void clickMap(Fixture& f, Coord tile, Uint8 button) {
     f.game->doInput();
 }
 
-/// The player's own order is kept: the Saboteur selected, the empty zone right-clicked on the map.
+/// The player's own order is kept: the Saboteur selected, the ungarrisoned zone right-clicked on the map.
 void playerOrderKept() {
     Fixture f("HumanPlayer", "player-order");
-    const auto* z = f.zone("empty Industrial zone 8 tiles east", Structure_ZoneIndustrial, 39, 30);
+    const auto* z = f.zone("ungarrisoned Industrial zone 8 tiles east", Structure_ZoneIndustrial, 39, 30);
     const Uint32 zoneID = z->getObjectID();
     f.building("Wind Trap 6 tiles north", Structure_WindTrap, 30, 22);
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
     f.game->updateGameState();
-    require(saboteur->getTarget() != z, f.label + ": the released Saboteur picked the empty zone itself");
+    require(saboteur->getTarget() != z, f.label + ": the released Saboteur picked the ungarrisoned zone itself");
     Game& game = *f.game;
     game.unselectAll(game.selectedList);
     game.selectedList.clear();
@@ -353,11 +383,11 @@ void playerOrderKept() {
     game.setCursorMode(Game::CursorMode_Normal);
     clickMap(f, z->getLocation(), SDL_BUTTON_RIGHT);
     require(f.runUntil(2, [&] { return saboteur->getTarget() == z; }),
-            f.label + ": the right click on the empty enemy zone did not send the Saboteur at it (target item "
+            f.label + ": the right click on the ungarrisoned enemy zone did not send the Saboteur at it (target item "
             + std::to_string(targetItem(saboteur)) + ")");
     f.runUntilGone(saboteurID, 120);
     f.requireOnlyVictim(saboteurID, zoneID);
-    record(f.label, "right-clicked onto an empty enemy zone: the order was kept and the zone blown up");
+    record(f.label, "right-clicked onto an ungarrisoned enemy zone: the order was kept and the zone blown up");
 }
 
 } // namespace SaboteurZoneProbe
@@ -366,7 +396,7 @@ int runSaboteurZoneProbe() {
     using namespace SaboteurZoneProbe;
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    require(gModOptions.saboteurSkipsEmptyZones, "Saboteurs Skip Empty Zones is not on by default in the Dune City mod");
+    require(gModOptions.saboteurSkipsCityZones, "Saboteurs Skip City Zones is not on by default in the Dune City mod");
     int failed = 0, cases = 0;
     auto run = [&](auto check) {
         ++cases;
@@ -378,11 +408,12 @@ int runSaboteurZoneProbe() {
         }
     };
     for(const std::string ownerClass : {"HumanPlayer", "qBotHard"}) {
-        run([&] { emptyZonesSkipped(ownerClass, true); });
-        run([&] { emptyZonesSkipped(ownerClass, false); });
+        run([&] { cityZonesSkipped(ownerClass, true); });
+        run([&] { cityZonesSkipped(ownerClass, false); });
         run([&] { garrisonedZoneTaken(ownerClass); });
+        run([&] { garrisonDecides(ownerClass); });
         run([&] { garrisonLeaves(ownerClass); });
-        run([&] { onlyEmptyZones(ownerClass); });
+        run([&] { onlyUngarrisonedZones(ownerClass); });
     }
     run([] { playerOrderKept(); });
     if(failed == 0) SDL_Log("SABOTEUR_ZONE_PROBE_PASS: %d cases", cases);

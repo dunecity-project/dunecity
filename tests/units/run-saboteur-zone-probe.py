@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Check on real units that a Saboteur passes over zones nobody garrisons (Saboteurs Skip Empty Zones).
+"""Check on real units that Saboteurs skip R/C/I zones unless garrisoned (Saboteurs Skip City Zones).
 
 Stefan, 2026-11-28: "also make sabateurs not target r/i/c (not valuable enough) unless it is
-garissoned". In a Dune City game a Palace-released Saboteur, human or QuantBot owned, goes past empty
-Residential, Commercial and Industrial zones to the building beyond; with the rule off it blows up the
-nearest zone. A garrisoned zone is still a target and is blown up (the front Soldier dies, the other
-is thrown out with half its hit points); a zone whose garrison leaves while the Saboteur walks to it is
-given up; with only empty zones about it takes no target; the player's own right-click on an empty
-zone is obeyed (tests/units/saboteur-zone-probe.inc).
+garissoned"; "saboteurs should skip r/i/c". In a Dune City game a Palace-released Saboteur, human
+or QuantBot owned, goes past Residential, Commercial and Industrial zones nobody garrisons to the
+building beyond; with the rule off it blows up the nearest zone. Only the garrison decides: a fully
+built, populated zone without one is passed over, an unbuilt zone with one is taken. A garrisoned
+zone is blown up (the front Soldier dies, the other is thrown out with half its hit points); a zone
+whose garrison leaves while the Saboteur walks to it is given up; with only ungarrisoned zones about
+it takes no target; the player's own right-click on an ungarrisoned zone is obeyed
+(tests/units/saboteur-zone-probe.inc).
 
 The match log must also show the rule acting: SABOTEUR_ZONE_SKIP lines (the zone the rule up to
 protocol 149 would have taken), SABOTEUR_ZONE_DROP lines (the evacuated zone given up) and no
@@ -113,7 +115,7 @@ problems = []
 if done.returncode != 0 or 'SABOTEUR_ZONE_PROBE_PASS:' not in text or 'SABOTEUR_ZONE_PROBE_FAIL:' in text:
     problems.append('a case failed')
 # The rule's own log: it passed zones over (the two owners' skipped and garrison-leaves cases), gave
-# up the evacuated zone (once per owner) and never chose an empty zone itself.
+# up the evacuated zone (once per owner) and never chose an ungarrisoned zone itself.
 if text.count('SABOTEUR_ZONE_SKIP:') < 2:
     problems.append('fewer than 2 SABOTEUR_ZONE_SKIP lines')
 if text.count('SABOTEUR_ZONE_DROP:') < 2:

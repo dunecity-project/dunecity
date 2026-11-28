@@ -66,12 +66,12 @@ public:
     /// The match rule that gives Saboteurs their own hunt (GameOptionsClass::saboteurHunt).
     static bool keepsOwnHunt();
 
-    /// The match rule Saboteurs Skip Empty Zones (GameOptionsClass::saboteurSkipsEmptyZones).
-    static bool skipsEmptyZones();
+    /// The match rule Saboteurs Skip City Zones (GameOptionsClass::saboteurSkipsCityZones).
+    static bool skipsCityZones();
 
     /**
         True for a Residential, Commercial or Industrial zone that nobody garrisons while the rule
-        Saboteurs Skip Empty Zones is on: a Saboteur choosing its own target passes over it (Stefan,
+        Saboteurs Skip City Zones is on: a Saboteur choosing its own target passes over it (Stefan,
         2026-11-28: "not valuable enough"). A garrisoned zone stays a target.
     */
     static bool passesOver(const ObjectBase* object);
@@ -101,12 +101,12 @@ protected:
 
 private:
     void takeNearerTargetWhenSeen();
-    /// The general nearest-target search with the empty zones left out (passesOver) when the rule
+    /// The general nearest-target search with the ungarrisoned R/C/I zones left out (passesOver) when the rule
     /// is on. Every automatic choice goes through here; an order its owner gives does not.
     const ObjectBase* searchOwn() const;
     /// With the rule on, a zone it chose itself that has lost its garrison is given up for the next
     /// target (or Guard when nothing else is left). True if it gave it up.
-    bool dropEmptyZone();
+    bool dropUngarrisonedZone();
     void showTargetToOwner(const Coord& targetTile);
 
     bool detonated = false;     ///< Set as it blows up its target; never saved, it is gone that cycle.

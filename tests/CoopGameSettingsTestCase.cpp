@@ -1871,12 +1871,12 @@ TEST_CASE("Turrets Can Fire On Buildings defaults off and its on state is hashed
     }
 }
 
-TEST_CASE("Saboteurs Skip Empty Zones defaults on and its off state is hashed and carried in bit 4 of the MOD20 byte",
+TEST_CASE("Saboteurs Skip City Zones defaults on and its off state is hashed and carried in bit 4 of the MOD20 byte",
           "[saboteur][network][save]") {
     SettingsClass::GameOptionsClass defaults;
-    REQUIRE(defaults.saboteurSkipsEmptyZones);
+    REQUIRE(defaults.saboteurSkipsCityZones);
     auto off = defaults;
-    off.saboteurSkipsEmptyZones = false;
+    off.saboteurSkipsCityZones = false;
     REQUIRE(off != defaults);
     REQUIRE(off.getHash() != defaults.getHash());
 
@@ -1884,14 +1884,14 @@ TEST_CASE("Saboteurs Skip Empty Zones defaults on and its off state is hashed an
     auto options = original.getGameOptions();
     options.startTechLevel = GENERATE(0, 5, 9);
     options.saboteurHunt = GENERATE(true, false);
-    options.saboteurSkipsEmptyZones = GENERATE(true, false);
+    options.saboteurSkipsCityZones = GENERATE(true, false);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
     // The default rule leaves the byte as protocol 149 wrote it.
     REQUIRE(static_cast<Uint8>(encoded.back())
             == static_cast<Uint8>(options.startTechLevel | (options.saboteurHunt ? 0 : 0x80)
-                                  | (options.saboteurSkipsEmptyZones ? 0 : 0x10)));
+                                  | (options.saboteurSkipsCityZones ? 0 : 0x10)));
 
     SECTION("every state round-trips with every tech level") {
         saved.writeUint32(0xabcdef01u);
@@ -1907,7 +1907,7 @@ TEST_CASE("Saboteurs Skip Empty Zones defaults on and its off state is hashed an
         bytes.resize(bytes.size() - Mod20Bytes);
         IMemoryStream input(bytes.data(), bytes.size());
         GameInitSettings restored(input);
-        REQUIRE(restored.getGameOptions().saboteurSkipsEmptyZones);
+        REQUIRE(restored.getGameOptions().saboteurSkipsCityZones);
     }
     SECTION("the off bit does not admit a tech level above 9") {
         auto bytes = encoded;

@@ -931,7 +931,7 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "Fremen Palace Worm", settings.gameOptions.fremenPalaceWorm);
     myINIFile.setBoolValue("Game Options", "Parks Count As Roads", settings.gameOptions.parksCountAsRoads);
     myINIFile.setBoolValue("Game Options", "Saboteur Hunt", settings.gameOptions.saboteurHunt);
-    myINIFile.setBoolValue("Game Options", "Saboteurs Skip Empty Zones", settings.gameOptions.saboteurSkipsEmptyZones);
+    myINIFile.setBoolValue("Game Options", "Saboteurs Skip City Zones", settings.gameOptions.saboteurSkipsCityZones);
     myINIFile.setBoolValue("Game Options", "Hospital Care", settings.gameOptions.hospitalCare);
     myINIFile.setBoolValue("Game Options", "Turrets Can Fire On Buildings", settings.gameOptions.turretsFireOnBuildings);
     myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);

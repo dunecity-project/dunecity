@@ -78,8 +78,8 @@ bool Saboteur::keepsOwnHunt() {
     return currentGame->getGameInitSettings().getGameOptions().saboteurHunt;
 }
 
-bool Saboteur::skipsEmptyZones() {
-    return currentGame->getGameInitSettings().getGameOptions().saboteurSkipsEmptyZones;
+bool Saboteur::skipsCityZones() {
+    return currentGame->getGameInitSettings().getGameOptions().saboteurSkipsCityZones;
 }
 
 namespace {
@@ -97,7 +97,7 @@ int garrisonOf(const ObjectBase* object) {
 } // namespace
 
 bool Saboteur::passesOver(const ObjectBase* object) {
-    return object != nullptr && skipsEmptyZones() && garrisonOf(object) == 0;
+    return object != nullptr && skipsCityZones() && garrisonOf(object) == 0;
 }
 
 void Saboteur::markReleased() {
@@ -195,7 +195,7 @@ bool Saboteur::update() {
                     pTarget != nullptr && pTarget->getObjectID() == ownPick ? 1 : 0,
                     ageSeconds(releasedCycle), currentGame->getGameCycleCount(), garrisonOf(pTarget));
         }
-        // The in-game check of Saboteurs Skip Empty Zones (every Saboteur, every new target): one
+        // The in-game check of Saboteurs Skip City Zones (every Saboteur, every new target): one
         // it chose itself is never a zone nobody garrisons. tests/units/saboteur-zone-report.py
         // fails a game with any such line.
         const ObjectBase* pChosen = target.getObjPointer();
@@ -338,7 +338,7 @@ const ObjectBase* Saboteur::findTarget() const {
 }
 
 const ObjectBase* Saboteur::searchOwn() const {
-    if(!skipsEmptyZones()) {
+    if(!skipsCityZones()) {
         return InfantryBase::findTarget();
     }
     ownSearch = true;
@@ -363,7 +363,7 @@ const ObjectBase* Saboteur::searchOwn() const {
     return pick;
 }
 
-bool Saboteur::dropEmptyZone() {
+bool Saboteur::dropUngarrisonedZone() {
     const ObjectBase* current = target.getObjPointer();
     // Its own pick, or (after a load, which forgets the pick) an AI house's hunting Saboteur,
     // which no order reaches. A zone its owner ordered it onto is kept.
@@ -416,7 +416,7 @@ void Saboteur::takeNearerTargetWhenSeen() {
         }
         return;
     }
-    if(dropEmptyZone() || target.getObjectID() != ownPick) {
+    if(dropUngarrisonedZone() || target.getObjectID() != ownPick) {
         return;
     }
     bool seen = false;
@@ -426,7 +426,7 @@ void Saboteur::takeNearerTargetWhenSeen() {
     if(!seen) {
         return;
     }
-    ownSearch = skipsEmptyZones();
+    ownSearch = skipsCityZones();
     const ObjectBase* nearest = InfantryBase::findTarget();    // the nearest structure or vehicle
     ownSearch = false;
     if(nearest != nullptr && nearest != current

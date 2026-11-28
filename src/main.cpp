@@ -1463,7 +1463,7 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.fremenPalaceWorm = myINIFile.getBoolValue("Game Options", "Fremen Palace Worm", true);
             settings.gameOptions.parksCountAsRoads = myINIFile.getBoolValue("Game Options", "Parks Count As Roads", true);
             settings.gameOptions.saboteurHunt = myINIFile.getBoolValue("Game Options", "Saboteur Hunt", true);
-            settings.gameOptions.saboteurSkipsEmptyZones = myINIFile.getBoolValue("Game Options", "Saboteurs Skip Empty Zones", true);
+            settings.gameOptions.saboteurSkipsCityZones = myINIFile.getBoolValue("Game Options", "Saboteurs Skip City Zones", true);
             settings.gameOptions.hospitalCare = myINIFile.getBoolValue("Game Options", "Hospital Care", true);
             // "Turrets Target Units Only" (the rule's first key, its inverse) counts when the current key is absent.
             settings.gameOptions.turretsFireOnBuildings = myINIFile.hasKey("Game Options", "Turrets Can Fire On Buildings")
