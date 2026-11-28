@@ -333,34 +333,45 @@ Coord QuantBot::findLotParkSite(int* gainOut, bool* lotCleared) {
     return best;
 }
 
-/// PollutionRelocation: the own Industrial zone whose pollution costs our R/C lots the most, and
-/// where the house's own Industrial siting would put it instead.
+/// PollutionRelocation: the own Industrial zone with the greatest recoverable R/C land value,
+/// and where the house's own Industrial siting would put it instead.
 bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, int& newHarm) {
     SearchClock clock(redevelopmentActivity.searchMicros);
     AITelemetry::PerformanceScope perfScope("ai.findPollutionRelocation", getGameCycleCount(), getHouse()->getHouseID());
     zoneID = NONE_ID; site = Coord::Invalid(); harm = newHarm = 0;
     const Map& map = getMap();
+    const auto& landValue = currentGame->getCitySimulation()->getLandValueMap();
     std::vector<std::pair<Coord, Coord>> lots;
     for (const auto* s : getStructureList())
         if (ownLot(s, getHouse())) lots.push_back({s->getLocation(), s->getStructureSize()});
-    auto harmAt = [&](Coord pos, Coord size, int emission, Coord skip) {
-        int total = 0;
+    struct Harm { int pollution = 0; int value = 0; };
+    auto harmAt = [&](Coord pos, Coord size, int emission, bool removing) {
+        Harm total;
         for (const auto& [o, lotSize] : lots) {
-            if (o == skip) continue;
-            total += RedevelopmentPolicy::pollutionHarm(emission, centreDistance(pos, size, o, lotSize),
-                                                        DuneCity::kPollutionRadius);
+            const int pollution = RedevelopmentPolicy::pollutionHarm(emission,
+                centreDistance(pos, size, o, lotSize), DuneCity::kPollutionRadius);
+            if (pollution == 0) continue;
+            const int value = landValue.worldGet(o.x, o.y);
+            total.pollution += pollution;
+            // As for park siting, a lot already at the floor has unknown excess pollution:
+            // reducing it is not evidence that land value can rise. The ceiling limits gains too.
+            total.value += removing ? ParkDistrictPolicy::blockGain(value, pollution)
+                : std::min(pollution, std::max(0, value - 1));
         }
         return total;
     };
-    int emission = 0;
+    int emission = 0, valueGain = 0;
     for (const auto* s : getStructureList()) {
         if (s->getOwner() != getHouse() || s->getHealth() <= 0 || s->getItemID() != Structure_ZoneIndustrial) continue;
         const Coord o = s->getLocation();
         const int e = DuneCity::getPollutionEmission(Structure_ZoneIndustrial, map.getTile(o.x, o.y)->getCityZoneDensity());
-        const int h = harmAt(o, s->getStructureSize(), e, Coord::Invalid());
-        if (h > harm) { harm = h; zoneID = s->getObjectID(); emission = e; }
+        const Harm cost = harmAt(o, s->getStructureSize(), e, true);
+        if (cost.pollution < RedevelopmentPolicy::kRelocateMinHarm) continue;
+        if (cost.value > valueGain) {
+            harm = cost.pollution; valueGain = cost.value; zoneID = s->getObjectID(); emission = e;
+        }
     }
-    if (zoneID == NONE_ID || harm < RedevelopmentPolicy::kRelocateMinHarm) { redevelopmentActivity.note("relocate_no_harm"); return false; }
+    if (zoneID == NONE_ID) { redevelopmentActivity.note("relocate_no_value_gain"); return false; }
     // The new site keeps clear of our homes whatever IndustrySeparation says: a relocation that
     // moved the polluter next to other lots would be no relocation.
     placementCache.erase(Structure_ZoneIndustrial);
@@ -376,8 +387,11 @@ bool QuantBot::findPollutionRelocation(Uint32& zoneID, Coord& site, int& harm, i
         placementCache.erase(Structure_ZoneIndustrial);
     }
     if (!site.isValid()) { redevelopmentActivity.note("relocate_no_site"); return false; }
-    newHarm = harmAt(site, getStructureSize(Structure_ZoneIndustrial), emission, Coord::Invalid());
-    if (!RedevelopmentPolicy::relocationPays(harm, newHarm)) { redevelopmentActivity.note("relocate_not_paying"); return false; }
+    const Harm replacement = harmAt(site, getStructureSize(Structure_ZoneIndustrial), emission, false);
+    newHarm = replacement.pollution;
+    if (!RedevelopmentPolicy::relocationPays(harm, newHarm) || replacement.value >= valueGain) {
+        redevelopmentActivity.note("relocate_not_paying"); return false;
+    }
     return true;
 }
 

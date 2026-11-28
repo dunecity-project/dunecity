@@ -404,6 +404,38 @@ void runRedevelopProbe() {
     }
     constexpr int kMinutes = 6;
 
+    // Real chooser boundary: raw pollution harm alone cannot justify moving industry while
+    // every affected home's land value is pinned at the floor or already at the ceiling.
+    {
+        auto game = load(save);
+        const Bot b = findBot(*game);
+        const Coord at = polluterSite(b.house);
+        skirmishRequire(at.isValid(), "Clamped relocation fixture has no industrial site");
+        const auto* polluter = b.house->placeStructure(NONE_ID, Structure_ZoneIndustrial, at.x, at.y, false, true);
+        skirmishRequire(polluter != nullptr, "Clamped relocation fixture could not place its polluter");
+        const int density = DuneCity::getStructureMaxLevel(Structure_ZoneIndustrial);
+        for (int dy = 0; dy < 2; ++dy) for (int dx = 0; dx < 2; ++dx)
+            currentGameMap->getTile(at.x + dx, at.y + dy)->setCityZoneDensity(density);
+        const auto lots = lotOrigins(b.house);
+        int rawHarm = 0;
+        for (const Coord lot : lots)
+            rawHarm += R::pollutionHarm(DuneCity::getPollutionEmission(Structure_ZoneIndustrial, density),
+                std::max(std::abs(at.x - lot.x), std::abs(at.y - lot.y)), DuneCity::kPollutionRadius);
+        skirmishRequire(rawHarm >= R::kRelocateMinHarm, "Clamped relocation fixture lacks real pollution harm");
+        auto* sim = game->getCitySimulation();
+        const int block = sim->landValueMap_.getBlockSize();
+        int rejected = 0;
+        for (const int value : {1, DuneCity::kMaxLandValue}) {
+            for (const Coord lot : lots) sim->landValueMap_.set(lot.x / block, lot.y / block, value);
+            Uint32 zoneID = NONE_ID; Coord site = Coord::Invalid(); int harm = 0, newHarm = 0;
+            const bool refused = !b.bot->findPollutionRelocation(zoneID, site, harm, newHarm);
+            expect(refused, "PollutionRelocation ordered a move with no recoverable land value");
+            rejected += refused;
+        }
+        SDL_Log("SKIRMISH_PROBE: redevelop clamp raw_harm=%d rejected=%d tested=2", rawHarm, rejected);
+        endMatch(game);
+    }
+
     // Every switch off: the baseline every ON arm is read against, and proof nothing fires.
     const Run off = play(save, {}, kMinutes, false);
     requireIdle(off, "all off");

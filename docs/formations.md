@@ -2244,9 +2244,11 @@ air raid or a ground threat to an asset; border fighting does not stop it.
 - `LotParks`: an own R/C lot of land value <= 64 and density <= 1 whose four Parks would add at least 24
   land value to the house's other lots; the yard's redevelopment route clears it once the Park order is
   accepted, and the next Parks fill it.
-- `PollutionRelocation`: the Industrial zone whose pollution costs our R/C lots the most (at least 40) is
-  rebuilt at an Industrial site clear of our homes; the old zone is demolished only once the new one
-  stands.
+- `PollutionRelocation`: choose the Industrial zone with the greatest recoverable R/C land value,
+  retaining the minimum 40 raw pollution harm and at-most-half-harm replacement rule. Floor-clamped
+  lots do not promise a value gain; gains stop at the ceiling, and must exceed the replacement's
+  value cost. Rebuild at an Industrial site clear of homes when available; demolish the old zone
+  only once the new one stands. The same-save acceptance still requires actual land-value gains.
 - `IndustrySeparation`: no new Industrial zone within 5 tiles (footprint to footprint) of an own R/C lot.
   A `HomeSeparation` switch (no new R/C lot within 5 tiles of an own polluter) was tried the same day and
   removed: the probe's homes beside polluters had pollution 35 and land value 79 against the city's
