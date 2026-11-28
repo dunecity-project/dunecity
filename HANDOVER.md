@@ -157,6 +157,11 @@ measures the old behaviour; match controls labelled `default` now have it on.
   house builds about 7,600 of units in ten minutes against the control's 25,075, and 7 of 24 houses missed the
   effect because their new zones were destroyed early. The hold releases while an enemy is near the core (12
   tiles), a stand-off he did not have.
+- `economy_first` asserts zones placed by minute 10 (42 against 7 at `e76c5e908`) and prints, as a KNOWN SHORTFALL
+  not asserted, zones standing net of losses: with the hold on, the house is under-armed and loses what it builds
+  when attacked early (seed 9461 after `f7afe2384` / `a3aba2e6a`: 5 standing net against -1, 2 yards lost); the
+  default is off for this reason among the twelve; the line returns to an assert when the hold lets affordable
+  defence and units through.
 - Palaces: the switch does not order them; the house stays at the map's 2 (his 15 by minute 31). Next arm:
   LowValuePalaces with EconomyFirst on (proposed, not on).
 - Scope: low / no spice maps only (his words); spice-rich maps are measured only for harm.
