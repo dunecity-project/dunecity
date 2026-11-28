@@ -103,7 +103,10 @@ Rules rulesOf(Game& game) {
 struct Started {
     std::unique_ptr<Game> game;
     Rules rules;
+    Started() = default;
+    Started(Started&&) = default;
     ~Started() {
+        if(!game) return;   // moved from
         game.reset();
         currentGame = nullptr;
         pLocalPlayer = nullptr;
