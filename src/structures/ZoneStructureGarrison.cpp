@@ -396,7 +396,8 @@ void ZoneStructure::updateGarrison() {
 void ZoneStructure::drawGarrisonSandbags() const {
     // Original pixel art, drawn rather than loaded: a ring of stacked sandbags hugging the lot's
     // edge, two staggered courses on every side with a gap in the middle of each side as a firing
-    // slit, the garrison house's colour along the front course, and an olive helmet per soldier.
+    // slit and a helmet per soldier. Every surface uses the occupying house's
+    // remapped palette ramp, as unit and building owner colours do.
     const int x0 = screenborder->world2screenX(lround(realX));
     const int y0 = screenborder->world2screenY(lround(realY));
     const int w = screenborder->world2screenX(lround(realX) + structureSize.x * TILESIZE) - x0;
@@ -405,7 +406,11 @@ void ZoneStructure::drawGarrisonSandbags() const {
     const int bagS = std::max(3, h / 10);       // its short side
     const House* house = getGarrisonHouse();
     const int houseColor = house ? house->getHouseID() : owner->getHouseID();
-    const SDL_Color seam = getHouseColorSDL(getHouseVisualHouse(houseColor));
+    const int colorSlot = getHouseVisualHouse(houseColor);
+    const SDL_Color highlight = getHouseColorSDL(colorSlot, 0);
+    const SDL_Color body = getHouseColorSDL(colorSlot, 3);
+    const SDL_Color tie = getHouseColorSDL(colorSlot, 5);
+    const SDL_Color outline = getHouseColorSDL(colorSlot, 7);
 
     auto fill = [](int x, int y, int bw, int bh, Uint8 r, Uint8 g, Uint8 b) {
         SDL_Rect rect{x, y, std::max(1, bw), std::max(1, bh)};
@@ -414,14 +419,14 @@ void ZoneStructure::drawGarrisonSandbags() const {
     };
     // One bag: dark outline, sacking body, sunlit face on its top or left side, a tie in the middle.
     auto bag = [&](int x, int y, int bw, int bh, bool horizontal) {
-        fill(x, y, bw, bh, 58, 42, 24);
-        fill(x + 1, y + 1, bw - 2, bh - 2, 176, 146, 92);
+        fill(x, y, bw, bh, outline.r, outline.g, outline.b);
+        fill(x + 1, y + 1, bw - 2, bh - 2, body.r, body.g, body.b);
         if(horizontal) {
-            fill(x + 1, y + 1, bw - 2, std::max(1, (bh - 2) / 3), 216, 190, 134);
-            fill(x + bw / 2, y + 1, 1, bh - 2, 128, 100, 62);
+            fill(x + 1, y + 1, bw - 2, std::max(1, (bh - 2) / 3), highlight.r, highlight.g, highlight.b);
+            fill(x + bw / 2, y + 1, 1, bh - 2, tie.r, tie.g, tie.b);
         } else {
-            fill(x + 1, y + 1, std::max(1, (bw - 2) / 3), bh - 2, 216, 190, 134);
-            fill(x + 1, y + bh / 2, bw - 2, 1, 128, 100, 62);
+            fill(x + 1, y + 1, std::max(1, (bw - 2) / 3), bh - 2, highlight.r, highlight.g, highlight.b);
+            fill(x + 1, y + bh / 2, bw - 2, 1, tie.r, tie.g, tie.b);
         }
     };
     // A wall of two staggered courses along one side; the middle bag of the outer course is left
@@ -453,17 +458,17 @@ void ZoneStructure::drawGarrisonSandbags() const {
     wallH(y0, false);
     wallH(y0 + h - 2 * bagS + 1, true);
     // The garrison house's colour along the front course, as a pennant line over the bags.
-    fill(x0 + bagL, y0 + h - 2 * bagS, w - 2 * bagL, std::max(2, bagS / 2), seam.r, seam.g, seam.b);
+    fill(x0 + bagL, y0 + h - 2 * bagS, w - 2 * bagL, std::max(2, bagS / 2), body.r, body.g, body.b);
 
-    // An olive helmet per soldier inside, along the top wall: how full it is at a glance.
+    // A house-coloured helmet per soldier inside, along the top wall.
     const int helmet = std::max(1, std::min(bagS + 1, (w - 4) / DuneCity::ZoneGarrison::kCapacity - 2));
     const int firstHelmet = x0 + (w - getGarrisonSize() * (helmet + 2) + 2) / 2;
     for(int i = 0; i < getGarrisonSize(); ++i) {
         const int hx = firstHelmet + i * (helmet + 2);
         const int hy = y0 + 2 * bagS;
-        fill(hx, hy, helmet, helmet, 20, 20, 14);                       // outline
-        fill(hx + 1, hy + 1, helmet - 2, helmet - 2, 92, 104, 52);      // olive drab
-        fill(hx + 1, hy + 1, std::max(1, (helmet - 2) / 2), 1, 150, 164, 96);   // highlight
-        fill(hx, hy + helmet - 1, helmet, 1, seam.r, seam.g, seam.b);   // house-coloured band
+        fill(hx, hy, helmet, helmet, outline.r, outline.g, outline.b);
+        fill(hx + 1, hy + 1, helmet - 2, helmet - 2, body.r, body.g, body.b);
+        fill(hx + 1, hy + 1, std::max(1, (helmet - 2) / 2), 1, highlight.r, highlight.g, highlight.b);
+        fill(hx, hy + helmet - 1, helmet, 1, tie.r, tie.g, tie.b);
     }
 }

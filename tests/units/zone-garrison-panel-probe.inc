@@ -19,6 +19,8 @@ void checkGarrisonPanel() {
         require(panel->update(), "panel: live update lost the selected zone");
         const auto& roster = panel->garrisonRoster;
         require(roster.isVisible() && roster.count == 5, "panel: model does not list five occupants");
+        require(panel->garrisonLabel.getText().find("5/5") != std::string::npos,
+                "panel: the full garrison label does not say 5/5");
         require(!panel->zonePreview.isVisible() && !panel->objPicture.isVisible(),
                 "panel: a building portrait obscures the occupant icons");
         for(size_t i = 0; i < roster.count; ++i) {

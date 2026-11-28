@@ -1031,6 +1031,7 @@ void checkPrice() {
 #include "zone-garrison-redevelopment-probe.inc"
 #include "zone-garrison-health-probe.inc"
 #include "zone-garrison-panel-probe.inc"
+#include "zone-garrison-appearance-probe.inc"
 
 } // namespace ZoneGarrisonProbe
 
@@ -1045,6 +1046,7 @@ int runZoneGarrisonProbe() {
     require(gModOptions.zoneGarrisons, "Zone Garrisons is not on by default in the Dune City mod");
     if(std::getenv("ZONE_GARRISON_PANEL_ONLY")) {
         checkGarrisonPanel();
+        checkGarrisonAppearance();
         SDL_Log("ZONE_GARRISON_PROBE_PASS: live occupant panel");
         return -1;
     }

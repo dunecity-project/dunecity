@@ -64,10 +64,12 @@ The lock is derived from the existing occupant list; no additional option is req
 - Transport recovery (`Game::reconcileTransportContainment`) knows garrisons and leaves them inside.
 
 **Look.** Sandbags drawn over the 2x2 lot after the zone sprite (`ZoneStructure::drawGarrisonSandbags`): bags a
-seventh of the lot long and a tenth deep, tan with a sunlit face, a tie and a dark outline, laid in two staggered
-courses on all four sides with the middle bag of the outer course left out as a firing slit; the garrison house's
-colour along the front course and an outlined olive helmet per soldier along the top wall. Original art drawn in code (no imported or C&C sprite); it scales with the zoom level. The zone
-panel shows `Garrison: n/4` and the Evacuate button while it is held.
+seventh of the lot long and a tenth deep, with a sunlit face, a tie and a dark outline, laid in two staggered
+courses on all four sides with the middle bag of the outer course left out as a firing slit, and one outlined
+helmet per occupant along the top wall. Bags and helmets use the occupying house's remapped colour ramp
+(bright face, body, dark tie, darkest outline), including visible enemy garrisons; fog still hides the overlay.
+Original art drawn in code (no imported or C&C sprite); it scales with zoom. The zone
+panel shows `Garrison: n/5` and the Evacuate button while it is held.
 
 ### Selected-building occupant panel (2026-11-28)
 
@@ -84,6 +86,8 @@ portrait. Captured zones shorten the count line to `n/5 (captured)` to fit.
 No extra panel height is added: the grid replaces the existing 54-pixel portrait
 area, with compact 22-pixel status/control rows keeping the full properties column
 inside the shared 640x480 logical minimum (including mobile's shared interface).
+The count/status row uses 12-pixel text and a separate two-pixel gap before Evacuate,
+so the complete `n/5 (captured)` marker stays on one line in the classic bitmap skin.
 Physical iPhone/iPad rendering and real-screen readability still need playtesting.
 
 Enemy inspection preserves `mayShowOwnerInterface()`: ordinary players get the
@@ -99,6 +103,8 @@ neither is silently enabled here, and neither should reveal buildings through fo
 | Live damage and healing | Same open panel after a real zone hit and normal garrison-healing game cycles |
 | Fits compact/desktop layout, paints every icon/bar | SDL dummy/software offscreen assertions and PNGs at 640x480 and 1024x768 |
 | No stale empty slots or new enemy disclosure | Real Evacuate clears roster/restores portrait; enemy map selection keeps generic inspect panel |
+| House-coloured bags and helmets, including enemies | Remapped own/enemy/captured-house pixel assertions at all three zooms; fogged render equals the plain building |
+| Captured Hospital marker stays clear of Evacuate | Complete single-line status, capacity-five text and two-pixel gap assertions; modern/lapis/classic offscreen PNGs at 640x480 and Air 960x600 logical at 2x/3x physical scale |
 
 
 **Save format 9900.** A zone saves its occupants (object ids in the order they entered), its garrison's target

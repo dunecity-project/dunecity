@@ -76,10 +76,12 @@ protected:
         textVBox.addWidget(&poweredLabel, (Sint32)22);
 
         // Zone Garrisons: how many soldiers hold the zone, and the order to bring them out.
-        garrisonLabel.setTextFontSize(14);
+        // Keep the complete captured marker on one line in the bitmap skin too.
+        garrisonLabel.setTextFontSize(12);
         garrisonLabel.setTextColor(color, COLOR_TRANSPARENT);
         garrisonLabel.setVisible(false);
         textVBox.addWidget(&garrisonLabel, (Sint32)22);
+        textVBox.addWidget(VSpacer::create(2));
         evacuateButton.setText(_("Evacuate"));
         evacuateButton.setTooltipText(_("The soldiers garrisoning this zone come out beside it. A captured zone goes back to its owner."));
         evacuateButton.setOnClick([id = objectID] {
