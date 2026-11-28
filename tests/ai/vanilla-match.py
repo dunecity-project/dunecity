@@ -69,6 +69,8 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+sys.path.insert(0, str(root / 'tests/menu'))
+from probe_fixture import file_hash  # noqa: E402
 import activation  # noqa: E402
 import match_score  # noqa: E402
 
@@ -87,7 +89,7 @@ HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardau
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 FFA_HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar')
 KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
-GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error')
+GAME_FIELDS = KEY + ('players', 'winner', 'winner_label', 'end_s', 'waves', 'wall_s', 'error', 'probe_hash')
 DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
                      'gate_holds', 'gate_timeouts', 'raid_orders', 'turret_targets', 'press_on_orders',
@@ -418,6 +420,7 @@ def apply_env(args):
 
 def play(args, scratch, binary, key):
     apply_env(args)
+    binary_hash = file_hash(binary)
     tag, difficulty, name, seed, sides_text = key
     sides = side_list(sides_text)
     out = scratch / f'{name}-{seed}-{abs(hash(sides_text)) % 10**8}-{tag}'
@@ -470,7 +473,8 @@ def play(args, scratch, binary, key):
     winner = result.get('winner', '')
     row.update(players=len(sides), winner=winner, winner_label=label_of.get(int(winner), '') if winner not in ('', '-1') else '',
                end_s=result.get('end_s', ''), wall_s=wall, waves=sum('FORMATION_WAVE:' in l for l in lines),
-               error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}')
+               error='' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
+               probe_hash=binary_hash)
     results = Path(args.results)
     if row['error']:
         (results / f'failed-{out.name}.txt').write_text(

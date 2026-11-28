@@ -464,6 +464,59 @@ class LinuxProbeReproducibilityTests(unittest.TestCase):
         self.assertEqual(len(set(hashes)), 1, hashes)
 
 
+class VanillaArtifactMetadataTests(unittest.TestCase):
+    """CSV provenance contract only; these fixtures never execute a game."""
+    @classmethod
+    def setUpClass(cls):
+        source = Path(__file__).resolve().parents[1] / 'ai/vanilla-match.py'
+        tree = ast.parse(source.read_text())
+        cutoff = next(node.lineno for node in ast.walk(tree)
+                      if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                      and isinstance(node.func.value, ast.Name)
+                      and node.func.value.id == 'argparse' and node.func.attr == 'ArgumentParser')
+        module = ast.Module(body=[node for node in tree.body if node.lineno < cutoff],
+                            type_ignores=[])
+        cls.vanilla = dict(__file__=str(source), __name__='vanilla_metadata_contract')
+        exec(compile(module, str(source), 'exec'), cls.vanilla)
+
+    def test_play_records_actual_binary_bytes_even_on_native_failure(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            scratch = Path(directory)
+            results = scratch / 'results'
+            results.mkdir()
+            binary = scratch / 'probe'
+            args = SimpleNamespace(env=[], build_dir='build', game_options=None,
+                                   map_mod=None, ai_telemetry=False, minutes=1,
+                                   wall_timeout=1, results=str(results))
+            key = ('fixture', 'hard', 'x-factor', '1', 'harkonnen:none|atreides:none')
+            failed = subprocess.CompletedProcess([], 1, stdout='', stderr='native failure fixture')
+            with patch.object(self.vanilla['subprocess'], 'run', return_value=failed), \
+                    patch.dict(self.vanilla, finish_game=lambda *args: None):
+                observed = []
+                for data in (b'first binary bytes', b'other binary bytes'):
+                    binary.write_bytes(data)
+                    row = self.vanilla['play'](args, scratch, binary, key)
+                    self.assertEqual(row['error'], 'rc=1')
+                    self.assertEqual(row['probe_hash'], hashlib.sha256(data).hexdigest())
+                    observed.append(row['probe_hash'])
+                self.assertNotEqual(*observed)
+            self.assertFalse((results / 'games.csv').exists(), 'failed fixtures cannot become scored games')
+
+    def test_csv_schema_keeps_legacy_hash_unknown_and_records_new_hash(self):
+        fields = self.vanilla['GAME_FIELDS']
+        self.assertIn('probe_hash', fields)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'games.csv'
+            old = dict(tag='legacy')
+            self.vanilla['append'](path, fields[:-1], [old])
+            digest = hashlib.sha256(b'actual executable bytes').hexdigest()
+            self.vanilla['append'](path, fields, [dict(tag='new', probe_hash=digest)])
+            rows = self.vanilla['read'](path)
+            self.assertEqual(rows[0]['probe_hash'], '', 'never backfill legacy rows with a current binary')
+            self.assertEqual(rows[1]['probe_hash'], digest)
+
+
 class PointerArtifactTests(unittest.TestCase):
     """Pure contract/extraction checks; never launch a GUI or build an SDK."""
     def setUp(self):
