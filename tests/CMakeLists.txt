@@ -390,7 +390,7 @@ dunecity_add_test(headless integration NAME dune2r_presentation_tests COMMAND du
 dunecity_add_test(headless integration NAME classic_desert_ui_tests COMMAND dunelegacy_tests "[menu][ui-skin]")
 # Modern RTS controls: order queue, attack-move, HOLD and repeat production rules (docs/rts-controls.md).
 dunecity_add_test(headless integration NAME rts_controls_tests COMMAND dunelegacy_tests "[rts-controls]")
-dunecity_add_test(headless integration NAME ai_infantry_tactics_settings COMMAND dunelegacy_tests "[ai-infantry-tactics]")
+dunecity_add_test(headless integration NAME garrison_capture_settings COMMAND dunelegacy_tests "[garrison-capture]")
 # Configurable command hotkeys: dispatch, WASD rule, conflicts, capture and [Hotkeys] config (misc/Hotkeys.h).
 dunecity_add_test(headless integration NAME hotkeys_tests COMMAND dunelegacy_tests "[hotkeys]")
 # The fair-start-rock seed sweep is one Catch test case per mode and map size; as one test the
@@ -1339,11 +1339,11 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/infantry-squads-real-game)
         set_tests_properties(infantry_squads_real_game PROPERTIES TIMEOUT 2400 PROCESSORS 3)
         # The real Options/Game Rules widgets persist the city-only default and drive a bundled-map
-        # ON/OFF game with all nine config switches off; actual AI garrison orders must reach a zone.
-        dunecity_add_test(headless nightly NAME ai_infantry_tactics_option_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/ai/run-ai-infantry-tactics-option-probe.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/ai-infantry-tactics-option-probe)
-        set_tests_properties(ai_infantry_tactics_option_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
+        # ON with all six raw switches OFF, OFF with all six ON, plus real human Capture permission.
+        dunecity_add_test(headless nightly NAME garrison_capture_option_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-garrison-capture-option-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/garrison-capture-option-probe)
+        set_tests_properties(garrison_capture_option_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
         # The Saboteur hunt off against on in one binary: 96 seeded Palace releases per arm and
         # mod against turreted bases; more Saboteurs must destroy something with the rule on.
         dunecity_add_test(headless nightly NAME saboteur_effect_probe COMMAND ${Python3_EXECUTABLE}

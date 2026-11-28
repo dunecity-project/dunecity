@@ -106,7 +106,8 @@ struct Fixture {
         require(game->isCitySimEnabled(), label + ": the fixture is not a city game");
         require(game->getGameInitSettings().getGameOptions().saboteurSkipsCityZones == rule,
                 label + ": the game did not keep the Saboteurs Skip City Zones rule of its arm");
-        require(game->getGameInitSettings().getGameOptions().zoneGarrisons, label + ": Zone Garrisons is off");
+        require(game->getGameInitSettings().getGameOptions().garrisoningAndCapturing,
+                label + ": Garrisoning and Capturing is off");
         palace = static_cast<Palace*>(owner->placeStructure(NONE_ID, Structure_Palace, 30, 30, true, true));
         require(palace != nullptr, label + ": cannot place the Palace");
     }
@@ -378,7 +379,7 @@ int runSaboteurZoneProbe() {
     using namespace SaboteurZoneProbe;
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    gModOptions.aiInfantryTactics = false;
+    gModOptions.garrisoningAndCapturing = true; // These cases exercise garrisoned zones.
     require(gModOptions.saboteurSkipsCityZones, "Saboteurs Skip City Zones is not on by default in the Dune City mod");
     int failed = 0, cases = 0;
     auto run = [&](auto check) {

@@ -1615,7 +1615,7 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
     }
     SECTION("every MOD18 city-rule bit is a rule: bit 7 turns Fremen Palace Worm off") {
         // Bits 2-3 are the protocol 137 city plane rules, bit 4 City Plane Crash Bombs (139), bit 5
-        // Zone Garrisons (144), bit 6 Parks Count As Roads (143), bit 7 Fremen Palace Worm (145).
+        // Garrisoning and Capturing (original permission bit, 144), bit 6 Parks Count As Roads (143), bit 7 Fremen Palace Worm (145).
         auto bytes = encoded;
         bytes.back() = static_cast<char>(static_cast<Uint8>(bytes.back()) | 128);
         IMemoryStream input(bytes.data(),bytes.size());
@@ -1917,12 +1917,12 @@ TEST_CASE("Saboteurs Skip City Zones defaults on and its off state is hashed and
     }
 }
 
-TEST_CASE("AI infantry tactics default on for city games and round-trip beside installments",
-          "[ai-infantry-tactics][city][network][save]") {
+TEST_CASE("Garrisoning and Capturing defaults on and round-trips independently of installments",
+          "[garrison-capture][city][network][save]") {
     SettingsClass::GameOptionsClass defaults;
-    REQUIRE(defaults.aiInfantryTactics);
+    REQUIRE(defaults.garrisoningAndCapturing);
     auto off = defaults;
-    off.aiInfantryTactics = false;
+    off.garrisoningAndCapturing = false;
     REQUIRE(off != defaults);
     REQUIRE(off.getHash() != defaults.getHash());
     defaults.cityEffects = off.cityEffects = true;
@@ -1931,7 +1931,7 @@ TEST_CASE("AI infantry tactics default on for city games and round-trip beside i
     auto original = makeCoop(false, true);
     auto options = original.getGameOptions();
     options.cityEffects = GENERATE(false, true);
-    options.aiInfantryTactics = GENERATE(false, true);
+    options.garrisoningAndCapturing = GENERATE(false, true);
     options.technologyInstallments = GENERATE(false, true);
     options.startTechLevel = GENERATE(0, 5, 9);
     options.saboteurSkipsCityZones = GENERATE(false, true);
@@ -1940,9 +1940,10 @@ TEST_CASE("AI infantry tactics default on for city games and round-trip beside i
     saved.open();
     original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
+    REQUIRE((static_cast<Uint8>(encoded[encoded.size() - Mod20Bytes - Mod19Bytes - 1]) & 32)
+            == (options.garrisoningAndCapturing ? 0 : 32));
     REQUIRE(static_cast<Uint8>(encoded[encoded.size() - Mod20Bytes - 1])
-            == static_cast<Uint8>((options.technologyInstallments ? 1 : 0)
-                                 | (options.aiInfantryTactics ? 0 : 2)));
+            == static_cast<Uint8>(options.technologyInstallments));
     saved.writeUint32(0xabcdef01u);
     IMemoryStream input(saved.getData(), saved.getDataLength());
     GameInitSettings restored(input);
@@ -1950,18 +1951,38 @@ TEST_CASE("AI infantry tactics default on for city games and round-trip beside i
     // City Effects is mod-derived, not serialized (same contract as degradation-probe.inc).
     serializedOptions.cityEffects = SettingsClass::GameOptionsClass{}.cityEffects;
     REQUIRE(restored.getGameOptions() == serializedOptions);
-    REQUIRE(restored.getGameOptions().aiInfantryTactics == options.aiInfantryTactics);
+    REQUIRE(restored.getGameOptions().garrisoningAndCapturing == options.garrisoningAndCapturing);
     REQUIRE(restored.getGameOptions().getHash() == serializedOptions.getHash());
     REQUIRE(input.readUint32() == 0xabcdef01u);
     REQUIRE(input.getRemainingLength() == 0);
 
-    SECTION("old MOD19 bytes keep the new default without enabling installments") {
+    SECTION("released MOD19 and MOD20 bytes ignore retired bit 1 without changing the city permission") {
+        const int legacyByte = GENERATE(0, 1, 2, 3);
+        const bool hasStartTechLevel = GENERATE(false, true);
         auto bytes = encoded;
-        bytes[bytes.size() - Mod20Bytes - 1] = static_cast<char>(options.technologyInstallments);
+        bytes[bytes.size() - Mod20Bytes - 1] = static_cast<char>(legacyByte);
+        auto expected = serializedOptions;
+        expected.technologyInstallments = (legacyByte & 1) != 0;
+        if(!hasStartTechLevel) {
+            const auto marker = bytes.rfind("KDOM");
+            REQUIRE(marker != std::string::npos);
+            bytes[marker] = 'J';
+            bytes.resize(bytes.size() - Mod20Bytes);
+            expected.startTechLevel = 0;
+            expected.saboteurSkipsCityZones = true;
+        }
+        bytes.append("tail");
         IMemoryStream legacy(bytes.data(), bytes.size());
         GameInitSettings previous(legacy);
-        REQUIRE(previous.getGameOptions().aiInfantryTactics);
-        REQUIRE(previous.getGameOptions().technologyInstallments == options.technologyInstallments);
+        REQUIRE(previous.getGameOptions() == expected);
+        REQUIRE(previous.getGameOptions().getHash() == expected.getHash());
+        REQUIRE(previous.getGameOptions().garrisoningAndCapturing == options.garrisoningAndCapturing);
+        REQUIRE(previous.getGameOptions().technologyInstallments == ((legacyByte & 1) != 0));
+        REQUIRE(legacy.readUint8() == static_cast<Uint8>('t'));
+        REQUIRE(legacy.readUint8() == static_cast<Uint8>('a'));
+        REQUIRE(legacy.readUint8() == static_cast<Uint8>('i'));
+        REQUIRE(legacy.readUint8() == static_cast<Uint8>('l'));
+        REQUIRE(legacy.getRemainingLength() == 0);
     }
 }
 
@@ -2179,11 +2200,11 @@ TEST_CASE("Protocol 145 Fremen Palace Worm rides bit 7 of the MOD18 city rules b
 
     auto options = plainOptions;
     options.fremenPalaceWorm = GENERATE(true, false);
-    options.zoneGarrisons = GENERATE(true, false);
+    options.garrisoningAndCapturing = GENERATE(true, false);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    if(options.fremenPalaceWorm && options.zoneGarrisons) {
+    if(options.fremenPalaceWorm && options.garrisoningAndCapturing) {
         // The default rule leaves the stream and the options hash as protocol 144 wrote them.
         REQUIRE(encoded == plain);
         REQUIRE(options.getHash() == plainOptions.getHash());
@@ -2199,23 +2220,23 @@ TEST_CASE("Protocol 145 Fremen Palace Worm rides bit 7 of the MOD18 city rules b
     REQUIRE(input.readUint32() == 0xabcdef01u);
 }
 
-TEST_CASE("Protocol 144 Zone Garrisons rides bit 5 of the MOD18 city rules byte, set only when off",
-          "[city][garrison][network][save]") {
+TEST_CASE("Garrisoning and Capturing reuses bit 5 of the MOD18 city rules byte, set only when off",
+          "[garrison-capture][city][garrison][network][save]") {
     SettingsClass::GameOptionsClass defaults;
-    REQUIRE(defaults.zoneGarrisons);
+    REQUIRE(defaults.garrisoningAndCapturing);
     auto original = makeCoop(false, true);
     const auto plainOptions = original.getGameOptions();
-    REQUIRE(plainOptions.zoneGarrisons);
+    REQUIRE(plainOptions.garrisoningAndCapturing);
     OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
     const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
 
     auto options = plainOptions;
-    options.zoneGarrisons = GENERATE(true, false);
+    options.garrisoningAndCapturing = GENERATE(true, false);
     options.parksCountAsRoads = GENERATE(true, false);
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    if(options.zoneGarrisons && options.parksCountAsRoads) {
+    if(options.garrisoningAndCapturing && options.parksCountAsRoads) {
         // The default rule leaves the stream and the options hash as protocol 143 wrote them.
         REQUIRE(encoded == plain);
         REQUIRE(options.getHash() == plainOptions.getHash());

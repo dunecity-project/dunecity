@@ -19,8 +19,8 @@
 // containment   transport recovery passes do not pull soldiers out of a zone
 // save          a captured, garrisoned zone saves and loads with its owner, original owner and
 //               occupants; they come out after the load and the zone goes back
-// rule off      with Zone Garrisons off, a capture order on an own zone does nothing and an enemy zone
-//               is not entered
+// rule off      Garrisoning and Capturing off refuses own/enemy zone entry, queued and existing capture
+//               orders, and the legacy damaged-zone capture path, for either house
 // picture       garrison.png: a garrisoned zone beside an empty one, for a person to look at
 //
 // The player's own path (CLAUDE.md, "Player features"): units selected as a click selects them, the
@@ -31,9 +31,9 @@
 //                    the panel says captured; Evacuate hands the zone back
 // player refused     a full own zone, an ally's zone (the cursor refuses the click) and a zone below the
 //                    threshold are not entered; an enemy's garrisoned zone shows Evacuate disabled
-// garrison button    the unit panel's Garrison button (and the I key) for Soldiers and Troopers, hidden for
-//                    a tank and with the rule off; the cursor shows the Garrison symbol over an own or enemy
-//                    zone and a pointer over sand; a click on sand is refused, on an own zone garrisons it
+// capture rule       Capture is the only zone order: no Garrison button or I key; with the rule off
+//                    single/multi infantry panels hide and disable Capture, C cannot open its cursor,
+//                    and real widget/key/map paths queue no capture command
 // reinforce          a Trooper joins a Soldier's own garrison and a captured zone's garrison (mixed)
 // trooper air/tank   a garrisoned Trooper hits an Ornithopter and a tank with its own rockets
 // no pull            a soldier on its way in keeps its order against every other controller's order
@@ -53,6 +53,7 @@
 #include <FileClasses/LoadSavePNG.h>
 #include <mod/ModManager.h>
 #include <players/Player.h>
+#include <players/QuantBot.h>
 #include <structures/ZoneStructure.h>
 #include <structures/BuilderBase.h>
 #include <units/InfantryBase.h>
@@ -111,7 +112,7 @@ struct Fixture {
 
     Fixture(const std::string& name, bool rule = true, bool bundled = false) : label(name) {
         auto options = gModOptions;
-        options.zoneGarrisons = rule;
+        options.garrisoningAndCapturing = rule;
         options.immortalHumanPlayer = false;
         const char* bundledPath = std::getenv("ZONE_GARRISON_METROPOLIS");
         require(!bundled || bundledPath, label + ": missing bundled Metropolis map");
@@ -136,6 +137,18 @@ struct Fixture {
         currentGame = game.get();
         game->bReplay = true;   // Private fixture, never a public match-analytics sample.
         game->initGame(init);
+        // Keep synthetic unit cases isolated from autonomous controllers, not from the
+        // garrison/capture rule or ordinary unit movement, targeting and weapons.
+        for(int houseID = 0; houseID < NUM_HOUSES; ++houseID) {
+            if(House* house = game->getHouse(houseID)) {
+                for(const auto& player : house->getPlayerList()) {
+                    if(auto* bot = dynamic_cast<QuantBot*>(player.get())) {
+                        bot->setRole(AIRole::Off);
+                        require(bot->switchedOff(), label + ": a fixture QuantBot controller remained active");
+                    }
+                }
+            }
+        }
         game->bReplay = false;
         game->initializeGameLoop();
         own = game->getHouse(HOUSE_ATREIDES);
@@ -143,8 +156,9 @@ struct Fixture {
         ally = game->getHouse(HOUSE_ORDOS);
         require(own && enemy && ally, label + ": fixture houses missing");
         require(game->isCitySimEnabled(), label + ": the fixture is not a city game");
-        require(game->getGameInitSettings().getGameOptions().zoneGarrisons == rule,
-                label + ": the game did not keep the Zone Garrisons rule of its arm");
+        require(game->getGameInitSettings().getGameOptions().garrisoningAndCapturing == rule,
+                label + ": the game did not keep the Garrisoning and Capturing rule of its arm");
+        require(ZoneStructure::garrisonsEnabled() == rule, label + ": the live zone permission disagrees with the rule");
     }
 
     ~Fixture() {
@@ -551,18 +565,100 @@ void checkSave() {
 }
 
 void checkRuleOff() {
-    Fixture f("rule off", false);
-    auto* own = f.zone(f.own, Structure_ZoneResidential, 20, 20);
-    auto* foe = f.zone(f.enemy, Structure_ZoneResidential, 30, 20);
-    auto* s = f.unit(f.own, Unit_Soldier, 17, 20);
-    auto* t = f.unit(f.own, Unit_Soldier, 27, 18);
-    f.capture(s, own);
-    require(s->getAttackMode() != CAPTURE, "rule off: a capture order on an own zone was taken");
-    f.capture(t, foe);
-    f.run(20);
-    require(!own->isGarrisoned() && !foe->isGarrisoned() && foe->getOwner() == f.enemy,
-            "rule off: a zone was garrisoned or an undamaged enemy zone taken");
-    record("rule_off", "own zone refused, enemy zone not entered");
+    {
+        Fixture f("rule off", false);
+        auto* own = f.zone(f.own, Structure_ZoneResidential, 20, 20);
+        auto* foe = f.zone(f.enemy, Structure_ZoneResidential, 30, 20);
+        auto* s = f.unit(f.own, Unit_Soldier, 17, 20);
+        auto* t = f.unit(f.own, Unit_Soldier, 27, 18);
+        f.capture(s, own);
+        require(s->getAttackMode() != CAPTURE, "rule off: a capture order on an own zone was taken");
+        f.capture(t, foe);
+        require(t->getAttackMode() != CAPTURE && t->getTarget() != foe && t->getOrderQueue().empty(),
+                "rule off: the enemy-zone command installed a capture order");
+        require(!own->mayEnterGarrison(s) && !own->enterGarrison(s)
+                    && !foe->mayEnterGarrison(t) && !foe->enterGarrison(t),
+                "rule off: direct garrison entry was permitted");
+        auto* enemy = f.unit(f.enemy, Unit_Soldier, 21, 20, STOP);
+        f.capture(enemy, own);
+        require(enemy->getAttackMode() != CAPTURE && enemy->getTarget() != own && !hidden(enemy),
+                "rule off: the other house could capture an enemy zone");
+
+        auto* damaged = f.zone(f.enemy, Structure_ZoneIndustrial, 40, 20, 1);
+        const Uint32 damagedID = damaged->getObjectID();
+        damaged->setHealth(damaged->getMaxHealth() / 5);
+        require(damaged->getHealthColor() == COLOR_RED, "rule off: the legacy target is not damaged enough to capture");
+        const FixPoint health = damaged->getHealth();
+        auto* walker = f.unit(f.own, Unit_Soldier, 39, 20);
+        const Uint32 walkerID = walker->getObjectID();
+        f.capture(walker, damaged);
+        f.own->getPlayerList().front()->doCaptureStructure(static_cast<const InfantryBase*>(walker), damaged);
+        require(walker->getAttackMode() != CAPTURE && walker->getTarget() != damaged
+                    && walker->getOrderQueue().empty(),
+                "rule off: a direct player or network capture order on a damaged zone was accepted");
+        damaged->transferOwnership(f.own);
+        require(damaged->getOwner() == f.enemy, "rule off: direct capture ownership transfer was permitted");
+
+        Command(f.playerOf(f.own), CMD_UNIT_QUEUEORDER, t->getObjectID(),
+                static_cast<Uint32>(UnitOrderType::Capture), damagedID, 0).executeCommand();
+        require(t->getOrderQueue().empty(), "rule off: an idle unit accepted a queued capture");
+        Command(f.playerOf(f.own), CMD_UNIT_MOVE2POS, s->getObjectID(), 17, 22, 1).executeCommand();
+        require(s->getOrderQueue().size() == 1, "rule off: the ordinary move order was not installed");
+        Command(f.playerOf(f.own), CMD_UNIT_QUEUEORDER, s->getObjectID(),
+                static_cast<Uint32>(UnitOrderType::Capture), damagedID, 0).executeCommand();
+        require(s->getOrderQueue().size() == 1 && s->getOrderQueue().front().type == UnitOrderType::Move,
+                "rule off: a queued capture was appended behind a move");
+        s->doIssueOrder(UnitOrder::on(UnitOrderType::Capture, damagedID), true);
+        require(s->getOrderQueue().size() == 1, "rule off: direct queue insertion bypassed the city rule");
+
+        // The old capture happened on arrival even without CAPTURE mode. Walk onto the red
+        // enemy structure through the real move-to-object command, not a synthetic checkPos call.
+        Command(f.playerOf(f.own), CMD_UNIT_MOVE2OBJECT, walkerID, damagedID).executeCommand();
+        require(walker->getTarget() == damaged, "rule off: the legacy-path walk never started");
+        require(f.runUntil(15, [&] {
+            require(f.game->getObjectManager().getObject(damagedID) == damaged && damaged->getOwner() == f.enemy,
+                    "rule off: walking onto the damaged zone replaced or captured it");
+            require(f.alive(walkerID), "rule off: the legacy capture path consumed its soldier");
+            return !walker->isMoving()
+                && blockDistance(walker->getLocation(), damaged->getClosestPoint(walker->getLocation())) <= 0.5_fix;
+        }), "rule off: the soldier never reached the legacy capture position");
+        f.run(20);
+        require(!own->isGarrisoned() && !foe->isGarrisoned() && foe->getOwner() == f.enemy,
+                "rule off: a zone was garrisoned or an undamaged enemy zone taken");
+        require(f.game->getObjectManager().getObject(damagedID) == damaged && damaged->getOwner() == f.enemy
+                    && !damaged->isGarrisoned() && damaged->getHealth() == health && f.alive(walkerID),
+                "rule off: authoritative execution captured or damaged the red zone or consumed its soldier");
+    }
+    {
+        // Install real orders while ON, then revoke the permission before their next cycle:
+        // saved or already-dispatched CAPTURE and waiting queue entries must not bypass OFF.
+        Fixture f("existing capture");
+        auto* foe = f.zone(f.enemy, Structure_ZoneResidential, 40, 40);
+        auto* active = f.unit(f.own, Unit_Soldier, 30, 40);
+        auto* waiting = f.unit(f.own, Unit_Trooper, 30, 44);
+        f.capture(active, foe);
+        require(active->getAttackMode() == CAPTURE && active->getTarget() == foe
+                    && active->getOrderQueue().size() == 1,
+                "existing capture: the real ON-path capture order never started");
+        Command(f.playerOf(f.own), CMD_UNIT_MOVE2POS, waiting->getObjectID(), 32, 44, 1).executeCommand();
+        Command(f.playerOf(f.own), CMD_UNIT_QUEUEORDER, waiting->getObjectID(),
+                static_cast<Uint32>(UnitOrderType::Capture), foe->getObjectID(), 0).executeCommand();
+        require(waiting->getOrderQueue().size() == 2
+                    && waiting->getOrderQueue()[1].type == UnitOrderType::Capture,
+                "existing capture: the real ON-path queued capture was not installed");
+        auto& options = const_cast<SettingsClass::GameOptionsClass&>(f.game->getGameInitSettings().getGameOptions());
+        options.garrisoningAndCapturing = false;
+        require(!ZoneStructure::garrisonsEnabled(), "existing capture: the city permission was not revoked");
+        f.game->updateGameState();
+        require(active->getAttackMode() != CAPTURE && active->getTarget() != foe && active->getOrderQueue().empty(),
+                "existing capture: the dispatched order survived the rule being turned off");
+        require(f.runUntil(20, [&] { return waiting->getOrderQueue().empty(); }),
+                "existing capture: the waiting capture order was not discarded");
+        require(foe->getOwner() == f.enemy && !foe->isGarrisoned() && active->isActive() && waiting->isActive(),
+                "existing capture: an old order took the zone or hid a soldier after OFF");
+    }
+    record("rule_off", "own and enemy commands, direct entry/ownership, idle/waiting queues, existing CAPTURE and "
+           "the real damaged-zone arrival refused; both houses obeyed");
 }
 
 void checkPicture() {
@@ -899,18 +995,59 @@ void checkGarrisonButton() {
 
 void checkGarrisonButtonRuleOff() {
     Fixture f("garrison button rule off", false);
+    Game& game = *f.game;
+    auto* own = f.zone(f.own, Structure_ZoneResidential, 24, 24);
+    auto* foe = f.zone(f.enemy, Structure_ZoneCommercial, 40, 24);
+    foe->setHealth(foe->getMaxHealth() / 5);
     auto* soldier = f.unit(f.own, Unit_Soldier, 20, 25);
+    auto* trooper = f.unit(f.own, Unit_Trooper, 20, 27);
     f.run(1);
-    auto* one = dynamic_cast<UnitInterface*>(selectUnits(f, {soldier}));
-    require(one != nullptr && one->captureButton.isVisible(), "garrison button rule off: Capture is not shown");
-    require(one->captureButton.getTooltipText().find(_("garrison")) == std::string::npos,
-            "garrison button rule off: the Capture tooltip offers garrisons with the rule off");
-    SDL_KeyboardEvent key{};
-    key.type = SDL_KEYDOWN;
-    key.keysym.sym = SDLK_i;
-    f.game->handleKeyInput(key);
-    require(f.game->currentCursorMode == Game::CursorMode_Normal, "garrison button rule off: the I key opened a cursor");
-    record("garrison_button_rule_off", "Capture without the garrison tooltip, no I key");
+    require(!game.isHotkeyAvailable(Hotkeys::Action::Capture),
+            "garrison button rule off: the Capture hotkey is advertised as available");
+    const int before = queued(game, CMD_INFANTRY_CAPTURE);
+    const int queuedBefore = queued(game, CMD_UNIT_QUEUEORDER);
+    const std::vector<std::vector<UnitBase*>> selections{{soldier}, {trooper}, {soldier, trooper}};
+    for(const auto& units : selections) {
+        for(const ZoneStructure* zone : {own, foe}) {
+            SymbolButton* button = captureButtonOf(selectUnits(f, units));
+            require(button != nullptr && !button->isVisible() && !button->isEnabled(),
+                    "garrison button rule off: Capture is visible or enabled for a single/multi infantry selection");
+            require(button->getTooltipText().find(_("garrison")) == std::string::npos,
+                    "garrison button rule off: the Capture tooltip offers garrisons with the rule off");
+            press(*button);
+            require(game.currentCursorMode == Game::CursorMode_Normal,
+                    "garrison button rule off: pressing the real Capture widget opened its cursor");
+            SDL_KeyboardEvent key{};
+            key.type = SDL_KEYDOWN;
+            key.keysym.sym = SDLK_c;
+            game.handleKeyInput(key);
+            require(game.currentCursorMode == Game::CursorMode_Normal,
+                    "garrison button rule off: the C key opened a Capture cursor");
+            key.keysym.sym = SDLK_i;
+            game.handleKeyInput(key);
+            require(game.currentCursorMode == Game::CursorMode_Normal,
+                    "garrison button rule off: the I key opened a cursor");
+            game.setCursorMode(Game::CursorMode_Capture);
+            require(game.currentCursorMode == Game::CursorMode_Normal,
+                    "garrison button rule off: cursor permission accepted Capture");
+            require(game.orderCursorAction(Game::CursorMode_Capture, zone->getX(), zone->getY())
+                        == CursorAppearance::Action::Pointer,
+                    "garrison button rule off: the cursor advertises an own or damaged enemy zone as capturable");
+            require(!game.handleSelectedObjectsCaptureClick(zone->getX(), zone->getY()),
+                    "garrison button rule off: the map capture handler accepted a zone");
+            for(UnitBase* unit : units)
+                static_cast<InfantryBase*>(unit)->handleCaptureClick(zone->getX(), zone->getY());
+            clickMap(f, zone->getLocation());
+            require(queued(game, CMD_INFANTRY_CAPTURE) == before && queued(game, CMD_UNIT_QUEUEORDER) == queuedBefore,
+                    "garrison button rule off: a real widget/key/map path queued a capture command");
+        }
+    }
+    f.run(5);
+    require(!own->isGarrisoned() && !foe->isGarrisoned() && own->getOwner() == f.own && foe->getOwner() == f.enemy
+                && soldier->isActive() && trooper->isActive(),
+            "garrison button rule off: the player's refused Capture paths entered or took a zone");
+    record("garrison_button_rule_off", "Soldier, Trooper and multi panels hide/disable Capture; real widget, C/I keys "
+           "and map clicks issue no capture; cursor permission and map/raw handlers refuse own/damaged enemy zones");
 }
 
 void checkReinforce() {
@@ -1043,7 +1180,7 @@ int runZoneGarrisonProbe() {
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "Garrison tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    require(gModOptions.zoneGarrisons, "Zone Garrisons is not on by default in the Dune City mod");
+    require(gModOptions.garrisoningAndCapturing, "Garrisoning and Capturing is not on by default in the Dune City mod");
     if(std::getenv("ZONE_GARRISON_PANEL_ONLY")) {
         checkGarrisonPanel();
         checkGarrisonAppearance();

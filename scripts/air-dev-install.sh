@@ -9,7 +9,7 @@
 # package and qualifies nothing.
 #
 # New features are part of the game, not a separate mod (Stefan: "i just want it as a
-# feature, not a mod"). AI infantry tactics uses the normal default-on Dune City menu option.
+# feature, not a mod"). Garrisoning and Capturing uses the normal default-on Dune City menu option.
 # Only DEV_SWITCHES are forced on in this copy's shipped defaults, then the app is re-signed.
 # The game reseeds those defaults at launch; the script keeps built-in Dune City active.
 #
@@ -24,7 +24,7 @@
 # The previous app is kept in /tmp/dunecity-dev-<sha> on the Air.
 set -euo pipefail
 
-DEV_SWITCHES=(EconomyFirst RepairReturnCheck)
+DEV_SWITCHES=(EconomyFirst RepairReturnCheck SquadOrders InfantryLanes InfantryInMix)
 HOST=${DUNECITY_AIR_HOST:-Stefans-MacBook-Air.local}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 BIN=$REPO/build-int/bin
@@ -124,5 +124,5 @@ fi
 # The House to House test mod (2026-11-28) stays installed but inactive: saves made under it name it.
 version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' /Applications/dunecity.app/Contents/Info.plist)
 echo "INSTALLED $sha ($version), app sha256 $(shasum -a 256 /Applications/dunecity.app/Contents/MacOS/dunecity | cut -c1-16)"
-echo "AI infantry tactics follows the Dune City menu default; extra dev switches: $*; active mod: $(cat "$mods/active_mod.txt" 2>/dev/null)"
+echo "Garrisoning and Capturing follows the Dune City menu default; extra dev switches: $*; active mod: $(cat "$mods/active_mod.txt" 2>/dev/null)"
 REMOTE

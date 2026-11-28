@@ -7,8 +7,8 @@
  *  (at your option) any later version.
  */
 
-// QuantBot Zone Garrisons (docs/zone-garrisons.md), each behaviour behind its own switch in
-// QuantBot Config [Force Concentration], all only with the Zone Garrisons match rule on in a city game:
+// QuantBot Zone Garrisons (docs/zone-garrisons.md): the city's Garrisoning and Capturing rule
+// grants zone permission and enables all six tactics below; config preferences never bypass OFF.
 //  - ZoneGarrison: Soldiers and Troopers into own zones enemies close on, out when quiet, and into
 //    empty enemy zones they pass;
 //  - ZoneCaptureRaid: free soldiers take empty enemy zones nobody guards;
@@ -105,9 +105,9 @@ int tenths(FixPoint distance) { return (distance * 10).lround(); }
 
 void QuantBot::updateZoneGarrisons() {
     const auto& force = botConfig().force;
-    if ((!aiInfantryTacticsEnabled(force.zoneGarrison) && !aiInfantryTacticsEnabled(force.zoneCaptureRaid)
-         && !aiInfantryTacticsEnabled(force.zoneCaptureLevy) && !aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)
-         && !aiInfantryTacticsEnabled(force.zoneFrontGarrison) && !aiInfantryTacticsEnabled(force.zoneCaptureChain))
+    if ((!wantsGarrisonTactic(force.zoneGarrison) && !wantsGarrisonTactic(force.zoneCaptureRaid)
+         && !wantsGarrisonTactic(force.zoneCaptureLevy) && !wantsGarrisonTactic(force.zoneGarrisonReinforce)
+         && !wantsGarrisonTactic(force.zoneFrontGarrison) && !wantsGarrisonTactic(force.zoneCaptureChain))
         || !ZoneStructure::garrisonsEnabled() || builderOnly()
         || currentGame == nullptr || !currentGame->isCitySimEnabled()) return;
     AITelemetry::PerformanceScope perfScope("ai.zoneGarrisons", getGameCycleCount(), getHouse()->getHouseID());
@@ -205,7 +205,7 @@ void QuantBot::updateZoneGarrisons() {
     // Threat on each zone we hold (own or captured): one point an enemy, three a soldier that can capture.
     std::map<Uint32, int> threat;
     std::map<Uint32, ZoneStructure*> zones;
-    if (aiInfantryTacticsEnabled(force.zoneGarrison) || aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)) {
+    if (wantsGarrisonTactic(force.zoneGarrison) || wantsGarrisonTactic(force.zoneGarrisonReinforce)) {
         std::vector<Uint32> seen;
         for (const UnitBase* enemy : enemies) {
             const Coord at = enemy->getLocation();
@@ -248,7 +248,7 @@ void QuantBot::updateZoneGarrisons() {
 
     // Our zones at the front: the kFrontZones nearest a visible enemy building, nearest first.
     std::vector<std::pair<int, ZoneStructure*>> front;
-    if (aiInfantryTacticsEnabled(force.zoneFrontGarrison) && !enemyBuildings.empty()) {
+    if (wantsGarrisonTactic(force.zoneFrontGarrison) && !enemyBuildings.empty()) {
         for (const StructureBase* structure : getStructureList()) {
             if (structure->getOwner() != house) continue;
             auto* zone = dynamic_cast<ZoneStructure*>(const_cast<StructureBase*>(structure));
@@ -266,7 +266,7 @@ void QuantBot::updateZoneGarrisons() {
         return std::any_of(front.begin(), front.end(), [&](const auto& item) { return item.second == zone; });
     };
 
-    if (aiInfantryTacticsEnabled(force.zoneGarrison)) {
+    if (wantsGarrisonTactic(force.zoneGarrison)) {
         // Defence: the most threatened zones first, the nearest free soldiers into them.
         for (const auto& [negPoints, id] : ranked) {
             if (orders >= kMaxOrdersPerPass) break;
@@ -284,7 +284,7 @@ void QuantBot::updateZoneGarrisons() {
     }
 
     // Reinforce: Troopers fill garrisons of ours enemies close on, up to the zone's four.
-    if (aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)) {
+    if (wantsGarrisonTactic(force.zoneGarrisonReinforce)) {
         for (const auto& [negPoints, id] : ranked) {
             if (orders >= kMaxOrdersPerPass) break;
             ZoneStructure* zone = zones[id];
@@ -315,7 +315,7 @@ void QuantBot::updateZoneGarrisons() {
     // Release: a garrison of ours in an own zone with no visible enemy near comes out to rejoin the
     // army. A house a human shares keeps the garrisons its human put there; a captured zone keeps its
     // garrison (it would go back the moment they left); a front zone keeps its garrison.
-    if (aiInfantryTacticsEnabled(force.zoneGarrison)
+    if (wantsGarrisonTactic(force.zoneGarrison)
         && std::none_of(house->getPlayerList().begin(), house->getPlayerList().end(), [](const auto& player) {
             return dynamic_cast<const HumanPlayer*>(player.get()) != nullptr;
         })) {
@@ -338,7 +338,7 @@ void QuantBot::updateZoneGarrisons() {
     }
 
     // Offence on the way: a soldier passing an empty enemy zone takes it (one soldier a zone a pass).
-    if (aiInfantryTacticsEnabled(force.zoneGarrison)) {
+    if (wantsGarrisonTactic(force.zoneGarrison)) {
         for (const UnitBase* soldier : soldiers) {
             if (orders >= kMaxOrdersPerPass) break;
             if (!available(soldier)) continue;
@@ -394,7 +394,7 @@ void QuantBot::updateZoneGarrisons() {
 
     // Chain: the next empty enemy zone across the street from a zone we hold (own or captured),
     // block by block: each zone taken becomes the next starting point.
-    if (aiInfantryTacticsEnabled(force.zoneCaptureChain) && !targets.empty()) {
+    if (wantsGarrisonTactic(force.zoneCaptureChain) && !targets.empty()) {
         std::vector<const ZoneStructure*> held;
         for (const StructureBase* structure : getStructureList()) {
             if (structure->getOwner() != house) continue;
@@ -420,7 +420,7 @@ void QuantBot::updateZoneGarrisons() {
     }
 
     // Raid: empty enemy zones with no enemy that can fight or capture near, and no turret.
-    if (aiInfantryTacticsEnabled(force.zoneCaptureRaid)) {
+    if (wantsGarrisonTactic(force.zoneCaptureRaid)) {
         std::vector<const ZoneStructure*> unguarded;
         for (const ZoneStructure* zone : targets) {
             bool guarded = false;
@@ -439,7 +439,7 @@ void QuantBot::updateZoneGarrisons() {
 
     // Levy: keep kLevySoldiers Soldiers in training at the Barracks while enemy zones are there
     // to take, and walk every free Soldier into the nearest one.
-    if (aiInfantryTacticsEnabled(force.zoneCaptureLevy) && !targets.empty()) {
+    if (wantsGarrisonTactic(force.zoneCaptureLevy) && !targets.empty()) {
         int levy = 0;
         for (const UnitBase* unit : getUnitList()) {
             if (unit->getOwner() == house && unit->getItemID() == Unit_Soldier && unit->getHealth() > 0) ++levy;

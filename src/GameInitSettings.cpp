@@ -351,7 +351,6 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
     gameOptions.saboteurHunt = true;
     gameOptions.saboteurSkipsCityZones = true;
-    gameOptions.aiInfantryTactics = true;
     gameOptions.hospitalCare = true;
     gameOptions.turretsFireOnBuildings = false;
     // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
@@ -368,8 +367,8 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.cityPlaneCrashBombs = true;
     // A Park counts as a road unless the stream carries the off bit (bit 6 of the city rules).
     gameOptions.parksCountAsRoads = true;
-    // Zone Garrisons is on unless the stream carries the off bit (bit 5 of the city rules).
-    gameOptions.zoneGarrisons = true;
+    // Garrisoning and Capturing is on unless the city-rules byte carries its off bit.
+    gameOptions.garrisoningAndCapturing = true;
     // The Fremen Palace calls its worm unless the stream carries the off bit (bit 7 of the city rules).
     gameOptions.fremenPalaceWorm = true;
     gameOptions.damageLowersLandValue = false;
@@ -526,17 +525,17 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     gameOptions.cityPlaneCrashBombs = (cityRules & 16) == 0;
                     // Bit 6 is set when Parks Count As Roads is off.
                     gameOptions.parksCountAsRoads = (cityRules & 64) == 0;
-                    // Protocol 144: bit 5 is set when Zone Garrisons is off.
-                    gameOptions.zoneGarrisons = (cityRules & 32) == 0;
+                    // Bit 5 (originally protocol 144) is set when Garrisoning and Capturing is off.
+                    gameOptions.garrisoningAndCapturing = (cityRules & 32) == 0;
                     // Protocol 145: bit 7 is set when Fremen Palace Worm is off.
                     gameOptions.fremenPalaceWorm = (cityRules & 128) == 0;
                 }
             }
             if(hasTechnologyInstallments) {
-                // Protocol 152: bit 1 is AI Infantry Tactics off. Bit 0 remains installments.
-                const Uint8 cityAI = stream.readUint8();
-                gameOptions.technologyInstallments = (cityAI & 1) != 0;
-                gameOptions.aiInfantryTactics = (cityAI & 2) == 0;
+                // Released protocol 152 also used bit 1. Ignore that retired bit: treating the
+                // whole byte as a bool would turn installments on in old saves that wrote 2.
+                const Uint8 installments = stream.readUint8();
+                gameOptions.technologyInstallments = (installments & 1) != 0;
             }
             if(hasStartTechLevel) {
                 // Refused, not clamped: both peers must play the level the host chose.
@@ -759,16 +758,14 @@ void GameInitSettings::save(OutputStream& stream) const {
         | (gameOptions.cityPlaneBuildTime ? 0 : 4) | (gameOptions.cityPlaneFreePerAirport ? 0 : 8)
         // Bit 4 (protocol 139): City Plane Crash Bombs off.
         | (gameOptions.cityPlaneCrashBombs ? 0 : 16)
-        // Bit 5 (protocol 144): Zone Garrisons off.
-        | (gameOptions.zoneGarrisons ? 0 : 32)
+        // Bit 5 (originally protocol 144): Garrisoning and Capturing off.
+        | (gameOptions.garrisoningAndCapturing ? 0 : 32)
         // Bit 6: Parks Count As Roads off.
         | (gameOptions.parksCountAsRoads ? 0 : 64)
         // Bit 7 (protocol 145): Fremen Palace Worm off.
         | (gameOptions.fremenPalaceWorm ? 0 : 128));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
-    // Protocol 152: bit 1 is AI Infantry Tactics off; default on preserves the original byte.
-    stream.writeUint8((gameOptions.technologyInstallments ? 1 : 0)
-        | (gameOptions.aiInfantryTactics ? 0 : 2));
+    stream.writeBool(gameOptions.technologyInstallments);
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.
     // Bit 7: the Saboteur hunt is off (the default, on, leaves the byte as it was).
     stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)

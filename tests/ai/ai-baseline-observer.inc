@@ -197,8 +197,8 @@ int runAIBaselineProbe() {
     if(!ModManager::instance().setActiveMod(mod) || ModManager::instance().getActiveModName()!=mod)
         throw std::runtime_error("Baseline native mod did not activate: "+mod);
     settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-#if NETWORK_PROTOCOL_VERSION >= 152
-    settings.gameOptions.aiInfantryTactics = false; // Historical control fixtures do not include the new rule.
+#if NETWORK_PROTOCOL_VERSION >= 157
+    settings.gameOptions.garrisoningAndCapturing = false; // Historical control fixtures do not include the new rule.
 #endif
     applyGameOptionsFromConfig(INIFile(std::getenv("BASELINE_OPTIONS")),"Game Options",settings.gameOptions);
     settings.general.playerName="AI baseline detached observer";

@@ -927,12 +927,13 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setBoolValue("Game Options", "City Plane Build Time", settings.gameOptions.cityPlaneBuildTime);
     myINIFile.setBoolValue("Game Options", "City Plane Free Per Airport", settings.gameOptions.cityPlaneFreePerAirport);
     myINIFile.setBoolValue("Game Options", "City Plane Crash Bombs", settings.gameOptions.cityPlaneCrashBombs);
-    myINIFile.setBoolValue("Game Options", "Zone Garrisons", settings.gameOptions.zoneGarrisons);
+    myINIFile.removeKey("Game Options", "Zone Garrisons");
+    myINIFile.removeKey("Game Options", "AI Infantry Tactics");
+    myINIFile.setBoolValue("Game Options", "Garrisoning and Capturing", settings.gameOptions.garrisoningAndCapturing);
     myINIFile.setBoolValue("Game Options", "Fremen Palace Worm", settings.gameOptions.fremenPalaceWorm);
     myINIFile.setBoolValue("Game Options", "Parks Count As Roads", settings.gameOptions.parksCountAsRoads);
     myINIFile.setBoolValue("Game Options", "Saboteur Hunt", settings.gameOptions.saboteurHunt);
     myINIFile.setBoolValue("Game Options", "Saboteurs Skip City Zones", settings.gameOptions.saboteurSkipsCityZones);
-    myINIFile.setBoolValue("Game Options", "AI Infantry Tactics", settings.gameOptions.aiInfantryTactics);
     myINIFile.setBoolValue("Game Options", "Hospital Care", settings.gameOptions.hospitalCare);
     myINIFile.setBoolValue("Game Options", "Turrets Can Fire On Buildings", settings.gameOptions.turretsFireOnBuildings);
     myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);

@@ -336,7 +336,6 @@ public:
                     && (startTechLevel == goc.startTechLevel)
                     && (saboteurHunt == goc.saboteurHunt)
                     && (saboteurSkipsCityZones == goc.saboteurSkipsCityZones)
-                    && (aiInfantryTactics == goc.aiInfantryTactics)
                     && (hospitalCare == goc.hospitalCare)
                     && (turretsFireOnBuildings == goc.turretsFireOnBuildings)
                     && (trooperAntiAir == goc.trooperAntiAir)
@@ -351,7 +350,7 @@ public:
                     && (cityPlaneFreePerAirport == goc.cityPlaneFreePerAirport)
                     && (cityPlaneCrashBombs == goc.cityPlaneCrashBombs)
                     && (parksCountAsRoads == goc.parksCountAsRoads)
-                    && (zoneGarrisons == goc.zoneGarrisons)
+                    && (garrisoningAndCapturing == goc.garrisoningAndCapturing)
                     && (fremenPalaceWorm == goc.fremenPalaceWorm)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
@@ -415,7 +414,7 @@ public:
             if(!cityPlaneFreePerAirport) optStr += "/cityPlaneFreePerAirport=0";
             if(!cityPlaneCrashBombs) optStr += "/cityPlaneCrashBombs=0";
             if(!parksCountAsRoads) optStr += "/parksCountAsRoads=0";
-            if(!zoneGarrisons) optStr += "/zoneGarrisons=0";
+            if(!garrisoningAndCapturing) optStr += "/garrisoningAndCapturing=0";
             if(!fremenPalaceWorm) optStr += "/fremenPalaceWorm=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
@@ -426,7 +425,6 @@ public:
             // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
             if(!saboteurHunt) optStr += "/saboteurHunt=0";
             if(!saboteurSkipsCityZones) optStr += "/saboteurSkipsCityZones=0";
-            if(!aiInfantryTactics) optStr += "/aiInfantryTactics=0";
             if(!hospitalCare) optStr += "/hospitalCare=0";
             if(turretsFireOnBuildings) optStr += "/turretsFireOnBuildings=1";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
@@ -522,10 +520,6 @@ public:
         /// compared in one build. INI key "Saboteurs Skip City Zones"; bit 4 of the MOD20 byte, set
         /// when off.
         bool        saboteurSkipsCityZones = true;
-        /// City games: enable QuantBot garrisons, capture raids/levies/chains, reinforcement,
-        /// infantry squads, production lanes and infantry in the army mix. Individual QuantBot
-        /// config switches remain independent overrides. Inert in non-city games.
-        bool        aiInfantryTactics = true;
         /// City games: Hospitals heal infantry (Stefan, 2026-11-27; dunecity/HospitalCare.h). A wounded
         /// soldier sent for repair walks or is flown beside an own Hospital and heals there, five at a time;
         /// a Hospital with a patient keeps its type. Off, infantry are sent to Repair Yards as up to
@@ -598,13 +592,12 @@ public:
         /// isRoadConnection, DuneCity::isTrafficConnector). Off, a Park is scenery only, as up to
         /// protocol 142. INI key only.
         bool        parksCountAsRoads = true;
-        /// City games: Soldiers and Troopers sent with the capture order occupy Residential,
-        /// Commercial and Industrial zones (Stefan, 2026-11-27: "i want infantry and troopers to be
-        /// able to occupy friendly and enemy R/I/C - using the capture command"). Inside they fire
-        /// out from behind sandbags; an enemy zone nobody holds becomes the occupier's house's
-        /// (ZoneStructureGarrison.cpp, docs/zone-garrisons.md). Off, a zone is captured as any
-        /// building is, as up to protocol 143. INI key only.
-        bool        zoneGarrisons = true;
+        /// City games: human and AI infantry may garrison own zones and capture enemy zones.
+        /// The rule also enables the AI's zone defence, reinforcement, capture raids, levies
+        /// and capture chains. Off forbids zone garrison/capture for every player, including
+        /// the legacy damaged-building capture path. Ordinary non-city capture is unchanged.
+        /// INI key "Garrisoning and Capturing"; MOD18 bit 5 is set when off.
+        bool        garrisoningAndCapturing = true;
         /// A Fremen Palace calls a sandworm its house controls instead of Fremen warriors (Stefan,
         /// 2026-11-27: "i want freeman house to get a worm as its palace special"): Hunt eats enemy
         /// units on its sand, Spice Bloom bursts it into a spice field (include/units/

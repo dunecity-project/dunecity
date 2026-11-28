@@ -73,7 +73,7 @@ struct World {
         getQuantBotConfig().strategy.fixedMix = QuantBotStrategy::Mix::Learned;
         getQuantBotConfig().strategy.fixedTempo = QuantBotStrategy::Tempo::Base;
         auto options = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-        options.aiInfantryTactics = false;
+        options.garrisoningAndCapturing = false;
         options.fogOfWar = false;
         options.startWithExploredMap = true;
         options.immortalHumanPlayer = true;

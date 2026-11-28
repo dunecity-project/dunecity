@@ -88,9 +88,7 @@ protected:
         carryallDropButton.setOnClick(std::bind(&UnitInterface::onCarryallDrop, this));
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
-        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled() && currentGame->isCitySimEnabled()));
-        captureButton.setVisible(itemID == Unit_Soldier || itemID == Unit_Trooper
-            || (ModManager::instance().isTornieFamilyContentActive() && itemID == Unit_FlameTrooper));
+        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled()));
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&UnitInterface::onCapture, this));
 
@@ -343,6 +341,10 @@ protected:
         healButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Heal);
         attackButton.setVisible(pObject->canAttack());
         healButton.setVisible(pObject->canHeal());
+        const bool captureAllowed = !currentGame->isCitySimEnabled() || ZoneStructure::garrisonsEnabled();
+        captureButton.setVisible(captureAllowed && (itemID == Unit_Soldier || itemID == Unit_Trooper
+            || (ModManager::instance().isTornieFamilyContentActive() && itemID == Unit_FlameTrooper)));
+        captureButton.setEnabled(captureAllowed);
         captureButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Capture);
         carryallDropButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_CarryallDrop);
         spiceBloomButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_SpiceBloom);

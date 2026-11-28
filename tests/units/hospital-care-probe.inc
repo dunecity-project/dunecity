@@ -1386,7 +1386,7 @@ int runHospitalCareProbe() {
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "Hospital tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    gModOptions.aiInfantryTactics = false;
+    gModOptions.garrisoningAndCapturing = false;
     require(gModOptions.hospitalCare, "Hospital Care is not on by default");
     const std::string mapData = fixtureMap();
     const char* only = std::getenv("HOSPITAL_CARE_CASE");

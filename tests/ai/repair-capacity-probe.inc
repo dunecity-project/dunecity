@@ -24,7 +24,7 @@ struct World {
         require(!currentGame, "Repair fixtures share live engine globals");
         require(ModManager::instance().setActiveMod(mod), "Cannot activate repair fixture mod");
         auto options = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-        options.aiInfantryTactics = false;
+        options.garrisoningAndCapturing = false;
         options.fogOfWar = false;
         options.startWithExploredMap = true;
         options.immortalHumanPlayer = true;

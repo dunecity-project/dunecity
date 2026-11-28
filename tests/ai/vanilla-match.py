@@ -436,14 +436,15 @@ def play(args, scratch, binary, key):
         command += ['--custom-map', str(game_map(name, scratch))]
         if args.map_mod:
             command += ['--mod', 'Dune2R' if args.map_mod == 'dune2r' else args.map_mod]
-    # The lobby convenience option enables all infantry switches. Keep runtime OFF/ON arms independent.
+    # Keep historical controls off, but preserve an explicitly chosen global garrison permission.
     options = configparser.ConfigParser(strict=False, interpolation=None)
     options.optionxform = str
     if game_options:
         options.read(game_options)
     if not options.has_section('Game Options'):
         options.add_section('Game Options')
-    options.set('Game Options', 'AI Infantry Tactics', 'false')
+    if not any(key.casefold() == 'garrisoning and capturing' for key in options['Game Options']):
+        options.set('Game Options', 'Garrisoning and Capturing', 'false')
     options_path = scratch / (out.name + '-game-options.ini')
     with options_path.open('w') as handle:
         options.write(handle)

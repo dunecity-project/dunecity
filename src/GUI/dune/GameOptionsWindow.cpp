@@ -186,13 +186,13 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&technologyInstallmentsCheckbox);
     vboxLeft.addWidget(VSpacer::create(ruleGap));
 
-    aiInfantryTacticsCheckbox.setVisible(ModManager::instance().isCityModeActive());
-    if(aiInfantryTacticsCheckbox.isVisible()) {
-        aiInfantryTacticsCheckbox.setText(_("AI infantry tactics"));
-        aiInfantryTacticsCheckbox.setChecked(gameOptions.aiInfantryTactics);
-        aiInfantryTacticsCheckbox.setExplanation(_("AI infantry tactics"),
-            _("AI houses garrison and reinforce city zones, raid and capture enemy zones, chain captures, buy discounted infantry squads, add infantry production lanes and include infantry in their armies. Individual QuantBot config switches can still enable these tactics when this option is off."));
-        vboxLeft.addWidget(&aiInfantryTacticsCheckbox);
+    garrisoningAndCapturingCheckbox.setVisible(ModManager::instance().isCityModeActive());
+    if(garrisoningAndCapturingCheckbox.isVisible()) {
+        garrisoningAndCapturingCheckbox.setText(_("Garrisoning and Capturing"));
+        garrisoningAndCapturingCheckbox.setChecked(gameOptions.garrisoningAndCapturing);
+        garrisoningAndCapturingCheckbox.setExplanation(_("Garrisoning and Capturing"),
+            _("Human and AI infantry may garrison friendly city zones and capture enemy zones. The AI defends and reinforces zones, sends capture raids and levies, and chains captures. Unchecked: no player may garrison or capture city zones, even damaged ones. Infantry squad purchases and production settings are separate."));
+        vboxLeft.addWidget(&garrisoningAndCapturingCheckbox);
         vboxLeft.addWidget(VSpacer::create(ruleGap));
     }
 
@@ -364,7 +364,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.researchLab = researchLabCheckbox.isChecked();
     gameOptions.technologyInstallments = technologyInstallmentsCheckbox.isChecked();
-    if(aiInfantryTacticsCheckbox.isVisible()) gameOptions.aiInfantryTactics = aiInfantryTacticsCheckbox.isChecked();
+    if(garrisoningAndCapturingCheckbox.isVisible()) gameOptions.garrisoningAndCapturing = garrisoningAndCapturingCheckbox.isChecked();
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
     gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();

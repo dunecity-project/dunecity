@@ -116,7 +116,7 @@ private:
     Checkbox rememberDefaults;
     Checkbox researchLabCheckbox;
     Checkbox technologyInstallmentsCheckbox;
-    DamageRulesCheckbox aiInfantryTacticsCheckbox;
+    DamageRulesCheckbox garrisoningAndCapturingCheckbox;
     HBox researchPaceHBox;
     Label researchPaceLabel;
     DropDownBox researchPaceDropDownBox;

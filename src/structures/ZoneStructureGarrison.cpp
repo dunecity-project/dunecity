@@ -46,11 +46,12 @@ int getGarrisonHouseID(const std::vector<Uint32>& occupants) {
 } // namespace
 
 bool ZoneStructure::garrisonsEnabled() {
-    return currentGame != nullptr && currentGame->getGameInitSettings().getGameOptions().zoneGarrisons;
+    return currentGame != nullptr && currentGame->isCitySimEnabled()
+        && currentGame->getGameInitSettings().getGameOptions().garrisoningAndCapturing;
 }
 
 bool ZoneStructure::garrisonOrderAvailable(const ObjectBase* unit) {
-    return unit != nullptr && unit->isAUnit() && garrisonsEnabled() && currentGame->isCitySimEnabled()
+    return unit != nullptr && unit->isAUnit() && garrisonsEnabled()
         && static_cast<const UnitBase*>(unit)->canCaptureStructures();
 }
 
@@ -201,6 +202,7 @@ void ZoneStructure::returnCapturedZone() {
 
 void ZoneStructure::transferOwnership(House* newOwner, bool capture) {
     if(newOwner == nullptr || newOwner == owner || owner == nullptr) return;
+    if(capture && currentGame->isCitySimEnabled() && !garrisonsEnabled()) return;
     House* previous = owner;
     // The zone's live power draw belongs to whoever owns it.
     if(registeredZonePower_ != 0) {

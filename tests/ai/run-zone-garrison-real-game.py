@@ -54,6 +54,7 @@ if not args.reuse:
     command = [sys.executable, str(root / 'tests/ai/vanilla-match.py'), '--build-dir', args.build_dir,
                '--results', str(out), '--tag', TAG, '--difficulty', 'brutal', '--minutes', str(args.minutes),
                '--maps', args.map, '--ffa', 'default@house-to-house',
+               '--game-options', str(root / 'tests/ai/game-options/garrison-capture-on.ini'),
                '--seeds', *[str(s) for s in args.seeds], '--jobs', str(args.jobs)]
     print('+ ' + ' '.join(command), flush=True)
     subprocess.run(command, check=True, cwd=root)

@@ -6815,6 +6815,8 @@ bool Game::isHotkeyAvailable(Hotkeys::Action action) const {
         case Hotkeys::Action::CityZoneTool: case Hotkeys::Action::CityRoadTool:
         case Hotkeys::Action::CityBudget: case Hotkeys::Action::CityStatsOverlay:
             return citySimEnabled_;
+        case Hotkeys::Action::Capture:
+            return !citySimEnabled_ || ZoneStructure::garrisonsEnabled();
         // The Sabotage mode and the Heal order exist only with Tornie-family content, like
         // their panel buttons.
         case Hotkeys::Action::Sabotage: case Hotkeys::Action::Heal:
@@ -7268,6 +7270,8 @@ bool Game::handleSelectedObjectsRequestCarryallDropClick(int xPos, int yPos) {
 
 
 bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
+    if(isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()) return false;
+
     Tile* pTile = currentGameMap->getTile(xPos, yPos);
 
     if(pTile == nullptr) {
@@ -7311,6 +7315,7 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
 CursorAppearance::Action Game::orderCursorAction(int mode, int x, int y) const {
     using Action = CursorAppearance::Action;
     const Action symbol = Action::Capture;
+    if(mode == CursorMode_Capture && isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()) return Action::Pointer;
     if(pLocalHouse == nullptr || currentGameMap == nullptr || !currentGameMap->tileExists(x, y)) return Action::Pointer;
     const auto* structure = dynamic_cast<const StructureBase*>(currentGameMap->getTile(x, y)->getGroundObject());
     if(structure == nullptr) return Action::Pointer;

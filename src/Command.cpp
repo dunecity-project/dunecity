@@ -310,6 +310,7 @@ case CMD_INFANTRY_CAPTURE: {
                 break;
             }
             const auto* pZone = dynamic_cast<const ZoneStructure*>(pStructure);
+            if(pZone != nullptr && currentGame->isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()) return;
             const bool validIntent = pZone != nullptr && ZoneStructure::garrisonsEnabled()
                 ? pInfantry->canCaptureStructures()
                     && (pZone->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID()

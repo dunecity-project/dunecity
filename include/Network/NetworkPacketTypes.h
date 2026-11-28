@@ -532,7 +532,12 @@
 //      GarrisonHealTime, default 60 seconds for a full heal). Old peers desync.
 //      Save 9905 preserves fractional damage and regeneration remainders.
 // 155: QuantBot checkpoint streams include EconomyFirst opening decision counters (save 9906).
-#define NETWORK_PROTOCOL_VERSION            155
+// 157: One city permission, Garrisoning and Capturing, replaces the AI-only option. MOD18 bit5
+//      still carries zone permission OFF for every human and AI; Capture input and legacy
+//      damaged-zone capture obey it. SquadOrders, InfantryLanes and InfantryInMix are independent.
+//      The shipped MOD19 bit1 is retired/ignored; installments continue to use bit0. Save layout
+//      unchanged. Earlier peers cannot enforce the same permission and are refused.
+#define NETWORK_PROTOCOL_VERSION            157
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

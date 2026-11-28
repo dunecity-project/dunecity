@@ -457,7 +457,7 @@ int runInfantrySquadProbe() {
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "Squad tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    gModOptions.aiInfantryTactics = false;
+    gModOptions.garrisoningAndCapturing = false;
     // Every case runs even after one fails, so a run shows all failures; any failure fails the probe.
     int failed = 0;
     const std::vector<std::pair<const char*, void (*)()>> cases = {

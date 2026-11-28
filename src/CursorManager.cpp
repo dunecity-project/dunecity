@@ -202,7 +202,9 @@ case Game::CursorMode_Attack:
                 }
                 break;
             case Game::CursorMode_Capture:
-                if (pObject->isAUnit() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable() && pObject->canAttack() && pObject->isInfantry()) {
+                if ((!currentGame->isCitySimEnabled() || ZoneStructure::garrisonsEnabled())
+                        && pObject->isAUnit() && (pObject->getOwner() == pLocalHouse)
+                        && pObject->isRespondable() && pObject->canAttack() && pObject->isInfantry()) {
                     return true;
                 }
                 break;

@@ -1092,12 +1092,11 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "City Plane Build Time") result.cityPlaneBuildTime = parseBool(value);
             else if (key == "City Plane Free Per Airport") result.cityPlaneFreePerAirport = parseBool(value);
             else if (key == "City Plane Crash Bombs") result.cityPlaneCrashBombs = parseBool(value);
-            else if (key == "Zone Garrisons") result.zoneGarrisons = parseBool(value);
+            else if (key == "Garrisoning and Capturing") result.garrisoningAndCapturing = parseBool(value);
             else if (key == "Fremen Palace Worm") result.fremenPalaceWorm = parseBool(value);
             else if (key == "Parks Count As Roads") result.parksCountAsRoads = parseBool(value);
             else if (key == "Saboteur Hunt") result.saboteurHunt = parseBool(value);
             else if (key == "Saboteurs Skip City Zones") result.saboteurSkipsCityZones = parseBool(value);
-            else if (key == "AI Infantry Tactics") result.aiInfantryTactics = parseBool(value);
             else if (key == "Hospital Care") result.hospitalCare = parseBool(value);
             else if (key == "Turrets Can Fire On Buildings") {
                 result.turretsFireOnBuildings = parseBool(value);

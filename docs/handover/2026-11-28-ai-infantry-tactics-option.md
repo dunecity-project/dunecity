@@ -1,38 +1,38 @@
-# AI infantry tactics option — 2026-11-28
+# Garrisoning and Capturing rule — 2026-11-28
 
-## Request and acceptance (recorded before implementation)
+## Corrected request and acceptance (recorded before rework)
 
-Stefan: “i just want it as a feature, not a mod” and “you can just have it as an option to be enabled from the menu that is on by default for dunecity not a different mod”.
+Stefan: “i didn't ask for an ai infantry tactics button. i asked for a button for allowing garrisoning and capturing”. The earlier AI-only bundle below was the wrong feature despite its passing tests.
 
 | Requested outcome | Observable acceptance assertion |
 | --- | --- |
-| One normal game option, no separate mod | The real Options → Game Rules window shows **AI infantry tactics** beside the Dune City rules, with a tooltip describing garrisons, zone capture, reinforcement, squads and infantry production. |
-| Default on for Dune City only | A newly selected city game's effective option is on; a vanilla game's effective option is off and the city-only control is not offered. |
-| Persistent choice | Clicking the real rule checkbox and accepting Options writes `AI Infantry Tactics` in the player's per-content Game Options section (`Game Options dunecity` for Dune City); reopening/restoring game options preserves the choice. |
-| Settings/multiplayer parity | Both states round-trip through GameInitSettings serialization; equality and the options hash distinguish effective city ON/OFF, and the network protocol is advanced with the new packed flag. |
-| Real AI activation on | A headless real-menu probe starts a city game with all nine QuantBot config switches off and this option on, then asserts more than zero real garrison/capture or squad events and their proximate effect. |
-| No bundled activation off | The paired probe turns this option off through the same menu path and asserts zero bundled garrison/capture/squad events. Config switches remain available for explicit independent experiments. |
-| Existing controls retain meaning | AI control/default fixtures explicitly set the new option off. Existing assertion thresholds are unchanged. |
-| Preserve a human's garrison when sharing a house with QuantBot | With the option on, two soldiers put into a quiet non-front zone through the real Capture button and map click remain **2→2** for 60 game seconds, with Human-first and Human-last controller ordering. The same AI-only quiet zone still releases **2→0**; the existing option-off arm remains inactive. |
-| Tested immutable source | An off-branch test commit passes the affected settings/menu tests, four AI gates, and AWS nightly (`-L nightly -LE gui`); report all failures and their causes without suppressing them. |
+| One rule, not an AI infantry button or mod | The normal Options and match Game Rules show **Garrisoning and Capturing**, with an explanation applying to human and AI zone control. |
+| Default ON in Dune City | The real city menu initially checks the rule; vanilla does not offer it and keeps normal non-city capture. |
+| Human permission ON | Through the real Capture command and map click, soldiers enter an own zone and capture an enemy zone, with at least one observed entry/capture. |
+| Human permission OFF | Capture is hidden/disabled for single and multi-selection; C cannot open the cursor; a city zone cannot be captured through an authoritative queued command or legacy damaged-building fallback. |
+| AI permission ON | With the six zone-config switches off, real AI garrison/capture orders execute and reach a zone; activation and entry/capture counts are greater than zero. |
+| AI permission OFF | Even with those config switches explicitly on, no AI garrison/capture orders or entries occur. |
+| Three unrelated infantry switches remain independent | SquadOrders, InfantryLanes and InfantryInMix are read only from their own config switches; the rule cannot enable them. Integrator keeps all three on in the Air copy's DEV_SWITCHES. |
+| Shared-human safety remains intact | Human-first and Human-last shared houses retain real-player garrisons 2→2; the AI-only quiet-zone control releases 2→0. |
+| INI, settings and multiplayer consistency | One field/key, both states persist/reopen and round-trip, hashes differ, MOD18 bit5 carries OFF, and shipped MOD19 bytes 0/1/2/3 preserve installments bit0 without a stale AI-only setting. |
+| Qualification and handoff | Targeted real-path tests pass at an immutable commit, then Integrator immediately lands/deploys to the Air before its extensive AI/nightly qualification. |
 
-## State and invariants
+## State and compatibility invariants
 
-The persisted choice belongs to GameOptionsClass. The match's city flag determines whether that choice is effective. Each requested QuantBot switch is enabled iff its original config switch is enabled OR the city match's option is enabled; turning the menu option off must not disable a deliberately enabled experimental config switch. Menu acceptance, INI reload, multiplayer serialization and save/load must preserve the same choice without modifying shared global QuantBot defaults.
+`GameOptionsClass::garrisoningAndCapturing` is the single city-zone permission. OFF is authoritative for every human and AI, including explicit config requests and legacy capture execution. ON also selects the six AI garrison/capture behaviours. The old `zoneGarrisons` and `aiInfantryTactics` fields are removed, not retained as alternate live settings.
 
-## Implementation
+UI, hotkey/cursor handling, AI admission and actual infantry/zone execution enforce the same permission. SquadOrders, InfantryLanes and InfantryInMix do not consult it. Quiet human-shared garrisons remain protected by actual HumanPlayer membership, not the legacy House::isAI flag.
 
-- **Options → Advanced → Default Game Rules → Change… → AI infantry tactics**, also the normal match Game Rules dialog. The wrapped explanation lists garrisons/reinforcement, capture raids and chains, squads, infantry production lanes and army composition.
-- `GameOptionsClass::aiInfantryTactics` stores the default-on preference. The control is offered only by city-mode content; `QuantBot::aiInfantryTacticsEnabled` uses the real game's city-mode flag (not the independent City Effects rule). Vanilla does not offer the control or gain any tactics from it.
-- Every requested config switch is ORed with the city-match option at its existing execution gate. No shared QuantBot config is mutated or copied. Explicit config experiments still work with the menu option off.
-- INI key **AI Infantry Tactics** follows the existing option persistence paths, including `[Game Options dunecity]` for the player's Dune City choices and mod `GameOptions.ini` overrides.
-- Protocol **152**: bit 1 of the existing MOD19 installments byte is set when tactics is **off**; bit 0 remains Technology Installments. The MOD20 tech-level byte is already full. No settings/save layout extension; older bytes inherit the new default. Equality includes the choice and the options hash spells out only its off state.
-- Existing control INIs and AI/related gameplay probes explicitly pin the bundle off. `vanilla-match.py` defaults it off only when an input INI does not explicitly choose it. No existing assertion threshold is weakened.
-- New checks: `ai_infantry_tactics_settings` (both states, city/control flags, installments, tech levels, following-record integrity and old-byte defaults) and `ai_infantry_tactics_option_probe` (real menu clicks, rendered explanation/bounds, INI/reopen, actual QuantBot garrison orders and entries on a bundled map, paired off arm, vanilla exclusion, and real-player shared-house garrison retention in both controller orders).
-- A human-shared house's quiet garrisons are protected by actual `HumanPlayer` membership, not `House::isAI()`: ordinary shared-house player insertion can leave that legacy flag true. Only the owning house's controllers are checked; AI-only houses retain their release behaviour. No new stored state or protocol change.
+Protocol 152 already shipped on the Air. The corrected rule therefore uses a new compatibility version (Integrator tentatively reserves **157**). The existing MOD18 bit5 remains the zone permission; the shipped MOD19 bit1 is retired but safely ignored while decoding Technology Installments from bit0. No settings layout extension or reinterpretation of a legacy value 2/3 as a whole-byte bool is allowed. Save9906 and its economy counters are preserved; the final protocol remains the Integrator's monotonic choice.
+
+The new INI key is **Garrisoning and Capturing**. A one-time profile migration preserves old Zone Garrisons permission where the new key is absent, removes both obsolete keys, and thereafter reads only the new key.
+
+## Corrected-rule results
+
+The corrected human-and-AI permission has not yet been qualified. The historical measurements below only cover the superseded AI-only option and its shared-human safety fix.
 
 
-## Results
+## Superseded AI-only implementation evidence
 
 ### Latest human-safe green source
 

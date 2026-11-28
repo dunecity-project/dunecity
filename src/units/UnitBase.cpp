@@ -878,6 +878,12 @@ void UnitBase::releaseTarget() {
 }
 
 void UnitBase::engageTarget() {
+    // A saved or already-dispatched Capture order cannot outlive the city permission.
+    if(attackMode == CAPTURE && currentGame->isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()
+       && dynamic_cast<const ZoneStructure*>(target.getObjPointer()) != nullptr) {
+        doSetAttackMode(GUARD);
+        return;
+    }
 
     // Zone Garrisons: a zone can change hands while a soldier walks to it (a comrade took it first),
     // so its friendliness is read now, not when the order was given; otherwise the soldier would drop
@@ -1626,6 +1632,11 @@ void UnitBase::doIssueOrder(const UnitOrder& order, bool queued) {
     if(order.type == UnitOrderType::Patrol || order.type >= UnitOrderType::Count) {
         return;
     }
+    if(order.type == UnitOrderType::Capture && currentGame->isCitySimEnabled()
+       && !ZoneStructure::garrisonsEnabled()
+       && dynamic_cast<const ZoneStructure*>(currentGame->getObjectManager().getObject(order.targetID)) != nullptr) {
+        return;
+    }
     if(!queued || orderQueue.empty()) {
         orderQueue.replace(order);
         dispatchFrontOrder();
@@ -1667,8 +1678,9 @@ bool UnitBase::isOrderExecutable(const UnitOrder& order) const {
         case UnitOrderType::Capture: {
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(order.targetID));
             if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
-               zone != nullptr && ZoneStructure::garrisonsEnabled()) {
-                return dynamic_cast<const InfantryBase*>(this) != nullptr && canCaptureStructures()
+               zone != nullptr && currentGame->isCitySimEnabled()) {
+                return ZoneStructure::garrisonsEnabled()
+                    && dynamic_cast<const InfantryBase*>(this) != nullptr && canCaptureStructures()
                     && (zone->getOwner()->getTeamID() != owner->getTeamID() || zone->mayEnterGarrison(this));
             }
             return dynamic_cast<const InfantryBase*>(this) != nullptr

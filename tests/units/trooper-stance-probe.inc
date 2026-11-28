@@ -89,7 +89,7 @@ struct Row {
 
 Row play(const std::string& mapData, int shooterKind, int stance, int raid, int seed, bool reach) {
     auto options = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    options.aiInfantryTactics = false;
+    options.garrisoningAndCapturing = false;
     options.immortalHumanPlayer = false;
     require(options.startWithExploredMap && !options.fogOfWar && options.trooperAntiAir
             && options.trooperOrnithopterReach, "These are not the Dune City mod's effective options");

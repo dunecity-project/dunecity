@@ -1421,6 +1421,25 @@ int main(int argc, char *argv[]) {
 
             settings.ai.campaignAI = myINIFile.getStringValue("AI","Campaign AI",DEFAULTAIPLAYERCLASS);
 
+            // Migrate the saved zone permission once. The retired AI-only choice never restricted
+            // players, so it must not turn the new global permission off in an existing profile.
+            bool gameOptionsMigrated = false;
+            for(const auto& section : myINIFile) {
+                const std::string sectionName = section.getSectionName();
+                if(SDL_strcasecmp(sectionName.c_str(), "Game Options") != 0
+                   && SDL_strncasecmp(sectionName.c_str(), "Game Options ", sizeof("Game Options ") - 1) != 0) {
+                    continue;
+                }
+                if(!myINIFile.hasKey(sectionName, "Garrisoning and Capturing")
+                   && myINIFile.hasKey(sectionName, "Zone Garrisons")) {
+                    myINIFile.setBoolValue(sectionName, "Garrisoning and Capturing",
+                                          myINIFile.getBoolValue(sectionName, "Zone Garrisons", true));
+                    gameOptionsMigrated = true;
+                }
+                gameOptionsMigrated = myINIFile.removeKey(sectionName, "Zone Garrisons") || gameOptionsMigrated;
+                gameOptionsMigrated = myINIFile.removeKey(sectionName, "AI Infantry Tactics") || gameOptionsMigrated;
+            }
+
             settings.gameOptions.gameSpeed = myINIFile.getIntValue("Game Options","Game Speed",GAMESPEED_DEFAULT);
             settings.gameOptions.concreteRequired = myINIFile.getBoolValue("Game Options","Concrete Required",true);
             settings.gameOptions.fogOfWar = myINIFile.getBoolValue("Game Options","Fog of War",false);
@@ -1459,12 +1478,11 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.cityPlaneBuildTime = myINIFile.getBoolValue("Game Options", "City Plane Build Time", true);
             settings.gameOptions.cityPlaneFreePerAirport = myINIFile.getBoolValue("Game Options", "City Plane Free Per Airport", true);
             settings.gameOptions.cityPlaneCrashBombs = myINIFile.getBoolValue("Game Options", "City Plane Crash Bombs", true);
-            settings.gameOptions.zoneGarrisons = myINIFile.getBoolValue("Game Options", "Zone Garrisons", true);
+            settings.gameOptions.garrisoningAndCapturing = myINIFile.getBoolValue("Game Options", "Garrisoning and Capturing", true);
             settings.gameOptions.fremenPalaceWorm = myINIFile.getBoolValue("Game Options", "Fremen Palace Worm", true);
             settings.gameOptions.parksCountAsRoads = myINIFile.getBoolValue("Game Options", "Parks Count As Roads", true);
             settings.gameOptions.saboteurHunt = myINIFile.getBoolValue("Game Options", "Saboteur Hunt", true);
             settings.gameOptions.saboteurSkipsCityZones = myINIFile.getBoolValue("Game Options", "Saboteurs Skip City Zones", true);
-            settings.gameOptions.aiInfantryTactics = myINIFile.getBoolValue("Game Options", "AI Infantry Tactics", true);
             settings.gameOptions.hospitalCare = myINIFile.getBoolValue("Game Options", "Hospital Care", true);
             // "Turrets Target Units Only" (the rule's first key, its inverse) counts when the current key is absent.
             settings.gameOptions.turretsFireOnBuildings = myINIFile.hasKey("Game Options", "Turrets Can Fire On Buildings")
@@ -1482,6 +1500,9 @@ int main(int argc, char *argv[]) {
             // Dune City section before that became the default gets the default once.
             if(adoptCarryallDropDefault(myINIFile)) {
                 SDL_Log("Dune City options: Manual Carryall Drops follows the mod default (on) from now on");
+                gameOptionsMigrated = true;
+            }
+            if(gameOptionsMigrated) {
                 myINIFile.saveChangesTo(getConfigFilepath());
             }
 

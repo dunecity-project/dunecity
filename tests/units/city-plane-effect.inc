@@ -1504,7 +1504,7 @@ int runCityPlaneEffect() {
     settings.general.playerName = "AA tester";
     // What a Custom Game with the Dune City mod plays: the INI overlaid by the mod's GameOptions.ini.
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    gModOptions.aiInfantryTactics = false;
+    gModOptions.garrisoningAndCapturing = false;
     require(gModOptions.cityPlaneDefence && gModOptions.cityPlaneBombing && !gModOptions.airportOrnithopterPatrol
                 && gModOptions.cityPlaneCarpetBombing && gModOptions.cityPlaneBombingRuns && gModOptions.cityPlanePurchase,
             "The mod's options do not play the default city plane rules");

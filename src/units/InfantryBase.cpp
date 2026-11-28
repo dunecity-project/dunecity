@@ -117,7 +117,8 @@ void InfantryBase::save(OutputStream& stream) const {
 }
 
 void InfantryBase::handleCaptureClick(int xPos, int yPos) {
-    if(respondable && canCaptureStructures()) {
+    if(respondable && canCaptureStructures()
+       && (!currentGame->isCitySimEnabled() || ZoneStructure::garrisonsEnabled())) {
         if (currentGameMap->tileExists(xPos, yPos)) {
             if (currentGameMap->getTile(xPos,yPos)->hasAnObject()) {
                 // capture structure
@@ -139,7 +140,8 @@ void InfantryBase::doCaptureStructure(const StructureBase* pStructure) {
     // Zone Garrisons: an own zone with room is occupied; an enemy zone is entered and taken, or,
     // while enemy soldiers hold it, fired on until they are gone (engageTarget).
     if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
-       zone != nullptr && ZoneStructure::garrisonsEnabled() && canCaptureStructures()) {
+       zone != nullptr && currentGame->isCitySimEnabled()) {
+        if(!ZoneStructure::garrisonsEnabled() || !canCaptureStructures()) return;
         const bool own = zone->getOwner()->getTeamID() == getOwner()->getTeamID();
         if(own && !zone->mayEnterGarrison(this)) {
             SDL_Log("ZONE_GARRISON: event=refused_at_order house=%d unit=%u item=%d zone=%u occupants=%d health=%d max_health=%d cycle=%u",
@@ -300,6 +302,11 @@ void InfantryBase::checkPos() {
             && target.getObjPointer()->isAStructure()
             && (getOwner()->getTeamID() != target.getObjPointer()->getOwner()->getTeamID()))
         {
+            // Walking onto a damaged enemy zone must not fall back to the old destroy-and-rebuild
+            // capture path while the city rule forbids taking it, whatever order brought us here.
+            if(currentGame->isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()
+               && dynamic_cast<const ZoneStructure*>(target.getObjPointer()) != nullptr) return;
+
             Coord   closestPoint;
 
             closestPoint = target.getObjPointer()->getClosestPoint(location);

@@ -1096,8 +1096,9 @@ private:
     std::shared_ptr<const QuantBotConfig> configOverride;
     /// The config this player plays by: configOverride if set, else getQuantBotConfig().
     const QuantBotConfig& botConfig() const { return configOverride ? *configOverride : getQuantBotConfig(); }
-    /// A config experiment OR the city match's player-facing infantry-tactics option.
-    bool aiInfantryTacticsEnabled(bool configured) const;
+    /// Configured preference OR the city's default zone tactics; the global permission is
+    /// independently enforced by ZoneStructure::garrisonsEnabled before any orders execute.
+    bool wantsGarrisonTactic(bool configured) const;
     /// Test-only play-style behaviours a config key cannot express (tests/ai play styles,
     /// `[Play Style]` in a tests/ai/play-styles/*.ini file; docs/ai-play-styles.md). The
     /// defaults are inert: every real game plays with them. Custom Hard/Brutal only. Never set by

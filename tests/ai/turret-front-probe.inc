@@ -577,7 +577,7 @@ int runTurretFrontProbe() {
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "Turret tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
-    gModOptions.aiInfantryTactics = false;
+    gModOptions.garrisoningAndCapturing = false;
     const char* caseEnv = std::getenv("TURRET_FRONT_CASE");
     const std::string only = caseEnv ? caseEnv : "";
     gChecks.open(gOut + "/checks.csv");

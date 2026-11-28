@@ -96,7 +96,7 @@ protected:
         carryallDropButton.setOnClick(std::bind(&MultiUnitInterface::onCarryallDrop, this));
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
-        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled() && currentGame->isCitySimEnabled()));
+        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled()));
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&MultiUnitInterface::onCapture, this));
 
@@ -435,7 +435,9 @@ protected:
 
         attackButton.setVisible(bShowAttack);
         healButton.setVisible(bShowHeal);
-        captureButton.setVisible(bShowCapture);
+        const bool captureAllowed = !currentGame->isCitySimEnabled() || ZoneStructure::garrisonsEnabled();
+        captureButton.setVisible(bShowCapture && captureAllowed);
+        captureButton.setEnabled(captureAllowed);
         sabotageButton.setVisible(ModManager::instance().isTornieFamilyContentActive() && bShowCapture);
         sabotageButton.setToggleState(bSabotage);
         returnButton.setVisible(bShowReturn);
