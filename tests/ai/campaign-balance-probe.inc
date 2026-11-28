@@ -84,6 +84,7 @@
 #include "zone-power-probe.inc"
 #include "tech-production-probe.inc"
 #include "repair-capacity-probe.inc"
+#include "infantry-lanes-probe.inc"
 #include "research-lab-continuation-probe.inc"
 #include "research-lab-ai-probe.inc"
 #include "factory-continuation-probe.inc"
@@ -162,6 +163,10 @@ int runCampaignBalanceProbe() {
     }
     if(std::getenv("BALANCE_RESEARCH_LAB_AI_PROBE")) {
         runResearchLabAIProbe(requestedMod.c_str(), partnerClass.c_str());
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_INFANTRY_LANES_PROBE")) {
+        runInfantryLanesProbe();
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_REPAIR_CAPACITY_PROBE")) {

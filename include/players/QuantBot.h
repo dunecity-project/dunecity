@@ -2292,6 +2292,7 @@ private:
     bool infantryMixLogged_ = false;
     Uint32 infantryMixLogCycle_ = 0;
     std::array<Uint32, 2> infantryLaneLogCycle_{};
+    std::array<Uint32, 2> infantryLaneStateLogCycle_{}; ///< Sampled demand diagnostics only; not saved.
     /// InfantryLanes: the cycle each producer's lane rule has held since (0: not holding). Transient, like the
     /// factory lanes' busy counts it reads: after a load the clock restarts the same way on every peer.
     std::array<Uint32, 2> infantryLaneRuleSince_{};

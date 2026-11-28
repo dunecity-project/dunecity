@@ -109,6 +109,21 @@ bool QuantBot::infantryLaneBacklog(BuildPass& pass, Uint32& producer) {
     if (!demand) since = 0;
     else if (since == 0) since = std::max<Uint32>(1, now);
     const bool backlog = demand && busy * 4 >= actual * 3 && now >= since + kLaneSustainCycles;
+    auto& stateLogged = infantryLaneStateLogCycle_[laneIndex(producer)];
+    if (stateLogged == 0 || now >= stateLogged + kInfantryLaneLogCycles) {
+        stateLogged = std::max<Uint32>(1, now);
+        const int64_t required = std::max<int64_t>(data[producer][houseID].price,
+            int64_t(kLaneDeficitOrders) * actual * std::max(1, orderValue));
+        const char* reason = actual == 0 ? "no_producer"
+            : pass.itemCount[producer] != actual ? "pending_producer"
+            : deficit < required ? "below_demand_threshold"
+            : int64_t(pass.money) < int64_t(pass.economyReserve) + data[producer][houseID].price + 1000 ? "cash_reserve"
+            : !busy ? "idle_producer" : !backlog ? "sustaining_demand" : "ready";
+        SDL_Log("INFANTRY_LANE: event=state house=%d producer=%u have=%d busy=%d deficit=%d required_deficit=%lld price=%d credits=%d reserve=%d share_bps=%d sustain_cycles=%u reason=%s cycle=%u",
+            houseID, producer, actual, busy, deficit, static_cast<long long>(required),
+            data[producer][houseID].price, pass.money, pass.economyReserve, pass.infantryPercent * 100,
+            since == 0 ? 0 : now - since, reason, now);
+    }
     auto& logged = infantryLaneLogCycle_[laneIndex(producer)];
     if (backlog && (logged == 0 || now >= logged + kInfantryLaneLogCycles)) {
         logged = std::max<Uint32>(1, now);

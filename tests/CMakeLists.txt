@@ -754,6 +754,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
                 --output-dir ${CMAKE_BINARY_DIR}/repair-capacity-${repair_mod}-probe)
             set_tests_properties(repair_capacity_${repair_mod} PROPERTIES TIMEOUT 300 PROCESSORS 2)
         endforeach()
+        # Causal infantry-capacity fixture: full AI build/placement, ON/OFF, actual delivered output.
+        dunecity_add_test(headless integration NAME infantry_lanes_backlog_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --infantry-lanes-probe --repeatable --headless-assets
+            --mod dunecity --level 9 --partner-difficulty brutal --minutes 1
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/infantry-lanes-backlog-probe)
+        set_tests_properties(infantry_lanes_backlog_probe PROPERTIES TIMEOUT 600 PROCESSORS 2)
         # Headless AI probes in every skirmish engine; the stats-panel probe is GUI and stays macOS-only.
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(ai_probe IN ITEMS air-defense shared-spending harvester-safety)

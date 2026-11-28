@@ -495,6 +495,8 @@ parser.add_argument('--original-campaign-rules', choices=('on', 'off'),
                     help='Capture original or legacy rules for newly created Campaign AI controllers')
 parser.add_argument('--repair-capacity-probe', action='store_true',
                     help='Verify demand-driven repair capacity, shared pending orders and saved pressure')
+parser.add_argument('--infantry-lanes-probe', action='store_true',
+                    help='Verify real infantry backlog, added Barracks/WOR and higher delivered output in ON/OFF controls')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
 parser.add_argument('--scenario', action='store_true',
                     help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
@@ -1113,6 +1115,7 @@ if args.original_campaign_probe: env['BALANCE_ORIGINAL_CAMPAIGN_PROBE'] = '1'
 env.pop('BALANCE_ORIGINAL_CAMPAIGN_RULES', None)
 if args.original_campaign_rules is not None: env['BALANCE_ORIGINAL_CAMPAIGN_RULES'] = args.original_campaign_rules
 if args.repair_capacity_probe: env['BALANCE_REPAIR_CAPACITY_PROBE'] = '1'
+if args.infantry_lanes_probe: env['BALANCE_INFANTRY_LANES_PROBE'] = '1'
 if args.scenario:
     env['BALANCE_SCENARIO'] = '1'
     if scenario_sides:
@@ -1192,6 +1195,9 @@ if cache_reader is not None:
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()
 results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
+if args.infantry_lanes_probe:
+    print(*[line for line in run_lines if any(marker in line for marker in
+           ('INFANTRY_LANES_FIXTURE:', 'INFANTRY_LANES_ARM:', 'INFANTRY_LANES_CASE:'))], sep='\n')
 if args.repair_capacity_probe:
     placements = [dict(part.split('=', 1) for part in line.split('REPAIR_CAPACITY_PLACEMENT:', 1)[1].split()
                        if '=' in part)
