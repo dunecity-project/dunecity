@@ -133,6 +133,7 @@ target_sources(dunelegacy_tests
         OriginalCampaignPolicyTestCase.cpp
         OriginalTeamScriptTestCase.cpp
         VersionTestCase.cpp
+        ${CMAKE_SOURCE_DIR}/src/misc/DisplayVersion.cpp
         RendererFallbackOrderTestCase.cpp
         SoundtrackPackTestCase.cpp
         ${CMAKE_SOURCE_DIR}/src/FileClasses/music/SoundtrackPack.cpp
@@ -362,6 +363,16 @@ target_compile_options(dunelegacy_tests
         $<$<CXX_COMPILER_ID:MSVC>:/W4>
         $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic>
 )
+
+# Compile the same loader/tests as an official release, independent of the
+# configured game's identity. This is a tiny test target, not a second game build.
+add_executable(display_version_release_tests VersionTestCase.cpp
+    ${CMAKE_SOURCE_DIR}/src/misc/DisplayVersion.cpp)
+target_include_directories(display_version_release_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(display_version_release_tests PRIVATE DUNECITY_RELEASE_BUILD=1)
+target_link_libraries(display_version_release_tests PRIVATE Catch2::Catch2WithMain)
+dunecity_add_test(headless integration NAME display_version_tests COMMAND dunelegacy_tests "[version]")
+dunecity_add_test(headless integration NAME display_version_release_tests COMMAND display_version_release_tests)
 
 # Add test
 # The dedicated generator groups below run their matrices once.

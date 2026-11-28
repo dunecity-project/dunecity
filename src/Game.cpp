@@ -57,6 +57,7 @@ std::mutex Game::performanceLogMutex;
 #include <misc/OFileStream.h>
 #include <misc/IMemoryStream.h>
 #include <misc/FileSystem.h>
+#include <misc/DisplayVersion.h>
 #include <misc/FrameYield.h>
 #include <misc/fnkdat.h>
 #include <misc/WebRuntime.h>
@@ -776,7 +777,7 @@ void Game::initPerformanceLog() {
         std::strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", std::localtime(&nowTime));
         
         performanceLogFile << "=== Dune City Performance Log Started " << timeStr << " ===" << std::endl;
-        performanceLogFile << "Version: " << DUNECITY_DISPLAY_VERSION << std::endl;
+        performanceLogFile << "Version: " << getDisplayVersion() << std::endl;
         performanceLogFile << "Platform: " << SDL_GetPlatform() << std::endl;
         performanceLogFile << std::endl;
         performanceLogFile.flush();

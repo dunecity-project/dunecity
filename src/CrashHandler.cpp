@@ -1,5 +1,6 @@
 #include "CrashHandler.h"
 #include "config.h"
+#include <misc/DisplayVersion.h>
 
 #include <csignal>
 #include <cstdio>
@@ -27,6 +28,7 @@ static FILE* crashLogFile = nullptr;
 static const char* crashLogPath = nullptr;
 static void* registeredGame = nullptr;
 static volatile sig_atomic_t errorDialogs = 1;
+static const char* crashDisplayVersion = DUNECITY_DISPLAY_VERSION;
 
 void setErrorDialogsEnabled(bool enabled) {
     errorDialogs = enabled ? 1 : 0;
@@ -126,7 +128,7 @@ static void signalHandler(int sig) {
     writeCrashLog("========================================\n");
     writeCrashLog("Signal: %d (%s)\n", sig, getSignalName(sig));
     writeCrashLog("Time: %s\n", getTimeStamp());
-    writeCrashLog("Version: %s\n", DUNECITY_DISPLAY_VERSION);
+    writeCrashLog("Version: %s\n", crashDisplayVersion);
     writeCrashLog("Platform: %s\n", SDL_GetPlatform());
     writeCrashLog("\n");
     
@@ -241,6 +243,8 @@ void installCrashHandlers(const char* logPath) {
     }
     
     crashLogPath = logPath;
+    // Resolve the resource in normal startup, never on first use in a signal.
+    crashDisplayVersion = getDisplayVersion().c_str();
     
     // Open log file for crash reporting (append mode)
     crashLogFile = fopen(logPath, "a");

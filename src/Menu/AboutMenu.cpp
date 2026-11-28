@@ -22,6 +22,7 @@
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/TextManager.h>
 #include <FileClasses/music/SoundtrackPack.h>
+#include <misc/DisplayVersion.h>
 
 AboutMenu::AboutMenu() : MenuBase()
 {
@@ -48,7 +49,8 @@ AboutMenu::AboutMenu() : MenuBase()
     const std::string soundtrackCredit = soundtrack
         ? "ALTERNATIVE SOUNDTRACK\n" + soundtrack->creditText() + "\n\n" : "";
     credits.setText(
-        std::string("Dune Legacy, DuneCity, and Dune2R have been built and maintained by many people.\n\n")
+        "DuneCity " + getDisplayVersion() + "\n\n"
+        + "Dune Legacy, DuneCity, and Dune2R have been built and maintained by many people.\n\n"
         + soundtrackCredit +
         "PROJECT LEADERSHIP\n"
         "Stefan van der Wel - creator of Dune Legacy and DuneCity\n"

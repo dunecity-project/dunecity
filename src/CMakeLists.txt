@@ -464,6 +464,7 @@ target_sources(dunecity
 
         # misc
         misc/AnalyticsInstallID.cpp
+        misc/DisplayVersion.cpp
         misc/draw_util.cpp
         misc/FileSystem.cpp
         misc/fnkdat.cpp

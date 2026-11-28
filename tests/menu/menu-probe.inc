@@ -40,6 +40,7 @@
 #include <FileClasses/LoadSavePNG.h>
 #include <players/PlayerFactory.h>
 #include <misc/MenuPalette.h>
+#include <misc/DisplayVersion.h>
 
 std::unique_ptr<MenuBase> createExtrasMenu(bool workshop);
 
@@ -1330,8 +1331,14 @@ int runMenuProbe() {
     }
     {
         MainMenu menu;
-        menuRequire(menu.modVersionLabel.getText() == std::string("App v") + DUNECITY_DISPLAY_VERSION,
-                    "Home does not display the configured release/development version");
+        menuRequire(menu.modVersionLabel.getText() == "App v" + getDisplayVersion(),
+                    "Home does not display the cached application version");
+        menuRequire(menu.modVersionLabel.isVisible()
+                    && menu.modVersionLabel.getMinimumSize().x <= menu.modVersionLabel.getSize().x
+                    && menu.modVersionLabel.getMinimumSize().y <= menu.modVersionLabel.getSize().y,
+                    "Home clips the full application version");
+        menuRequire(std::string(SDL_GetWindowTitle(window)) == "DuneCity " + getDisplayVersion(),
+                    "SDL window title and Home application versions disagree");
         SDL_Log("MENU_VERSION_PASS: %s", menu.modVersionLabel.getText().c_str());
         menuRequire(menu.campaignButton.isVisible() && menu.customButton.isVisible() && menu.randomSkirmishButton.isVisible()
             && menu.civWarsButton.isVisible() && menu.onlineButton.isVisible(), "Home play actions missing");
@@ -2793,7 +2800,13 @@ int runMenuProbe() {
                            "Extras contains editor or mod activation destinations");
         menuCapture(*menu,workshop ? "editors" : "extras");
     }
-    { AboutMenu menu;menuCapture(menu,"about"); }
+    {
+        AboutMenu menu;
+        menuRequire(menu.credits.isVisible()
+                    && menu.credits.getText().find("DuneCity " + getDisplayVersion() + "\n\n") == 0,
+                    "About does not show the application version at the top of its credits");
+        menuCapture(menu,"about");
+    }
     { HowToPlayMenu menu;menuCapture(menu,"help"); }
     {
         ModMenu menu;

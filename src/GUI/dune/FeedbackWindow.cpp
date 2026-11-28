@@ -3,7 +3,7 @@
 #include <House.h>
 #include <globals.h>
 #include <sand.h>
-#include <config.h>
+#include <misc/DisplayVersion.h>
 #include <misc/FeedbackIssue.h>
 #include <misc/string_util.h>
 #include <FileClasses/TextManager.h>
@@ -105,7 +105,7 @@ FeedbackWindow::FeedbackWindow(Submit send) : Window(0, 0, 560, 440), send(std::
     layout.addWidget(&details, Point(16, 145), Point(528, 150));
 
     const auto& init = currentGame->getGameInitSettings();
-    context = "DuneCity " + std::string(DUNECITY_DISPLAY_VERSION) + "\nPlatform: " + SDL_GetPlatform()
+    context = "DuneCity " + getDisplayVersion() + "\nPlatform: " + SDL_GetPlatform()
         + "\nMod: " + init.getModName()
         + "\nHouse: " + (pLocalHouse ? getHouseNameByNumber(static_cast<HOUSETYPE>(pLocalHouse->getHouseID())) : _("Spectator"));
     if(init.getMission() > 0) context += "\nLevel: " + std::to_string(missionNumberToLevelNumber(init.getMission()))

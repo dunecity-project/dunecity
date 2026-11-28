@@ -34,6 +34,7 @@
 #include <structures/Wall.h>
 
 #include <misc/FileSystem.h>
+#include <misc/DisplayVersion.h>
 #include <misc/draw_util.h>
 #include <misc/format.h>
 #include <misc/DiscordManager.h>
@@ -532,7 +533,7 @@ void MapEditor::loadMap(const std::string& filepath) {
 
 void MapEditor::saveMap(const std::string& filepath) {
     if(!loadedINIFile) {
-        std::string comment = "Created with Dune City " + std::string(DUNECITY_DISPLAY_VERSION) + " Map Editor.";
+        std::string comment = "Created with Dune City " + getDisplayVersion() + " Map Editor.";
         loadedINIFile = std::make_unique<INIFile>(false, comment);
     }
 

@@ -38,6 +38,7 @@
 #include <Menu/OptionsMenu.h>
 #include <Menu/DisplayMenu.h>
 #include <misc/MenuLayout.h>
+#include <misc/DisplayVersion.h>
 #include <misc/MenuPalette.h>
 #include <Menu/ModMenu.h>
 #include <Menu/Dune2REditorMenu.h>
@@ -253,14 +254,16 @@ MainMenu::MainMenu()
     if(enlargedStartMenus) {
         windowWidget.addWidget(&modVersionLabel, Point(24, getSize().y - 30), Point(getSize().x - 48, 24));
     } else {
-        windowWidget.addWidget(&modVersionLabel, Point(versionX, getSize().y - 58), Point(220, 50));
+        windowWidget.addWidget(&modVersionLabel, Point(versionX, getSize().y - 58),
+                               Point(getSize().x - versionX - 12, 50));
     }
 #if defined(DUNECITY_DESKTOP_UPDATER)
     updateButton.setKeyboardFocusVisible(false);
     updateButton.setText(_("Check for updates"));
     updateButton.setOnClick([this]() { onUpdate(); });
     windowWidget.addWidget(&updateButton, Point(getSize().x-232, getSize().y-38), Point(220,28));
-    windowWidget.setWidgetGeometry(&modVersionLabel, Point(versionX,getSize().y-38), Point(180,28));
+    windowWidget.setWidgetGeometry(&modVersionLabel, Point(versionX,getSize().y-38),
+                                   Point(getSize().x - versionX - 244,28));
     modVersionLabel.setAlignment(Alignment_Left);
 #endif
     onlineButton.setActive();
@@ -323,7 +326,7 @@ void MainMenu::refreshModVersionLabel()
             --bannerFontSize;
         activeModLabel.setTextFontSize(bannerFontSize);
         activeModLabel.setText(bannerText);
-        modVersionLabel.setText("App v" + std::string(DUNECITY_DISPLAY_VERSION));
+        modVersionLabel.setText("App v" + getDisplayVersion());
     } catch (const std::exception& e) {
         SDL_Log("MainMenu: setText failed: %s", e.what());
     }

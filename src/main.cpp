@@ -47,6 +47,7 @@
 
 #include <misc/fnkdat.h>
 #include <misc/FileSystem.h>
+#include <misc/DisplayVersion.h>
 #include <misc/Scaler.h>
 #include <misc/MenuLayout.h>
 #include <misc/string_util.h>
@@ -273,7 +274,7 @@ void setVideoMode(int displayIndex)
         clampWindowedSizeToDisplay(displayIndex, windowWidth, windowHeight);
     }
 #endif
-    window = SDL_CreateWindow("DuneCity " DUNECITY_DISPLAY_VERSION,
+    window = SDL_CreateWindow(("DuneCity " + getDisplayVersion()).c_str(),
                               SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex), SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex),
                               windowWidth, windowHeight,
                               videoFlags);
@@ -1037,10 +1038,10 @@ int main(int argc, char *argv[]) {
     SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
 #endif
 
-    // v1.0.512: build-stamp log so Stefan can verify the binary on disk
-    // actually contains the v1.0.5xx fixes. If this line is missing from
-    // the run log, the .exe is stale.
-    SDL_Log("DuneCity v%s — build stamp active", DUNECITY_DISPLAY_VERSION);
+    // Initialize the display cache before installing any signal callbacks.
+    // Those callbacks only read this process-lifetime pointer.
+    static const char* const crashDisplayVersion = getDisplayVersion().c_str();
+    SDL_Log("DuneCity v%s — build stamp active", crashDisplayVersion);
 
     // v1.0.514: install SIGSEGV/SIGABRT/SIGFPE handler so a fatal native
     // crash (nullptr deref, divide by zero, etc.) writes a diagnostic to
@@ -1077,7 +1078,7 @@ int main(int argc, char *argv[]) {
                 "  Check Dune City.log for the last SDL_Log lines before the\n"
                 "  crash — that is where the actionable diagnostic lives.\n"
                 "=============================\n",
-                sig, sigName, info->si_code, info->si_addr, DUNECITY_DISPLAY_VERSION);
+                sig, sigName, info->si_code, info->si_addr, crashDisplayVersion);
             if(n > 0) {
                 // stderr
                 (void)!write(2, buf, n);
@@ -1218,7 +1219,7 @@ int main(int argc, char *argv[]) {
         installCrashHandlers(crashLogPath.c_str());
 #endif
 
-        SDL_Log("Starting DuneCity %s on %s", DUNECITY_DISPLAY_VERSION, SDL_GetPlatform());
+        SDL_Log("Starting DuneCity %s on %s", getDisplayVersion().c_str(), SDL_GetPlatform());
 
         // First check for missing files
         std::vector<std::string> missingFiles = FileManager::getMissingFiles();
