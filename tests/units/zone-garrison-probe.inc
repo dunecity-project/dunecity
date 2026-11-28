@@ -61,6 +61,7 @@
 #include <dunecity/ZoneGarrisonPolicy.h>
 #include <GUI/dune/InGameMenu.h>
 #include <GUI/dune/LoadSaveWindow.h>
+#include <GUI/dune/HouseStatsWindow.h>
 #include <sstream>
 #include <fstream>
 #include <dunecity/CitySimulation.h>
@@ -1168,6 +1169,7 @@ void checkPrice() {
 #include "zone-garrison-redevelopment-probe.inc"
 #include "zone-garrison-health-probe.inc"
 #include "zone-garrison-panel-probe.inc"
+#include "zone-garrison-stats-probe.inc"
 #include "zone-garrison-appearance-probe.inc"
 
 } // namespace ZoneGarrisonProbe
@@ -1181,6 +1183,11 @@ int runZoneGarrisonProbe() {
     settings.general.playerName = "Garrison tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     require(gModOptions.garrisoningAndCapturing, "Garrisoning and Capturing is not on by default in the Dune City mod");
+    if(std::getenv("ZONE_GARRISON_STATS_ONLY")) {
+        checkGarrisonStats();
+        SDL_Log("ZONE_GARRISON_PROBE_PASS: garrison combat statistics");
+        return -1;
+    }
     if(std::getenv("ZONE_GARRISON_PANEL_ONLY")) {
         checkGarrisonPanel();
         checkGarrisonAppearance();
@@ -1195,7 +1202,7 @@ int runZoneGarrisonProbe() {
                       checkGarrisonButtonRuleOff, checkReinforce, checkTrooperAir, checkTrooperTank, checkNoPull,
                       checkPrice, checkPicture, checkGrowthHeld, checkDemandDeclineHeld, checkPowerDeclineHeld,
                       checkCivicHeld, checkDemolitionEjects, checkBundledHeld, checkOccupantDamageShare,
-                      checkGarrisonRegeneration, checkChipDamageSurvival, checkGarrisonCivicSave}) {
+                      checkGarrisonRegeneration, checkChipDamageSurvival, checkGarrisonCivicSave, checkGarrisonStats}) {
         try {
             check();
         } catch(const std::exception&) {
@@ -1203,7 +1210,7 @@ int runZoneGarrisonProbe() {
             currentGame = nullptr;
         }
     }
-    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 33 cases");
-    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 33 cases failed", failed);
+    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 34 cases");
+    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 34 cases failed", failed);
     return -1;
 }

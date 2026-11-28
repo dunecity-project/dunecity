@@ -537,7 +537,9 @@
 //      damaged-zone capture obey it. SquadOrders, InfantryLanes and InfantryInMix are independent.
 //      The shipped MOD19 bit1 is retired/ignored; installments continue to use bit0. Save layout
 //      unchanged. Earlier peers cannot enforce the same permission and are refused.
-#define NETWORK_PROTOCOL_VERSION            157
+// 159: Garrison weapons launch outside their building instead of striking their
+//      own cover. Combat simulation differs; no save layout change.
+#define NETWORK_PROTOCOL_VERSION            159
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

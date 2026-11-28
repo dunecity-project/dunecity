@@ -381,7 +381,18 @@ void ZoneStructure::updateGarrison() {
     }
 
     const Coord fromTile = getClosestPoint(target->getLocation());
-    const Coord muzzle(fromTile.x * TILESIZE + TILESIZE / 2, fromTile.y * TILESIZE + TILESIZE / 2);
+    Coord muzzle(fromTile.x * TILESIZE + TILESIZE / 2, fromTile.y * TILESIZE + TILESIZE / 2);
+    // A gun moves only 20 pixels before testing structure collisions, less
+    // than half a tile: launching at the tile centre hits our own cover.
+    // Start just beyond its edge along the firing ray, including diagonals.
+    const Coord aim = target->getClosestCenterPoint(fromTile);
+    const int dx = aim.x - muzzle.x, dy = aim.y - muzzle.y;
+    const int extent = std::max(std::abs(dx), std::abs(dy));
+    if(extent > 0) {
+        const int offset = std::min(TILESIZE / 2 + 1, extent);
+        muzzle.x += dx * offset / extent;
+        muzzle.y += dy * offset / extent;
+    }
     const FixPoint distance = blockDistance(fromTile, target->getLocation());
     for(const Uint32 id : garrison_) {
         UnitBase* unit = occupantUnit(id);

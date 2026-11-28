@@ -66,14 +66,12 @@ void runStatsUiProbe(Game& game) {
     seedLedger(pLocalHouse,Unit_Tank,7,123456,3);
     seedLedger(pLocalHouse,Unit_Launcher,2,45678,5);
     seedLedger(otherHouse,Unit_Quad,11,222000,1);
-    // The three types the table must never list, given exactly the things that
-    // would otherwise make a row appear: real ledger history on two houses and,
-    // below, units the house actually owns right now. The City Airplane was the
-    // fourth until it bombed for its house: it is listed since 3fff76592 (Stefan,
-    // 2026-11-23: "also include plane in the unit performance stats") and is
-    // checked as a listed type further down.
-    const Uint32 hiddenTypes[]={Unit_AmbientHelicopter,
-                                Unit_RocketTrike,Unit_EliteLauncher};
+    // Excluded combat variants and purchase-only squads stay out even with
+    // stale ledger history. Squad members fight under Soldier/Trooper.
+    const Uint32 hiddenTypes[]={Unit_AmbientHelicopter,Unit_RocketTrike,Unit_EliteLauncher,
+                                Unit_Infantry,Unit_Troopers,Unit_Infantry5,Unit_Troopers5};
+    for(const auto item : {Unit_Infantry,Unit_Troopers,Unit_Infantry5,Unit_Troopers5})
+        seedLedger(pLocalHouse,item,1,1000,1);
     seedLedger(pLocalHouse,Unit_EliteLauncher,13,98765,4);
     seedLedger(pLocalHouse,Unit_RocketTrike,5,4321,2);
     seedLedger(otherHouse,Unit_AmbientHelicopter,1,1000,1);
@@ -92,6 +90,8 @@ void runStatsUiProbe(Game& game) {
     };
     int liveHiddenPlaced=0;
     for(const auto item : hiddenTypes) {
+        if(item==Unit_Infantry || item==Unit_Troopers
+           || item==Unit_Infantry5 || item==Unit_Troopers5) continue; // No squad object exists.
         // The Tornie-only variants cannot be instantiated outside their mod, so
         // only the types this ruleset can really create are placed.
         if(isTornieExclusiveItem(item) && !ModManager::instance().isTornieContentActive()) continue;

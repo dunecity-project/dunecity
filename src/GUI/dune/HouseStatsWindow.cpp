@@ -59,8 +59,11 @@ constexpr int kMinNameColumnWidth = 76;
 /// The traffic helicopter and the two upgraded variants the player asked to keep
 /// out of the unit table. The city airplane is listed since it bombs (Stefan,
 /// 2026-11-23: "include plane in the unit performance stats").
+/// Squad purchases deploy ordinary Soldiers/Troopers, never squad objects.
+/// Their combat and census belong to those real types, not empty purchase rows.
 constexpr int kHiddenUnitTypes[] = {
-    Unit_AmbientHelicopter, Unit_RocketTrike, Unit_EliteLauncher
+    Unit_AmbientHelicopter, Unit_RocketTrike, Unit_EliteLauncher,
+    Unit_Infantry, Unit_Troopers, Unit_Infantry5, Unit_Troopers5
 };
 
 /// True for a type the unit table never lists, whatever its counters say.
