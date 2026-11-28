@@ -186,6 +186,16 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&technologyInstallmentsCheckbox);
     vboxLeft.addWidget(VSpacer::create(ruleGap));
 
+    aiInfantryTacticsCheckbox.setVisible(ModManager::instance().isCityModeActive());
+    if(aiInfantryTacticsCheckbox.isVisible()) {
+        aiInfantryTacticsCheckbox.setText(_("AI infantry tactics"));
+        aiInfantryTacticsCheckbox.setChecked(gameOptions.aiInfantryTactics);
+        aiInfantryTacticsCheckbox.setExplanation(_("AI infantry tactics"),
+            _("AI houses garrison and reinforce city zones, raid and capture enemy zones, chain captures, buy discounted infantry squads, add infantry production lanes and include infantry in their armies. Individual QuantBot config switches can still enable these tactics when this option is off."));
+        vboxLeft.addWidget(&aiInfantryTacticsCheckbox);
+        vboxLeft.addWidget(VSpacer::create(ruleGap));
+    }
+
     researchPaceLabel.setText(_("Research Pace"));
     researchPaceHBox.addWidget(&researchPaceLabel, 110);
     researchPaceDropDownBox.addEntry(_("Fast"), static_cast<int>(TechResearch::Pace::Fast));
@@ -354,6 +364,7 @@ void GameOptionsWindow::onOK() {
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.researchLab = researchLabCheckbox.isChecked();
     gameOptions.technologyInstallments = technologyInstallmentsCheckbox.isChecked();
+    if(aiInfantryTacticsCheckbox.isVisible()) gameOptions.aiInfantryTactics = aiInfantryTacticsCheckbox.isChecked();
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
     gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();

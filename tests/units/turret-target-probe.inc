@@ -241,6 +241,7 @@ int runTurretTargetProbe() {
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "Turret tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
+    gModOptions.aiInfantryTactics = false;
     require(!gModOptions.turretsFireOnBuildings, "Turrets Can Fire On Buildings is not off by default");
     const std::string mapData = fixtureMap();
     gChecks.open(gOut + "/checks.csv");

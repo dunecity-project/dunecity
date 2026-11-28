@@ -37,7 +37,7 @@ const char* QuantBot::squadOrderRefusal(const BuilderBase* builder, Uint32 item)
     // Tornie content keeps its own order rules (its five-man orders, its own tables).
     if (!DuneCity::InfantrySquad::threeManSquad(item) || ModManager::instance().isTornieFamilyContentActive())
         return nullptr;
-    if (!botConfig().force.squadOrders) return "squad_orders_off";
+    if (!aiInfantryTacticsEnabled(botConfig().force.squadOrders)) return "squad_orders_off";
     const Uint32 single = item == Unit_Infantry ? Unit_Soldier : Unit_Trooper;
     const int singlePrice = purchasePrice(builder, single);
     if (singlePrice > 0 && !DuneCity::InfantrySquad::cheaperPerMan(purchasePrice(builder, item), 3, singlePrice, 1))
@@ -46,7 +46,7 @@ const char* QuantBot::squadOrderRefusal(const BuilderBase* builder, Uint32 item)
 }
 
 Uint32 QuantBot::infantryOrderFor(const BuilderBase* builder, Uint32 single, int64_t money) const {
-    if (!botConfig().force.squadOrders || ModManager::instance().isTornieFamilyContentActive()) return single;
+    if (!aiInfantryTacticsEnabled(botConfig().force.squadOrders) || ModManager::instance().isTornieFamilyContentActive()) return single;
     const Uint32 squad = DuneCity::InfantrySquad::squadOf(single);
     if (squad == ItemID_Invalid || !campaignAvailableToBuild(builder, squad) || squadOrderRefusal(builder, squad))
         return single;
@@ -81,7 +81,7 @@ Uint32 QuantBot::infantryLaneProducer() const {
 
 bool QuantBot::infantryLaneBacklog(BuildPass& pass, Uint32& producer) {
     producer = infantryLaneProducer();
-    if (!botConfig().force.infantryLanes || ModManager::instance().isTornieFamilyContentActive()
+    if (!aiInfantryTacticsEnabled(botConfig().force.infantryLanes) || ModManager::instance().isTornieFamilyContentActive()
         || getHouse()->isGroundUnitLimitReached()) return false;
     // The infantry share's value of the army the house is funding, as the vehicle lanes compare the
     // funded mix with what is fielded and queued (planYardLanes).
@@ -97,7 +97,7 @@ bool QuantBot::infantryLaneBacklog(BuildPass& pass, Uint32& producer) {
     const auto& data = currentGame->objectData.data;
     const Uint32 single = producer == Structure_WOR ? Unit_Trooper : Unit_Soldier;
     const Uint32 squad = DuneCity::InfantrySquad::squadOf(single);
-    const int orderValue = botConfig().force.squadOrders && data[squad][houseID].enabled
+    const int orderValue = aiInfantryTacticsEnabled(botConfig().force.squadOrders) && data[squad][houseID].enabled
         ? data[squad][houseID].price : data[single][houseID].price;
     // Production has a short empty-queue gap between delivery and the AI's next order. Sustain the
     // funded demand, not uninterrupted queue occupancy; still require busy lanes when expanding.
@@ -140,19 +140,19 @@ void QuantBot::updateInfantryLanes() {
 }
 
 bool QuantBot::cityInfantryShare() const {
-    return botConfig().force.infantryInMix && !ModManager::instance().isTornieFamilyContentActive();
+    return aiInfantryTacticsEnabled(botConfig().force.infantryInMix) && !ModManager::instance().isTornieFamilyContentActive();
 }
 
 int QuantBot::infantryOrderCash(const BuilderBase* builder, Uint32 item) const {
     // SquadOrders: a builder pays as it builds, so a squad is affordable wherever its single is.
-    if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()
+    if (aiInfantryTacticsEnabled(botConfig().force.squadOrders) && !ModManager::instance().isTornieFamilyContentActive()
         && DuneCity::InfantrySquad::threeManSquad(item))
         return purchasePrice(builder, item == Unit_Infantry ? Unit_Soldier : Unit_Trooper);
     return purchasePrice(builder, item);
 }
 
 int QuantBot::infantryQuotaValue(Uint32 item, int value) const {
-    if (!botConfig().force.squadOrders || ModManager::instance().isTornieFamilyContentActive()
+    if (!aiInfantryTacticsEnabled(botConfig().force.squadOrders) || ModManager::instance().isTornieFamilyContentActive()
         || !DuneCity::InfantrySquad::threeManSquad(item)) return value;
     return std::max(1, value / 3);
 }

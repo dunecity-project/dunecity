@@ -523,7 +523,11 @@
 //      over Residential, Commercial and Industrial zones nobody garrisons and gives up one whose
 //      garrison has gone; an order its owner gives is kept (Saboteur::passesOver). Targets differ, so a
 //      149 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            151
+// 152: city match option AI Infantry Tactics (default on; bit 1 of the MOD19 installments byte
+//      is set when off). QuantBot's nine infantry/garrison config switches are ORed with this
+//      city-only rule; vanilla is unaffected. AI decisions differ, so 151 peers are refused.
+//      Save layout unchanged; the default leaves the settings byte as before.
+#define NETWORK_PROTOCOL_VERSION            152
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

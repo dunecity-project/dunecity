@@ -351,6 +351,7 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
     gameOptions.saboteurHunt = true;
     gameOptions.saboteurSkipsCityZones = true;
+    gameOptions.aiInfantryTactics = true;
     gameOptions.hospitalCare = true;
     gameOptions.turretsFireOnBuildings = false;
     // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
@@ -532,7 +533,10 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                 }
             }
             if(hasTechnologyInstallments) {
-                gameOptions.technologyInstallments = stream.readBool();
+                // Protocol 152: bit 1 is AI Infantry Tactics off. Bit 0 remains installments.
+                const Uint8 cityAI = stream.readUint8();
+                gameOptions.technologyInstallments = (cityAI & 1) != 0;
+                gameOptions.aiInfantryTactics = (cityAI & 2) == 0;
             }
             if(hasStartTechLevel) {
                 // Refused, not clamped: both peers must play the level the host chose.
@@ -762,7 +766,9 @@ void GameInitSettings::save(OutputStream& stream) const {
         // Bit 7 (protocol 145): Fremen Palace Worm off.
         | (gameOptions.fremenPalaceWorm ? 0 : 128));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
-    stream.writeBool(gameOptions.technologyInstallments);
+    // Protocol 152: bit 1 is AI Infantry Tactics off; default on preserves the original byte.
+    stream.writeUint8((gameOptions.technologyInstallments ? 1 : 0)
+        | (gameOptions.aiInfantryTactics ? 0 : 2));
     // MOD20: 0 keeps the map's tech level, which is what every older stream means.
     // Bit 7: the Saboteur hunt is off (the default, on, leaves the byte as it was).
     stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)

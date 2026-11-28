@@ -336,6 +336,7 @@ public:
                     && (startTechLevel == goc.startTechLevel)
                     && (saboteurHunt == goc.saboteurHunt)
                     && (saboteurSkipsCityZones == goc.saboteurSkipsCityZones)
+                    && (aiInfantryTactics == goc.aiInfantryTactics)
                     && (hospitalCare == goc.hospitalCare)
                     && (turretsFireOnBuildings == goc.turretsFireOnBuildings)
                     && (trooperAntiAir == goc.trooperAntiAir)
@@ -425,6 +426,7 @@ public:
             // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
             if(!saboteurHunt) optStr += "/saboteurHunt=0";
             if(!saboteurSkipsCityZones) optStr += "/saboteurSkipsCityZones=0";
+            if(!aiInfantryTactics) optStr += "/aiInfantryTactics=0";
             if(!hospitalCare) optStr += "/hospitalCare=0";
             if(turretsFireOnBuildings) optStr += "/turretsFireOnBuildings=1";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
@@ -520,6 +522,10 @@ public:
         /// compared in one build. INI key "Saboteurs Skip City Zones"; bit 4 of the MOD20 byte, set
         /// when off.
         bool        saboteurSkipsCityZones = true;
+        /// City games: enable QuantBot garrisons, capture raids/levies/chains, reinforcement,
+        /// infantry squads, production lanes and infantry in the army mix. Individual QuantBot
+        /// config switches remain independent overrides. Inert in non-city games.
+        bool        aiInfantryTactics = true;
         /// City games: Hospitals heal infantry (Stefan, 2026-11-27; dunecity/HospitalCare.h). A wounded
         /// soldier sent for repair walks or is flown beside an own Hospital and heals there, five at a time;
         /// a Hospital with a patient keeps its type. Off, infantry are sent to Repair Yards as up to

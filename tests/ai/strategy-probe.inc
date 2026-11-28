@@ -779,6 +779,7 @@ int runQuantBotStrategyProbe() {
     settings.network.metaServer = "http://127.0.0.1:1/";
     settings.gameOptions.fogOfWar = false;
     settings.gameOptions.immortalHumanPlayer = false;
+    settings.gameOptions.aiInfantryTactics = false;
     const auto seed = static_cast<Uint32>(std::stoul(std::getenv("BALANCE_SEED")));
     // Calibration only: BALANCE_STRATEGY_SECTIONS=34 runs just those numbered checks; CTest runs all.
     const char* sections = std::getenv("BALANCE_STRATEGY_SECTIONS");

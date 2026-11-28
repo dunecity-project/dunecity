@@ -1479,7 +1479,7 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     // InfantryInMix (docs/infantry-squads.md): a city's WOR also buys to the measured infantry share.
-    const bool cityShare = pass.citySimEnabled && botConfig().force.infantryInMix
+    const bool cityShare = pass.citySimEnabled && aiInfantryTacticsEnabled(botConfig().force.infantryInMix)
         && !ModManager::instance().isTornieFamilyContentActive();
     // A city raises rocket infantry only while a hostile wing is actually
     // observed, and then only inside the ordinary infantry quota, because they
@@ -1518,7 +1518,7 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
             if (pass.citySimEnabled
                 && (infantryOrderCash(turn.pBuilder,candidate) > pass.money - pass.cityWorkingReserve
                     || !infantryQuotaAdmits(pass, infantryQuotaValue(candidate, value)))) continue;
-            if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()) {
+            if (aiInfantryTacticsEnabled(botConfig().force.squadOrders) && !ModManager::instance().isTornieFamilyContentActive()) {
                 // SquadOrders: the offer cheapest per man.
                 if (itemID == NONE_ID || DuneCity::InfantrySquad::cheaperPerMan(purchasePrice(turn.pBuilder, candidate),
                         DuneCity::InfantrySquad::orderSize(candidate), purchasePrice(turn.pBuilder, itemID),
@@ -1574,7 +1574,7 @@ void QuantBot::buildBarracks(BuildPass& pass, BuilderTurn& turn) {
     int houseID = ModManager::instance().isTornieFamilyContentActive()
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
-    const bool cityShare = pass.citySimEnabled && botConfig().force.infantryInMix
+    const bool cityShare = pass.citySimEnabled && aiInfantryTacticsEnabled(botConfig().force.infantryInMix)
         && !ModManager::instance().isTornieFamilyContentActive();
     if ((!pass.citySimEnabled || cityShare)
         && !turn.pBuilder->isUpgrading()
@@ -1599,7 +1599,7 @@ void QuantBot::buildBarracks(BuildPass& pass, BuilderTurn& turn) {
                     || int64_t(pass.militaryValue) + data[candidate][houseID].price > pass.lightBudget
                     || !infantryQuotaAdmits(pass, data[candidate][houseID].price))) continue;
             if (!campaignAvailableToBuild(turn.pBuilder,candidate)) continue;
-            if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()) {
+            if (aiInfantryTacticsEnabled(botConfig().force.squadOrders) && !ModManager::instance().isTornieFamilyContentActive()) {
                 // SquadOrders: the offer cheapest per man.
                 if (itemID == NONE_ID || DuneCity::InfantrySquad::cheaperPerMan(purchasePrice(turn.pBuilder, candidate),
                         DuneCity::InfantrySquad::orderSize(candidate), purchasePrice(turn.pBuilder, itemID),

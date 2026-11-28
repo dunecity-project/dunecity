@@ -179,6 +179,11 @@ void QuantBot::init() {
 
 QuantBot::~QuantBot() = default;
 
+bool QuantBot::aiInfantryTacticsEnabled(bool configured) const {
+    return configured || (currentGame != nullptr && currentGame->isCitySimEnabled()
+        && currentGame->getGameInitSettings().getGameOptions().aiInfantryTactics);
+}
+
 
 bool QuantBot::hasExplicitUnitCountOverride() const {
     return currentGame != nullptr

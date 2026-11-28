@@ -23,6 +23,7 @@
 // match log (house=<engine house>), which tests/ai/activation-events.json counts per play style.
 
 #include "QuantBotInternal.h"
+#include <players/HumanPlayer.h>
 #include <structures/ZoneStructure.h>
 #include <units/InfantryBase.h>
 #include <structures/BuilderBase.h>
@@ -104,8 +105,9 @@ int tenths(FixPoint distance) { return (distance * 10).lround(); }
 
 void QuantBot::updateZoneGarrisons() {
     const auto& force = botConfig().force;
-    if ((!force.zoneGarrison && !force.zoneCaptureRaid && !force.zoneCaptureLevy && !force.zoneGarrisonReinforce
-         && !force.zoneFrontGarrison && !force.zoneCaptureChain)
+    if ((!aiInfantryTacticsEnabled(force.zoneGarrison) && !aiInfantryTacticsEnabled(force.zoneCaptureRaid)
+         && !aiInfantryTacticsEnabled(force.zoneCaptureLevy) && !aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)
+         && !aiInfantryTacticsEnabled(force.zoneFrontGarrison) && !aiInfantryTacticsEnabled(force.zoneCaptureChain))
         || !ZoneStructure::garrisonsEnabled() || builderOnly()
         || currentGame == nullptr || !currentGame->isCitySimEnabled()) return;
     AITelemetry::PerformanceScope perfScope("ai.zoneGarrisons", getGameCycleCount(), getHouse()->getHouseID());
@@ -203,7 +205,7 @@ void QuantBot::updateZoneGarrisons() {
     // Threat on each zone we hold (own or captured): one point an enemy, three a soldier that can capture.
     std::map<Uint32, int> threat;
     std::map<Uint32, ZoneStructure*> zones;
-    if (force.zoneGarrison || force.zoneGarrisonReinforce) {
+    if (aiInfantryTacticsEnabled(force.zoneGarrison) || aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)) {
         std::vector<Uint32> seen;
         for (const UnitBase* enemy : enemies) {
             const Coord at = enemy->getLocation();
@@ -246,7 +248,7 @@ void QuantBot::updateZoneGarrisons() {
 
     // Our zones at the front: the kFrontZones nearest a visible enemy building, nearest first.
     std::vector<std::pair<int, ZoneStructure*>> front;
-    if (force.zoneFrontGarrison && !enemyBuildings.empty()) {
+    if (aiInfantryTacticsEnabled(force.zoneFrontGarrison) && !enemyBuildings.empty()) {
         for (const StructureBase* structure : getStructureList()) {
             if (structure->getOwner() != house) continue;
             auto* zone = dynamic_cast<ZoneStructure*>(const_cast<StructureBase*>(structure));
@@ -264,7 +266,7 @@ void QuantBot::updateZoneGarrisons() {
         return std::any_of(front.begin(), front.end(), [&](const auto& item) { return item.second == zone; });
     };
 
-    if (force.zoneGarrison) {
+    if (aiInfantryTacticsEnabled(force.zoneGarrison)) {
         // Defence: the most threatened zones first, the nearest free soldiers into them.
         for (const auto& [negPoints, id] : ranked) {
             if (orders >= kMaxOrdersPerPass) break;
@@ -282,7 +284,7 @@ void QuantBot::updateZoneGarrisons() {
     }
 
     // Reinforce: Troopers fill garrisons of ours enemies close on, up to the zone's four.
-    if (force.zoneGarrisonReinforce) {
+    if (aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)) {
         for (const auto& [negPoints, id] : ranked) {
             if (orders >= kMaxOrdersPerPass) break;
             ZoneStructure* zone = zones[id];
@@ -313,7 +315,10 @@ void QuantBot::updateZoneGarrisons() {
     // Release: a garrison of ours in an own zone with no visible enemy near comes out to rejoin the
     // army. A house a human shares keeps the garrisons its human put there; a captured zone keeps its
     // garrison (it would go back the moment they left); a front zone keeps its garrison.
-    if (force.zoneGarrison && house->isAI()) {
+    if (aiInfantryTacticsEnabled(force.zoneGarrison)
+        && std::none_of(house->getPlayerList().begin(), house->getPlayerList().end(), [](const auto& player) {
+            return dynamic_cast<const HumanPlayer*>(player.get()) != nullptr;
+        })) {
         for (const StructureBase* structure : getStructureList()) {
             if (structure->getOwner() != house) continue;
             auto* zone = dynamic_cast<ZoneStructure*>(const_cast<StructureBase*>(structure));
@@ -333,7 +338,7 @@ void QuantBot::updateZoneGarrisons() {
     }
 
     // Offence on the way: a soldier passing an empty enemy zone takes it (one soldier a zone a pass).
-    if (force.zoneGarrison) {
+    if (aiInfantryTacticsEnabled(force.zoneGarrison)) {
         for (const UnitBase* soldier : soldiers) {
             if (orders >= kMaxOrdersPerPass) break;
             if (!available(soldier)) continue;
@@ -389,7 +394,7 @@ void QuantBot::updateZoneGarrisons() {
 
     // Chain: the next empty enemy zone across the street from a zone we hold (own or captured),
     // block by block: each zone taken becomes the next starting point.
-    if (force.zoneCaptureChain && !targets.empty()) {
+    if (aiInfantryTacticsEnabled(force.zoneCaptureChain) && !targets.empty()) {
         std::vector<const ZoneStructure*> held;
         for (const StructureBase* structure : getStructureList()) {
             if (structure->getOwner() != house) continue;
@@ -415,7 +420,7 @@ void QuantBot::updateZoneGarrisons() {
     }
 
     // Raid: empty enemy zones with no enemy that can fight or capture near, and no turret.
-    if (force.zoneCaptureRaid) {
+    if (aiInfantryTacticsEnabled(force.zoneCaptureRaid)) {
         std::vector<const ZoneStructure*> unguarded;
         for (const ZoneStructure* zone : targets) {
             bool guarded = false;
@@ -434,7 +439,7 @@ void QuantBot::updateZoneGarrisons() {
 
     // Levy: keep kLevySoldiers Soldiers in training at the Barracks while enemy zones are there
     // to take, and walk every free Soldier into the nearest one.
-    if (force.zoneCaptureLevy && !targets.empty()) {
+    if (aiInfantryTacticsEnabled(force.zoneCaptureLevy) && !targets.empty()) {
         int levy = 0;
         for (const UnitBase* unit : getUnitList()) {
             if (unit->getOwner() == house && unit->getItemID() == Unit_Soldier && unit->getHealth() > 0) ++levy;

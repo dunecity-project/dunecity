@@ -1917,6 +1917,54 @@ TEST_CASE("Saboteurs Skip City Zones defaults on and its off state is hashed and
     }
 }
 
+TEST_CASE("AI infantry tactics default on for city games and round-trip beside installments",
+          "[ai-infantry-tactics][city][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.aiInfantryTactics);
+    auto off = defaults;
+    off.aiInfantryTactics = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+    defaults.cityEffects = off.cityEffects = true;
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.cityEffects = GENERATE(false, true);
+    options.aiInfantryTactics = GENERATE(false, true);
+    options.technologyInstallments = GENERATE(false, true);
+    options.startTechLevel = GENERATE(0, 5, 9);
+    options.saboteurSkipsCityZones = GENERATE(false, true);
+    original.setGameOptions(options);
+    OMemoryStream saved;
+    saved.open();
+    original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    REQUIRE(static_cast<Uint8>(encoded[encoded.size() - Mod20Bytes - 1])
+            == static_cast<Uint8>((options.technologyInstallments ? 1 : 0)
+                                 | (options.aiInfantryTactics ? 0 : 2)));
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    auto serializedOptions = options;
+    // City Effects is mod-derived, not serialized (same contract as degradation-probe.inc).
+    serializedOptions.cityEffects = SettingsClass::GameOptionsClass{}.cityEffects;
+    REQUIRE(restored.getGameOptions() == serializedOptions);
+    REQUIRE(restored.getGameOptions().aiInfantryTactics == options.aiInfantryTactics);
+    REQUIRE(restored.getGameOptions().getHash() == serializedOptions.getHash());
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+    REQUIRE(input.getRemainingLength() == 0);
+
+    SECTION("old MOD19 bytes keep the new default without enabling installments") {
+        auto bytes = encoded;
+        bytes[bytes.size() - Mod20Bytes - 1] = static_cast<char>(options.technologyInstallments);
+        IMemoryStream legacy(bytes.data(), bytes.size());
+        GameInitSettings previous(legacy);
+        REQUIRE(previous.getGameOptions().aiInfantryTactics);
+        REQUIRE(previous.getGameOptions().technologyInstallments == options.technologyInstallments);
+    }
+}
+
 TEST_CASE("Turrets Can Fire On Buildings: the options hash names the rule only when it is on",
           "[turret][settings]") {
     // getHash() spells out only the non-default state, so the default hash (and every saved or

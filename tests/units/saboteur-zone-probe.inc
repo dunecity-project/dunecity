@@ -396,6 +396,7 @@ int runSaboteurZoneProbe() {
     using namespace SaboteurZoneProbe;
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
+    gModOptions.aiInfantryTactics = false;
     require(gModOptions.saboteurSkipsCityZones, "Saboteurs Skip City Zones is not on by default in the Dune City mod");
     int failed = 0, cases = 0;
     auto run = [&](auto check) {

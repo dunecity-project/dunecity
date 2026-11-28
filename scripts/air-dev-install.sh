@@ -8,10 +8,10 @@
 # libraries; the script refuses if any is missing. It is not the official static staging
 # package and qualifies nothing.
 #
-# New features are on in the game itself, not in a separate mod (Stefan: "i just want it as a
-# feature, not a mod"): the copy's shipped `config/QuantBot Config.ini.default` gets the switches
-# set to 1 and the app is re-signed ad hoc. The game reseeds its built-in Dune City rules from that
-# file at launch (ModManager::dunecityNeedsReseed), and the script makes Dune City the active mod.
+# New features are part of the game, not a separate mod (Stefan: "i just want it as a
+# feature, not a mod"). AI infantry tactics uses the normal default-on Dune City menu option.
+# Only DEV_SWITCHES are forced on in this copy's shipped defaults, then the app is re-signed.
+# The game reseeds those defaults at launch; the script keeps built-in Dune City active.
 #
 #   AGENT_OWNER=FRAMEWORK:SESSION:AGENT scripts/air-dev-install.sh [--no-build] [--wait] [--switch NAME]...
 #
@@ -22,8 +22,7 @@
 # The previous app is kept in /tmp/dunecity-dev-<sha> on the Air.
 set -euo pipefail
 
-DEV_SWITCHES=(ZoneGarrison ZoneCaptureRaid ZoneCaptureLevy ZoneGarrisonReinforce ZoneFrontGarrison
-              ZoneCaptureChain SquadOrders InfantryLanes InfantryInMix)
+DEV_SWITCHES=()
 HOST=${DUNECITY_AIR_HOST:-Stefans-MacBook-Air.local}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 BIN=$REPO/build-int/bin
@@ -37,7 +36,7 @@ while (($#)); do
     esac
     shift
 done
-((${#switches[@]})) || switches=("${DEV_SWITCHES[@]}")
+if ((${#switches[@]} == 0 && ${#DEV_SWITCHES[@]} > 0)); then switches=("${DEV_SWITCHES[@]}"); fi
 
 if ((build)); then
     : "${AGENT_OWNER:?set AGENT_OWNER=FRAMEWORK:SESSION:AGENT for the build mutex}"
@@ -54,7 +53,7 @@ work=$(mktemp -d /private/tmp/dunecity-air-dev.XXXXXX)
 trap 'rm -rf "$work"' EXIT
 ditto "$BIN/dunecity.app" "$work/dunecity.app"
 defaults="$work/dunecity.app/Contents/Resources/config/QuantBot Config.ini.default"
-for key in "${switches[@]}"; do
+for key in "${switches[@]+"${switches[@]}"}"; do
     grep -q "^$key=" "$defaults" || { echo "unknown switch $key" >&2; exit 1; }
     sed -i '' -E "s/^$key=.*/$key=1/" "$defaults"
 done
@@ -65,7 +64,7 @@ ssh -o ConnectTimeout=10 "$HOST" "rm -rf '$dest' && mkdir -p '$dest'"
 tar -C "$work" -cf - dunecity.app | ssh "$HOST" "tar -xf - -C '$dest'"
 
 # Install, make built-in Dune City the active mod, report what the Air has.
-ssh "$HOST" bash -s -- "$dest" "$wait" "$sha" "${switches[@]}" <<'REMOTE'
+ssh "$HOST" bash -s -- "$dest" "$wait" "$sha" "${switches[@]+"${switches[@]}"}" <<'REMOTE'
 set -euo pipefail
 dest=$1 wait=$2 sha=$3; shift 3
 app=$dest/dunecity.app
@@ -96,5 +95,5 @@ fi
 # The House to House test mod (2026-11-28) stays installed but inactive: saves made under it name it.
 version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' /Applications/dunecity.app/Contents/Info.plist)
 echo "INSTALLED $sha ($version), app sha256 $(shasum -a 256 /Applications/dunecity.app/Contents/MacOS/dunecity | cut -c1-16)"
-echo "on in the game's own Dune City rules: $*; active mod: $(cat "$mods/active_mod.txt" 2>/dev/null)"
+echo "AI infantry tactics follows the Dune City menu default; extra dev switches: $*; active mod: $(cat "$mods/active_mod.txt" 2>/dev/null)"
 REMOTE

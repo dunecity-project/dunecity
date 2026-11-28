@@ -29,6 +29,7 @@ int runBrutalUnitOverrideProbe() {
     };
     require(ModManager::instance().setActiveMod(mod), "Missing override fixture mod");
     settings.general.playerName = "Override tester";
+    settings.gameOptions.aiInfantryTactics = false;
     std::ifstream mapFile(PROBE_MAP_PATH);
     const std::string mapData((std::istreambuf_iterator<char>(mapFile)), {});
     auto game = std::make_unique<Game>();
