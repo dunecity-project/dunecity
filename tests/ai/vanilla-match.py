@@ -51,6 +51,7 @@ used in docs/formations.md, scored by tests/ai/match_score.py (placement score, 
 negative, verdict on the paired difference; --scoring legacy for the old rule).
 """
 import argparse
+import configparser
 import csv
 import itertools
 import re
@@ -156,7 +157,7 @@ GARRISON_ROW_FIELDS = KEY + ('event',) + GARRISON_FIELDS
 # QuantBot's infantry purchases with their reason (INFANTRY_BUY) and the Barracks/WOR tax census
 # (CITY_INFANTRY_HOUSING).
 INFANTRY_KINDS = ('INFANTRY_ORDER', 'INFANTRY_SQUAD', 'INFANTRY_MIX', 'INFANTRY_LANE', 'INFANTRY_BUY',
-                  'CITY_INFANTRY_HOUSING')
+                  'INFANTRY_DELIVERY', 'INFANTRY_MIX_DELIVERED', 'CITY_INFANTRY_HOUSING')
 INFANTRY_FIELDS = ('house', 'event', 'builder', 'builder_item', 'item', 'men', 'expected', 'price', 'squad_offered',
                    'ai', 'share_bps', 'opening_bps', 'learning', 'reward_milli', 'loss_milli', 'score', 'type',
                    'infantry_value', 'military_value', 'on_share', 'producer', 'have', 'busy', 'deficit', 'credits',
@@ -423,22 +424,34 @@ def play(args, scratch, binary, key):
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,
                '--minutes', str(args.minutes), '--seed', seed, '--capture-mib', '256',
                '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
+    game_options = args.game_options
     if generated := skirmish(name):
         size, mod = generated
         command += ['--skirmish-ffa-size', str(size), '--skirmish-map-seed', seed,
-                    '--mod', 'Dune2R' if mod == 'dune2r' else mod,
-                    '--game-options', str(args.game_options or SKIRMISH_OPTIONS)]
+                    '--mod', 'Dune2R' if mod == 'dune2r' else mod]
+        game_options = game_options or SKIRMISH_OPTIONS
     else:
         command += ['--custom-map', str(game_map(name, scratch))]
         if args.map_mod:
             command += ['--mod', 'Dune2R' if args.map_mod == 'dune2r' else args.map_mod]
-        if args.game_options:
-            command += ['--game-options', str(args.game_options)]
+    # The lobby convenience option enables all infantry switches. Keep runtime OFF/ON arms independent.
+    options = configparser.ConfigParser(strict=False, interpolation=None)
+    options.optionxform = str
+    if game_options:
+        options.read(game_options)
+    if not options.has_section('Game Options'):
+        options.add_section('Game Options')
+    options.set('Game Options', 'AI Infantry Tactics', 'false')
+    options_path = scratch / (out.name + '-game-options.ini')
+    with options_path.open('w') as handle:
+        options.write(handle)
+    command += ['--game-options', str(options_path)]
     if not args.ai_telemetry:
         command.append('--no-ai-telemetry')
     assert '--army-deploys-regression-observer' not in command
     started = time.time()
     outcome = subprocess.run(command, cwd=root, capture_output=True, text=True)
+    options_path.unlink(missing_ok=True)
     wall = round(time.time() - started)
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
@@ -535,7 +548,7 @@ def play(args, scratch, binary, key):
                              **{f: data.get(f, '') for f in GARRISON_FIELDS}})
     append(results / 'garrison.csv', GARRISON_ROW_FIELDS, garrison)
     infantry = []
-    for l in lines:
+    for l in itertools.chain(lines, activation.infantry_mix_deliveries(lines)):
         for kind in INFANTRY_KINDS:
             if kind + ':' in l:
                 data = parse(l, kind + ':')

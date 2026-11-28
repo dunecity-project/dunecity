@@ -26,6 +26,7 @@ than half of the arm's house-games. A label whose style declared no events is ma
 import csv
 import json
 from collections import defaultdict
+from itertools import chain
 from pathlib import Path
 
 REGISTRY_PATH = Path(__file__).resolve().with_name('activation-events.json')
@@ -78,6 +79,31 @@ def _fields(line, marker):
     return dict(part.split('=', 1) for part in line.split(marker, 1)[1].split() if '=' in part)
 
 
+def infantry_mix_deliveries(lines):
+    """Yield only deliveries of the share order accepted at an empty infantry producer.
+
+    A new order invalidates any older purchase at that builder (including cancelled/repeated orders).
+    House, builder and item must match; a delivery is consumed once. No army census is evidence here.
+    """
+    pending = {}
+    for line in lines:
+        if 'INFANTRY_ORDER:' in line:
+            fields = _fields(line, 'INFANTRY_ORDER:')
+            pending.pop((fields.get('house'), fields.get('builder')), None)
+        elif 'INFANTRY_BUY:' in line:
+            fields = _fields(line, 'INFANTRY_BUY:')
+            # The ordinary Trooper-support controller also logs trooper_infantry_share with the switch
+            # OFF. Only the city mix path is activation evidence for InfantryInMix.
+            if fields.get('reason') == 'city_infantry_share':
+                pending[(fields.get('house'), fields.get('builder'))] = fields.get('item')
+        elif 'INFANTRY_DELIVERY:' in line:
+            fields = _fields(line, 'INFANTRY_DELIVERY:')
+            item = pending.pop((fields.get('house'), fields.get('builder')), None)
+            if (item is not None and item == fields.get('item') and int(fields.get('men', 0)) > 0
+                    and fields.get('men') == fields.get('expected')):
+                yield 'INFANTRY_MIX_DELIVERED: ' + ' '.join(f'{k}={v}' for k, v in fields.items())
+
+
 def count(lines, styles_by_house, registry):
     """{house number: (fired, succeeded)} for every house whose style is registered."""
     out = {house: [0, 0] for house, style in styles_by_house.items() if style in registry}
@@ -88,7 +114,9 @@ def count(lines, styles_by_house, registry):
         for kind_index, kind in enumerate(('fire', 'success')):
             for marker, filters in registry[styles_by_house[house]][kind]:
                 wanted[marker].append((house, kind_index, filters))
-    for line in lines:
+    # The original input can be an iterator; keep it once for production-provenance matching.
+    lines = list(lines)
+    for line in chain(lines, infantry_mix_deliveries(lines)):
         for marker, targets in wanted.items():
             if marker not in line:
                 continue

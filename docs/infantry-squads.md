@@ -59,9 +59,9 @@ barracks count as a high density residential and is taxable".
   - the infantry share's deficit at least the lane's price;
   - the lane's price plus 1000 over the house's reserve.
 
-  The deviation, "if the ai needs more capacity": the rule must also hold for 2 minutes, and the deficit must
-  be at least 3 orders per existing lane. In the first real games, lanes added on one busy moment did not
-  raise output (men per 10 minutes went 10 -> 10 and 13 -> 7), because demand was the limit, not capacity.
+  The deviation, "if the ai needs more capacity": funded demand must hold for 2 minutes, and the deficit must
+  be at least 3 orders per existing lane. Normal delivery-to-reorder gaps do not reset that clock; the lanes
+  still must be busy at expansion. Early lanes added on a momentary deficit did not raise output.
   - It builds a WOR once Troopers are fielded, otherwise a Barracks.
   - The Yard rule is `infantry_unit_backlog`, right after `light_unit_backlog`.
 - **InfantryInMix.** Infantry has been one more slot of the unit mix since 2026-11-26 (`938eae7c7`,
@@ -76,7 +76,8 @@ barracks count as a high density residential and is taxable".
   - a city's Barracks and WOR buy to the measured share, inside the city working reserve;
   - the Trooper target rises to the share;
   - a house with a share of 2% or more and neither building builds its first Barracks or WOR
-    (`infantry_first_producer`).
+    (`infantry_first_producer`) before optional city growth, keeping its city working reserve. The pass's
+    money already excludes economy/strategic reservations, so those are not withheld a second time.
 
   The debug line "Adaptive unit mix" now prints Infantry's reward, losses and share.
 
@@ -85,6 +86,11 @@ barracks count as a high density residential and is taxable".
 - `INFANTRY_ORDER` (engine): every foot-soldier order, with its price, its men, and whether the builder
   offered the squad.
 - `INFANTRY_SQUAD event=delivered` (engine): the men a squad put on the map.
+- `INFANTRY_DELIVERY` (engine): actual singles/squads deployed, their paid price, and the producer ID.
+- `INFANTRY_MIX_DELIVERED` (harness): a full delivery matched to that producer's accepted
+  `city_infantry_share` purchase. Only this proves InfantryInMix's effect. Ordinary
+  `trooper_infantry_share` support runs even with the switch OFF and is not activation evidence.
+  Building survivors and census `on_share=1` never count. A later order invalidates an older pending match.
 - `INFANTRY_MIX` (QuantBot, once a game minute): the measured share, its opening, the score, the infantry and
   army value, and `on_share`.
 - `INFANTRY_LANE` (first, backlog, ordered, standing).

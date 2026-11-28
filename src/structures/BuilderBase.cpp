@@ -915,6 +915,7 @@ bool BuilderBase::update() {
         if(deployTimer == 0) {
             int finishedItemID = currentProducedItem;
             const Uint32 builtItemID = currentProducedItem;
+            const int builtPrice = int(getCurrentProductionPrice());
             removeBuiltItemFromProductionQueue();
 
             int num2Place = 1;
@@ -989,6 +990,12 @@ bool BuilderBase::update() {
                         AITelemetry::Record().set("builder", getObjectID()).set("item", finishedItemID)
                             .set("object", newUnit->getObjectID()).set("x", spot.x).set("y", spot.y));
                 }
+            }
+            if(DuneCity::InfantrySquad::orderSize(builtItemID) > 0) {
+                // Actual factory output only: soldiers escaping destroyed buildings never reach this path.
+                SDL_Log("INFANTRY_DELIVERY: house=%d builder=%u item=%u price=%d men=%d expected=%d cycle=%u",
+                    owner->getHouseID(), getObjectID(), builtItemID, builtPrice, placed, num2Place,
+                    currentGame->getGameCycleCount());
             }
             if(DuneCity::InfantrySquad::threeManSquad(builtItemID)) {
                 // docs/infantry-squads.md: every squad puts its three men on the map.

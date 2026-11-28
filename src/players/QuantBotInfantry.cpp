@@ -99,14 +99,16 @@ bool QuantBot::infantryLaneBacklog(BuildPass& pass, Uint32& producer) {
     const Uint32 squad = DuneCity::InfantrySquad::squadOf(single);
     const int orderValue = botConfig().force.squadOrders && data[squad][houseID].enabled
         ? data[squad][houseID].price : data[single][houseID].price;
-    const bool rule = QuantBotBuildPolicy::needsProductionLane(actual, pass.itemCount[producer], busy, deficit,
+    // Production has a short empty-queue gap between delivery and the AI's next order. Sustain the
+    // funded demand, not uninterrupted queue occupancy; still require busy lanes when expanding.
+    const bool demand = QuantBotBuildPolicy::needsProductionLane(actual, pass.itemCount[producer], actual, deficit,
         pass.money, pass.economyReserve, data[producer][houseID].price)
         && int64_t(deficit) >= int64_t(kLaneDeficitOrders) * actual * std::max(1, orderValue);
     const Uint32 now = currentGame->getGameCycleCount();
     auto& since = infantryLaneRuleSince_[laneIndex(producer)];
-    if (!rule) since = 0;
+    if (!demand) since = 0;
     else if (since == 0) since = std::max<Uint32>(1, now);
-    const bool backlog = rule && now >= since + kLaneSustainCycles;
+    const bool backlog = demand && busy * 4 >= actual * 3 && now >= since + kLaneSustainCycles;
     auto& logged = infantryLaneLogCycle_[laneIndex(producer)];
     if (backlog && (logged == 0 || now >= logged + kInfantryLaneLogCycles)) {
         logged = std::max<Uint32>(1, now);
@@ -162,7 +164,9 @@ Uint32 QuantBot::infantryFirstProducer(BuildPass& pass, const BuilderBase* yard)
     for (const Uint32 producer : {Structure_WOR, Structure_Barracks}) {
         if (!campaignAvailableToBuild(yard, producer)) continue;
         const int price = currentGame->objectData.data[producer][houseID].price;
-        if (pass.money < pass.economyReserve + pass.cityWorkingReserve + price + 1000) return NONE_ID;
+        // pass.money is already net of strategic/economy reservations. Keep the city's working
+        // cash once, rather than adding those reservations again and starving the first Barracks.
+        if (int64_t(pass.money) < int64_t(pass.cityWorkingReserve) + price) return NONE_ID;
         return producer;
     }
     return NONE_ID;

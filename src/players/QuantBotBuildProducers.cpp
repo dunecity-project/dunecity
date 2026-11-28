@@ -373,10 +373,12 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
         || (!supportTroop && !infantryQuotaAdmits(pass, infantryQuotaValue(itemID, data[itemID][houseID].price)))
         || int64_t(std::min<int64_t>(quotedPrice, infantryOrderCash(turn.pBuilder, itemID))) + pass.cityWorkingReserve
             > pass.money)) return false;
-    if (pass.citySimEnabled && itemID == Structure_WOR
-        && ((!pass.cityAntiAirInfantryDemand && !pass.trooperSupport) || !troopContentExists(pass, turn.pBuilder)
-            || openingWorkersNeeded(pass)
-            || int64_t(quotedPrice) + pass.cityWorCashReserve > pass.money)) return false;
+    if (pass.citySimEnabled && itemID == Structure_WOR) {
+        if (cityInfantryShare()) {
+            if (int64_t(quotedPrice) + pass.cityWorkingReserve > pass.money) return false;
+        } else if ((!pass.cityAntiAirInfantryDemand && !pass.trooperSupport) || !troopContentExists(pass, turn.pBuilder)
+            || openingWorkersNeeded(pass) || int64_t(quotedPrice) + pass.cityWorCashReserve > pass.money) return false;
+    }
     const bool emergencyGenerator=!getHouse()->hasPower()
         && (itemID==Structure_WindTrap || itemID==Structure_NuclearPlant
             || (turn.emergencyFoundationOrder
@@ -1477,41 +1479,17 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
         ? turn.pBuilder->getTechnologyHouseID() : getHouse()->getHouseID();
     auto& data = currentGame->objectData.data;
     // InfantryInMix (docs/infantry-squads.md): a city's WOR also buys to the measured infantry share.
-    const bool cityShare = pass.citySimEnabled && !pass.cityAntiAirInfantryDemand && botConfig().force.infantryInMix
+    const bool cityShare = pass.citySimEnabled && botConfig().force.infantryInMix
         && !ModManager::instance().isTornieFamilyContentActive();
-    if (pass.trooperSupport) {
-        const bool floorSupplier = turn.capitalSupplier
-            && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_recruitment";
-        const int64_t reserve = floorSupplier ? pass.cityWorCashReserve
-            : (pass.citySimEnabled ? pass.cityWorkingReserve : 0);
-        const int target = floorSupplier
-            ? std::min(pass.trooperTarget, QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft))
-            : pass.trooperTarget;
-        const Uint32 item = supportTrooperOrder(pass, turn.pBuilder,
-            int(std::max<int64_t>(0, int64_t(pass.money) - reserve)), target);
-        const char* supportReason = pass.hostileAircraft > 0 ? "trooper_anti_air"
-            : pass.techSavings ? "existing_infantry_composition"
-            : pass.trooperCount < QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft)
-                ? "trooper_standing_floor" : "trooper_infantry_share";
-        if (item != NONE_ID && produceItemWithLogging(pass, turn, item, __LINE__, supportReason)) {
-            SDL_Log("INFANTRY_BUY: house=%d builder=%u item=%u reason=%s cycle=%u", getHouse()->getHouseID(),
-                turn.pBuilder->getObjectID(), item, supportReason, currentGame->getGameCycleCount());
-            ++pass.itemCount[item];
-            pass.infantryCount += QuantBotBuildPolicy::rocketInfantrySize(item);
-            pass.infantryValue += data[item][houseID].price;
-            pass.militaryValue += data[item][houseID].price;
-            if (floorSupplier) pass.capitalConsumed = true;
-            return;
-        }
-        // The anti-air and armour support target is met: InfantryInMix still buys to the share below.
-        if (!cityShare) return;
-    }
     // A city raises rocket infantry only while a hostile wing is actually
     // observed, and then only inside the ordinary infantry quota, because they
     // supplement the launcher share and the turrets rather than replacing them.
     // The opening bootstrap of three stays a non-city rule: a city has no
     // standing infantry role to bootstrap.
-    if ((!pass.citySimEnabled || pass.cityAntiAirInfantryDemand || cityShare)
+    // With InfantryInMix ON, measured demand gets the first order even when aircraft are visible.
+    // Reactive support is the fallback below; OFF keeps its original support-first path.
+    if ((!pass.trooperSupport || cityShare)
+        && (!pass.citySimEnabled || pass.cityAntiAirInfantryDemand || cityShare)
         && !turn.pBuilder->isUpgrading()
         && turn.pBuilder->getProductionQueueSize() < 1
         && turn.pBuilder->getBuildListSize() > 0
@@ -1558,7 +1536,36 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
                 ? 1 : std::max(1, DuneCity::InfantrySquad::orderSize(itemID));
             pass.infantryValue += data[itemID][houseID].price;
             pass.militaryValue += data[itemID][houseID].price;
+            if (turn.capitalSupplier
+                && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_recruitment")
+                pass.capitalConsumed = true;
+            return;
 
+        }
+    }
+    if (pass.trooperSupport) {
+        const bool floorSupplier = turn.capitalSupplier
+            && std::string_view(pass.capitalCandidates[pass.capitalChoice].kind) == "trooper_recruitment";
+        const int64_t reserve = floorSupplier ? pass.cityWorCashReserve
+            : (pass.citySimEnabled ? pass.cityWorkingReserve : 0);
+        const int target = floorSupplier
+            ? std::min(pass.trooperTarget, QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft))
+            : pass.trooperTarget;
+        const Uint32 item = supportTrooperOrder(pass, turn.pBuilder,
+            int(std::max<int64_t>(0, int64_t(pass.money) - reserve)), target);
+        const char* supportReason = pass.hostileAircraft > 0 ? "trooper_anti_air"
+            : pass.techSavings ? "existing_infantry_composition"
+            : pass.trooperCount < QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft)
+                ? "trooper_standing_floor" : "trooper_infantry_share";
+        if (item != NONE_ID && produceItemWithLogging(pass, turn, item, __LINE__, supportReason)) {
+            SDL_Log("INFANTRY_BUY: house=%d builder=%u item=%u reason=%s cycle=%u", getHouse()->getHouseID(),
+                turn.pBuilder->getObjectID(), item, supportReason, currentGame->getGameCycleCount());
+            ++pass.itemCount[item];
+            pass.infantryCount += QuantBotBuildPolicy::rocketInfantrySize(item);
+            pass.infantryValue += data[item][houseID].price;
+            pass.militaryValue += data[item][houseID].price;
+            if (floorSupplier) pass.capitalConsumed = true;
+            return;
         }
     }
 }

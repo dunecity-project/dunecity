@@ -32,6 +32,6 @@
   "house-to-house": {"fire": ["ZONE_GARRISON: event=order"], "success": ["ZONE_GARRISON: event=entered"]},
   "squad-orders": {"fire": ["INFANTRY_ORDER: ai=1 squad_offered=1"], "success": ["INFANTRY_SQUAD: event=delivered men=3"]},
   "infantry-lanes": {"fire": ["INFANTRY_LANE: event=ordered"], "success": ["INFANTRY_LANE: event=standing"]},
-  "infantry-in-mix": {"fire": ["INFANTRY_BUY: reason=city_infantry_share"], "success": ["INFANTRY_MIX: on_share=1"]},
-  "infantry-squads": {"fire": ["INFANTRY_BUY: reason=city_infantry_share"], "success": ["INFANTRY_SQUAD: event=delivered men=3"]}
+  "infantry-in-mix": {"fire": ["INFANTRY_BUY: reason=city_infantry_share"], "success": ["INFANTRY_MIX_DELIVERED:"]},
+  "infantry-squads": {"fire": ["INFANTRY_BUY: reason=city_infantry_share"], "success": ["INFANTRY_MIX_DELIVERED:"]}
 }

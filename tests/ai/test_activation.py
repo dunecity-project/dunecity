@@ -51,6 +51,27 @@ class StyleAndPatterns(unittest.TestCase):
                  'x TURRET_FRONT_STATE: house=1 drill=1/1/1/0']        # not the marker
         self.assertEqual(activation.count(lines, {1: 's', 3: 'unregistered'}, registry), {1: (1, 1)})
 
+    def test_infantry_share_requires_its_own_completed_purchase(self):
+        registry = activation.load_registry()
+        census = 'INFANTRY_MIX: house=1 on_share=1'
+        buy = 'INFANTRY_BUY: house=1 builder=20 item=32 reason=city_infantry_share'
+        delivered = 'INFANTRY_DELIVERY: house=1 builder=20 item=32 men=1 expected=1 cycle=10'
+        count = lambda lines: activation.count(lines, {1: 'infantry-in-mix'}, registry)[1]
+        self.assertEqual(count([census]), (0, 0))  # Building survivors are not purchases.
+        self.assertEqual(count([buy, census]), (1, 0))  # Accepted is not delivered.
+        self.assertEqual(count([delivered]), (0, 0))  # Other factory output is not a share order.
+        self.assertEqual(count([buy, delivered]), (1, 1))
+        self.assertEqual(count([buy, delivered, delivered]), (1, 1))
+        self.assertEqual(count([buy, delivered.replace('builder=20', 'builder=21')]), (1, 0))
+        self.assertEqual(count([buy, delivered.replace('house=1', 'house=2')]), (1, 0))
+        self.assertEqual(count([buy, delivered.replace('item=32', 'item=44')]), (1, 0))
+        self.assertEqual(count([buy, delivered.replace('men=1', 'men=0')]), (1, 0))
+        self.assertEqual(count([buy, delivered.replace('expected=1', 'expected=3')]), (1, 0))
+        intervening = 'INFANTRY_ORDER: house=1 builder=20 item=32'
+        self.assertEqual(count([buy, intervening, delivered]), (1, 0))
+        support = buy.replace('city_infantry_share', 'trooper_infantry_share')
+        self.assertEqual(count([support, delivered]), (0, 0))  # The ordinary support path also runs OFF.
+
     def test_houses_limit_the_house_games(self):
         registry = activation.load_registry()
         self.assertEqual(registry['palace-worm-1']['houses'], {'fremen'})

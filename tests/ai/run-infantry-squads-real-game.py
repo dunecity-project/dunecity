@@ -163,8 +163,8 @@ accept('S3 the AI adds Barracks/WOR when infantry production is the limit (facto
 
 # S4: infantry is scored like the vehicle slots: its share moves off its opening as its score comes in, and the
 # city buys to that share (not only against aircraft) in every house-game: >= 3 purchases for the share, and the
-# infantry it bought by minute 20 worth at least half its share of the army then, where that share is >= 2%.
-# Bought, not held: soldiers walking out of destroyed buildings were never bought.
+# infantry those purchases delivered by minute 20 worth at least half its share of the army then, at >= 2%.
+# Only engine deliveries matched to share purchases count; neither queued orders nor building survivors do.
 mix = defaultdict(list)
 for r in kind['INFANTRY_MIX']:
     mix[(r['seed'], r['house'])].append(r)
@@ -174,7 +174,7 @@ SHARE_REASONS = ('city_infantry_share', 'trooper_infantry_share')
 buys = Counter((r['seed'], r['house']) for r in kind['INFANTRY_BUY'] if r['reason'] in SHARE_REASONS)
 MINUTE_20 = 20 * 60 * CYCLES_PER_SECOND
 bought = Counter()
-for r in ai_orders:
+for r in kind['INFANTRY_MIX_DELIVERED']:
     if int(r['cycle']) <= MINUTE_20:
         bought[(r['seed'], r['house'])] += int(r['price'])
 reached, short_of_share, early_end = set(), {}, set()
