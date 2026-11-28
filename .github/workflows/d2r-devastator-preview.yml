@@ -1,0 +1,846 @@
+name: D2R Devastator isolated preview artifacts
+on:
+  push:
+    branches: [d2r-devastator-preview-v10880]
+permissions:
+  contents: read
+  actions: read
+env:
+  DUNECITY_RELEASE_BUILD: 'OFF'
+jobs:
+  select-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ github.sha }}
+      run: 'true'
+      package: 'true'
+      stable: 'false'
+      staging: 'false'
+      tier: 'integration'
+    steps:
+      - run: echo 'Artifact-only Devastator preview; no signing or release'
+  relay-tests:
+    # A Windows cache probe validates the Windows job in isolation.
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/room-relay/package-lock.json
+      - run: npm ci --ignore-scripts && npm test
+        working-directory: tools/room-relay
+      - name: Verify relay deployment recovery and artifact checks
+        run: |
+          python3 tools/room-relay/deploy/test-artifact-manifest.py
+          python3 tools/room-relay/deploy/test-relay-supervisor.py
+          python3 tools/room-relay/deploy/test-release-pinning.py
+  # Exercise the real PHP introduction service; this job never deploys it.
+  signaling-tests:
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ needs.select-inputs.outputs.sha }}
+      - name: Run the signaling service test suite
+        run: |
+          php --version
+          python3 -m unittest discover -s tools/p2p-signaling/test -p 'test_*.py'
+
+  # Gate: on v* tag builds, verify that the source-controlled version metadata
+  # (CMakeLists.txt, include/config.h, vcpkg.json) already matches the tag.
+  # This catches missing bump commits BEFORE any build/release/upload runs.
+  verify-version:
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true' && needs.select-inputs.outputs.stable == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+      - name: Verify source version matches tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag version: $TAG_VERSION"
+          bash scripts/bump-version.sh --check
+          SOURCE_VERSION=$(sed -n 's/^project(DuneCity VERSION \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt)
+          if [ "$SOURCE_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Version mismatch: tag is v${TAG_VERSION} but source metadata says ${SOURCE_VERSION}."
+            echo "::error::Commit the version bump with 'scripts/bump-version.sh ${TAG_VERSION}' before tagging."
+            exit 1
+          fi
+          echo "OK — all source files agree on $SOURCE_VERSION, matches tag v${TAG_VERSION}"
+
+  test-linux:
+    runs-on: ubuntu-latest
+    # The nightly tier builds every target and runs the long tests on two cores.
+    timeout-minutes: ${{ needs.select-inputs.outputs.tier == 'nightly' && 180 || 45 }}
+    needs: [select-inputs, verify-version]
+    # !cancelled(), not always(): a running job whose condition is always() ignores cancellation.
+    if: |
+      !cancelled() && needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libsdl2-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            libcurl4-openssl-dev libssl-dev python3-cryptography python3-pil \
+            catch2 libminiupnpc-dev
+
+      # Native packet tests need headers; framing vectors also need the SDK's
+      # ESM exports, produced by its prepare script.
+      - name: Install the pinned p2pkit SDK
+        working-directory: platform/web
+        run: npm ci
+
+      - name: Verify signed update feeds and AppImage replacement
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_desktop_updates.py
+          python3 -m unittest discover -s scripts/tests -p test_checkout_content.py
+          python3 -m unittest discover -s scripts/tests -p test_release_automation.py
+          python3 -m unittest discover -s scripts/tests -p test_release_delivery.py
+          python3 -m unittest discover -s scripts/tests -p test_qualification_routing.py
+          python3 -m unittest discover -s scripts/tests -p test_headless_parallel.py
+          python3 -m unittest discover -s scripts/tests -p test_ios_staging.py
+          python3 -m unittest discover -s tests/performance -p test_fixture_reconstruction.py
+          python3 -m unittest discover -s scripts/tests -p test_macos_runtime.py
+          python3 -m unittest discover -s tests/menu -p test_probe_process.py
+          python3 tests/desktop-updater/run-appimage-flow.py --output "$RUNNER_TEMP/appimage-update-test"
+
+      - name: Configure CMake
+        # The unit tests exercise the direct transport with fake data channels, so this job does
+        # not need libdatachannel; the interoperability harness in tools/p2p-interop does, and is
+        # built where that dependency is provisioned. A Debug build turns on AddressSanitizer and
+        # UndefinedBehaviorSanitizer by default: any report aborts the test that hit it.
+        run: cmake -B build -DDUNECITY_BUILD_TESTS=ON -DDUNECITY_DIRECT_P2P=OFF -DCMAKE_BUILD_TYPE=Debug -DDUNECITY_RELEASE_BUILD=OFF
+
+      - name: Build tests
+        run: |
+          # No unbounded -j: sanitizer translation units can exhaust a hosted
+          # runner before it reports a compiler error. Keep all test targets.
+          if [ '${{ needs.select-inputs.outputs.tier }}' = nightly ]; then
+            cmake --build build --parallel 2
+          else
+            cmake --build build --parallel 2 --target dunelegacy_tests network_wire_harness \
+              relay_wire_harness relay_session_tests relay_http_transport_tests desktop_updater_tests \
+              renderer_initialization_tests
+          fi
+
+      - name: Check native and browser framing still agree
+        run: node tools/p2p-interop/framing-vectors.mjs
+
+      - name: Check the browser signaling fetch keeps its guarantees
+        # The JavaScript inside the EM_JS blocks is not reachable by a C++ compiler and not
+        # exercised by a wasm link either, so it gets its own regression test.
+        run: node tools/p2p-interop/signaling-fetch.test.mjs
+
+      - name: Run tests
+        env:
+          ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        # Capability and tier are independent: hosted Linux never admits GUI tests.
+        run: ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L '${{ needs.select-inputs.outputs.tier }}' -LE gui
+
+  build-emscripten:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    needs: [select-inputs, verify-version]
+    if: |
+      !cancelled() && needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      (needs.select-inputs.outputs.tier != 'nightly' || needs.select-inputs.outputs.package == 'true') &&
+      (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ needs.select-inputs.outputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            platform/web/package-lock.json
+            tools/p2pkit-build/package-lock.json
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git python3
+
+      - name: Check browser build safety
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_web_build.py'
+          python3 -m unittest discover -s scripts/tests -p 'test_check_web_mods.py'
+
+      # The p2pkit SDK (headers + --js-library glue) is a real dependency of the
+      # browser build; CMake configure refuses to proceed without it.
+      - name: Install the pinned p2pkit SDK
+        working-directory: platform/web
+        run: npm ci
+
+      - name: Test browser matchmaking glue and runtime packaging
+        working-directory: platform/web
+        run: npm test
+
+      # The direct-play bridge bundle is committed for reproducible browser builds.
+      # These three steps are what keeps that honest: install the pinned tool (and the
+      # p2pkit package its tests exercise through genuine package exports), prove the
+      # SDK transport and the bridge still behave, and prove the committed bundle is what
+      # this source actually produces.
+      - name: Install the pinned bundler
+        working-directory: tools/p2pkit-build
+        run: npm ci
+
+      - name: Test the pinned P2PKit transport and the bridge
+        working-directory: tools/p2pkit-build
+        run: |
+          node --test test.mjs
+          node --test bridge.test.mjs
+
+      - name: Verify the committed bridge bundle is reproducible
+        run: |
+          node tools/p2pkit-build/build.mjs
+          if ! git diff --quiet -- platform/web/p2p-direct.js; then
+            echo "ERROR: platform/web/p2p-direct.js does not match a rebuild from source." >&2
+            echo "Run: node tools/p2pkit-build/build.mjs and commit the result." >&2
+            git --no-pager diff --stat -- platform/web/p2p-direct.js >&2
+            exit 1
+          fi
+
+      - name: Build browser target
+        run: ./tools/web/build-emscripten.sh
+
+      - name: Check browser peer teardown with AddressSanitizer
+        run: |
+          source .emsdk/emsdk_env.sh
+          tests/wasm/run-webrtc-peer-lifecycle.sh
+
+      - name: Freeze the verified browser package
+        if: needs.select-inputs.outputs.package == 'true'
+        env:
+          WEB_CHANNEL: ${{ needs.select-inputs.outputs.stable == 'true' && 'stable' || 'staging' }}
+        run: |
+          PLAY_ROOT="$RUNNER_TEMP/$(test "$WEB_CHANNEL" = staging && echo play-staging || echo play)"
+          python3 scripts/package-web.py --build-root build/emscripten --play-root "$PLAY_ROOT" \
+            --channel "$WEB_CHANNEL" --signaling-origin https://dunelegacy.com
+          mkdir -p browser-package
+          python3 scripts/release-automation.py record-build --platform emscripten \
+            --build-root build/emscripten --output browser-package/build-inputs-emscripten.json
+          tar -czf browser-package/DuneCity-browser.tar.gz -C "$PLAY_ROOT" .
+          python3 scripts/package-p2p-service.py --output "$RUNNER_TEMP/browser-service"
+          tar -czf browser-package/DuneCity-p2p-service.tar.gz -C "$RUNNER_TEMP/browser-service" .
+      - name: Upload frozen browser artifacts
+        if: needs.select-inputs.outputs.package == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Emscripten
+          overwrite: true
+          path: browser-package/*
+          if-no-files-found: error
+          retention-days: 30
+
+  build-windows:
+    timeout-minutes: 40
+    runs-on: windows-2022
+    # Wait for version check on tag builds; run unconditionally otherwise
+    needs: [select-inputs, verify-version]
+    if: ${{ !cancelled() && needs.select-inputs.outputs.run == 'true' && (needs.select-inputs.outputs.tier != 'nightly' || needs.select-inputs.outputs.package == 'true') && inputs.linux_audio_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true && (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped') }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Preflight Windows installer configuration
+        run: |
+          cmake -S tests/windows-installer -B installer-preflight
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cpack --config installer-preflight/CPackConfig.cmake -G NSIS -B installer-preflight/package
+          if ($LASTEXITCODE -ne 0) {
+            Get-ChildItem installer-preflight -Recurse -Filter NSISOutput.log | ForEach-Object { Get-Content $_.FullName }
+            exit 1
+          }
+
+      - name: Check installer desktop shortcut
+        run: |
+          # The fixture installer on this disposable runner: a default silent install must
+          # create the desktop shortcut and the uninstaller must remove it.
+          $installer = Get-ChildItem installer-preflight/package -Filter *.exe | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP 'dunecity-installer-preflight'
+          $link = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Dune City.lnk'
+          $install = Start-Process $installer.FullName -ArgumentList '/S', "/D=$dir" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exited with $($install.ExitCode)" }
+          if (-not (Test-Path $link)) { throw 'The installer did not create the desktop shortcut' }
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+          if ($target -ne (Join-Path $dir 'dunecity.exe')) { throw "The desktop shortcut points to '$target'" }
+          $uninstall = Start-Process (Join-Path $dir 'Uninstall.exe') -ArgumentList '/S', "_?=$dir" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0 -or (Test-Path $link)) { throw 'The uninstaller did not remove the desktop shortcut' }
+
+      - name: Set Windows dependency cache location
+        id: windows-vcpkg-cache
+        run: |
+          $cache = Join-Path $env:LOCALAPPDATA 'vcpkg/archives'
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          "path=$cache" >> $env:GITHUB_OUTPUT
+          "image=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+          # vcpkg.json also carries the application version, so hashing the
+          # whole manifest changed the primary key on every release bump.
+          # Hash only the fields that change what vcpkg builds.
+          $dependencies = python scripts/vcpkg-dependency-key.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "dependencies=$dependencies" >> $env:GITHUB_OUTPUT
+
+      - name: Cache Windows dependency binaries
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.windows-vcpkg-cache.outputs.path }}
+          key: vcpkg-windows-x64-v1-${{ steps.windows-vcpkg-cache.outputs.image }}-${{ steps.windows-vcpkg-cache.outputs.dependencies }}
+          restore-keys: |
+            vcpkg-windows-x64-v1-${{ steps.windows-vcpkg-cache.outputs.image }}-
+            vcpkg-windows-x64-v1-
+
+      # Ninja needs cl.exe on PATH; the Visual Studio generator would find it
+      # on its own, but Ninja plus a compiler launcher is what makes the
+      # compile cache usable at all.
+      - name: Initialise the MSVC x64 toolchain
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: v0.18.0
+
+      - name: Set Windows compiler cache location
+        id: windows-sccache
+        run: |
+          $cache = Join-Path $env:LOCALAPPDATA 'sccache'
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          "path=$cache" >> $env:GITHUB_OUTPUT
+          # Persist the cache ourselves through actions/cache below instead of
+          # sccache's GitHub Actions backend.
+          "SCCACHE_GHA_ENABLED=false" >> $env:GITHUB_ENV
+          "SCCACHE_DIR=$cache" >> $env:GITHUB_ENV
+          "SCCACHE_CACHE_SIZE=2G" >> $env:GITHUB_ENV
+
+      # A unique key per run means actions/cache always writes a fresh entry
+      # on success; the prefixes restore the newest cache built on the same
+      # runner image (object hits depend on the exact compiler binary).
+      - name: Cache Windows compiled objects
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.windows-sccache.outputs.path }}
+          key: sccache-windows-x64-v1-${{ steps.windows-vcpkg-cache.outputs.image }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            sccache-windows-x64-v1-${{ steps.windows-vcpkg-cache.outputs.image }}-
+            sccache-windows-x64-v1-
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/web/package-lock.json
+
+      # The p2pkit SDK headers are a configure-time dependency on every
+      # platform (the packet streams and WebRtcTransport alias include them);
+      # headers ship in the git package, so no prepare/build scripts are needed.
+      - name: Install the pinned p2pkit SDK headers
+        working-directory: platform/web
+        run: npm ci --ignore-scripts
+
+      # run-vcpkg still selects the removed x-gha backend and clears the
+      # default cache. Use the persisted files provider, as on Linux/macOS.
+      # vcpkg validates package ABIs before reusing restored binaries.
+      - name: Enable Windows dependency binary caching
+        env:
+          WINDOWS_VCPKG_CACHE: ${{ steps.windows-vcpkg-cache.outputs.path }}
+        run: |
+          "VCPKG_BINARY_SOURCES=clear;files,$env:WINDOWS_VCPKG_CACHE,readwrite" >> $env:GITHUB_ENV
+
+      - name: Configure CMake
+        # Quote the -D arg so PowerShell expands $env:VCPKG_ROOT instead
+        # of treating the colon-slash as a literal string. Without the
+        # quotes CMake gets the unexpanded path and fails to find the
+        # toolchain file.
+        #
+        # Precompiled headers are off here on purpose: sccache cannot cache
+        # an /Yc or /Yu compile, so PCH would make every translation unit a
+        # miss. Local Visual Studio builds keep the default (PCH on).
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DDUNECITY_RELEASE_BUILD=$env:DUNECITY_RELEASE_BUILD" `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+            -DDUNECITY_ENABLE_PCH=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build
+        # Ninja schedules source files concurrently, unlike MSBuild /m which
+        # primarily schedules projects. Bound memory use to four compilers.
+        timeout-minutes: 30
+        run: |
+          sccache --zero-stats
+          cmake --build build --parallel 4
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          sccache --show-stats
+
+      # Validation only (workflow_dispatch with windows_cache_probe). The
+      # build above filled the cache; throw the build tree away and prove the
+      # rebuild is served from it. Nothing here publishes.
+      - name: Probe the compiler cache with a clean rebuild
+        if: ${{ inputs.windows_cache_probe }}
+        timeout-minutes: 30
+        run: |
+          Remove-Item -Recurse -Force build
+          sccache --zero-stats
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DDUNECITY_RELEASE_BUILD=OFF `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+            -DDUNECITY_ENABLE_PCH=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --parallel 4
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # `Cache hits` / `Cache misses` are stable across sccache releases;
+          # the JSON schema is not, so read the summary table.
+          $stats = (sccache --show-stats | Out-String)
+          Write-Host $stats
+          $hit = [regex]::Match($stats, '(?m)^Cache hits\s+(\d+)\s*$')
+          $miss = [regex]::Match($stats, '(?m)^Cache misses\s+(\d+)\s*$')
+          if (-not ($hit.Success -and $miss.Success)) {
+            throw "Could not read sccache statistics"
+          }
+          $hits = [int]$hit.Groups[1].Value
+          $misses = [int]$miss.Groups[1].Value
+          $total = $hits + $misses
+          if ($total -eq 0) { throw "The rebuild compiled nothing; the cache was not exercised" }
+          $rate = [math]::Round(100.0 * $hits / $total, 1)
+          Write-Host "Compiler cache hit rate: $rate% ($hits hits, $misses misses)"
+          if ($hits -lt 100 -or $hits * 10 -lt $total * 9) {
+            throw "Compiler cache hit rate $rate% is below 90% or fewer than 100 hits; caching is not working"
+          }
+
+      - name: Check nested game stack budgets
+        run: |
+          python scripts/check-windows-nested-game-stack.py --build-dir build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify secure relay support
+        run: |
+          $game = Get-ChildItem build -Recurse -Filter dunecity.exe | Select-Object -First 1
+          if (-not $game) { throw "Game binary missing" }
+          $probe = Start-Process -FilePath $game.FullName -ArgumentList '--check-relay-support' -Wait -PassThru -NoNewWindow
+          if ($probe.ExitCode -ne 0) { exit $probe.ExitCode }
+
+      - name: Create Installer Package
+        if: needs.select-inputs.outputs.package == 'true' && inputs.windows_cache_probe != true
+        run: |
+          cd build
+          cmake --install . --prefix install --config Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($runtime in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            if (-not (Test-Path "install/$runtime")) { throw "Missing bundled MSVC runtime: $runtime" }
+          }
+          if ((Get-Item install/README).LinkType) { throw "Packaged README must be a regular file" }
+          cpack -G ZIP -C Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cpack -G NSIS -C Release
+          if ($LASTEXITCODE -ne 0) {
+            Get-ChildItem _CPack_Packages -Recurse -Filter NSISOutput.log | ForEach-Object { Get-Content $_.FullName }
+            exit 1
+          }
+
+      - name: Preserve installer diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Windows-installer-diagnostics-${{ github.run_attempt }}
+          path: |
+            installer-preflight/package/**/NSISOutput.log
+            installer-preflight/package/**/project.nsi
+            build/_CPack_Packages/**/NSISOutput.log
+            build/_CPack_Packages/**/project.nsi
+            build/*.zip
+            build/*.exe
+
+      - name: Record Windows package inputs
+        if: success() && needs.select-inputs.outputs.package == 'true' && inputs.windows_cache_probe != true
+        run: python scripts/release-automation.py record-build --platform windows-x64 --build-root build --output build/build-inputs-windows-x64.json
+      - name: Upload Installer
+        if: success() && needs.select-inputs.outputs.package == 'true' && inputs.windows_cache_probe != true
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Windows-Installer
+          overwrite: true
+          path: |
+            build/*.zip
+            build/*.exe
+            build/build-inputs-windows-x64.json
+          if-no-files-found: error
+
+  build-linux:
+    # Keep the release ABI on an older, stable glibc baseline. A moving
+    # ubuntu-latest runner produced binaries requiring GLIBC_2.38.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    needs: [select-inputs, verify-version]
+    if: |
+      !cancelled() && needs.select-inputs.outputs.run == 'true' && inputs.windows_cache_probe != true && inputs.android_package_probe != true && inputs.macos_skin_probe != true &&
+      (needs.select-inputs.outputs.tier != 'nightly' || needs.select-inputs.outputs.package == 'true') &&
+      (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.select-inputs.outputs.sha }}
+          persist-credentials: false
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: linux-${{ hashFiles('vcpkg.json') }}
+
+      # vcpkg builds several autotools-based ports from source on Linux
+      # (libxcrypt, sdl2-mixer's flac/opus/etc.) and needs the GNU build
+      # toolchain pre-installed on the runner. Without these the Configure
+      # step fails with: "libxcrypt currently requires ... autoconf
+      # autoconf-archive automake libtoolize". Also pulling in
+      # build-essential + libltdl-dev so any other transitive port that
+      # needs them is happy.
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf autoconf-archive automake libtool libltdl-dev \
+            build-essential pkg-config bison flex python3-jinja2 \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libx11-dev libxft-dev libxext-dev libwayland-dev libxkbcommon-dev libibus-1.0-dev \
+            libsystemd-dev libpulse-dev libpipewire-0.3-dev xvfb xauth
+
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/vcpkg/archives
+          # SDL auto-detects GL/GLX headers. Do not restore older SDL archives
+          # built without the graphics development packages above.
+          key: vcpkg-linux-x64-graphics-v2-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-linux-x64-graphics-v2-
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      # run-vcpkg sets VCPKG_BINARY_SOURCES to 'clear;x-gha,readwrite' but
+      # the x-gha backend was removed from vcpkg. The 'clear' prefix also
+      # disables the default file-based cache. Override to use files-based
+      # caching backed by the actions/cache step above.
+      - name: Fix vcpkg binary caching
+        run: echo "VCPKG_BINARY_SOURCES=clear;files,$HOME/.cache/vcpkg/archives,readwrite" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/web/package-lock.json
+
+      # The p2pkit SDK headers are a configure-time dependency on every
+      # platform (the packet streams and WebRtcTransport alias include them).
+      - name: Install the pinned p2pkit SDK headers
+        working-directory: platform/web
+        run: npm ci --ignore-scripts
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=Release -DDUNECITY_RELEASE_BUILD="$DUNECITY_RELEASE_BUILD"
+
+      - name: Build
+        # Limit to 2 parallel jobs — ubuntu-latest has 4 cores but only 7GB
+        # RAM, and 4 concurrent g++ -O2 processes on large TUs exceed that.
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Verify secure relay support
+        run: build/bin/dunecity --check-relay-support
+
+      - name: Verify real Linux audio backends and silent recovery
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_audio_runtime.py'
+          python3 scripts/check-audio-runtime.py --binary build/bin/dunecity --require-driver alsa --require-driver pulseaudio --require-driver pipewire
+
+      - name: Verify Linux graphics backends and software recovery
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_video_runtime.py'
+          xvfb-run -a python3 scripts/check-video-runtime.py --binary build/bin/dunecity --require-driver opengl --require-accelerated
+
+      - name: Create Linux Packages
+        if: needs.select-inputs.outputs.package == 'true'
+        run: |
+          cd build
+          cmake --install . --prefix install --config Release
+          cpack -G "DEB;RPM;TGZ" -C Release
+
+      - name: Create AppImage
+        if: needs.select-inputs.outputs.package == 'true'
+        run: |
+          # Download linuxdeploy (fuse-less FUSE_APPIMAGE_EXTRACT_AND_RUN avoids
+          # "fuse: device not found" errors on GitHub-hosted runners)
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+          # Stage the AppDir from the cmake install tree
+          cd build
+          cmake --install . --prefix AppDir/usr --config Release
+
+          # Ensure icons and desktop file are in the right AppDir locations
+          mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/128x128/apps
+          cp ../dunecity.desktop AppDir/usr/share/applications/
+          cp ../dunecity-128x128.png AppDir/usr/share/icons/hicolor/128x128/apps/dunecity.png
+
+          # linuxdeploy bundles the binary's shared-library dependencies into the
+          # AppDir, generates AppRun, and creates the final .AppImage
+          ARCH=x86_64 FUSE_APPIMAGE_EXTRACT_AND_RUN=1 \
+            ../linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable AppDir/usr/bin/dunecity \
+            --desktop-file AppDir/usr/share/applications/dunecity.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/128x128/apps/dunecity.png \
+            --output appimage
+
+          # Rename with version for clarity
+          VERSION=$(sed -n 's/^project(DuneCity VERSION \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' ../CMakeLists.txt)
+          mv DuneCity-*.AppImage "DuneCity-${VERSION}-Linux-x86_64.AppImage" 2>/dev/null || true
+
+      - name: Smoke-test portable Linux packages
+        if: needs.select-inputs.outputs.package == 'true'
+        run: |
+          set -euo pipefail
+
+          VERSION=$(sed -n 's/^project(DuneCity VERSION \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' CMakeLists.txt)
+          SMOKE_ROOT="$RUNNER_TEMP/dunecity-linux-smoke"
+          rm -rf "$SMOKE_ROOT"
+          mkdir -p "$SMOKE_ROOT/tgz" "$SMOKE_ROOT/home"
+
+          tar -xzf "build/DuneCity-${VERSION}-Linux-x64.tar.gz" -C "$SMOKE_ROOT/tgz"
+          TGZ_BIN=$(find "$SMOKE_ROOT/tgz" -type f -path '*/bin/dunecity' -print -quit)
+          TGZ_DATA=$(find "$SMOKE_ROOT/tgz" -type f -name 'DUNE.PAK' -print)
+          APPIMAGE="build/DuneCity-${VERSION}-Linux-x86_64.AppImage"
+
+          python3 scripts/check-audio-runtime.py --binary "$TGZ_BIN" --require-driver alsa --require-driver pulseaudio --require-driver pipewire
+          APPIMAGE_EXTRACT_AND_RUN=1 python3 scripts/check-audio-runtime.py --binary "$APPIMAGE" --require-driver alsa --require-driver pulseaudio --require-driver pipewire
+          xvfb-run -a python3 scripts/check-video-runtime.py --binary "$TGZ_BIN" --require-driver opengl --require-accelerated
+          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a python3 scripts/check-video-runtime.py --binary "$APPIMAGE" --require-driver opengl --require-accelerated
+
+          echo "TGZ executable: ${TGZ_BIN:-missing}"
+          echo "TGZ DUNE.PAK: ${TGZ_DATA:-missing}"
+          data_notice=${TGZ_DATA//'%'/'%25'}
+          data_notice=${data_notice//$'\r'/'%0D'}
+          data_notice=${data_notice//$'\n'/'%0A'}
+          echo "::notice title=TGZ data layout::${data_notice:-DUNE.PAK was not packaged}"
+
+          if [ -z "$TGZ_BIN" ] || [ ! -x "$TGZ_BIN" ]; then
+            echo "::error title=TGZ smoke setup failed::Packaged dunecity executable was not found or is not executable."
+            find "$SMOKE_ROOT/tgz" -maxdepth 4 -type f -print
+            exit 1
+          fi
+          if [ ! -x "$APPIMAGE" ]; then
+            echo "::error title=AppImage smoke setup failed::Expected AppImage is missing or not executable: $APPIMAGE"
+            find build -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          smoke_launch() {
+            local label="$1"
+            shift
+            local executable="$1"
+            shift
+            local launch_dir
+            launch_dir=$(cd "$(dirname "$executable")" && pwd)
+            executable="$launch_dir/$(basename "$executable")"
+            set +e
+            (
+              cd "$launch_dir"
+              env -u SDL_RENDER_DRIVER HOME="$SMOKE_ROOT/home" SDL_AUDIODRIVER=dummy \
+                timeout 12s xvfb-run -a "$executable" "$@" --showlog
+            ) >"$SMOKE_ROOT/${label}.log" 2>&1
+            local status=$?
+            set -e
+
+            if [ "$status" -ne 124 ] || grep -Eq 'An unhandled exception|DuneCity will now be terminated' "$SMOKE_ROOT/${label}.log"; then
+              echo "${label} exited during startup (status ${status})"
+              cat "$SMOKE_ROOT/${label}.log"
+              find "$SMOKE_ROOT/home" -type f -name '*.log' -exec sh -c \
+                'echo "--- $1"; cat "$1"' _ {} \;
+              local details
+              details=$(sed -n '1,80p' "$SMOKE_ROOT/${label}.log")
+              details=${details//'%'/'%25'}
+              details=${details//$'\r'/'%0D'}
+              details=${details//$'\n'/'%0A'}
+              echo "::error title=${label} portable startup failed (status ${status})::${details:-No process output was captured.}"
+              return 1
+            fi
+          }
+
+          smoke_status=0
+          smoke_launch tgz "$TGZ_BIN" || smoke_status=1
+          APPIMAGE_EXTRACT_AND_RUN=1 smoke_launch appimage "$APPIMAGE" || smoke_status=1
+          exit "$smoke_status"
+
+      - name: Record Linux package inputs
+        if: success() && needs.select-inputs.outputs.package == 'true'
+        run: python3 scripts/release-automation.py record-build --platform linux-x86_64 --build-root build --output build/build-inputs-linux-x86_64.json
+      - name: Upload Packages
+        if: success() && needs.select-inputs.outputs.package == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Linux-Packages
+          overwrite: true
+          path: |
+            build/*.deb
+            build/*.rpm
+            build/*.tar.gz
+            build/*.AppImage
+            build/build-inputs-linux-x86_64.json
+
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve failed Linux package/runtime evidence
+        if: failure() && needs.select-inputs.outputs.package == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Linux-failed-packages-${{ github.run_attempt }}
+          path: |
+            build/*.deb
+            build/*.rpm
+            build/*.tar.gz
+            build/*.AppImage
+            ${{ runner.temp }}/dunecity-linux-smoke/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Candidate only: never upload a private signing key to this hosted runner.
+  android-package:
+    needs: [select-inputs]
+    if: needs.select-inputs.outputs.run == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ needs.select-inputs.outputs.sha }}
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/web/package-lock.json
+      - name: Configure Android toolchain and dependency cache
+        id: android-cache
+        shell: pwsh
+        run: |
+          $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $env:ANDROID_SDK_ROOT }
+          if (-not $sdk) { throw 'Android SDK not found on runner' }
+          $manager = Join-Path $sdk 'cmdline-tools/latest/bin/sdkmanager.bat'
+          & $manager --install 'ndk;28.2.13676358' 'platforms;android-34' 'build-tools;34.0.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Android SDK installation failed' }
+          "ANDROID_HOME=$sdk" >> $env:GITHUB_ENV
+          "ANDROID_SDK_ROOT=$sdk" >> $env:GITHUB_ENV
+          "ANDROID_NDK_HOME=$(Join-Path $sdk 'ndk/28.2.13676358')" >> $env:GITHUB_ENV
+          $vcpkg = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { $env:VCPKG_INSTALLATION_ROOT }
+          if (-not (Test-Path -LiteralPath (Join-Path $vcpkg 'vcpkg.exe'))) { throw 'vcpkg not found on runner' }
+          "VCPKG_ROOT=$vcpkg" >> $env:GITHUB_ENV
+          $cache = Join-Path $env:LOCALAPPDATA 'vcpkg/archives'
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" >> $env:GITHUB_ENV
+          "path=$cache" >> $env:GITHUB_OUTPUT
+          "image=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+          $dependencies = python scripts/vcpkg-dependency-key.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "dependencies=$dependencies" >> $env:GITHUB_OUTPUT
+      - uses: actions/cache@v6
+        with:
+          path: ${{ steps.android-cache.outputs.path }}
+          key: vcpkg-android-arm64-v1-${{ steps.android-cache.outputs.image }}-${{ steps.android-cache.outputs.dependencies }}
+          restore-keys: |
+            vcpkg-android-arm64-v1-${{ steps.android-cache.outputs.image }}-
+            vcpkg-android-arm64-v1-
+            vcpkg-windows-x64-v1-${{ steps.android-cache.outputs.image }}-
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-v1-${{ runner.os }}-${{ hashFiles('scripts/package-android-apk.ps1') }}
+          restore-keys: gradle-android-v1-${{ runner.os }}-
+      - name: Install pinned SDK headers
+        working-directory: platform/web
+        run: npm ci --ignore-scripts
+      - name: Build native ARM64 and APK candidate
+        shell: pwsh
+        run: |
+          python -m unittest discover -s scripts/tests -p test_android_payload.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/package-android-apk.ps1 -RepoRoot $env:GITHUB_WORKSPACE -BuildNative -NativeBuildJobs 2 -BuildApk -ReleaseBuild:('${{ inputs.android_release_build }}' -eq 'true')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/check-build-deps.py build-android-arm64-ndk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/verify-android-payload.py --root $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload runner-key-signed candidate (not public release)
+        uses: actions/upload-artifact@v7
+        with:
+          name: DuneCity-Android-Runner-Candidate
+          path: |
+            build-android-apk/app/build/outputs/apk/debug/DuneLegacy.apk
+            android-version.json
+
+  # Reuse the existing dev publisher, but publish a complete immutable source set.
