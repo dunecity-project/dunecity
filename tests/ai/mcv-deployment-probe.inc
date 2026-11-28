@@ -1616,7 +1616,7 @@ void runMcvDeploymentProbe(Game& game) {
                 SDL_Log("AIRLIFT_COLONISTS_ASSERT: enabled=0 flights=0 driven=1 deployed=1");continue;
             }
             bool readyBeforeArrival=false,everCarried=false,deployed=false,restoredMaterial=false,homeMaterialPlaced=arm!=2;
-            bool retargeted=false,cornerExercised=false,supplierReplaced=false;
+            bool retargeted=false,cornerExercised=false,supplierReplaced=false,landedSupplierGap=false;
             Uint32 deployedAt=0;
             const Uint32 deadline=game.getGameCycleCount()+MILLI2CYCLES(180000);
             while (game.getGameCycleCount()<deadline) {
@@ -1664,6 +1664,23 @@ void runMcvDeploymentProbe(Game& game) {
                 const auto* current=dynamic_cast<const MCV*>(game.getObjectManager().getObject(passengerID));
                 if (current) {
                     everCarried=everCarried || current->isPickedUp();
+                    if (arm==2 && everCarried && current->isActive() && !current->isPickedUp() && !landedSupplierGap) {
+                        auto arrival=bot->airliftJobs.find(passengerID);
+                        if (arrival!=bot->airliftJobs.end() && arrival->second.kind==QuantBot::AirliftKind::Colonist
+                            && arrival->second.lifted && !arrival->second.landed) {
+                            // After a REAL pickup and landing, a stale supplier lookup must not run the pre-pickup cancellation.
+                            // Inject only the missing-reference failure; the paid turret, aircraft and passenger are untouched.
+                            const Uint32 paidSupplier=arrival->second.objective;
+                            arrival->second.objective=NONE_ID;
+                            bot->updateAirlift();
+                            require(bot->airliftJobs.count(passengerID)
+                                && bot->airliftJobs.at(passengerID).kind==QuantBot::AirliftKind::ColonistGround
+                                && bot->airliftJobs.at(passengerID).landed && bot->airliftJobs.at(passengerID).lifted,
+                                "An actually landed MCV re-entered pre-pickup cancellation when its supplier lookup was stale");
+                            bot->airliftJobs.at(passengerID).objective=paidSupplier;
+                            landedSupplierGap=true;
+                        }
+                    }
                     if (ready && current->getLocation().isValid() && bot->onOwnRockFormation(current->getLocation())) readyBeforeArrival=true;
                     bot->manageMcv(current);
                     if (arm==3 && !supplierReplaced && bot->airliftJobs.count(passengerID)
@@ -1704,7 +1721,7 @@ void runMcvDeploymentProbe(Game& game) {
                 }
                 tick(10);
             }
-            require(arm!=2 || (retargeted && cornerExercised),"Retarget/diagonal ownership boundary was not exercised");
+            require(arm!=2 || (retargeted && cornerExercised && landedSupplierGap),"Retarget/diagonal/actual-landing ownership boundary was not exercised");
             require(arm!=3 || supplierReplaced,"Supplier-loss ownership boundary was not exercised");
             require(deployed,"An away MCV never deployed through the actual logistics path");
             require(readyBeforeArrival,"The existing yard had no finished Rocket Turret before the colonist arrived");
@@ -1724,5 +1741,5 @@ void runMcvDeploymentProbe(Game& game) {
         " space-driven colonisation of safe reclaimed rock, the market colonist of a city"
         " with no factory, cramped factory placement that compromises roading only,"
         " and an opening MCV boxed in by its own army");
-    SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=mcv_deployment outcome=passed");
+    SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=mcv_deployment outcome=passed colonist_flight_arms=2 colonist_ground_arms=1 colonies_covered=3 actual_landed_guard=1");
 }

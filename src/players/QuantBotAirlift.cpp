@@ -233,7 +233,7 @@ void QuantBot::trackAirliftJobs() {
             ++it;continue;
         }
         const auto* ground = static_cast<const GroundUnit*>(unit);
-        if (job.kind==AirliftKind::Colonist && !unit->isPickedUp()) {
+        if (job.kind==AirliftKind::Colonist && !job.lifted && !unit->isPickedUp()) {
             const auto* supplier=dynamic_cast<const BuilderBase*>(getObject(job.objective));
             if (!supplier || supplier->getOwner()!=getHouse() || supplier->getHealth()<=0
                 || !supplier->isWaitingToPlace() || supplier->getCurrentProducedItem()!=Structure_RocketTurret) {
