@@ -111,12 +111,15 @@ struct Fixture {
 };
 
 /// Atreides: a Brutal QuantBot with 30,000 credits; Harkonnen: the idle human tester's house.
-Fixture newGame(bool front, bool advance, bool creep, bool retire, bool drill = false, bool fireOnBuildings = false) {
+Fixture newGame(bool front, bool advance, bool creep, bool retire, bool drill = false, bool fireOnBuildings = false, bool fixedBase = false) {
     Fixture f;
     auto options = gModOptions;
     options.turretsFireOnBuildings = fireOnBuildings;
     options.immortalHumanPlayer = false;
     options.instantBuild = true;          // the probe tests where turrets go, not how fast they build
+    // The far negative case promises one stationary base. Ordinary MCVs otherwise found a
+    // new yard beside the enemy (observed at 106,16 by cycle 4289), invalidating that promise.
+    if(fixedBase) options.maximumNumberOfConstructionYardsOverride = 1;
     options.fogOfWar = false;
     options.startWithExploredMap = true;
     GameInitSettings init("turret-front.ini", fixtureMap(), "Turret front", true, options);
@@ -469,7 +472,7 @@ void retire(bool on) {
 void drill(bool on, bool fireOnBuildings, bool far, bool turrets = false) {
     const std::string name = std::string("drill-") + (far ? "far" : !on ? "off" : turrets ? "turrets"
                                                       : fireOnBuildings ? "buildings" : "on");
-    Fixture f = newGame(false, false, false, false, on, fireOnBuildings);
+    Fixture f = newGame(false, false, false, false, on, fireOnBuildings, far);
     ownBase(f);
     const int ex = far ? 110 : 34;
     enemyBase(f, ex);
@@ -513,7 +516,37 @@ void drill(bool on, bool fireOnBuildings, bool far, bool turrets = false) {
         }
     };
     int nearest = 1000, touching = 0, onBuildings = 0, onUnits = 0;
+    int minFarEdge = 1000;
+    auto keepFar = [&] {
+        if(f.own->getNumItems(Structure_ConstructionYard) != 1)
+            require(false, name + ": the fixed-base fixture changed its one-yard precondition");
+        int edge = 1000;
+        const StructureBase* closestOwn = nullptr;
+        const StructureBase* closestEnemy = nullptr;
+        for(const StructureBase* own : structureList) {
+            if(own->getOwner() != f.own || own->getHealth() <= 0) continue;
+            const auto item = own->getItemID();
+            if(item == Structure_Wall || item == Structure_Slab1 || item == Structure_Slab4
+                || item == Structure_ZoneResidential || item == Structure_ZoneCommercial || item == Structure_ZoneIndustrial) continue;
+            const Coord at = own->getLocation();
+            for(const StructureBase* enemy : structureList) {
+                if(enemy->getOwner() != f.enemy || enemy->getHealth() <= 0) continue;
+                const Coord close = enemy->getClosestPoint(at);
+                const int gap = TurretFrontPolicy::tileDistance(at.x, at.y, close.x, close.y);
+                if(gap < edge) { edge = gap; closestOwn = own; closestEnemy = enemy; }
+            }
+        }
+        minFarEdge = std::min(minFarEdge, edge);
+        if(edge <= TurretFrontPolicy::kDrillStartTiles)
+            require(false, name + ": far fixture moved its own base edge inside the drill start radius (" + std::to_string(edge)
+                + "), cycle " + std::to_string(f.game->getGameCycleCount())
+                + ", own item " + std::to_string(closestOwn->getItemID()) + " at " + std::to_string(closestOwn->getLocation().x)
+                + "," + std::to_string(closestOwn->getLocation().y) + ", enemy item " + std::to_string(closestEnemy->getItemID())
+                + " at " + std::to_string(closestEnemy->getLocation().x) + "," + std::to_string(closestEnemy->getLocation().y));
+    };
+    if(far) keepFar();
     const int played = play(f, 12000, [&] {
+        if(far) keepFar();
         mass(nearest, touching);
         sampleTargets(f, onBuildings, onUnits);
         if(turrets) return c.placed >= 10;
@@ -527,8 +560,10 @@ void drill(bool on, bool fireOnBuildings, bool far, bool turrets = false) {
         return;
     }
     if(far) {
+        keepFar();
         require(c.ordered == 0, name + ": the drill started with the enemy base 90 tiles away");
-        record(name, "no drill order in " + std::to_string(played) + " cycles");
+        require(played == 12000, name + ": the far fixture did not observe its full original window");
+        record(name, "no drill order in " + std::to_string(played) + " cycles; live far edge at least " + std::to_string(minFarEdge));
         return;
     }
     require(c.ordered >= 8 && c.placed >= 8, name + ": the drill did not build a mass, eight wanted (" + countText(c) + ")");
