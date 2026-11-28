@@ -2250,6 +2250,14 @@ private:
     /// InfantryLanes: whether \a producer (set here) needs another lane, by the factory lane rule.
     bool infantryLaneBacklog(BuildPass& pass, Uint32& producer);
     void noteInfantryLaneOrdered(Uint32 producer);
+    /// InfantryInMix is on and this is not Tornie content (its own infantry rules).
+    bool cityInfantryShare() const;
+    /// SquadOrders rounds up: the value a three-man squad claims against the infantry share and budget is one
+    /// man's, so a squad is admitted wherever a single man is. Every other item claims its full \a value.
+    int infantryQuotaValue(Uint32 item, int value) const;
+    /// InfantryInMix: the first Barracks or WOR \a yard should build for a city house with a measured infantry
+    /// share of 2% or more and neither; NONE_ID otherwise.
+    Uint32 infantryFirstProducer(BuildPass& pass, const BuilderBase* yard) const;
     /// INFANTRY_LANE standing: a lane ordered by the rule now stands.
     void updateInfantryLanes();
     /// Logging state of the lines above only (no decision reads it); not saved.
@@ -2257,6 +2265,9 @@ private:
     bool infantryMixLogged_ = false;
     Uint32 infantryMixLogCycle_ = 0;
     std::array<Uint32, 2> infantryLaneLogCycle_{};
+    /// InfantryLanes: the cycle each producer's lane rule has held since (0: not holding). Transient, like the
+    /// factory lanes' busy counts it reads: after a load the clock restarts the same way on every peer.
+    std::array<Uint32, 2> infantryLaneRuleSince_{};
     /// Lanes ordered by InfantryLanes not yet standing, and the producers counted last pass (Barracks, WOR).
     /// Read only for the INFANTRY_LANE standing line; not saved.
     std::array<int, 2> infantryLaneOrdered_{};

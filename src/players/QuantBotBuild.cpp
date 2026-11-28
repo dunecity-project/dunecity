@@ -3220,6 +3220,11 @@ void QuantBot::planUnitMix(BuildPass& pass) {
             pass.trooperTarget = std::max(pass.trooperTarget,
                 (pass.techSavings ? pass.militaryValue : pass.lightBudget)
                     / std::max(1, data[Unit_Trooper][houseID].price));
+        // InfantryInMix: a city's Troopers are wanted up to the measured infantry share too.
+        if (cityInfantryShare() && pass.citySimEnabled)
+            pass.trooperTarget = std::max(pass.trooperTarget, pass.trooperCount + int(std::max<int64_t>(0,
+                (int64_t(pass.militaryValue) * pass.infantryPercent / 100 - pass.infantryValue
+                 + data[Unit_Trooper][houseID].price - 1) / std::max(1, data[Unit_Trooper][houseID].price))));
     }
 
 
@@ -3479,7 +3484,10 @@ bool QuantBot::troopContentExists(BuildPass& pass, const BuilderBase* builder) {
 }
 
 bool QuantBot::trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value) {
-    const int troops = QuantBotBuildPolicy::rocketInfantrySize(item);
+    // SquadOrders rounds up: a squad is admitted wherever one more man is (docs/infantry-squads.md).
+    const bool roundUp = infantryQuotaValue(item, value) != value;
+    const int troops = roundUp ? 1 : QuantBotBuildPolicy::rocketInfantrySize(item);
+    value = infantryQuotaValue(item, value);
     const bool supportFloor = pass.trooperCount + troops
         <= QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft);
     return troops > 0 && pass.trooperCount + troops <= pass.trooperTarget
@@ -5610,7 +5618,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 && !trooperOrderAdmitted(pass, item, value)) reason="trooper_support_satisfied";
             else if (cityInfantryItem(pass, item) && !pass.cityAntiAirInfantryDemand && !botConfig().force.infantryInMix
                 && !(pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item))) reason="no_observed_air";
-            else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, value)) reason="infantry_quota_satisfied";
+            else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, infantryQuotaValue(item, value))) reason="infantry_quota_satisfied";
             else if (item==Unit_Ornithopter && pass.citySimEnabled && cityLauncherArmyEnabled()) reason="city_launcher_army";
             else if (item==Unit_Ornithopter && int64_t(pass.itemCount[item]+1)*value*10000
                 > int64_t(pass.militaryValue+value)*2000) reason="air_composition_cap";

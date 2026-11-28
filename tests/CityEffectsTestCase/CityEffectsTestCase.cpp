@@ -190,14 +190,15 @@ TEST_CASE("Police coverage: PoliceStation full, gun turrets 15%, rocket turrets 
     REQUIRE(getPoliceCoverage(Structure_HeavyFactory)  == 0);
 }
 
-TEST_CASE("Police coverage: Barracks and WOR no longer count as police (regression)",
+TEST_CASE("Police coverage: Barracks and WOR police at half a station (regression)",
           "[city-effects][police][regression]") {
-    // Barracks and WOR are infantry-production buildings only. Adding
-    // them used to grant full police coverage, which was a design bug:
-    // putting a barracks down would magically turn slums luxury. Police
-    // Station is now the sole full-coverage source.
-    REQUIRE(getPoliceCoverage(Structure_Barracks)  == 0);
-    REQUIRE(getPoliceCoverage(Structure_WOR)       == 0);
+    // History: Barracks and WOR once granted FULL police coverage, which was a design bug (a barracks
+    // turned slums luxury), so the Police Station became the sole full-coverage source and they had none.
+    // Stefan, 2026-11-28: "and infantry and wor have 50% police effect": half a station, never full, and
+    // no upkeep of their own (docs/infantry-squads.md).
+    REQUIRE(getPoliceCoverage(Structure_Barracks)  == kPoliceCoverageFull / 2);
+    REQUIRE(getPoliceCoverage(Structure_WOR)       == kPoliceCoverageFull / 2);
+    REQUIRE(getPoliceCoverage(Structure_Barracks)  < getPoliceCoverage(Structure_PoliceStation));
     REQUIRE(getPoliceAnnualCost(Structure_Barracks) == 0);
     REQUIRE(getPoliceAnnualCost(Structure_WOR)      == 0);
 }

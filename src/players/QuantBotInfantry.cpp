@@ -24,6 +24,11 @@ namespace {
 constexpr Uint32 kInfantryMixLogCycles = MILLI2CYCLES(60 * 1000);
 /// One INFANTRY_LANE backlog line a house and producer per game minute.
 constexpr Uint32 kInfantryLaneLogCycles = MILLI2CYCLES(60 * 1000);
+/// "if the ai needs more capacity": the factory lane rule must hold this long, and the deficit must be at least
+/// kLaneDeficitOrders orders per existing lane. A lane added on one busy moment sat idle in the first real games
+/// (men per 10 minutes 10 -> 10 and 13 -> 7 after the lane): demand, not capacity, was the limit.
+constexpr Uint32 kLaneSustainCycles = MILLI2CYCLES(120 * 1000);
+constexpr int kLaneDeficitOrders = 3;
 
 size_t laneIndex(Uint32 producer) { return producer == Structure_WOR ? 1 : 0; }
 }
@@ -88,9 +93,19 @@ bool QuantBot::infantryLaneBacklog(BuildPass& pass, Uint32& producer) {
     }
     const int houseID = getHouse()->getHouseID();
     const int actual = getHouse()->getNumItems(producer);
-    const bool backlog = QuantBotBuildPolicy::needsProductionLane(actual, pass.itemCount[producer], busy, deficit,
-        pass.money, pass.economyReserve, currentGame->objectData.data[producer][houseID].price);
+    const auto& data = currentGame->objectData.data;
+    const Uint32 single = producer == Structure_WOR ? Unit_Trooper : Unit_Soldier;
+    const Uint32 squad = DuneCity::InfantrySquad::squadOf(single);
+    const int orderValue = botConfig().force.squadOrders && data[squad][houseID].enabled
+        ? data[squad][houseID].price : data[single][houseID].price;
+    const bool rule = QuantBotBuildPolicy::needsProductionLane(actual, pass.itemCount[producer], busy, deficit,
+        pass.money, pass.economyReserve, data[producer][houseID].price)
+        && int64_t(deficit) >= int64_t(kLaneDeficitOrders) * actual * std::max(1, orderValue);
     const Uint32 now = currentGame->getGameCycleCount();
+    auto& since = infantryLaneRuleSince_[laneIndex(producer)];
+    if (!rule) since = 0;
+    else if (since == 0) since = std::max<Uint32>(1, now);
+    const bool backlog = rule && now >= since + kLaneSustainCycles;
     auto& logged = infantryLaneLogCycle_[laneIndex(producer)];
     if (backlog && (logged == 0 || now >= logged + kInfantryLaneLogCycles)) {
         logged = std::max<Uint32>(1, now);
@@ -119,4 +134,27 @@ void QuantBot::updateInfantryLanes() {
         }
         infantryLaneSeen_[lane] = have;
     }
+}
+
+bool QuantBot::cityInfantryShare() const {
+    return botConfig().force.infantryInMix && !ModManager::instance().isTornieFamilyContentActive();
+}
+
+int QuantBot::infantryQuotaValue(Uint32 item, int value) const {
+    if (!botConfig().force.squadOrders || ModManager::instance().isTornieFamilyContentActive()
+        || !DuneCity::InfantrySquad::threeManSquad(item)) return value;
+    return std::max(1, value / 3);
+}
+
+Uint32 QuantBot::infantryFirstProducer(BuildPass& pass, const BuilderBase* yard) const {
+    if (!cityInfantryShare() || pass.infantryPercent < 2
+        || pass.itemCount[Structure_Barracks] + pass.itemCount[Structure_WOR] > 0) return NONE_ID;
+    const int houseID = getHouse()->getHouseID();
+    for (const Uint32 producer : {Structure_WOR, Structure_Barracks}) {
+        if (!campaignAvailableToBuild(yard, producer)) continue;
+        const int price = currentGame->objectData.data[producer][houseID].price;
+        if (pass.money < pass.economyReserve + pass.cityWorkingReserve + price + 1000) return NONE_ID;
+        return producer;
+    }
+    return NONE_ID;
 }

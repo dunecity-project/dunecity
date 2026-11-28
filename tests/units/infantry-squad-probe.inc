@@ -15,9 +15,9 @@
 // wor_tax        the same for a WOR
 // land_value     a Barracks or WOR raises the land value of own lots 2-4 tiles away by more than 0 and by 20-50% of
 //                what a Palace on the same spot does ("and they moderately increase land value")
-// police         a Barracks or WOR gives 0.50 (+-0.02) of a Police Station's police coverage and 0.50 (+-0.10) of its
-//                crime drop on the same spot, and at 50% Police funding still half a 50%-funded station's
-//                ("and infantry and wor have 50% police effect")
+// police         a Barracks or WOR gives 0.50 (+-0.02) of a Police Station's police coverage on every cell around the
+//                same spot, also at 50% Police funding, and crime on each lot is crime before police less that
+//                coverage ("and infantry and wor have 50% police effect")
 
 #include <House.h>
 #include <Map.h>
@@ -195,7 +195,11 @@ std::vector<UnitBase*> buyOnce(Fixture& f, BuilderBase* producer, Uint32 item, U
     clickItem(f, producer, list, item);
     const int buildSeconds = f.game->objectData.data[item][f.own->getHouseID()].buildtime * 15 / 62 + 8;
     std::vector<UnitBase*> fresh;
+    // What the order cost is what the builder took for it (its production progress, paid from the house's
+    // credits as it builds): the credit balance also moves with the city budget while the men are built.
+    FixPoint paid = 0;
     const bool out = f.runUntil(buildSeconds + 30, [&] {
+        if(producer->getCurrentProducedItem() == item) paid = std::max(paid, producer->getProductionProgress());
         fresh.clear();
         for(UnitBase* u : f.units(man)) if(!before.count(u->getObjectID())) fresh.push_back(u);
         return producer->getProductionQueueSize() == 0 && static_cast<int>(fresh.size()) >= men;
@@ -206,8 +210,10 @@ std::vector<UnitBase*> buyOnce(Fixture& f, BuilderBase* producer, Uint32 item, U
     for(UnitBase* u : f.units(man)) if(!before.count(u->getObjectID())) fresh.push_back(u);
     require(static_cast<int>(fresh.size()) == men, f.label + ": the order put " + std::to_string(fresh.size())
             + " men on the map, not " + std::to_string(men));
-    require(credits - f.own->getCredits() == price, f.label + ": the order cost " + std::to_string(credits - f.own->getCredits())
-            + ", not " + std::to_string(price));
+    require(paid.lround() == price, f.label + ": the builder took " + std::to_string(paid.lround()) + " for the order, not "
+            + std::to_string(price));
+    require(credits - f.own->getCredits() >= price, f.label + ": the house's credits fell by only "
+            + std::to_string(credits - f.own->getCredits()) + " for an order of " + std::to_string(price));
     return fresh;
 }
 
@@ -285,7 +291,7 @@ void housingTax(const std::string& name, int item) {
     const int baseBefore = taxBase(f), popBefore = residents(f);
     BuilderList* list = openList(f, yard);
     clickItem(f, yard, list, item);
-    const Coord site(24, 20);
+    const Coord site(22, 20);   // beside the yard: a plot must touch the base
     for(int dy = 0; dy < 3; ++dy) for(int dx = 0; dx < 3; ++dx) currentGameMap->getTile(site.x + dx, site.y + dy)->setType(Terrain_Rock);
     StructureBase* built = nullptr;
     auto findBuilt = [&] {
@@ -370,9 +376,11 @@ void landValue() {
     }
 }
 
-struct PoliceReading { double coverage = 0, drop = 0; int lots = 0; };
+struct PoliceReading {
+    std::vector<int> coverage, before, after;   // per lot, then the source cell last (coverage only)
+};
 
-/// Police coverage and crime drop on the lots around SITE with ITEM there, at FUNDING percent.
+/// Police coverage and crime before / after police on the lots around SITE with ITEM there, at FUNDING percent.
 PoliceReading policeEffect(const std::string& name, int item, Coord site, int funding) {
     Fixture f(name);
     const auto lots = cityBlock(f, site);
@@ -382,34 +390,52 @@ PoliceReading policeEffect(const std::string& name, int item, Coord site, int fu
     const auto* city = f.game->getCitySimulation();
     PoliceReading reading;
     for(const Coord lot : lots) {
-        reading.coverage += city->getPoliceCoverageMap().worldGet(lot.x, lot.y);
-        reading.drop += int(city->getCrimeBeforePoliceMap().worldGet(lot.x, lot.y)) - int(city->getCrimeRateMap().worldGet(lot.x, lot.y));
-        ++reading.lots;
+        reading.coverage.push_back(city->getPoliceCoverageMap().worldGet(lot.x, lot.y));
+        reading.before.push_back(city->getCrimeBeforePoliceMap().worldGet(lot.x, lot.y));
+        reading.after.push_back(city->getCrimeRateMap().worldGet(lot.x, lot.y));
     }
-    reading.coverage += city->getPoliceCoverageMap().worldGet(site.x, site.y);
+    reading.coverage.push_back(city->getPoliceCoverageMap().worldGet(site.x, site.y));
     return reading;
 }
 
 void police() {
-    // Stefan, 2026-11-28: "and infantry and wor have 50% police effect": half a Police Station's coverage and
-    // crime reduction, scaled by Police funding as a station is.
+    // Stefan, 2026-11-28: "and infantry and wor have 50% police effect": half a Police Station's police coverage,
+    // taken off crime exactly as a station's is, and scaled by Police funding as a station's is. Crime after
+    // police is clamp(before - coverage, 0, 250) (computeCrimeAfterPolice): near a station crime reaches 0, so the
+    // size of the drop is capped by each lot's crime before police (higher around a Barracks, which houses 40
+    // people) and is not a measure of the effect; the coverage, cell by cell, is.
     const Coord site(30, 30);
     const PoliceReading station = policeEffect("police station", Structure_PoliceStation, site, 100);
-    require(station.coverage > 0 && station.drop > 0, "police: the Police Station covers or lowers nothing, the comparison is void");
     const PoliceReading stationHalf = policeEffect("police station 50%", Structure_PoliceStation, site, 50);
+    for(size_t i = 0; i < station.coverage.size(); ++i)
+        require(station.coverage[i] > 0, "police: the Police Station covers nothing at cell " + std::to_string(i));
     for(const int item : {Structure_Barracks, Structure_WOR}) {
+        const std::string what = "police: item " + std::to_string(item);
         const PoliceReading full = policeEffect("police " + std::to_string(item), item, site, 100);
-        const double coverage = full.coverage / station.coverage, drop = full.drop / station.drop;
-        require(coverage >= 0.48 && coverage <= 0.52, "police: item " + std::to_string(item) + " coverage is "
-                + std::to_string(coverage) + " of a Police Station's");
-        require(drop >= 0.40 && drop <= 0.60, "police: item " + std::to_string(item) + " lowers crime by "
-                + std::to_string(drop) + " of a Police Station's");
         const PoliceReading half = policeEffect("police 50% " + std::to_string(item), item, site, 50);
-        const double funded = half.drop / std::max(1.0, stationHalf.drop);
-        require(half.coverage < full.coverage && funded >= 0.40 && funded <= 0.60, "police: at 50% funding item "
-                + std::to_string(item) + " lowers crime by " + std::to_string(funded) + " of a station's at 50%");
-        record("police", "item " + std::to_string(item) + ": coverage " + std::to_string(coverage) + ", crime drop "
-               + std::to_string(drop) + " of a Police Station's; at 50% funding " + std::to_string(funded));
+        double low = 1, high = 0;
+        int lowered = 0;
+        for(size_t i = 0; i < station.coverage.size(); ++i) {
+            const double ratio = double(full.coverage[i]) / station.coverage[i];
+            const double funded = double(half.coverage[i]) / std::max(1, stationHalf.coverage[i]);
+            low = std::min({low, ratio, funded});
+            high = std::max({high, ratio, funded});
+            require(ratio >= 0.48 && ratio <= 0.52, what + " coverage at cell " + std::to_string(i) + " is "
+                    + std::to_string(ratio) + " of a Police Station's");
+            require(funded >= 0.48 && funded <= 0.52, what + " at 50% funding: coverage at cell " + std::to_string(i)
+                    + " is " + std::to_string(funded) + " of a 50%-funded Police Station's");
+            require(half.coverage[i] < full.coverage[i], what + ": 50% funding did not lower its coverage");
+            if(i + 1 == station.coverage.size()) break;   // the source cell has no lot
+            const int expected = std::clamp(full.before[i] - full.coverage[i], 0, 250);
+            require(full.after[i] == expected, what + ": crime at lot " + std::to_string(i) + " is "
+                    + std::to_string(full.after[i]) + ", not crime before police " + std::to_string(full.before[i])
+                    + " less its coverage " + std::to_string(full.coverage[i]));
+            if(full.after[i] < full.before[i]) ++lowered;
+        }
+        require(lowered >= 1, what + " lowered crime on no lot");
+        record("police", "item " + std::to_string(item) + ": coverage " + std::to_string(low) + "-" + std::to_string(high)
+               + " of a Police Station's on every cell (also at 50% funding), taken off crime on " + std::to_string(lowered)
+               + " of " + std::to_string(station.coverage.size() - 1) + " lots");
     }
 }
 

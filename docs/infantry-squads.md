@@ -44,22 +44,41 @@ barracks count as a high density residential and is taxable".
 
 ## QuantBot (each switch default off until measured)
 
-- **SquadOrders.** Every QuantBot infantry order takes the offer cheapest per man, which is the squad at these
-  prices. That covers the Barracks and WOR passes, the Trooper anti-air floor (`supportTrooperOrder`, which
-  already compared per man), the capital-candidate loop, and the Zone Garrisons levy. With the switch off,
-  QuantBot never orders Infantry or Troopers, so enabling the items left the default AI unchanged. The AI
-  Player and the campaign AI did buy them, from their existing priority tables.
-- **InfantryLanes.** Another Barracks or WOR is built by the rule that adds Light and Heavy Factories
-  (`QuantBotBuildPolicy::needsProductionLane`). The rule fires when every lane is built and at least 75% are
-  busy, the infantry share's deficit is at least the lane's price, and the house holds the lane's price plus
-  1000 over its reserve. It builds a WOR once Troopers are fielded, else a Barracks. No other cap. The
-  Construction Yard rule is `infantry_unit_backlog`, right after `light_unit_backlog`.
-- **InfantryInMix.** Since 2026-11-26 (`938eae7c7`) infantry has been one more slot of the unit mix
-  (`UnitMixPolicy::measuredInfantryBps`, the same performance score as the vehicle slots). In a city game,
-  though, the Barracks never built, and the WOR and the capital loop bought infantry only while hostile
-  aircraft were seen (`cityAntiAirInfantryDemand`). With the switch on, a city's Barracks and WOR buy to the
-  measured share, inside the city working reserve. The debug line "Adaptive unit mix" now prints Infantry's
-  reward, losses and share.
+- **SquadOrders.** Every QuantBot infantry order takes the offer that is cheapest per man, which at these
+  prices is the squad. That covers the Barracks and WOR passes, the Trooper support path
+  (`supportTrooperOrder`), the capital-candidate loop, and the Zone Garrisons levy.
+  - It rounds up: a squad is admitted wherever one more man is, against the Trooper target, the infantry share
+    and the light-unit budget. The first real games showed why: refused because three men overshot a target by
+    one or two, the support path bought 85 single Troopers and only 46 squads.
+  - With the switch off, QuantBot never orders Infantry or Troopers, so enabling the items left the default AI
+    unchanged.
+  - The AI Player and the campaign AI do buy them, from their existing priority tables.
+- **InfantryLanes.** Another Barracks or WOR, by the rule that adds Light and Heavy Factories
+  (`QuantBotBuildPolicy::needsProductionLane`):
+  - every lane built and at least 75% of them busy;
+  - the infantry share's deficit at least the lane's price;
+  - the lane's price plus 1000 over the house's reserve.
+
+  The deviation, "if the ai needs more capacity": the rule must also hold for 2 minutes, and the deficit must
+  be at least 3 orders per existing lane. In the first real games, lanes added on one busy moment did not
+  raise output (men per 10 minutes went 10 -> 10 and 13 -> 7), because demand was the limit, not capacity.
+  - It builds a WOR once Troopers are fielded, otherwise a Barracks.
+  - The Yard rule is `infantry_unit_backlog`, right after `light_unit_backlog`.
+- **InfantryInMix.** Infantry has been one more slot of the unit mix since 2026-11-26 (`938eae7c7`,
+  `UnitMixPolicy::measuredInfantryBps`, the same performance score as the vehicle slots). In a city game it
+  never decided anything, for three reasons:
+  - the Barracks never built;
+  - the WOR, the capital loop and the order gate (`produceItemWithLogging`) took infantry only while hostile
+    aircraft were seen;
+  - Atreides, who have no WOR, never got a Barracks.
+
+  With the switch on:
+  - a city's Barracks and WOR buy to the measured share, inside the city working reserve;
+  - the Trooper target rises to the share;
+  - a house with a share of 2% or more and neither building builds its first Barracks or WOR
+    (`infantry_first_producer`).
+
+  The debug line "Adaptive unit mix" now prints Infantry's reward, losses and share.
 
 ## Match log
 
@@ -68,8 +87,8 @@ barracks count as a high density residential and is taxable".
 - `INFANTRY_SQUAD event=delivered` (engine): the men a squad put on the map.
 - `INFANTRY_MIX` (QuantBot, once a game minute): the measured share, its opening, the score, the infantry and
   army value, and `on_share`.
-- `INFANTRY_LANE` (backlog, ordered, standing).
-- `INFANTRY_BUY` (reason `city_infantry_share`).
+- `INFANTRY_LANE` (first, backlog, ordered, standing).
+- `INFANTRY_BUY` (QuantBot's Barracks and WOR purchases, with their reason).
 - `CITY_INFANTRY_HOUSING` (once a city year): the Barracks and WOR of a house, their residents and their tax
   base.
 
@@ -83,7 +102,9 @@ success events of the play styles `squad-orders`, `infantry-lanes`, `infantry-in
   Troopers costs 200 and puts three Troopers on the map, and one Move click sends all three; one click on
   Infantry gives three Soldiers for 50; the singles; a Barracks and a WOR ordered from the yard list and
   placed with a map click add 80 tax eighths and 40 residents, and take them back when destroyed; a Barracks or
-  WOR raises nearby lots' land value by 20-50% of a Palace's on the same spot; its police coverage is 0.50
-  (+-0.02) and its crime drop 0.50 (+-0.10) of a Police Station's, also at 50% funding.
+  WOR raises nearby lots' land value by 20-50% of a Palace's on the same spot. Its police coverage is 0.50
+  (+-0.02) of a Police Station's on every cell, also at 50% funding, and crime on each lot is its crime before
+  police minus that coverage. A ratio of crime drops is not a measure here: crime after police is
+  `clamp(before - coverage, 0, 250)`, and near a station it reaches 0.
 - `infantry_squads_real_game` (three rs160 games, style `infantry-squads`): ACCEPT S1-S5, one per request.
 - `CityEffectsTestCase` "Barracks and WOR are taxable top-density residential".

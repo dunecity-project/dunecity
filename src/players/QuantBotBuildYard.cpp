@@ -2706,6 +2706,16 @@ void QuantBot::chooseYardProductionLanes(BuildPass& pass, BuilderTurn& turn, Yar
         && findPlaceLocation(Structure_LightFactory).isValid()) {
         yardTurn.itemID = Structure_LightFactory; yardTurn.structureRule = "light_unit_backlog";
     }
+    // InfantryInMix: a city house with a measured infantry share and no Barracks or WOR builds its first one
+    // (Atreides never had one: the city AI built a WOR only for TrooperSupport, and Atreides have no WOR).
+    if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && pass.citySimEnabled) {
+        const Uint32 first = infantryFirstProducer(pass, turn.pBuilder);
+        if (first != NONE_ID && findPlaceLocation(first).isValid()) {
+            yardTurn.itemID = first; yardTurn.structureRule = "infantry_first_producer";
+            SDL_Log("INFANTRY_LANE: event=first house=%d producer=%u share_bps=%d cycle=%u", getHouse()->getHouseID(),
+                first, pass.infantryPercent * 100, currentGame->getGameCycleCount());
+        }
+    }
     // InfantryLanes: saturated infantry production gets another Barracks or WOR, as the factories do.
     if (yardTurn.itemID == NONE_ID && !yardTurn.skipRemainingStructureLogic && yardTurn.infantryBacklog
         && campaignAvailableToBuild(turn.pBuilder, yardTurn.infantryLaneProducer)
