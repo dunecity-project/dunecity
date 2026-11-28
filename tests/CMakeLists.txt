@@ -878,7 +878,7 @@ if(APPLE AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(quantbot_carryall_repair PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
         # Demand-backed capacity, pending work, access failures and save/observer clocks.
         foreach(repair_mod IN ITEMS vanilla dunecity)
-            dunecity_add_test(headless integration LABELS "macos" NAME repair_capacity_${repair_mod}
+            dunecity_add_test(headless nightly LABELS "macos" NAME repair_capacity_${repair_mod}
                 COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repair-capacity-probe --repeatable --headless-assets
                 --mod ${repair_mod} --level 9 --partner-difficulty hard --minutes 1

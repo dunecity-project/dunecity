@@ -1552,7 +1552,7 @@ class ReleaseReadinessTests(unittest.TestCase):
 
 class QualificationAdmissionTests(unittest.TestCase):
     def invoke(self, event, name='workflow_run', ref='refs/heads/main', latest=SHA,
-               reusable=False, recipe_matches=True):
+               reusable=False, recipe_matches=True, ci_error=None):
         with tempfile.TemporaryDirectory() as tmp:
             event_path = Path(tmp) / 'event.json'
             automation.write_json(event_path, event)
@@ -1565,17 +1565,17 @@ class QualificationAdmissionTests(unittest.TestCase):
             with patch.dict(os.environ, GITHUB_EVENT_PATH=str(event_path), GITHUB_EVENT_NAME=name,
                             GITHUB_REF=ref, GITHUB_SHA=OTHER), \
                  patch.object(automation, 'qualification_api', side_effect=api), \
-                 patch.object(automation, 'qualification_for', return_value={'id': 41}) as green, \
+                 patch.object(automation, 'qualification_for', return_value={'id': 41}, side_effect=ci_error) as green, \
                  patch.object(automation, 'reuse_qualification', side_effect=None if reusable else ValueError('none')), \
                  patch.object(automation, 'emit') as emit:
                 automation.select_qualification(argparse.Namespace())
                 return emit.call_args.args[0], green.call_count
 
     def event(self, **overrides):
-        source = dict(head_branch=automation.STAGING, event='push', conclusion='success', head_sha=SHA,
+        source = dict(head_branch=automation.STAGING, event='push', conclusion=None, head_sha=SHA,
                       head_repository={'full_name': automation.repository()})
         source.update(overrides)
-        return {'workflow_run': source}
+        return {'action': 'requested', 'workflow_run': source}
 
     def test_failed_fork_wrong_branch_and_nonpush_never_admit(self):
         for override in [dict(conclusion='failure'), dict(head_branch='release-idea'), dict(event='pull_request'),
@@ -1593,7 +1593,25 @@ class QualificationAdmissionTests(unittest.TestCase):
 
     def test_already_qualified_candidate_does_not_rerun(self):
         values, checked = self.invoke(self.event(), reusable=True)
-        self.assertFalse(values['run']); self.assertEqual(checked, 1)
+        self.assertFalse(values['run']); self.assertEqual(checked, 0)
+
+    def test_requested_push_starts_before_platform_ci_completes(self):
+        values, checked = self.invoke(self.event(), ci_error=ValueError('CI still running'))
+        self.assertTrue(values['run'])
+        self.assertEqual(values['sha'], SHA)
+        self.assertEqual(checked, 0)
+
+    def test_completed_notification_cannot_launch_duplicate_qualification(self):
+        event = self.event(conclusion='success')
+        event['action'] = 'completed'
+        values, checked = self.invoke(event)
+        self.assertFalse(values['run'])
+        self.assertEqual(checked, 0)
+
+    def test_explicit_pin_still_refuses_incomplete_platform_ci(self):
+        with self.assertRaisesRegex(ValueError, 'CI still running'):
+            self.invoke({'inputs': {'sha': SHA}}, name='workflow_dispatch',
+                        ci_error=ValueError('CI still running'))
 
     def test_control_recipe_drift_and_untrusted_dispatch_ref_fail_closed(self):
         with self.assertRaisesRegex(ValueError, 'recipes differ'):
