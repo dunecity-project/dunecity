@@ -144,6 +144,16 @@ void RepairYard::deployRepairUnit(Carryall* pCarryall) {
         if (pCarryall) pCarryall->setTarget(nullptr);
         return;
     }
+    bool redirected = false;
+    if (owner->isAI()) {
+        for (const auto& player : owner->getPlayerList()) {
+            auto* bot = dynamic_cast<QuantBot*>(player.get());
+            if (bot && bot->reconsiderRepairReturn(pRepairUnit, location, pCarryall != nullptr)) {
+                redirected = true;
+                break;
+            }
+        }
+    }
     if(metrics) AITelemetry::log().repairPrepareReturn(*metrics, currentGame->getGameCycleCount(),
         pRepairUnit->getObjectID(), pCarryall != nullptr, pRepairUnit->getHealth().getRawValue(),
         FixPoint(pRepairUnit->getMaxHealth()).getRawValue());
@@ -160,7 +170,7 @@ void RepairYard::deployRepairUnit(Carryall* pCarryall) {
         pRepairUnit->doSetAttackMode(isHarvesterLikeUnit(pRepairUnit->getItemID()) ? HARVEST : GUARD);
         pRepairUnit->deploy(deployPos);
         pRepairUnit->setTarget(nullptr);
-        pRepairUnit->setDestination(pRepairUnit->getLocation());
+        pRepairUnit->setDestination(redirected ? pRepairUnit->getGuardPoint() : pRepairUnit->getLocation());
     }
 
     if(getOwner() == pLocalHouse) {

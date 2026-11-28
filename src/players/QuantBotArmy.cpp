@@ -53,6 +53,72 @@ int liveValue(const ObjectBase* object) {
 }
 } // namespace
 
+bool QuantBot::reconsiderRepairReturn(UnitBase* unit, Coord yard, bool carried) {
+    if (!botConfig().force.repairReturnCheck || !getHouse()->isAI() || switchedOff()
+        || !unit || unit->getOwner() != getHouse() || unit->getHealth() < unit->getMaxHealth()
+        || !unit->getGuardPoint().isValid()) return false;
+    constexpr int radius = 8;
+    const Coord previous = unit->getGuardPoint();
+    const int team = getHouse()->getTeamID();
+    const auto& data = currentGame->objectData.data;
+    auto power = [&](const ObjectBase* object) {
+        return CombatPowerPolicy::unitPower(data[object->getItemID()][object->getProductionHouseID()].price,
+            object->getHealth().lround(), object->getMaxHealth());
+    };
+    int64_t friendly = unit->canAttack() && mobileCombatItem(unit->getItemID()) ? power(unit) : 0;
+    int64_t hostile = 0;
+    for (const auto* other : getUnitList()) {
+        if (other == unit || !other->isActive() || other->getHealth() <= 0 || !other->getOwner()
+            || !other->canAttack() || !mobileCombatItem(other->getItemID())
+            || blockDistance(previous, other->getLocation()) > radius) continue;
+        if (other->getOwner()->getTeamID() == team) friendly += power(other);
+        else hostile += power(other);
+    }
+    for (const auto* turret : getStructureList()) {
+        if (!turret->isActive() || turret->getHealth() <= 0 || !turret->getOwner()
+            || (turret->getItemID() != Structure_GunTurret && turret->getItemID() != Structure_RocketTurret)
+            || blockDistance(previous, turret->getClosestPoint(previous)) > radius
+            || blockDistance(previous, turret->getClosestPoint(previous)) > turret->getWeaponRange()) continue;
+        const auto value = CombatPowerPolicy::turretPower(
+            data[turret->getItemID()][turret->getProductionHouseID()].price,
+            turret->getHealth().lround(), turret->getMaxHealth());
+        if (turret->getOwner()->getTeamID() == team) friendly += value;
+        else hostile += value;
+    }
+    ++repairReturnChecks;
+    const bool redirect = hostile > friendly;
+    Coord chosen = previous;
+    if (redirect) {
+        refreshTacticalDanger();
+        chosen = findProtectedRallyLocation();
+        if (!chosen.isValid()) chosen = yard;
+        unit->setGuardPoint(chosen);
+        ++repairReturnRedirects;
+        if (carried) repairReturnFlights[unit->getObjectID()] = {previous, chosen};
+        SDL_Log("REPAIR_RETURN: house=%d event=redirect unit=%u old_x=%d old_y=%d x=%d y=%d carried=%d",
+            getHouse()->getHouseID(), unit->getObjectID(), previous.x, previous.y, chosen.x, chosen.y, int(carried));
+    }
+    traceDecision("repair_return_check", AITelemetry::Record().set("unit", unit->getObjectID())
+        .set("redirect", redirect).set("friendly_power", friendly).set("enemy_power", hostile)
+        .set("radius", radius).set("old_x", previous.x).set("old_y", previous.y)
+        .set("x", chosen.x).set("y", chosen.y));
+    return redirect;
+}
+
+void QuantBot::noteRepairReturnLanding(const UnitBase* unit) {
+    if (!unit || unit->getOwner() != getHouse()) return;
+    const auto found = repairReturnFlights.find(unit->getObjectID());
+    if (found == repairReturnFlights.end()) return;
+    const auto [previous, chosen] = found->second;
+    const Coord landed = unit->getLocation();
+    const bool met = unit->isActive() && !unit->isPickedUp()
+        && blockDistance(landed, chosen) <= 3 && blockDistance(landed, previous) > 8;
+    if (met) ++repairReturnLandings;
+    SDL_Log("REPAIR_RETURN: house=%d event=landed unit=%u met=%d x=%d y=%d",
+        getHouse()->getHouseID(), unit->getObjectID(), int(met), landed.x, landed.y);
+    repairReturnFlights.erase(found);
+}
+
 QuantBot::CoreDefenceSurvey QuantBot::surveyVanillaCoreDefence() const {
     namespace Policy = QuantBotCoreDefencePolicy;
     CoreDefenceSurvey survey;

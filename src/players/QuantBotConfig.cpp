@@ -425,6 +425,7 @@ QuantBotConfig::QuantBotConfig() {
     force.fleetCarryallQuarters = 1;
     force.fleetRepairYards = 1;
     force.repairCapacityDemand = false;
+    force.repairReturnCheck = false;
     force.ffaVultureLevel = 0;
     force.techIncomeTiming = 0;
     // Candidate (fix/ladder-campaign, docs/ai-scenario-matrix.md "Team games"): team waves join an
@@ -991,6 +992,7 @@ bool QuantBotConfig::save(const std::string& filepath) const {
         iniFile.setIntValue("Force Concentration", "FleetCarryallQuarters", force.fleetCarryallQuarters);
         iniFile.setIntValue("Force Concentration", "FleetRepairYards", force.fleetRepairYards);
         iniFile.setBoolValue("Force Concentration", "RepairCapacityDemand", force.repairCapacityDemand);
+        iniFile.setBoolValue("Force Concentration", "RepairReturnCheck", force.repairReturnCheck);
         iniFile.setIntValue("Force Concentration", "FfaVultureLevel", force.ffaVultureLevel);
         iniFile.setIntValue("Force Concentration", "TechIncomeTiming", force.techIncomeTiming);
         iniFile.setBoolValue("Force Concentration", "JoinAllyWaves", force.joinAllyWaves);
@@ -1391,6 +1393,8 @@ bool QuantBotConfig::readFrom(const INIFile& iniFile) {
         "Force Concentration", "FleetRepairYards", force.fleetRepairYards), 0, 1);
     force.repairCapacityDemand = iniFile.getBoolValue(
         "Force Concentration", "RepairCapacityDemand", force.repairCapacityDemand);
+    force.repairReturnCheck = iniFile.getBoolValue(
+        "Force Concentration", "RepairReturnCheck", force.repairReturnCheck);
     force.ffaVultureLevel = std::clamp(iniFile.getIntValue("Force Concentration", "FfaVultureLevel", force.ffaVultureLevel), 0, 2);
     force.techIncomeTiming = std::clamp(iniFile.getIntValue(
         "Force Concentration", "TechIncomeTiming", force.techIncomeTiming), 0, 2);
@@ -2175,6 +2179,7 @@ std::string QuantBotConfig::getConfigHash() const {
     addNamed("fleetCarryallQuarters", force.fleetCarryallQuarters);
     addNamed("fleetRepairYards", force.fleetRepairYards);
     if (force.repairCapacityDemand) addNamed("repairCapacityDemand", force.repairCapacityDemand);
+    if (force.repairReturnCheck) addNamed("repairReturnCheck", force.repairReturnCheck);
     if (force.ffaVultureLevel != 0) addNamed("ffaVultureLevel", force.ffaVultureLevel);
     addNamed("techIncomeTiming", force.techIncomeTiming);
     addNamed("joinAllyWaves", force.joinAllyWaves);

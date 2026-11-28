@@ -345,6 +345,7 @@ struct QuantBotConfig {
         /// Default-OFF: repeat bays need 30s of reachable, saturated local service
         /// demand. Custom games only; authored campaign rebuilding is unchanged.
         bool repairCapacityDemand;
+        bool repairReturnCheck;               ///< Default OFF: veto locally outmatched repaired-unit returns.
         /// Default-off FFA vulture timing: 0 native, 1 strike below 60%, 2 below 90%.
         /// Uses current mutual rival combat and true army values, never unsaved history.
         int ffaVultureLevel;

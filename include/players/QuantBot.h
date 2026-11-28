@@ -128,6 +128,10 @@ public:
     /// Shared by automatic repair and the AI reservation: an exhausted economy
     /// cannot finish this AI-owned repair. Explicit human and defence claims win.
     bool declinesUnfundedRepair(const UnitBase* unit) const;
+    /// Called at actual repair-bay departure; replaces an unsafe return with the protected base rally.
+    bool reconsiderRepairReturn(UnitBase* unit, Coord yard, bool carried);
+    /// Observes the real cargo landing, not the chosen order.
+    void noteRepairReturnLanding(const UnitBase* unit);
     void onScriptedReinforcement(const UnitBase* unit);
     /// Palace experiments are confined to original spice-bearing Custom maps.
     bool palaceExperimentScope() const;
@@ -1768,6 +1772,9 @@ private:
     /// observed enemy rather than for screening workers.
     Coord protectedRally = Coord::Invalid();
     Uint32 protectedRallyCycle = std::numeric_limits<Uint32>::max();
+    /// Observational counters only: not decision state and deliberately not saved.
+    unsigned repairReturnChecks = 0, repairReturnRedirects = 0, repairReturnLandings = 0;
+    std::map<Uint32, std::pair<Coord, Coord>> repairReturnFlights;
     /// Corruption bound only. It is NOT a wave size cap: an unlimited or a
     /// ten-thousand unit override can legitimately field far more than a few
     /// thousand attackers, so this is sized to the engine's own object space

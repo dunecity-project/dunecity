@@ -1216,6 +1216,11 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-repair-return-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/repair-return-probe)
         set_tests_properties(repair_return_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        dunecity_add_test(headless integration NAME quantbot_repair_return_check COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-repair-return-probe.py
+            --cases ai_unsafe_on ai_unsafe_off ai_safe_on ai_drove_unsafe ai_walk_unsafe human_unsafe
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/quantbot-repair-return-check)
+        set_tests_properties(quantbot_repair_return_check PROPERTIES TIMEOUT 600 PROCESSORS 2)
         # Hospitals heal infantry: five beds, the type lock and its release, Carryall delivery,
         # the automatic rule and the match rule off, save/load (dunecity/HospitalCare.h).
         dunecity_add_test(headless nightly NAME hospital_care_probe COMMAND ${Python3_EXECUTABLE}

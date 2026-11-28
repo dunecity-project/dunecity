@@ -788,6 +788,9 @@ FleetRepairYards=1
 # Queued bays, idle bays and transport/access failures do not justify repeats.
 # Campaign rebuild permissions and Medium's existing limits are unchanged.
 RepairCapacityDemand=false
+# Default OFF: repaired AI units avoid locally superior enemies within 8 tiles of pickup.
+# Redirect to the existing protected base rally; human units are unchanged.
+RepairReturnCheck=0
 # Experimental pre-ladder (1.0.807) Custom Medium, default 0 = current. 1: no banked-credit
 # surplus army and no heavy-factory walk after the starport opening; 2: also the standing
 # 40% raid share instead of whole-army waves. Easy/Hard/Brutal and campaigns are unchanged.

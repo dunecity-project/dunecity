@@ -1,5 +1,7 @@
 {
   "_readme": "Activation events per play style (tests/ai/activation.py): fire = the behaviour acted, success = it reached its effect. Patterns are 'MARKER: key=value ...' matched against match-log lines that carry house=<number>. One line per style.",
+  "repair-return-on": {"fire": ["REPAIR_RETURN: event=redirect"], "success": ["REPAIR_RETURN: event=landed met=1"]},
+  "repair-return-off": {"fire": ["REPAIR_RETURN: event=redirect"], "success": ["REPAIR_RETURN: event=landed met=1"]},
   "front-turrets": {"fire": ["TURRET_FRONT: rule=front_reinforce"], "success": ["TURRET_FRONT_ENGAGED: rule=front_reinforce"]},
   "advancing-turrets": {"fire": ["TURRET_FRONT: rule=turret_advance"], "success": ["TURRET_FRONT_PLACED: rule=turret_advance"]},
   "turret-creep": {"fire": ["TURRET_FRONT: rule=turret_creep"], "success": ["TURRET_FRONT_ENGAGED: rule=turret_creep"]},

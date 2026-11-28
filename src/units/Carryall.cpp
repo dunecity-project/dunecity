@@ -27,6 +27,7 @@
 #include <Game.h>
 #include <SoundPlayer.h>
 #include <mod/ModManager.h>
+#include <players/QuantBot.h>
 
 #include <structures/RepairYard.h>
 #include <structures/Refinery.h>
@@ -286,6 +287,8 @@ void Carryall::deployUnit(Uint32 unitID)
                 pUnit->getAttackMode(), pUnit->getItemID() == Unit_Saboteur,
                 isHarvesterLikeUnit(pUnit->getItemID()), pUnit->getOwner()->isAI(),
                 pUnit->isAttackMoving()));
+            for (const auto& player : pUnit->getOwner()->getPlayerList())
+                if (auto* bot = dynamic_cast<QuantBot*>(player.get())) bot->noteRepairReturnLanding(pUnit);
         }
 
         if (pickedUpUnitList.empty()) {

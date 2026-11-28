@@ -560,6 +560,76 @@ void caseRuleOff() {
     finish(match);
 }
 
+void caseReturnCheck(const std::string& name) {
+    Match match = start(true);
+    QuantBot* bot = nullptr;
+    for (const auto& player : match.enemy->getPlayerList())
+        if (auto* candidate = dynamic_cast<QuantBot*>(player.get())) bot = candidate;
+    require(bot != nullptr, name + ": no QuantBot");
+    // Keep the fixture's repaired tank out of unrelated offensive controllers.
+    // The engine's repair, carrier and movement paths continue to run normally.
+    bot->role = AIRole::Builder;
+    auto config = std::make_shared<QuantBotConfig>(bot->botConfig());
+    config->force.repairReturnCheck = name != "ai_unsafe_off";
+    bot->configOverride = config;
+    const bool human = name == "human_unsafe";
+    House* house = human ? match.home : match.enemy;
+    RepairYard* yard = human ? match.yard : match.enemyYard;
+    const Coord post = human ? match.at(kPost) : match.enemyAt(kPost);
+    const Coord parking = human ? match.at(kParking) : match.enemyAt(kParking);
+    const bool walking = name == "ai_walk_unsafe";
+    const bool drove = name == "ai_drove_unsafe" || walking;
+    if (!drove) carryall(house, parking);
+    auto* unit = tank(house, post);
+    run(*match.game, 10);
+    damage(unit);
+    if (human) unit->handleSendToRepairClick();
+    else bot->doRepair(unit);
+    Uint32 intoBay = 0;
+    while (yard->getContainedRepairUnit() != unit && intoBay < kTripCycles) {
+        run(*match.game, 1);
+        ++intoBay;
+    }
+    require(yard->getContainedRepairUnit() == unit, name + ": unit never reached the repair bay");
+    const Coord actualPickup = unit->getGuardPoint();
+    require(blockDistance(actualPickup, post) <= kNearPost, name + ": pickup point changed before repair");
+    if (drove && !walking) carryall(house, parking);
+    // Equal local strength is safe because the repaired tank itself counts.
+    // Also place a large remote army: it must NEVER inflate this local comparison.
+    House* hostile = human ? match.enemy : match.home;
+    const int localEnemies = name == "ai_safe_on" ? 1 : 6;
+    for (int i = 0; i < localEnemies; ++i) {
+        auto* threat = tank(hostile, actualPickup + Coord(6 + i % 2, i / 2));
+        threat->doSetAttackMode(RETREAT);
+    }
+    for (int i = 0; i < 12; ++i) {
+        auto* remote = tank(hostile, Coord(16 + i % 4, 8 + i / 4));
+        remote->doSetAttackMode(RETREAT);
+    }
+    Trip trip = follow(*match.game, unit, yard);
+    trip.inBay = intoBay;
+    require(unit->getHealth() == unit->getMaxHealth() && trip.released && (walking || trip.landed),
+        name + ": repair and release did not finish" + describe(unit, trip));
+    if (walking) require(!trip.flownBack && unit->isActive(),
+        name + ": a Carryall appeared in the walking-only case");
+    const bool redirect = !human && name != "ai_unsafe_off" && name != "ai_safe_on";
+    require(bot->repairReturnChecks == unsigned(!human && config->force.repairReturnCheck),
+        name + ": wrong decision activation count");
+    require(bot->repairReturnRedirects == unsigned(redirect), name + ": wrong redirect count");
+    require(bot->repairReturnLandings == unsigned(redirect && !walking),
+        name + ": redirected flight did not reach its effect");
+    if (redirect) {
+        require(blockDistance(trip.end, actualPickup) > 8, name + ": returned to dominated pickup area");
+        require(blockDistance(trip.end, unit->getGuardPoint()) <= kNearPost,
+            name + ": did not land at the chosen protected rally");
+    } else expectBack(name, unit, actualPickup, trip);
+    require(!unit->hasBookedCarrier() && !unit->isPickedUp(), name + ": transport booking leaked");
+    SDL_Log("REPAIR_RETURN_PROBE_CHECK: %s checks=%u redirects=%u end=%s guard=%s",
+        name.c_str(), bot->repairReturnChecks, bot->repairReturnRedirects,
+        coord(trip.end).c_str(), coord(unit->getGuardPoint()).c_str());
+    finish(match);
+}
+
 } // namespace RepairReturnProbe
 
 int runRepairReturnProbe() {
@@ -575,6 +645,9 @@ int runRepairReturnProbe() {
         else if(name == "rule_off") caseRuleOff();
         else if(name == "old_save") caseOldSave();
         else if(name == "default") caseDefault();
+        else if(name == "ai_unsafe_on" || name == "ai_unsafe_off" || name == "ai_safe_on"
+                || name == "ai_drove_unsafe" || name == "ai_walk_unsafe"
+                || name == "human_unsafe") caseReturnCheck(name);
         else throw std::runtime_error("unknown case");
     } catch(const std::exception& e) {
         SDL_Log("REPAIR_RETURN_PROBE_FAIL: %s: %s", name.c_str(), e.what());
