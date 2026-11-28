@@ -172,7 +172,8 @@ TURRET_ROW_FIELDS = KEY + ('event', 'label') + TURRET_FIELDS
 LESSON_EVENTS = (('LAUNCHER_ARMY:', 'launcher_army'), ('LOW_VALUE_PALACE:', 'low_value_palace'),
                  ('FRONT_PALACE:', 'front_palace'), ('CITY_LOTS:', 'city_lots'),
                  # EconomyFirst (Stefan's Air game, 2026-11-28): tests/ai/economy-first-report.py.
-                 ('ECONOMY_FIRST:', 'economy_first'), ('ECONOMY_STATE:', 'economy_state'), ('BUILD_ORDER:', 'build_order'))
+                 ('ECONOMY_FIRST:', 'economy_first'), ('ECONOMY_STATE:', 'economy_state'), ('BUILD_ORDER:', 'build_order'),
+                 ('MCV_DEPLOYED:', 'mcv_deployed'))
 LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 'launchers', 'ornithopters',
                  'launcher_value', 'vehicle_value', 'x', 'y', 'low_lots', 'lots_standing', 'lv_before', 'lv_now',
                  'lv_after', 'rise', 'palace_stands', 'palaces', 'credits', 'wait_s', 'met', 'enemy_tiles',
@@ -181,7 +182,7 @@ LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 
                  'yards', 'mcvs', 'yard_target', 'was', 'capacity', 'refinery_bays', 'yard_refineries', 'zones_r',
                  'zones_c', 'zones_i', 'nuclear', 'windtraps', 'police', 'rocket_turrets', 'heavy_factories',
                  'population', 'tax_per_min', 'power', 'unit_built', 'structure_built', 'hold', 'threat', 'producer',
-                 'item', 'rule', 'hold_passes', 'threat_passes', 'zones', 'spice', 'houses', 'ordered', 'half_his', 'cycle')
+                 'item', 'rule', 'hold_passes', 'threat_passes', 'zones', 'spice', 'houses', 'ordered', 'half_his', 'yards_lost', 'mcvs_lost', 'cycle')
 LESSON_ROW_FIELDS = KEY + ('kind', 'label') + LESSON_FIELDS
 # One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
 # building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on

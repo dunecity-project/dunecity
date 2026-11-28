@@ -2153,8 +2153,11 @@ void QuantBot::buildStarPort(BuildPass& pass, BuilderTurn& turn) {
             const Uint32 unit = offer.itemID;
             const int factory = priceLevel == 0 ? data[unit][houseID].price
                 : getHouse()->radarUnitPrice(unit,data[unit][houseID].price);
+            // CityLauncherArmy (default off): no Ornithopter from the market either (on rs192 its bargains were
+            // every Ornithopter the switch's houses fielded, 20261128T110127-cla-orni).
             if (!isUnit(unit) || unit == Unit_Harvester || unit == Unit_Carryall
-                || unit == Unit_MCV || !StarportBuyingPolicy::admitted(
+                || unit == Unit_MCV || (unit == Unit_Ornithopter && pass.citySimEnabled && cityLauncherArmyEnabled())
+                || !StarportBuyingPolicy::admitted(
                     purchasePrice(turn.pBuilder,unit),factory,priceLevel)) continue;
             bargains.push_back(unit);
         }

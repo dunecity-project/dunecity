@@ -933,6 +933,18 @@ void QuantBot::manageMcv(const MCV* pMCV) {
     const bool colonyMission=report&&colonyMissionDue(pMCV);
     const bool deployed=ready&&doDeploy(pMCV);
     bool clearing=false;
+    if(deployed && currentGame->isCitySimEnabled() && economyLogEnabled()) {
+        // MCV_DEPLOYED (EconomyFirst evidence): where a yard went up and how far the nearest enemy building is.
+        int enemyGap=-1;
+        for (const auto* structure : getStructureList()) {
+            if (!structure->getOwner() || structure->getHealth() <= 0
+                || structure->getOwner()->getTeamID() == getHouse()->getTeamID()) continue;
+            const int gap=blockDistance(location, structure->getClosestPoint(location));
+            if (enemyGap < 0 || gap < enemyGap) enemyGap=gap;
+        }
+        SDL_Log("MCV_DEPLOYED: house=%d x=%d y=%d enemy_tiles=%d yards=%d cycle=%u", getHouse()->getHouseID(),
+                location.x, location.y, enemyGap, getHouse()->getNumItems(Structure_ConstructionYard), getGameCycleCount());
+    }
     if(deployed) {
         mcvExpansionSites.erase(id);
         mcvSurveyCycles.erase(id);

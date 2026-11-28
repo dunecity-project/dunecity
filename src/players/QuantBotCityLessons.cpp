@@ -213,7 +213,7 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
     SDL_Log("ECONOMY_STATE: house=%d credits=%d yards=%d mcvs=%d yard_target=%d capacity=%d refinery_bays=%d "
             "yard_refineries=%d zones_r=%d zones_c=%d zones_i=%d nuclear=%d windtraps=%d palaces=%d police=%d "
             "rocket_turrets=%d heavy_factories=%d population=%d tax_per_min=%d power=%d/%d unit_built=%d "
-            "structure_built=%d hold=%d spice=%d cycle=%u", houseID, house->getCredits(),
+            "structure_built=%d hold=%d spice=%d yards_lost=%d mcvs_lost=%d cycle=%u", houseID, house->getCredits(),
             house->getNumItems(Structure_ConstructionYard), house->getNumItems(Unit_MCV), pass.cityYardTarget,
             pass.cityConstructionCapacity, getAIRefineryBays(), pass.cityYardRefineries,
             house->getNumItems(Structure_ZoneResidential), house->getNumItems(Structure_ZoneCommercial),
@@ -222,7 +222,8 @@ void QuantBot::logEconomyState(const BuildPass& pass) {
             house->getNumItems(Structure_PoliceStation), house->getNumItems(Structure_RocketTurret),
             house->getNumItems(Structure_HeavyFactory), state.getTotalPop(), taxPerMinute,
             house->getProducedPower(), house->getPowerRequirement(), house->getUnitBuiltValue(),
-            house->getStructureBuiltValue(), pass.economyFirstHold, lastCalculatedSpice, now);
+            house->getStructureBuiltValue(), pass.economyFirstHold, lastCalculatedSpice,
+            house->getNumLostItems(Structure_ConstructionYard), house->getNumLostItems(Unit_MCV), now);
 }
 
 bool QuantBot::lowValuePalacesEnabled() const {
