@@ -108,7 +108,7 @@ void InfantryBase::targeting() {
         if(zone && zone->getOwner()->getTeamID() != owner->getTeamID()) {
             if(attackMode == CAPTURE) {
                 // Own-zone capture orders use Follow too. Preserve their explicit intent
-                // when the target changes hands, but normalize to enemy assault.
+                // when the target changes hands; live occupancy still decides whether it can be taken.
                 bFollow = false;
                 targetFriendly = false;
                 setForced(true);
@@ -168,10 +168,11 @@ void InfantryBase::doCaptureStructure(Uint32 targetStructureID) {
 
 void InfantryBase::doCaptureStructure(const StructureBase* pStructure) {
     garrisonRelocationTarget_ = NONE_ID;
-    // Zone Garrisons: an own zone with room is occupied; an enemy zone is entered and taken, or,
-    // while enemy soldiers hold it, fired on until they are gone (engageTarget).
-    if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
-       zone != nullptr && currentGame->isCitySimEnabled()) {
+    // Capture never assaults an occupied zone, even if damage or a different entry point
+    // would otherwise permit the order. The player must clear it with an actual Attack.
+    const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
+    if(zone != nullptr && zone->heldAgainst(this)) return;
+    if(zone != nullptr && currentGame->isCitySimEnabled()) {
         if(!ZoneStructure::garrisonsEnabled() || !canCaptureStructures()) return;
         const bool own = zone->getOwner()->getTeamID() == getOwner()->getTeamID();
         if(own && !zone->mayEnterGarrison(this)) {
@@ -293,14 +294,16 @@ void InfantryBase::checkPos() {
             return;
         }
     }
-    // Zone Garrisons: a capture-ordered soldier standing beside its zone walks in (and an enemy zone
-    // nobody holds becomes its house's); a zone enemy soldiers hold is fired on instead. Checked on
-    // every cycle the soldier stands within reach, not only the cycle it stopped: one that stopped a
-    // step short, or whose zone changed hands after it stopped, would otherwise wait there forever.
-    if(attackMode == CAPTURE && !moving && ZoneStructure::garrisonsEnabled() && location.isValid()) {
+    // Read occupancy again on arrival: another house may have garrisoned the zone after
+    // this Capture started. A stale Capture ends; it never becomes an Attack.
+    if(attackMode == CAPTURE) {
         if(auto* zone = dynamic_cast<ZoneStructure*>(target.getObjPointer())) {
-            if(blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance
-               && !zone->heldAgainst(this)) {
+            if(zone->heldAgainst(this) && garrisonRelocationTarget_ != zone->getObjectID()) {
+                doSetAttackMode(GUARD);
+                return;
+            }
+            if(!moving && ZoneStructure::garrisonsEnabled() && location.isValid()
+               && blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance) {
                 if(zone->enterGarrison(this)) return;
                 // Full, too damaged, or no longer ours to enter: the order ends here.
                 SDL_Log("ZONE_GARRISON: event=refused_at_zone house=%d unit=%u item=%d zone=%u occupants=%d health=%d max_health=%d zone_house=%d cycle=%u",
@@ -343,19 +346,15 @@ void InfantryBase::checkPos() {
         // Zone entry is handled above, from beside the lot; Saboteurs have
         // their own damage/attribution path. A stale step must not reach
         // legacy delete-and-recreate capture or friendly-structure suicide.
-        if(ZoneStructure::garrisonsEnabled()
-           && dynamic_cast<const ZoneStructure*>(target.getObjPointer())) return;
+        // This also closes legacy capture when the city rule is off or a garrison just left.
+        if(const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
+           zone != nullptr && (currentGame->isCitySimEnabled() || zone->heldAgainst(this))) return;
 
         //check to see if close enough to blow up target
         if(target.getObjPointer() != nullptr
             && target.getObjPointer()->isAStructure()
             && (getOwner()->getTeamID() != target.getObjPointer()->getOwner()->getTeamID()))
         {
-            // Walking onto a damaged enemy zone must not fall back to the old destroy-and-rebuild
-            // capture path while the city rule forbids taking it, whatever order brought us here.
-            if(currentGame->isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()
-               && dynamic_cast<const ZoneStructure*>(target.getObjPointer()) != nullptr) return;
-
             Coord   closestPoint;
 
             closestPoint = target.getObjPointer()->getClosestPoint(location);

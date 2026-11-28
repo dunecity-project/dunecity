@@ -7287,10 +7287,15 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
     if(pLocalHouse && (pStructure != nullptr) && (ownZone || ((pStructure->canBeCaptured()) && (pStructure->getOwner()->getTeamID() != pLocalHouse->getTeamID())))) {
         InfantryBase* pResponder = nullptr;
         const bool queued = (SDL_GetModState() & KMOD_SHIFT) != 0;
+        bool blockedByGarrison = false;
 
         for(Uint32 objectID : selectedList) {
             ObjectBase* pObject = objectManager.getObject(objectID);
             if(pObject->isInfantry() && canControlHouse(pObject->getOwner()) && pObject->isRespondable()) {
+                if(pZone != nullptr && pZone->heldAgainst(static_cast<const UnitBase*>(pObject))) {
+                    blockedByGarrison = true;
+                    continue;
+                }
                 pResponder = static_cast<InfantryBase*>(pObject);
                 if(queued && pResponder->canCaptureStructures()) {
                     cmdManager.addCommand(Command(pLocalPlayer->getPlayerID(), CMD_UNIT_QUEUEORDER, objectID,
@@ -7301,11 +7306,15 @@ bool Game::handleSelectedObjectsCaptureClick(int xPos, int yPos) {
             }
         }
 
-        if(!queued) setCursorMode(CursorMode_Normal);
         if(pResponder) {
+            if(!queued) setCursorMode(CursorMode_Normal);
             pResponder->playConfirmSound();
             return true;
         } else {
+            if(blockedByGarrison) {
+                addToNewsTicker(_("Attack the enemy garrison before capturing this zone."));
+                soundPlayer->playSound(Sound_InvalidAction);
+            }
             return false;
         }
     }
@@ -7323,7 +7332,19 @@ CursorAppearance::Action Game::orderCursorAction(int mode, int x, int y) const {
     const bool enemy = structure->getOwner()->getTeamID() != pLocalHouse->getTeamID();
     const auto* zone = dynamic_cast<const ZoneStructure*>(structure);
     if(zone != nullptr && ZoneStructure::garrisonsEnabled()) {
-        // An own zone to occupy, or an enemy's to take (or to fire on while enemy soldiers hold it).
+        // Own friendly crews can be reinforced; a foreign-held takeover remains refused.
+        if(zone->isGarrisoned()) {
+            bool eligibleCapturer = false;
+            for(Uint32 objectID : selectedList) {
+                const auto* unit = dynamic_cast<const InfantryBase*>(objectManager.getObject(objectID));
+                if(unit != nullptr && canControlHouse(unit->getOwner()) && unit->isRespondable()
+                        && !zone->heldAgainst(unit)) {
+                    eligibleCapturer = true;
+                    break;
+                }
+            }
+            if(!eligibleCapturer) return Action::Pointer;
+        }
         if(zone->getOwner() == pLocalHouse || enemy) return symbol;
         return Action::Pointer;
     }

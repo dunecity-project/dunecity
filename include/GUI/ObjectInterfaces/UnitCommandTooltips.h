@@ -81,12 +81,10 @@ inline std::string stop() {
 inline std::string carryallDrop() {
     return withHotkey(_("Request Carryall drop"), Hotkeys::Action::CarryallDrop, _("fly the unit to a position"));
 }
-/// ZONES: the Zone Garrisons rule is on in a city game, so Capture on a zone occupies it. Capture is the only
-/// zone order (Stefan, 2026-11-28: "capture button acts as garrison button if used on own r/i/c no need for 2
-/// different buttons, just capture").
+/// ZONES: Capture on an own zone occupies it; another house's garrison requires Attack first.
 inline std::string capture(bool zones = false) {
     return withHotkey(_("Capture"), Hotkeys::Action::Capture, zones
-        ? _("take over an enemy building or zone; on your own R/C/I zone, garrison it (soldiers fire out from inside); Shift queues")
+        ? _("take over an enemy building or zone; attack enemy garrisons first; on your own R/C/I zone, garrison it (soldiers fire out from inside); Shift queues")
         : _("take over a building; Shift queues"));
 }
 inline std::string returnHarvester() {

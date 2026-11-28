@@ -11,22 +11,27 @@
 #include <mod/ModManager.h>
 #include <players/HumanPlayer.h>
 #include <players/QuantBot.h>
+#include <players/AIDecisionLog.h>
 #include <players/QuantBotConfig.h>
 #include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
 #include <dunecity/InfantrySquadPolicy.h>
 #include <dunecity/ZoneGarrisonPolicy.h>
+#include <dunecity/StructureDegradation.h>
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -206,18 +211,101 @@ struct Fixture {
 enum class Exclusion { None, Health, Permission, Full, Unreachable, HumanOrder, NonZone };
 struct CaptureTotals { int cases = 0, eligible = 0, engagements = 0, captures = 0, excluded = 0; long long damage = 0; } captureTotals;
 
+// Only handleDamage combat records carry the actual attacking object ID. A net target-HP
+// decrease also includes StructureBase's independent power tick, which bypasses that path.
+long long combatInteger(const std::string& row, std::string_view key) {
+    const auto offset = row.find(key);
+    if(offset == std::string::npos) throw std::runtime_error("Missing combat telemetry field");
+    const char* first = row.data() + offset + key.size();
+    const char* end = row.data() + row.size();
+    long long value = 0;
+    const auto parsed = std::from_chars(first, end, value);
+    if(parsed.ec != std::errc() || parsed.ptr == end || (*parsed.ptr != ',' && *parsed.ptr != '}'))
+        throw std::runtime_error("Invalid combat telemetry integer");
+    return value;
+}
+
 struct Engagement {
-    Uint32 unitID, targetID;
+    Uint32 unitID, targetID, lastCycle;
+    const House* attacker;
+    int attackerItem;
     FixPoint lastHealth;
+    int lastPowerTimer = 0, lastProduced = 0, lastRequired = 0, lastOwner = -1;
+    Sint32 lastDamageStat;
+    uint64_t lastHitStat;
     bool engaged = false, captured = false;
-    long long damage = 0;
-    Engagement(const UnitBase* man, const ObjectBase* target)
-        : unitID(man->getObjectID()), targetID(target->getObjectID()), lastHealth(target->getHealth()) {}
+    long long damage = 0, hpRemovedMilli = 0, grossHPDecline = 0, powerDamage = 0, cohortDamage = 0;
+    uint64_t combatHits = 0, cohortHits = 0;
+    int powerTicks = 0;
+    std::string telemetryPath;
+
+    void rememberPower(const ObjectBase* target) {
+        if(const auto* structure = dynamic_cast<const StructureBase*>(target)) {
+            lastPowerTimer = structure->powerDamageTimer;
+            lastProduced = structure->getOwner()->getProducedPower();
+            lastRequired = structure->getOwner()->getPowerRequirement();
+            lastOwner = structure->getOwner()->getHouseID();
+        }
+    }
+    Engagement(Fixture& f, const UnitBase* man, const ObjectBase* target)
+        : unitID(man->getObjectID()), targetID(target->getObjectID()),
+          lastCycle(f.game->getGameCycleCount()), attacker(man->getOwner()), attackerItem(man->getItemID()),
+          lastHealth(target->getHealth()), lastDamageStat(attacker->getNumItemDamageInflicted(attackerItem)),
+          lastHitStat(attacker->getCombatReward(attackerItem).hits) {
+        rememberPower(target);
+        const char* profile = std::getenv("DUNECITY_USERDIR");
+        require(profile && *profile, f.name + ": isolated probe profile missing");
+        auto& log = AITelemetry::log();
+        require(log.start(std::string(profile) + "/capture-damage",
+                    AITelemetry::Record().set("case", f.name).set("unit", unitID).set("target", targetID)),
+                f.name + ": cannot start independent combat attribution");
+        telemetryPath = log.path();
+    }
     void sample(Fixture& f) {
         auto* target = f.object(targetID);
         const FixPoint health = target ? target->getHealth() : FixPoint(0);
-        if(health < lastHealth) damage += static_cast<long long>((lastHealth - health).getRawValue());
+        const auto decline = health < lastHealth
+            ? static_cast<long long>((lastHealth - health).getRawValue()) : 0;
+        grossHPDecline += decline;
+
+        // This conservative, independent guard covers every shooter of this house/type,
+        // not just this ID. Signed raw damage also sees a late friendly hit after capture;
+        // monotonic hostile-hit totals prevent opposite-signed hits cancelling within a tick.
+        const Sint32 damageStat = attacker->getNumItemDamageInflicted(attackerItem);
+        const auto hitStat = attacker->getCombatReward(attackerItem).hits;
+        const long long delta = static_cast<long long>(damageStat) - lastDamageStat;
+        cohortDamage += (delta < 0 ? -delta : delta) * FixPoint(1).getRawValue();
+        require(hitStat >= lastHitStat, f.name + ": combat-hit ledger moved backwards");
+        cohortHits += hitStat - lastHitStat;
+        lastDamageStat = damageStat;
+        lastHitStat = hitStat;
+
+        const Uint32 cycle = f.game->getGameCycleCount();
+        if(cycle != lastCycle) {
+            require(cycle == lastCycle + 1, f.name + ": HP observer skipped a native cycle");
+            const auto* structure = dynamic_cast<const StructureBase*>(target);
+            if(structure && lastPowerTimer == 1) {
+                require(structure->powerDamageTimer == DuneCity::Degradation::powerDamageIntervalCycles(),
+                        f.name + ": power timer did not complete its real tick");
+                ++powerTicks;
+                const int threshold = DuneCity::Degradation::powerHitpointsMax(
+                    structure->getMaxHealth(), lastProduced, lastRequired);
+                const long long expected = lastHealth > FixPoint(threshold)
+                    ? static_cast<long long>(FixPoint(DuneCity::Degradation::kPowerDamagePerInterval).getRawValue()) : 0;
+                powerDamage += expected;
+                std::printf("INFANTRY_ZONE_DAMAGE_SOURCE: name=%s unit=%u target=%u cycle=%u "
+                            "source=%s expected_raw=%lld gross_decline_raw=%lld "
+                            "owner=%d produced=%d required=%d threshold=%d timer_before=%d timer_after=%d "
+                            "concrete_required=%d\n",
+                    f.name.c_str(), unitID, targetID, lastCycle,
+                    expected > 0 ? "power_shortage" : "power_tick_no_loss", expected, decline, lastOwner,
+                    lastProduced, lastRequired, threshold, lastPowerTimer, structure->powerDamageTimer,
+                    int(f.game->getGameInitSettings().getGameOptions().concreteRequired));
+            }
+        }
+        lastCycle = cycle;
         lastHealth = health;
+        rememberPower(target);
         const auto* man = f.unit(unitID);
         if(man && man->getTarget() && man->getTarget()->getObjectID() == targetID) engaged = true;
         const auto* zone = dynamic_cast<const ZoneStructure*>(target);
@@ -226,6 +314,35 @@ struct Engagement {
                     f.name + ": ID listed inside without actual hidden entry/ownership");
             captured = engaged = true;
         }
+    }
+    void finishDamage(Fixture& f) {
+        auto& log = AITelemetry::log();
+        require(log.enabled() && log.path() == telemetryPath && !log.captureLimited && log.stream.good(),
+                f.name + ": incomplete combat telemetry cannot prove zero damage");
+        log.stop(); // Flush the real hit records, including the projectile-drain interval.
+        std::ifstream input(telemetryPath);
+        require(input.is_open(), f.name + ": combat telemetry missing");
+        bool ended = false;
+        std::string row;
+        while(std::getline(input, row)) {
+            require(row.find("\"event\":\"capture_limit\"") == std::string::npos,
+                    f.name + ": truncated combat telemetry");
+            if(row.find("\"event\":\"session_end\"") != std::string::npos) ended = true;
+            if(row.find("\"event\":\"combat_target_hit\"") == std::string::npos) continue;
+            if(combatInteger(row, "\"attacker\":") != unitID
+               || combatInteger(row, "\"target\":") != targetID) continue;
+            require(combatInteger(row, "\"attacker_item\":") == attackerItem,
+                    f.name + ": combat source ID changed infantry type");
+            const auto before = combatInteger(row, "\"hp_before_milli\":");
+            const auto after = combatInteger(row, "\"hp_after_milli\":");
+            require(before > after && after >= 0, f.name + ": combat hit did not remove actual HP");
+            hpRemovedMilli += before - after;
+            ++combatHits;
+        }
+        require(input.eof() && !input.bad() && ended, f.name + ": combat telemetry did not close completely");
+        // Production hit statistics use milli-HP. The zero/nonzero assertion loses no precision;
+        // these controlled infantry hits are integer HP, below the fresh lot's remaining HP.
+        damage = hpRemovedMilli * FixPoint(1).getRawValue() / 1000;
     }
 };
 
@@ -239,31 +356,38 @@ void observeAttack(Fixture& f, UnitBase* man, ObjectBase* target, Exclusion excl
     }
     const Uint32 began = f.game->getGameCycleCount();
     const auto healthRaw = static_cast<long long>(man->getHealth().getRawValue());
-    Engagement observation(man, target);
+    Engagement observation(f, man, target);
     stimulus();
     observation.sample(f);
     require(!observation.captured, f.name + ": treatment started in entry distance instead of exercising game cycles");
     f.until(40, [&] {
         observation.sample(f);
-        return eligible ? observation.captured : observation.damage > 0;
+        return eligible ? observation.captured : observation.cohortDamage > 0;
     });
     // Drain any already-fired projectile: a late hit must not be hidden by a quick ownership change.
     const Uint32 settle = f.game->getGameCycleCount() + MILLI2CYCLES(2000);
     while(f.game->getGameCycleCount() < settle) { f.step(); observation.sample(f); }
+    observation.finishDamage(f);
     std::printf("INFANTRY_ZONE_CAPTURE_RESULT: name=%s unit=%u item=%d target=%u health_raw=%lld "
                 "eligible=%d engagements=%d captures=%d captured_unit=%u damage_raw=%lld permission=%d "
                 "excluded_health=%d excluded_permission=%d excluded_full=%d excluded_unreachable=%d "
-                "excluded_human=%d excluded_nonzone=%d cycles=%u\n",
+                "excluded_human=%d excluded_nonzone=%d cycles=%u gross_hp_decline_raw=%lld "
+                "power_damage_raw=%lld power_ticks=%d combat_hp_removed_milli=%lld combat_hits=%llu "
+                "cohort_damage_raw=%lld cohort_hits=%llu\n",
         f.name.c_str(), observation.unitID, man->getItemID(), observation.targetID, healthRaw,
         int(eligible), int(observation.engaged), int(observation.captured),
         observation.captured ? observation.unitID : NONE_ID, observation.damage, int(ZoneStructure::garrisonsEnabled()),
         int(exclusion == Exclusion::Health), int(exclusion == Exclusion::Permission), int(exclusion == Exclusion::Full),
         int(exclusion == Exclusion::Unreachable), int(exclusion == Exclusion::HumanOrder), int(exclusion == Exclusion::NonZone),
-        f.game->getGameCycleCount() - began);
+        f.game->getGameCycleCount() - began, observation.grossHPDecline, observation.powerDamage,
+        observation.powerTicks, observation.hpRemovedMilli, static_cast<unsigned long long>(observation.combatHits),
+        observation.cohortDamage, static_cast<unsigned long long>(observation.cohortHits));
     std::fflush(stdout);
     require(observation.engaged, f.name + ": no actual target engagement (zero activation)");
-    require(eligible ? observation.captured && observation.damage == 0
-                     : !observation.captured && observation.damage > 0,
+    require(eligible ? observation.captured && observation.damage == 0 && observation.combatHits == 0
+                         && observation.cohortDamage == 0 && observation.cohortHits == 0
+                         && observation.grossHPDecline == observation.powerDamage
+                     : !observation.captured && observation.damage > 0 && observation.combatHits > 0,
             f.name + (eligible ? ": eligible infantry did not physically capture without damage"
                                : ": excluded engagement did not retain an actual damaging attack"));
     ++captureTotals.cases;
@@ -391,12 +515,20 @@ void squadChildren() {
     std::printf("INFANTRY_ZONE_SQUAD: children=%zu price=%d first=%u second=%u third=%u\n",
                 children.size(), price, children[0], children[1], children[2]);
     // Independent lots keep every engagement hostile at onset, including later children.
+    std::string failures;
     for(size_t i = 0; i < children.size(); ++i) {
-        auto* target = f.addZone(f.enemy, zoneKinds[i], {25 + int(i) * 4, 12});
-        auto* man = f.unit(children[i]);
-        require(man && man->getItemID() == Unit_Trooper, f.name + ": delivered child identity disappeared");
-        observeAttack(f, man, target, Exclusion::None, [&] { f.bot->doAttackObject(man, target, true); });
+        try {
+            auto* target = f.addZone(f.enemy, zoneKinds[i], {25 + int(i) * 4, 12});
+            auto* man = f.unit(children[i]);
+            require(man && man->getItemID() == Unit_Trooper, f.name + ": delivered child identity disappeared");
+            observeAttack(f, man, target, Exclusion::None, [&] { f.bot->doAttackObject(man, target, true); });
+        } catch(const std::exception& error) {
+            std::printf("INFANTRY_ZONE_SQUAD_CHILD: unit=%u pass=0 reason=%s\n", children[i], error.what());
+            if(!failures.empty()) failures += "; ";
+            failures += std::to_string(children[i]) + ": " + error.what();
+        }
     }
+    require(failures.empty(), f.name + ": delivered children failed: " + failures);
 }
 
 // Rush observations are independent of the controller's order proposals/logs. Availability is

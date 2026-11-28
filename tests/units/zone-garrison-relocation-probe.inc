@@ -390,14 +390,28 @@ void checkGarrisonCaptureOwnershipChange() {
     f.capture(defender, target);
     require(target->getGarrisonSize() == 1, "capture ownership change: no enemy defender entered");
     f.game->updateGameState();
+    // Stefan: "if a building is already garrisoned by the enemy then it cant be captured it can only be attacked".
     for(UnitBase* unit : attackers)
-        require(unit->getAttackMode() == CAPTURE && unit->getTarget() == target
-                    && unit->getGarrisonRelocationTarget() == NONE_ID,
-                "capture ownership change: explicit Capture was mistaken for ordinary Follow/automatic transfer");
+        require(unit->getAttackMode() != CAPTURE && unit->getTarget() != target
+                    && unit->getGarrisonRelocationTarget() == NONE_ID && unit->getOrderQueue().empty(),
+                "capture ownership change: live enemy occupation did not cancel the old Capture");
+    require(target->getOwner() == f.enemy && target->getGarrisonHouse() == f.enemy,
+            "capture ownership change: cancelled Capture changed the occupied target");
     const FixPoint before = target->getHealth();
-    require(f.runUntil(45, [&] { return target->getHealth() < before; }),
-            "capture ownership change: explicit friendly Capture never normalized to enemy assault");
-    record("capture_ownership_change", "2 friendly Capture orders persist through takeover and assault the enemy-held target");
+    const auto damageBefore = f.own->getCombatReward(Unit_Trooper).hpRemovedMilli;
+    for(UnitBase* unit : attackers) {
+        Command(f.playerOf(f.own), CMD_UNIT_ATTACKOBJECT, unit->getObjectID(), target->getObjectID()).executeCommand();
+        require(unit->getTarget() == target && unit->getAttackMode() != CAPTURE,
+                "capture ownership change: a separately issued Attack was refused or became Capture");
+    }
+    require(f.runUntil(45, [&] {
+        return target->getHealth() < before
+            && f.own->getCombatReward(Unit_Trooper).hpRemovedMilli > damageBefore;
+    }), "capture ownership change: explicit Attack never damaged the zone with attacker credit");
+    require(target->getOwner() == f.enemy && target->getGarrisonHouse() == f.enemy,
+            "capture ownership change: explicit Attack captured the occupied zone");
+    record("capture_ownership_change", "2 friendly Capture orders cancelled on enemy occupation; "
+           "separate explicit Attack damaged the zone and credited its Troopers without takeover");
 }
 
 void checkGarrisonRelocationAIClass(const std::string& aiClass) {

@@ -8,9 +8,9 @@ far more valuable."
 
 ## The match rule
 
-**Zone Garrisons** (`GameOptions::zoneGarrisons`, INI key `Zone Garrisons`, default on; bit 5 of the MOD18
-city rules byte, set only when off; protocol 144). Off, a zone is captured as any building is (the red-health
-capture that replaces the building), as up to protocol 143.
+**Garrisoning and Capturing** (`GameOptionsClass::garrisoningAndCapturing`) controls zone entry in city
+games. Off, own and enemy zone Capture orders are refused, including already-dispatched and waiting
+orders. There is no fallback to the classic red-health destroy-and-rebuild capture path for city zones.
 
 Who: the units that can capture (`UnitBase::canCaptureStructures`): Soldier and Trooper (and the Flame
 Trooper in Tornie content). What: Residential, Commercial and Industrial zones (`ZoneStructure`), the 2x2
@@ -22,7 +22,18 @@ lot, whatever its density or civic overlay.
 | Own zone, full | Refused: the order is not taken. |
 | Ally's zone | Manual Capture is refused. Automatic emergency relocation may use a friendly zone with room, without changing its owner. |
 | Enemy zone nobody holds | The soldier walks in and the zone becomes its house's: owner, tiles, power draw and building counts move; density, residents, civic overlay and health stay (`ZoneStructure::transferOwnership`). Counted as a loss for the old owner (its AI hears of it). |
-| Enemy zone enemy soldiers hold | The soldier cannot enter: it fires on the zone from weapon range (`UnitBase::captureTargetHeld`) until the garrison is gone, then walks in and takes it. |
+| Ownership target occupied by another house | Capture is refused, regardless of building health or team alliance. Use an actual Attack to clear hostile occupants; then issue a fresh Capture once the empty zone meets the normal entry-health rule. Capture never becomes an attack. |
+
+**Live occupancy lock.** `ZoneStructure::heldAgainst` examines all occupants rather than only the first.
+Foreign crews block ownership Capture regardless of building HP. The owner may still reinforce its own
+building's friendly allied crew; this does not take ownership. Enemy crews also block that reinforcement.
+Direct entry/transfer, command/order admission, waiting-order dispatch and arrival/engagement enforce it.
+New foreign occupation invalidates old Capture orders. Hunt, movement and Attack cannot bypass the
+lock with classic damaged-building capture. Attack still damages without transferring ownership; after
+evacuation or the last occupant's death, a fresh Capture works once the normal entry-health rule is met.
+Same-house reinforcement retains the existing capacity and health checks.
+Automatic emergency relocation to friendly shelter remains a non-capturing transfer: it may share a
+friendly garrison without changing building ownership. Its reserved intent is not a player Capture order.
 
 Inside, soldiers are hidden exactly as a Carryall's cargo is (`UnitBase::enterGarrison`: off the map, inactive,
 unselectable, no orders, no AI orders). Each keeps its health, house and weapon reload.
@@ -140,10 +151,10 @@ capture buildings"
   The current 30% relocation rule is deterministic match logic, not a per-process override.
 - **Entering.** A capture-ordered soldier enters on any cycle it stands within reach of its zone, not only the
   cycle it stopped (`InfantryBase::checkPos`). It reads its zone's owner every cycle, so it keeps the order when
-  a comrade takes the zone first (its cached friendliness made it drop the order). It never fires on the zone it
-  walks into: the Dune Legacy capture branch falls through to firing, which classic captures need for red
-  health; it fires only on a zone enemy soldiers hold (`UnitBase::engageTarget`). The player-path test found
-  all three.
+  a comrade takes the zone first (its cached friendliness made it drop the order). A different house's
+  occupant instead cancels the Capture. It never fires on the zone as part of Capture
+  (`UnitBase::engageTarget`); firing requires an actual Attack. City zones never reach the Dune Legacy
+  destroy-and-rebuild capture branch, even at red health or after a low-health evacuation.
 
 ### Historical evacuation threshold measurements
 
@@ -200,15 +211,15 @@ to Area Guard. Decision log events: `zone_garrison_order` (why `defend` / `take`
 
 - **Capture** (C) is the only zone order. Stefan, 2026-11-28: "capture button acts as garrison button if used on
   own r/i/c no need for 2 different buttons, just capture".
-  - A Soldier or Trooper sent at an own R/C/I zone garrisons it; sent at an enemy zone it takes it.
+  - A Soldier or Trooper sent at an own R/C/I zone garrisons it; sent at an empty enemy zone it takes it.
   - With the rule on in a city game, the tooltip says both.
   - The separate Garrison button and its I key (added 2026-11-27 after "i cant garison my own buildings there no
     button") are gone.
   - Nothing of them was saved. A profile's old `Garrison` hotkey entry is ignored on load, and the click always
     sent the capture command.
-- **Cursor hint:** the Capture cursor shows its symbol over a target the click would order the selection at: an
-  own or enemy zone, or an enemy building it can take. Elsewhere it shows a plain pointer, and a click there is
-  refused with the cursor kept open.
+- **Cursor hint:** the Capture cursor shows its symbol over an own or empty enemy zone, or an enemy
+  building it can take. A zone with another house's garrison shows a plain pointer, even at red health.
+  A refused click queues no Capture command and keeps the cursor open. Attack remains available.
 - **Evacuate:** the zone panel's button, shown while the zone is garrisoned and enabled only for its owner.
 
 ## No pulling soldiers away
@@ -280,7 +291,8 @@ All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start
 
 - `zone_garrison_probe` (headless nightly; `tests/units/zone-garrison-probe.inc`): own zone (five
   enter via the player's Capture button, a sixth refused, owner kept), take (zone, tiles, density and power draw move), fire out (kill credited
-  to the Trooper), assault (clear a held zone, defeat the evacuated defender, repair and capture),
+  to the Trooper), assault (occupied-target Capture refused; explicit Attack clears a held zone,
+  then the evacuee is defeated, the lot repaired and freshly Captured),
   manual evacuation (owner's command, an enemy's refused), collapse (normal damage and visible
   deaths after deployment), captured-zone return, and exact 30% relocation boundaries with room,
   reachability, friendly ownership, no-destination retention and saved once-per-crossing state,
@@ -296,6 +308,12 @@ All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start
   - no pulling away (nine other controllers' orders refused; the controller's own obeyed);
   - the 30-credit Soldier in the Barracks build list.
 
+- `zone-garrison-capture-lock-probe.inc` adds adversarial assertions for healthy and red-health occupied
+  targets through the real Capture button/key, direct command/player/unit entry, ownership transfer and
+  idle/waiting queues. It covers live cancellation after another house enters, real legacy-path movement,
+  AI Hunt attacking instead of capturing, same-team foreign-house refusal, actual Attack damage credit,
+  owner-authorized evacuation, repair, and a fresh player Capture entering and taking the empty lot.
+  Entry point: `ZoneGarrisonProbe::checkOccupiedCaptureLock()`; runtime verification belongs to integration.
 - `zone_garrison_real_game` (headless nightly; `tests/ai/run-zone-garrison-real-game.py`): three `rs160-dunecity`
   Brutal games with every switch on (`house-to-house`), one ACCEPT line per request (A1-A12); HANDOVER.md has the
   acceptance table.

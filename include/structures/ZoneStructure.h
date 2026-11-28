@@ -99,7 +99,7 @@ public:
     const House* getGarrisonHouse() const;
     /// May UNIT walk in now (own zone with room, or an enemy zone nobody holds)?
     bool mayEnterGarrison(const UnitBase* unit) const;
-    /// Enemy soldiers hold this zone against UNIT: a capture order fires on it instead.
+    /// A foreign garrison blocks Capture; the owner may still reinforce its friendly allied crew.
     bool heldAgainst(const UnitBase* unit) const;
     /// Puts UNIT inside; an enemy zone becomes UNIT's house's. False when refused.
     bool enterGarrison(UnitBase* unit);

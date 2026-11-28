@@ -18,6 +18,7 @@
  */
 
 #include <players/Player.h>
+#include <players/HumanPlayer.h>
 
 #include <cstring>
 #include <map>
@@ -612,6 +613,8 @@ void Player::doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObje
         if(saboteurRefuses(pUnit, "attack_object", caller)) return;
         const_cast<UnitBase*>(pUnit)->leaveFormation();
         const_cast<UnitBase*>(pUnit)->doAttackObject(pTargetObject, bForced);
+        if(dynamic_cast<const HumanPlayer*>(this) == nullptr)
+            const_cast<UnitBase*>(pUnit)->tryCaptureZoneTarget();
     } else {
         logWarn("The player '%s' tries to attack with a unit he doesn't own or that is inactive!\n", playername.c_str());
         return;

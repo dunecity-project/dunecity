@@ -6,7 +6,7 @@
 // take          an own Trooper walks into an empty enemy zone: the zone, its tiles, its density and
 //               its power draw become ours, the enemy's count drops
 // fire out      a garrison shoots an enemy Soldier standing in its range, crediting the Trooper
-// assault       three Troopers ordered to capture a zone one enemy Soldier holds shoot it out and take it
+// assault       occupied-target Capture refused; three Troopers explicitly Attack, clear it, then Capture
 // evacuate      the owner's Evacuate command brings every soldier out beside the zone; an enemy's
 //               command is refused
 // destroyed     soldiers come out of a zone that is destroyed around them, each losing half its
@@ -54,6 +54,7 @@
 #include <mod/ModManager.h>
 #include <players/Player.h>
 #include <players/QuantBot.h>
+#include <players/HumanPlayer.h>
 #include <structures/ZoneStructure.h>
 #include <structures/BuilderBase.h>
 #include <units/InfantryBase.h>
@@ -70,6 +71,7 @@
 #include <misc/FileSystem.h>
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
+#include <array>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -114,17 +116,18 @@ struct Fixture {
     House* ally = nullptr;
     std::string label;
 
-    Fixture(const std::string& name, bool rule = true, bool bundled = false) : label(name) {
+    Fixture(const std::string& name, bool rule = true, bool bundled = false, bool aiCapturer = false) : label(name) {
         auto options = gModOptions;
         options.garrisoningAndCapturing = rule;
         options.immortalHumanPlayer = false;
+        settings.general.playerName = aiCapturer ? "Enemy" : "Garrison tester";
         const char* bundledPath = std::getenv("ZONE_GARRISON_METROPOLIS");
         require(!bundled || bundledPath, label + ": missing bundled Metropolis map");
         GameInitSettings init("zone-garrison.ini", bundled ? readCompleteFile(bundledPath) : fixtureMap(),
                               "Zone garrison", true, options);
         init.randomSeed = 17;
         GameInitSettings::HouseInfo a(HOUSE_ATREIDES, 1);
-        a.addPlayerInfo({"Garrison tester", "HumanPlayer"});
+        a.addPlayerInfo({"Garrison tester", aiCapturer ? "qBotBrutal" : "HumanPlayer"});
         init.addHouseInfo(a);
         GameInitSettings::HouseInfo h(HOUSE_HARKONNEN, 2);
         h.addPlayerInfo({"Enemy", "HumanPlayer"});
@@ -324,12 +327,20 @@ void checkAssault() {
     std::vector<Uint32> attackerIDs;
     for(auto* a : attackers) {
         f.capture(a, z);
-        require(a->getAttackMode() == CAPTURE, "assault: a capture order on a held zone was refused");
+        require(a->getAttackMode() != CAPTURE && a->getTarget() != z && a->getOrderQueue().empty(),
+                "assault: Capture on the occupied zone was not refused");
         attackerIDs.push_back(a->getObjectID());
     }
-    // While the zone is held nobody may walk in.
-    f.run(2);
-    require(z->getOwner() == f.enemy, "assault: the zone changed hands while held");
+    require(z->getOwner() == f.enemy && z->getGarrisonSize() == 1,
+            "assault: refused Capture changed the occupied zone");
+    const FixPoint beforeAttack = z->getHealth();
+    const auto removedBefore = f.own->getCombatReward(Unit_Trooper).hpRemovedMilli;
+    for(const auto id : attackerIDs)
+        Command(f.playerOf(f.own), CMD_UNIT_ATTACKOBJECT, id, z->getObjectID()).executeCommand();
+    require(f.runUntil(30, [&] {
+        return z->getHealth() < beforeAttack && f.own->getCombatReward(Unit_Trooper).hpRemovedMilli > removedBefore;
+    }), "assault: explicit Attack never damaged the occupied zone and credited its Troopers");
+    require(z->getOwner() == f.enemy, "assault: explicit Attack transferred ownership instead of only damaging it");
     require(f.runUntil(120, [&] { return !z->isGarrisoned(); }),
             "assault: the attackers never cleared the held zone");
     require(z->getOwner() == f.enemy && z->tooDamagedToHold(),
@@ -359,8 +370,10 @@ void checkAssault() {
         const auto* a = dynamic_cast<const UnitBase*>(f.game->getObjectManager().getObject(id));
         if(a != nullptr && hidden(a)) ++inside;
     }
-    record("assault", "zone cleared, evacuated defender dead, owner repaired, zone taken, "
-           + std::to_string(inside) + " of " + std::to_string(attackers.size()) + " Troopers inside, zone health "
+    require(inside > 0, "assault: Capture transferred ownership without putting a Trooper inside");
+    record("assault", "Capture refused, explicit Attack damaged and cleared the zone, evacuated defender dead, "
+           "owner repaired, fresh Capture took it, " + std::to_string(inside) + " of "
+           + std::to_string(attackers.size()) + " Troopers inside, zone health "
            + std::to_string(z->getHealth().lround()) + "/" + std::to_string(z->getMaxHealth()));
 }
 
@@ -1196,6 +1209,8 @@ void checkPrice() {
 #include "garrison-collapse-stats.inc"
 #include "zone-garrison-panel-probe.inc"
 #include "zone-garrison-appearance-probe.inc"
+#include "zone-garrison-tax-probe.inc"
+#include "zone-garrison-capture-lock-probe.inc"
 #include "zone-garrison-identity-probe.inc"
 
 } // namespace ZoneGarrisonProbe
@@ -1209,6 +1224,16 @@ int runZoneGarrisonProbe() {
     settings.general.playerName = "Garrison tester";
     gModOptions = ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
     require(gModOptions.garrisoningAndCapturing, "Garrisoning and Capturing is not on by default in the Dune City mod");
+    if(std::getenv("ZONE_GARRISON_CAPTURE_LOCK_ONLY")) {
+        checkOccupiedCaptureLock();
+        SDL_Log("ZONE_GARRISON_PROBE_PASS: occupied-zone Capture refusal, Attack and empty Capture");
+        return -1;
+    }
+    if(std::getenv("ZONE_GARRISON_TAX_ONLY")) {
+        checkCapturedZoneTax();
+        SDL_Log("ZONE_GARRISON_PROBE_PASS: captured-zone tax, human/AI R/C/I");
+        return -1;
+    }
     if(std::getenv("ZONE_GARRISON_IDENTITY_ONLY")) {
         checkGarrisonIdentity();
         SDL_Log("ZONE_GARRISON_PROBE_PASS: occupant identity across all exit paths");

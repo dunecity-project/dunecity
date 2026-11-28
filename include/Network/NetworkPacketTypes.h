@@ -543,7 +543,9 @@
 //      Below30% they attempt one reachable friendly relocation per crossing. Save9907 preserves intent.
 // 163: Occupied-zone destruction ejects only its real occupants, without additional generic
 //      Soldier survivors. Empty structures retain their survivor rolls. No save layout change.
-#define NETWORK_PROTOCOL_VERSION            163
+// 164: Native infantry takes eligible empty zones without firing; occupied-zone Capture
+//      obeys live all-crew ownership checks and never becomes Attack. No save layout change.
+#define NETWORK_PROTOCOL_VERSION            164
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

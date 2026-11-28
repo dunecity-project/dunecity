@@ -20,6 +20,7 @@
 #include <dunecity/HospitalCare.h>
 #include <units/Trooper.h>
 #include <structures/ZoneStructure.h>
+#include <dunecity/ZoneGarrisonPolicy.h>
 #include <Achievements/AchievementEvents.h>
 #include <mod/ModManager.h>
 #include <mod/RadarResearch.h>
@@ -881,19 +882,24 @@ void UnitBase::releaseTarget() {
 }
 
 void UnitBase::engageTarget() {
-    // A saved or already-dispatched Capture order cannot outlive the city permission.
-    if(attackMode == CAPTURE && currentGame->isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()
-       && dynamic_cast<const ZoneStructure*>(target.getObjPointer()) != nullptr) {
-        doSetAttackMode(GUARD);
-        return;
-    }
-
-    // Zone Garrisons: a zone can change hands while a soldier walks to it (a comrade took it first),
-    // so its friendliness is read now, not when the order was given; otherwise the soldier would drop
-    // the order below because it "cannot attack" what is now its own house's zone.
-    const auto* captureZone = attackMode == CAPTURE && ZoneStructure::garrisonsEnabled()
+    // Permission and occupancy are live: saved/dispatched Capture cannot outlive either.
+    // Resolve the zone once; rejected Capture is cancelled, never converted into Attack.
+    const auto* captureZone = attackMode == CAPTURE
         ? dynamic_cast<const ZoneStructure*>(target.getObjPointer()) : nullptr;
-    if(captureZone != nullptr) targetFriendly = captureZone->getOwner()->getTeamID() == owner->getTeamID();
+    if(captureZone != nullptr) {
+        const bool enabled = ZoneStructure::garrisonsEnabled();
+        // Reserved friendly shelter relocation never transfers ownership.
+        if((captureZone->heldAgainst(this)
+            && (garrisonRelocationTarget_ != captureZone->getObjectID()
+                || captureZone->getOwner()->getTeamID() != owner->getTeamID()))
+           || (currentGame->isCitySimEnabled() && !enabled)) {
+            doSetAttackMode(GUARD);
+            return;
+        }
+        // A comrade can take an empty zone while this soldier is on its way to reinforce it.
+        if(enabled) targetFriendly = captureZone->getOwner()->getTeamID() == owner->getTeamID();
+        else captureZone = nullptr;
+    }
 
     if(target && (target.getObjPointer() == nullptr)) {
         // the target does not exist anymore
@@ -999,14 +1005,14 @@ void UnitBase::engageTarget() {
             // we are going to the repair yard
             // => we do not need to change the destination
             targetAngle = INVALID;
-        } else if((attackMode == CAPTURE && !captureTargetHeld())
+        } else if(attackMode == CAPTURE
                   || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
             // we want to capture the target building
             setDestination(targetLocation);
             targetAngle = INVALID;
             if(attackMode == SABOTAGE) return;
-            // A soldier walks into a zone; it never shoots the building it is taking or joining (it
-            // still fires on a zone enemy soldiers hold: captureTargetHeld).
+            // A soldier walks into an empty zone or reinforces its own house's garrison;
+            // it never shoots as part of Capture. Ordinary Attack uses the firing path.
             if(captureZone != nullptr) return;
         } else if(isTracked() && target.getObjPointer()->isInfantry() && !targetFriendly && currentGameMap->tileExists(targetLocation) && !currentGameMap->getTile(targetLocation)->isMountain() && forced) {
             // we squash the infantry unit because we are forced to
@@ -1637,10 +1643,10 @@ void UnitBase::doIssueOrder(const UnitOrder& order, bool queued) {
     if(order.type == UnitOrderType::Patrol || order.type >= UnitOrderType::Count) {
         return;
     }
-    if(order.type == UnitOrderType::Capture && currentGame->isCitySimEnabled()
-       && !ZoneStructure::garrisonsEnabled()
-       && dynamic_cast<const ZoneStructure*>(currentGame->getObjectManager().getObject(order.targetID)) != nullptr) {
-        return;
+    if(order.type == UnitOrderType::Capture) {
+        if(const auto* zone = dynamic_cast<const ZoneStructure*>(currentGame->getObjectManager().getObject(order.targetID));
+           zone != nullptr && (zone->heldAgainst(this)
+               || (currentGame->isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()))) return;
     }
     if(!queued || orderQueue.empty()) {
         orderQueue.replace(order);
@@ -1682,8 +1688,9 @@ bool UnitBase::isOrderExecutable(const UnitOrder& order) const {
 
         case UnitOrderType::Capture: {
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(order.targetID));
-            if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
-               zone != nullptr && currentGame->isCitySimEnabled()) {
+            const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
+            if(zone != nullptr && zone->heldAgainst(this)) return false;
+            if(zone != nullptr && currentGame->isCitySimEnabled()) {
                 return ZoneStructure::garrisonsEnabled()
                     && dynamic_cast<const InfantryBase*>(this) != nullptr && canCaptureStructures()
                     && (zone->getOwner()->getTeamID() != owner->getTeamID() || zone->mayEnterGarrison(this));
@@ -1951,6 +1958,56 @@ void UnitBase::doAttackObject(Uint32 TargetObjectID, bool bForced) {
     doAttackObject(pObject, bForced);
 }
 
+void UnitBase::doAutoAttackObject(const ObjectBase* object, bool bForced) {
+    doAttackObject(object, bForced);
+    if(!canCaptureStructures()) return;
+    if(attackMode != HUNT) {
+        // A co-op house may contain both controllers; House::isAI() depends on roster order.
+        // Human Guard/attack-move keeps ordinary combat, while human Hunt opts into capture.
+        for(const auto& player : owner->getPlayerList())
+            if(dynamic_cast<const HumanPlayer*>(player.get()) != nullptr) return;
+    }
+    tryCaptureZoneTarget();
+}
+
+bool UnitBase::tryCaptureZoneTarget() {
+    if(!ZoneStructure::garrisonsEnabled() || !canCaptureStructures()
+       || attackMode == CAPTURE || attackMode == CARRYALLREQUESTED || bFollow
+       || location.isInvalid()) return false;
+    const auto* infantry = dynamic_cast<const InfantryBase*>(this);
+    if(infantry == nullptr || infantry->hasBookedCarrier()) return false;
+    if(attackMode == HUNT && getHealth() * 2 < FixPoint(getMaxHealth())) return false;
+    const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
+    if(zone == nullptr || !zone->isActive()
+       || zone->getOwner()->getTeamID() == owner->getTeamID()
+       || !zone->mayEnterGarrison(this)) return false;
+
+    const Coord entryGoal = zone->getClosestPoint(location);
+    std::list<Coord> entryPath;
+    if(blockDistance(location, entryGoal) > DuneCity::ZoneGarrison::kEntryDistance) {
+        // Use native passability, not weapon-range terrain connectivity. A* may return a
+        // partial approach: only an endpoint from which the soldier can enter counts.
+        // This runs at acquisition/order time, never on every combat update.
+        AStarSearch pathfinder(currentGameMap, this, location, entryGoal);
+        entryPath = pathfinder.getFoundPath();
+        if(entryPath.empty()
+           || blockDistance(entryPath.back(), zone->getClosestPoint(entryPath.back()))
+                > DuneCity::ZoneGarrison::kEntryDistance) return false;
+    }
+
+    // No doCaptureStructure/doAttackObject recursion. The attack already supplied the target;
+    // accept the capture now and retain its successful route rather than searching it twice.
+    doSetAttackMode(CAPTURE);
+    setForced(true);
+    targetFriendly = false;
+    setDestination(entryGoal);
+    if(!entryPath.empty()) {
+        pathList = std::move(entryPath);
+        updateCachedPathMetadata(entryGoal);
+    }
+    return true;
+}
+
 void UnitBase::doSetAttackMode(ATTACKMODE newAttackMode) {
     garrisonRelocationTarget_ = NONE_ID;
     if(ModManager::instance().isTornieFamilyContentActive()) {
@@ -2017,7 +2074,7 @@ void UnitBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
             if(canAttack(pDamager)) {
                 if(!target || target.getObjPointer() == nullptr || !isInWeaponRange(target.getObjPointer())) {
                     // no target or target not on weapon range => switch target
-                    doAttackObject(pDamager, false);
+                    doAutoAttackObject(pDamager, false);
                 }
 
             }
@@ -2271,11 +2328,6 @@ void UnitBase::setPickedUp(UnitBase* newCarrier) {
     clearPath();
 }
 
-bool UnitBase::captureTargetHeld() const {
-    const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
-    return zone != nullptr && zone->heldAgainst(this);
-}
-
 void UnitBase::enterGarrison() {
     clearOrderQueue();
     cancelCarryallPickup();
@@ -2475,13 +2527,15 @@ void UnitBase::engageFormationContact(const ObjectBase* enemy, bool hunter) {
         // marched in. The form-up walk and a plain close-in move both leave Hunt, and a wave
         // member left in Guard stops attacking once this fight is over.
         if(!fightsOnAttackMove()) return;
+        // Contact may already have converted this member's acquired target to a capture.
+        if(target && attackMode == CAPTURE) return;
         if(target || enemy == nullptr || !canAttack(enemy)) {
             if(attackMode != HUNT) { attackMode = HUNT; findTargetTimer = 0; }
             return;
         }
         if(isInAttackRange(enemy)) {
-            doAttackObject(enemy, false);
             attackMode = HUNT;
+            doAutoAttackObject(enemy, false);
             return;
         }
         const Coord at = enemy->getClosestPoint(location);
@@ -2490,7 +2544,7 @@ void UnitBase::engageFormationContact(const ObjectBase* enemy, bool hunter) {
     }
     if(enemy == nullptr || target || !fightsOnAttackMove() || !canAttack(enemy)) return;
     if(isInAttackRange(enemy)) {
-        doAttackObject(enemy, false);
+        doAutoAttackObject(enemy, false);
         return;
     }
     doMove2Pos(enemy->getClosestPoint(location), false);
@@ -2621,7 +2675,7 @@ void UnitBase::targeting() {
                     if(pNewTarget != nullptr
                        && blockDistance(location, pNewTarget->getClosestPoint(location)) <= huntTowardRange()) {
                         // Saboteurs need forced=true to pathfind onto occupied tiles
-                        doAttackObject(pNewTarget, getItemID() == Unit_Saboteur);
+                        doAutoAttackObject(pNewTarget, getItemID() == Unit_Saboteur);
                     }
                     findTargetTimer = MILLI2CYCLES(1*1000);
                     engageTarget();
@@ -2640,7 +2694,7 @@ void UnitBase::targeting() {
                         blockDistance(location, pNewTarget->getClosestPoint(location)).lround(),
                         getWeaponRange(), getViewRange())) {
                     attackMoveBreakOff = location;
-                    doAttackObject(pNewTarget, false);
+                    doAutoAttackObject(pNewTarget, false);
                 }
                 findTargetTimer = MILLI2CYCLES(500);
                 engageTarget();
@@ -2663,7 +2717,7 @@ void UnitBase::targeting() {
                     if(pNewTarget != nullptr) {
                         // Saboteurs need forced=true to pathfind onto occupied tiles
                         bool forceAttack = (getItemID() == Unit_Saboteur);
-                        doAttackObject(pNewTarget, forceAttack);
+                        doAutoAttackObject(pNewTarget, forceAttack);
                         findTargetTimer = 500;
                     } else {
                         // A unit closing on a distant target it keeps - no closer
@@ -2701,7 +2755,7 @@ void UnitBase::targeting() {
                         // Saboteurs need forced=true to pathfind onto occupied tiles; a holding
                         // Saboteur waits for a target to come to it instead.
                         bool forceAttack = (getItemID() == Unit_Saboteur) && attackMode != HOLD;
-                        doAttackObject(pNewTarget, forceAttack);
+                        doAutoAttackObject(pNewTarget, forceAttack);
                         
                         // Sandworms switch to HUNT after acquiring target
                         if(isSandwormUnit(getItemID())) {
@@ -2775,7 +2829,7 @@ void UnitBase::resolvePendingTargetRequest() {
             if(pNewTarget != nullptr) {
                 // Saboteurs need forced=true to pathfind onto occupied tiles (structures/vehicles)
                 bool forceAttack = (getItemID() == Unit_Saboteur);
-                doAttackObject(pNewTarget, forceAttack);
+                doAutoAttackObject(pNewTarget, forceAttack);
                 findTargetTimer = 500;
                 return;
             }
@@ -2823,7 +2877,7 @@ void UnitBase::resolvePendingTargetRequest() {
                     }
                     // Saboteurs need forced=true to pathfind onto occupied tiles (structures/vehicles)
                     bool forceAttack = (getItemID() == Unit_Saboteur);
-                    doAttackObject(pNewTarget, forceAttack);
+                    doAutoAttackObject(pNewTarget, forceAttack);
                 }
             }
 

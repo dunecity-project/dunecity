@@ -97,6 +97,89 @@ Per Stefan/Main's playtest-first flow, the green source was handed immediately t
 
 Integrator owns the subsequent four AI gates and AWS nightly (`-L nightly -LE gui`) on the landed source; those results are **not claimed here**. Real-window appearance/input on a human screen and the installed Air build remain unverified here. The option probe observes representative garrison/capture activation, not a separate activation measurement for every one of the nine underlying behaviours.
 
+## Captured tax and enemy-garrison capture follow-up
+
+Stefan: “ensure captured buildings generate tax for the side that captured them”; “if a building is already garrisoned by the enemy then it cant be captured it can only be attacked”.
+
+| Property | Acceptance evidence |
+|---|---|
+| Live holder receives the full R/C/I tax | Human and actual QuantBot captures; normal game budget ticks increase the holder's exact fixed-point city credits and gross receipts by the zone's complete calculated tax |
+| No duplicate or former-owner tax | Every sampled tick conserves one payout: former owner and unrelated house get zero; per-house budget/tax-base figures agree |
+| Tax follows later ownership | Sample original ownership, capture, real evacuation/release and retake through the normal command path |
+| Military capture levy is not another tax | `ZoneCaptureLevy` recruits/orders Soldiers and spends their price; the same exact one-payout assertion applies with the city tactics enabled, without adding another credit path |
+| An enemy garrison prevents Capture | Healthy/red-health, direct/network/queued/current Capture, Hunt and legacy entry paths refuse another house's occupants; the real Capture cursor/message explains it |
+| Attacking and later capture still work | A deliberate Attack has a real effect; after death/evacuation empties the garrison, ordinary Capture succeeds |
+
+Tax observations use ordinary storage capacity, a nonzero live tax base/land value, and no other taxable structures or police costs. They test actual credits and receipts, not just a cached UI figure. Existing city tax storage/credit limits are not bypassed.
+
+Initial source trace: `ZoneStructure::transferOwnership` changes the live structure owner; `CitySimulation::advancePhase` dispatches `runDailyBudget`, whose structure walk selects that live owner and credits it once. `House::addCityTaxReceipts` is a statistic, while `addCityCredits` changes spendable tax money. The budget probe must establish the runtime result before any claimed tax fix.
+
+### Existing-tax baseline evidence
+
+Unchanged production tax accounting passed `captured_zone_tax_probe` at `74a40d739364698a407c2a18147c8d60d38aea7d`, AWS job `20261128T181931-captured-tax-baseline-v2-569692` (20.65s test time). All six real human/QuantBot R/C/I cases passed original → captured → released → retaken, 16 actual budget ticks per phase: 384 sampled single payouts, with full exact fixed-point credits and receipts to the live holder and zero to the other houses. Example R/C: original ownership paid annual107 (980397872 raw credit units per16 ticks); captured ownership paid annual106 (971235264 raw), with zero to the other house in either phase. Industrial likewise followed each holder's own current tax/land-value calculation (28 versus43 annual). No production tax-credit path was added, avoiding double counting.
+
+The first baseline snapshot `95583af0556af07a67362e6a68c5fcf0e31952e1`, job `20261128T181428-captured-tax-baseline-v1-ac8f2a`, failed only native-probe compilation: the fixture used an invented attack-mode command identifier. Replacing it with existing `CMD_UNIT_SETMODE` retained every accounting assertion; no income observation is claimed from that failed compile.
+
+The capture-only registration covers native attack/Hunt behavior alongside occupied-garrison authority; it does not register or claim the separate Trooper-rush controller's qualification.
+
+### Occupied-target qualification and measurement
+
+- Combined candidate `26b531f8dbbd1d51f48baa4353d02f1af05230f1`, AWS job
+  `20261128T183525-captured-tax-and-lock-v1-a18d7a`, passed 5/7 selected tests.
+  `occupied_zone_capture_probe` exposed an unconditional cursor reset on a refused Capture:
+  no responder accepted the order, yet the cursor closed. The reset now belongs only to the
+  accepted-responder branch; the refusal assertions are unchanged.
+- `infantry_zone_capture_probe` initially stopped after its first delivered squad child's
+  target lost 1 HP. That observer measured all target HP decline, not infantry-inflicted
+  damage. The native power-shortage timer also reduces structure HP, independently of combat.
+  The corrected observer requires complete attacker/target combat telemetry, zero hit and
+  signed-damage deltas for the whole attacking house/type cohort, and exact equality between
+  gross target HP decline and independently witnessed native power-timer loss. It never
+  subtracts an assumed background loss. All three delivered children are attempted.
+- The existing assault case now first proves Capture refusal, then uses explicit Attack to
+  clear the occupied lot, defeats the evacuee, repairs the lot, and issues a fresh Capture.
+  This replaces the retired Capture-as-Assault expectation, not a failed capture assertion.
+- Rebasing retains the integrated shelter immunity, exact 30% relocation rule and friendly
+  automatic relocation. Such relocation never transfers ownership and is not a player Capture.
+- The targeted cursor candidate `14cfcd68d2047649822856bc202ec5fb88c92cc5`
+  (`20261128T185259-captured-tax-and-lock-ui-v3-27b7a1`) passed the tax probe and the
+  occupied probe's healthy, red-health and existing-order cases. The next legacy fixture
+  reported its Soldier lost while waiting for an interior position that ON-rule hostile
+  Follow rejects. Its replacement separately asserts that ON rejection, then drives the
+  unchanged exact `0.5`-tile legacy-arrival assertion with permission revoked on the already
+  occupied zone. Soldier survival, object identity, ownership and foreign occupation remain
+  mandatory in both healthy and red cases; no damage or capture assertion is waived.
+- Candidate v3 was cancelled with the broad garrison probe unrun; v4 and v5 were cancelled
+  before their test registries were listed. None is reported as a successful qualification.
+- The final overlay rebases onto landed Rush/identity source
+  `b16f24dbfd1aafdc7809448cba4ca62dd24a8580`, retaining its current shared runner and Rush
+  implementation, including the 16-order, near-4/far-12 and protected-5/5/4/3 assertions.
+- Candidate `cf4ce7b1e04d4c21fdab45518aa86150399f5772`, job
+  `20261128T194445-captured-tax-and-lock-v6-377543`, finished 6/9: tax, all seven occupied-target
+  cases, settings/menu option, RTS controls, identity and combat stats passed. The full garrison
+  probe passed 50/52 cases. Its friendly-crew owner reinforcement exposed an over-broad admission
+  predicate; all map/cursor/command paths now share the corrected occupant-scanning predicate.
+  The other case still required Capture-as-Assault and is migrated under Main's explicit approval.
+- Stefan's rule is quoted in that case: "if a building is already garrisoned by the enemy then it
+  cant be captured it can only be attacked". It now requires both live Capture cancellations and
+  a separately issued Attack with actual Trooper damage credit, preserving the takeover/defender
+  activation preconditions and verifying no Attack ownership transfer.
+- The Native Capture and Rush tests in v6 stopped at a shared observer-only compile error:
+  `const UnitBase::getOwner()` returns `const House*`, but the new observer member was `House*`.
+  Its member is now const-correct. Neither Native Capture nor Rush runtime is claimed from v6.
+- Mixed friendly crews are checked member-by-member, not only by their first house. A new occupied
+  case requires real allied relocation and owner reinforcement, then refuses an ownership takeover
+  whose first crew matches the proposed owner but a later crew does not. The final ownership-transfer
+  boundary uses the same all-occupants requirement; ordinary allied shelter and own reinforcement
+  remain non-capturing operations.
+
+- Candidate `879c0acb446063e8d8edf33940c9bcc23adb0d3d`, job
+  `20261128T200905-captured-tax-and-lock-v7-25c080`, passed 8/9, including the full garrison
+  probe, mixed-crew authority, Native Capture and preserved Rush. Its sole failure was the old
+  option probe rejecting the newly landed `ScrollView` container. That probe now uses the
+  established real wheel/window-click routing and scroll-offset bounds calculation, retaining
+  all viewport, label, tooltip, persistence, permission and activation assertions.
+
 ## Game Rules minimum-viewport layout repair
 
 The added city rule exposed a pre-existing fixed-height limit in the two-column

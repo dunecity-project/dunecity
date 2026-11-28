@@ -268,8 +268,12 @@ void Command::executeCommand() const {
                 && (pUnit->canAttack() || isHarvesterLikeUnit(pUnit->getItemID()));
             applyMovementOrder(pUnit, validIntent, [&] {
                 pUnit->doAttackObject((int) parameter[1], true);
+                // The issuer, not the house's last-added controller, owns this decision.
+                if(validIntent && !human) pUnit->tryCaptureZoneTarget();
             });
-            if(validIntent) pUnit->recordPlayerOrder(UnitOrder::on(UnitOrderType::AttackObject, parameter[1]));
+            if(validIntent) pUnit->recordPlayerOrder(UnitOrder::on(
+                pUnit->getAttackMode() == CAPTURE ? UnitOrderType::Capture : UnitOrderType::AttackObject,
+                parameter[1]));
         } break;
 
                 case CMD_UNIT_HEAL: {
@@ -300,6 +304,8 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(parameter[1]));
+            const auto* pZone = dynamic_cast<const ZoneStructure*>(pStructure);
+            if(pZone != nullptr && pZone->heldAgainst(pInfantry)) return;
             // The Capture cursor on an own Hospital with a wounded soldier: it heals there instead
             // of entering the zone (a healthy one still enters it as a garrison).
             if(auto* hospital = DuneCity::HospitalCare::walkInHospital(pInfantry, pStructure, Coord::Invalid(), 0)) {
@@ -309,7 +315,6 @@ case CMD_INFANTRY_CAPTURE: {
                 DuneCity::HospitalCare::walkIn(pInfantry, hospital);
                 break;
             }
-            const auto* pZone = dynamic_cast<const ZoneStructure*>(pStructure);
             if(pZone != nullptr && currentGame->isCitySimEnabled() && !ZoneStructure::garrisonsEnabled()) return;
             const bool validIntent = pZone != nullptr && ZoneStructure::garrisonsEnabled()
                 ? pInfantry->canCaptureStructures()
@@ -687,9 +692,13 @@ case CMD_INFANTRY_CAPTURE: {
                     order = UnitOrder::at(UnitOrderType::Move, Coord((int) parameter[2], (int) parameter[3]));
                 } break;
                 case UnitOrderType::MoveToObject:
-                case UnitOrderType::AttackObject:
-                case UnitOrderType::Capture: {
+                case UnitOrderType::AttackObject: {
                     order = UnitOrder::on(static_cast<UnitOrderType>(parameter[1]), parameter[2]);
+                } break;
+                case UnitOrderType::Capture: {
+                    const auto* zone = dynamic_cast<const ZoneStructure*>(currentGame->getObjectManager().getObject(parameter[2]));
+                    if(zone != nullptr && zone->heldAgainst(unit)) return;
+                    order = UnitOrder::on(UnitOrderType::Capture, parameter[2]);
                 } break;
                 case UnitOrderType::HarvesterReturn: {
                     if(!isHarvesterLikeUnit(unit->getItemID())) return;

@@ -1,6 +1,7 @@
 // Exercise the player's city permission menu and real human/AI garrison and capture paths.
 #include <Menu/OptionsMenu.h>
 #include <GUI/dune/GameOptionsWindow.h>
+#include <GUI/ScrollView.h>
 #include <Game.h>
 #include <GameInterface.h>
 #include <ScreenBorder.h>
@@ -40,20 +41,48 @@ template<class Control> void click(Control& control) {
     control.handleMouseLeft(4, control.getSize().y / 2, false);
 }
 
-void requireBounds(Window& window, Widget& control) {
+SDL_Rect ruleBounds(GameOptionsWindow& window, Widget& control) {
     Point at = window.getPosition();
     for(Widget* current = &control; current != &window;) {
         auto* parent = current->getParent();
         require(parent != nullptr, "Rule control is not in the real window");
         if(auto* box = dynamic_cast<HBox*>(parent)) at = at + box->getWidgetPosition(current);
         else if(auto* box = dynamic_cast<VBox*>(parent)) at = at + box->getWidgetPosition(current);
+        else if(auto* scroll = dynamic_cast<ScrollView*>(parent))
+            at = at + Point(0, -scroll->scrollbar.getCurrentValue());
         else require(parent == &window, "Unexpected rule control container");
         current = parent;
     }
-    const auto size = control.getSize();
-    require(size.x > 0 && size.y > 0 && at.x >= 0 && at.y >= 0
-            && at.x + size.x <= getRendererWidth() && at.y + size.y <= getRendererHeight(),
+    return {at.x, at.y, control.getSize().x, control.getSize().y};
+}
+
+void requireBounds(GameOptionsWindow& window, Widget& control) {
+    const auto viewport = ruleBounds(window, window.rulesScroll);
+    int wheelEvents = 0;
+    for(int attempts = 0; attempts < 100; ++attempts) {
+        const auto rect = ruleBounds(window, control);
+        if(rect.y >= viewport.y && rect.y + rect.h <= viewport.y + viewport.h) break;
+        require(window.handleMouseWheel(viewport.x + 8, viewport.y + viewport.h / 2, rect.y < viewport.y),
+                "Game Rules did not route the wheel event needed to reveal its city option");
+        ++wheelEvents;
+    }
+    const auto rect = ruleBounds(window, control);
+    require(rect.w > 0 && rect.h > 0 && rect.x >= 0 && rect.y >= 0
+            && rect.x + rect.w <= getRendererWidth() && rect.y + rect.h <= getRendererHeight(),
             "Garrisoning and Capturing is clipped or outside the viewport");
+    require(rect.x >= viewport.x && rect.x + rect.w <= viewport.x + window.rulesScroll.getContentWidth()
+            && rect.y >= viewport.y && rect.y + rect.h <= viewport.y + viewport.h,
+            "The city option was not fully revealed inside the real scroll viewport");
+    window.draw();
+    SDL_Log("GARRISON_CAPTURE_RULE_CONTROL: wheel_events=%d x=%d y=%d width=%d height=%d",
+            wheelEvents, rect.x, rect.y, rect.w, rect.h);
+}
+
+void click(GameOptionsWindow& window, Widget& control) {
+    require(control.isVisible() && control.isEnabled(), "The player's rule control is hidden or disabled");
+    const auto rect = ruleBounds(window, control);
+    window.handleMouseLeft(rect.x + 4, rect.y + rect.h / 2, true);
+    window.handleMouseLeft(rect.x + 4, rect.y + rect.h / 2, false);
 }
 
 GameOptionsWindow* openRules(OptionsMenu& menu) {
@@ -81,9 +110,9 @@ SettingsClass::GameOptionsClass choose(bool on) {
     control.drawOverlay({0, 0});
     require(control.explanationBounds.w > 0 && control.explanationBounds.h > 0,
             "The option's wrapped explanation was not rendered");
-    if(control.isChecked() != on) click(control);
+    if(control.isChecked() != on) click(*rules, control);
     require(control.isChecked() == on, "The real checkbox click did not change its state");
-    click(rules->okbutton);
+    click(*rules, rules->okbutton);
     menu.processChildWindowOpenCloses();
     require(menu.currentGameOptions.garrisoningAndCapturing == on, "Game Rules OK lost the selected permission");
     click(menu.acceptButton);
@@ -100,7 +129,7 @@ SettingsClass::GameOptionsClass choose(bool on) {
     auto* reopenedRules = openRules(reopened);
     require(reopenedRules->garrisoningAndCapturingCheckbox.isChecked() == on,
             "Reopening the real options path lost the saved checkbox state");
-    click(reopenedRules->okbutton);
+    click(*reopenedRules, reopenedRules->okbutton);
     reopened.processChildWindowOpenCloses();
     click(reopened.backButton);
     return restored;

@@ -57,19 +57,18 @@ inline constexpr bool belowEvacuateHealth(int health, int maxHealth, int percent
 enum class Entry {
     Enter,          ///< walk in: an own zone with room, or an enemy zone nobody holds
     EnterAndTake,   ///< walk in and the zone becomes the soldier's house's (enemy, empty)
-    Assault,        ///< enemy soldiers hold it: fire on it until they are gone, then walk in
-    Refused,        ///< full, or an ally's zone (allies' zones are never taken or shared)
+    Refused,        ///< full, held by another house, or an ally's zone
 };
 
 inline constexpr Entry entryFor(int ownHouse, int ownTeam, int zoneOwner, int zoneTeam,
                                 int occupants, int garrisonHouse) {
+    if(occupants > 0 && garrisonHouse != ownHouse) return Entry::Refused;
     if(zoneTeam != ownTeam) {
-        if(occupants > 0) return Entry::Assault;
+        if(occupants > 0) return Entry::Refused;
         return Entry::EnterAndTake;
     }
     if(zoneOwner != ownHouse) return Entry::Refused;
     if(occupants >= kCapacity) return Entry::Refused;
-    if(occupants > 0 && garrisonHouse != ownHouse) return Entry::Refused;
     return Entry::Enter;
 }
 

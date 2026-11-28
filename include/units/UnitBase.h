@@ -315,6 +315,10 @@ public:
     */
     virtual void doAttackObject(Uint32 TargetObjectID, bool bForced);
 
+    /// After an AI attack order, take its enemy zone instead when legal and reachable.
+    /// A failed attempt leaves the attack and its route unchanged; Hunt needs at least half HP.
+    bool tryCaptureZoneTarget();
+
     /**
         This method is called when an unit should change it's current attack mode
         \param  newAttackMode   the new attack mode
@@ -384,8 +388,6 @@ public:
     /// A reserved automatic walk into this friendly shelter; cleared by arrival or a new order.
     Uint32 getGarrisonRelocationTarget() const { return garrisonRelocationTarget_; }
     void doGarrisonRelocation(const ZoneStructure* zone);
-    /// The capture target is a zone enemy soldiers hold: a capture order fires on it instead.
-    bool captureTargetHeld() const;
     /// Fires this garrisoned soldier's weapon at TARGET from MUZZLE (world pixels, the zone's
     /// centre), with the damage and Trooper short-range rules of attack(). FROMTILE is the zone
     /// tile nearest the target. Returns false while reloading.
@@ -717,6 +719,8 @@ protected:
     /// engageTarget() handles them itself.)
     virtual bool firesAtAircraftUnfaced(const ObjectBase& aircraft) const { return false; }
     void enqueueTargetRequest(TargetRequestKind kind);
+    /// Native target acquisition, distinct from an explicit player's attack order.
+    void doAutoAttackObject(const ObjectBase* object, bool bForced);
     void enqueuePathRequest();
 
     virtual void turn();

@@ -1352,6 +1352,18 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-probe)
         set_tests_properties(zone_garrison_probe PROPERTIES TIMEOUT 420 PROCESSORS 2)
+        # Capture/release/retake R/C/I through real human/AI paths: the live holder receives
+        # exactly one full tax payout and no former-owner or duplicate credit.
+        dunecity_add_test(headless integration NAME captured_zone_tax_probe COMMAND ${CMAKE_COMMAND} -E env
+            ZONE_GARRISON_TAX_ONLY=1 ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/captured-zone-tax-probe)
+        set_tests_properties(captured_zone_tax_probe PROPERTIES TIMEOUT 240 PROCESSORS 2)
+        dunecity_add_test(headless integration NAME occupied_zone_capture_probe COMMAND ${CMAKE_COMMAND} -E env
+            ZONE_GARRISON_CAPTURE_LOCK_ONLY=1 ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/occupied-zone-capture-probe)
+        set_tests_properties(occupied_zone_capture_probe PROPERTIES TIMEOUT 240 PROCESSORS 2)
         dunecity_add_test(headless integration LABELS "ai;garrison" NAME zone_trooper_rush_probe
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-infantry-zone-capture-probe.py
             --build-dir ${CMAKE_BINARY_DIR}
@@ -1374,6 +1386,11 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-zone-garrison-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/zone-garrison-stats-probe)
         set_tests_properties(zone_garrison_stats_probe PROPERTIES TIMEOUT 180 PROCESSORS 2)
+        dunecity_add_test(headless integration LABELS "ai;garrison" NAME infantry_zone_capture_probe
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-infantry-zone-capture-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/infantry_zone_capture_probe
+            --case-group capture)
+        set_tests_properties(infantry_zone_capture_probe PROPERTIES TIMEOUT 360 PROCESSORS 2)
         # The selected building's five individual portraits/HP bars: real player
         # Capture/Evacuate paths and offscreen pixels at compact/desktop sizes.
         dunecity_add_test(headless nightly NAME zone_garrison_panel_probe COMMAND ${CMAKE_COMMAND} -E env

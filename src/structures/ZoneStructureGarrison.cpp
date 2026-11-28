@@ -78,6 +78,7 @@ bool ZoneStructure::mayEnterGarrison(const UnitBase* unit) const {
         return mayReceiveGarrisonRelocation(unit);
     if(!hasGarrisonSpaceFor(unit)) return false;
     const House* garrisonHouse = getGarrisonHouse();
+    if(isGarrisoned() && garrisonHouse != unit->getOwner()) return false;
     const auto entry = DuneCity::ZoneGarrison::entryFor(
         unit->getOwner()->getHouseID(), unit->getOwner()->getTeamID(),
         owner->getHouseID(), owner->getTeamID(), getGarrisonSize(),
@@ -233,9 +234,16 @@ void ZoneStructure::relocateGarrison() {
 }
 
 bool ZoneStructure::heldAgainst(const UnitBase* unit) const {
-    if(!garrisonsEnabled() || unit == nullptr || garrison_.empty()) return false;
-    const House* garrisonHouse = getGarrisonHouse();
-    return garrisonHouse != nullptr && garrisonHouse->getTeamID() != unit->getOwner()->getTeamID();
+    if(unit == nullptr) return false;
+    const House* actor = unit->getOwner();
+    for(const Uint32 id : garrison_) {
+        const UnitBase* occupant = occupantUnit(id);
+        if(occupant == nullptr) continue;
+        const House* crew = occupant->getOwner();
+        // An owner's reinforcement of its friendly allied crew is not an ownership capture.
+        if(crew != actor && (owner != actor || crew->getTeamID() != actor->getTeamID())) return true;
+    }
+    return false;
 }
 
 bool ZoneStructure::enterGarrison(UnitBase* unit) {
@@ -400,7 +408,11 @@ void ZoneStructure::returnCapturedZone() {
 
 void ZoneStructure::transferOwnership(House* newOwner, bool capture) {
     if(newOwner == nullptr || newOwner == owner || owner == nullptr) return;
-    if(capture && currentGame->isCitySimEnabled() && !garrisonsEnabled()) return;
+    if(capture) {
+        if(currentGame->isCitySimEnabled() && !garrisonsEnabled()) return;
+        for(const Uint32 id : garrison_)
+            if(const UnitBase* occupant = occupantUnit(id); occupant && occupant->getOwner() != newOwner) return;
+    }
     House* previous = owner;
     // The zone's live power draw belongs to whoever owns it.
     if(registeredZonePower_ != 0) {
