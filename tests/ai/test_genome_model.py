@@ -70,7 +70,8 @@ class GenomeModelTests(unittest.TestCase):
                 model._validate_registry(self.registry, complete=True)
 
     def test_missing_existing_boolean_or_enum_rejects_full_registry(self):
-        for gene_id in ('focus_fire', 'hard_attack_enabled', 'wave_formation', 'strategy_mode'):
+        for gene_id in ('focus_fire', 'hard_attack_enabled', 'wave_formation', 'strategy_mode',
+                        'repair_return_check'):
             with self.subTest(gene_id=gene_id):
                 reduced = [gene for gene in self.registry if gene['id'] != gene_id]
                 with self.assertRaisesRegex(ValueError, 'missing (boolean|enum)'):
@@ -122,6 +123,7 @@ bool QuantBotConfig::readFrom(
             'unit_ratio_ordos_launcher': '0.0',
             'recovery_enabled': 1,
             'recovery_withdrawals_enabled': 0,
+            'repair_return_check': 0,
             'strategy_mode': 'Fixed:Tuned,Swarm',
             'tuned_ratio_harkonnen': '14,16,15,22,0,0,0,0,0,33',
             'tuned_ratio_fremen_tech2': '0,0,0,0,0,0,0,50,50,0',
@@ -142,6 +144,13 @@ bool QuantBotConfig::readFrom(
         self.assertEqual(second['values'], {})
         self.assertEqual(second['expression'], [])
         self.assertEqual(self.genes['focus_fire']['default'], 1)
+
+    def test_repair_return_check_renders_both_boolean_levels(self):
+        self.assertEqual(self.genes['repair_return_check']['levels'], [0, 1])
+        for value in (0, 1):
+            with self.subTest(value=value):
+                self.assertEqual(model.render_ini(genome({'repair_return_check': value}), CONTEXT, self.registry),
+                                 '[Force Concentration]\nRepairReturnCheck=' + str(value) + '\n')
 
     def test_explicit_registry_subsets_are_supported(self):
         candidate = genome({'focus_fire': 0})

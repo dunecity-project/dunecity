@@ -59,3 +59,7 @@ Placement score: ON **0.031**, OFF **−0.052**, difference **+0.083**, 95% boot
 Evidence: `/Users/stefan/Documents/projects/outputs/repair-return-check-20261128/summary.txt`, `activation.csv`, `games.csv`, `houses.csv`; queue-owned targeted logs under `~/.local/state/dunecity-queue/ctest/<job>/`.
 
 Unverified: Air installation/playtest; interrupted-flight/save-load observation continuity; a cause-by-cause breakdown of the 143 redirects without observed landing success; and broad integration/nightly/performance gates (Integrator-owned). Those are not implied by the targeted probe or the arm.
+
+## Pre-push registry contract fix
+
+The bounded pre-push job `20261128T171455-integrate-air-bounded-ceed-f07b75` exposed the missing genome registration for `(Force Concentration, RepairReturnCheck)`, breaking seven shared registry consumers. Add the standard boolean gene `repair_return_check`, levels `[0, 1]`, default `0`, and cover its effective default, required-presence contract and rendered ON/OFF values in `test_genome_model.py`. Gameplay and the shipping switch default are unchanged.
