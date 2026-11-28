@@ -24,6 +24,8 @@
 #include <string>
 #include <vector>
 
+namespace Workshop { struct Revision; }
+
 /**
  * Singleton class for managing game mods.
  * 
@@ -364,6 +366,28 @@ private:
      * Used to auto-reseed mods when the shipped defaults are updated.
      */
     bool installedObjectDataDiffersFromDefaults(const std::string& modName) const;
+
+    /**
+     * The rules file of the installed vanilla or dunecity mod that no longer has the bytes this
+     * build seeds (ObjectData.ini, QuantBot Config.ini, GameOptions.ini), or nullptr.
+     *
+     * These are the files installerContentHash() compares, byte for byte. A reseed that looks at
+     * less leaves a copy that is not the build's shipped mod: builds of one version that ship
+     * other QuantBot defaults (every staging build) kept the old settings, and because that copy
+     * is not approved, each new game was moved onto a `ws-<hash>` snapshot of it.
+     */
+    const char* seededRulesDrift(const std::string& modName) const;
+
+    /**
+     * The installed shipped mod that @a revision is an automatic snapshot of, or empty.
+     *
+     * Automatic: its ID is derived from its content, as Workshop::saveMod() captures a shipped mod;
+     * an authored mod has its own ID and is never matched. The shipped mod is the one with the
+     * revision's content base and display name. With @a sameNameOnly false, a revision whose name
+     * matches none is given to the shipped mod its base names (snapshots from releases that named
+     * the mod differently), which is how the pickers have always grouped them.
+     */
+    std::string shippedModOfSnapshot(const Workshop::Revision& revision, bool sameNameOnly) const;
     
     std::string modsBasePath;        ///< Base path for mods directory
     std::string sharedBundledModsPath; ///< Verified read-only probe payload; private active_mod.txt stays local

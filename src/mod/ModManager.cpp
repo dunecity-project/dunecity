@@ -517,6 +517,23 @@ void ModManager::initialize() {
     // Load active mod from file
     loadActiveMod();
 
+    // A new game on a shipped mod that was not this build's bytes (seededRulesDrift) was moved
+    // onto an automatic snapshot of that copy, and the snapshot stayed the stored selection:
+    // every picker shows it under the shipped mod's name, so nothing tells the player that new
+    // games still run the old rules. The shipped mod was refreshed above; return to it. A save
+    // or replay names its revision and activates it itself (WorkshopGameContent::resolveMod).
+    if(isWorkshopSnapshotMod(activeMod) && modExists(activeMod)) {
+        try {
+            const std::string shipped = shippedModOfSnapshot(Workshop::store().get(activeMod.substr(3)), true);
+            if(!shipped.empty()) {
+                SDL_Log("ModManager: Active mod '%s' is an automatic snapshot of the shipped '%s' mod; "
+                        "new games use the shipped mod", activeMod.c_str(), shipped.c_str());
+                activeMod = shipped;
+                saveActiveMod();
+            }
+        } catch(const std::exception&) { /* Not a stored revision: verified below like any other mod. */ }
+    }
+
     // A failed refresh must never leave startup pointing at a stale bundled
     // payload. Preserve user data, but disable the managed mod until a later
     // launch can refresh it successfully.
@@ -823,32 +840,39 @@ std::vector<ModInfo> ModManager::listMods() const {
     return mods;
 }
 
+std::string ModManager::shippedModOfSnapshot(const Workshop::Revision& revision, bool sameNameOnly) const {
+    if(revision.kind != "mod") return {};
+    auto manifest = revision.manifest;
+    const auto field = manifest.find("\nid=" + revision.id + "\n");
+    if(field == std::string::npos) return {};
+    manifest.replace(field + 4, revision.id.size(), std::string(32, '0'));
+    if(Workshop::hashBytes(manifest).substr(0,32) != revision.id) return {};   // an authored mod
+    std::string byBase;
+    for(const char* shipped : {VANILLA_MOD_NAME, DUNECITY_MOD_NAME, CIVWARS_MOD_NAME, TORNIE_MOD_NAME, DUNE2R_MOD_NAME}) {
+        if(!modExists(shipped) || resolveContentBase(shipped) != revision.base) continue;
+        const std::string displayName = readModIni(getModPath(shipped)).displayName;
+        if(revision.name == (displayName.empty() ? std::string(shipped) : displayName)) return shipped;
+        if(byBase.empty() && revision.base == shipped) byBase = shipped;
+    }
+    return sameNameOnly ? std::string() : byBase;
+}
+
 std::vector<ModInfo> ModManager::listModChoices() const {
     auto mods = listMods();
     const auto revisions = Workshop::store().list("mod"); // Metadata only; activation verifies file bytes.
     std::map<std::string, const Workshop::Revision*> byHash;
     for(const auto& revision : revisions) byHash.emplace(revision.hash, &revision);
-    // Old clients cached the shipped mods as automatic Workshop snapshots. Their
-    // content-derived ID identifies them independently of the current build; an
-    // authored mod has its own ID and must remain a separate choice.
-    for(auto& owner : mods) {
-        if(owner.name != "vanilla" && owner.name != DUNECITY_MOD_NAME && owner.name != CIVWARS_MOD_NAME
-           && owner.name != "Tornie" && owner.name != "Dune2R") continue;
-        for(const auto& cached : mods) {
-            if(!isWorkshopSnapshotMod(cached.name) || cached.revisionHash.empty()) continue;
-            try {
-                const auto found = byHash.find(cached.revisionHash);
-                if(found == byHash.end()) continue;
-                const auto& revision = *found->second;
-                if(revision.base != owner.name) continue;
-                auto manifest = revision.manifest;
-                const auto field = manifest.find("\nid=" + revision.id + "\n");
-                if(field == std::string::npos) continue;
-                manifest.replace(field + 4, revision.id.size(), std::string(32, '0'));
-                if(Workshop::hashBytes(manifest).substr(0,32) == revision.id)
-                    owner.selectionAliases.push_back(cached.name);
-            } catch(const std::exception&) { /* Unverified copies remain visible. */ }
-        }
+    // A shipped mod that is not the installer's bytes is captured as an automatic Workshop
+    // snapshot when a game starts on it. Its content-derived ID identifies it independently of
+    // the current build; an authored mod has its own ID and must remain a separate choice.
+    for(const auto& cached : mods) {
+        if(!isWorkshopSnapshotMod(cached.name) || cached.revisionHash.empty()) continue;
+        try {
+            const auto found = byHash.find(cached.revisionHash);
+            if(found == byHash.end()) continue;
+            const std::string shipped = shippedModOfSnapshot(*found->second, false);
+            for(auto& owner : mods) if(owner.name == shipped) owner.selectionAliases.push_back(cached.name);
+        } catch(const std::exception&) { /* Unverified copies remain visible. */ }
     }
     std::vector<ModInfo> choices;
     for(const auto& mod : mods) {
@@ -1176,6 +1200,21 @@ bool ModManager::installedObjectDataDiffersFromDefaults(const std::string& modNa
     }
 
     return hashFileCanonical(installed) != hashFileCanonical(defaults);
+}
+
+const char* ModManager::seededRulesDrift(const std::string& modName) const {
+    const std::string installed = getModPath(modName) + "/";
+    const std::string defaults = getInstallConfigPath() + "/";
+    // The two files seeding copies. Without the shipped file there is nothing to reseed from.
+    const std::pair<const char*, const char*> copied[] = {
+        {OBJECT_DATA_FILE, OBJECT_DATA_DEFAULT}, {QUANTBOT_CONFIG_FILE, QUANTBOT_CONFIG_DEFAULT}};
+    for(const auto& [file, shipped] : copied) {
+        if(existsFile(defaults + shipped) && readCompleteFile(installed + file) != readCompleteFile(defaults + shipped))
+            return file;
+    }
+    const std::string options = modName == DUNECITY_MOD_NAME ? BundledGameOptions::city() : BundledGameOptions::vanilla();
+    if(readCompleteFile(installed + GAME_OPTIONS_FILE) != options) return GAME_OPTIONS_FILE;
+    return nullptr;
 }
 
 std::string ModManager::combineChecksumParts(const std::string& objectDataHash,
@@ -1969,6 +2008,17 @@ bool ModManager::dunecityNeedsReseed() const {
         return true;
     }
 
+    if (info.version != DUNECITY_MOD_VERSION) {
+        SDL_Log("ModManager: Dunecity mod version mismatch (%s vs %s), needs reseed",
+                info.version.c_str(), DUNECITY_MOD_VERSION);
+        return true;
+    }
+
+    if (const char* file = seededRulesDrift(DUNECITY_MOD_NAME)) {
+        SDL_Log("ModManager: Dunecity %s is not this build's shipped file, needs reseed", file);
+        return true;
+    }
+
     return false;
 }
 
@@ -2035,6 +2085,11 @@ bool ModManager::vanillaNeedsReseed() const {
 
     if (installedObjectDataDiffersFromDefaults(VANILLA_MOD_NAME)) {
         SDL_Log("ModManager: Vanilla %s drifted from defaults, needs reseed", OBJECT_DATA_FILE);
+        return true;
+    }
+
+    if (const char* file = seededRulesDrift(VANILLA_MOD_NAME)) {
+        SDL_Log("ModManager: Vanilla %s is not this build's shipped file, needs reseed", file);
         return true;
     }
 
