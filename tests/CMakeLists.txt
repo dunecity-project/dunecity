@@ -35,6 +35,11 @@ endfunction()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    if(NOT WIN32)
+        dunecity_add_test(headless integration NAME headless_parallel_admission COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/tests/test_headless_parallel.py)
+        set_tests_properties(headless_parallel_admission PROPERTIES TIMEOUT 30 PROCESSORS 2)
+    endif()
     dunecity_add_test(headless integration NAME probe_wrapper_lifecycle COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/menu/test_probe_process.py)
     set_tests_properties(probe_wrapper_lifecycle PROPERTIES TIMEOUT 60)
@@ -1699,17 +1704,32 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${MENU_PROBE_FIXTURE_DIR})
         set_tests_properties(menu_probe_fixture PROPERTIES TIMEOUT 600 PROCESSORS 2
             FIXTURES_SETUP menu_native_fixture)
-        dunecity_add_test(headless nightly NAME menu_navigation_probe COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py
-            --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/menu-probe)
-        set_tests_properties(menu_navigation_probe PROPERTIES TIMEOUT 1380 PROCESSORS 2)
+        # Partition the original three-view matrix without splitting stateful
+        # navigation sequences: core and six-edition family cases at every size.
+        # All six processes reuse the sealed fixture, with private outputs/profiles.
+        set(MENU_NAVIGATION_PROBES)
+        foreach(case IN ITEMS core tornie-family)
+            if(case STREQUAL "core")
+                set(menu_case_arg --navigation-only)
+            else()
+                set(menu_case_arg --tornie-family)
+            endif()
+            foreach(size IN ITEMS 640x480 854x480 1280x720)
+                set(name menu_navigation_probe_${case}_${size})
+                dunecity_add_test(headless nightly NAME ${name} COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py ${menu_case_arg} --size ${size}
+                    --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
+                    --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/${name})
+                set_tests_properties(${name} PROPERTIES TIMEOUT 1380 PROCESSORS 2)
+                list(APPEND MENU_NAVIGATION_PROBES ${name})
+            endforeach()
+        endforeach()
         dunecity_add_test(headless nightly NAME terrain_mix_menu_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --terrain-mix --size 640x480
             --fixture-dir ${MENU_PROBE_FIXTURE_DIR}
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/terrain-mix-menu-probe)
         set_tests_properties(terrain_mix_menu_probe PROPERTIES TIMEOUT 240 PROCESSORS 2)
-        set_tests_properties(menu_navigation_probe terrain_mix_menu_probe PROPERTIES
+        set_tests_properties(${MENU_NAVIGATION_PROBES} terrain_mix_menu_probe PROPERTIES
             FIXTURES_REQUIRED menu_native_fixture)
         # UI skins on the real menus and a real DuneCity game (Modern and the default Classic
         # Desert at 640x480 and Stefan's 1440x900 Medium): every screen rendered and linted, the
@@ -1782,7 +1802,7 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/menu/run-menu-probe.py --retina-resolution
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/retina-resolution-probe)
         set_tests_properties(retina_resolution_probe PROPERTIES TIMEOUT 180 PROCESSORS 2)
-        set_tests_properties(graphics_skin_probe menu_probe_fixture menu_navigation_probe
+        set_tests_properties(graphics_skin_probe menu_probe_fixture ${MENU_NAVIGATION_PROBES}
             terrain_mix_menu_probe ui_gallery_probe skirmish_probe_fixture retina_resolution_probe PROPERTIES
             TIMEOUT_SIGNAL_NAME SIGTERM TIMEOUT_SIGNAL_GRACE_PERIOD 20)
         if(DUNECITY_DIRECT_P2P)

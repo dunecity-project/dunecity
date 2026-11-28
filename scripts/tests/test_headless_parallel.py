@@ -16,9 +16,12 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ('quantbot_custom_attack', 'quantbot_police_placement', 'quantbot_battery_clearance',
          'trooper_anti_air_probe', 'community_maps_startup', 'body_angle_probe',
-         'menu_navigation_probe', 'natives_probe', 'carryall_flight_probe', 'skirmish_probe_fixture')
-# The only tests that may take the whole machine. Every other test plays at most one game at a
-# time in its own output directory and profile, and uses PROCESSORS instead of RUN_SERIAL.
+         'menu_navigation_probe_core_640x480', 'menu_navigation_probe_core_854x480',
+         'menu_navigation_probe_core_1280x720', 'menu_navigation_probe_tornie-family_640x480',
+         'menu_navigation_probe_tornie-family_854x480', 'menu_navigation_probe_tornie-family_1280x720',
+         'natives_probe', 'carryall_flight_probe', 'skirmish_probe_fixture')
+# The only tests that may take the whole machine. Other probes reserve PROCESSORS for their
+# bounded native workers and keep each worker's output directory and profile private.
 EXCLUSIVE = {
     'dunelegacy_gpu_tests': 'real GPU renderer',
     'native_pointer_mapping_probe': 'real window and Cocoa input',
@@ -46,6 +49,49 @@ with open(sys.argv[1], 'a') as log:
 '''
 
 
+def scheduling_properties(source, name):
+    direct = re.search(r'set_tests_properties\(' + re.escape(name) + r'\s+PROPERTIES[^)]*\)', source)
+    if direct:
+        return direct[0]
+    matches = {}
+    for assignment in re.finditer(r'set\((\w+)\s+([^\s)]+)\s*\)', source):
+        variable, template = assignment.groups()
+        prefix = template.split('${', 1)[0]
+        # An unresolved leading namespace can belong to an entirely different loop.
+        if '${' not in template or not prefix or not name.startswith(prefix):
+            continue
+        pattern = ''.join(r'\S+' if part.startswith('${') else re.escape(part)
+                          for part in re.split(r'(\$\{[^}]+\})', template))
+        if not re.fullmatch(pattern, name):
+            continue
+        token = '${' + variable + '}'
+        properties = re.search(r'set_tests_properties\(' + re.escape(token) + r'\s+PROPERTIES[^)]*\)',
+                               source[assignment.end():])
+        if properties:
+            matches.setdefault(len(prefix), set()).add(properties[0].replace(token, name, 1))
+    best = matches[max(matches)] if matches else set()
+    if len(best) != 1:
+        raise AssertionError('Missing or ambiguous CTest scheduling properties: ' + name)
+    return best.pop()
+
+
+class PropertyTemplateTests(unittest.TestCase):
+    def test_literal_namespace_does_not_inherit_an_unrelated_loop(self):
+        source = ('set(name native_probe_${case}_${size})\n'
+                  'set_tests_properties(${name} PROPERTIES TIMEOUT 1380 PROCESSORS 2)\n'
+                  'set(name ${prefix}_${case}_${size})\n'
+                  'set_tests_properties(${name} PROPERTIES TIMEOUT 600 PROCESSORS 5)\n')
+        properties = scheduling_properties(source, 'native_probe_core_640x480')
+        self.assertIn('TIMEOUT 1380 PROCESSORS 2', properties)
+        self.assertNotIn('TIMEOUT 600', properties)
+
+    def test_unresolved_namespace_is_not_a_property_match(self):
+        source = ('set(name ${prefix}_${case}_${size})\n'
+                  'set_tests_properties(${name} PROPERTIES PROCESSORS 5)\n')
+        with self.assertRaisesRegex(AssertionError, 'Missing or ambiguous'):
+            scheduling_properties(source, 'native_probe_core_640x480')
+
+
 @unittest.skipUnless(shutil.which('ctest') and sys.platform != 'win32', 'requires CTest and flock')
 class SchedulingTests(unittest.TestCase):
     def peak(self, slots):
@@ -55,7 +101,7 @@ class SchedulingTests(unittest.TestCase):
             (root / 'worker.py').write_text(WORKER)
             lines = []
             for name in CASES:
-                properties = re.search(r'set_tests_properties\(' + name + r'\s+PROPERTIES[^)]*\)', source)[0]
+                properties = scheduling_properties(source, name)
                 lines += [f'add_test({name} "{sys.executable}" "{root}/worker.py" "{root}/events" {name})', properties]
             (root / 'CTestTestfile.cmake').write_text('\n'.join(lines))
             subprocess.run(['ctest', '--test-dir', directory, '--parallel', str(slots), '--output-on-failure'],

@@ -2,7 +2,10 @@
 """Exercise real menu widgets with no public connection or shared user settings.
 Test access is isolated to this diagnostic binary; production objects are unchanged.
 Like the native pointer gate and workspace test wrapper, preflight checks the disk
-floor first and sweeps only when low; leased scratch cleanup ownership is unchanged."""
+floor first and sweeps only when low; leased scratch cleanup ownership is unchanged.
+The default remains the complete serial viewport matrix. Nightly CTests partition it
+into core navigation and Tornie-family cases, recording comparable rows in
+navigation-case-results.json without rebuilding the shared fixture."""
 import argparse
 from contextlib import contextmanager, nullcontext
 import json
@@ -42,6 +45,7 @@ parser.add_argument('--producer-inputs', type=Path, help='Normal Mac producer’
 parser.add_argument('--export-pointer-artifact', type=Path, help='Producer-only separate diagnostic output directory')
 parser.add_argument('--package-zip', type=Path, help='Producer-only exact final Mac package ZIP')
 parser.add_argument('--tornie-family', action='store_true', help='Run only the six-edition campaign, custom lobby and map editor matrix')
+parser.add_argument('--navigation-only', action='store_true', help='Run the complete navigation sequence except the separately selectable Tornie-family matrix')
 parser.add_argument('--terrain-mix', action='store_true', help='Run only the 640x480 Random Skirmish terrain controls, saved choices and layout checks')
 args = parser.parse_args()
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
@@ -64,6 +68,9 @@ sys.excepthook = pointer_exception
 pointer_status('blocked-prerequisite', reason='Pointer input admission has not completed')
 consumer_options = (args.publication_manifest, args.publication_manifest_sha256, args.candidate_source)
 producer_options = (args.producer_inputs, args.export_pointer_artifact, args.package_zip)
+if args.navigation_only and (args.prepare_only or args.audio_failure or args.retina_resolution
+                             or args.pointer_mapping or args.tornie_family or args.terrain_mix):
+    parser.error('--navigation-only cannot be mixed with preparation or other menu variants')
 if args.pointer_artifact:
     if not all(consumer_options) or not args.pointer_mapping or not args.runtime_app:
         parser.error('--pointer-artifact requires --pointer-mapping, --runtime-app and all three publication/source pins')
@@ -288,6 +295,7 @@ def native_desktop():
             print(message, file=sys.stderr, flush=True)
             if not failed: raise RuntimeError(message)
 family_results = []
+navigation_results = []
 with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) as scratch:
     if args.pointer_artifact:
         binary, proof, receipt_sha256 = pointer_artifact.consume_fixture(args.pointer_artifact,
@@ -302,6 +310,8 @@ with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) 
                      'Physical Width = '+str(width)+'\nPhysical Height = '+str(height)+'\nWidth = '+str(width)+'\nHeight = '+str(height)+'\nInterface Height = '+str(height)+'\nFullscreen = false\n')
             (profile/'Dune City.ini').write_text('[Video]\n'+video+'[General]\nPlay Intro = false\nPlayer Name = Menu tester\n')
         env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='unavailable-test-driver' if args.audio_failure else 'dummy', MENU_PROBE_OUT=str(out), MENU_PROBE_WIDTH=str(width), MENU_PROBE_HEIGHT=str(height))
+        env.pop('MENU_NAVIGATION_ONLY', None)
+        if args.navigation_only: env['MENU_NAVIGATION_ONLY'] = '1'
         if args.pointer_mapping:
             env.pop('SDL_VIDEODRIVER', None)
             if args.runtime_app:
@@ -334,14 +344,17 @@ with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) 
             display_version = versions[0][len('App v'):]
             if 'Starting DuneCity ' + display_version + ' on ' not in text:
                 raise RuntimeError('Startup log and main-menu version disagree; see '+str(logpath))
-        if not args.pointer_mapping and not args.retina_resolution and not args.terrain_mix:
+            navigation_results.append(dict(case='core', width=width, height=height, display_version=display_version))
+        if not args.pointer_mapping and not args.retina_resolution and not args.terrain_mix and not args.navigation_only:
             rows = [dict(field.split('=', 1) for field in line.split('TORNIE_MENU_PASS: ', 1)[1].split())
                     for line in text.splitlines() if 'TORNIE_MENU_PASS: ' in line]
             if {row['mod'] for row in rows} != {'Tornie', 'TornieLite', 'Jericho', 'JerichoLite', 'ArcaKev', 'ArcaKevLite'} or len(rows) != 6:
                 raise RuntimeError('Incomplete Tornie-family menu matrix; see '+str(logpath))
             for row in rows:
-                family_results.append(dict(width=width, height=height,
-                                           **{key: int(value) if value.isdigit() else value for key, value in row.items()}))
+                measurement = dict(width=width, height=height,
+                                   **{key: int(value) if value.isdigit() else value for key, value in row.items()})
+                family_results.append(measurement)
+                navigation_results.append(dict(case='tornie-family', **measurement))
                 print('TORNIE_MENU_PASS: ' + ' '.join(key+'='+value for key, value in row.items()))
             (out/'tornie-family-results.json').write_text(json.dumps(family_results, indent=2)+'\n')
         if args.audio_failure:
@@ -352,3 +365,6 @@ with (nullcontext(out) if args.pointer_sdl_only else scratch_dir('menu-probe')) 
             shutil.copytree(profile, out / ('profile-' + str(width)), dirs_exist_ok=True)
             shutil.rmtree(profile)
         print(results[0])
+if navigation_results:
+    navigation_results.sort(key=lambda row: (row['width'], row['height'], row['case'], row.get('mod', '')))
+    (out/'navigation-case-results.json').write_text(json.dumps(navigation_results, indent=2)+'\n')

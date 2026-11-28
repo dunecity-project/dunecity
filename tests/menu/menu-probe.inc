@@ -1505,7 +1505,9 @@ int runMenuProbe() {
         menu.populateLevels();
         menuRequire(menu.startLevelDropDown.getNumEntries()==22,"Single mission range wrong");
     }
-    verifyTornieFamilyMenus();
+    // Nightly runs this self-contained matrix in its own viewport shards.
+    // With no selector, retain the original complete serial navigation path.
+    if(!std::getenv("MENU_NAVIGATION_ONLY")) verifyTornieFamilyMenus();
     CustomPlaySetup setup;
     auto files = getFileNamesList(getDuneLegacyDataDir()+"/maps/multiplayer/","ini",true);
     auto dir = getDuneLegacyDataDir()+"/maps/multiplayer/";
