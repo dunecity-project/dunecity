@@ -1,3 +1,59 @@
+## 2026-11-28 - Saboteurs Skip City Zones: Saboteurs leave R/C/I zones alone unless garrisoned (protocol 151)
+
+Stefan, 2026-11-28: "also make sabateurs not target r/i/c (not valuable enough) unless it is garissoned", then,
+on the first name: "also i said saboteurs should skip r/i/c not empty zones".
+
+**Default change (match rule, protocol 151, save format unchanged).** `GameOptionsClass::saboteurSkipsCityZones`,
+INI key `Saboteurs Skip City Zones`, default on; bit 4 of the MOD20 starting tech level byte, set only when off
+(the level is now the low four bits; a level above 9 is still refused); in the options hash only when off.
+Protocol 150 is the infantry squads (agreed with that session; the numbers are fixed whatever the commit order).
+- A Saboteur choosing its own target (its hunt, `Saboteur::searchOwn`, and the nearer-target check on the way)
+  leaves out Residential, Commercial and Industrial zones that no soldier garrisons
+  (`Saboteur::passesOver`: `ZoneStructure::getGarrisonSize() == 0`). How built up or populated the zone is
+  plays no part. A garrisoned zone is a target like any building.
+- A zone it chose itself that loses its garrison while it walks there is given up for the next target, or Guard
+  when nothing is left (`Saboteur::dropUngarrisonedZone`; an AI house's Saboteur looks again every ten seconds).
+- **Interpretation (mine, listed as such):** the rule is about automatic target selection. A target its owner
+  orders (a right-click on a zone) is kept, garrisoned or not. After a load, a human's Saboteur forgets which
+  target it chose itself (as before), so a zone it was walking to then counts as an order; an AI house's
+  hunting Saboteur still drops it.
+- Off is the rule up to protocol 149, kept so both can be compared in one build
+  (`tests/ai/game-options/saboteur-zones-{on,off}.ini`).
+
+**Match log.** `SABOTEUR_TARGET` and `SABOTEUR_HIT` gain `garrison=` (soldiers in a target zone, -1 for anything
+else) and `own=` (1: its own choice). New: `SABOTEUR_ZONE_SKIP` (once per new choice, the zone the old rule would
+have taken), `SABOTEUR_ZONE_DROP`, and the in-game check `SABOTEUR_ZONE_RULE: event=violation` (an own choice that
+is an ungarrisoned zone). `vanilla-match.py` writes them to `saboteurs.csv`; `tests/units/saboteur-zone-report.py`
+fails a game with any own ungarrisoned zone target or violation line (`--rule on`).
+
+### Acceptance
+
+| Request line | Test | Measured | Result |
+|---|---|---|---|
+| 1. A released Saboteur never selects an ungarrisoned R/C/I zone | `saboteur-zone-report.py --rule on` over the ON arm; probe `city-zones-skipped`, `only-ungarrisoned-zones` | ON: 0 zone targets, 0 own ungarrisoned, 0 violations, 24/24 games pass; the rule fired (165 `SABOTEUR_ZONE_SKIP`) in 20/24. OFF: 144 ungarrisoned zone targets, 72 blown up, in 20/24. Stefan's Air game (before): 2 of 95 targets, 1 blown up | pass |
+| 2. A garrisoned zone is still a target, chosen when best; its garrison's fate | probe `garrisoned-zone`, `garrison-decides`, `garrison-leaves` | picked and blown up; the front Soldier dies in the blast (cover), the other comes out at 20 -> 10 HP; a populated zone without a garrison is passed for an unbuilt one with a Soldier inside; an evacuated zone is given up. No garrisoned zone came within reach in the real games (the AI garrison switches are off) | pass (probe only) |
+| 3. Saboteurs still find other targets: the share reaching a target does not fall | ON/OFF arms, paired by seed | any target: OFF 75.9% (715/942), ON 74.3% (690/929), -1.8 points (95% CI -4.0 to +0.4); a non-zone target: OFF 68.3%, ON 74.3%, +5.4 (+2.1 to +8.9); lost on the way 171 -> 187 | level within noise; not shown to fall, not proven |
+
+Arms: `rs160-dunecity`, four Brutal QuantBots (Ordos, Mercenary, Harkonnen, Atreides: the two Palaces that release
+Saboteurs), 45 minutes, seeds 9101-9124, 24 games each, AWS, build `f85b41bb2` (same behaviour as the renamed
+`45af7a17a`), jobs `20261128T132305-sabz-on-55a4c3` / `20261128T132312-sabz-off-e5016c`; results
+`~/Documents/projects/outputs/saboteur-zones-20261128/`. Game outcomes identical in both arms (Ordos 7, Atreides 4,
+Harkonnen 2, 11 time-outs, no errors).
+
+**Deviation:** none from the request. The garrison-leaves drop and Guard-when-nothing-left are additions so a
+Saboteur does not finish a walk to a zone that stopped being a target.
+
+**Tests.** `saboteur_zone_probe` (headless, nightly; 13 cases, human and QuantBot owners, real Palace release, real
+capture and Evacuate commands, the player's right-click through `Game::doInput`) passed at `45af7a17a` on AWS (job
+`20261128T132619-ctest-bff24d`, with `saboteur_target_probe` and `saboteur_effect_probe`); settings round trip in
+`CoopGameSettingsTestCase` ("Saboteurs Skip City Zones defaults on ..."). The nightly at the release candidate
+`e76c5e908` passed every saboteur test, with the four AI gates 4/4 there. Pushed to origin in `96c1a3ff5`
+(Stefan's Air build). Commits: `1ee54918d` (rule), `f85b41bb2` (probe fix), `45af7a17a` (rename, garrison-decides).
+
+**Not verified:** a game where garrisoned zones are in an enemy Saboteur's reach (the AI garrison switches are off,
+so none came up in the measured games); `perf_regression` was run by the release candidate's qualifying set, not by
+this session.
+
 ## 2026-11-28 - Infantry squads: three men at a discount, the AI's Barracks/WOR, taxable infantry housing (protocol 150)
 
 Stefan, 2026-11-28: "in the original dune you could build three troopers for a discount - i think maybe 3 were
