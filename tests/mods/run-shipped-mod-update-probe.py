@@ -50,7 +50,7 @@ def shipped_rules(data):
     """Today's shipped defaults and the older ones this test derives from them."""
     config = data / 'config'
     objects = (config / 'ObjectData.ini.default').read_text()
-    soldier = re.search(r'(?ms)^\[Soldier\]\n(?:(?!^\[).*\n)*?Price\s*=\s*(\d+)', objects)
+    soldier = re.search(r'(?m)^\[Soldier\]\n(?:(?!\[).*\n)*?Price\s*=\s*(\d+)', objects)
     if not soldier:
         raise RuntimeError('No [Soldier] Price in the shipped ObjectData.ini.default')
     price = int(soldier.group(1))
