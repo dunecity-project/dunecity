@@ -371,7 +371,8 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
     }
     if (cityInfantryItem(pass, itemID) && ((!pass.cityAntiAirInfantryDemand && !supportTroop && !cityInfantryShare())
         || (!supportTroop && !infantryQuotaAdmits(pass, infantryQuotaValue(itemID, data[itemID][houseID].price)))
-        || int64_t(quotedPrice) + pass.cityWorkingReserve > pass.money)) return false;
+        || int64_t(std::min<int64_t>(quotedPrice, infantryOrderCash(turn.pBuilder, itemID))) + pass.cityWorkingReserve
+            > pass.money)) return false;
     if (pass.citySimEnabled && itemID == Structure_WOR
         && ((!pass.cityAntiAirInfantryDemand && !pass.trooperSupport) || !troopContentExists(pass, turn.pBuilder)
             || openingWorkersNeeded(pass)
@@ -1462,7 +1463,7 @@ Uint32 QuantBot::supportTrooperOrder(BuildPass& pass, const BuilderBase* builder
             || squadOrderRefusal(builder, candidate)
             || !trooperOrderAdmitted(pass, candidate, data[candidate][houseID].price)) continue;
         const int price = purchasePrice(builder, candidate);
-        if (price > money) continue;
+        if (infantryOrderCash(builder, candidate) > money) continue;
         if (item == NONE_ID || int64_t(price) * bestSize < int64_t(bestPrice) * size
             || (int64_t(price) * bestSize == int64_t(bestPrice) * size && size > bestSize)) {
             item = candidate; bestPrice = price; bestSize = size;
@@ -1537,7 +1538,7 @@ void QuantBot::buildWOR(BuildPass& pass, BuilderTurn& turn) {
                 && (purchasePrice(turn.pBuilder,candidate) > pass.money || !infantryQuotaAdmits(pass, value))) continue;
             if (int64_t(pass.militaryValue)+value > pass.lightBudget) continue;
             if (pass.citySimEnabled
-                && (purchasePrice(turn.pBuilder,candidate) > pass.money - pass.cityWorkingReserve
+                && (infantryOrderCash(turn.pBuilder,candidate) > pass.money - pass.cityWorkingReserve
                     || !infantryQuotaAdmits(pass, infantryQuotaValue(candidate, value)))) continue;
             if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()) {
                 // SquadOrders: the offer cheapest per man.
@@ -1582,7 +1583,7 @@ void QuantBot::buildBarracks(BuildPass& pass, BuilderTurn& turn) {
             if (candidate >= Unit_Troopers5 && !ModManager::instance().isTornieFamilyContentActive()) continue;
             if (squadOrderRefusal(turn.pBuilder, candidate)) continue;
             // A city keeps its working reserve and buys inside the measured share, as the WOR does.
-            if (cityShare && (purchasePrice(turn.pBuilder, candidate) > pass.money - pass.cityWorkingReserve
+            if (cityShare && (infantryOrderCash(turn.pBuilder, candidate) > pass.money - pass.cityWorkingReserve
                     || !infantryQuotaAdmits(pass, infantryQuotaValue(candidate, data[candidate][houseID].price)))) continue;
             if (pass.vanillaBoomArmy && (purchasePrice(turn.pBuilder, candidate) > pass.money
                 || int64_t(pass.militaryValue) + data[candidate][houseID].price > pass.lightBudget)) continue;

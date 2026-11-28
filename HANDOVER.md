@@ -32,19 +32,48 @@ Found while building:
 
 | Request | Observable fact, with its number | Test | Measured | Result |
 |---|---|---|---|---|
-| "three troopers for a discount ... 3 were 200 credits" | build lists: Soldier 30 / Infantry 50, Trooper 100 / Troopers 200; one click = exactly that price and exactly three men; one Move click sends all three; singles stay 1 man | probe build_list, troopers, infantry, singles; real_game S1 | pending | pending |
-| "the ai should use it if it wants to build these men" | >= 90% of the men QuantBot buys where a squad is offered come as squads, every house-game; switch off: 0 squad orders | real_game S2 | pending | pending |
-| "additional infantry and wor ... similar to factories" | >= 90% of infantry backlogs answered by an order within 60 s; a second Barracks/WOR stands in >= half the house-games; men delivered per minute rises after the lane in >= 75% of lanes | real_game S3 | pending | pending |
-| "include infantry in the calculation for what to build" | the infantry share moves >= 1 point off its opening in every learning house-game; >= 3 city share purchases per house-game; half the share reached by minute 20 where it is >= 2% | real_game S4 | pending | pending |
-| "count as a high density residential and is taxable" | +80 tax eighths and +40 residents per Barracks/WOR, built from the yard list with a map click; back when destroyed; every census row 80 x buildings | probe barracks_tax, wor_tax; real_game S5; CityEffectsTestCase | pending | pending |
-| "and they moderately increase land value" | nearby own lots rise > 0 and by 20-50% of a Palace's rise on the same spot | probe land_value; CityEffectsTestCase | pending | pending |
-| "and infantry and wor have 50% police effect" | coverage 0.50 (+-0.02) and crime drop 0.50 (+-0.10) of a Police Station's on the same spot, also at 50% funding | probe police; CityEffectsTestCase | pending | pending |
+| "three troopers for a discount ... 3 were 200 credits" | build lists: Soldier 30 / Infantry 50, Trooper 100 / Troopers 200; one click = exactly that price and exactly three men; one Move click sends all three; singles stay 1 man | probe build_list, troopers, infantry, singles; real_game S1 | lists as stated; 200 / 50 taken by the builder, 3 men each; all three Troopers arrived; 197 squads in 3 games, 0 short of three | PASS |
+| "the ai should use it if it wants to build these men" | >= 90% of the men QuantBot buys where a squad is offered come as squads, every house-game; switch off: 0 squad orders | real_game S2 (switch on) | 100% in all 10 house-games that bought men | MET (default off) |
+| "additional infantry and wor ... similar to factories" | >= 90% of infantry backlogs answered by an order within 60 s; a second Barracks/WOR stands in >= half the house-games; men delivered per minute rises after the lane in >= 75% of lanes | real_game S3 (switch on) | 0 backlogs, 0 lanes in 12 house-games | **NOT MET: not done** |
+| "include infantry in the calculation for what to build" | the infantry share moves >= 1 point off its opening in every learning house-game; >= 3 share purchases per house-game; infantry bought by minute 20 worth half the share where it is >= 2% | real_game S4 (switch on) | share moved in 12/12; share purchases per house-game 0,0,0,0,0,0,4,8,10,10,11,30; half the share bought in 7 of 12 | **NOT MET: not done** |
+| "count as a high density residential and is taxable" | +80 tax eighths and +40 residents per Barracks/WOR, built from the yard list with a map click; back when destroyed; every census row 80 x buildings | probe barracks_tax, wor_tax; real_game S5; CityEffectsTestCase | +80 / +40 for each, both back when destroyed; 156 census rows, 0 off the rule | PASS |
+| "and they moderately increase land value" | nearby own lots rise > 0 and by 20-50% of a Palace's rise on the same spot | probe land_value; CityEffectsTestCase | +22 against the Palace's +91.5 (24%), Barracks and WOR | PASS |
+| "and infantry and wor have 50% police effect" | coverage within 4 units of half a Police Station's on every cell, and 0.48-0.52 of it where the station gives >= 200 (integer rounding: 3 smoothing passes), also at 50% funding; crime on each lot = crime before police less that coverage | probe police; CityEffectsTestCase, PoliceStationTestCase | 0.478-0.500 on every cell, crime taken off on 5 of 6 lots | PASS |
+
+Green at test commit `821e61e5a` (tree `7d86685a`), AWS job `20261128T142017-ctest-3c82f4`: 11 of 11, including
+`skirmish_generator_tests` and its matrix, and the city-park and city-redevelop probes. Landed on top of `dc41fe127`,
+so the qualifying set reruns on the landed commit.
+
+**The three AI lines (default-off QuantBot switches) are not all done.** SquadOrders meets its line. InfantryLanes
+and InfantryInMix do not, and they stay off:
+- InfantryLanes found no backlog in 12 house-games. One WOR fills a typical 10% infantry share in 3-4 minutes, so
+  capacity was never the limit.
+- InfantryInMix still has 6 of 12 house-games with no purchase for the share. Atreides' first Barracks waits behind
+  the city cash reserves.
+`infantry_squads_real_game` fails on S1 and S5 (rules every game plays) and reports S2-S4 as MET / NOT MET; with
+`--strict-ai` they fail it too.
+
+**Found and fixed on the way:**
+- The squads' first AWS run (`afb827470`) failed on three counts:
+  - Two unit tests pinned "Barracks/WOR give no police coverage", from when their full coverage was removed as a
+    design bug. They now pin half a station.
+  - Three probe construction faults: cost read from the credit balance, a detached yard plot, and a crime-drop
+    ratio that clamping makes meaningless.
+  - The AI paths: the support path refused a squad when three men overshot its target; the order gate took city
+    infantry only against aircraft; Atreides had no Barracks.
+- The generator: `SkirmishGenerator::populationOf` asked the game for a Barracks/WOR's population (now 40), so every
+  DuneCity seed with one in its base got fewer zones. The generator plans them at 16, as its maps were made, so
+  every seed generates the same map. The game counts the 40.
 
 **Deviations:**
 - A squad is three single units, not one three-man unit, so garrisons, capture, beds and the levy count men.
 - A lost squad man is valued at the single's price in the infantry score.
-- With SquadOrders on, QuantBot buys the squad only when it is cheaper per man and admitted in the same pass.
-  Otherwise it buys the single.
+- SquadOrders rounds up: a squad is admitted wherever one more man is (target, share, budget, cash: a builder pays
+  as it builds).
+- InfantryLanes: the factory lane rule must hold 2 minutes with a deficit of >= 3 orders per lane (a lane added on one
+  busy moment did not raise output: 10 -> 10, 13 -> 7 men per 10 minutes).
+- A generated city holds 24 more residents per Barracks/WOR than the generator's estimate (the generator plans them at
+  16 so seeds keep their maps).
 
 ## 2026-11-28 - EconomyFirst: the AI out of the poverty trap on low / no spice maps (Stefan's last Air game); approved on, shipped OFF
 

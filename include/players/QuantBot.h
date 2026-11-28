@@ -2255,6 +2255,9 @@ private:
     /// SquadOrders rounds up: the value a three-man squad claims against the infantry share and budget is one
     /// man's, so a squad is admitted wherever a single man is. Every other item claims its full \a value.
     int infantryQuotaValue(Uint32 item, int value) const;
+    /// The cash an infantry order needs at \a builder now: with SquadOrders a squad's single's price, since a
+    /// builder pays as it builds; otherwise the item's own price.
+    int infantryOrderCash(const BuilderBase* builder, Uint32 item) const;
     /// InfantryInMix: the first Barracks or WOR \a yard should build for a city house with a measured infantry
     /// share of 2% or more and neither; NONE_ID otherwise.
     Uint32 infantryFirstProducer(BuildPass& pass, const BuilderBase* yard) const;

@@ -50,7 +50,8 @@ Uint32 QuantBot::infantryOrderFor(const BuilderBase* builder, Uint32 single, int
     const Uint32 squad = DuneCity::InfantrySquad::squadOf(single);
     if (squad == ItemID_Invalid || !campaignAvailableToBuild(builder, squad) || squadOrderRefusal(builder, squad))
         return single;
-    if (purchasePrice(builder, squad) > money) return single;
+    // A builder pays as it builds (BuilderBase::update), so the squad needs only what the single would.
+    if (purchasePrice(builder, single) > money) return single;
     return squad;
 }
 
@@ -138,6 +139,14 @@ void QuantBot::updateInfantryLanes() {
 
 bool QuantBot::cityInfantryShare() const {
     return botConfig().force.infantryInMix && !ModManager::instance().isTornieFamilyContentActive();
+}
+
+int QuantBot::infantryOrderCash(const BuilderBase* builder, Uint32 item) const {
+    // SquadOrders: a builder pays as it builds, so a squad is affordable wherever its single is.
+    if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()
+        && DuneCity::InfantrySquad::threeManSquad(item))
+        return purchasePrice(builder, item == Unit_Infantry ? Unit_Soldier : Unit_Trooper);
+    return purchasePrice(builder, item);
 }
 
 int QuantBot::infantryQuotaValue(Uint32 item, int value) const {

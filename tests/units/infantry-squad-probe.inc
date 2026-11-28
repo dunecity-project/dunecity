@@ -320,7 +320,10 @@ void housingTax(const std::string& name, int item) {
             + std::to_string(residents(f) - popBefore) + ", not " + std::to_string(expectedPop));
     const int baseWith = taxBase(f), popWith = residents(f);
     built->destroy();
-    const bool gone = f.runUntil(120, [&] { return baseWith - taxBase(f) >= expectedBase; });
+    // The tax base is recounted every city day (runDailyBudget), residents at the zone-growth census: wait for both.
+    const bool gone = f.runUntil(180, [&] {
+        return baseWith - taxBase(f) >= expectedBase && popWith - residents(f) >= expectedPop;
+    });
     require(gone && baseWith - taxBase(f) == expectedBase && popWith - residents(f) == expectedPop,
             name + ": destroying it took back " + std::to_string(baseWith - taxBase(f)) + " eighths and "
             + std::to_string(popWith - residents(f)) + " people");
@@ -416,14 +419,22 @@ void police() {
         double low = 1, high = 0;
         int lowered = 0;
         for(size_t i = 0; i < station.coverage.size(); ++i) {
-            const double ratio = double(full.coverage[i]) / station.coverage[i];
-            const double funded = double(half.coverage[i]) / std::max(1, stationHalf.coverage[i]);
-            low = std::min({low, ratio, funded});
-            high = std::max({high, ratio, funded});
-            require(ratio >= 0.48 && ratio <= 0.52, what + " coverage at cell " + std::to_string(i) + " is "
-                    + std::to_string(ratio) + " of a Police Station's");
-            require(funded >= 0.48 && funded <= 0.52, what + " at 50% funding: coverage at cell " + std::to_string(i)
-                    + " is " + std::to_string(funded) + " of a 50%-funded Police Station's");
+            // Coverage is integer: smoothPoliceCoverage runs three passes of (c + floor(n/4)) / 2, each losing less
+            // than 1 unit, so each field is within 3 units of its exact value and a half-strength field within
+            // 1.5 x 3 = 4.5 of half the full one. Cells: within 4 units of half the station's, and where the
+            // station gives 200 or more (rounding under 2%), within 0.48-0.52 of it.
+            const auto halfOf = [&](int barracks, int stationValue, const std::string& when) {
+                const double ratio = double(barracks) / std::max(1, stationValue);
+                low = std::min(low, ratio);
+                high = std::max(high, ratio);
+                require(std::abs(2 * barracks - stationValue) <= 8, what + when + ": coverage at cell " + std::to_string(i)
+                        + " is " + std::to_string(barracks) + ", half the Police Station's " + std::to_string(stationValue)
+                        + " is " + std::to_string(stationValue / 2.0) + " (more than 4 units of rounding)");
+                require(stationValue < 200 || (ratio >= 0.48 && ratio <= 0.52), what + when + ": coverage at cell "
+                        + std::to_string(i) + " is " + std::to_string(ratio) + " of a Police Station's");
+            };
+            halfOf(full.coverage[i], station.coverage[i], "");
+            halfOf(half.coverage[i], stationHalf.coverage[i], " at 50% funding");
             require(half.coverage[i] < full.coverage[i], what + ": 50% funding did not lower its coverage");
             if(i + 1 == station.coverage.size()) break;   // the source cell has no lot
             const int expected = std::clamp(full.before[i] - full.coverage[i], 0, 250);

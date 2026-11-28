@@ -134,6 +134,10 @@ char terrainChar(TERRAINTYPE t) {
 }
 
 int populationOf(int item, int level) {
+    // Barracks and WOR house 40 since 2026-11-28 (top-density infantry housing, docs/infantry-squads.md). The
+    // generator keeps planning them at the 16 a level-1 Residential lot has, the count its maps were made with,
+    // so every seed (Stefan's games among them) still generates the same city; the game counts the 40.
+    if(DuneCity::isInfantryHousing(item)) return DuneCity::getZonePopulation(Structure_ZoneResidential, 1);
     // Zones report their placed level; every other city-role building starts at occupancy 1.
     const int effective = isZone(item) ? std::max(0, level) : 1;
     return DuneCity::getZonePopulation(item, effective)
