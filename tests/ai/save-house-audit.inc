@@ -9,6 +9,7 @@
 #include <dunecity/CityEffects.h>
 #include <dunecity/CitySimulation.h>
 #include <structures/StructureBase.h>
+#include <structures/ZoneStructure.h>
 #include <units/UnitBase.h>
 #include <players/HumanPlayer.h>
 #include <map>
@@ -42,11 +43,17 @@ inline void report(Game& game, const char* phase) {
         std::vector<Coord> enemy, enemyUnits, palaces, turrets, lots;
         std::vector<int> lotValues;
         long long sx = 0, sy = 0, sn = 0;
+        int garrisonedZones = 0, garrisonedUnits = 0;
         for (const auto* s : structureList) {
             const Coord c = s->getLocation() + Coord(s->getStructureSize().x / 2, s->getStructureSize().y / 2);
             const Uint32 item = s->getItemID();
             if (s->getOwner() == house) {
                 structures[getItemNameByID(item)]++;
+                if (item == Structure_ZoneResidential || item == Structure_ZoneCommercial || item == Structure_ZoneIndustrial) {
+                    const int inside = static_cast<const ZoneStructure*>(s)->getGarrisonSize();
+                    garrisonedZones += inside > 0;
+                    garrisonedUnits += inside;
+                }
                 if (item != Structure_RocketTurret && item != Structure_GunTurret && item != Structure_Wall) { sx += c.x; sy += c.y; ++sn; }
                 if (item == Structure_Palace || item == Structure_Stadium) palaces.push_back(s->getLocation() + Coord(1, 1));
                 if (item == Structure_RocketTurret) turrets.push_back(c);
@@ -107,6 +114,7 @@ inline void report(Game& game, const char* phase) {
         SDL_Log("SAVE_HOUSE_AUDIT: {\"phase\":\"%s\",\"minute\":%.2f,\"house\":%d,\"team\":%d,\"players\":[%s],\"credits\":%d,"
                 "\"pop_r\":%d,\"pop_c\":%d,\"pop_i\":%d,\"avg_land_value\":%d,\"tax_rate\":%d,\"lots\":%d,\"lot_lv_mean\":%lld,"
                 "\"low_lots\":%d,\"low_lots_in_landmark_reach\":%d,\"centre\":[%d,%d],\"combat_units\":%d,"
+                "\"garrisoning_and_capturing\":%d,\"garrisoned_zones\":%d,\"garrisoned_units\":%d,"
                 "\"rocket_turrets\":%d,\"turret_enemy_bands\":[%d,%d,%d,%d,%d],\"turrets_enemy_unit_in_range\":%d,"
                 "\"turret_mean_dist_centre\":%lld,\"turret_mean_dist_enemy\":%lld,\"landmarks\":[%s],\"turrets\":[%s],"
                 "\"units\":{%s},\"structures\":{%s}}",
@@ -114,6 +122,7 @@ inline void report(Game& game, const char* phase) {
                 state ? state->resPop : 0, state ? state->comPop : 0, state ? state->indPop : 0,
                 state ? state->avgLandValue : 0, state ? int(state->taxRate) : 0, int(lots.size()),
                 lots.empty() ? 0LL : lvSum / (long long)lots.size(), low, lowInReach, centre.x, centre.y, combat,
+                int(game.getGameInitSettings().getGameOptions().garrisoningAndCapturing), garrisonedZones, garrisonedUnits,
                 int(turrets.size()), bands[0], bands[1], bands[2], bands[3], bands[4], unitClose, dCentre / nt, dEnemy / nt,
                 pal.str().c_str(), tur.str().c_str(), jsonCounts(units).c_str(), jsonCounts(structures).c_str());
         house->logUnitEconomy(phase);

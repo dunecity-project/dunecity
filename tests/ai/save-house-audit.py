@@ -83,7 +83,7 @@ def frozen_save(args):
     digest = hashlib.sha256(data).hexdigest()
     if digest != packed['Land Value Save']['SHA256']:
         raise RuntimeError('Frozen save checksum mismatch')
-    return data, digest
+    return data, digest, packed
 
 
 def build_probe(args, scratch):
@@ -111,7 +111,7 @@ def play(args, scratch, binary, key):
         raise ValueError('Auditing an exact save requires the frozen --game-options input')
     out = scratch / arm
     out.mkdir(parents=True, exist_ok=True)
-    data, digest = frozen_save(args)
+    data, digest, options = frozen_save(args)
     saved = out / 'audit.dls'
     saved.write_bytes(data)
     source_profile = out / 'fixture-profile'
@@ -133,6 +133,8 @@ def play(args, scratch, binary, key):
                '--prebuilt-probe', str(binary), '--output-dir', str(run), '--load-save', str(saved),
                '--save-profile', str(source_profile), '--mod', 'dunecity', '--minutes', '1440',
                '--wall-timeout', str(args.wall_timeout), '--path-workers', '1', '--capture-mib', str(args.capture_mib)]
+    if options.has_section('Game Options'):
+        command += ['--game-options', str(Path(args.game_options).resolve())]
     if arm != 'audit' and arm not in specs:
         command += ['--scenario-style', arm]
     started = time.time()

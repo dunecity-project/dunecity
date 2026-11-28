@@ -10,6 +10,9 @@ His save tests/saves/data/seewhatidid-dunecity.dls.gz (Metropolis, game minute 7
 played on for 23 game minutes (to minute 95, his moremaginot save) twice, headless:
   drill    house 0 plays the turret-drill style (TurretDrill on), the other houses the shipped defaults;
   control  every house plays the shipped defaults.
+Garrisoning and Capturing is pinned off in both continuations: this fixture measures turret-drill
+effects, not the later garrison protection/healing rules. The native audit verifies the effective
+rule, zero held zones/occupants and zero garrison entries in both arms.
 Turrets fire on units only in both (the default rule). What he did by minute 95, measured from his saves
 (outputs/seewhatidid-20261127/analysis/acceptance-list.md): 76 more Rocket Turrets standing, 96% touching
 another, median 10 tiles to the nearest enemy building, 18 within 8 tiles, +308k R-Turret damage value,
@@ -45,8 +48,10 @@ MIN_DAMAGE, MIN_ORDOS_LOST = HIS['damage'] // 2, HIS['ordos_lost'] // 2
 def freeze(results):
     data = gzip.decompress(SAVE.read_bytes())
     packed = configparser.ConfigParser(interpolation=None)
+    packed.optionxform = str
     packed['Land Value Save'] = {'SHA256': hashlib.sha256(data).hexdigest(),
                                  'GzipBase64': base64.b64encode(gzip.compress(data, mtime=0)).decode()}
+    packed['Game Options'] = {'Garrisoning and Capturing': 'false'}
     path = results / 'seewhatidid.ini'
     with path.open('w') as handle:
         packed.write(handle)
@@ -95,7 +100,11 @@ def measure(results, arm):
             'damage': delta((OWN, 'R-Turret'), 'damage_value'), 'kills': delta((OWN, 'R-Turret'), 'kills'),
             'ordos_lost': lost[ORDOS], 'enemy_lost': sum(lost.values()),
             'ordered': count('TURRET_FRONT'), 'placed': count('TURRET_FRONT_PLACED'),
-            'engaged': count('TURRET_FRONT_ENGAGED')}
+            'engaged': count('TURRET_FRONT_ENGAGED'),
+            'garrison_rule': any(row['garrisoning_and_capturing'] for row in rows),
+            'garrisoned_zones': max(row['garrisoned_zones'] for row in rows),
+            'garrisoned_units': max(row['garrisoned_units'] for row in rows),
+            'garrison_entries': len(re.findall(r'ZONE_GARRISON: event=entered\b', log))}
 
 
 def acceptance(results):
@@ -105,6 +114,12 @@ def acceptance(results):
     def line(request, measured, ok):
         rows.append((request, measured, 'PASS' if ok else 'FAIL'))
 
+    line('both arms isolate the turret drill: Garrisoning and Capturing off, no occupants or entries',
+         '; '.join(f"{name}: rule={int(state['garrison_rule'])}, zones={state['garrisoned_zones']}, "
+                   f"occupants={state['garrisoned_units']}, entries={state['garrison_entries']}"
+                   for name, state in (('drill', drill), ('control', control))),
+         all(not any(state[key] for key in ('garrison_rule', 'garrisoned_zones', 'garrisoned_units', 'garrison_entries'))
+             for state in (drill, control)))
     line('the switch fires: drill orders with TurretDrill on, none off',
          f"drill {drill['ordered']} ordered; control {control['ordered']}", drill['ordered'] > 0 and control['ordered'] == 0)
     line('the orders become turrets that fight (placed >= 50% of ordered, engaged >= 80% of placed)',

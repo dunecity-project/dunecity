@@ -10,6 +10,7 @@
 #include <players/HumanPlayer.h>
 #include <units/HarvesterHelpers.h>
 #include <memory>
+#include <optional>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -152,11 +153,13 @@ int runCampaignBalanceProbe() {
         settings.gameOptions.maximumNumberOfHarvestersOverride=std::atoi(std::getenv("BALANCE_HARVESTER_LIMIT"));
     if (std::getenv("BALANCE_PACING_PROBE")) settings.gameOptions.maximumNumberOfHarvestersOverride=100;
     // A whole [Game Options] section, as a player's Dune City.ini stores it (the
-    // all-against-Atreides fixture is Stefan's own). Applied last, so it wins.
+    // all-against-Atreides fixture is Stefan's own). Explicit keys win, including
+    // over the continued save's rules after its setup has been restored.
+    std::optional<INIFile> frozenGameOptions;
     if (const char* options = std::getenv("BALANCE_GAME_OPTIONS")) {
-        const INIFile optionsFile(options);
-        if (!optionsFile.hasSection("Game Options")) throw std::runtime_error("No [Game Options] in BALANCE_GAME_OPTIONS");
-        applyGameOptionsFromConfig(optionsFile, "Game Options", settings.gameOptions);
+        frozenGameOptions.emplace(options);
+        if (!frozenGameOptions->hasSection("Game Options")) throw std::runtime_error("No [Game Options] in BALANCE_GAME_OPTIONS");
+        applyGameOptionsFromConfig(*frozenGameOptions, "Game Options", settings.gameOptions);
     }
     if(std::getenv("BALANCE_ACHIEVEMENTS_PROBE")) {
         runAchievementRuntimeProbe();
@@ -325,6 +328,8 @@ int runCampaignBalanceProbe() {
         GamePerf::MeasuredQuantBots measuredQuantBots(!civWars && std::getenv("BALANCE_PERF") != nullptr);
         game->initGame(init);
     }
+    if (loadSave && frozenGameOptions)
+        applyGameOptionsFromConfig(*frozenGameOptions, "Game Options", game->gameInitSettings.gameOptions);
     for(int h = 0; h < NUM_HOUSES; ++h) if(const auto* house = game->getHouse(h))
         for(const auto& player : house->getPlayerList())
             if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
