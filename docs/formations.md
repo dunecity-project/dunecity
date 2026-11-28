@@ -2269,7 +2269,15 @@ value at the order. Per house the counters, with why-counters for every gate and
 logged as `SCENARIO_SWITCH_ACTIVITY` (houses.csv `switch_activity`); per event as `REDEVELOP:`,
 `INDUSTRY_PLACED:` and `HOME_PLACED:` lines (`tests/ai/activation-events.json`). The headless probe
 `skirmish_generator_probe_city-redevelop_1024x768` (`tests/skirmish/redevelop-probe.inc`) replays one
-saved DuneCity start per arm:
+saved DuneCity start per arm.
+
+The four-switch fixture explicitly keeps `Garrisoning and Capturing` off in every arm, as it
+implicitly was before that rule became default-on. Captures and levies change the city census,
+pollution and ordinary construction timing; a new building can move the city centre and mask a
+Park's positive terrain contribution in the 30-second reading. No activation, placement, passage,
+lost-order, effect or matched ON-versus-OFF assertion is relaxed. The separate real-engine
+`zone-garrison-redevelopment-probe.inc` enforces Stefan's rule, "dont let a garrisoned building
+change type", on occupied lots rather than mixing that independent rule into this fixture.
 
 | Switch | ON acted | its lots, ON vs OFF |
 |---|---|---|

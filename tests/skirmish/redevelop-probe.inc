@@ -165,6 +165,8 @@ Coord polluterSite(const House* house) {
 
 Run play(const std::string& save, Switches switches, int minutes, bool plant, Coord* plantSite = nullptr, int credits = 0) {
     auto game = load(save);
+    skirmishRequire(!game->getGameInitSettings().getGameOptions().garrisoningAndCapturing,
+                    "The four-switch fixture must keep the independent garrison/capture rule off");
     Bot b = findBot(*game);
     configure(b.bot, switches);
     if (credits > 0) b.house->addCredits(FixPoint(credits));
@@ -370,7 +372,12 @@ void runRedevelopProbe() {
     const Params params = caseParams("city-redevelop");
     skirmishRequire(RandomSkirmish::activateMod(params.mod), "Case mod did not activate");
     const Result result = SkirmishGenerator::generate(params, RandomSkirmish::loadCatalogue(params.mode));
-    GameInitSettings init = RandomSkirmish::makeInit(result, effectiveGameOptions, params);
+    // This four-switch fixture predates default-on garrisons. Captures and levies change
+    // the city census and construction timing, so matched arms would no longer isolate
+    // park/relocation effects. Occupied-zone type locking has its own real-engine probe.
+    auto rules = effectiveGameOptions;
+    rules.garrisoningAndCapturing = false;
+    GameInitSettings init = RandomSkirmish::makeInit(result, rules, params);
     init.randomSeed = params.seed;
     std::string save = probeOut("city-redevelop.dls");
     std::vector<Coord> startLots;
