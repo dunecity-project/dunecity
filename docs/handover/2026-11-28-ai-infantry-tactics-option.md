@@ -96,3 +96,20 @@ Per Stefan/Main's playtest-first flow, the green source was handed immediately t
 - `option-handover-evidence-human-safe.patch`: final evidence update, superseding the earlier handover-evidence patch.
 
 Integrator owns the subsequent four AI gates and AWS nightly (`-L nightly -LE gui`) on the landed source; those results are **not claimed here**. Real-window appearance/input on a human screen and the installed Air build remain unverified here. The option probe observes representative garrison/capture activation, not a separate activation measurement for every one of the nine underlying behaviours.
+
+## Game Rules minimum-viewport layout repair
+
+The added city rule exposed a pre-existing fixed-height limit in the two-column
+form. Its rule columns now use the existing `ScrollView` widget, preserving
+checkbox sizes and both original columns. The caption and OK/Remember controls
+remain fixed, while mouse-wheel/scrollbar input reaches rules below the viewport.
+Future rows such as All Units for All Houses do not require a taller window.
+No match-rule semantics, protocol or save version changes.
+
+The original `city_zone_power` and `research_lab_probe` fit assertions remain
+unchanged. `city_zone_power` additionally exercises every actual checkbox through
+the window's real click/wheel routing, checks that the last controls can be fully
+revealed, and saves offscreen top/bottom PNGs for DuneCity/Tornie in all three UI
+skins at 640x480 and Air 960x600 logical at 2x/3x physical scale. The research UI
+bounds helper now accounts for the viewport's actual scroll offset.
+Real-screen/touch scrolling remains unverified.

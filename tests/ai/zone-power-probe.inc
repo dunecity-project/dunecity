@@ -3,6 +3,8 @@
 #include <dunecity/CityStructurePopulation.h>
 #include <GUI/ObjectInterfaces/ZoneStructureInterface.h>
 #include <GUI/dune/GameOptionsWindow.h>
+#include <GUI/dune/DuneStyle.h>
+#include <FileClasses/LoadSavePNG.h>
 #include <structures/ZoneStructure.h>
 #include <map>
 #include <tuple>
@@ -27,6 +29,7 @@ void status(ZoneStructure* zone, bool powered) {
         require(panel.densityLabel.getText() == " " + _("Density") + ": 0/3",
             "Empty lot does not display density zero");
 }
+#include "../menu/game-rules-layout-probe.inc"
 }
 
 void runZonePowerProbe(Game& game) {
@@ -173,6 +176,7 @@ void runZonePowerProbe(Game& game) {
             window.vbox.getMinimumSize().x,window.vbox.getMinimumSize().y);
     }
     require(ModManager::instance().setActiveMod(activeMod),"Cannot restore rule-window fixture content");
+    checkRulesLayout(game.gameInitSettings.gameOptions);
     SDL_Log("ZONE_POWER_PASS: legacy_floor=1 vacancy_empty_day=%d powered_trajectory_identical=1 zero_grid_stays_empty=1 regrowth=1 ui=1",emptiedDay);
     SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=zone_power outcome=passed");
 }

@@ -79,8 +79,8 @@ void DamageRulesCheckbox::drawOverlay(Point) {
 GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGameOptions)
  : Window(50, 50, 626, ModManager::instance().isTornieFamilyContentActive() ? 430 : 410), gameOptions(initialGameOptions) {
 
-    // Family rules need the intrinsic checkbox padding, but no extra row gaps,
-    // to keep every control inside the same crest-safe 430px frame at 640x480.
+    // Keep the existing crest-safe frame and row sizes. Extra rules scroll
+    // inside it rather than pushing the confirmation controls off 640x480.
     const int ruleGap = ModManager::instance().isTornieFamilyContentActive() ? 0 : 2;
 
     setWindowWidget(&vbox);
@@ -91,7 +91,9 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     captionlabel.setTextFontSize(22);
     vbox.addWidget(&captionlabel,32);
     vbox.addWidget(VSpacer::create(3));
-    vbox.addWidget(&hbox);
+    rulesScroll.setPreserveContentWidth(true);
+    rulesScroll.setContent(&hbox);
+    vbox.addWidget(&rulesScroll);
     vbox.addWidget(VSpacer::create(6));
     vbox.addWidget(&okHBox, 30);
     vbox.addWidget(VSpacer::create(6));

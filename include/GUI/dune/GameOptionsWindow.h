@@ -21,6 +21,7 @@
 #include <GUI/Window.h>
 #include <GUI/HBox.h>
 #include <GUI/VBox.h>
+#include <GUI/ScrollView.h>
 #include <GUI/TextButton.h>
 #include <GUI/Label.h>
 #include <GUI/Spacer.h>
@@ -80,6 +81,7 @@ private:
 
     VBox vbox;                                      ///< vertical box
     HBox hbox;                                      ///< horizontal box
+    ScrollView rulesScroll;                         ///< Rule columns scroll; title and confirmation stay fixed.
     HBox okHBox;
     VBox vboxLeft;                                  ///< inner vertical box on the left side
     VBox vboxRight;                                 ///< inner vertical box on the right side

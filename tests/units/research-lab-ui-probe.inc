@@ -49,6 +49,8 @@ SDL_Rect bounds(Widget& control, Widget& root, Point origin = Point(0, 0)) {
         if(auto* box = dynamic_cast<StaticContainer*>(parent)) origin = origin + box->getWidgetPosition(current);
         else if(auto* box = dynamic_cast<HBox*>(parent)) origin = origin + box->getWidgetPosition(current);
         else if(auto* box = dynamic_cast<VBox*>(parent)) origin = origin + box->getWidgetPosition(current);
+        else if(auto* view = dynamic_cast<ScrollView*>(parent))
+            origin = origin + Point(0, -view->scrollbar.getCurrentValue());
         else require(parent == &root, "Research UI has an unknown layout container");
         current = parent;
     }
