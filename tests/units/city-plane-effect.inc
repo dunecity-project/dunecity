@@ -63,6 +63,9 @@ void require(bool ok, const std::string& why) {
 constexpr int kMapSize = 64;
 std::string gOut;
 SettingsClass::GameOptionsClass gModOptions;
+int gShardIndex = 0, gShardCount = 1, gCaseLimit = 0;
+int gCheckRows = 0;
+std::ofstream gOrder;
 
 std::string fixtureMap() {
     std::string data = "[BASIC]\nVersion=2\nWinFlags=3\nLoseFlags=1\nTechLevel=8\n[MAP]\nSizeX="
@@ -301,11 +304,14 @@ int runPasses(const std::string& mapData, const std::vector<int>& seeds) {
     csv << "layout,turrets,direction,offset,seed,defence,in_range,hold,no_target,turning,reloading,shots,"
            "first_shot_distance,plane_damage,killed,crash_distance,own_damage,own_destroyed,ticks\n";
     int passes = 0;
+    int cases = 0;
     for(const int layout : {0, 1})
     for(const int turrets : {1, 2, 4, 6})
     for(const int direction : {0, 1, 2})
     for(const int offset : {0, 2, 4, 6, 9})
     for(const int seed : seeds) {
+        const int index = cases++;
+        if(index % gShardCount != gShardIndex || (gCaseLimit && index >= gCaseLimit)) continue;
         const PassSpec spec{layout, turrets, direction, offset, seed};
         for(const bool defence : {false, true}) {
             const auto o = playPass(mapData, spec, defence);
@@ -316,7 +322,9 @@ int runPasses(const std::string& mapData, const std::vector<int>& seeds) {
             ++passes;
         }
         csv.flush();
+        gOrder << "passes.csv," << index << ",2\n";
     }
+    gOrder << "passes.csv,total," << (gCaseLimit ? std::min(cases, gCaseLimit) : cases) << '\n';
     return passes;
 }
 
@@ -415,9 +423,12 @@ int runRuns(const std::string& mapData, const std::vector<int>& seeds) {
     std::ofstream csv(gOut + "/runs.csv");
     csv << "direction,offset,seed,bombing,bombs,damage,damaged,destroyed,credits,yard_lost,palace_lost,lost,ticks\n";
     int runs = 0;
+    int cases = 0;
     for(const int direction : {0, 1, 2})
     for(int offset = -6; offset <= 6; ++offset)
     for(const int seed : seeds) {
+        const int index = cases++;
+        if(index % gShardCount != gShardIndex || (gCaseLimit && index >= gCaseLimit)) continue;
         for(const int bombing : {0, 1, 2}) {
             const auto o = playRun(mapData, direction, offset, seed, bombing);
             // The aimed bombs come from a rack of six; the stick has none.
@@ -429,7 +440,9 @@ int runRuns(const std::string& mapData, const std::vector<int>& seeds) {
             ++runs;
         }
         csv.flush();
+        gOrder << "runs.csv," << index << ",3\n";
     }
+    gOrder << "runs.csv,total," << (gCaseLimit ? std::min(cases, gCaseLimit) : cases) << '\n';
     return runs;
 }
 
@@ -440,6 +453,7 @@ int runRuns(const std::string& mapData, const std::vector<int>& seeds) {
 std::ofstream gChecks;
 void record(const std::string& name, const std::string& detail) {
     gChecks << name << ',' << detail << '\n';
+    ++gCheckRows;
     gChecks.flush();
     SDL_Log("CITY_PLANE_EFFECT check %s: %s", name.c_str(), detail.c_str());
 }
@@ -1500,6 +1514,15 @@ int runCityPlaneEffect() {
         replaySave(replay, cycles ? std::atoi(cycles) : 3750);
         return -1;
     }
+    const char* shardIndex = std::getenv("CITY_PLANE_EFFECT_SHARD_INDEX");
+    const char* shardCount = std::getenv("CITY_PLANE_EFFECT_SHARD_COUNT");
+    const char* caseLimit = std::getenv("CITY_PLANE_EFFECT_CASE_LIMIT");
+    require(shardIndex && shardCount && caseLimit, "Missing city plane shard environment");
+    gShardIndex = std::atoi(shardIndex);
+    gShardCount = std::atoi(shardCount);
+    gCaseLimit = std::atoi(caseLimit);
+    require(gShardCount > 0 && gShardIndex >= 0 && gShardIndex < gShardCount && gCaseLimit >= 0,
+            "Invalid city plane shard selection");
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     settings.general.playerName = "AA tester";
     // What a Custom Game with the Dune City mod plays: the INI overlaid by the mod's GameOptions.ini.
@@ -1510,31 +1533,43 @@ int runCityPlaneEffect() {
             "The mod's options do not play the default city plane rules");
     const std::string mapData = fixtureMap();
 
+    gOrder.open(gOut + "/order.csv");
+    gOrder << "file,index,rows\n";
     gChecks.open(gOut + "/checks.csv");
     gChecks << "check,detail\n";
-    checkBombTargets(mapData);
-    checkBombLoad(mapData);
-    checkSavedBombLoad(mapData, false);
-    checkSavedBombLoad(mapData, true);
-    checkAirport(mapData);
-    checkAirportBuiltPlane(mapData);
-    checkHoldFire(mapData);
-    checkRocketChase(mapData);
-    checkStick(mapData);
-    checkRepairingBuilding(mapData);
-    checkBombsOnUnits(mapData);
-    checkCrashCredit(mapData);
-    checkCrashBombs(mapData);
-    checkBuildingSplash(mapData);
-    checkPurchase(mapData);
-    checkBuildTime(mapData);
-    checkFreePerAirport(mapData);
-    checkPictures(mapData);
-    checkFall(mapData);
+    int checks = 0;
+    const auto check = [&](auto&& run) {
+        const int index = checks++;
+        if(index % gShardCount != gShardIndex || (gCaseLimit && index >= gCaseLimit)) return;
+        const int before = gCheckRows;
+        run();
+        gOrder << "checks.csv," << index << ',' << gCheckRows - before << '\n';
+    };
+    check([&] { checkBombTargets(mapData); });
+    check([&] { checkBombLoad(mapData); });
+    check([&] { checkSavedBombLoad(mapData, false); });
+    check([&] { checkSavedBombLoad(mapData, true); });
+    check([&] { checkAirport(mapData); });
+    check([&] { checkAirportBuiltPlane(mapData); });
+    check([&] { checkHoldFire(mapData); });
+    check([&] { checkRocketChase(mapData); });
+    check([&] { checkStick(mapData); });
+    check([&] { checkRepairingBuilding(mapData); });
+    check([&] { checkBombsOnUnits(mapData); });
+    check([&] { checkCrashCredit(mapData); });
+    check([&] { checkCrashBombs(mapData); });
+    check([&] { checkBuildingSplash(mapData); });
+    check([&] { checkPurchase(mapData); });
+    check([&] { checkBuildTime(mapData); });
+    check([&] { checkFreePerAirport(mapData); });
+    check([&] { checkPictures(mapData); });
+    check([&] { checkFall(mapData); });
     gChecks.close();
+    gOrder << "checks.csv,total," << (gCaseLimit ? std::min(checks, gCaseLimit) : checks) << '\n';
 
     const int runs = runRuns(mapData, numbers(runSeedEnv));
     const int passes = runPasses(mapData, numbers(seedEnv));
+    gOrder.close();
     // A units probe owns its own marker, never the menu runner's result marker.
     SDL_Log("CITY_PLANE_EFFECT_PASS: passes=%d runs=%d", passes, runs);
     return -1;

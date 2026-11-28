@@ -35,6 +35,7 @@ than the aimed bombs.
 Outputs: passes.csv, runs.csv, checks.csv, summary.md, run.log.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import csv
 import os
 from pathlib import Path
@@ -100,6 +101,59 @@ def share(rows, field):
     return 100.0 * sum(int(row[field]) for row in rows) / total if total else 0.0
 
 
+def merge_worker_rows(workers, destination):
+    """Reassemble exact native byte rows in serial case order, checking the full partition."""
+    files = ('checks.csv', 'runs.csv', 'passes.csv')
+    chunks = {name: {} for name in files}
+    expected, headers = {}, {}
+    for worker in workers:
+        payloads = {name: (worker / name).read_bytes().splitlines(keepends=True) for name in files}
+        offsets = dict.fromkeys(files, 1)
+        totals = {}
+        for name, data in payloads.items():
+            if not data or (name in headers and headers[name] != data[0]):
+                raise RuntimeError('Missing or inconsistent worker CSV header: ' + str(worker / name))
+            headers[name] = data[0]
+        with (worker / 'order.csv').open(newline='') as handle:
+            for row in csv.DictReader(handle):
+                name, index, count = row['file'], row['index'], int(row['rows'])
+                if name not in chunks or count < 0:
+                    raise RuntimeError('Invalid worker case manifest: ' + str(worker))
+                if index == 'total':
+                    if name in totals:
+                        raise RuntimeError('Duplicate worker case total: ' + str(worker))
+                    totals[name] = count
+                    continue
+                index = int(index)
+                end = offsets[name] + count
+                if index < 0 or index in chunks[name] or end > len(payloads[name]):
+                    raise RuntimeError('Duplicate or incomplete worker case: ' + str(worker))
+                chunks[name][index] = payloads[name][offsets[name]:end]
+                offsets[name] = end
+        if set(totals) != set(files):
+            raise RuntimeError('Missing worker case totals: ' + str(worker))
+        for name in files:
+            if offsets[name] != len(payloads[name]):
+                raise RuntimeError('Unclaimed worker measurement rows: ' + str(worker / name))
+            if name in expected and expected[name] != totals[name]:
+                raise RuntimeError('Inconsistent worker case totals: ' + name)
+            expected[name] = totals[name]
+    for name in files:
+        if set(chunks[name]) != set(range(expected[name])):
+            raise RuntimeError('Missing or extra native cases: ' + name)
+        with (destination / name).open('wb') as handle:
+            handle.write(headers[name])
+            for index in range(expected[name]):
+                handle.writelines(chunks[name][index])
+    with (destination / 'order.csv').open('w', newline='') as handle:
+        writer = csv.writer(handle, lineterminator='\n')
+        writer.writerow(('file', 'index', 'rows'))
+        for name in files:
+            for index in range(expected[name]):
+                writer.writerow((name, index, len(chunks[name][index])))
+            writer.writerow((name, 'total', expected[name]))
+
+
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
 parser.add_argument('--output-dir', type=Path, default=default_build_dir(root) / 'city-plane-effect')
@@ -107,6 +161,10 @@ parser.add_argument('--seeds', type=seed_list, default=seed_list('1-4'),
                     help='Seeds for the turret passes (120 pass kinds per seed), e.g. 1-4')
 parser.add_argument('--run-seeds', type=seed_list, default=seed_list('1-3'),
                     help='Seeds for the bombing runs (39 run kinds per seed)')
+parser.add_argument('--jobs', type=int, default=1,
+                    help='Independent native workers; compile once and retain full-cohort assertions (default: 1)')
+parser.add_argument('--verify-parallel', action='store_true',
+                    help='Compare four native cases per cohort byte-for-byte with a serial run; diagnostic only')
 parser.add_argument('--report', action='store_true',
                     help='Only recompute the report from the CSVs in --output-dir')
 parser.add_argument('--wall-timeout', type=int, default=3000)
@@ -121,6 +179,8 @@ parser.add_argument('--replay-workshop-revision', type=Path, action='append', de
                          'the save needs; without it the game tries to download it (repeatable)')
 parser.add_argument('--replay-cycles', type=int, default=3750)
 args = parser.parse_args()
+if args.jobs < 1 or (args.verify_parallel and (args.jobs < 2 or args.report or args.replay_save)):
+    parser.error('--jobs must be positive; --verify-parallel requires at least two workers and a normal run')
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
 
@@ -161,40 +221,75 @@ if not args.report:
         subprocess.run(compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
         subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
-    with scratch_dir('city-plane-effect') as scratch:
-        profile = scratch / 'profile'
-        profile.mkdir()
-        (profile / 'Dune City.ini').write_text(
-            '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
-            'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = AA tester\n',
-            encoding='utf-8')
-        if args.replay_save:
-            (profile / 'mods').mkdir()
-            for mod in args.replay_mod:
-                shutil.copytree(mod, profile / 'mods' / mod.name)
-            for revision in args.replay_workshop_revision:
-                shutil.copytree(revision, profile / 'workshop' / 'revisions' / revision.name)
-        env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy',
-                   SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1',
-                   CITY_PLANE_EFFECT_OUT=str(out),
-                   CITY_PLANE_EFFECT_SEEDS=','.join(str(seed) for seed in args.seeds),
-                   CITY_PLANE_EFFECT_RUN_SEEDS=','.join(str(seed) for seed in args.run_seeds))
-        if args.replay_save:
-            env.update(CITY_PLANE_EFFECT_REPLAY=str(args.replay_save.resolve()),
-                       CITY_PLANE_EFFECT_REPLAY_CYCLES=str(args.replay_cycles))
-        logfile = out / 'run.log'
-        with logfile.open('w') as log:
-            subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
-                           stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.wall_timeout)
-        text = logfile.read_text(errors='replace')
-        if args.replay_save:
-            print('\n'.join(l for l in text.splitlines() if l.startswith('CITY_PLANE_REPLAY')))
-            sys.exit(0)
-        if text.count('CITY_PLANE_EFFECT_PASS:') != 1 or 'CITY_PLANE_EFFECT_FAIL:' in text:
-            raise RuntimeError('Missing or failed city plane effect run; see ' + str(logfile))
-        discard_profile_assets(profile)
-    (out / 'city-plane-effect.dls').unlink(missing_ok=True)
+    def run_worker(index, count, worker_out, case_limit):
+        worker_out.mkdir(parents=True, exist_ok=True)
+        with scratch_dir('city-plane-effect') as scratch:
+            profile = scratch / 'profile'
+            profile.mkdir()
+            (profile / 'Dune City.ini').write_text(
+                '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
+                'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = AA tester\n',
+                encoding='utf-8')
+            if args.replay_save:
+                (profile / 'mods').mkdir()
+                for mod in args.replay_mod:
+                    shutil.copytree(mod, profile / 'mods' / mod.name)
+                for revision in args.replay_workshop_revision:
+                    shutil.copytree(revision, profile / 'workshop' / 'revisions' / revision.name)
+            env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy',
+                       SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1',
+                       CITY_PLANE_EFFECT_OUT=str(worker_out),
+                       CITY_PLANE_EFFECT_SEEDS=','.join(str(seed) for seed in args.seeds),
+                       CITY_PLANE_EFFECT_RUN_SEEDS=','.join(str(seed) for seed in args.run_seeds),
+                       CITY_PLANE_EFFECT_SHARD_INDEX=str(index), CITY_PLANE_EFFECT_SHARD_COUNT=str(count),
+                       CITY_PLANE_EFFECT_CASE_LIMIT=str(case_limit))
+            if args.replay_save:
+                env.update(CITY_PLANE_EFFECT_REPLAY=str(args.replay_save.resolve()),
+                           CITY_PLANE_EFFECT_REPLAY_CYCLES=str(args.replay_cycles))
+            logfile = worker_out / 'run.log'
+            with logfile.open('w') as log:
+                subprocess.run([str(binary), '--window', '--showlog'], cwd=worker_out, env=env,
+                               stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.wall_timeout)
+            text = logfile.read_text(errors='replace')
+            if not args.replay_save and (text.count('CITY_PLANE_EFFECT_PASS:') != 1
+                                         or 'CITY_PLANE_EFFECT_FAIL:' in text):
+                raise RuntimeError('Missing or failed city plane effect run; see ' + str(logfile))
+            discard_profile_assets(profile)
+        (worker_out / 'city-plane-effect.dls').unlink(missing_ok=True)
+        return worker_out
+
+    def run_matrix(destination, count, case_limit):
+        destination.mkdir(parents=True, exist_ok=True)
+        def execute(index):
+            worker_out = destination if count == 1 else destination / 'shards' / str(index)
+            return run_worker(index, count, worker_out, case_limit)
+        if count == 1:
+            workers = [execute(0)]
+        else:
+            with ThreadPoolExecutor(max_workers=count) as pool:
+                workers = list(pool.map(execute, range(count)))
+            with (destination / 'run.log').open('w') as log:
+                for index, worker in enumerate(workers):
+                    log.write('=== native worker %d ===\n' % index)
+                    log.write((worker / 'run.log').read_text(errors='replace'))
+        if not args.replay_save:
+            merge_worker_rows(workers, destination)
+
+    run_matrix(out, 1 if args.replay_save else args.jobs, 4 if args.verify_parallel else 0)
+    if args.replay_save:
+        print('\n'.join(line for line in (out / 'run.log').read_text(errors='replace').splitlines()
+                        if line.startswith('CITY_PLANE_REPLAY')))
+        sys.exit(0)
+    if args.verify_parallel:
+        reference = out / 'serial-reference'
+        run_matrix(reference, 1, 4)
+        for name in ('passes.csv', 'runs.csv', 'checks.csv'):
+            if (out / name).read_bytes() != (reference / name).read_bytes():
+                raise RuntimeError('Parallel measurements differ from serial execution: ' + name)
     subprocess.run([sys.executable, str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+    if args.verify_parallel:
+        print('City plane workers match serial measurement rows exactly (four cases per cohort).')
+        sys.exit(0)
 
 with (out / 'passes.csv').open(newline='') as handle:
     passes = pair_up(list(csv.DictReader(handle)), PASS_KEY, 'defence')

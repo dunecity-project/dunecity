@@ -1191,9 +1191,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         # Yard or Palace, and an Airport launches no Ornithopter.
         dunecity_add_test(headless nightly NAME city_plane_effect COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-city-plane-effect.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-plane-effect)
-        # 7 minutes on the Mini, 17 on the AWS Linux workers.
-        set_tests_properties(city_plane_effect PROPERTIES TIMEOUT 3000 PROCESSORS 2)
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-plane-effect --jobs 4)
+        set_tests_properties(city_plane_effect PROPERTIES TIMEOUT 3000 PROCESSORS 8)
+        dunecity_add_test(headless nightly NAME city_plane_effect_parallel_equivalence COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-city-plane-effect.py --seeds 1 --run-seeds 1
+            --jobs 4 --verify-parallel --wall-timeout 240
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-plane-effect-equivalence)
+        set_tests_properties(city_plane_effect_parallel_equivalence PROPERTIES TIMEOUT 600 PROCESSORS 8)
         # Whole games on Stefan's two city maps (4P Metropolis, 2P City), QuantBot Brutal on every
         # house, in four states of the bomb stick, bombing run and plane purchase rules: the
         # stick must destroy more buildings per flight than the aimed bombs in every game, runs
