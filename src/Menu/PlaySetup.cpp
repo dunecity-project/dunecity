@@ -115,20 +115,6 @@ private:
     std::string selected;
 };
 
-std::string recentGame() {
-    const auto dir = userDirectory("save/");
-    if(dir.empty()) return {};
-    const auto installed = ModManager::instance().listMods();
-    for(const auto& file : getFileNamesList(dir, "dls", true, FileListOrder_ModifyDate_Dsc)) {
-        try {
-            GameInitSettings::HouseInfoList houses;
-            const auto saved = readSetup(dir + file, houses);
-            if(!isNetworkGameType(saved.getGameType())
-               && (!saved.getModRevisionHash().empty() || std::any_of(installed.begin(), installed.end(), [&](const auto& mod) { return mod.name == saved.getModName(); }))) return dir + file;
-        } catch(const std::exception&) { /* Skip corrupt, newer or unavailable saves. */ }
-    }
-    return {};
-}
 }
 
 void rememberPlayMode(PlayModeScope scope, bool online) {
@@ -158,12 +144,6 @@ void rememberCustomGameMod(const std::string& modName) {
 }
 
 void showGameLibrary(bool replays) { GameLibrary(replays).showMenu(); }
-bool hasRecentGame() { return !recentGame().empty(); }
-void continueRecentGame() {
-    const auto path = recentGame();
-    if(!path.empty()) startSinglePlayerGame(GameInitSettings(path));
-    else showGameLibrary();
-}
 
 SettingsClass::GameOptionsClass initialCustomGameRules() {
     // Saves, joins and map previews can activate content without updating the
@@ -231,7 +211,12 @@ void playCustomGame(bool online, bool publicGame, bool randomMap, bool civilizat
         auto& mods = ModManager::instance();
         const auto oldMod = mods.getActiveModName();
         if(!setup.mods.empty() && setup.mods[setup.mod].name != oldMod) {
-            if(mods.setActiveMod(setup.mods[setup.mod].name)) setup.rules = effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+            if(mods.setActiveMod(setup.mods[setup.mod].name)) {
+                // The new mod brings its own rule defaults; the tech level chosen for this match stays.
+                const int chosenTechLevel = setup.rules.startTechLevel;
+                setup.rules = effectiveGameOptions = mods.loadEffectiveGameOptions(settings.gameOptions);
+                setup.rules.startTechLevel = chosenTechLevel;
+            }
             else for(size_t i = 0; i < setup.mods.size(); ++i) if(setup.mods[i].name == oldMod) setup.mod = static_cast<int>(i);
         }
         // The canonical Dune2R artwork is completed and verified here, before this game

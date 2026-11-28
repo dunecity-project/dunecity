@@ -39,6 +39,7 @@
 #include <mod/ModManager.h>
 
 #include <structures/StructureBase.h>
+#include <structures/Airport.h>
 #include <structures/BuilderBase.h>
 #include <structures/ZoneStructure.h>
 #include <structures/Refinery.h>
@@ -109,6 +110,9 @@ House::House(InputStream& stream) : choam(this) {
     if(houseID == HOUSE_NATIVES) teamID = NATIVES_TEAM;
     autoRepairEnabled = currentGame && currentGame->getLoadedSavegameVersion() >= 9824
         ? stream.readBool() : false;
+    repairReturnEnabled = currentGame
+            && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_REPAIR_RETURN
+        ? stream.readBool() : true;
 
     // Storage capacity is reconstructed after the houses, but the absolute
     // credit ceiling applies immediately, even while loading an older save.
@@ -260,6 +264,11 @@ House::House(InputStream& stream) : choam(this) {
             techResearchPaid = techResearchTotalCost;
         }
     }
+    // SAVEGAMEVERSION_AIR_RAID_RECORD: the bombs on this house's buildings and the turrets
+    // ordered in answer. A house from an older save has not been bombed.
+    if(currentGame && currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIR_RAID_RECORD) {
+        loadAirRaid(stream);
+    }
 }
 
 
@@ -311,6 +320,7 @@ void House::save(OutputStream& stream) const {
     stream.writeUint8(houseID);
     stream.writeUint8(teamID);
     stream.writeBool(autoRepairEnabled);
+    stream.writeBool(repairReturnEnabled);
 
     stream.writeFixPoint(storedCredits);
     stream.writeFixPoint(startingCredits);
@@ -366,6 +376,38 @@ void House::save(OutputStream& stream) const {
     stream.writeSint32(techResearchTotalCost);
     stream.writeSint32(techResearchTotalCycles);
     stream.writeFixPoint(techResearchPaid);
+    saveAirRaid(stream);
+}
+
+// The record of city airplane bombs on this house's buildings (QuantBotAirDefencePolicy::
+// RaidRecord): QuantBot's AirRaidTurrets rule reads it, so a loaded game must answer a raid
+// exactly as the saved one would have. At most 10 + 8 x 8 bytes.
+void House::saveAirRaid(OutputStream& stream) const {
+    stream.writeUint32(airRaid.lastHitCycle);
+    stream.writeUint32(airRaid.lastTurretCycle);
+    stream.writeUint8(airRaid.turretsOrdered);
+    stream.writeUint8(airRaid.hitCount);
+    for(int i = 0; i < airRaid.hitCount; ++i) {
+        stream.writeSint16(airRaid.hits[i].x);
+        stream.writeSint16(airRaid.hits[i].y);
+        stream.writeUint32(airRaid.hits[i].cycle);
+    }
+}
+
+void House::loadAirRaid(InputStream& stream) {
+    airRaid = QuantBotAirDefencePolicy::RaidRecord();
+    airRaid.lastHitCycle = stream.readUint32();
+    airRaid.lastTurretCycle = stream.readUint32();
+    airRaid.turretsOrdered = stream.readUint8();
+    airRaid.hitCount = stream.readUint8();
+    if(airRaid.hitCount > QuantBotAirDefencePolicy::kMaxHits) {
+        THROW(std::runtime_error, "Invalid house air raid record");
+    }
+    for(int i = 0; i < airRaid.hitCount; ++i) {
+        airRaid.hits[i].x = stream.readSint16();
+        airRaid.hits[i].y = stream.readSint16();
+        airRaid.hits[i].cycle = stream.readUint32();
+    }
 }
 
 
@@ -507,7 +549,8 @@ bool House::isAlive() const {
     const int fightingUnits = numUnits - numItem[Unit_Carryall] - numItem[Unit_ChemicalCarryall]
         - getNumHarvesters() - numItem[Unit_Frigate] - numItem[Unit_Sandworm]
         - numItem[Unit_AmbientAirplane] - numItem[Unit_AmbientHelicopter];
-    return teamID == 0 || isNatives() || numStructures - numItem[Structure_Wall] > 0 || fightingUnits > 0;
+    // Walls and parks alone do not keep a house in the game.
+    return teamID == 0 || isNatives() || numStructures - numItem[Structure_Wall] - numItem[Structure_Park] > 0 || fightingUnits > 0;
 }
 
 bool House::isGroundUnitLimitReached() const {
@@ -937,7 +980,7 @@ void House::updateBuildLists() {
 
 bool House::meetsStarportPopulation() const {
     if(!currentGame->getGameInitSettings().getGameOptions().starportPopulation
-       || isCampaignGameType(currentGame->gameType)
+       || (isCampaignGameType(currentGame->gameType) && !currentGame->getGameInitSettings().isDuneCityCampaign())
        || !currentGame->isCitySimEnabled()) return true;
     // Mission AI permissions follow each controller's hashed policy; a human-only
     // Single mission and every custom game retain their population requirement.
@@ -1050,9 +1093,9 @@ bool House::isUnitLimitReached(int itemID) const {
 
 
 
-void House::decrementUnits(int itemID) {
+void House::decrementUnits(int itemID, bool lost) {
     numUnits--;
-    numItemLosses[itemID]++;
+    if(lost) numItemLosses[itemID]++;
 
     if(itemID == Unit_Harvester || (ModManager::instance().isTornieFamilyContentActive()
         && (itemID == Unit_FastHarvester || itemID == Unit_CapacityHarvester))) {
@@ -1196,6 +1239,9 @@ void House::transformStructure(int oldItemID, int newItemID) {
 
 
 void House::noteDamageLocation(ObjectBase* pObject, int damage, Uint32 damagerID) {
+    // A soldier hit inside a garrisoned zone is hidden and takes no orders: its players hear of
+    // the hit on the zone itself (Zone Garrisons).
+    if(pObject != nullptr && pObject->isAUnit() && !pObject->isActive()) return;
     for(auto& pPlayer : players) {
         pPlayer->onDamage(pObject, damage, damagerID);
     }
@@ -1268,6 +1314,23 @@ void House::informHasDamaged(Uint32 itemID, Uint32 damage) {
     numItemDamageInflicted[itemID] += damage;
 }
 
+
+void House::logUnitEconomy(const char* phase) const {
+    for(int item = 0; item < Num_ItemID; ++item) {
+        const auto& reward = combatRewards[item];
+        if(numItemBuilt[item] == 0 && numItemLosses[item] == 0 && reward.total() == 0) continue;
+        std::string name;
+        try { name = getItemNameByID(item); } catch(const std::exception&) { name = "item_" + std::to_string(item); }
+        std::replace(name.begin(), name.end(), ' ', '_');
+        SDL_Log("UNIT_ECONOMY: phase=%s house=%d item=%d name=%s kind=%s price=%d built=%d lost=%d damage_value=%lld "
+                "kill_bonus=%lld kills=%llu hits=%llu cycle=%u", phase, houseID, item, name.c_str(),
+                isUnit(item) ? "unit" : "structure",
+                currentGame->objectData.data[item][houseID].price, numItemBuilt[item], numItemLosses[item],
+                static_cast<long long>(reward.damageMilli / 1000), static_cast<long long>(reward.killBonusMilli / 1000),
+                static_cast<unsigned long long>(reward.kills), static_cast<unsigned long long>(reward.hits),
+                currentGame->getGameCycleCount());
+    }
+}
 
 void House::addCombatReward(Uint32 itemID, const CombatReward::Totals& reward) {
     if (itemID >= Num_ItemID) return;
@@ -1487,7 +1550,10 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
     if (!byScenario && (itemID == Structure_Slab1 || itemID == Structure_Slab4)
         && !currentGame->getGameInitSettings().getGameOptions().concreteRequired) return nullptr;
 
-    const Coord requestedStructureSize = getStructureSize(itemID);
+    // An Airport is 4x4, except the compact (3x3) one the scenario loader asks for on a map
+    // with no room for the fourth row and column (Airport::CompactPlacement).
+    const Coord requestedStructureSize = itemID == Structure_Airport ? Airport::nextPlacementSize()
+                                                                     : getStructureSize(itemID);
     if(requestedStructureSize.x <= 0 || requestedStructureSize.y <= 0
        || xPos + requestedStructureSize.x > currentGameMap->getSizeX()
        || yPos + requestedStructureSize.y > currentGameMap->getSizeY()) {
@@ -1665,7 +1731,8 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
             // auto-tiled road overlay doesn't render under the building
             // art. Players can still place buildings on top of these
             // auto-roads later (road is a tile flag, not a StructureBase).
-            if (currentGame && currentGame->isCitySimEnabled() && itemID != Structure_Wall) {
+            // A Micropolis park is laid on bare ground with no road frontage.
+            if (currentGame && currentGame->isCitySimEnabled() && itemID != Structure_Wall && itemID != Structure_Park) {
                 const int sx = newStructure->getStructureSizeX();
                 const int sy = newStructure->getStructureSizeY();
                 for (int dy = 0; dy < sy; ++dy) {
@@ -1691,7 +1758,7 @@ StructureBase* House::placeStructure(Uint32 builderID, int itemID, int xPos, int
                 }
             }
 
-            if ((builderID != NONE_ID) && (itemID != Structure_Wall)) {
+            if ((builderID != NONE_ID) && (itemID != Structure_Wall) && (itemID != Structure_Park)) {
                 newStructure->setJustPlaced();
             }
 
@@ -1807,7 +1874,9 @@ UnitBase* House::placeUnit(int itemID, int xPos, int yPos, bool byScenario) {
     if (newUnit) {
         Coord pos = Coord(xPos, yPos);
         if (newUnit->canPass(xPos, yPos)) {
-            newUnit->deploy(pos);
+            // A scenario's own unit is already there when the map starts (keeps a bloom intact).
+            if(byScenario) newUnit->deployAtMapStart(pos);
+            else newUnit->deploy(pos);
         } else {
             newUnit->setVisible(VIS_ALL, false);
             newUnit->destroy();

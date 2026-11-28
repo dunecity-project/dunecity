@@ -1,3 +1,4 @@
+#include <dunecity/HospitalCare.h>
 #include <structures/ZoneStructure.h>
 /*
  *  This file is part of Dune Legacy.
@@ -34,6 +35,7 @@
 
 #include <units/UnitBase.h>
 #include <units/GroundUnit.h>
+#include <units/SandWorm.h>
 #include <units/Carryall.h>
 #include <units/Devastator.h>
 #include <units/MCV.h>
@@ -43,6 +45,7 @@
 #include <structures/BuilderBase.h>
 #include <structures/TurretBase.h>
 #include <structures/Palace.h>
+#include <structures/Airport.h>
 #include <structures/TechCenter.h>
 #include <structures/ResearchLab.h>
 #include <structures/Scoutpost.h>
@@ -203,6 +206,12 @@ void Command::executeCommand() const {
             // An unshifted order replaces the queue and becomes its front, so a later Shift
             // order runs after it.
             if(validIntent) unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, Coord((int) parameter[1], (int) parameter[2])));
+            // A wounded soldier moved onto or beside an own Hospital heals there (HospitalCare.h).
+            if(validIntent) {
+                if(auto* hospital = DuneCity::HospitalCare::walkInHospital(unit, nullptr,
+                        Coord((int) parameter[1], (int) parameter[2]), DuneCity::kHospitalWalkInTiles))
+                    DuneCity::HospitalCare::walkIn(unit, hospital);
+            }
         } break;
 
         case CMD_UNIT_MOVE2OBJECT: {
@@ -219,6 +228,12 @@ void Command::executeCommand() const {
                 unit->doMove2Object((int) parameter[1]);
             });
             if(validIntent) unit->recordPlayerOrder(UnitOrder::on(UnitOrderType::MoveToObject, parameter[1]));
+            // Right-clicking an own Hospital with a wounded soldier walks it in to heal.
+            if(validIntent) {
+                if(auto* hospital = DuneCity::HospitalCare::walkInHospital(unit,
+                        dynamic_cast<const StructureBase*>(target), Coord::Invalid(), 0))
+                    DuneCity::HospitalCare::walkIn(unit, hospital);
+            }
         } break;
 
         case CMD_UNIT_ATTACKPOS: {
@@ -285,8 +300,22 @@ case CMD_INFANTRY_CAPTURE: {
                 return;
             }
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(parameter[1]));
-            const bool validIntent = pStructure != nullptr && pStructure->canBeCaptured()
-                && pStructure->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID();
+            // The Capture cursor on an own Hospital with a wounded soldier: it heals there instead
+            // of entering the zone (a healthy one still enters it as a garrison).
+            if(auto* hospital = DuneCity::HospitalCare::walkInHospital(pInfantry, pStructure, Coord::Invalid(), 0)) {
+                pInfantry->leaveHoldForOrder();
+                pInfantry->leaveFormation();
+                pInfantry->clearOrderQueue();
+                DuneCity::HospitalCare::walkIn(pInfantry, hospital);
+                break;
+            }
+            const auto* pZone = dynamic_cast<const ZoneStructure*>(pStructure);
+            const bool validIntent = pZone != nullptr && ZoneStructure::garrisonsEnabled()
+                ? pInfantry->canCaptureStructures()
+                    && (pZone->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID()
+                        || pZone->mayEnterGarrison(pInfantry))
+                : pStructure != nullptr && pStructure->canBeCaptured()
+                    && pStructure->getOwner()->getTeamID() != pInfantry->getOwner()->getTeamID();
             if(validIntent) pInfantry->leaveHoldForOrder();
             pInfantry->leaveFormation();
             pInfantry->doCaptureStructure((int) parameter[1]);
@@ -444,6 +473,27 @@ case CMD_INFANTRY_CAPTURE: {
             auto* lab = dynamic_cast<ResearchLab*>(currentGame->getObjectManager().getObject(parameter[0]));
             if(!mayActOnObject(playerID, commandID, parameter[0], lab)) return;
             lab->getOwner()->startTechResearch(lab->getObjectID());
+        } break;
+
+        case CMD_ZONE_EVACUATE: {
+            if(parameter.size() != 1) return;
+            auto* zone = dynamic_cast<ZoneStructure*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], zone)) return;
+            zone->evacuateGarrison();
+        } break;
+
+        case CMD_SANDWORM_SPICEBLOOM: {
+            if(parameter.size() != 3) return;
+            auto* worm = dynamic_cast<Sandworm*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], worm)) return;
+            worm->doSpiceBloom((int) parameter[1], (int) parameter[2]);
+        } break;
+
+        case CMD_AIRPORT_BUY_AIRPLANE: {
+            if(parameter.size() != 1) return;
+            auto* airport = dynamic_cast<Airport*>(currentGame->getObjectManager().getObject(parameter[0]));
+            if(!mayActOnObject(playerID, commandID, parameter[0], airport)) return;
+            airport->buyAirplane();
         } break;
 
         case CMD_BUILDER_UPGRADE: {
@@ -729,6 +779,13 @@ case CMD_INFANTRY_CAPTURE: {
             });
             // Like a plain move, it replaces the order queue and becomes its front.
             unit->recordPlayerOrder(UnitOrder::at(UnitOrderType::Move, destination));
+            // A group moved beside an own Hospital: its wounded soldiers heal there (the slots
+            // spread round the clicked tile, so a slot counts within two tiles).
+            if(kind == static_cast<Uint32>(FormationOrders::OrderKind::Move)) {
+                if(auto* hospital = DuneCity::HospitalCare::walkInHospital(unit, nullptr, destination,
+                        DuneCity::kHospitalWalkInFormationTiles))
+                    DuneCity::HospitalCare::walkIn(unit, hospital);
+            }
         } break;
 
         case CMD_UNIT_FORMATION_HUNT: {
@@ -872,6 +929,16 @@ case CMD_INFANTRY_CAPTURE: {
             if (!issuer || !issuer->getHouse()) return;
             auto* house = currentGame->getHouse(issuer->getHouse()->getHouseID());
             if (house) house->setAutoRepairEnabled(parameter[0] != 0);
+        } break;
+
+        case CMD_HOUSE_REPAIR_RETURN: {
+            // The issuer's own house, like auto repair: no object is named, so no player can
+            // switch another house's yards.
+            if (parameter.size() != 1 || parameter[0] > 1) return;
+            const auto* issuer = currentGame->getPlayerByID(playerID);
+            if (!issuer || !issuer->getHouse()) return;
+            auto* house = currentGame->getHouse(issuer->getHouse()->getHouseID());
+            if (house) house->setRepairReturnEnabled(parameter[0] != 0);
         } break;
 
         case CMD_AI_SUPPORT_ROLE: {

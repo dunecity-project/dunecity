@@ -15,6 +15,7 @@
  *  along with Dune Legacy.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <dunecity/CityAircraftPolicy.h>
 #include <Map.h>
 #include <DynastyProjectile.h>
 #include <GasDeviationPolicy.h>
@@ -348,7 +349,9 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
         // A reinforcement worm's bite takes the whole tile but its summoner's side.
         const auto* worm = dynamic_cast<const Sandworm*>(currentGame->getObjectManager().getObject(damagerID));
         const bool family = ModManager::instance().isTornieFamilyContentActive();
-        const bool tameAttack = family && worm && worm->getItemID() == Unit_TameSandworm;
+        // A tame worm (Tornie) and the Fremen Palace worm never bite their own team.
+        const bool tameAttack = (family && worm && worm->getItemID() == Unit_TameSandworm)
+            || (worm && worm->isPalaceWorm());
         for(auto objectID : affectedGroundAndUndergroundUnits) {
             auto pObject = currentGame->getObjectManager().getObject(objectID);
             if(pObject
@@ -364,7 +367,9 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
             }
         }
     } else {
-        if(air || dynastyBlast) {
+        // The city airplane's bomb (Bullet_Bomb) bursts on the ground: it never damages an
+        // aircraft, not the plane that dropped it, another of its house, an ally or an enemy.
+        if((air || dynastyBlast) && bulletID != Bullet_Bomb) {
             // air damage
             if(dynastyBlast || bulletID == Bullet_DRocket || bulletID == Bullet_Rocket || bulletID == Bullet_TurretRocket || bulletID == Bullet_SmallRocket) {
                 for(auto objectID : affectedAirUnits) {
@@ -427,11 +432,24 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                     if(bulletID != Bullet_DRocket && realPos.x >= topLeftCorner.x && realPos.y >= topLeftCorner.y && realPos.x < bottomRightCorner.x && realPos.y < bottomRightCorner.y) {
                         pStructure->handleDamage(lround(damage), damagerID, damagerOwner, provenance);
 
-                        if( (bulletID == Bullet_LargeRocket || bulletID == Bullet_Rocket || bulletID == Bullet_TurretRocket || bulletID == Bullet_SmallRocket || bulletID == Bullet_Flame)
+                        if( (bulletID == Bullet_LargeRocket || bulletID == Bullet_Rocket || bulletID == Bullet_TurretRocket || bulletID == Bullet_SmallRocket || bulletID == Bullet_Flame || bulletID == Bullet_Bomb)
                             && (pStructure->getHealth() < pStructure->getMaxHealth()/2)) {
                             if(pStructure->getNumSmoke() < 5) {
                                 pStructure->addSmoke(realPos, currentGame->getGameCycleCount());
                             }
+                        }
+                    } else if(bulletID == Bullet_Bomb && damageRadius > TILESIZE/2 && damagerOwner != nullptr
+                              && pStructure->getOwner()->getTeamID() != damagerOwner->getTeamID()) {
+                        // The city airplane's heavy bomb splashes a building of another team it
+                        // just missed (CityAircraft::stickBuildingDamage); never the bomber's own side.
+                        const int dx = std::max({topLeftCorner.x - realPos.x, 0, realPos.x - (bottomRightCorner.x - 1)});
+                        const int dy = std::max({topLeftCorner.y - realPos.y, 0, realPos.y - (bottomRightCorner.y - 1)});
+                        const int offFootprint = static_cast<int>(lround(sqrt(static_cast<double>(dx*dx + dy*dy))));
+                        if(offFootprint <= damageRadius) {
+                            const int splash = DuneCity::CityAircraft::stickBuildingDamage(
+                                lround(damage), std::max(1, offFootprint), TILESIZE,
+                                DuneCity::CityAircraft::stickBuildingSplashPercent());
+                            if(splash > 0) pStructure->handleDamage(splash, damagerID, damagerOwner, provenance);
                         }
                     }
                 } else if(pObject && pObject->isAUnit()) {
@@ -471,6 +489,11 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
                             const auto scaledDamage = OrdinaryDamagePolicy::damageAt(
                                 ordinaryDamageMode, bulletID, ordinarySourceItemID, lround(damage), distance);
                             pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
+                        } else if(bulletID == Bullet_Bomb && damageRadius > TILESIZE/2) {
+                            // The city airplane's heavy bomb: full damage within half a tile, halved
+                            // for every half tile beyond (CityAircraft::stickUnitDamage).
+                            pUnit->handleDamage(DuneCity::CityAircraft::stickUnitDamage(lround(damage), distance, TILESIZE),
+                                                damagerID, damagerOwner, provenance);
                         } else {
                             const auto scaledDamage = lround(damage) >> (distance/(TILESIZE/4) + (dynastyBlast ? 0 : 1));
                             pUnit->handleDamage(scaledDamage, damagerID, damagerOwner, provenance);
@@ -497,7 +520,7 @@ void Map::damage(Uint32 damagerID, House* damagerOwner, const Coord& realPos, Ui
             const auto pTile = currentGameMap->getTile_internal(location.x, location.y);
 
             if(affectTerrain && pTile
-                && ((bulletID == Bullet_Rocket) || (bulletID == Bullet_TurretRocket) || (bulletID == Bullet_SmallRocket) || (bulletID == Bullet_LargeRocket) || (bulletID == Bullet_Flame))
+                && ((bulletID == Bullet_Rocket) || (bulletID == Bullet_TurretRocket) || (bulletID == Bullet_SmallRocket) || (bulletID == Bullet_LargeRocket) || (bulletID == Bullet_Flame) || (bulletID == Bullet_Bomb))
                 && (!pTile->hasAGroundObject() || !pTile->getGroundObject()->isAStructure()) )
             {
                 const auto type = pTile->getType();

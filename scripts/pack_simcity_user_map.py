@@ -58,7 +58,7 @@ FOOTPRINT: Dict[str, Tuple[int, int]] = {
     "Const Yard": (2, 2), "Windtrap": (2, 2), "Refinery": (3, 2),
     "Spice Silo": (2, 2), "Repair Yard": (3, 2), "Heavy Factory": (3, 2),
     "Light Factory": (2, 2), "Hightech Factory": (3, 2), "House IX": (2, 2),
-    "Nuclear Plant": (3, 3), "Outpost": (2, 2), "Airport": (3, 3),
+    "Nuclear Plant": (3, 3), "Outpost": (2, 2), "Airport": (4, 4),
     "Barracks": (2, 2), "WOR": (2, 2), "Police Station": (2, 2),
     "Residential Zone": (2, 2), "Commercial Zone": (2, 2),
     "Industrial Zone": (2, 2), "Rocket-Turret": (1, 1), "Gun-Turret": (1, 1),

@@ -19,9 +19,11 @@
 #include <FileClasses/GFXManager.h>
 #include <globals.h>
 #include <Game.h>
+#include <structures/ZoneStructure.h>
 #include <ScreenBorder.h>
 #include <ObjectManager.h>
 #include <units/UnitBase.h>
+#include <units/SandWorm.h>
 #include <structures/StructureBase.h>
 #include <structures/Palace.h>
 #include <misc/CursorAppearance.h>
@@ -83,8 +85,12 @@ void presentWithCursor(int mode, bool contextual) {
             case Game::CursorMode_Attack: action = Action::Attack; break;
             case Game::CursorMode_Patrol: action = Action::Patrol; break;
             case Game::CursorMode_Heal: action = Action::Heal; break;
-            case Game::CursorMode_Capture: action = Action::Capture; break;
+            // Zone Garrisons: the order symbol over a target the click would take, a pointer elsewhere.
+            case Game::CursorMode_Capture:
+                action = currentGame ? currentGame->getOrderCursorAction() : Action::Capture;
+                break;
             case Game::CursorMode_CarryallDrop: action = Action::Drop; break;
+            case Game::CursorMode_SpiceBloom: action = Action::Drop; break;
             default: break;
         }
         const float scale = getEffectiveCursorScale();
@@ -202,6 +208,12 @@ case Game::CursorMode_Attack:
                 break;
             case Game::CursorMode_CarryallDrop:
                 if (pObject->isAUnit() && (pObject->getOwner() == pLocalHouse) && pObject->isRespondable()) {
+                    return true;
+                }
+                break;
+            case Game::CursorMode_SpiceBloom:
+                if (pObject->getItemID() == Unit_Sandworm && (pObject->getOwner() == pLocalHouse)
+                        && static_cast<const Sandworm*>(pObject)->isPalaceWorm()) {
                     return true;
                 }
                 break;

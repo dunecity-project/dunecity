@@ -116,6 +116,9 @@ UnitLimitMediumMap = 100        # Maps 64x64 or smaller (4096 tiles)
 UnitLimitLargeMap = 250         # Maps between 64x64 and 128x128 (4096-16384 tiles)
 UnitLimitHugeMap = 300          # Maps 128x128 or larger (16384+ tiles)
 
+# Full regeneration from zero HP while infantry are inside a zone (seconds of game time).
+GarrisonHealTime = 60
+
 ### default structure ###
 
 [default structure]
@@ -513,6 +516,22 @@ Builder = Construction Yard
 TechLevel = 1
 Prerequisite = Windtrap
 
+[Park]
+# DuneCity city-mode-only. The Micropolis park tool (tool.cpp putDownPark,
+# gCostOf[TOOL_PARK] = 10): a 1x1 tile of woods or a fountain. Each park is one
+# +15 natural-terrain source on the land-value map, like the original's trees;
+# it raises the developed blocks around it and does not develop its own.
+# No power, no prerequisite, no concrete, no decay.
+Enabled = true
+HitPoints = 50
+Price = 10
+Power = 0
+ViewRange = 1
+BuildTime = 8
+InfSpawnProp = 0
+Builder = Construction Yard
+TechLevel = 1
+
 [Stadium]
 # DuneCity civic building. 3x3 footprint. Provides a large land-value
 # and quality-of-life boost to surrounding residential/commercial areas.
@@ -529,7 +548,8 @@ TechLevel = 4
 Prerequisite = Windtrap, Radar
 
 [Airport]
-# DuneCity economic building. 3x3 footprint. Provides commercial/transport
+# DuneCity economic building. 4x4 footprint (3x3 where an older map or save has
+# no room for the fourth row and column). Provides commercial/transport
 # boost to nearby areas — equivalent to SimCity Classic's airport zone.
 Enabled = true
 HitPoints = 500
@@ -808,12 +828,30 @@ UpgradeLevel(O) = 2
 [Soldier]
 Enabled = true
 HitPoints = 20
-Price = 60
+Price = 30  # Stefan, 2026-11-27: "make infantry cost 30 credits" (docs/zone-garrisons.md)
 ViewRange = 1
 WeaponDamage = 3
 WeaponRange = 2
 WeaponReloadTime = 135
 MaxSpeed = 0.56  # Dynasty normal-speed cap; see docs/unit-speeds.md
+TurnSpeed = 0.09
+BuildTime = 32
+InfSpawnProp = 0
+Builder = Barracks
+
+[Infantry]
+# Three Soldiers in one order at a discount, as in Dune II (Stefan, 2026-11-28: "in the original dune you could
+# build three troopers for a discount"). The order deploys three individual Soldiers (BuilderBase::update).
+# Price 50 is the integrator's number (single Soldier 30; the original squad cost 100 against a 60 Soldier).
+# BuildTime is the single's, as in the original squad (mods/Tornie and mods/Jericho ObjectData.ini: Infantry 32).
+Enabled = true
+HitPoints = 20
+Price = 50
+ViewRange = 1
+WeaponDamage = 3
+WeaponRange = 2
+WeaponReloadTime = 135
+MaxSpeed = 0.56
 TurnSpeed = 0.09
 BuildTime = 32
 InfSpawnProp = 0
@@ -880,9 +918,26 @@ BuildTime = 56
 InfSpawnProp = 0
 Builder = WOR
 
+[Troopers]
+# Three Troopers in one order at a discount (Stefan, 2026-11-28: "maybe 3 were 200 credits" - "yes"). The order
+# deploys three individual Troopers. BuildTime is the single's, as in the original squad (mods/Tornie and
+# mods/Jericho ObjectData.ini: Troopers 56).
+Enabled = true
+HitPoints = 45
+Price = 200
+ViewRange = 1
+WeaponDamage = 5
+WeaponRange = 5
+WeaponReloadTime = 150
+MaxSpeed = 1.12
+TurnSpeed = 0.09
+BuildTime = 56
+InfSpawnProp = 0
+Builder = WOR
+
 [Ambient Airplane]
 Enabled = true
-HitPoints = 100
+HitPoints = 150
 Price = 0
 ViewRange = 3
 MaxSpeed = 10.24  # Micropolis doAirplaneSprite: 8/16 tile per 50ms sprite tick

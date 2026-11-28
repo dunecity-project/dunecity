@@ -67,6 +67,7 @@
 #include <structures/NuclearPlant.h>
 #include <structures/PoliceStation.h>
 #include <structures/Stadium.h>
+#include <structures/Park.h>
 #include <structures/Airport.h>
 #include <structures/WOR.h>
 #include <structures/ZoneStructure.h>
@@ -493,8 +494,8 @@ void ObjectBase::setTarget(const ObjectBase* newTarget) {
     const ObjectBase* pTarget = target.getObjPointer();
     targetFriendly = (pTarget != nullptr)
                      && (pTarget->getOwner()->getTeamID() == owner->getTeamID())
-                     && (getItemID() != Unit_Sandworm)
-                     && (pTarget->getItemID() != Unit_Sandworm);
+                     && !isWildSandworm()
+                     && !pTarget->isWildSandworm();
 }
 
 void ObjectBase::unassignFromMap(const Coord& location) const {
@@ -508,7 +509,13 @@ bool ObjectBase::canAttack(const ObjectBase* object) const {
     return canAttack()
         && (object != nullptr)
         && (object->isAStructure() || !object->isAFlyingUnit())
-        && (((object->getOwner()->getTeamID() != owner->getTeamID()) && object->isVisible(getOwner()->getTeamID())) || (object->getItemID() == Unit_Sandworm));
+        && (((object->getOwner()->getTeamID() != owner->getTeamID()) && object->isVisible(getOwner()->getTeamID())) || object->isWildSandworm());
+}
+
+bool ObjectBase::isWildSandworm() const {
+    // Every Unit_Sandworm belongs to the Natives (createObject) except the Fremen Palace worm,
+    // which belongs to the house whose Palace called it and is anyone else's enemy as usual.
+    return itemID == Unit_Sandworm && owner != nullptr && owner->isNatives();
 }
 
 bool ObjectBase::isOnScreen() const {
@@ -621,7 +628,7 @@ bool isAutonomousTargetVetoed(const ObjectBase& seeker, const ObjectBase& candid
 // 0 = normal, 1 = walls (slightly deprioritized), 2 = carryalls (heavily deprioritized)
 int getTargetDeprioritizationLevel(const ObjectBase& candidate) {
     if(isCarryallUnit(candidate.getItemID())) return 2;
-    if(candidate.getItemID() == Structure_Wall) return 1;
+    if(candidate.getItemID() == Structure_Wall || candidate.getItemID() == Structure_Park) return 1;
     return 0;
 }
 
@@ -759,12 +766,12 @@ const ObjectBase* findTargetLegacy(const ObjectBase& seeker, int checkRange) {
                 return;
             }
 
-            if(!isTileVisibleToSeeker(seeker, checkCoord)) {
+            ObjectBase* candidate = tile->getObject();
+            if(candidate == nullptr) {
                 return;
             }
 
-            ObjectBase* candidate = tile->getObject();
-            if(candidate == nullptr) {
+            if(!isTileVisibleToSeeker(seeker, checkCoord) && !seeker.targetsWithoutGroundSight(*candidate)) {
                 return;
             }
 
@@ -870,7 +877,7 @@ const ObjectBase* findTargetViaGrid(const ObjectBase& seeker,
                     && !rocketHunt->isInWeaponRange(candidate)) continue;
 
                 const Coord candidatePoint = candidate->getClosestPoint(seekerLocation);
-                if(!isTileVisibleToSeeker(seeker, candidatePoint)) {
+                if(!isTileVisibleToSeeker(seeker, candidatePoint) && !seeker.targetsWithoutGroundSight(*candidate)) {
                     continue;
                 }
 
@@ -937,8 +944,8 @@ const StructureBase* ObjectBase::findClosestTargetStructure() const {
             const auto closestPoint = pStructure->getClosestPoint(getLocation());
             auto structureDistance = blockDistance(getLocation(), closestPoint);
 
-            if(pStructure->getItemID() == Structure_Wall) {
-                structureDistance += 20000000; //so that walls are targeted very last
+            if(pStructure->getItemID() == Structure_Wall || pStructure->getItemID() == Structure_Park) {
+                structureDistance += 20000000; //so that walls (and parks) are targeted very last
             }
 
             if(structureDistance < closestDistance) {
@@ -1102,6 +1109,7 @@ ObjectBase* ObjectBase::createObject(int itemID, House* Owner, bool byScenario, 
         case Structure_ZoneCommercial:      newObject = new CommercialZone(Owner); break;
         case Structure_ZoneIndustrial:      newObject = new IndustrialZone(Owner); break;
         case Structure_Stadium:             newObject = new Stadium(Owner); break;
+        case Structure_Park:                newObject = new Park(Owner); break;
         case Structure_Airport:             newObject = new Airport(Owner); break;
 
         case Unit_Carryall:                 newObject = new Carryall(Owner); break;
@@ -1254,6 +1262,7 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
         case Structure_ZoneCommercial:      newObject = new CommercialZone(stream); break;
         case Structure_ZoneIndustrial:      newObject = new IndustrialZone(stream); break;
         case Structure_Stadium:             newObject = new Stadium(stream); break;
+        case Structure_Park:                newObject = new Park(stream); break;
         case Structure_Airport:             newObject = new Airport(stream); break;
 
         case Unit_Carryall:                 newObject = new Carryall(stream); break;
@@ -1312,9 +1321,13 @@ ObjectBase* ObjectBase::loadObject(InputStream& stream, int itemID, Uint32 objec
 bool ObjectBase::targetInWeaponRange() const {
     const auto* object = target.getObjPointer();
     if(!object) return false;
-    if(itemID == Structure_RocketTurret && isOrnithopterUnit(object->getItemID()))
+    // City Plane Defence gives the city airplane the Ornithopter's triple range.
+    if(itemID == Structure_RocketTurret
+       && (isOrnithopterUnit(object->getItemID())
+           || (object->getItemID() == Unit_AmbientAirplane
+               && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence)))
         return DynastyProjectile::distance(getCenterPoint()*4, object->getCenterPoint()*4)
-            <= getWeaponRange()*3*TILESIZE*4;
+            <= getWeaponRange()*(object->getItemID() == Unit_AmbientAirplane ? AmbientAirplane::turretReachFactor() : 3)*TILESIZE*4;
     Coord coord = (target.getObjPointer())->getClosestPoint(location);
     FixPoint dist = blockDistance(location,coord);
 

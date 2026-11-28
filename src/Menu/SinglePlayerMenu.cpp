@@ -34,6 +34,8 @@
 #include <Menu/SinglePlayerSkirmishMenu.h>
 #include <Menu/HouseChoiceMenu.h>
 #include <Menu/CoopCampaignMenu.h>
+#include <Menu/RandomSkirmishMenu.h>
+#include <misc/DuneCityCampaign.h>
 #include <mod/ModManager.h>
 #include <Network/OnlineModPolicy.h>
 
@@ -117,11 +119,22 @@ void SinglePlayerMenu::onCampaign() {
 }
 
 void SinglePlayerMenu::playCampaign(bool showLobby) {
+    runCampaign(showLobby, false);
+}
+
+void SinglePlayerMenu::playDuneCityCampaign() {
+    // No mod choice: like Civilization Wars, the campaign switches to its own mod and leaves it
+    // active. The screen says so and offers no start when the mod or the maps are missing.
+    RandomSkirmish::activateMod(DuneCityCampaign::kMod);
+    runCampaign(false, true);
+}
+
+void SinglePlayerMenu::runCampaign(bool showLobby, bool duneCity) {
   // Hosting from the online lobby is always online; otherwise start from the last choice.
-  bool online = showLobby || settings.general.campaignOnline;
+  bool online = !duneCity && (showLobby || settings.general.campaignOnline);
   bool keepRules = false;
   for(;;) {
-    int player = HouseChoiceMenu(online, keepRules, showLobby).showMenu();
+    int player = HouseChoiceMenu(online, keepRules, showLobby, duneCity).showMenu();
     keepRules = true;
 
     if(player < 0) {
@@ -141,9 +154,14 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
     const auto* partner = PlayerFactory::getByPlayerClass(partnerClass);
     const bool supportSelected = (partner != nullptr) && (!HouseChoiceMenu::isOnline() || (!showLobby && OnlineModPolicy::approved()));
 
-    GameInitSettings init = HouseChoiceMenu::isSingleMission()
+    // The DuneCity campaign's missions are not the original campaign's levels: its Mission 10 has no
+    // level, and mapping it through one threw before the game began (Stefan, 2026-11-26).
+    GameInitSettings init = HouseChoiceMenu::isDuneCityCampaign()
+        ? GameInitSettings::duneCityCampaign(HouseChoiceMenu::getStartLevel(), HouseChoiceMenu::isSingleMission(), gameOptions)
+        : HouseChoiceMenu::isSingleMission()
         ? GameInitSettings((HOUSETYPE) player, HouseChoiceMenu::getStartLevel(), gameOptions)
         : GameInitSettings((HOUSETYPE) player, gameOptions, HouseChoiceMenu::getStartLevel());
+    if(!HouseChoiceMenu::isDuneCityCampaign() && HouseChoiceMenu::isReworkedMaps()) init.useReworkedMaps();
     const auto campaignSkin = GameInitSettings::sanitizeGraphicsSkin(HouseChoiceMenu::getCampaignSkin());
     init.setCampaignGraphicsSkin(campaignSkin);
     if(supportSelected) {
@@ -173,7 +191,8 @@ void SinglePlayerMenu::playCampaign(bool showLobby) {
         }
     }
 
-    if(HouseChoiceMenu::isOnline()) {
+    // The DuneCity campaign is offline only for now (its co-op has not been played).
+    if(HouseChoiceMenu::isOnline() && !HouseChoiceMenu::isDuneCityCampaign()) {
         init.enableCoop(!HouseChoiceMenu::isSingleMission(), settings.general.playerName + "'s co-op game");
         auto file = pFileManager->openCampaignFile(init.getFilename());
         const auto size = SDL_RWsize(file.get());

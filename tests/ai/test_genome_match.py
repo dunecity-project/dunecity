@@ -68,7 +68,9 @@ class ArmyMeasurementTests(unittest.TestCase):
         path = Path(__file__).with_name('run-ffa-army-deploys.py')
         spec = importlib.util.spec_from_file_location('ffa_deploys', path)
         deploy = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(deploy)
+        # The harness parses its command line on import, and --results is required.
+        with patch.object(sys, 'argv', [str(path), '--results', 'unused']):
+            spec.loader.exec_module(deploy)
         args = SimpleNamespace(wave_minutes=8, wave_members=30, reserve_value=5000, inside_minutes=6)
         wave = 'FORMATION_WAVE: launched=3750 members=30'
         sample = ('FFA_ARMY_SAMPLE: house=0 minute=3 army_value=10000 outside_value=2000 '
@@ -92,16 +94,23 @@ class ArmyMeasurementTests(unittest.TestCase):
         path = Path(__file__).with_name('run-ffa-army-deploys.py')
         spec = importlib.util.spec_from_file_location('ffa_deploys_observer', path)
         deploy = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(deploy)
+        with patch.object(sys, 'argv', [str(path), '--results', 'unused']):
+            spec.loader.exec_module(deploy)
         with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary)
-            run = output / 'seed-9101' / 'run-0000'
-            run.mkdir(parents=True)
-            (run / 'run.log').write_text('regression fixture\n', encoding='utf-8')
-            args = SimpleNamespace(output_dir=output, build_dir=output / 'unused-build',
+            root = Path(temporary)
+            game = {'id': 'ffa-9101', 'seed': 9101}
+            args = SimpleNamespace(results=root / 'results', build_dir=root / 'unused-build',
                                    eliminated_minutes=35, size=160, wall_timeout=1500)
-            with patch.object(deploy.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as process:
-                self.assertEqual(deploy.play(args, 9101), ['regression fixture'])
+
+            def match(command, **kwargs):
+                # play() clears the game's directory first; the match then writes its log there.
+                (root / 'scratch' / game['id']).mkdir(parents=True, exist_ok=True)
+                (root / 'scratch' / game['id'] / 'run.log').write_text('regression fixture\n', encoding='utf-8')
+                return SimpleNamespace(returncode=0, stdout='', stderr='')
+
+            with patch.object(deploy.subprocess, 'run', side_effect=match) as process:
+                row = deploy.play(args, root / 'scratch', root / 'probe', game)
+            self.assertEqual(row['error'], '')
             command = process.call_args.args[0]
             self.assertIn('--army-deploys-regression-observer', command)
             self.assertNotIn('--scenario', command)
@@ -111,7 +120,14 @@ class GenomeMatchTests(unittest.TestCase):
     def test_generic_prepare_needs_no_runtime_manifest_or_seeds(self):
         args = league['parser'].parse_args(['--results', 'unused-results', '--build-dir', 'unused-build'])
         with tempfile.TemporaryDirectory() as temporary:
-            with patch.object(league['subprocess'], 'run') as run:
+            def build(command, **kwargs):
+                # Like run-campaign-balance.py --build-only: Linux and Windows record the probe's path.
+                out = Path(command[command.index('--output-dir') + 1])
+                out.mkdir(parents=True, exist_ok=True)
+                (out / 'balance-probe-path.txt').write_text(str(out / 'balance-probe/bin/balance-probe'))
+                return SimpleNamespace(returncode=0, stdout='', stderr='')
+
+            with patch.object(league['subprocess'], 'run', side_effect=build) as run:
                 binary = league['build_probe'](args, Path(temporary))
         command = run.call_args.args[0]
         self.assertIn('--build-only', command)

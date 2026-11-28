@@ -41,7 +41,7 @@ inline int antiAirSafetyRange(int item, int weaponRange) {
 // A base building rather than paving or a wall: the single offensive option the
 // non-raiding difficulties have is a strike on the enemy base itself.
 inline bool opportunisticBaseStructure(int item) {
-    return item != Structure_Wall && item != Structure_Slab1 && item != Structure_Slab4;
+    return item != Structure_Wall && item != Structure_Slab1 && item != Structure_Slab4 && item != Structure_Park;
 }
 
 // Healthy local aircraft required per launcher covering the point they want to

@@ -47,7 +47,7 @@ namespace DuneCity {
 //   Radar              -> Commercial medium
 //   House IX           -> Commercial high
 //   Starport           -> Shipyard / Industrial high (jobs, economic role)
-//   Palace             -> Civic dual: 1x Residential + 1x Commercial pop, land-value boost
+//   Palace             -> Civic: 1x Residential pop (no commercial half since 2026-11-22), land-value boost
 //   Stadium            -> Civic amenity (large land-value boost)
 //   Airport            -> Commercial high (transport/trade boost)
 //   Barracks           -> Residential high (infantry garrison = population)
@@ -55,6 +55,7 @@ namespace DuneCity {
 //   Gun Turret        -> Park bonus + 15% Police
 //   Rocket Turret     -> one park terrain source, 15% police coverage
 //   Wall               -> Park bonus only
+//   Park               -> Micropolis park: park terrain only (does not develop its block)
 //   Sand (terrain)     -> Water (land-value bonus)
 //   Mountain (terrain) -> Forest (Micropolis terrain bonus, Mountain Scenery rule)
 // =============================================================================
@@ -90,6 +91,10 @@ constexpr int kSupplyRadius      = 16;
 
 constexpr int kParkLandValueBonus       = 15;  // Micropolis raw park terrain contribution, before smoothing
 constexpr int kStadiumLandValueBonus   = 40;  // Stadium provides a much larger boost
+/// Barracks and WOR "moderately increase land value" (Stefan, 2026-11-28). Moderate is the integrator's number:
+/// a third of the Palace's stamp, over 6 tiles instead of 8. It stacks with every other stamp (capped).
+constexpr int kInfantryHousingLandValueBonus = kStadiumLandValueBonus / 3;
+constexpr int kInfantryHousingLandValueRadius = 6;
 constexpr int kSandLandValueBonus       = 8;   // Per-tile direct stampFalloff
 /// Per-tile contribution to the block-smoothed terrain feature map. Box-
 /// smoothed twice and added to the SC-style land-value base, this is the
@@ -100,6 +105,9 @@ constexpr int kSandTerrainRawBonus      = 40;
 constexpr int kPoliceCoverageFull       = 1000; // Micropolis MAX_POLICE_STATION_EFFECT
 constexpr int kPoliceCoverageGunTurret  = 150; // 15% of a police station
 constexpr int kPoliceCoverageRocketTurret = kPoliceCoverageFull * 15 / 100;  // 15% of police-station coverage.
+/// Barracks and WOR police their streets at half a Police Station's strength (Stefan, 2026-11-28: "and infantry
+/// and wor have 50% police effect"): the same diffusion, funding and power scaling, no upkeep of their own.
+constexpr int kPoliceCoverageInfantryHousing = kPoliceCoverageFull / 2;
 
 constexpr int kMaxLandValue = 250;
 
@@ -144,10 +152,13 @@ enum class CityRole {
 };
 
 /// What SC-Classic role this Dune structure plays in the city sim, if any.
-/// Palace → civic dual (contributes to BOTH R and C pop — handled specially).
-///   For growth purposes Palace uses Residential role.
+/// Palace → civic residential: one residential zone's population (Stefan, 2026-11-22: "nerf
+///   palaces slightly, make it only have 1 residential not residential and commercial").
 /// StarPort → shipyard / industrial high (jobs + economic role).
-/// Airport → commercial high (transport/trade boost).
+/// Airport → no role and no population, as in Micropolis, where it is a special building that
+/// is only counted (simulate.cpp, `case AIRPORT: airportPop++`) and lifts the commercial cap
+/// (Stefan, 2026-11-23: "airport should not have population unless the original did, make it like
+/// micropolis"). Until then it was commercial-high with a level and jobs of its own.
 /// Barracks/WOR → residential high (infantry garrisons = population).
 inline CityRole getStructureCityRole(int itemID) {
     switch (itemID) {
@@ -159,7 +170,6 @@ inline CityRole getStructureCityRole(int itemID) {
         case Structure_ZoneCommercial:
         case Structure_Radar:
         case Structure_IX:
-        case Structure_Airport:
             return CityRole::Commercial;
         case Structure_ZoneIndustrial:
         case Structure_ConstructionYard:
@@ -183,7 +193,7 @@ inline int getStructureMaxLevel(int itemID) {
         case Structure_ZoneResidential:
         case Structure_ZoneCommercial:
         case Structure_ZoneIndustrial:
-        case Structure_Palace:          // civic dual — grows to max density
+        case Structure_Palace:          // civic residential — grows to max density
             return 3;
         case Structure_WindTrap:        // government power, no industry
             return 0;
@@ -199,7 +209,6 @@ inline int getStructureMaxLevel(int itemID) {
         case Structure_IX:              // commercial high
         case Structure_ConstructionYard: // industrial high (acts as factory)
         case Structure_StarPort:        // shipyard — industrial high
-        case Structure_Airport:         // transport hub — commercial high
         case Structure_Barracks:        // residential high (infantry)
         case Structure_WOR:             // residential high (heavy infantry)
         case Structure_TechCenter:      // civic high (IX vehicle support)
@@ -209,23 +218,40 @@ inline int getStructureMaxLevel(int itemID) {
     }
 }
 
-/// Private zones pay tax. The Palace is the sole government exception, with
-/// both R and C income. Fiscal status is independent of employment role.
-inline bool isTaxableCityStructure(int itemID) {
-    return itemID == Structure_ZoneResidential || itemID == Structure_ZoneCommercial
-        || itemID == Structure_ZoneIndustrial || itemID == Structure_Palace;
+/// Private zones pay tax, and so do the Palace (its residential population) and infantry housing.
+/// Fiscal status is independent of employment role.
+/// Barracks and WOR house infantry as top-density residential and pay tax as a level-3 Residential zone does
+/// (Stefan, 2026-11-28: "both wor and infantry barracks count as a high density residential and is taxable").
+inline bool isInfantryHousing(int itemID) {
+    return itemID == Structure_Barracks || itemID == Structure_WOR;
 }
 
+inline bool isTaxableCityStructure(int itemID) {
+    return itemID == Structure_ZoneResidential || itemID == Structure_ZoneCommercial
+        || itemID == Structure_ZoneIndustrial || itemID == Structure_Palace || isInfantryHousing(itemID);
+}
+
+/// The density a city-role structure counts at. Infantry housing is top density from the day it stands (an
+/// occupied, powered building: any level above 0); everything else is capped at its tier.
 inline int effectiveCityLevel(int itemID, int level) {
+    if (isInfantryHousing(itemID) && level > 0) return getStructureMaxLevel(itemID);
     return std::clamp(level, 0, getStructureMaxLevel(itemID));
 }
 
 // --- Pollution emission ------------------------------------------------------
 
+/// Micropolis getPollutionValue(): port, airport and coal plant tiles 100 (industrial 50).
+constexpr int kAirportPollution = 100;
+
 /// Per-source pollution emission (0-100 scale), scaled by current level.
 /// Industrial sources pollute by their capped city density. Government tax
 /// exemption does not remove factory emissions.
 inline int getPollutionEmission(int itemID, int level) {
+    // The Airport pollutes as Micropolis's does (Stefan, 2026-11-23: "it should have pollution
+    // like micropolis"): scan.cpp getPollutionValue() returns 100 for seaport, airport and coal
+    // power plant tiles and 50 for a developed industrial tile, which is this table's top
+    // industrial value. It has no level, so the value does not scale.
+    if (itemID == Structure_Airport) return kAirportPollution;
     level = effectiveCityLevel(itemID, level);
     if (level <= 0) return 0;
     if (getStructureCityRole(itemID) != CityRole::Industrial) return 0;
@@ -260,7 +286,7 @@ inline int supplyForLevel(int level) {
 }
 
 inline int getCommercialSupply(int itemID, int level) {
-    return (getStructureCityRole(itemID) == CityRole::Commercial || itemID == Structure_Palace)
+    return (getStructureCityRole(itemID) == CityRole::Commercial)
         ? detail::supplyForLevel(effectiveCityLevel(itemID, level)) : 0;
 }
 
@@ -287,6 +313,8 @@ inline int getPoliceCoverage(int itemID) {
         case Structure_PoliceStation:   return kPoliceCoverageFull;
         case Structure_GunTurret:       return kPoliceCoverageGunTurret;
         case Structure_RocketTurret:    return kPoliceCoverageRocketTurret;
+        case Structure_Barracks:
+        case Structure_WOR:             return kPoliceCoverageInfantryHousing;
         default:                        return 0;
     }
 }
@@ -305,25 +333,37 @@ inline FixPoint getPoliceAnnualCost(int itemID) {
     }
 }
 
-// --- Park-style land-value bonus (Wall / Turrets) ----------------------------
+// --- Park-style land-value bonus (Park / Wall / Turrets) ---------------------
 
 inline bool usesParkTerrain(int itemID) {
-    return itemID == Structure_Wall || itemID == Structure_GunTurret || itemID == Structure_RocketTurret;
+    return itemID == Structure_Park || itemID == Structure_Wall || itemID == Structure_GunTurret
+        || itemID == Structure_RocketTurret;
+}
+
+/// Micropolis's wooded park tiles lie below RUBBLE: they add terrain but do not develop their
+/// land-value block (only tiles from ROADBASE up do), so a park alone earns no land value and
+/// never enters a house's average; it raises the developed blocks around it.
+inline bool developsLandValueBlock(int itemID) {
+    return itemID != Structure_Park;
 }
 
 inline int getParkLandValueBonus(int itemID) {
     switch (itemID) {
+        case Structure_Park:            return kParkLandValueBonus; // Micropolis woods: +15 terrain
         case Structure_Wall:            return kParkLandValueBonus;
         case Structure_GunTurret:       return kParkLandValueBonus; // one park source
         case Structure_RocketTurret:    return kParkLandValueBonus;
         case Structure_Stadium:         return kStadiumLandValueBonus;
         case Structure_Palace:          return kStadiumLandValueBonus;   // civic building — large boost
+        case Structure_Barracks:
+        case Structure_WOR:             return kInfantryHousingLandValueBonus;   // moderate
         default:                        return 0;
     }
 }
 
 inline int getParkLandValueRadius(int itemID) {
     if (itemID == Structure_Stadium || itemID == Structure_Palace) return 8;
+    if (itemID == Structure_Barracks || itemID == Structure_WOR) return kInfantryHousingLandValueRadius;
     // Conservative candidate-search bound, not a radial gameplay bonus.
     return kParkTerrainSearchRadius;
 }
@@ -564,9 +604,8 @@ inline int getZoneValueTier(int landValue, int numTiers) {
 /// DuneCity maps levels 1/2/3 to SC's low/mid/high density tiers.
 /// Fewer zones on Dune maps means smaller absolute populations — by design.
 ///
-/// Palace is a civic dual structure that contributes to BOTH R and C.
-/// getZonePopulation returns the residential portion; use
-/// getPalaceCommercialPopulation() for the commercial half.
+/// Palace contributes one residential zone's population (getZonePopulation); its former
+/// commercial half is gone (getPalaceCommercialPopulation() is 0 since 2026-11-22).
 inline int getZonePopulation(int itemID, int level) {
     level = effectiveCityLevel(itemID, level);
     if (level <= 0) return 0;
@@ -585,24 +624,27 @@ inline int getZonePopulation(int itemID, int level) {
     }
 }
 
-/// Palace commercial population contribution (one commercial zone).
-/// Separate from getZonePopulation so the main loop can add this to comPop.
-inline int getPalaceCommercialPopulation(int level) {
-    return getZonePopulation(Structure_ZoneCommercial, level);
+/// Palace commercial population contribution: none since 2026-11-22 (was one commercial zone).
+inline int getPalaceCommercialPopulation(int /*level*/) {
+    // Residential only since 2026-11-22 (Stefan); callers still add it, so the rule lives here.
+    return 0;
 }
 
 /// Weighted tax population in eighths. Private R/C/I income receives a 2x
-/// balance multiplier; Palace retains its unboosted R+C contribution. Preserve
+/// balance multiplier; Palace pays its unboosted residential population. Preserve
 /// fractional houses until the city-wide annual total is rounded.
 constexpr int kZoneTaxMultiplier = 2;
-inline int taxablePopulationEighths(int itemID, int population, int level) {
+inline int taxablePopulationEighths(int itemID, int population, [[maybe_unused]] int level) {
     population = std::max(0, population);
     switch (itemID) {
-        case Structure_ZoneResidential: return population * kZoneTaxMultiplier;
+        case Structure_ZoneResidential:
+        case Structure_Barracks:        // taxed as a Residential zone of the same population
+        case Structure_WOR:
+            return population * kZoneTaxMultiplier;
         case Structure_ZoneCommercial:
         case Structure_ZoneIndustrial: return population * 8 * kZoneTaxMultiplier;
         case Structure_Palace:
-            return population + getPalaceCommercialPopulation(effectiveCityLevel(itemID,level)) * 8;
+            return population;
         default: return 0;
     }
 }

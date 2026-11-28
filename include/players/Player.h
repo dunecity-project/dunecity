@@ -163,7 +163,7 @@ protected:
         Start repairing the structure pObject or sending the unit pObject to the rapair yard.
         \param  pObject  the structure or unit to repair
     */
-    void doRepair(const ObjectBase* pObject) const;
+    void doRepair(const ObjectBase* pObject, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Set the deploy position of pStructure. Units produced in this structure will move directly to
@@ -263,6 +263,9 @@ protected:
         \param  pPalace the palace to activate the special weapon of
     */
     void doSpecialWeapon(const Palace* pPalace) const;
+    /// City Plane Purchase: has an own Airport launch a city airplane for its price. False when
+    /// the Airport cannot sell one now (Airport::canBuyAirplane).
+    bool doBuyCityAirplane(const class Airport* airport) const;
 
     /**
         Launch the deathhand missile an target position x,y.
@@ -272,6 +275,8 @@ protected:
     */
     Coord findNuclearMissileTarget() const;
     void doLaunchDeathhand(const Palace* pPalace, int x, int y) const;
+    /// Spice Bloom order for the house's Fremen Palace worm (Sandworm::doSpiceBloom).
+    bool doSpiceBloom(const class Sandworm* worm, int x, int y) const;
 
     /**
         Attacks with turret pTurret the object pObject.
@@ -287,14 +292,18 @@ protected:
         \param  x    the x position on the map
         \param  y    the y position on the map
         \param  bForced true, if the unit should ignore everything else
+        \param  caller  the function giving the order (filled in by the compiler). It is here and
+                        on the other unit orders for one reason: a Saboteur keeps its own hunt, so
+                        an order to one is refused and logged with the army code that gave it
+                        (Saboteur::armyOrder, docs: HANDOVER 2026-11-22).
     */
-    void doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced) const;
+    void doMove2Pos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Sends pUnit towards x,y in Hunt mode: it attacks any enemy it meets on
         the way and hunts normally once there (UnitBase::doHuntToward).
     */
-    void doHuntToward(const UnitBase* pUnit, int x, int y) const;
+    void doHuntToward(const UnitBase* pUnit, int x, int y, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         The formation shape the AI players use (docs/formations.md): QuantBot Config.ini
@@ -313,7 +322,7 @@ protected:
         list always do.
     */
     void doFormationMove(const std::vector<const UnitBase*>& units, int x, int y, bool bForced,
-                         int shape = aiFormationShape()) const;
+                         int shape = aiFormationShape(), const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Hunting in formation: each unit hunts its way (doHuntToward) to its own slot in
@@ -322,21 +331,21 @@ protected:
         doFormationMove(), with doHuntToward to x,y.
     */
     void doFormationHuntToward(const std::vector<const UnitBase*>& units, int x, int y,
-                               int shape = aiFormationShape()) const;
+                               int shape = aiFormationShape(), const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Units that already have their orders (a Hunt wave, a forced attack on one objective)
         travel at the slowest one's pace without being given destinations. Does nothing for
         fewer than FormationOrders::kMinAIGroup eligible ground units.
     */
-    void doFormUp(const std::vector<const UnitBase*>& units) const;
+    void doFormUp(const std::vector<const UnitBase*>& units, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Moves the unit pUnit to x,y.
         \param  pUnit           the unit to move
         \param  pTargetObject   the object to move to
     */
-    void doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject) const;
+    void doMove2Object(const UnitBase* pUnit, const ObjectBase* pTargetObject, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Orders the unit pUnit to attack position x,y.
@@ -345,7 +354,7 @@ protected:
         \param  y       the y position on the map
         \param  bForced true, if the unit should ignore everything else
     */
-    void doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced) const;
+    void doAttackPos(const UnitBase* pUnit, int x, int y, bool bForced, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Attacks with unit pUnit the object pObject.
@@ -353,14 +362,14 @@ protected:
         \param  pTargetObject   the object to attack
         \param  bForced         true, if the unit should ignore everything else
     */
-    void doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObject, bool bForced) const;
+    void doAttackObject(const UnitBase* pUnit, const ObjectBase* pTargetObject, bool bForced, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Change the attack mode of pUnit to attackMode.
         \param  pUnit           the unit to change attack mode of
         \param  attackMode      the new attack mode
     */
-    void doSetAttackMode(const UnitBase* pUnit, ATTACKMODE attackMode) const;
+    void doSetAttackMode(const UnitBase* pUnit, ATTACKMODE attackMode, const char* caller = __builtin_FUNCTION()) const;
 
     /**
         Start the devastation sequence of a devastator
@@ -394,7 +403,7 @@ protected:
         This isn't in the original game but will make it fun
     */
 
-    bool doRequestCarryallDrop(const GroundUnit* pGroundUnit) const;
+    bool doRequestCarryallDrop(const GroundUnit* pGroundUnit, const char* caller = __builtin_FUNCTION()) const;
 
     /// A fresh formation group id for this controller (FormationPlanner::makeGroupID).
     Uint32 allocateFormationGroup() const;

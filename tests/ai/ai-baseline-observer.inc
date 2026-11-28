@@ -1,6 +1,7 @@
 // Diagnostic executable only. No gameplay object, controller, RNG or AI setting is modified.
 #include <Game.h>
 #include <GameInitSettings.h>
+#include <Network/NetworkPacketTypes.h>
 #include <House.h>
 #include <sand.h>
 #include <mod/ModManager.h>
@@ -196,6 +197,9 @@ int runAIBaselineProbe() {
     if(!ModManager::instance().setActiveMod(mod) || ModManager::instance().getActiveModName()!=mod)
         throw std::runtime_error("Baseline native mod did not activate: "+mod);
     settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
+#if NETWORK_PROTOCOL_VERSION >= 152
+    settings.gameOptions.aiInfantryTactics = false; // Historical control fixtures do not include the new rule.
+#endif
     applyGameOptionsFromConfig(INIFile(std::getenv("BASELINE_OPTIONS")),"Game Options",settings.gameOptions);
     settings.general.playerName="AI baseline detached observer";
     settings.network.metaServer="http://127.0.0.1:1/";

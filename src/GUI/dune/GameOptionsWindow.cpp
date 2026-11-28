@@ -186,6 +186,16 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(&technologyInstallmentsCheckbox);
     vboxLeft.addWidget(VSpacer::create(ruleGap));
 
+    aiInfantryTacticsCheckbox.setVisible(ModManager::instance().isCityModeActive());
+    if(aiInfantryTacticsCheckbox.isVisible()) {
+        aiInfantryTacticsCheckbox.setText(_("AI infantry tactics"));
+        aiInfantryTacticsCheckbox.setChecked(gameOptions.aiInfantryTactics);
+        aiInfantryTacticsCheckbox.setExplanation(_("AI infantry tactics"),
+            _("AI houses garrison and reinforce city zones, raid and capture enemy zones, chain captures, buy discounted infantry squads, add infantry production lanes and include infantry in their armies. Individual QuantBot config switches can still enable these tactics when this option is off."));
+        vboxLeft.addWidget(&aiInfantryTacticsCheckbox);
+        vboxLeft.addWidget(VSpacer::create(ruleGap));
+    }
+
     researchPaceLabel.setText(_("Research Pace"));
     researchPaceHBox.addWidget(&researchPaceLabel, 110);
     researchPaceDropDownBox.addEntry(_("Fast"), static_cast<int>(TechResearch::Pace::Fast));
@@ -199,15 +209,23 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxLeft.addWidget(VSpacer::create(ruleGap));
 
     if(ModManager::instance().isTornieFamilyContentActive()) {
+        // The two allied rules share a row and Building sales sits in this column, so both columns
+        // keep 14 rows inside the crest-safe 430px frame with Turrets Can Fire On Buildings added.
         alliedControlCheckbox.setText(_("Allied control"));
         alliedControlCheckbox.setTooltipText(_("Allies may command each other's units and buildings. Ownership and credits remain separate."));
         alliedControlCheckbox.setChecked(gameOptions.alliedControl);
-        vboxLeft.addWidget(&alliedControlCheckbox);
-        vboxLeft.addWidget(VSpacer::create(ruleGap));
+        alliedHBox.addWidget(&alliedControlCheckbox);
+        alliedHBox.addWidget(HSpacer::create(6));
         alliedBuildingCheckbox.setText(_("Allied construction"));
         alliedBuildingCheckbox.setTooltipText(_("Extend construction range from allied land without sharing ownership or credits."));
         alliedBuildingCheckbox.setChecked(gameOptions.alliedBuilding);
-        vboxLeft.addWidget(&alliedBuildingCheckbox);
+        alliedHBox.addWidget(&alliedBuildingCheckbox);
+        vboxLeft.addWidget(&alliedHBox);
+        vboxLeft.addWidget(VSpacer::create(ruleGap));
+        sellingBuildingsCheckbox.setText(_("Building sales"));
+        sellingBuildingsCheckbox.setTooltipText(_("Sell buildings for 50% of their purchase and upgrade costs; Easy campaign allies receive 75%."));
+        sellingBuildingsCheckbox.setChecked(gameOptions.sellingBuildings);
+        vboxLeft.addWidget(&sellingBuildingsCheckbox);
         vboxLeft.addWidget(VSpacer::create(ruleGap));
     }
 
@@ -234,6 +252,12 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     rocketTurretsNeedPowerCheckbox.setTooltipText(_("If checked rocket turrets are dysfunctional on power shortage."));
     rocketTurretsNeedPowerCheckbox.setChecked(gameOptions.rocketTurretsNeedPower);
     vboxRight.addWidget(&rocketTurretsNeedPowerCheckbox);
+    vboxRight.addWidget(VSpacer::create(ruleGap));
+
+    turretsFireOnBuildingsCheckbox.setText(_("Turrets Can Fire On Buildings"));
+    turretsFireOnBuildingsCheckbox.setTooltipText(_("If checked Rocket and Gun Turrets also fire on buildings and city zones. Unchecked they fire on units only, as in Dune II."));
+    turretsFireOnBuildingsCheckbox.setChecked(gameOptions.turretsFireOnBuildings);
+    vboxRight.addWidget(&turretsFireOnBuildingsCheckbox);
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
     onlyOnePalaceCheckbox.setText(_("Only One Palace per House"));
@@ -274,11 +298,6 @@ GameOptionsWindow::GameOptionsWindow(SettingsClass::GameOptionsClass& initialGam
     vboxRight.addWidget(VSpacer::create(ruleGap));
 
     if(ModManager::instance().isTornieFamilyContentActive()) {
-        sellingBuildingsCheckbox.setText(_("Building sales"));
-        sellingBuildingsCheckbox.setTooltipText(_("Sell buildings for 50% of their purchase and upgrade costs; Easy campaign allies receive 75%."));
-        sellingBuildingsCheckbox.setChecked(gameOptions.sellingBuildings);
-        vboxRight.addWidget(&sellingBuildingsCheckbox);
-        vboxRight.addWidget(VSpacer::create(ruleGap));
         easyModeCheckbox.setText(_("Easy campaign"));
         easyModeCheckbox.setTooltipText(_("Start at mission 2, reduce purchase prices by 25 credits and grant 500 extra starting credits in the first mission. Co-op allies share these benefits."));
         easyModeCheckbox.setChecked(gameOptions.easyMode);
@@ -345,9 +364,11 @@ void GameOptionsWindow::onOK() {
     gameOptions.planBuildingSites = planBuildingSitesCheckbox.isChecked();
     gameOptions.researchLab = researchLabCheckbox.isChecked();
     gameOptions.technologyInstallments = technologyInstallmentsCheckbox.isChecked();
+    if(aiInfantryTacticsCheckbox.isVisible()) gameOptions.aiInfantryTactics = aiInfantryTacticsCheckbox.isChecked();
     gameOptions.researchPace = static_cast<TechResearch::Pace>(researchPaceDropDownBox.getSelectedEntryIntData());
     gameOptions.trooperAntiAir = trooperAntiAirCheckbox.isChecked();
     gameOptions.rocketTurretsNeedPower = rocketTurretsNeedPowerCheckbox.isChecked();
+    gameOptions.turretsFireOnBuildings = turretsFireOnBuildingsCheckbox.isChecked();
     gameOptions.sandwormsRespawn = sandwormsRespawnCheckbox.isChecked();
     gameOptions.killedSandwormsDropSpice = killedSandwormsDropSpiceCheckbox.isChecked();
     gameOptions.manualCarryallDrops = manualCarryallDropsCheckbox.isChecked();

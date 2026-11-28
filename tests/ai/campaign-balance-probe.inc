@@ -17,6 +17,9 @@
 
 #include "starport-economy-probe.inc"
 #include "city-placement-probe.inc"
+#include "land-value-audit.inc"
+#include "save-house-audit.inc"
+#include "city-lessons-probe.inc"
 #include "controls-probe.inc"
 #include "stats-ui-probe.inc"
 #include "sourceforge-regressions-probe.inc"
@@ -44,9 +47,12 @@
 #include "campaign-stats-probe.inc"
 #include "campaign-pressure-probe.inc"
 #include "campaign-nuclear-probe.inc"
+#include "held-site-threat-probe.inc"
+#include "enemy-border-site-probe.inc"
 #include "campaign-defence-probe.inc"
 #include "campaign-pacing-probe.inc"
 #include "campaign-repair-probe.inc"
+#include "original-campaign-probe.inc"
 #include "campaign-helper-economy-probe.inc"
 #include "city-income-probe.inc"
 #include "credit-storage-probe.inc"
@@ -62,6 +68,7 @@
 #include "wave-formation-probe.inc"
 #include "blob-wave-probe.inc"
 #include "force-concentration-probe.inc"
+#include "wind-trap-retirement-probe.inc"
 #include "spice-bloom-probe.inc"
 #include "formation-duel.inc"
 #include "probe-digest.inc"
@@ -99,7 +106,7 @@ int runCampaignBalanceProbe() {
         : partner == "brutal" ? "qBotBrutal" : "qBotEasy";
     const std::string enemy = std::getenv("BALANCE_ENEMY") ? std::getenv("BALANCE_ENEMY") : "easy";
     std::string enemyClass = enemy == "hard" ? "qBotHard" : enemy == "medium" ? "qBotMedium"
-        : enemy == "brutal" ? "qBotBrutal" : "qBotEasy";
+        : enemy == "brutal" ? "qBotBrutal" : enemy == "easiest" ? "qBotEasiest" : "qBotEasy";
     if(std::getenv("BALANCE_ENEMY_AI") && std::string(std::getenv("BALANCE_ENEMY_AI")) == "ai-player")
         enemyClass = enemy == "hard" ? "AIPlayerHard" : enemy == "medium" ? "AIPlayerMedium" : "AIPlayerEasy";
     // The campaign menu's "scenario settings" enemy (HouseChoiceMenu kEnemyAIClasses).
@@ -118,6 +125,7 @@ int runCampaignBalanceProbe() {
         throw std::runtime_error("Generated Civilization Wars needs the exact CivWars mod");
     if(std::getenv("BALANCE_DEGRADATION_PROBE") || scenario || civWars || std::getenv("BALANCE_GENOME_PHASE_DIR"))
         settings.gameOptions=ModManager::instance().loadEffectiveGameOptions(settings.gameOptions);
+    settings.gameOptions.aiInfantryTactics = false; // Keep the default/control AI, independent of new-game defaults.
     getQuantBotConfig().easy.attackForceMilitaryValueRatio = percent / 100.0f;
     if (const char* shape = std::getenv("BALANCE_WAVE_FORMATION")) {
         const int parsed = QuantBotConfig::parseWaveFormation(shape, INT_MIN);
@@ -179,6 +187,19 @@ int runCampaignBalanceProbe() {
     if(requestedMission && campaignMode=="full") {
         init.mission=std::atoi(requestedMission); // Test-only access, provided by -fno-access-control.
         init.filename=GameInitSettings::getScenarioFilename(humanHouse, init.mission);
+    }
+    // The campaign menu's Maps: Reworked (docs/reworked-campaign.md), in either campaign mode.
+    if(std::getenv("BALANCE_REWORKED")) init.useReworkedMaps();
+    // The DuneCity Campaign screen (docs/city-campaign.md): DCITY_M?? as Atreides, built the way the
+    // menu builds it, so a mission the original levels cannot express (10) is covered too.
+    if(std::getenv("BALANCE_CITY_CAMPAIGN"))
+        init = GameInitSettings::duneCityCampaign(requestedMission ? std::atoi(requestedMission) : 1,
+                                                  campaignMode=="single", settings.gameOptions);
+    // A balance variant of that mission's map (scenario-matrix --city-strength).
+    if(const char* variant = std::getenv("BALANCE_CITY_CAMPAIGN_MAP")) {
+        std::ifstream file(variant);
+        if(!file) throw std::runtime_error("Cannot read the city campaign map variant");
+        init.setScenarioData(std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>()));
     }
     const char* customMap=std::getenv("BALANCE_CUSTOM_MAP");
     if(customMap) {
@@ -281,6 +302,8 @@ int runCampaignBalanceProbe() {
         ++rosterRow;
         init.addHouseInfo(info);
     }
+    if(const char* original = std::getenv("BALANCE_ORIGINAL_CAMPAIGN_RULES"))
+        getQuantBotConfig().originalCampaignAI = std::string(original) == "on";
     auto game = std::make_unique<Game>();
     currentGame = game.get();
     // Suppress the interactive briefing and public match analytics at setup.
@@ -292,11 +315,16 @@ int runCampaignBalanceProbe() {
         GamePerf::MeasuredQuantBots measuredQuantBots(!civWars && std::getenv("BALANCE_PERF") != nullptr);
         game->initGame(init);
     }
+    for(int h = 0; h < NUM_HOUSES; ++h) if(const auto* house = game->getHouse(h))
+        for(const auto& player : house->getPlayerList())
+            if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
+                SDL_Log("ORIGINAL_CAMPAIGN_ROSTER: house=%d original=%d", h, int(campaign->usesOriginalRules()));
     if(localSpectator && (!game->isObserving() || !game->getGameInitSettings().isLocalSpectator()))
         throw std::runtime_error("Custom diagnostic did not create the real local observer");
     if(scenario && scenarioSides.empty())
-        SDL_Log("PROBE_CONFIG: campaign_mode=%s mission=%d enemy=%s enemy_difficulty=%s",
-            campaignMode.c_str(),game->getGameInitSettings().getMission(),enemyClass.c_str(),enemy.c_str());
+        SDL_Log("PROBE_CONFIG: campaign_mode=%s mission=%d enemy=%s enemy_difficulty=%s scenario=%s reworked=%d",
+            campaignMode.c_str(),game->getGameInitSettings().getMission(),enemyClass.c_str(),enemy.c_str(),
+            game->getGameInitSettings().getFilename().c_str(),int(game->getGameInitSettings().isReworkedCampaign()));
     if(campaignAiOnly) {
         const House* candidateHouse=game->getHouse(humanHouse);
         if(!candidateHouse || candidateHouse->getPlayerList().size()!=1
@@ -459,6 +487,14 @@ int runCampaignBalanceProbe() {
         runForceConcentrationProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (std::getenv("BALANCE_CITY_LESSONS_PROBE")) {
+        runCityLessonsProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_WIND_TRAP_PROBE")) {
+        runWindTrapRetirementProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_SPICE_BLOOM_PROBE")) {
         runSpiceBloomProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
@@ -475,12 +511,27 @@ int runCampaignBalanceProbe() {
         runRadarPowerProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
+    if (std::getenv("BALANCE_HELD_SITE_THREAT_PROBE")) {
+        runHeldSiteThreatProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_ENEMY_BORDER_SITE_PROBE")) {
+        runEnemyBorderSiteProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
     if (std::getenv("BALANCE_NUCLEAR_PROBE")) {
         runCampaignNuclearProbe(*game);game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_REPAIR_PROBE")) {
         runCampaignRepairProbe(*game);
+        game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_ORIGINAL_CAMPAIGN_PROBE")) {
+        runOriginalCampaignProbe(*game);
+        runOriginalCampaignContinuation(game);
+        SDL_Log("CAMPAIGN_BALANCE_RESULT: probe=original-campaign outcome=passed");
         game.reset();currentGame=nullptr;pLocalPlayer=nullptr;
         return MENU_QUIT_DEFAULT;
     }
@@ -524,6 +575,41 @@ int runCampaignBalanceProbe() {
                 if (House* house = game->getHouse(h))
                     for (const auto& player : house->getPlayerList())
                         if (auto* bot = dynamic_cast<QuantBot*>(player.get())) FormationDuel::applyStyle(*bot, style);
+    // Per-house play styles, "house=style,house=style" (save-house-audit.py --arm; e.g. Stefan's house 0
+    // continuing his save with turret-drill while the others keep the shipped defaults).
+    if (const char* styles = std::getenv("BALANCE_HOUSE_STYLES"); styles && *styles) {
+        std::istringstream input(styles);
+        std::string entry;
+        while (std::getline(input, entry, ',')) {
+            const auto eq = entry.find('=');
+            if (eq == std::string::npos) throw std::runtime_error("BALANCE_HOUSE_STYLES needs house=style entries");
+            House* house = game->getHouse(std::stoi(entry.substr(0, eq)));
+            if (!house) throw std::runtime_error("BALANCE_HOUSE_STYLES names a house that is not in the game");
+            int bots = 0;
+            for (const auto& player : house->getPlayerList())
+                if (auto* bot = dynamic_cast<QuantBot*>(player.get())) { FormationDuel::applyStyle(*bot, entry.substr(eq + 1).c_str()); ++bots; }
+            if (bots == 0) throw std::runtime_error("BALANCE_HOUSE_STYLES names a house without a QuantBot");
+            SDL_Log("HOUSE_STYLE: house=%s style=%s bots=%d", entry.substr(0, eq).c_str(), entry.substr(eq + 1).c_str(), bots);
+        }
+    }
+    // Match rule Turrets Can Fire On Buildings for a continuation (a 1.0.880 save let turrets hit buildings).
+    if (const char* rule = std::getenv("BALANCE_TURRETS_FIRE_ON_BUILDINGS"); rule && *rule) {
+        const_cast<SettingsClass::GameOptionsClass&>(game->getGameInitSettings().getGameOptions()).turretsFireOnBuildings
+            = std::atoi(rule) != 0;
+        SDL_Log("TURRET_RULE: turrets_fire_on_buildings=%d", int(game->getGameInitSettings().getGameOptions().turretsFireOnBuildings));
+    }
+    if (const char* style = std::getenv("BALANCE_HELPER_STYLE"); style && *style) {
+        if (!scenario || !scenarioSides.empty() || loadSave || customMap || std::getenv("BALANCE_SCENARIO_STYLE"))
+            throw std::runtime_error("Helper style requires an authored campaign without a global treatment");
+        House* house = game->getHouse(humanHouse);
+        int helpers = 0;
+        if (house) for (const auto& player : house->getPlayerList())
+            if (auto* bot = dynamic_cast<QuantBot*>(player.get())) {
+                FormationDuel::applyStyle(*bot, style);
+                ++helpers;
+            }
+        if (helpers != 1) throw std::runtime_error("Helper treatment requires exactly one player-side QuantBot");
+    }
     if (std::getenv("BALANCE_POWER_CONTINUATION")) {
         runPowerContinuation(*game, minutes);
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
@@ -531,6 +617,16 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_FACTORY_CONTINUATION")) {
         runFactoryContinuation(*game, minutes);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_SAVE_HOUSE_AUDIT")) {
+        SaveHouseAudit::run(*game);
+        game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_LAND_VALUE_AUDIT")) {
+        LandValueAudit::run(*game, MILLI2CYCLES(minutes * 60000));
         game.reset(); currentGame = nullptr; pLocalPlayer = nullptr;
         return MENU_QUIT_DEFAULT;
     }
@@ -563,6 +659,8 @@ int runCampaignBalanceProbe() {
         SDL_Log("ASSET_STARTUP: phase=probe_setup ms=%lld", setupMs);
     const auto loopStart = ProbeDigest::Clock::now();
     const Uint32 firstCycle = game->getGameCycleCount();
+    // A save's unit economy as loaded, to subtract from its end (tests/ai/unit-economy-report.py).
+    if (loadSave) for (int h = 0; h < NUM_HOUSES; ++h) if (const House* house = game->getHouse(h)) house->logUnitEconomy("loaded");
     if (civWars) {
         outcome = CivWarsMatch::run(*game, end);
     } else if (duel) {
@@ -675,6 +773,7 @@ int runCampaignBalanceProbe() {
             DuneCityAudit::sample(*game);
     }
     if (outcome.empty()) outcome = game->finished ? (game->won ? "won" : "lost") : "time_limit";
+    for (int h = 0; h < NUM_HOUSES; ++h) if (const House* house = game->getHouse(h)) house->logUnitEconomy("probe_end");
     {
         const long long loopMs = ProbeDigest::millisecondsSince(loopStart);
         const Uint32 cycles = game->getGameCycleCount() - firstCycle;

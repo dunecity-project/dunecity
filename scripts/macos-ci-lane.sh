@@ -170,7 +170,10 @@ if [ "$STABLE" = ON ]; then
 fi
 if [ "${TEST_TIER:-integration}" = nightly ]; then
     # Headless nightly is owned by qualify-release.yml; this lane owns GUI nightly.
-    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly -L gui
+    # perf_regression's budgets are calibrated on the Mini, which runs it below; on
+    # hosted runners it failed on machine speed (16 and 17 November nightlies).
+    ctest --test-dir build --output-on-failure --no-tests=error --parallel 2 -L nightly -L gui \
+        -E '^perf_regression$'
 fi
 build/bin/dunecity.app/Contents/MacOS/dunecity --check-relay-support
 if [ "$STABLE" = ON ] || [ "${MACOS_SKIN_PROBE:-false}" = true ]; then

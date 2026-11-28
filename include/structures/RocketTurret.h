@@ -33,6 +33,9 @@ public:
     const ObjectBase* findTarget() const override;
     void attack() override;
 
+    /// Damage of one rocket as attack() fires it.
+    int rocketDamage() const;
+
     /// Reload of the close-range cannon, scaled from the configured Gun-Turret reload.
     int closeCannonReloadTime() const;
 
@@ -49,6 +52,10 @@ protected:
     void updateStructureSpecificStuff() override;
 
 private:
+    /// City Plane Defence: the nearest enemy city airplane this turret may shoot at inside
+    /// its aircraft reach (triple weapon range, as for an Ornithopter), or nullptr.
+    const ObjectBase* cityPlaneInReach() const;
+    bool canMeetCityPlane(const ObjectBase* object) const;
 };
 
 #endif //ROCKETTURRET_H

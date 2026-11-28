@@ -266,6 +266,10 @@ QuantBot::QuantBot(InputStream& stream, House* associatedHouse) : Player(stream,
         repairPressureYard = stream.readUint32();
         repairPressureSince = stream.readUint32();
     }
+    // SAVEGAMEVERSION_AIRLIFT: the Carryall manoeuvres. An older save has none under way.
+    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_AIRLIFT) loadAirlift(stream);
+    else { airliftJobs.clear(); airliftDrop = AirliftDrop{}; airliftLocalDefeat = airliftRetreating = false; }
+    if (currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_ECONOMY_FIRST_STATE) loadEconomyFirstState(stream);
     resolveStrategyProfile();
     // An older save has no posture, so the defaults above stand: offensive, an
     // empty ledger and no tracked wave. The first update() rebuilds the baseline
@@ -415,6 +419,69 @@ void QuantBot::save(OutputStream& stream) const {
     // on reload, nor may an observer expand earlier than its host.
     stream.writeUint32(repairPressureYard);
     stream.writeUint32(repairPressureSince);
+    // SAVEGAMEVERSION_AIRLIFT: who is under a lift order and the planned drop decide the next
+    // orders and cannot be recomputed from the world.
+    saveAirlift(stream);
+    saveEconomyFirstState(stream);
+}
+
+// These counters decide the next paid order and cannot be reset on disk reload or a checkpoint.
+void QuantBot::saveEconomyFirstState(OutputStream& stream) const {
+    const auto& state=cityLessons;
+    stream.writeBool(state.economyFirstStoodDown);
+    stream.writeBool(state.economyFirstFootprintLogged);
+    stream.writeBool(state.economyFirstRichLogged);
+    stream.writeBool(state.economyFirstThreatNow);
+    stream.writeBool(state.economyFirstActiveNow);
+    stream.writeSint32(state.economyFirstHoldPasses);
+    stream.writeSint32(state.economyFirstThreatPasses);
+    stream.writeSint32(state.economyFirstYardOrders);
+    stream.writeSint32(state.economyFirstMcvs);
+    stream.writeSint32(state.economyFirstUnitSpend);
+    stream.writeSint32(state.economyFirstPortSpend);
+    stream.writeSint32(state.economyFirstTurretOrders);
+    stream.writeSint32(state.economyFirstZonesPlaced);
+    stream.writeUint32(state.lastEconomyLog);
+    stream.writeUint32(state.economyFirstPaceLoggedMinute);
+    stream.writeUint32(state.economyFirstRefusedMinute);
+    for (int count:state.economyFirstZoneOrders) stream.writeSint32(count);
+    stream.writeSint32(state.economyFirstStartZones);
+    stream.writeUint32(static_cast<Uint32>(state.economyFirstTurretBuilders.size()));
+    for (Uint32 builder:state.economyFirstTurretBuilders) stream.writeUint32(builder);
+}
+
+void QuantBot::loadEconomyFirstState(InputStream& stream) {
+    auto& state=cityLessons;
+    const auto counter=[&]() {
+        const int value=stream.readSint32();
+        if (value<0) throw std::runtime_error("Invalid EconomyFirst opening counter");
+        return value;
+    };
+    state.economyFirstStoodDown=stream.readBool();
+    state.economyFirstFootprintLogged=stream.readBool();
+    state.economyFirstRichLogged=stream.readBool();
+    state.economyFirstThreatNow=stream.readBool();
+    state.economyFirstActiveNow=stream.readBool();
+    state.economyFirstHoldPasses=counter();
+    state.economyFirstThreatPasses=counter();
+    state.economyFirstYardOrders=counter();
+    state.economyFirstMcvs=counter();
+    state.economyFirstUnitSpend=counter();
+    state.economyFirstPortSpend=counter();
+    state.economyFirstTurretOrders=counter();
+    state.economyFirstZonesPlaced=counter();
+    state.lastEconomyLog=stream.readUint32();
+    state.economyFirstPaceLoggedMinute=stream.readUint32();
+    state.economyFirstRefusedMinute=stream.readUint32();
+    for (int& count:state.economyFirstZoneOrders) count=counter();
+    state.economyFirstStartZones=stream.readSint32();
+    if (state.economyFirstStartZones < -1) throw std::runtime_error("Invalid EconomyFirst initial zones");
+    const Uint32 builders=stream.readUint32();
+    if (builders>65536) throw std::runtime_error("Invalid EconomyFirst material count");
+    state.economyFirstTurretBuilders.clear();
+    for (Uint32 i=0;i<builders;++i)
+        if (!state.economyFirstTurretBuilders.insert(stream.readUint32()).second)
+            throw std::runtime_error("Duplicate EconomyFirst material owner");
 }
 
 // Supplemental network checkpoint state: normal disk saves intentionally rebuild these plans.
@@ -475,6 +542,9 @@ void QuantBot::saveObserverRuntime(OutputStream& s) const {
     }
     s.writeUint32(repairPressureYard);
     s.writeUint32(repairPressureSince);
+    // Protocol 135: how long each yard has held a finished building with no safe site.
+    s.writeUint32(heldWithoutSiteSince.size());
+    for(const auto& e : heldWithoutSiteSince) { s.writeUint32(e.first); s.writeUint32(e.second); }
 }
 
 void QuantBot::loadObserverRuntime(InputStream& s) {
@@ -532,4 +602,6 @@ void QuantBot::loadObserverRuntime(InputStream& s) {
     }
     repairPressureYard = s.readUint32();
     repairPressureSince = s.readUint32();
+    heldWithoutSiteSince.clear();
+    for(Uint32 n=count(); n; --n) { const auto id=s.readUint32(); heldWithoutSiteSince[id]=s.readUint32(); }
 }

@@ -208,6 +208,14 @@ private:
     Label           opponentLabel;   ///< Browser: the matched opponent's connection state.
 #endif
     Label           mapPropertyCity;
+    /// "Tech level" at the right of the hint line under the mode row (no extra height, so the
+    /// 640x480 family lobby still fits): a selector while setting up a custom game
+    /// (GameOptionsClass::startTechLevel; 0 = the map's own level), a label in a lobby.
+    HBox            readinessHBox;
+    Label           techLevelLabel;
+    Label           mapPropertyTech;
+    DropDownBox     setupTechLevel;
+    int             mapTechLevel = 0;   ///< the selected map's own level (INIMapLoader::authoredTechLevel)
 
     // bottom row of buttons
     HBox            buttonHBox;

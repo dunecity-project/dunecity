@@ -35,6 +35,8 @@
 #include <misc/CursorAppearance.h>
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
 #include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
+#include <dunecity/HospitalCare.h>
+#include <structures/ZoneStructure.h>
 #include <GUI/ObjectInterfaces/FormationBar.h>
 #include <FormationOrders.h>
 
@@ -94,7 +96,7 @@ protected:
         carryallDropButton.setOnClick(std::bind(&MultiUnitInterface::onCarryallDrop, this));
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
-        captureButton.setTooltipText(UnitCommandTooltips::capture());
+        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled() && currentGame->isCitySimEnabled()));
         captureButton.setToggleButton(true);
         captureButton.setOnClick(std::bind(&MultiUnitInterface::onCapture, this));
 
@@ -103,18 +105,18 @@ protected:
         returnButton.setOnClick(std::bind(&MultiUnitInterface::onReturn, this));
 
         deployButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Deploy)});
-        deployButton.setTooltipText(_("Build a new construction yard"));
+        deployButton.setTooltipText(UnitCommandTooltips::deploy());
         deployButton.setOnClick(std::bind(&MultiUnitInterface::onDeploy, this));
 
         destructButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Destruct)});
-        destructButton.setTooltipText(_("Self-destruct this unit"));
+        destructButton.setTooltipText(UnitCommandTooltips::destruct());
         destructButton.setOnClick(std::bind(&MultiUnitInterface::onDestruct, this));
 
         healButton.setVisible(false);
         if(ModManager::instance().isTornieFamilyContentActive()) {
 
             healButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Heal)});
-            healButton.setTooltipText(_("Heal an allied unit"));
+            healButton.setTooltipText(UnitCommandTooltips::heal());
             healButton.setToggleButton(true);
             healButton.setOnClick(std::bind(&MultiUnitInterface::onHeal, this));
 
@@ -126,7 +128,7 @@ protected:
 
         movementPathsButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Paths)});
         movementPathsButton.setToggleButton(true);
-        movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
+        movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
         actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
             &carryallDropButton, &captureButton, &returnButton, &deployButton,
@@ -141,7 +143,7 @@ protected:
 
         guardButton.setText(_("Guard"));
         guardButton.setTextColor(color);
-        guardButton.setTooltipText(_("Unit will not move from location"));
+        guardButton.setTooltipText(UnitCommandTooltips::guard());
         guardButton.setToggleButton(true);
         guardButton.setOnClick(std::bind(&MultiUnitInterface::onGuard, this));
         buttonVBox.addWidget(&guardButton, 26);
@@ -150,7 +152,7 @@ protected:
 
         areaGuardButton.setText(_("Area Guard"));
         areaGuardButton.setTextColor(color);
-        areaGuardButton.setTooltipText(_("Unit will engage any unit within guard range"));
+        areaGuardButton.setTooltipText(UnitCommandTooltips::areaGuard());
         areaGuardButton.setToggleButton(true);
         areaGuardButton.setOnClick(std::bind(&MultiUnitInterface::onAreaGuard, this));
         buttonVBox.addWidget(&areaGuardButton, 26);
@@ -177,7 +179,7 @@ protected:
 
         ambushButton.setText(_("Ambush"));
         ambushButton.setTextColor(color);
-        ambushButton.setTooltipText(_("Unit will not move until enemy unit spotted"));
+        ambushButton.setTooltipText(UnitCommandTooltips::ambush());
         ambushButton.setToggleButton(true);
         ambushButton.setOnClick(std::bind(&MultiUnitInterface::onAmbush, this));
         buttonVBox.addWidget(&ambushButton, 26);
@@ -186,7 +188,7 @@ protected:
 
         huntButton.setText(_("Hunt"));
         huntButton.setTextColor(color);
-        huntButton.setTooltipText(_("Unit will immediately start to engage an enemy unit"));
+        huntButton.setTooltipText(UnitCommandTooltips::hunt());
         huntButton.setToggleButton(true);
         huntButton.setOnClick(std::bind(&MultiUnitInterface::onHunt, this));
         buttonVBox.addWidget(&huntButton, 26);
@@ -195,7 +197,7 @@ protected:
 
         retreatButton.setText(_("Retreat"));
         retreatButton.setTextColor(color);
-        retreatButton.setTooltipText(_("Unit will retreat back to base"));
+        retreatButton.setTooltipText(UnitCommandTooltips::retreat());
         retreatButton.setToggleButton(true);
         retreatButton.setOnClick(std::bind(&MultiUnitInterface::onRetreat, this));
         buttonVBox.addWidget(&retreatButton,26);
@@ -204,7 +206,7 @@ protected:
             buttonVBox.addWidget(VSpacer::create(buttonGap));
             sabotageButton.setText(_("Sabotage"));
             sabotageButton.setTextColor(color);
-            sabotageButton.setTooltipText(_("Infantry will hunt enemy buildings to capture them"));
+            sabotageButton.setTooltipText(UnitCommandTooltips::sabotage(_("Infantry will hunt enemy buildings to capture them")));
             sabotageButton.setToggleButton(true);
             sabotageButton.setOnClick(std::bind(&MultiUnitInterface::onSabotage, this));
             buttonVBox.addWidget(&sabotageButton, 26);
@@ -368,6 +370,7 @@ protected:
         bool bShowDeploy = false;
         bool bShowDevastate = false;
         bool bShowRepair = false;
+        bool bCanRepair = false, bSoldiers = false, bVehicles = false;   // Hospital Care: see below
         bool bShowCarryallDrop = false;
         int ownGroundUnits = 0;
 
@@ -402,6 +405,11 @@ protected:
 
                 if(pUnit->getHealth() < pUnit->getMaxHealth()){
                     bShowRepair = true;
+                    // Infantry under Hospital Care heal only at a Hospital (HospitalCare.h).
+                    using DuneCity::HospitalCare::RepairButton;
+                    const RepairButton repair = DuneCity::HospitalCare::repairButtonFor(pUnit);
+                    if(repair == RepairButton::RepairYard || repair == RepairButton::Hospital) bCanRepair = true;
+                    if(repair != RepairButton::RepairYard) bSoldiers = true; else bVehicles = true;
                 }
 
                 if(pUnit->canCaptureStructures()) bShowCapture = true;
@@ -434,6 +442,12 @@ protected:
         deployButton.setVisible(bShowDeploy);
         destructButton.setVisible(bShowDevastate);
         sendToRepairButton.setVisible(bShowRepair);
+        sendToRepairButton.setEnabled(bCanRepair);
+        {
+            const std::string tip = (!bSoldiers || bVehicles) ? UnitCommandTooltips::repairUnit()
+                : bCanRepair ? UnitCommandTooltips::healAtHospital() : UnitCommandTooltips::needsHospital();
+            if(sendToRepairButton.getTooltipText() != tip) sendToRepairButton.setTooltipText(tip);
+        }
         carryallDropButton.setVisible(bShowCarryallDrop && currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops);
         actionBar.refresh();
         formationBar.refresh(ownGroundUnits >= FormationOrders::kMinPlayerGroup);

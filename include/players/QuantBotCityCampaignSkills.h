@@ -1,0 +1,89 @@
+#pragma once
+
+#include <array>
+
+/// DuneCity campaign skill ladder (Stefan, 2026-11-20: "Yes, build it").
+///
+/// On the low-spice campaign maps no difficulty reaches its army or city ceiling, so the tiers played
+/// the same game: a Brutal helper beat Hard enemies no more often than a Hard helper did. Same-tier
+/// games losing 60% and one-tier-lower games winning half cannot both hold while the helper tiers are
+/// equal (docs/city-campaign.md, "The tiers in the campaign: the skill ladder"). Each tier thinks at
+/// its own speed and plays the skills whose tier is at or below its own. Scope: DuneCity campaign
+/// missions only, helpers and enemies alike, while [Force Concentration] CityCampaignSkillLadder is
+/// on. Everywhere else every QuantBot keeps its native behaviour (nativeSkill).
+namespace QuantBotCityCampaignSkills {
+
+/// Mirrors QuantBot::Difficulty for Easy..Brutal; Never keeps a skill from every tier.
+enum Tier { Easy = 0, Medium = 1, Hard = 2, Brutal = 3, Never = 4 };
+
+enum Skill {
+    TreasuryRelease = 0, ///< a house saving for a credits goal spends the bank when its base is threatened
+    CityServices,        ///< crime or land-value goal: police beside homes and the land-value police budget
+    LandValueSiting,     ///< a Palace or Stadium is sited among its own homes and shops
+    PalaceForTax,        ///< a Palace is ordered as a land-value investment once 12 homes and shops stand
+    FactoriesFirst,      ///< a funded factory backlog takes a construction yard before zoning does
+    EarlyAttack,         ///< attacks at CityCampaignBrutalAttackPercent of its army ceiling, not 25%
+    GrowthTax,           ///< 3% tax while the city is below the growth population, then the default
+    HarvesterTargets,    ///< ground combat shoots harvesters first, then artillery (TargetPriorityLevel 2)
+    kSkillCount
+};
+
+/// Lowest tier that plays each skill. Easy: none; Medium: keeps itself safe; Hard: plans the city;
+/// Brutal: plays the whole map.
+constexpr std::array<int, kSkillCount> kDefaultTiers{{
+    Medium, // TreasuryRelease
+    Medium, // CityServices
+    Hard,   // LandValueSiting
+    Hard,   // PalaceForTax
+    Hard,   // FactoriesFirst
+    Brutal, // EarlyAttack
+    Never,  // GrowthTax
+    Never,  // HarvesterTargets
+}};
+
+/// [Force Concentration] keys holding each skill's tier (0 Easy .. 3 Brutal, 4 never).
+constexpr std::array<const char*, kSkillCount> kTierKeys{{
+    "CityCampaignSkillTreasuryRelease", "CityCampaignSkillCityServices", "CityCampaignSkillLandValueSiting",
+    "CityCampaignSkillPalaceForTax", "CityCampaignSkillFactoriesFirst", "CityCampaignSkillEarlyAttack",
+    "CityCampaignSkillGrowthTax", "CityCampaignSkillHarvesterTargets",
+}};
+
+/// Thinking speed: a tier decides on one AI pass in this many (1 = every pass, about 0.8 s). Slower
+/// tiers zone, produce and command their units less often. Indexed Easy..Brutal. The skills above moved
+/// a Hard helper's wins by at most a few of 80; a Hard helper deciding on every 2nd, 3rd or 4th pass
+/// lost 7, 12 and 20 of its 24. With 8/6/3/1 a Brutal helper won 18 more of 80 games against Hard
+/// enemies than a Hard helper, and a Hard helper 23 more against Medium enemies than a Medium one.
+constexpr std::array<int, 4> kDefaultThinkPasses{{8, 6, 3, 1}};
+constexpr std::array<const char*, 4> kThinkKeys{{
+    "CityCampaignThinkEasy", "CityCampaignThinkMedium", "CityCampaignThinkHard", "CityCampaignThinkBrutal",
+}};
+constexpr int kMaxThinkPasses = 16;
+
+/// AI passes per decision for this difficulty: the tier's value on the ladder, 1 elsewhere.
+inline int thinkPasses(int difficulty, const std::array<int, 4>& table, bool ladder) {
+    if (!ladder || difficulty < Easy || difficulty > Brutal) return 1;
+    return table[difficulty] < 1 ? 1 : table[difficulty] > kMaxThinkPasses ? kMaxThinkPasses : table[difficulty];
+}
+
+/// Behaviour outside the ladder. Skills the AI already had stay on for every tier; EarlyAttack stays
+/// Brutal's own; FactoriesFirst, GrowthTax and HarvesterTargets are new and stay off. FactoriesFirst
+/// is a campaign fix: in other city games a rich house keeps its dedicated growth yard zoning while
+/// another yard builds factories (shared_spending probe, the reported 100,000-credit opening).
+inline bool nativeSkill(Skill skill, int difficulty) {
+    switch (skill) {
+        case EarlyAttack: return difficulty == Brutal;
+        case FactoriesFirst:
+        case GrowthTax:
+        case HarvesterTargets: return false;
+        default: return true;
+    }
+}
+
+/// Whether a QuantBot of this difficulty plays the skill. A tier outside Easy..Brutal (Defend) keeps
+/// its native behaviour; so does a ladder that is switched off.
+inline bool hasSkill(Skill skill, int difficulty, int tier, bool ladder) {
+    if (!ladder || difficulty < Easy || difficulty > Brutal) return nativeSkill(skill, difficulty);
+    return tier <= difficulty;
+}
+
+} // namespace QuantBotCityCampaignSkills

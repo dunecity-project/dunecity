@@ -30,6 +30,8 @@
 #include <Menu/BriefingMenu.h>
 #include <Menu/CampaignStatsMenu.h>
 #include <Menu/CustomGameStatsMenu.h>
+#include <Menu/MapChoice.h>
+#include <misc/DuneCityCampaign.h>
 
 #include <CutScenes/Meanwhile.h>
 #include <CutScenes/Finale.h>
@@ -38,6 +40,7 @@
 #include <GameInitSettings.h>
 #include <data.h>
 
+#include <misc/ReworkedCampaign.h>
 #include <misc/exceptions.h>
 
 #include <algorithm>
@@ -81,6 +84,7 @@ SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
         case Structure_NuclearPlant:        newPicID = Picture_NuclearPlant;        break;
         case Structure_PoliceStation:       newPicID = Picture_PoliceStation;       break;
         case Structure_Stadium:            newPicID = Picture_Stadium;             break;
+        case Structure_Park:               newPicID = Picture_Park;                break;
         case Structure_Airport:            newPicID = Picture_Airport;             break;
         case Structure_AdvancedWindTrap:   newPicID = Picture_AdvancedWindTrap;    break;
         case Structure_AdvancedWindTrapMK2:newPicID = Picture_AdvancedWindTrap;    break;
@@ -122,8 +126,8 @@ SDL_Texture* resolveItemPicture(int itemID, HOUSETYPE house) {
         case Unit_Trike:                    newPicID = Picture_Trike;               break;
         case Unit_Saboteur:                 newPicID = Picture_Saboteur;            break;
         case Unit_Sandworm:                 newPicID = Picture_Sandworm;            break;
-        case Unit_AmbientAirplane:          newPicID = Picture_Carryall;            break;
-        case Unit_AmbientHelicopter:        newPicID = Picture_Ornithopter;         break;
+        case Unit_AmbientAirplane:          newPicID = Picture_CityAirplane;        break;
+        case Unit_AmbientHelicopter:        newPicID = Picture_CityHelicopter;      break;
         case Unit_RocketTrike:              newPicID = Picture_RocketTrike;         break;
         case Unit_SonicTrike:               newPicID = Picture_SonicTrike;          break;
         case Unit_FlameTank:                newPicID = Picture_FlameTank;           break;
@@ -264,7 +268,8 @@ Coord getStructureSize(int itemID) {
         case Structure_Road:                return Coord(1,1); break;
         case Structure_PowerLine:           return Coord(1,1); break;
         case Structure_Stadium:             return Coord(3,3); break;
-        case Structure_Airport:             return Coord(3,3); break;
+        case Structure_Park:                return Coord(1,1); break;
+        case Structure_Airport:             return Coord(4,4); break;    // a compact Airport is 3x3: Airport::isCompact()
         case Structure_AdvancedWindTrap:    return Coord(3,3); break;
         case Structure_AdvancedWindTrapMK2: return Coord(2,3); break;
         case Structure_AdvancedWindTrapMK3: return Coord(3,2); break;
@@ -318,6 +323,7 @@ Uint32  getItemIDByName(const std::string& name) {
     else if(lowerName == "road")                                                   return Structure_Road;
     else if((lowerName == "power line") || (lowerName == "powerline"))              return Structure_PowerLine;
     else if(lowerName == "stadium")                                                return Structure_Stadium;
+    else if(lowerName == "park")                                                   return Structure_Park;
     else if(lowerName == "airport")                                                return Structure_Airport;
     else if((lowerName == "advanced windtrap") || (lowerName == "advanced wind trap") || (lowerName == "advanced windtrap 3x3") || (lowerName == "advanced wind trap 3x3")) return Structure_AdvancedWindTrap;
     else if((lowerName == "advanced windtrap mk2") || (lowerName == "advanced wind trap mk2") || (lowerName == "advanced windtrap 2x3") || (lowerName == "advanced wind trap 2x3")) return Structure_AdvancedWindTrapMK2;
@@ -419,6 +425,7 @@ std::string getItemNameByID(Uint32 itemID) {
         case Structure_Road:                return "Road";              break;
         case Structure_PowerLine:           return "Power Line";        break;
         case Structure_Stadium:             return "Stadium";           break;
+        case Structure_Park:                return "Park";              break;
         case Structure_Airport:             return "Airport";           break;
         case Structure_AdvancedWindTrap:    return "Advanced Windtrap 3x3"; break;
         case Structure_AdvancedWindTrapMK2: return "Advanced Windtrap 2x3"; break;
@@ -522,6 +529,7 @@ std::string resolveItemName(int itemID) {
         case Structure_Road:                return _("Road");                              break;
         case Structure_PowerLine:           return _("Power Line");                        break;
         case Structure_Stadium:             return _("Stadium");                           break;
+        case Structure_Park:                return _("Park");                              break;
         case Structure_Airport:             return _("Airport");                           break;
         case Structure_AdvancedWindTrap:    return _("Advanced Windtrap");                 break;
         case Structure_AdvancedWindTrapMK2: return _("Advanced Windtrap");                 break;
@@ -905,6 +913,9 @@ void startSinglePlayerGame(const GameInitSettings& init)
     while(1) {
 
         try {
+            // Reworked campaign: its briefing, debriefing, statistics and map choice show the
+            // REMASTERED badge. The game screen draws its own, so the menus' badge is off meanwhile.
+            ReworkedCampaign::WatermarkScope remastered(currentGameInitInfo.isReworkedCampaign());
 
             SDL_Log("Initializing game...");
             currentGame = new Game();
@@ -913,7 +924,9 @@ void startSinglePlayerGame(const GameInitSettings& init)
             // get init settings from game as it might have changed (through loading the game)
             currentGameInitInfo = currentGame->getGameInitSettings();
 
+            ReworkedCampaign::setWatermarkVisible(false);
             currentGame->runMainLoop();
+            ReworkedCampaign::setWatermarkVisible(currentGameInitInfo.isReworkedCampaign());
 
             bool bGetNext = true;
             while(bGetNext) {
@@ -921,7 +934,7 @@ void startSinglePlayerGame(const GameInitSettings& init)
                     case GAME_DEBRIEFING_WIN: {
                         SDL_Log("Debriefing...");
                         {
-                            BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_WIN);
+                            BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_WIN, currentGameInitInfo.getFilename());
                             briefing.showMenu();
                         }
 
@@ -933,7 +946,18 @@ void startSinglePlayerGame(const GameInitSettings& init)
 
                         const int houseID = currentGameInitInfo.getHouseID();
 
-                        if(currentGameInitInfo.getGameType() == GameType::Campaign) {
+                        if(currentGameInitInfo.isDuneCityCampaign()) {
+                            // No region map: the planet takes the house's colour, a share per win.
+                            SDL_Log("DuneCity campaign conquest...");
+                            const int mission = currentGameInitInfo.getMission();
+                            MapChoice::DuneCityConquest won;
+                            won.missionWon = mission;
+                            won.missionName = DuneCityCampaign::missionName(mission);
+                            if(mission < DuneCityCampaign::kMissions) won.nextName = DuneCityCampaign::missionName(mission + 1);
+                            MapChoice(houseID, won).showMenu();
+                        }
+
+                        if(currentGameInitInfo.getGameType() == GameType::Campaign && !currentGameInitInfo.isDuneCityCampaign()) {
                             const int level = missionNumberToLevelNumber(currentGameInitInfo.getMission());
 
                             if(level == 4 && (ModManager::instance().isTornieFamilyContentActive() || houseID == HOUSE_HARKONNEN || houseID == HOUSE_ATREIDES || houseID == HOUSE_ORDOS)) {
@@ -954,7 +978,7 @@ void startSinglePlayerGame(const GameInitSettings& init)
 
                     case GAME_DEBRIEFING_LOST: {
                         SDL_Log("Debriefing...");
-                        BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_LOST);
+                        BriefingMenu briefing(currentGameInitInfo.getHouseID(), currentGameInitInfo.getMission(), DEBRIEFING_LOST, currentGameInitInfo.getFilename());
                         briefing.showMenu();
                     } break;
 

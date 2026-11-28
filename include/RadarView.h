@@ -24,6 +24,8 @@
 
 #include <misc/SDL2pp.h>
 
+class AmbientAirplane;
+
 
 /// This class manages the mini map at the top right corner of the screen
 class RadarView : public RadarViewBase
@@ -97,6 +99,9 @@ private:
     };
 
     void updateRadarSurface(int mapSizeX, int mapSizeY, const RadarScaleInfo& scaleInfo);
+
+    /// True when the radar marks this City Airplane with a white cross (updateRadarSurface).
+    bool radarShowsCityPlane(const AmbientAirplane* plane) const;
 
     RadarMode currentRadarMode;             ///< the current mode of the radar
 

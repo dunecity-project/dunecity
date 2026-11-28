@@ -333,6 +333,10 @@ Coord QuantBot::findRockExpansionSite(const MCV* mcv, bool needsLocalSpace) {
         availableBaseRock=freeBase;
         availableBaseFootprints=QuantBotColonisationPolicy::freeFootprints(w,h,buildable,2,2,
             QuantBotColonisationPolicy::kCrampedFootprints);
+        // Diagnostic only (ECONOMY_STATE free_footprints): how much room the home rock has, uncapped.
+        // Free room counted up to 400 footprints: EconomyFirst's yard target, and ECONOMY_STATE free_footprints.
+        availableBaseFootprintsWide=currentGame->isCitySimEnabled() && (economyFirstEnabled() || economyLogEnabled())
+            ? QuantBotColonisationPolicy::freeFootprints(w,h,buildable,2,2,400) : -1;
     }
     if(mcv && mcv->getLocation().isValid()) starts.push_back(mcv->getY()*w+mcv->getX());
     if(!mcv && starts.empty()) {
@@ -474,6 +478,14 @@ bool QuantBot::colonyMissionDue(const MCV* pMCV) const {
     // The formation flood only runs for an MCV that could actually leave.
     if(!QuantBotColonisationPolicy::colonisationAllowed(demand)||!demand.siteAvailable) return false;
     if(pMCV&&pMCV->getLocation().isValid()) demand.yardsOnFormation=yardsOnFormation(pMCV->getLocation());
+    // EconomyFirst (Stefan, 2026-11-28: "the mcvs can expand whenever ... but sometimes if there is a lot of rock
+    // connected to main base there is no need to expand. expansion is for when you lack space"): a house the switch
+    // acts for leaves only when its home rock is built out (fewer than kCrampedFootprints free 2x2 footprints in
+    // build range) or a strategic formation is wanted; a formation's yard share alone is not a reason.
+    if(cityLessons.economyFirstActiveNow) {
+        if(demand.yardLimit > 0 && demand.yards >= demand.yardLimit) return false;
+        return QuantBotColonisationPolicy::builtOut(demand) || demand.strategicSiteWanted;
+    }
     return QuantBotColonisationPolicy::missionDue(demand);
 }
 
@@ -841,6 +853,17 @@ void QuantBot::manageMcv(const MCV* pMCV) {
         clearPlacementCache();
     }
     const Uint32 id=pMCV->getObjectID();
+    // MCV_LOST evidence (EconomyFirst, Stefan 2026-11-28: "the mcvs can expand whenever"): where each MCV goes,
+    // so a loss before deploying can be told apart by site, distance, escort and attacker.
+    if (currentGame->isCitySimEnabled() && economyLogEnabled()) {
+        auto& track=cityLessons.mcvTracks[id];
+        if (track.born==0) { track.born=getGameCycleCount()+1; track.start=pMCV->getLocation(); }
+        track.last=pMCV->getLocation();
+        if (const auto it=mcvExpansionSites.find(id); it!=mcvExpansionSites.end()) track.target=it->second;
+        int escorts=0;
+        for (const auto& entry : colonistEscorts()) escorts+=entry.second==id;
+        track.escorts=escorts;
+    }
     // Progress refreshes the retry timer; traffic gets a grace period after arrival.
     if(pMCV->isMoving()) {
         mcvSurveyCycles[id]=getGameCycleCount();
@@ -933,7 +956,22 @@ void QuantBot::manageMcv(const MCV* pMCV) {
     const bool colonyMission=report&&colonyMissionDue(pMCV);
     const bool deployed=ready&&doDeploy(pMCV);
     bool clearing=false;
+    if(deployed && currentGame->isCitySimEnabled() && economyLogEnabled()) {
+        // MCV_DEPLOYED (EconomyFirst evidence): where a yard went up and how far the nearest enemy building is.
+        int enemyGap=-1;
+        for (const auto* structure : getStructureList()) {
+            if (!structure->getOwner() || structure->getHealth() <= 0
+                || structure->getOwner()->getTeamID() == getHouse()->getTeamID()) continue;
+            const int gap=blockDistance(location, structure->getClosestPoint(location)).lround();
+            if (enemyGap < 0 || gap < enemyGap) enemyGap=gap;
+        }
+        SDL_Log("MCV_DEPLOYED: house=%d x=%d y=%d enemy_tiles=%d yards=%d choice=%s home=%d cycle=%u",
+                getHouse()->getHouseID(), location.x, location.y, enemyGap,
+                getHouse()->getNumItems(Structure_ConstructionYard), choice, int(onOwnRockFormation(location)),
+                getGameCycleCount());
+    }
     if(deployed) {
+        cityLessons.mcvTracks.erase(id);
         mcvExpansionSites.erase(id);
         mcvSurveyCycles.erase(id);
         rockSurveyCycle=std::numeric_limits<Uint32>::max();

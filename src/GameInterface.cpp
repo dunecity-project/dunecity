@@ -190,7 +190,7 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     // dedicated UI texture so we use a TextButton; it's hidden in
     // non-city games via setVisible() in draw().
     budgetButton.setText(_("Budget"));
-    budgetButton.setTooltipText(_("Open city budget (Shift+B)"));
+    budgetButton.setTooltipText(_("Open city budget") + UnitCommandTooltips::hotkeySuffix(Hotkeys::Action::CityBudget));
     budgetButton.setOnClick(std::bind(&Game::onCityBudget, currentGame));
     topBarHBox.addWidget(&budgetButton);
 
@@ -270,7 +270,8 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     if(tornieFamilyPresentation) {
         ornithopterSelectButton.setCountedText(_("Ornithopter"), 0);
     }
-    ornithopterSelectButton.setTooltipText(_("Select all ornithopters (Hotkey: O)"));
+    ornithopterSelectButton.setTooltipText(_("Select all ornithopters")
+        + UnitCommandTooltips::hotkeySuffix(Hotkeys::Action::SelectOrnithopters));
     ornithopterSelectButton.setOnClick(std::bind(&Game::selectAllOrnithopters, currentGame));
 
     const int ornithopterButtonWidth = sideBar.getSize().x - 25;
@@ -350,7 +351,7 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
     }
 
     movementPathsButton.setText(_("Movement paths"));
-    movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
+    movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
     movementPathsButton.setToggleButton(true);
     movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
     windowWidget.addWidget(&movementPathsButton,
@@ -415,7 +416,9 @@ GameInterface::GameInterface() : Window(0,0,0,0) {
         const int itemID = kBuilderShortcutTypes[i];
         TextButton& button = builderButtons[i];
         button.setText(builderShortcutLabel(itemID));
-        button.setTooltipText(fmt::sprintf(_("Open the build menu of your least busy %s"), resolveItemName(itemID)));
+        button.setTooltipText(itemID == Structure_Airport
+            ? _("Select your Airport: buy city airplanes there")
+            : fmt::sprintf(_("Open the build menu of your least busy %s"), resolveItemName(itemID)));
         button.setOnClick([itemID]() { currentGame->selectBuilderOfType(itemID); });
         button.setVisible(false);
         windowWidget.addWidget(&button, Point(getRendererWidth() - sideBar.getSize().x + 24, builderRowsTop),

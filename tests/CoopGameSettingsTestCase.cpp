@@ -8,6 +8,7 @@
 #include <misc/IMemoryStream.h>
 #include <misc/OMemoryStream.h>
 #include <mod/ModManager.h>
+#include <misc/DuneCityCampaign.h>
 #include <Network/GameInitSettingsPolicy.h>
 
 #include <vector>
@@ -23,7 +24,9 @@ constexpr std::size_t Mod14Bytes = 1;
 constexpr std::size_t Mod15Bytes = 2;
 constexpr std::size_t Mod16Bytes = 1;
 constexpr std::size_t Mod18ResearchBytes = 6; // pace4 + damage1 + city-rule bits1
-constexpr std::size_t CurrentResearchBytes = Mod18ResearchBytes + 1; // MOD19: technology-installment rule
+constexpr std::size_t Mod19Bytes = 1; // technology-installment rule
+constexpr std::size_t Mod20Bytes = 1; // Custom Game starting tech level
+constexpr std::size_t CurrentResearchBytes = Mod18ResearchBytes + Mod19Bytes + Mod20Bytes;
 constexpr std::size_t PostMod11Bytes = Mod12Bytes + Mod13Bytes + Mod14Bytes + Mod15Bytes + Mod16Bytes + CurrentResearchBytes;
 struct ActiveTestMod {
     explicit ActiveTestMod(const std::string& name) { ModManager::instance().setActiveMod(name); }
@@ -359,7 +362,7 @@ TEST_CASE("Original damage is a shared rule preserved by setup, saves and campai
 
     SECTION("MOD5 defaults the new rule off without consuming following save bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '5';
         // Everything MOD5 does not know about: the MOD6 rule byte, MOD7's count plus one
@@ -395,7 +398,7 @@ TEST_CASE("Plan building sites participates in match identity and save compatibi
     SECTION("MOD7 and older default the rule on without consuming following bytes") {
         const char older = GENERATE('4', '5', '6', '7');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         std::size_t trailing = PostMod11Bytes + 1 + 2 + 1 + 1;                // MOD14 through MOD8
@@ -437,7 +440,7 @@ TEST_CASE("Continuous ground steps participates in match identity and save compa
 
     SECTION("MOD8 streams keep the rule off without consuming following bytes") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = '8';
         bytes.resize(bytes.size() - PostMod11Bytes - 4);   // MOD14 through MOD9, which MOD8 does not own
@@ -489,7 +492,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
         // A save or replay recorded before the rules existed must replay with the legacy behaviour.
         const char older = GENERATE('8', '9');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         bytes.resize(bytes.size() - PostMod11Bytes - (older == '8' ? 4 : 3));
@@ -503,7 +506,7 @@ TEST_CASE("The planned-construction rules participate in match identity and save
 
     SECTION("an announced MOD10 rule byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes - 2);   // MOD14..MOD11 and the missing last MOD10 byte
@@ -539,7 +542,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
         mod10.setGameOptions(planned);
         OMemoryStream mod10Out; mod10Out.open(); mod10.save(mod10Out);
         std::string bytes(mod10Out.getData(), mod10Out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'A';
         bytes.resize(bytes.size() - PostMod11Bytes);
@@ -554,7 +557,7 @@ TEST_CASE("Slow City Year participates in match identity and save compatibility"
 
     SECTION("an announced MOD11 byte that is not there is a truncated stream") {
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = 'B';
         bytes.resize(bytes.size() - PostMod11Bytes - 1);
@@ -613,7 +616,7 @@ TEST_CASE("Spice income factors survive the wire and default to 1x in every olde
     SECTION("every marker before MOD7 means 1x and leaves the following bytes alone") {
         const char older = GENERATE('!', '2', '3', '4', '5', '6');
         std::string bytes(out.getData(), out.getDataLength());
-        const auto marker = bytes.rfind("JDOM");
+        const auto marker = bytes.rfind("KDOM");
         REQUIRE(marker != std::string::npos);
         bytes[marker] = older;
         // Strip what that older marker cannot account for, so the tail is unambiguous.
@@ -921,6 +924,23 @@ TEST_CASE("Invalid campaign start levels fail before loading a scenario", "[camp
     REQUIRE_THROWS_AS(GameInitSettings(HOUSE_ATREIDES, SettingsClass::GameOptionsClass{}, level), std::invalid_argument);
 }
 
+// Stefan, 2026-11-26: the DuneCity Campaign started at Mission 10 as a full campaign crashed the game
+// ("Campaign level must be between 1 and 9"): the menu mapped the mission through an original level.
+TEST_CASE("Every DuneCity campaign mission starts as a campaign and as a single mission", "[campaign][dunecity]") {
+    const int mission = GENERATE(range(1, DuneCityCampaign::kMissions + 1));
+    for(const bool single : {false, true}) {
+        CAPTURE(mission, single);
+        const GameInitSettings init = GameInitSettings::duneCityCampaign(mission, single, SettingsClass::GameOptionsClass{});
+        REQUIRE(init.isDuneCityCampaign());
+        REQUIRE(init.getGameType() == (single ? GameType::Skirmish : GameType::Campaign));
+        REQUIRE(init.getHouseID() == DuneCityCampaign::kHouse);
+        REQUIRE(init.getMission() == mission);
+        REQUIRE(init.getFilename() == DuneCityCampaign::scenarioFilename(mission));
+    }
+    REQUIRE_THROWS_AS(GameInitSettings::duneCityCampaign(DuneCityCampaign::kMissions + 1, false,
+                                                         SettingsClass::GameOptionsClass{}), std::invalid_argument);
+}
+
 TEST_CASE("Workshop revisions survive game settings and checkpoint copies", "[workshop][network][save]") {
     auto original = makeCoop(true, false);
     original.setModRevision(std::string(64, 'a'), 7);
@@ -944,7 +964,7 @@ TEST_CASE("Legacy MOD3 remains readable and truncated MOD14 fails closed", "[wor
     auto original = makeCoop(false, true);
     OMemoryStream out; out.open(); original.save(out);
     std::string bytes(reinterpret_cast<const char*>(out.getData()), out.getDataLength());
-    const auto marker = bytes.find("JDOM");
+    const auto marker = bytes.find("KDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("old graphics marker") {
         bytes[marker] = '3';
@@ -1068,7 +1088,7 @@ TEST_CASE("MOD12 is append-only and every announced rule byte is required",
     const auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("JDOM");
+    const auto marker = encoded.rfind("KDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'C';
     encoded.resize(encoded.size() - Mod13Bytes - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes); // Released MOD12 layout.
@@ -1108,7 +1128,7 @@ TEST_CASE("MOD13 shared factory queue is hashed, append-only and required when a
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("JDOM");
+    const auto marker = encoded.rfind("KDOM");
     REQUIRE(marker != std::string::npos);
     encoded[marker] = 'D';
     encoded.resize(encoded.size() - Mod14Bytes - Mod15Bytes - Mod16Bytes - CurrentResearchBytes); // Released MOD13 layout.
@@ -1165,7 +1185,7 @@ TEST_CASE("MOD14 Micropolis land value is hashed, append-only and required when 
     auto original = makeSeparateFactionCoop(false);
     OMemoryStream out; out.open(); original.save(out);
     const std::string encoded(out.getData(), out.getDataLength());
-    const auto marker = encoded.rfind("JDOM");
+    const auto marker = encoded.rfind("KDOM");
     REQUIRE(marker != std::string::npos);
 
     SECTION("both switch states round-trip without consuming following bytes") {
@@ -1228,7 +1248,7 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    const auto marker = encoded.rfind("JDOM");
+    const auto marker = encoded.rfind("KDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("all combinations round-trip without consuming the next record") {
         saved.writeUint32(0xabcdef01u);
@@ -1264,6 +1284,131 @@ TEST_CASE("MOD15 Research Lab and Trooper Anti-Air are independent shared saved 
     }
 }
 
+TEST_CASE("The Trooper Ornithopter reach defaults on and its off state is hashed and carried in the MOD15 Trooper byte",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.trooperOrnithopterReach);
+    auto off = defaults;
+    off.trooperOrnithopterReach = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeSeparateFactionCoop(false);
+    auto options = original.getGameOptions();
+    options.trooperAntiAir = GENERATE(false, true);
+    options.trooperOrnithopterReach = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // The same setup playing the default rule: the stream every build since MOD15 has written.
+    auto plainOptions = options;
+    plainOptions.trooperOrnithopterReach = true;
+    auto plainSetup = original;
+    plainSetup.setGameOptions(plainOptions);
+    OMemoryStream plainSaved; plainSaved.open(); plainSetup.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+    REQUIRE(plain.size() == encoded.size());
+    std::vector<std::size_t> changed;
+    for(std::size_t i = 0; i < plain.size(); ++i) if(plain[i] != encoded[i]) changed.push_back(i);
+
+    SECTION("only the off state changes the stream, and only bit 1 of the Trooper byte") {
+        if(options.trooperOrnithopterReach) {
+            REQUIRE(changed.empty());
+        } else {
+            REQUIRE(changed.size() == 1);
+            REQUIRE(static_cast<Uint8>(plain[changed.front()]) == static_cast<Uint8>(options.trooperAntiAir ? 1 : 0));
+            REQUIRE(static_cast<Uint8>(encoded[changed.front()]) == static_cast<Uint8>(plain[changed.front()] | 2));
+        }
+    }
+    SECTION("all four states round-trip without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a stream older than MOD15 plays the current rule") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'E';
+        bytes.resize(bytes.size() - Mod15Bytes - Mod16Bytes - CurrentResearchBytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions().trooperOrnithopterReach);
+    }
+    SECTION("every bit of the byte is a rule: bit 5 turns City Plane Carpet Bombing off") {
+        if(!options.trooperOrnithopterReach) {
+            auto bytes = encoded;
+            bytes[changed.front()] = static_cast<char>(0x20 | 1);
+            IMemoryStream input(bytes.data(), bytes.size());
+            GameInitSettings restored(input);
+            REQUIRE(restored.getGameOptions().trooperAntiAir);
+            REQUIRE(restored.getGameOptions().trooperOrnithopterReach);
+            REQUIRE_FALSE(restored.getGameOptions().cityPlaneCarpetBombing);
+            REQUIRE(restored.getGameOptions().cityPlaneBombingRuns);
+            REQUIRE(restored.getGameOptions().cityPlanePurchase);
+        }
+    }
+}
+
+TEST_CASE("The city plane rules keep their defaults out of the stream and round-trip in the MOD15 Trooper byte",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.cityPlaneDefence);
+    REQUIRE(defaults.cityPlaneBombing);
+    REQUIRE_FALSE(defaults.airportOrnithopterPatrol);
+    REQUIRE(defaults.cityPlaneCarpetBombing);
+    REQUIRE(defaults.cityPlaneBombingRuns);
+    REQUIRE(defaults.cityPlanePurchase);
+
+    auto original = makeSeparateFactionCoop(false);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.cityPlaneDefence);
+    REQUIRE(plainOptions.cityPlaneBombing);
+    REQUIRE_FALSE(plainOptions.airportOrnithopterPatrol);
+    REQUIRE(plainOptions.cityPlaneCarpetBombing);
+    REQUIRE(plainOptions.cityPlaneBombingRuns);
+    REQUIRE(plainOptions.cityPlanePurchase);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.cityPlaneDefence = GENERATE(true, false);
+    options.cityPlaneBombing = GENERATE(true, false);
+    options.airportOrnithopterPatrol = GENERATE(false, true);
+    options.cityPlaneCarpetBombing = GENERATE(true, false);
+    options.cityPlaneBombingRuns = GENERATE(true, false);
+    options.cityPlanePurchase = GENERATE(true, false);
+    const Uint8 bits = static_cast<Uint8>((options.cityPlaneDefence ? 0 : 4) | (options.cityPlaneBombing ? 0 : 8)
+                                          | (options.airportOrnithopterPatrol ? 16 : 0)
+                                          | (options.cityPlaneCarpetBombing ? 0 : 32)
+                                          | (options.cityPlaneBombingRuns ? 0 : 64)
+                                          | (options.cityPlanePurchase ? 0 : 128));
+    REQUIRE((options == plainOptions) == (bits == 0));
+    REQUIRE((options.getHash() == plainOptions.getHash()) == (bits == 0));
+
+    auto setup = original;
+    setup.setGameOptions(options);
+    OMemoryStream saved; saved.open(); setup.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    REQUIRE(plain.size() == encoded.size());
+    std::vector<std::size_t> changed;
+    for(std::size_t i = 0; i < plain.size(); ++i) if(plain[i] != encoded[i]) changed.push_back(i);
+    if(bits == 0) {
+        REQUIRE(changed.empty());
+    } else {
+        REQUIRE(changed.size() == 1);
+        REQUIRE(static_cast<Uint8>(encoded[changed.front()]) == static_cast<Uint8>(plain[changed.front()] | bits));
+    }
+
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
 TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams read off",
           "[citybudget][network][save]") {
     SettingsClass::GameOptionsClass defaults;
@@ -1278,7 +1423,7 @@ TEST_CASE("MOD16 Starport Population is a hashed saved rule that older streams r
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    const auto marker = encoded.rfind("JDOM");
+    const auto marker = encoded.rfind("KDOM");
     REQUIRE(marker != std::string::npos);
     SECTION("both states round-trip without consuming the next record") {
         saved.writeUint32(0xabcdef01u);
@@ -1379,11 +1524,11 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     std::string encoded(saved.getData(),saved.getDataLength());
-    const auto marker = encoded.rfind("JDOM");
+    const auto marker = encoded.rfind("KDOM");
     REQUIRE(marker != std::string::npos);
     // All frozen-layout sections below start from the released MOD18 bytes.
     encoded[marker] = 'I';
-    encoded.pop_back();
+    encoded.resize(encoded.size() - Mod19Bytes - Mod20Bytes);
     SECTION("released MOD18 preserves every old rule and reads installments off") {
         auto bytes = encoded;
         bytes.append("tail");
@@ -1468,11 +1613,14 @@ TEST_CASE("MOD18 pace and land value rules preserve frozen MOD17 streams",
         REQUIRE(restored.getGameOptions() == expected);
         REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
     }
-    SECTION("unknown MOD18 city-rule bits are refused") {
+    SECTION("every MOD18 city-rule bit is a rule: bit 7 turns Fremen Palace Worm off") {
+        // Bits 2-3 are the protocol 137 city plane rules, bit 4 City Plane Crash Bombs (139), bit 5
+        // Zone Garrisons (144), bit 6 Parks Count As Roads (143), bit 7 Fremen Palace Worm (145).
         auto bytes = encoded;
-        bytes.back() = static_cast<char>(4);
+        bytes.back() = static_cast<char>(static_cast<Uint8>(bytes.back()) | 128);
         IMemoryStream input(bytes.data(),bytes.size());
-        REQUIRE_THROWS(GameInitSettings(input));
+        GameInitSettings restored(input);
+        REQUIRE_FALSE(restored.getGameOptions().fremenPalaceWorm);
     }
     SECTION("unknown wire pace is refused instead of normalized") {
         auto bytes = encoded;
@@ -1503,9 +1651,9 @@ TEST_CASE("MOD19 technology installments default off and are hashed, saved and r
     original.setGameOptions(options);
     OMemoryStream saved; saved.open(); original.save(saved);
     const std::string encoded(saved.getData(), saved.getDataLength());
-    const auto marker = encoded.rfind("JDOM");
+    const auto marker = encoded.rfind("KDOM");
     REQUIRE(marker != std::string::npos);
-    REQUIRE(encoded.back() == static_cast<char>(options.technologyInstallments));
+    REQUIRE(encoded[encoded.size() - Mod20Bytes - 1] == static_cast<char>(options.technologyInstallments));
 
     SECTION("both payment modes round-trip without consuming the next record") {
         saved.writeUint32(0xabcdef01u);
@@ -1520,10 +1668,316 @@ TEST_CASE("MOD19 technology installments default off and are hashed, saved and r
     }
     SECTION("an announced MOD19 stream requires its payment-mode byte") {
         auto bytes = encoded;
+        bytes[marker] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes - Mod19Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("MOD20 Custom Game tech level defaults to the map's, and is hashed, saved and required on the wire",
+          "[techlevel][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.startTechLevel == 0);
+    auto chosen = defaults;
+    chosen.startTechLevel = 5;
+    REQUIRE(chosen != defaults);
+    REQUIRE(chosen.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.technologyInstallments = GENERATE(false, true);
+    options.startTechLevel = GENERATE(0, 1, 5, 9);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    const auto marker = encoded.rfind("KDOM");
+    REQUIRE(marker != std::string::npos);
+    REQUIRE(encoded.back() == static_cast<char>(options.startTechLevel));
+
+    SECTION("every level round-trips without consuming the next record") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+        REQUIRE(input.getRemainingLength() == 0);
+        OMemoryStream resaved; resaved.open(); restored.save(resaved);
+        REQUIRE(std::string(resaved.getData(), resaved.getDataLength()) == encoded);
+    }
+    SECTION("released MOD19 keeps every old rule and plays the map's level") {
+        auto bytes = encoded;
+        bytes[marker] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes);
+        bytes.append("tail");
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        auto expected = options;
+        expected.startTechLevel = 0;
+        REQUIRE(restored.getGameOptions() == expected);
+        REQUIRE(restored.getGameOptions().getHash() == expected.getHash());
+        REQUIRE(input.readUint8() == static_cast<Uint8>('t'));
+    }
+    SECTION("an announced MOD20 stream requires its level byte") {
+        auto bytes = encoded;
         bytes.pop_back();
         IMemoryStream input(bytes.data(), bytes.size());
         REQUIRE_THROWS(GameInitSettings(input));
     }
+    SECTION("a level above 9 is refused, not clamped") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(10);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("The Saboteur hunt defaults on and its off state is hashed and carried in the MOD20 byte",
+          "[saboteur][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.saboteurHunt);
+    auto off = defaults;
+    off.saboteurHunt = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.startTechLevel = GENERATE(0, 5, 9);
+    options.saboteurHunt = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // Bit 7 is the off state; a setup that plays the default rule writes the byte MOD20 always wrote.
+    REQUIRE(static_cast<Uint8>(encoded.back())
+            == static_cast<Uint8>(options.startTechLevel | (options.saboteurHunt ? 0 : 0x80)));
+
+    SECTION("both states round-trip with every tech level") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+        REQUIRE(input.getRemainingLength() == 0);
+    }
+    SECTION("a stream older than MOD20 plays the current rule") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions().saboteurHunt);
+    }
+    SECTION("the off bit does not admit a tech level above 9") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(0x80 | 10);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("Hospital Care defaults on and its off state is hashed and carried in bit 6 of the MOD20 byte",
+          "[city][hospital][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.hospitalCare);
+    auto off = defaults;
+    off.hospitalCare = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.startTechLevel = GENERATE(0, 9);
+    options.saboteurHunt = GENERATE(true, false);
+    options.hospitalCare = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // The default rule leaves the byte as protocol 145 wrote it.
+    REQUIRE(static_cast<Uint8>(encoded.back())
+            == static_cast<Uint8>(options.startTechLevel | (options.saboteurHunt ? 0 : 0x80)
+                                  | (options.hospitalCare ? 0 : 0x40)));
+
+    SECTION("every state round-trips") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a stream older than MOD20 plays Hospital Care") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions().hospitalCare);
+    }
+    SECTION("the off bit does not admit a tech level above 9") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(0x40 | 10);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("Turrets Can Fire On Buildings defaults off and its on state is hashed and carried in bit 5 of the MOD20 byte",
+          "[turret][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE_FALSE(defaults.turretsFireOnBuildings);
+    auto on = defaults;
+    on.turretsFireOnBuildings = true;
+    REQUIRE(on != defaults);
+    REQUIRE(on.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.startTechLevel = GENERATE(0, 9);
+    options.hospitalCare = GENERATE(true, false);
+    options.turretsFireOnBuildings = GENERATE(false, true);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // The default rule leaves the byte as protocol 146 wrote it; on is the bit the earlier
+    // "Turrets Target Units Only" off state set, so the wire format is unchanged by the rename.
+    REQUIRE(static_cast<Uint8>(encoded.back())
+            == static_cast<Uint8>(options.startTechLevel | (options.hospitalCare ? 0 : 0x40)
+                                  | (options.turretsFireOnBuildings ? 0x20 : 0)));
+
+    SECTION("every state round-trips") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a stream older than MOD20 plays turrets on units only") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE_FALSE(restored.getGameOptions().turretsFireOnBuildings);
+    }
+    SECTION("the on bit does not admit a tech level above 9") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(0x20 | 10);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("Saboteurs Skip City Zones defaults on and its off state is hashed and carried in bit 4 of the MOD20 byte",
+          "[saboteur][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.saboteurSkipsCityZones);
+    auto off = defaults;
+    off.saboteurSkipsCityZones = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.startTechLevel = GENERATE(0, 5, 9);
+    options.saboteurHunt = GENERATE(true, false);
+    options.saboteurSkipsCityZones = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // The default rule leaves the byte as protocol 149 wrote it.
+    REQUIRE(static_cast<Uint8>(encoded.back())
+            == static_cast<Uint8>(options.startTechLevel | (options.saboteurHunt ? 0 : 0x80)
+                                  | (options.saboteurSkipsCityZones ? 0 : 0x10)));
+
+    SECTION("every state round-trips with every tech level") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a stream older than MOD20 plays the current rule") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions().saboteurSkipsCityZones);
+    }
+    SECTION("the off bit does not admit a tech level above 9") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(0x10 | 10);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
+TEST_CASE("AI infantry tactics default on for city games and round-trip beside installments",
+          "[ai-infantry-tactics][city][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.aiInfantryTactics);
+    auto off = defaults;
+    off.aiInfantryTactics = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+    defaults.cityEffects = off.cityEffects = true;
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.cityEffects = GENERATE(false, true);
+    options.aiInfantryTactics = GENERATE(false, true);
+    options.technologyInstallments = GENERATE(false, true);
+    options.startTechLevel = GENERATE(0, 5, 9);
+    options.saboteurSkipsCityZones = GENERATE(false, true);
+    original.setGameOptions(options);
+    OMemoryStream saved;
+    saved.open();
+    original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    REQUIRE(static_cast<Uint8>(encoded[encoded.size() - Mod20Bytes - 1])
+            == static_cast<Uint8>((options.technologyInstallments ? 1 : 0)
+                                 | (options.aiInfantryTactics ? 0 : 2)));
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    auto serializedOptions = options;
+    // City Effects is mod-derived, not serialized (same contract as degradation-probe.inc).
+    serializedOptions.cityEffects = SettingsClass::GameOptionsClass{}.cityEffects;
+    REQUIRE(restored.getGameOptions() == serializedOptions);
+    REQUIRE(restored.getGameOptions().aiInfantryTactics == options.aiInfantryTactics);
+    REQUIRE(restored.getGameOptions().getHash() == serializedOptions.getHash());
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+    REQUIRE(input.getRemainingLength() == 0);
+
+    SECTION("old MOD19 bytes keep the new default without enabling installments") {
+        auto bytes = encoded;
+        bytes[bytes.size() - Mod20Bytes - 1] = static_cast<char>(options.technologyInstallments);
+        IMemoryStream legacy(bytes.data(), bytes.size());
+        GameInitSettings previous(legacy);
+        REQUIRE(previous.getGameOptions().aiInfantryTactics);
+        REQUIRE(previous.getGameOptions().technologyInstallments == options.technologyInstallments);
+    }
+}
+
+TEST_CASE("Turrets Can Fire On Buildings: the options hash names the rule only when it is on",
+          "[turret][settings]") {
+    // getHash() spells out only the non-default state, so the default hash (and every saved or
+    // networked setup that plays it) is the same as before the rule existed. The INI round trip
+    // and the earlier key's fallback are checked in turret_target_probe (globals.cpp is not linked
+    // into this binary).
+    SettingsClass::GameOptionsClass defaults;
+    auto on = defaults;
+    on.turretsFireOnBuildings = true;
+    auto back = on;
+    back.turretsFireOnBuildings = false;
+    REQUIRE(on.getHash() != defaults.getHash());
+    REQUIRE(back.getHash() == defaults.getHash());
 }
 
 TEST_CASE("Tornie-only player limits apply to writers and received direct lobby settings",
@@ -1611,4 +2065,168 @@ TEST_CASE("Choosing an authored support faction never replaces a family campaign
     REQUIRE(context->slots[1].faction == HOUSE_HARKONNEN);
     REQUIRE(context->slots[2].faction == HOUSE_HARKONNEN);
     REQUIRE(context->slots[1].house != context->slots[2].house);
+}
+
+TEST_CASE("Protocol 137 city plane rules ride bits 2-3 of the MOD18 city rules byte, set only when off",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.cityPlaneBuildTime);
+    REQUIRE(defaults.cityPlaneFreePerAirport);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.cityPlaneBuildTime);
+    REQUIRE(plainOptions.cityPlaneFreePerAirport);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.cityPlaneBuildTime = GENERATE(true, false);
+    options.cityPlaneFreePerAirport = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.cityPlaneBuildTime && options.cityPlaneFreePerAirport) {
+        // The default rules leave the stream and the options hash as protocol 136 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options != plainOptions);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
+TEST_CASE("Protocol 139 City Plane Crash Bombs rides bit 4 of the MOD18 city rules byte, set only when off",
+          "[combat][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.cityPlaneCrashBombs);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.cityPlaneCrashBombs);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.cityPlaneCrashBombs = GENERATE(true, false);
+    options.cityPlaneFreePerAirport = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.cityPlaneCrashBombs && options.cityPlaneFreePerAirport) {
+        // The default rule leaves the stream and the options hash as protocol 138 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
+TEST_CASE("Protocol 143 Parks Count As Roads rides bit 6 of the MOD18 city rules byte, set only when off",
+          "[city][park][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.parksCountAsRoads);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.parksCountAsRoads);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.parksCountAsRoads = GENERATE(true, false);
+    options.cityPlaneCrashBombs = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.parksCountAsRoads && options.cityPlaneCrashBombs) {
+        // The default rule leaves the stream and the options hash as protocol 142 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
+TEST_CASE("Protocol 145 Fremen Palace Worm rides bit 7 of the MOD18 city rules byte, set only when off",
+          "[palace][worm][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.fremenPalaceWorm);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.fremenPalaceWorm);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.fremenPalaceWorm = GENERATE(true, false);
+    options.zoneGarrisons = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.fremenPalaceWorm && options.zoneGarrisons) {
+        // The default rule leaves the stream and the options hash as protocol 144 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
+}
+
+TEST_CASE("Protocol 144 Zone Garrisons rides bit 5 of the MOD18 city rules byte, set only when off",
+          "[city][garrison][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.zoneGarrisons);
+    auto original = makeCoop(false, true);
+    const auto plainOptions = original.getGameOptions();
+    REQUIRE(plainOptions.zoneGarrisons);
+    OMemoryStream plainSaved; plainSaved.open(); original.save(plainSaved);
+    const std::string plain(plainSaved.getData(), plainSaved.getDataLength());
+
+    auto options = plainOptions;
+    options.zoneGarrisons = GENERATE(true, false);
+    options.parksCountAsRoads = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    if(options.zoneGarrisons && options.parksCountAsRoads) {
+        // The default rule leaves the stream and the options hash as protocol 143 wrote them.
+        REQUIRE(encoded == plain);
+        REQUIRE(options.getHash() == plainOptions.getHash());
+    } else {
+        REQUIRE(encoded.size() == plain.size());
+        REQUIRE(encoded != plain);
+        REQUIRE(options.getHash() != plainOptions.getHash());
+    }
+    saved.writeUint32(0xabcdef01u);
+    IMemoryStream input(saved.getData(), saved.getDataLength());
+    GameInitSettings restored(input);
+    REQUIRE(restored.getGameOptions() == options);
+    REQUIRE(input.readUint32() == 0xabcdef01u);
 }

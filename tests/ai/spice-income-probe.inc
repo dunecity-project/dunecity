@@ -512,9 +512,15 @@ void runSpiceIncomeProbe(std::unique_ptr<Game>& game) {
         OMemoryStream saved; saved.open();
         measured->save(saved);
         std::string bytes(reinterpret_cast<const char*>(saved.getData()), saved.getDataLength());
-        // houseID, teamID, autoRepairEnabled, then four FixPoints, then the factor.
-        const std::size_t factorAt = 3 + 4 * sizeof(Sint64);
+        // houseID, teamID, autoRepairEnabled, the Repair Yard "Return units" flag (9893), then
+        // four FixPoints, then the factor.
+        static_assert(SAVEGAMEVERSION_REPAIR_RETURN > SpiceIncome::kFirstSavegameVersion,
+                      "The Return units flag is newer than the income factor");
+        const std::size_t returnUnitsAt = 3;
+        const std::size_t factorAt = 4 + 4 * sizeof(Sint64);
         require(bytes.size() > factorAt + 4, "The fixture house block is too short");
+        require(static_cast<unsigned char>(bytes[returnUnitsAt]) == (measured->isRepairReturnEnabled() ? 1 : 0),
+                "The Return units flag is not where the save layout says it is");
         Uint32 encoded = 0;
         for(int shift = 0; shift < 4; ++shift) {
             encoded |= static_cast<Uint32>(static_cast<unsigned char>(bytes[factorAt + shift])) << (8 * shift);
@@ -522,8 +528,13 @@ void runSpiceIncomeProbe(std::unique_ptr<Game>& game) {
         require(encoded == 3, "The factor is not where the save layout says it is");
 
         const auto savedVersion = game->loadedSavegameVersion;
-        std::string older = bytes;
-        older.erase(factorAt, 4);
+        // Both old layouts below predate the Return units flag, so it is taken out of them; a
+        // house read from either has it on, as Repair Yards behaved then.
+        std::string atFirst = bytes;
+        atFirst.erase(returnUnitsAt, 1);
+        const std::size_t oldFactorAt = factorAt - 1;
+        std::string older = atFirst;
+        older.erase(oldFactorAt, 4);
         game->loadedSavegameVersion = SpiceIncome::kFirstSavegameVersion - 1;
         {
             IMemoryStream in(older.data(), older.size());
@@ -532,19 +543,21 @@ void runSpiceIncomeProbe(std::unique_ptr<Game>& game) {
                     "A house from before the field did not resume at 1x");
             require(legacy.getTeamID() == measured->getTeamID(),
                     "The legacy house fixture did not parse the rest of the block");
+            require(legacy.isRepairReturnEnabled(), "A house from before the Return units flag did not load with it on");
         }
         game->loadedSavegameVersion = SpiceIncome::kFirstSavegameVersion;
         {
-            IMemoryStream in(bytes.data(), bytes.size());
-            House current(in);
-            require(current.getSpiceIncomeMultiplier() == 3,
-                    "A house from the current format lost its factor");
+            IMemoryStream in(atFirst.data(), atFirst.size());
+            House first(in);
+            require(first.getSpiceIncomeMultiplier() == 3,
+                    "A house from the first format with the factor lost it");
+            require(first.isRepairReturnEnabled(), "A house from before the Return units flag did not load with it on");
         }
         // A factor this build does not accept is refused rather than defaulted.
         for(const Uint32 bad : {0u, SpiceIncome::kMax + 1, 0xFFFFFFFFu}) {
-            std::string hostile = bytes;
+            std::string hostile = atFirst;
             for(int shift = 0; shift < 4; ++shift) {
-                hostile[factorAt + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
+                hostile[oldFactorAt + shift] = static_cast<char>((bad >> (8 * shift)) & 0xFF);
             }
             IMemoryStream in(hostile.data(), hostile.size());
             bool refused = false;

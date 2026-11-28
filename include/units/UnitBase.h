@@ -68,9 +68,21 @@ public:
 
     virtual void checkPos() = 0;
     virtual void deploy(const Coord& newLocation);
+    /**
+        Deploys a unit the map starts with ([UNITS] in the scenario, co-op extra forces).
+        It was already standing on its tile when the mission began instead of arriving there,
+        so a spice or special bloom under it stays intact, as in Dune II, which loads its blooms
+        after the units. A unit that arrives on a bloom later (carryall drop, reinforcement,
+        factory exit, driving onto it) still sets it off.
+    */
+    void deployAtMapStart(const Coord& newLocation);
     void cancelDeployment();
 
     void destroy() override;
+
+    /// Whether destroying this unit counts as a loss in its house's statistics
+    /// (House::decrementUnits). A Saboteur that blew up its target was spent, not lost.
+    virtual bool lostWhenDestroyed() const { return true; }
     /**
         Hands control of this unit to newOwner until the deviation timer runs out.
         \param  newOwner            the house taking control; the original house ends the deviation
@@ -364,6 +376,20 @@ public:
     /// actual carrier cargo lists and structure occupant pointers.
     inline bool isPickedUp() const { return pickedUp; }
 
+    /// Zone Garrisons (docs/zone-garrisons.md): hides this soldier inside a zone as a Carryall's
+    /// cargo is hidden (off the map, inactive, unselectable, no orders). Its health, house and
+    /// weapon reload stay its own; ZoneStructure keeps the list and deploys it again.
+    void enterGarrison();
+    /// The capture target is a zone enemy soldiers hold: a capture order fires on it instead.
+    bool captureTargetHeld() const;
+    /// Fires this garrisoned soldier's weapon at TARGET from MUZZLE (world pixels, the zone's
+    /// centre), with the damage and Trooper short-range rules of attack(). FROMTILE is the zone
+    /// tile nearest the target. Returns false while reloading.
+    bool fireFromGarrison(const ObjectBase* target, const Coord& muzzle, const Coord& fromTile);
+    /// A hidden unit does not run update(), so its garrison ticks the reload clock.
+    void tickGarrisonWeapon() { if(primaryWeaponTimer > 0) --primaryWeaponTimer; }
+    bool garrisonWeaponReady() const { return numWeapons > 0 && primaryWeaponTimer == 0; }
+
     /**
         Updates this unit.
         \return true if this unit still exists, false if it was destroyed
@@ -638,6 +664,8 @@ protected:
     // Counts belong to the original house even while a unit is deviated.
     void registerUnit();
     bool restoredFromSave = false;
+    /// True only inside deployAtMapStart()'s deploy() call; never saved.
+    bool deployingAtMapStart = false;
 
 
     void updateVisibleUnits();
@@ -680,6 +708,10 @@ protected:
     FixPoint getTerrainAdjustedSpeed(int cargoPercent = 0) const;
 
     virtual void targeting();
+    /// May this unit fire at this aircraft before it has turned to face it? Only a Trooper under
+    /// the Ornithopter reach rule. (Dynasty Launchers and Deviators never face aircraft at all;
+    /// engageTarget() handles them itself.)
+    virtual bool firesAtAircraftUnfaced(const ObjectBase& aircraft) const { return false; }
     void enqueueTargetRequest(TargetRequestKind kind);
     void enqueuePathRequest();
 

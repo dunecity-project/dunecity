@@ -29,6 +29,231 @@ The dated implementation/audit sections below remain historical evidence for
 their named source revisions, not proof that the current engine or either menu
 mode passes every proposed target.
 
+## Campaign opponent tiers changed on 2026-11-22 (after the measurements below)
+
+Stefan, 2026-11-22, on the matrix of every campaign setting by difficulty: "easy should be 1.5x
+the army ceiling not x2 / attack wave should be smaller on easiest / ornithopter attacks on for
+medium / add silos should be on for harder difficulties".
+
+| Change | Before | Now | Lever (`[Force Concentration]`, default) |
+|---|---|---|---|
+| Easy: army it rebuilds to, x its starting army | 2.0 | 1.5 | `CampaignEasyArmyPercent` (150; 0 = `Easy_MilitaryValueMultiplier`) |
+| Easiest: value of one ground wave | 70% of Easy's (630 / 840 / 1,190) | 50% (450 / 600 / 850) | fixed, `EasiestPolicy.h` |
+| Easiest: units in one ground wave | 3 / 4 / 5 as Easy | 2 / 3 / 4 | fixed, `EasiestPolicy.h` |
+| Medium: offensive ornithopter raids | no | yes, as Hard and Brutal | `CampaignMediumAirRaids` (on) |
+| Hard and Brutal: add a Silo at 90% full storage | no (Medium only) | yes | `CampaignHardSilos` (on) |
+
+- They apply to campaign opponents only (`isCampaignEnemy()`: Dune Legacy and DuneCity campaigns,
+  Single mission under campaign policy). Custom, skirmish and multiplayer games and campaign
+  helpers are unchanged; a Medium house outside a campaign still does not raid with aircraft.
+- They are rules in `CampaignDifficultyPolicy.h` with levers, not new `[Difficulty Settings]`
+  defaults, because every player's saved `QuantBot Config.ini` and every shipped mod
+  configuration stores `Easy_MilitaryValueMultiplier=2.0` and
+  `Medium_OrnithopterAttackEnabled=0`; a changed default would reach new installations only
+  and would give them a different configuration hash from existing ones. The levers are saved
+  and hashed only when changed. The Easy mission 21+ floor of 2,000 is unchanged.
+- Workers are still never an aircraft target; that rule sits ahead of the raid gate.
+- Old behaviour for a paired test in the same build: `--style campaign-tiers-1122-off`
+  (`tests/ai/play-styles/campaign-tiers-1122-off.ini`; the Easiest wave has no lever).
+- The Easiest and Easy results below were measured before these changes (source `097d07dc3`).
+  Not re-measured: see the gates recorded with the commit.
+
+## QuantBot Easiest (2026-11-22, class `qBotEasiest`, protocol 132)
+
+Stefan, 2026-11-22: "can we just make an 'easiest' difficulty which is easier than easy". It
+is a selectable difficulty below Easy in every AI selector (lobby, skirmish, campaign enemy;
+listed last, after Defend, so the default stays Easy)
+and, since later the same day, the default enemy of the campaign, Skirmish and Custom Game menus
+and a choice in Restart on New Difficulty (`docs/easier-enemy-restart.md`). QuantBot Easy and every other difficulty
+are unchanged: nothing reads these rules unless the class is `qBotEasiest`. It replaces the
+`EasyRelief` config switch tried earlier the same day.
+
+QuantBot Easiest is QuantBot Easy (same skills, same `[Difficulty Settings] Easy_*` values and
+`CampaignEasy*` levers) plus the fixed rules of `include/players/EasiestPolicy.h`:
+
+| Where | Easiest | Easy |
+|---|---|---|
+| Custom games: army it builds up to | 60% of Easy's limit for the map size | 100% |
+| Custom games: harvesters (maps above 64x64) | half Easy's ceiling, at least two | 8 / 15 |
+| Custom games: first attack | not before minute 10; it still defends | no hold |
+| Campaign opponent: army it rebuilds to | the army the mission starts it with, at least 2,000 | 1.5 times it |
+| Campaign opponent: one ground wave | 50% (450 / 600 / 850) | 900 / 1,200 / 1,700 |
+| Campaign opponent: units in one wave | 2 / 3 / 4 | 3 / 4 / 5 |
+| Campaign opponent: first wave (triggered missions) | 180 s later | on the trigger |
+
+The class is an Easy QuantBot with a mark set by `PlayerFactory` on create and on load; the
+save stores the class string and an ordinary Easy stream, so the save format is unchanged.
+Its analytics difficulty is `easiest`. A wave never waits for more than four fifths of the
+lower army ceiling.
+
+### Why: the live results (vanilla rules, one human, every opponent Easy, games of 5+ minutes)
+
+- **Custom games are the real problem.** 16 of 39 players ever beat one Easy QuantBot 1v1
+  (407 tries, 1.0.865 and later). In the games they left at minute 10-20 they had built 15
+  units and harvested 14,000 spice; Easy had built 47 units and harvested 24,000.
+- **Counting tries overstates the campaign wall.** A reloaded save is recorded as a new game with
+  the totals so far, so one long mission played over several sessions is several "quits" and one
+  win. On missions 20-22 the players who won made 372 of the 424 recorded tries. Counted per
+  player, 26 of 41 ever won mission 20, 19 of 24 mission 21 and 28 of 35 mission 22 (63%, 79%,
+  80%), against 80-100% on missions 14-19. In 1.0.874 and later: 9 of 17, 9 of 11, 11 of 13.
+- Players who never won missions 21-22 stopped either at minute 10-18, with 0-4 units built and
+  their starting army against three Easy houses that had already built 25-34 units, or at minute
+  33-51 with 12,000-30,000 army against 39,000-41,000.
+
+### Measured: Easiest against Easy (source `097d07dc3`, one build, AWS)
+
+Results: `~/Documents/projects/outputs/easy-relief-20261122/easiest/`. Real players are not in
+these games: an AI stands in for the player, so read the direction, not the percentages.
+
+**Custom 1v1.** Cells `skirmish/easy-1v1-{ae,am,ah}-v-{qe,qx}-{habbanya-penny,rs128}/vanilla`:
+the AI Player (Easy, Medium, Hard) as the player against QuantBot Easy (QE) and QuantBot
+Easiest (QX), even starts, the most-played 1v1 map and a generated 128x128 map, 12 seeds from
+both starts, 60 minutes. Player wins / player eliminated / time limit:
+
+| Player proxy (48 games per opponent) | Against Easy | Against Easiest |
+|---|---|---|
+| AI Player Hard | 30 / 0 / 18 | 32 / 2 / 14 |
+| AI Player Medium | 0 / 19 / 29 | 3 / 11 / 34 |
+| AI Player Easy | 0 / 11 / 37 | 2 / 8 / 38 |
+| All 144 | 30 / 30 / 84 | 37 / 21 / 86 |
+
+- The opponent ends with a mean army of 5,800 against Easy's 10,700 and 19 structures against
+  31. Time-out rate 58% against Easy, 60% against Easiest: the AI Player Easy and Medium rarely
+  finish a base in 60 minutes against either.
+- These two columns use different seeds (the seed follows the cell name). The same three custom
+  rules were first measured as a switch on Easy with identical seeds (source `19381e6cf`,
+  `.../easy-relief-20261122/final/`): 30 wins became 43 of 144, eliminations 30 became 16;
+  paired, 18 games turned into wins and 5 went the other way (win share +9 points, bootstrap
+  95% interval +3 to +15).
+- Easy against Easiest (48 games): all 48 reach the time limit. Easy holds 15,000 army and 53
+  structures at the end, Easiest 8,500 and 35. Neither Easy nor Easiest ends a 1v1 by itself.
+
+**Campaign.** Cells `campaign/partner-easy-v-quantbot-{easy,easiest}/vanilla`: an idle human
+with an Easy helper, 3 houses, 80 minutes (`--enemy-difficulty easiest`). Helper wins / helper
+defeated / time limit:
+
+| Missions (seeds) | Easy enemies | Easiest enemies |
+|---|---|---|
+| 20, level 8 (9811-9822, 36 games) | 23 / 8 / 5 | 23 / 3 / 10 |
+| 21, level 8 (36) | 33 / 2 / 1 | 32 / 2 / 2 |
+| 22, level 9 (36) | 33 / 3 / 0 | 28 / 2 / 6 |
+| 20-22 (108) | 89 / 13 / 6 | 83 / 7 / 18 |
+| 1-19, gate seeds (57) | 54 / 1 / 2 | 54 / 1 / 2 |
+
+- Against Easiest the helper loses its base about half as often (7 against 13) but does not win
+  more: the games it no longer loses end at the 80-minute limit with the helper alive (3,900
+  army, 14 structures) and two enemy houses still standing. An Easiest enemy sends less and
+  keeps more at home, and the Easy helper's attacks stall on that. Whether a person finishes
+  those games is not measured here.
+- The same pattern showed when each campaign rule was a switch on Easy for missions 20-22 only
+  (`19381e6cf` and `918c3e32a`): army ceiling alone 88 wins of 108 against 89; later opening
+  and smaller waves alone 27 of 36 against 27; all three 53 of 72 against 58 with time limits
+  14 against 5.
+- The Easy helper already wins 92% on missions 21 and 22 against Easy, so it cannot show much
+  of a gain there. A weaker proxy (`CampaignHelperEasyHarvesters=2`) won 1 of 24 on mission 22
+  and was not used.
+- Atreides mission 20 is the one late map the Easy helper does not win: 0 of 12 against Easy,
+  1 of 12 against Easiest (16 enemy rocket turrets, "Still open" below).
+
+### Where the level 8 wall is: the Atreides campaign (2026-11-22)
+
+Live results, Easy opponents, players who ever won a mission they tried (1.0.865 and later):
+
+| Level | Atreides | Harkonnen | Ordos |
+|---|---|---|---|
+| 1-7 | 324 of 354 (92%) | 156 of 167 (93%) | 66 of 72 (92%) |
+| 8 (missions 20, 21) | 15 of 29 (52%) | 14 of 18 (78%) | 7 of 8 (88%) |
+| 9 | 10 of 11 | 7 of 9 | 4 of 6 |
+
+- Mission 20 is not the wall by itself: 9 of 18 Atreides players ever won mission 20 and 6 of
+  11 mission 21 (Harkonnen 10 of 14 and 4 of 4, Ordos 3 of 4 and 4 of 4). Both Atreides level 8
+  maps set the player against Ordos and Mercenary.
+- The Easy helper agrees (12 seeds per map, Easy enemies): Atreides mission 20 0 of 12 and
+  mission 21 9 of 12; Harkonnen 11 and 12 of 12; Ordos 12 and 12 of 12.
+- It is not spice. Atreides mission 20 starts with 109,000 spice on the map, Harkonnen mission
+  20 (the same terrain and the same player start) 93,000, Atreides mission 21 68,000; the
+  helper earns 27,000 by minute 30 on both mission 20 maps.
+- On Atreides mission 20 the helper's attacks achieve about half as much: by minute 30-35 it
+  has destroyed 14,000-17,000 for 17,000-21,000 lost, against 25,000-31,000 for 14,000-21,000
+  as Harkonnen on the same terrain, and in the first 45 minutes it answers 36-37 attacks on its
+  own base against 10 (two seeds each).
+- Tried on mission 20 (36 games per arm, source `c9090809f`, results
+  `.../easy-relief-20261122/m20/`): `CampaignHelperSingleTarget` and
+  `campaign-helper-tactics-all` on the Easy helper. Atreides stays 0 of 12 with both; Harkonnen
+  falls from 11 to 3 and to 1 of 12, Ordos from 12 to 11 and to 0. Neither is a fix.
+- Open: which part of the Ordos and Mercenary setup (the Devastator dropped on the player's
+  base at minute 14 on both maps, 12-16 rocket turrets, the Deviators) costs Atreides players
+  the mission. It needs scenario variants to test; nothing was changed for it.
+
+**Not measured:** Easiest in city games and in the DuneCity campaign (the custom rules apply
+there too), and any game with a human playing.
+
+**Gates on `9927dbdb8`:** `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`,
+`quantbot_scenario_matrix` and `quantbot_ffa_army_deploys` pass on AWS, `perf_regression` on
+the Mini, and `menu_navigation_probe` passes with the sixth difficulty. The whole headless
+suite on `097d07dc3` passed 229 of 240; of the 11 failures, `menu_navigation_probe` was this
+change (Easiest was first listed first; fixed in `9927dbdb8`), and
+`quantbot_growth_installments`, `quantbot_whole_army_dispatch`, `genome_registry_contract` and
+the six Python suites that load the genome registry fail the same way on `806b40e6f`, the
+commit before this work.
+
+## Full campaign cap confirmation (2026-11-14, 1.0.868 game code)
+
+The repair-role and deferred-upgrade fixes are enabled. House-count wave scaling
+remains disabled: none of the tested candidates established a better difficulty
+curve. This does **not** establish that the retained 3,500 cap is calibrated on
+every map.
+
+Exploration covered 2,880 games and eleven caps. Three candidates were then
+frozen and compared with 3,500 on eight independent seeds per map (9901–9908),
+all four helper tiers, all three player houses, missions 5/8/14/20/21/22, actual
+QuantBot opponents, Vanilla, Full campaign, idle human, Both-role support and
+an 80-minute game-time limit. Medium and Brutal enemy brackets ran alongside
+them. Source `db72ba6f73b1b603134216a6332876599910c8b3` contains the styles;
+game behavior is unchanged from `bd8af1f71dc1cd7895b81f7629c8ddfd342a021f`.
+The 3,456-game confirmation had no engine errors and eleven time limits, kept
+in the denominators. These are measured samples, not universal win odds.
+
+| Helper and mission group | 3,500 | 6,500/2,000/4,000 | 6,500/4,000/4,000 | Flat 4,000 |
+|---|---:|---:|---:|---:|
+| Hard, level 4 | 24/24 | 24/24 | 24/24 | 24/24 |
+| Hard, level 6 | 24/24 | 24/24 | 24/24 | 24/24 |
+| Easy, level 6 | 18/24 | 3/24 | 3/24 | 13/24 |
+| Hard, level 8 | 16/48 | 12/48 | 20/48 | 20/48 |
+| Brutal, level 8 | 21/48 | 15/48 | 19/48 | 20/48 |
+| Medium, level 9 | 3/24 | 1/24 | 1/24 | 1/24 |
+| Hard, level 9 | 14/24 | 9/24 | 9/24 | 9/24 |
+| Brutal, level 9 | 13/24 | 9/24 | 9/24 | 9/24 |
+
+Tuples mean per-house credit caps with one/two/three surviving enemy bases.
+Stefan explicitly requested live recalculation as bases are destroyed. The
+combined-policy tests exercise that behavior; actual cap changes occurred in
+26 and 17 games for the two variable tuples. Every logged dispatch obeyed its
+effective cap. The apparent exploratory Hard-helper level-4 benefit from 6,500
+did not repeat, and every candidate reduced Brutal final-mission wins. The
+exploratory target-fit score alone would favor them, but all paired seed-block
+intervals cross zero and the map-specific regressions preclude promotion.
+
+The baseline loses Harkonnen mission 21 in all 32 helper/seed games. Candidates
+win once in 96, with Medium support under 6,500/2,000/4,000; Brutal is 0/8 in
+every arm. The reported seed 1408815401 loses with every helper under all four
+policies. Disabling only `CampaignAllyStrengthFloor` in a separate 36-game
+Full campaign Harkonnen-21 comparison also loses every game; it enables more
+Easy/Medium attacks but no Brutal attacks. Removing that floor alone is not a
+solution. The ordinary readiness threshold and the wider late-map imbalance
+remain unresolved.
+
+Diagnostic arm 3 uses `CampaignHouseWaveOneValue`, `CampaignHouseWaveTwoValue`
+and `CampaignHouseWaveThreeValue`. These keys are hashed, absent from the
+canonical INI, and default to 3,500 with the experiment off. Arm 0 preserves
+`CampaignHardWaveValue`. Helpers, Custom games, other tiers and city games do
+not inherit the experimental live-base scaling.
+
+The campaign menu now accurately says enemy houses can attack at the same
+time: each has an independent launch timer. The old one-house/two-house and
+relative-recovery descriptions were obsolete; correcting them changes no
+combat rule.
+
 ## Vanilla level 9 partner calibration (2026-11-13)
 
 Stefan's targets for idle human plus QuantBot support against QuantBot enemies on
@@ -116,10 +341,17 @@ outstanding-force or recovery blocking: an enemy wave is limited by its own cap.
   buying refineries and the factory stays idle), and `CampaignCombatBudget`
   for Hard/Brutal helpers (no effect against Brutal enemies).
 
-Measured win % (games), 3 houses x seeds 9601-9603 on every mission and seeds
-9604-9609 added on missions 20-22. Levels 1-3 were measured again after the
-quota saving rule below; that rule cannot act on later missions, which carry no
-quota. Helper rows, enemy columns:
+Measured win % (games). **Scope: Full campaign, Vanilla rules, idle human,
+helper role Both.** These are historical measurements of that one setup. They
+are not Single mission results and not odds for the current release.
+
+- Source: levels 4-9 were measured at `264f44e0a`; levels 1-3 were measured
+  again at `f3c3cc09a`, after the quota saving rule below (that rule cannot act
+  on later missions, which carry no quota). No released build was measured.
+- Seeds: 3 houses x seeds 9601-9603 on every mission, with seeds 9604-9609
+  added on missions 20-22.
+
+Helper rows, enemy columns:
 
 | Levels | Helper | Easy | Medium | Hard | Brutal |
 |---|---|---|---|---|---|
@@ -144,12 +376,72 @@ quota. Helper rows, enemy columns:
 | | Hard | 96 | 77 | 40 | 0 |
 | | Brutal | 92 | 77 | 51 | 0 |
 
+An average over a level hides single maps. The level 9 cell for a Hard helper
+against Medium enemies is 21 of 27 (shown as 77), but on Harkonnen mission 22
+that same pairing won 4 of 9. In the logged seed 9603 game, three Medium
+houses launched waves within a minute of each other. Read a cell as "this
+share of these maps and seeds", not as the chance of winning any given
+mission.
+
+#### Single mission, repair and yard-upgrade fixes (2026-11-14, 1.0.868)
+
+A separate, smaller measurement made for the 1.0.868 fixes
+(`CampaignRepairRoleFix`, `CampaignDeferredYardUpgrade`). Scope: Single
+mission, Vanilla rules, idle human, helper role Both, missions 14, 20 and 22,
+three houses, seeds 9701-9704, 80-minute limit, concrete on, powered turrets
+off. Source `2778733d3`; all four arms ran on the same build. Wins of 36:
+
+| Helper v enemy | Both off | Repair only | Deferred upgrade only | Both on |
+|---|---:|---:|---:|---:|
+| Hard v Medium | 31 | 31 | 32 | 32 |
+| Medium v Hard | 10 | 17 | 10 | 16 |
+
+- Medium helper against Hard enemies, both on against both off: six losses
+  became wins and none went the other way (paired mean +0.33, bootstrap 95%
+  interval +0.11 to +0.61).
+- Hard helper against Medium enemies: three improvements and two regressions;
+  no improvement is established.
+- A Medium helper lost all 12 tested mission 22 games in every arm. That is a
+  bounded observation, not proof that the mission cannot be won.
+- Other maps, helper roles, options, the DuneCity ruleset and an active human
+  were not measured.
+
+Evidence: `~/Documents/projects/outputs/wtfrepairyard-20261114/release-handoff.md`
+and `stats-audit.md` in the same directory.
+
 `tests/ai/scenario-matrix.py --attack-events` returns `campaign-ai.csv` (the
 game's own `CAMPAIGN_AI:` log lines) and
 `tests/ai/campaign-game-report.py RESULTS... [--game REGEX] [--lost]` prints
 one line per game or a full game story from it.
 
 Still open:
+
+- The historical level-8 Brutal-helper/Hard-enemy aggregate was 22 wins,
+  31 losses and one time limit in 54 Full campaign games (40.7% wins), on
+  `264f44e0a1d3bfc0b39466d805cf7fd4badc94bf`. Harkonnen mission 20 was
+  4/9 wins; mission 21 was **0/9**. These are measured results, not the
+  separate 55% final-mission target, and do not establish Single mission
+  performance. The `losing` save from 1.0.867 is Full campaign Harkonnen
+  mission 21, Brutal helper against Hard enemies. Its captured first 24
+  minutes show no helper ground dispatch and ten enemy dispatches; the
+  helper's army falls below the opposing-alliance readiness floor while
+  suffering losses without a general attack. This identifies a failure mode, not proof
+  that removing the floor improves results.
+- A flat Hard wave increase to 4000 was tested and withdrawn by Stefan.
+  Matched Single mission Harkonnen 20/21 games with Brutal support changed
+  from 7/20 wins at 3500 to 2/20 at 4000; mission 21 was 0/10 in both.
+  Turning off the allied readiness floor also gave 2/20 (one win exchanged
+  in each direction), so it was not promoted. These were Single mission
+  diagnostics, not exact-mode reproductions of the Full campaign save.
+- `CampaignHouseWaveExperiment` is a hashed, default-OFF diagnostic. Arm 0
+  keeps 3500; arm 1 uses 4000/3000/2500 per enemy house with 1/2/3+ living
+  allied enemy bases; arm 2 uses 4000/3250/3000. A base needs a non-wall
+  structure; empty roster slots and unit-only reinforcements do not count.
+  Eliminating a base recalculates the next dispatch, never an existing wave.
+  Only Hard campaign enemies in non-city games participate. Helpers, Custom
+  games, other tiers and city games retain their existing behavior. The new
+  key is absent from the shipped INI; the template again matches 1.0.867,
+  and the now-unnecessary checksum migration has been removed.
 
 - Brutal enemies win every game on levels 8-9 and most from level 4. A Brutal
   enemy sends its whole army on the trigger (5,000-7,000 on missions 8-12,

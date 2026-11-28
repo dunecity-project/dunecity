@@ -17,7 +17,9 @@
  */
 
 #include <units/UnitBase.h>
+#include <dunecity/HospitalCare.h>
 #include <units/Trooper.h>
+#include <structures/ZoneStructure.h>
 #include <Achievements/AchievementEvents.h>
 #include <mod/ModManager.h>
 #include <mod/RadarResearch.h>
@@ -38,6 +40,8 @@
 #include <audio/sounds.h>
 
 #include <players/HumanPlayer.h>
+#include <players/CampaignAIPlayer.h>
+#include <players/OriginalCampaignPolicy.h>
 
 #include <misc/draw_util.h>
 
@@ -655,7 +659,11 @@ void UnitBase::deploy(const Coord& newLocation) {
             }
         }
 
-        if(isAGroundUnit() && !isSandwormUnit(getItemID())) {
+        // A unit the map starts with did not drive onto its tile, so the bloom under it waits
+        // for a unit that does. Setting it off here killed the unit, and the health from its
+        // [UNITS] line then revived it without its visibility: a unit nobody could see or
+        // target, whose house could never be defeated (reworked Atreides mission 13).
+        if(isAGroundUnit() && !isSandwormUnit(getItemID()) && !deployingAtMapStart) {
             if(currentGameMap->getTile(location)->isSpiceBloom()) {
                 currentGameMap->getTile(location)->triggerSpiceBloom(getOwner());
                 
@@ -688,6 +696,12 @@ void UnitBase::deploy(const Coord& newLocation) {
     }
 }
 
+void UnitBase::deployAtMapStart(const Coord& newLocation) {
+    deployingAtMapStart = true;
+    deploy(newLocation);
+    deployingAtMapStart = false;
+}
+
 void UnitBase::cancelDeployment() {
     if(currentGame) AITelemetry::log().repairReturnAborted(currentGame->getGameCycleCount(), getObjectID(), "deployment_cancelled");
     setTarget(nullptr);
@@ -714,7 +728,7 @@ void UnitBase::destroy() {
     currentGameMap->removeObjectFromMap(getObjectID()); //no map point will reference now
     currentGame->getObjectManager().removeObject(objectID);
 
-    currentGame->getHouse(originalHouseID)->decrementUnits(itemID);
+    currentGame->getHouse(originalHouseID)->decrementUnits(itemID, lostWhenDestroyed());
 
     unitList.remove(this);
     currentGame->invalidateCarryallCandidateIds();
@@ -865,6 +879,13 @@ void UnitBase::releaseTarget() {
 
 void UnitBase::engageTarget() {
 
+    // Zone Garrisons: a zone can change hands while a soldier walks to it (a comrade took it first),
+    // so its friendliness is read now, not when the order was given; otherwise the soldier would drop
+    // the order below because it "cannot attack" what is now its own house's zone.
+    const auto* captureZone = attackMode == CAPTURE && ZoneStructure::garrisonsEnabled()
+        ? dynamic_cast<const ZoneStructure*>(target.getObjPointer()) : nullptr;
+    if(captureZone != nullptr) targetFriendly = captureZone->getOwner()->getTeamID() == owner->getTeamID();
+
     if(target && (target.getObjPointer() == nullptr)) {
         // the target does not exist anymore
         releaseTarget();
@@ -955,6 +976,10 @@ void UnitBase::engageTarget() {
         const bool airMissile = (itemID == Unit_Launcher || itemID == Unit_Deviator)
             && target.getObjPointer()->isAFlyingUnit();
         const bool bodyTurnComplete = targetAngle == INVALID || angle == FixPoint(targetAngle);
+        // An Ornithopter is in a Trooper's range for a fraction of a second per pass, less than
+        // the turn takes: the Trooper keeps turning towards it but fires without waiting.
+        const bool unfacedShot = !airMissile && target.getObjPointer()->isAFlyingUnit()
+            && firesAtAircraftUnfaced(*target.getObjPointer());
 
         if(targetFriendly && !forced) {
             // the target is friendly and we only attack these if were forced to do so
@@ -965,12 +990,15 @@ void UnitBase::engageTarget() {
             // we are going to the repair yard
             // => we do not need to change the destination
             targetAngle = INVALID;
-        } else if(attackMode == CAPTURE
+        } else if((attackMode == CAPTURE && !captureTargetHeld())
                   || (ModManager::instance().isTornieFamilyContentActive() && attackMode == SABOTAGE)) {
             // we want to capture the target building
             setDestination(targetLocation);
             targetAngle = INVALID;
             if(attackMode == SABOTAGE) return;
+            // A soldier walks into a zone; it never shoots the building it is taking or joining (it
+            // still fires on a zone enemy soldiers hold: captureTargetHeld).
+            if(captureZone != nullptr) return;
         } else if(isTracked() && target.getObjPointer()->isInfantry() && !targetFriendly && currentGameMap->tileExists(targetLocation) && !currentGameMap->getTile(targetLocation)->isMountain() && forced) {
             // we squash the infantry unit because we are forced to
             setDestination(targetLocation);
@@ -982,7 +1010,8 @@ void UnitBase::engageTarget() {
             else if(bodyTurnComplete) targetAngle = INVALID;
         }
 
-        if(airMissile ? !moving && bodyTurnComplete : getCurrentAttackAngle() == newTargetAngle) {
+        if(airMissile ? !moving && bodyTurnComplete
+                      : (getCurrentAttackAngle() == newTargetAngle || (unfacedShot && !moving))) {
             attack();
         }
 
@@ -1637,6 +1666,11 @@ bool UnitBase::isOrderExecutable(const UnitOrder& order) const {
 
         case UnitOrderType::Capture: {
             const auto* pStructure = dynamic_cast<const StructureBase*>(currentGame->getObjectManager().getObject(order.targetID));
+            if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
+               zone != nullptr && ZoneStructure::garrisonsEnabled()) {
+                return dynamic_cast<const InfantryBase*>(this) != nullptr && canCaptureStructures()
+                    && (zone->getOwner()->getTeamID() != owner->getTeamID() || zone->mayEnterGarrison(this));
+            }
             return dynamic_cast<const InfantryBase*>(this) != nullptr
                 && (!ModManager::instance().isTornieFamilyContentActive() || canCaptureStructures())
                 && pStructure != nullptr
@@ -2218,6 +2252,59 @@ void UnitBase::setPickedUp(UnitBase* newCarrier) {
     clearPath();
 }
 
+bool UnitBase::captureTargetHeld() const {
+    const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer());
+    return zone != nullptr && zone->heldAgainst(this);
+}
+
+void UnitBase::enterGarrison() {
+    clearOrderQueue();
+    cancelCarryallPickup();
+    // The same hiding a Carryall's lift does; no carrier, so no target is kept.
+    setPickedUp(nullptr);
+    setTarget(nullptr);
+    attackPos.invalidate();
+    attackMode = GUARD;
+    destination.invalidate();
+}
+
+bool UnitBase::fireFromGarrison(const ObjectBase* pObject, const Coord& muzzle, const Coord& fromTile) {
+    if(pObject == nullptr || !garrisonWeaponReady()) return false;
+    Coord centerPoint = muzzle;
+    Coord targetCenterPoint = pObject->getClosestCenterPoint(fromTile);
+    const bool bAirBullet = pObject->isAFlyingUnit();
+    int currentBulletType = bulletType;
+    Sint32 currentWeaponDamage = currentGame->objectData.data[itemID][getProductionHouseID()].weapondamage;
+    if(ModManager::instance().isTornieFamilyContentActive()) {
+        currentWeaponDamage = owner->radarAttackDamage(itemID, currentWeaponDamage);
+    }
+    // As attack(): a Trooper uses its gun up close and loses a quarter of its rocket's damage further out.
+    if(getItemID() == Unit_Trooper && !bAirBullet
+       && (!ModManager::instance().isTornieFamilyContentActive() || currentBulletType != Bullet_Flame)) {
+        if(distanceFrom(centerPoint, targetCenterPoint) <= 2*TILESIZE) {
+            currentBulletType = Bullet_ShellSmall;
+        } else {
+            currentWeaponDamage -= currentWeaponDamage/4;
+        }
+    }
+    if(ModManager::instance().isTornieFamilyContentActive()
+       && (getItemID() == Unit_Trooper || getItemID() == Unit_FlameTrooper)
+       && currentBulletType == Bullet_Flame) {
+        currentWeaponDamage = static_cast<Trooper*>(this)->flameWeaponDamage(currentWeaponDamage);
+    }
+    bulletList.push_back(new Bullet(objectID, &centerPoint, &targetCenterPoint, currentBulletType,
+                                    currentWeaponDamage, bAirBullet, pObject));
+    currentGameMap->viewMap(pObject->getOwner()->getHouseID(), fromTile, 2);
+    lastFiredBulletType = currentBulletType;
+    if(currentGameMap->tileExists(fromTile)) {
+        // playAttackSound() plays at the unit's own (hidden) location.
+        soundPlayer->playSoundAt(lastFiredBulletType == Bullet_ShellSmall || getItemID() == Unit_Soldier
+                                     ? Sound_Gun : Sound_RocketSmall, fromTile);
+    }
+    primaryWeaponTimer = getWeaponReloadTime();
+    return true;
+}
+
 FixPoint UnitBase::getMovementSpeedFactor() const {
     if(!ModManager::instance().isTornieFamilyContentActive() || slowTimer <= 0
        || isHouseFaction(static_cast<HOUSETYPE>(owner->getFactionID()), HOUSE_KLESHMERSH)) {
@@ -2436,7 +2523,9 @@ void UnitBase::setTarget(const ObjectBase* newTarget) {
         && (pNewTarget->getItemID() == Structure_RepairYard)
         // An explicit move onto the captor's repair yard must not turn into a repair trip
         // for a deviated unit: without the booking it never reaches setGettingRepaired().
-        && isEligibleForRepair()) {
+        && isEligibleForRepair()
+        // Infantry under Hospital Care are healed at Hospitals; a yard never repairs them.
+        && !DuneCity::HospitalCare::replacesRepairYard(this)) {
         static_cast<RepairYard*>(pNewTarget)->book();
         goingToRepairYard = true;
     }
@@ -2529,7 +2618,14 @@ void UnitBase::targeting() {
             // Refresh target if current one is out of weapon range
             if(target && !attackPos && !forced && 
                (attackMode == GUARD || attackMode == AREAGUARD || attackMode == AMBUSH || attackMode == HUNT)) {
-                if(!isInWeaponRange(target.getObjPointer())) {
+                bool scriptedTeamTarget = false;
+                if(isByScenario() && attackMode == HUNT) {
+                    for(const auto& player : owner->getPlayerList())
+                        if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
+                            scriptedTeamTarget |= campaign->keepsScenarioTeamTarget(this);
+                }
+                if(scriptedTeamTarget) findTargetTimer = MILLI2CYCLES(1*1000);
+                else if(!isInWeaponRange(target.getObjPointer())) {
                     const ObjectBase* pNewTarget = findTarget();
 
                     if(pNewTarget != nullptr) {
@@ -3175,6 +3271,29 @@ bool UnitBase::update() {
     return true;
 }
 
+namespace {
+
+bool hasOriginalCampaignAI(const House* house) {
+    for(const auto& player : house->getPlayerList())
+        if(const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get()))
+            if(campaign->usesOriginalRules()) return true;
+    return false;
+}
+
+// Dune II "unveiled to the player": a house of this team has had the tile in sight. "Start
+// with Explored Map" marks every tile explored for everyone, so there only recorded sight counts.
+bool tileSeenByTeam(const Tile& tile, int teamID) {
+    const bool preExplored = currentGame->getGameInitSettings().getGameOptions().startWithExploredMap;
+    for(int h = 0; h < NUM_HOUSES; ++h) {
+        const auto* house = currentGame->getHouse(h);
+        if(house != nullptr && house->getTeamID() == teamID && tile.isExploredByHouse(h)
+           && (!preExplored || tile.getLastAccess(h) != 0)) return true;
+    }
+    return false;
+}
+
+} // namespace
+
 void UnitBase::updateVisibleUnits() {
     if(isAFlyingUnit()) {
         return;
@@ -3213,9 +3332,20 @@ void UnitBase::updateVisibleUnits() {
             
             // ORIGINAL AI: Ground-only contact triggers mutual activation (unit.c:3111-3116)
             // Only ground units (not wingers/carryalls/ornithopters) activate AI
-            if(isAGroundUnit() && !isAFlyingUnit()) {
-                pHouse->activateAI();        // Observing house activates
-                getOwner()->activateAI();    // Unit's house also activates (mutual)
+            if(isAGroundUnit() && !isAFlyingUnit() && (!pHouse->isAIActivated() || !getOwner()->isAIActivated())) {
+                const bool ownerOriginal = hasOriginalCampaignAI(getOwner());
+                const bool observerOriginal = hasOriginalCampaignAI(pHouse);
+                // The object visibility flag tested above is set for every deployed unit, so
+                // the pre-9886 controller (and every other one) is activated at the first
+                // update. An original-rules Campaign AI house wakes as in Dune II: only once
+                // the other side's own sight has uncovered this ground unit. Two such houses
+                // at war with nobody else present wake each other by sight (no Dune II case).
+                if((!ownerOriginal && !observerOriginal)
+                   || OriginalCampaignPolicy::sightActivates(observerOriginal && !ownerOriginal, false, false,
+                                                             tileSeenByTeam(*pTile, pHouse->getTeamID()))) {
+                    pHouse->activateAI();        // Observing house activates
+                    getOwner()->activateAI();    // Unit's house also activates (mutual)
+                }
             }
         }
 

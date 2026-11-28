@@ -108,6 +108,9 @@ def injected_main(source):
     includes = ['tests/network/spectator-end-probe.inc']
     if sys.platform == 'win32':
         includes.insert(0, 'tests/ai/windows-probe-compat.inc')
+    elif sys.platform.startswith('linux'):
+        # libstdc++ needs RobustList's iterator traits first (probe_profile.native_probe_includes).
+        includes.insert(0, 'tests/ai/robustlist-iterator-traits.inc')
     pos = main.index('int main(')
     return main[:pos] + ''.join('#include "' + (source / p).as_posix() + '"\n' for p in includes) + main[pos:]
 
@@ -388,7 +391,8 @@ CASES = {
                              SE_STALL_MS='25000', SE_STALL_AT='cycle:1200', SE_HOST_LEAVE='decision'),
 }
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import default_build_dir, managed_profile
+from probe_profile import (NATIVE_TARGET, default_build_dir, managed_profile, native_build_commands,
+                           native_probe_binary, native_probe_relative)
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
 parser.add_argument('--output-dir', type=Path)
@@ -415,6 +419,8 @@ for c in cases:
 remote = dict(item.split('=', 1) for item in args.remote)
 for role in remote:
     if role not in ('Host', 'Partner', 'Viewer'): parser.error('unknown role ' + role)
+if remote and sys.platform != 'darwin':
+    parser.error('--remote stages the macOS probe app; drive it from a Mac (local runs work on Linux too)')
 machines = json.loads(args.machines.read_text()) if args.machines.is_file() else {}
 pc = machines.get('pc', {})
 windows_roles = {role for role, host in remote.items() if host in ('pc', pc.get('ssh'))}
@@ -433,7 +439,7 @@ if not (os.environ.get('PHP_BIN') or shutil.which('php8.3') or shutil.which('php
         or Path('/opt/homebrew/bin/php').exists()):
     if windows_roles:
         parser.error('Crossplay requires local PHP signaling; it cannot be skipped')
-    print('SKIPPED: the signaling service needs PHP (brew install php)')
+    print('SKIPPED: the signaling service needs PHP (brew install php; apt-get install php8.3-cli)')
     sys.exit(77)
 if not os.environ.get('PHP_BIN') and not shutil.which('php') and Path('/opt/homebrew/bin/php').exists():
     os.environ['PHP_BIN'] = '/opt/homebrew/bin/php'
@@ -448,12 +454,11 @@ if any((out / case).exists() for case in cases):
 # Never overwrite an earlier remote run's app, evidence, settings or assets.
 args.remote_dir = args.remote_dir.rstrip('/') + '/' + run_token
 
-app = out / 'spectator-end-probe.app/Contents'
-binary = args.binary.resolve() if args.binary else app / 'MacOS/spectator-end-probe'
+binary = args.binary.resolve() if args.binary else out / native_probe_relative('spectator-end-probe')
 if not args.binary:
     subprocess.run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
-    target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-    lines = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+    target = NATIVE_TARGET
+    lines = native_build_commands(build)
     main = injected_main(root)
     source, obj = out / 'spectator-end-probe-main.cpp', out / 'spectator-end-probe-main.o'
     source.write_text(main)
@@ -461,10 +466,8 @@ if not args.binary:
     game_source, game_obj = out / 'spectator-end-probe-game.cpp', out / 'spectator-end-probe-game.o'
     game_source.write_text(injected_game(root))
     game_cc = mac_probe_command(lines, 'Game.cpp', game_source, game_obj)
-    (app / 'MacOS').mkdir(parents=True, exist_ok=True)
-    if not (app / 'Resources').exists():
-        (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    link = shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
+    native_probe_binary(build, out, 'spectator-end-probe')  # the private bundle/data link
+    link =shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
     link = link[link.index('&&') + 1:]
     link = link[:link.index('&&')]
     link[link.index('-o') + 1] = str(binary)

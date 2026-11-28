@@ -15,6 +15,10 @@
 // (game-perf.py --source copies it into a throwaway tag worktree).
 #include <players/AIDecisionLog.h>
 #include <units/GroundUnit.h>
+#include <Explosion.h>
+#include <FileClasses/LoadSavePNG.h>
+#include <ScreenBorder.h>
+#include <misc/draw_util.h>
 
 #include <algorithm>
 #include <array>
@@ -274,6 +278,61 @@ inline void runMainLoop(Game& game, Uint32 cycles) {
     std::fflush(stdout);
 }
 
+
+/// BALANCE_PERF_SABOTEUR_SHOTS=DIR (game-perf.py --saboteur-shots): what a spectator is shown of
+/// Saboteurs. Every 64 cycles the view is centred on a live Saboteur, the frame is rendered through
+/// Game::renderFrame() and written to DIR as a PNG; when a Saboteur disappears, three frames are
+/// taken where it last stood (its blast). At most 80 frames. Diagnostic only: the simulation is
+/// not touched, only the view.
+struct SaboteurShots {
+    std::string dir;
+    int shots = 0;
+    std::map<Uint32, Coord> lastSeen;
+    std::vector<std::pair<Coord, Uint32>> gone;    // where a Saboteur vanished, and its object id
+    int goneFrames = 0;
+
+    SaboteurShots() { if (const char* d = std::getenv("BALANCE_PERF_SABOTEUR_SHOTS")) dir = d; }
+
+    void shoot(Game& game, const Coord& world, const char* what, Uint32 id) {
+        screenborder->setNewScreenCenter(world);
+        game.renderFrame();
+        auto surface = renderReadSurface(renderer);
+        char name[256];
+        std::snprintf(name, sizeof name, "%s/%06d-%s-%u.png", dir.c_str(), static_cast<int>(game.getGameCycleCount()), what, id);
+        const int saved = surface ? SavePNG(surface.get(), name) : -1;
+        const ObjectBase* object = game.getObjectManager().getObject(id);
+        const Coord tile(world.x / TILESIZE, world.y / TILESIZE);
+        const Tile* t = currentGameMap->tileExists(tile) ? currentGameMap->getTile(tile) : nullptr;
+        bool listed = false;
+        if (t != nullptr && object != nullptr)
+            for (auto oid : t->getInfantryList()) listed = listed || oid == id;
+        SDL_Log("SABOTEUR_SHOT: file=%s saved=%d observing=%d local_house=%d id=%u alive=%d at=%d,%d infantry_listed=%d "
+                "visible_any=%d explosions=%d zoom=%d",
+                name, saved, game.isObserving() ? 1 : 0, pLocalHouse ? pLocalHouse->getHouseID() : -1, id,
+                object != nullptr ? 1 : 0, tile.x, tile.y, listed ? 1 : 0, object && object->isVisible() ? 1 : 0,
+                static_cast<int>(game.getExplosionList().size()), currentZoomlevel);
+        ++shots;
+    }
+
+    void step(Game& game) {
+        if (dir.empty() || shots >= 80) return;
+        std::map<Uint32, Coord> now;
+        for (const auto* unit : unitList)
+            if (unit->getItemID() == Unit_Saboteur && unit->isActive()) now[unit->getObjectID()] = unit->getCenterPoint();
+        for (const auto& [id, at] : lastSeen)
+            if (!now.count(id)) gone.push_back({at, id});
+        lastSeen = now;
+        if (!gone.empty()) {
+            shoot(game, gone.front().first, "gone", gone.front().second);
+            if (++goneFrames >= 3) { gone.erase(gone.begin()); goneFrames = 0; }
+            return;
+        }
+        if (game.getGameCycleCount() % 64 != 0 || now.empty()) return;
+        const auto pick = std::next(now.begin(), (game.getGameCycleCount() / 64) % now.size());
+        shoot(game, pick->second, "live", pick->first);
+    }
+};
+
 /// Plays @a cycles game cycles (or to the end of the match) and prints one GAME_PERF_RESULT line.
 /// @a perCycle runs before every cycle (the probe's digest hook); it is not timed.
 inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle) {
@@ -304,6 +363,7 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
     };
     std::array<double, 10> counterTotals{}, counterLast = counters();
     int unitsMax = 0;
+    SaboteurShots saboteurShots;
     const Uint32 first = game.getGameCycleCount();
     const auto loopStart = Clock::now();
     while (!game.finished && game.getGameCycleCount() - first < cycles) {
@@ -317,6 +377,7 @@ inline void run(Game& game, Uint32 cycles, const std::function<void()>& perCycle
         const auto start = Clock::now();
         const double cpuStart = threadCpuMs();
         game.updateGameState();
+        saboteurShots.step(game);
         Cycle sample;
         sample.cpu = static_cast<float>(threadCpuMs() - cpuStart);
         sample.sim = static_cast<float>(msSince(start));

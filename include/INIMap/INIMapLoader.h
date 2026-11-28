@@ -38,6 +38,10 @@ public:
     INIMapLoader(Game* pGame, const std::string& mapname, const std::string& mapdata = "");
     ~INIMapLoader();
 
+    /// The tech level a match on this map starts at unless the Custom Game "Tech level" rule
+    /// replaces it: [BASIC] TechLevel, else 8 (9 for Tornie content).
+    static int authoredTechLevel(const INIFile& map);
+
 private:
     void load();
     void loadMap();
@@ -49,12 +53,16 @@ private:
     void loadExtraCoopForces();
     void loadAITeams();
     void loadView();
+    /// DuneCity: [OBJECTIVES] goals and [EVENTS] breaches (docs/city-campaign.md).
+    void loadObjectivesAndEvents();
 
     House* getOrCreateHouse(int house);
     HOUSETYPE getHouseID(const std::string& name);
 
     Game* pGame;
     bool originalCoopOwners = false;
+    /// DuneCity campaign [DIFFICULTY]: the strongest enemy house's strength (per mille), 0 before any.
+    int enemyStrengthPermille = 0;
     std::map<std::string, HOUSETYPE> housename2house;
 };
 

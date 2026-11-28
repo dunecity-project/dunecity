@@ -21,6 +21,8 @@ import tempfile
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import NATIVE_TARGET, native_build_commands, native_probe_binary, native_probe_includes  # noqa: E402
+NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
 from probe_profile import scratch_dir, require_free_space, discard_profile_assets, copy_revisions, prune_runs, MINIMAL_INI
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -52,8 +54,8 @@ if args.prebuilt_probe:
     binary = args.prebuilt_probe.resolve()
     compiled_fixture = binary.parents[3] / 'tornie-state-probe.inc'
 else:
-    target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-    lines = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+    target = NATIVE_TARGET
+    lines = native_build_commands(build)
     main = (source_root / 'src/main.cpp').read_text()
     needle = 'int menuResult = MainMenu().showMenu();'
     if main.count(needle) != 1:
@@ -63,7 +65,7 @@ else:
     position = main.index('int main(')
     compiled_fixture = out / 'tornie-state-probe.inc'
     compiled_fixture.write_bytes((root / 'tests/ai/tornie-state-probe.inc').read_bytes())
-    main = main[:position] + '#include "' + str(compiled_fixture) + '"\n' + main[position:]
+    main = main[:position] + NATIVE_INCLUDES + '#include "' + str(compiled_fixture) + '"\n' + main[position:]
     source = out / 'tornie-state-main.cpp'
     source.write_text(main)
     cc = shlex.split(next(line for line in lines if ' -c ' in line and '/src/main.cpp' in line))
@@ -78,10 +80,7 @@ else:
     cc[cc.index('-o') + 1] = str(obj)
     cc[cc.index('-c') + 1] = str(source)
     cc += ['-fno-access-control']
-    app = out / 'tornie-state-probe.app/Contents'
-    (app / 'MacOS').mkdir(parents=True)
-    (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    binary = app / 'MacOS/tornie-state-probe'
+    binary = native_probe_binary(build, out, 'tornie-state-probe')
     link = shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
     link = link[link.index('&&')+1:]
     link = link[:link.index('&&')]

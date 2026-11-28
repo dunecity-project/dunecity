@@ -57,7 +57,7 @@ Force::TargetKey targetKeyOf(const ObjectBase* object) {
     key.id = object->getObjectID();
     key.health = object->getHealth().lround();
     if (object->isAStructure()) {
-        key.cls = object->getItemID() == Structure_Wall ? Force::Wall
+        key.cls = object->getItemID() == Structure_Wall || object->getItemID() == Structure_Park ? Force::Wall
             : object->canAttack() ? Force::ArmedBuilding : Force::Building;
     } else {
         key.cls = object->canAttack() && mobileCombatItem(object->getItemID()) ? Force::ArmedUnit : Force::Unarmed;
@@ -187,9 +187,7 @@ QuantBotVanillaPolicy::Plan QuantBot::vanillaBoldPlan(QuantBotVanillaPolicy::Obs
 bool QuantBot::citySpiceScope() const {
     if (!autonomousCustomArmy() || fighterOnly() || !currentGame->isCitySimEnabled()
         || getGameInitSettings().getModName() != "dunecity") return false;
-    const auto type = getGameInitSettings().getGameType();
-    return (type == GameType::CustomGame || type == GameType::CustomMultiplayer)
-        && getGameInitSettings().getInitialSpiceTilePermille() > 0;
+    return customRulesGame() && getGameInitSettings().getInitialSpiceTilePermille() > 0;
 }
 
 bool QuantBot::cityEconomyExperimentScope() const {
@@ -364,6 +362,7 @@ const QuantBot::CityBoomSurvey& QuantBot::cityBoomSurvey() const {
         if (structure->getOwner() != getHouse() || structure->getHealth() <= 0 || !structure->isActive()) continue;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+            case Structure_Park:
                 continue;
             default: break;
         }
@@ -417,6 +416,7 @@ const QuantBot::CityBoomSurvey& QuantBot::cityBoomSurvey() const {
             || !enemy[structure->getOwner()->getHouseID()] || structure->getHealth() <= 0 || !structure->isActive()) continue;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+            case Structure_Park:
                 continue;
             default: break;
         }
@@ -546,7 +546,7 @@ void QuantBot::vanillaReactiveSurvey(QuantBotVanillaPolicy::Observation& receipt
         if (!structure->getOwner() || structure->getHealth() <= 0) return false;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
-            case Structure_Road: case Structure_PowerLine: return false;
+            case Structure_Road: case Structure_PowerLine: case Structure_Park: return false;
             default: return true;
         }
     };
@@ -706,8 +706,7 @@ int QuantBot::vultureOpportunity(const std::vector<Uint32>& strikeUnits) {
     const int level = botConfig().force.ffaVultureLevel;
     if (level == 0 || !autonomousCustomArmy()) return -1;
     const auto& init = currentGame->getGameInitSettings();
-    const auto type = init.getGameType();
-    if (type != GameType::CustomGame && type != GameType::CustomMultiplayer) return -1;
+    if (!customRulesGame()) return -1;
     if (init.getModName() != "vanilla" && init.getModName() != "dunecity") return -1;
     // Scope is the original occupied controller roster, not surviving runtime houses.
     std::array<int, NUM_HOUSES> teams;
@@ -779,7 +778,7 @@ const ObjectBase* QuantBot::vultureObjective(const UnitBase* lead, int team) con
             || structure->getHealth() <= 0) continue;
         switch (structure->getItemID()) {
             case Structure_Wall: case Structure_Slab1: case Structure_Slab4:
-            case Structure_Road: case Structure_PowerLine: continue;
+            case Structure_Road: case Structure_PowerLine: case Structure_Park: continue;
             default: break;
         }
         int score = tiles(lead->getLocation(), structure->getLocation());
@@ -1121,8 +1120,7 @@ int QuantBot::perimeterTurrets() const {
 }
 
 bool QuantBot::combatTargetTuningActive() const {
-    const auto& settings = botConfig().force;
-    if (builderOnly() || (!effectiveFocusFireLevel() && !settings.targetPriorityLevel) || !currentGame) return false;
+    if (builderOnly() || (!effectiveFocusFireLevel() && !effectiveTargetPriorityLevel()) || !currentGame) return false;
     return currentGame->getGameInitSettings().getInitialSpiceTilePermille() > 0;
 }
 
@@ -1152,6 +1150,35 @@ bool QuantBot::openingOpenMapNative() const {
     for (const auto& house : init.getHouseInfoList())
         if (!house.playerInfoList.empty()) ++controllers;
     return QuantBotMapScopePolicy::openFlatCrowd(init.getInitialTerrain(), controllers);
+}
+
+int QuantBot::cityCampaignBrutalAttackPercent() const {
+    return duneCityCampaignGame() && cityCampaignSkill(QuantBotCityCampaignSkills::EarlyAttack)
+        ? botConfig().force.cityCampaignBrutalAttackPercent : 0;
+}
+
+bool QuantBot::duneCityCampaignGame() const {
+    if (!currentGame) return false;
+    if (!duneCityCampaignGameCache) duneCityCampaignGameCache = currentGame->getGameInitSettings().isDuneCityCampaign();
+    return *duneCityCampaignGameCache;
+}
+
+bool QuantBot::cityCampaignSkill(QuantBotCityCampaignSkills::Skill skill) const {
+    const auto& force = botConfig().force;
+    return QuantBotCityCampaignSkills::hasSkill(skill, static_cast<int>(difficulty), force.cityCampaignSkillTier[skill],
+        force.cityCampaignSkillLadder && duneCityCampaignGame());
+}
+
+int QuantBot::cityCampaignThinkPasses() const {
+    const auto& force = botConfig().force;
+    return QuantBotCityCampaignSkills::thinkPasses(static_cast<int>(difficulty), force.cityCampaignThinkPasses,
+        force.cityCampaignSkillLadder && duneCityCampaignGame());
+}
+
+int QuantBot::effectiveTargetPriorityLevel() const {
+    // HarvesterTargets: the campaign skill shoots harvesters first, then artillery; an explicit level wins.
+    const int level = botConfig().force.targetPriorityLevel;
+    return level || !cityCampaignSkill(QuantBotCityCampaignSkills::HarvesterTargets) ? level : 2;
 }
 
 int QuantBot::effectiveFocusFireLevel() const {
@@ -1195,10 +1222,9 @@ bool QuantBot::focusFire(const UnitBase* unit, const std::vector<const ObjectBas
     const int reach = unit->getWeaponRange() + 3;
     const ObjectBase* best = nullptr;
     Force::TargetKey bestKey;
-    const auto& settings = botConfig().force;
     const bool tuning = combatTargetTuningActive();
     const int focusLevel = tuning ? effectiveFocusFireLevel() : 0;
-    const int priorityLevel = tuning ? settings.targetPriorityLevel : 0;
+    const int priorityLevel = tuning ? effectiveTargetPriorityLevel() : 0;
     const auto keyOf = [&](const ObjectBase* object) {
         auto key = targetKeyOf(object);
         if (!tuning) return key;
@@ -1522,6 +1548,7 @@ bool QuantBot::knownEnemyStructure(const StructureBase* structure) const {
         || structure->getHealth() <= 0) return false;
     switch (structure->getItemID()) {
         case Structure_Wall: case Structure_Slab1: case Structure_Slab4: case Structure_Road: case Structure_PowerLine:
+        case Structure_Park:
             return false;
         default: break;
     }
@@ -2051,4 +2078,222 @@ void QuantBot::updateSplits() {
         }
         ++it;
     }
+}
+
+// ---- Turret clusters and the held mass (TurretClusters / MassHold, default off) ---------------
+//
+// docs/formations.md, "Turret clusters and the held mass". Stefan, 2026-11-21 (save nobuildup):
+// a house that is losing defends with rocket turret clusters and builds its army up, instead of
+// sending each new unit into a defence it cannot win.
+
+bool QuantBot::turretClustersActive() const {
+    return botConfig().force.turretClusters && gameMode == GameMode::Custom && outnumberedByEstimate();
+}
+
+int QuantBot::clusterTurretGoal() const {
+    if (!turretClustersActive()) return 0;
+    return Force::clusterTurretGoal(teamGroundArmyValue(), enemyThreatEstimate());
+}
+
+int QuantBot::clusterTurrets() const {
+    using QuantBotInternal::clusterCoreRank;
+    using QuantBotInternal::footprintDistance;
+    std::vector<std::pair<Coord, Coord>> cores;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && clusterCoreRank(structure->getItemID()) >= 0)
+            cores.emplace_back(structure->getLocation(), structure->getStructureSize());
+    auto nearCore = [&](Coord p) {
+        for (const auto& [origin, size] : cores)
+            if (footprintDistance(p, origin, size) <= Force::kClusterReachTiles) return true;
+        return false;
+    };
+    int count = 0;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+            && (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
+            && nearCore(structure->getLocation())) ++count;
+    for (const auto& entry : reservedStructures)
+        if ((entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)
+            && nearCore(entry.second.location)) ++count;
+    return count;
+}
+
+int64_t QuantBot::turretSupportNear(const ObjectBase* building) const {
+    if (!building) return 0;
+    const bool rocketsDark = currentGame->getGameInitSettings().getGameOptions().rocketTurretsNeedPower
+        && getHouse()->getProducedPower() < getHouse()->getPowerRequirement();
+    int64_t support = 0;
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        const Uint32 item = structure->getItemID();
+        if (item != Structure_GunTurret && (item != Structure_RocketTurret || rocketsDark)) continue;
+        if (tiles(structure->getLocation(), building->getClosestPoint(structure->getLocation()))
+            > Force::kMassTurretSupportTiles) continue;
+        const int price = currentGame->objectData.data[item][structure->getOriginalHouseID()].price;
+        support += (FixPoint(price) * structure->getHealth() / structure->getMaxHealth()).lround();
+    }
+    return support;
+}
+
+bool QuantBot::massHoldActive() const {
+    // Vanilla and campaign games are left alone: there MassHold measured level with a negative
+    // point estimate and alone lost the vanilla smoke game Hard v Easy 29505 (2026-11-22).
+    return botConfig().force.massHold && gameMode == GameMode::Custom
+        && currentGame && currentGame->isCitySimEnabled();
+}
+
+int QuantBot::gatherHeldMass(const std::vector<Uint32>& ids) {
+    Coord point = armyAssemblyAnchor();
+    if (point.isInvalid()) point = findBaseCentre(getHouse()->getHouseID());
+    if (point.isInvalid()) return 0;
+    const int radius = BlobWavePolicy::blobRadius(int(ids.size())) + 2;
+    std::set<int64_t> reserved;
+    int ordered = 0;
+    for (const Uint32 id : ids) {
+        const auto* unit = dynamic_cast<const UnitBase*>(getObject(id));
+        // A hunter is on an offensive; holding a defence never recalls it.
+        if (!unit || !unit->isActive() || !unit->isRespondable() || unit->getOwner() != getHouse()
+            || unit->getAttackMode() == HUNT) continue;
+        // Already at home: it stands in Area Guard and fights what comes into reach.
+        if (tiles(unit->getLocation(), point) <= radius) continue;
+        const Coord destination = unit->getDestination();
+        if (unit->isMoving() && destination.isValid() && tiles(destination, point) <= radius) continue;
+        Coord slot = huntPartySlot(unit, point, radius, reserved);
+        if (slot.isInvalid()) slot = point;
+        doSetAttackMode(unit, AREAGUARD);
+        doMove2Pos(unit, slot.x, slot.y, false);
+        groundSquad.erase(id);
+        ++ordered;
+    }
+    return ordered;
+}
+
+// ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) --------------------
+//
+// docs/formations.md, "Counter-punch, leader raids and ganging up". A weak house cannot beat the
+// leader's army head-on; these choose the moment (a broken attack, the leader's army away) or the
+// target (a runaway leader). Read from live state and the saved wave/defence state only.
+
+bool QuantBot::directedWaveSwitches() const {
+    const auto& force = botConfig().force;
+    return (force.counterPunch || force.leaderRaid || force.gangUpLeader)
+        && autonomousCustomArmy() && !campaignPolicyApplies();
+}
+
+QuantBot::DirectedWave QuantBot::directedWave() const {
+    DirectedWave out;
+    if (!directedWaveSwitches()) return out;
+    const auto& force = botConfig().force;
+    const int myTeam = getHouse()->getTeamID();
+    const Uint32 now = getGameCycleCount();
+    struct Enemy { const UnitBase* unit; int64_t value; int house; };
+    std::vector<Enemy> enemies;
+    std::array<int64_t, NUM_HOUSES> army{};
+    for (const auto* unit : getUnitList()) {
+        if (!unit->getOwner() || unit->getHealth() <= 0 || !unit->isActive() || !unit->isAGroundUnit()
+            || !unit->canAttack() || !mobileCombatItem(unit->getItemID())) continue;
+        const House* owner = unit->getOwner();
+        if (owner->getTeamID() == myTeam || owner->isNatives() || !unit->isVisible(myTeam)) continue;
+        const int house = owner->getHouseID();
+        if (house < 0 || house >= NUM_HOUSES) continue;
+        const int64_t value = healthValue(unit);
+        army[house] += value;
+        enemies.push_back({unit, value, house});
+    }
+    out.own = ownGroundArmyValue();
+    int leader = -1;
+    for (int h = 0; h < NUM_HOUSES; ++h)
+        if (army[h] > 0 && (leader < 0 || army[h] > army[leader])) leader = h;
+    int otherHouses = 0;
+    for (int h = 0; h < NUM_HOUSES; ++h)
+        if (h != leader && army[h] > 0) { out.others += army[h]; ++otherHouses; }
+    if (leader >= 0) out.leader = army[leader];
+    auto teamOf = [](int house) {
+        const House* h = currentGame ? currentGame->getHouse(house) : nullptr;
+        return h ? h->getTeamID() : -1;
+    };
+    // A tracked wave still hunting, or one that left less than kDirectedRepeatMs ago, blocks a
+    // directed launch (the wave itself decides what happens next).
+    bool waveOut = false;
+    for (const Uint32 id : customWave.members)
+        if (const auto* member = dynamic_cast<const UnitBase*>(getObject(id));
+            member && member->getOwner() == getHouse() && member->getHealth() > 0 && member->getAttackMode() == HUNT) {
+            waveOut = true;
+            break;
+        }
+    const bool rested = customWave.launched == 0
+        || ArmyPosturePolicy::elapsed(now, customWave.launched) >= Uint32(MILLI2CYCLES(Force::kDirectedRepeatMs));
+    const bool free = !waveOut && rested;
+    if (force.counterPunch) {
+        bool recent = false;
+        for (const auto& [key, cycle] : defenceResponseCycles)
+            if (key % 2 == 0 && ArmyPosturePolicy::elapsed(now, cycle) <= Uint32(MILLI2CYCLES(Force::kCounterWindowMs))) {
+                recent = true;
+                break;
+            }
+        if (recent) {
+            out.watch = true;
+            bool clear = true;
+            for (const auto& enemy : enemies) {
+                for (const auto* structure : getStructureList())
+                    if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+                        && tiles(enemy.unit->getLocation(), structure->getClosestPoint(enemy.unit->getLocation()))
+                            <= Force::kCounterClearTiles) {
+                        clear = false;
+                        break;
+                    }
+                if (!clear) break;
+            }
+            if (clear && free) {
+                out.kind = "counter_punch";
+                out.bypass = true;
+                const Coord home = findBaseCentre(getHouse()->getHouseID());
+                std::array<int64_t, NUM_HOUSES> near{};
+                if (home.isValid())
+                    for (const auto& enemy : enemies)
+                        if (tiles(enemy.unit->getLocation(), home) <= Force::kCounterAttackerTiles) near[enemy.house] += enemy.value;
+                int attacker = -1;
+                for (int h = 0; h < NUM_HOUSES; ++h)
+                    if (near[h] > 0 && (attacker < 0 || near[h] > near[attacker])) attacker = h;
+                out.team = attacker >= 0 ? teamOf(attacker) : -1;
+                return out;
+            }
+        }
+    }
+    if (force.leaderRaid && leader >= 0) {
+        const Coord base = findBaseCentre(leader);
+        if (base.isValid()) {
+            int64_t away = 0, guard = 0;
+            for (const auto& enemy : enemies) {
+                if (enemy.house != leader) continue;
+                const int distance = tiles(enemy.unit->getLocation(), base);
+                if (distance > Force::kRaidAwayTiles) away += enemy.value;
+                if (distance <= Force::kRaidHomeTiles) guard += enemy.value;
+            }
+            for (const auto* structure : getStructureList()) {
+                if (!structure->getOwner() || structure->getOwner()->getHouseID() != leader || structure->getHealth() <= 0
+                    || !structure->canAttack() || !knownEnemyStructure(structure)
+                    || tiles(structure->getLocation(), base) > Force::kRaidHomeTiles) continue;
+                const int price = currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price;
+                guard += (FixPoint(price) * structure->getHealth() / structure->getMaxHealth()).lround();
+            }
+            out.away = away;
+            out.guard = guard;
+            if (away * 10000 >= army[leader] * Force::kRaidAwayBps) {
+                out.watch = true;
+                if (free && out.own * 10000 >= guard * Force::kRaidStrengthBps) {
+                    out.kind = "leader_raid";
+                    out.bypass = true;
+                    out.team = teamOf(leader);
+                    return out;
+                }
+            }
+        }
+    }
+    if (force.gangUpLeader && leader >= 0 && otherHouses >= 1 && army[leader] >= out.others
+        && army[leader] * 10000 >= out.own * Force::kGangUpOwnBps) {
+        out.kind = "gang_up";
+        out.team = teamOf(leader);
+    }
+    return out;
 }

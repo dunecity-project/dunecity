@@ -15,6 +15,7 @@
  *  along with Dune Legacy.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <dunecity/CityAircraftPolicy.h>
 #include <GUI/dune/HouseStatsWindow.h>
 #include <GUI/dune/ObservedHouseSelector.h>
 
@@ -36,6 +37,11 @@ namespace {
 constexpr int kStatsWindowWidth = 620;
 constexpr int kStatsWindowHeight = 460;
 constexpr int kRowHeight = 18;
+/// The allocation table's header and its twelve rows are set in 11 point and take 16 lines each,
+/// so that the two rows added below the ten slots fit the 460-line window at 640x480.
+constexpr int kAllocationRowHeight = 16;
+/// Three lines of 10 point under the allocation table.
+constexpr int kAllocationNoteHeight = 40;
 constexpr int kBodyFontSize = 12;
 constexpr int kAllocationNameWidth = 100;
 constexpr int kAllocationPerformanceWidth = 102;
@@ -50,10 +56,11 @@ constexpr int kSideMargin = 12;
 constexpr int kColumnsGap = 10;
 /// Narrowest the type column may become. Longer names keep their ellipsis.
 constexpr int kMinNameColumnWidth = 76;
-/// The two non-combat city aircraft and the two upgraded variants the player
-/// asked to keep out of the unit table.
+/// The traffic helicopter and the two upgraded variants the player asked to keep
+/// out of the unit table. The city airplane is listed since it bombs (Stefan,
+/// 2026-11-23: "include plane in the unit performance stats").
 constexpr int kHiddenUnitTypes[] = {
-    Unit_AmbientAirplane, Unit_AmbientHelicopter, Unit_RocketTrike, Unit_EliteLauncher
+    Unit_AmbientHelicopter, Unit_RocketTrike, Unit_EliteLauncher
 };
 
 /// True for a type the unit table never lists, whatever its counters say.
@@ -150,7 +157,7 @@ HouseStatsWindow::HouseStatsWindow()
     allocationHeader.addWidget(&allocationNameHeader, kAllocationNameWidth);
     allocationHeader.addWidget(&allocationPerformanceHeader, kAllocationPerformanceWidth);
     allocationHeader.addWidget(&allocationGoalHeader, kAllocationGoalWidth);
-    leftVBox.addWidget(&allocationHeader, kRowHeight);
+    leftVBox.addWidget(&allocationHeader, kAllocationRowHeight);
     for(auto& row : allocationRows) {
         configureValueLabel(row.name, Alignment_Left, 11);
         configureValueLabel(row.performance, Alignment_Right, 11);
@@ -158,12 +165,12 @@ HouseStatsWindow::HouseStatsWindow()
         row.box.addWidget(&row.name, kAllocationNameWidth);
         row.box.addWidget(&row.performance, kAllocationPerformanceWidth);
         row.box.addWidget(&row.goal, kAllocationGoalWidth);
-        leftVBox.addWidget(&row.box, kRowHeight);
+        leftVBox.addWidget(&row.box, kAllocationRowHeight);
     }
     allocationNoteLabel.setTextColor(COLOR_LIGHTGREY);
     allocationNoteLabel.setTextFontSize(10);
     allocationNoteLabel.setAlignment(Alignment_Left);
-    leftVBox.addWidget(&allocationNoteLabel, 60);
+    leftVBox.addWidget(&allocationNoteLabel, kAllocationNoteHeight);
     leftVBox.addWidget(Spacer::create());
 
     configureSectionHeading(tableHeadingLabel, _("Units"));
@@ -418,17 +425,73 @@ void HouseStatsWindow::refreshAllocation(const House* house) {
         }
     }
 
-    // Short notes, so the meaning is stated without a paragraph of text in a
-    // narrow column. Kept free of per-cent signs: the numbers above carry those.
-    std::string note = std::string(_("Performance: production score as a multiplier."))
-        + "\n" + _("Goal %: intended share of total army value.")
-        + fmt::sprintf("\n%s %d.%02d%%", _("Infantry cap (separate):"),
-                       snapshot.infantryQuotaBps / 100, snapshot.infantryQuotaBps % 100);
+    // Two types the unit mix does not allocate, each with a row of its own under the ten slots
+    // (Stefan, 2026-11-23: "i can't see the % for troopers or airplanes"). Neither has a goal
+    // share of army value, so the last column holds the number that does govern it and the note
+    // below says which.
+    const int houseID = house->getHouseID();
+    {
+        // The Trooper is the infantry the house raises beside its vehicles. It is scored as a
+        // slot is (credits destroyed per credit of Troopers lost, one price of prior); its per
+        // cent is the infantry cap, the most of the army's value infantry may be.
+        auto& row = allocationRows[kTrooperRow];
+        const auto& trooper = currentGame->objectData.data[Unit_Trooper][houseID];
+        row.name.setText(fitText(unitName(Unit_Trooper), kAllocationNameWidth - 4, 11));
+        if(!trooper.enabled || trooper.price <= 0) {
+            row.performance.setText("-");
+            row.goal.setText("-");
+        } else {
+            const int64_t score = UnitMixPolicy::performanceScore(
+                house->getCombatReward(Unit_Trooper).total(),
+                int64_t(house->getNumLostItems(Unit_Trooper)) * trooper.price * 1000, trooper.price * 1000);
+            row.performance.setText(fmt::sprintf("x%.1f", static_cast<double>(score) / 1000000.0));
+            row.goal.setText(fmt::sprintf("%d.%02d", snapshot.infantryQuotaBps / 100, snapshot.infantryQuotaBps % 100));
+        }
+    }
+    // The city airplane is scored the same way (the value its bombs and crashes destroyed per
+    // credit of planes flown; "include planes in the performance scores so we know how cost
+    // effective it is compared to other units"). It is bought when that score reaches the house's
+    // buy score, so its per cent is the score as a share of the buy score: 100 or more and the
+    // house buys. Shown once the house has an Airport or has flown a plane.
+    const int flights = house->getNumLostItems(Unit_AmbientAirplane);
+    const bool planes = currentGame->isCitySimEnabled()
+        && (flights > 0 || house->getNumItems(Structure_Airport) > 0 || house->getNumItems(Unit_AmbientAirplane) > 0);
+    const int64_t buyScore = bot->getCityPlaneBuyScore();
+    {
+        auto& row = allocationRows[kPlaneRow];
+        if(!planes) {
+            row.name.setText(""); row.performance.setText(""); row.goal.setText("");
+        } else {
+            const int64_t score = DuneCity::CityAircraft::planePerformanceScore(
+                house->getCombatReward(Unit_AmbientAirplane).total(), flights, DuneCity::CityAircraft::planePrice());
+            row.name.setText(fitText(unitName(Unit_AmbientAirplane), kAllocationNameWidth - 4, 11));
+            row.performance.setText(fmt::sprintf("x%.1f", static_cast<double>(score) / 1000000.0));
+            if(buyScore <= 0) {
+                row.goal.setText("-");   // no build pass has set the buy score yet
+            } else {
+                const int64_t bps = std::min<int64_t>(99999, score * 10000 / buyScore);
+                row.goal.setText(fmt::sprintf("%d.%02d", static_cast<int>(bps / 100), static_cast<int>(bps % 100)));
+            }
+        }
+    }
+
+    // Three short lines, so the meaning is stated without a paragraph of text in a narrow column.
+    std::string note = std::string(_("Performance x: score. Goal %: share of army value."))
+        + "\n" + _("Trooper %: infantry cap.") + " ";
     if(snapshot.antiAirFloorBps > 0)
-        note += fmt::sprintf("\n%s %d.%02d%%", _("Anti-air floor:"),
+        note += fmt::sprintf("%s %d.%02d%%", _("Anti-air floor:"),
                              snapshot.antiAirFloorBps / 100, snapshot.antiAirFloorBps % 100);
-    else note += "\n" + std::string(_("- = not allocated in this pass."));
+    else note += _("- = not allocated.");
+    if(planes && buyScore > 0)
+        note += "\n" + fmt::sprintf(_("City Airplane %%: of its buy score x%.1f; buys at 100."),
+                                    static_cast<double>(buyScore) / 1000000.0);
+    else if(planes)
+        note += "\n" + std::string(_("City Airplane %: of its buy score; buys at 100."));
     allocationNoteLabel.setText(note);
+}
+
+std::string HouseStatsWindow::unitName(int itemID) {
+    return itemID == Unit_AmbientAirplane ? std::string(_("City Airplane")) : getItemNameByID(itemID);
 }
 
 void HouseStatsWindow::refreshLedger(const House* house) {
@@ -454,7 +517,7 @@ void HouseStatsWindow::refreshLedger(const House* house) {
         // it is disabled.
         const bool anyData = active > 0 || reward.kills > 0 || deaths > 0 || damageHp > 0;
         if(!anyData && !currentGame->objectData.data[item][houseID].enabled) continue;
-        ledger.push_back({static_cast<Uint32>(item), getItemNameByID(item),
+        ledger.push_back({static_cast<Uint32>(item), unitName(item),
                           active, reward.kills, deaths, damageHp});
     }
 }

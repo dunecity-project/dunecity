@@ -686,7 +686,7 @@ MapEditorInterface::MapEditorInterface(MapEditor* pMapEditor)
         editorModeStructs_HBoxCityCivic.addWidget(HSpacer::create(2));
         editorModeStructs_HBoxCityCivic.addWidget(&editorModeStructs_Stadium);
 
-        editorModeStructs_VBox.addWidget(&editorModeStructs_HBoxCityAirport, 3*D2_TILESIZE + 5);
+        editorModeStructs_VBox.addWidget(&editorModeStructs_HBoxCityAirport, 4*D2_TILESIZE + 5);   // the Airport is 4x4
         editorModeStructs_HBoxCityAirport.addWidget(&editorModeStructs_Airport);
         editorModeStructs_HBoxCityAirport.addWidget(Spacer::create());
     }

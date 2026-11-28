@@ -1,3 +1,4 @@
+#include <sstream>
 // Included only by campaign-balance-probe.inc (run-campaign-balance.py --match-sides, driven by
 // tests/ai/vanilla-match.py).
 //
@@ -58,6 +59,19 @@ inline GameInitSettings makeSkirmishInit(int mapSize, Uint32 mapSeed, const std:
     params.mod = mod;
     params.techLevel = 9;
     params.startSide = SkirmishGenerator::Side{"", BaseSize::Fortress, 5, city ? 4 : 0};
+    // Test-only start overrides (vanilla-match.py --env): BALANCE_SKIRMISH_BASE 0-5 (None = an MCV,
+    // Outpost = a Construction Yard ... Fortress), BALANCE_SKIRMISH_ARMY 0-6, BALANCE_SKIRMISH_CITY 0-5.
+    // Unset, the start is Stefan's Fortress with a 20,000-credit army and a 40,000 city.
+    auto startLevel = [](const char* name, int low, int high, int fallback) {
+        const char* text = std::getenv(name);
+        if (!text) return fallback;
+        const int value = std::atoi(text);
+        if (value < low || value > high) throw std::runtime_error(std::string("Invalid ") + name);
+        return value;
+    };
+    params.startSide.base = static_cast<BaseSize>(startLevel("BALANCE_SKIRMISH_BASE", 0, 5, int(BaseSize::Fortress)));
+    params.startSide.army = startLevel("BALANCE_SKIRMISH_ARMY", 0, 6, params.startSide.army);
+    params.startSide.city = startLevel("BALANCE_SKIRMISH_CITY", 0, city ? 5 : 0, params.startSide.city);
     if (genome) {
         const INIFile inputs(std::string(std::getenv("BALANCE_GENOME_PHASE_DIR")) + "/schedule.ini");
         const int base = inputs.getIntValue("Map", "base", 5);
@@ -103,6 +117,11 @@ inline void recordEliminations(Game& game, State& state) {
         state.eliminated[side.house] = now;
         SDL_Log("VANILLA_MATCH_ELIMINATED: house=%d label=%s cycle=%u end_s=%.1f", side.house, side.label.c_str(), now,
                 FormationWaveMeasure::seconds(now));
+        // Every building the house lost, to set beside the ones city airplanes destroyed
+        // (CITY_PLANE_KILL, CITY_PLANE_CRASH_KILL): was a plane the main cause?
+        int structuresLost = 0;
+        for (int item = Structure_FirstID; item <= Structure_LastID; ++item) structuresLost += house->getNumLostItems(item);
+        SDL_Log("CITY_HOUSE_OUT: house=%d structures_lost=%d cycle=%u", side.house, structuresLost, now);
     }
 }
 
@@ -148,7 +167,30 @@ inline bool tick(Game& game, State& state) {
     return FormationDuel::decided(game, state.sides);
 }
 
+/// BALANCE_EXTRA_CREDITS ("house:credits,..." or "all:credits"; tests only): a rich start, credits added
+/// to the named houses' starting credits before the first cycle (Stefan, 2026-11-26: "if an ai has a lot
+/// of money planes win games"; the city plane rules measured where plane spam matters).
+inline void addExtraCredits(Game& game) {
+    const char* text = std::getenv("BALANCE_EXTRA_CREDITS");
+    if (!text) return;
+    std::stringstream list(text);
+    std::string item;
+    while (std::getline(list, item, ',')) {
+        const auto colon = item.find(':');
+        if (colon == std::string::npos) throw std::runtime_error("BALANCE_EXTRA_CREDITS wants house:credits");
+        const std::string who = item.substr(0, colon);
+        const int credits = std::stoi(item.substr(colon + 1));
+        for (int h = 0; h < NUM_HOUSES; ++h) {
+            House* house = game.getHouse(h);
+            if (!house || house->isNatives() || (who != "all" && std::stoi(who) != h)) continue;
+            house->startingCredits += credits;
+            SDL_Log("VANILLA_MATCH_EXTRA_CREDITS: house=%d credits=%d", h, credits);
+        }
+    }
+}
+
 inline void run(Game& game, Uint32 end, const std::vector<FormationDuel::Side>& sides) {
+    addExtraCredits(game);
     State state{sides, {}, {}};
     FormationDuel::applyShapes(game, sides);
     state.genome = FormationDuel::loadGenomePhases(game, sides);
@@ -188,6 +230,7 @@ inline void run(Game& game, Uint32 end, const std::vector<FormationDuel::Side>& 
     recordEliminations(game, state);
     EliminationMatch::sample(game, true);
     if (state.genome.enabled) genomeSample(game);
+    for (int h = 0; h < NUM_HOUSES; ++h) if (const House* house = game.getHouse(h)) house->logUnitEconomy("match_end");
     FormationDuel::report(game, sides);
 }
 

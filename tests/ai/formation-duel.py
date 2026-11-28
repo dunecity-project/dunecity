@@ -55,7 +55,15 @@ FORCE_FIELDS = ('home_kill', 'home_loss', 'focus', 'converges', 'pooled', 'recal
                 'split_timeouts', 'full_readiness', 'garrison_holds', 'strength_holds', 'reserve_kept',
                 'sized_responses', 'declined_responses', 'fall_backs', 'perimeter_turret_orders', 'turrets_built',
                 'turrets_lost', 'raid_orders', 'turret_targets', 'press_on_orders', 'finish_waves', 'fortified_holds',
-                'sonic_retargets', 'surplus_peak', 'siege_orders', 'siege_holds', 'assault_holds', 'assault_waves')
+                'sonic_retargets', 'surplus_peak', 'siege_orders', 'siege_holds', 'assault_holds', 'assault_waves',
+                # Mass Carryall manoeuvres (QuantBot::airliftStats) and the house's Carryall fleet.
+                'airlift_rear', 'airlift_flank', 'airlift_retreats', 'airlift_retreat_units', 'airlift_rescues',
+                'airlift_strikes', 'airlift_ordered', 'airlift_lifted', 'airlift_landed', 'airlift_lost', 'airlift_lost_waiting',
+                'airlift_cancelled', 'carryalls', 'carryalls_built', 'carryalls_lost', 'airlift_no_front', 'airlift_no_trip', 'airlift_no_carryalls', 'airlift_no_group', 'airlift_no_point',
+                'airlift_defeat_passes', 'airlift_retreat_no_carryall', 'airlift_retreat_no_fighter', 'airlift_rescues_damaged',
+                'airlift_rescues_alone', 'airlift_ferried', 'airlift_squad_retreats', 'airlift_harvester_raids', 'airlift_perimeter_raids',
+                'airlift_raid_units', 'airlift_raid_retargets', 'airlift_raid_no_target', 'airlift_raid_no_group',
+                'airlift_raid_no_carryall', 'airlift_base_defence', 'airlift_harvester_defence')
 HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed', 'units_destroyed', 'structures',
                 'army_value', 'army_units', 'strategy') + PARTY_FIELDS + FORCE_FIELDS
 # The army value curve: each side's mobile armed value at these game minutes (the 5-minute

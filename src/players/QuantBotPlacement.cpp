@@ -18,6 +18,7 @@
 // QuantBot structure placement: city lots, reserved and recently lost footprints, redevelopment,
 // turrets, batteries and battery clearance.
 
+#include <players/CityLessonsPolicy.h>
 #include "QuantBotInternal.h"
 #include <players/RocketTurretPolicy.h>
 
@@ -92,7 +93,7 @@ bool tileKeepsFrontage(const Map& map, int tx, int ty, int x, int y, int w, int 
 	if (!map.tileExists(tx, ty)) return false;
 	if (tx >= x && tx < x + w && ty >= y && ty < y + h) return false;
 	const Tile* t = map.getTile(tx, ty);
-	if (t->isRoad()) return true;
+	if (t->isRoad() || t->isParkRoad()) return true;
 	return !t->hasAStructure() && !t->hasCityZone() && !t->isMountain()
 		&& !t->hasAGroundObject() && DuneCity::isCityZoneTerrain(t->getType());
 }
@@ -502,7 +503,11 @@ bool QuantBot::preservesGroundAccess(Uint32 item, Coord pos, const std::vector<U
 bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& zones) const {
     zones.clear();
     auto* sim = currentGame->isCitySimEnabled() ? currentGame->getCitySimulation() : nullptr;
-    if (!sim || (item != Structure_HeavyFactory && item != Structure_NuclearPlant && item != Structure_WindTrap)) return false;
+    // PalaceDistricts (default off): a Palace or Stadium may displace own low-density lots of any land value.
+    const bool palace = (item == Structure_Palace || item == Structure_Stadium) && botConfig().force.palaceDistricts;
+    // LotParks (default off): a Park may clear one cheap own R/C lot (QuantBotRedevelop.cpp).
+    const bool lotPark = item == Structure_Park && botConfig().force.lotParks;
+    if (!sim || (!palace && !lotPark && item != Structure_HeavyFactory && item != Structure_NuclearPlant && item != Structure_WindTrap)) return false;
     const Coord size = getStructureSize(item);
     bool range = false;
     for (int y=pos.y; y<pos.y+size.y; ++y) for (int x=pos.x; x<pos.x+size.x; ++x) {
@@ -514,11 +519,140 @@ bool QuantBot::redevelopmentZones(Uint32 item, Coord pos, std::vector<Uint32>& z
         const auto* zone = dynamic_cast<const ZoneStructure*>(object);
         if (!zone || zone->getOwner() != getHouse()) return false;
         const Coord z = zone->getLocation();
-        if (sim->getLandValueMap().worldGet(z.x,z.y) > 64
-            || zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None) return false;
+        if (zone->getCivicOverlay() != ZoneStructure::CivicOverlay::None) return false;
+        if (lotPark ? sim->getLandValueMap().worldGet(z.x,z.y) > RedevelopmentPolicy::kLotParkMaxValue
+                      || getMap().getTile(z.x,z.y)->getCityZoneDensity() > RedevelopmentPolicy::kLotParkMaxDensity
+                   : palace ? getMap().getTile(z.x,z.y)->getCityZoneDensity() > ForceConcentrationPolicy::kPalaceClearDensity
+                         && !botConfig().force.palaceDenseClearing
+                   : sim->getLandValueMap().worldGet(z.x,z.y) > 64) return false;
         if (std::find(zones.begin(),zones.end(),zone->getObjectID()) == zones.end()) zones.push_back(zone->getObjectID());
     }
     return range && !zones.empty() && zones.size() <= 4;
+}
+
+Coord QuantBot::findPalaceDistrictSite(Uint32 item, int minLots, bool lowValueLots,
+                                       const std::vector<uint8_t>* allowedCentres) {
+    AITelemetry::PerformanceScope perfScope("ai.findPalaceDistrictSite", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Force = ForceConcentrationPolicy;
+    if (!currentGame->isCitySimEnabled()) return Coord::Invalid();
+    const int w = getMap().getSizeX(), h = getMap().getSizeY(), reach = Force::kPalaceReachTiles;
+    const Coord size = getStructureSize(item);
+    auto landmark = [](Uint32 id) { return id == Structure_Palace || id == Structure_Stadium; };
+    std::vector<Coord> palaces;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && landmark(structure->getItemID()))
+            palaces.push_back(structure->getLocation() + Coord(1, 1));
+    for (const auto& entry : reservedStructures)
+        if (landmark(entry.second.item)) palaces.push_back(entry.second.location + Coord(1, 1));
+    // R/C lot origins no palace reaches yet, as a prefix-sum grid.
+    std::vector<int> sum(size_t(w + 1) * (h + 1), 0);
+    auto at = [&](int x, int y) -> int& { return sum[size_t(y) * (w + 1) + x]; };
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+            || (structure->getItemID() != Structure_ZoneResidential && structure->getItemID() != Structure_ZoneCommercial)) continue;
+        const Coord o = structure->getLocation();
+        bool reached = false;
+        for (const Coord c : palaces) reached = reached || std::max(std::abs(c.x - o.x), std::abs(c.y - o.y)) <= reach;
+        // LowValuePalaces: the low-value lots, reached or not (Palace stamps add up), except those a placed
+        // lesson Palace has not lifted yet (its effect is still pending; the next plan does not wait for it).
+        if (lowValueLots) {
+            const auto* sim = currentGame->getCitySimulation();
+            reached = !sim || !CityLessonsPolicy::lowLot(sim->getLandValueMap().worldGet(o.x, o.y));
+            for (const auto& placed : cityLessons.palaceEffects)
+                reached = reached || std::find(placed.lots.begin(), placed.lots.end(), o) != placed.lots.end();
+        }
+        if (allowedCentres) reached = false;   // FrontPalaces: every lot in reach (stamps add up)
+        if (!reached && o.x >= 0 && o.y >= 0 && o.x < w && o.y < h) at(o.x + 1, o.y + 1) += 1;
+    }
+    for (int y = 1; y <= h; ++y) for (int x = 1; x <= w; ++x) at(x, y) += at(x - 1, y) + at(x, y - 1) - at(x - 1, y - 1);
+    auto window = [&](std::vector<int>& grid, int cx, int cy, int r) {
+        auto g = [&](int x, int y) { return grid[size_t(y) * (w + 1) + x]; };
+        const int x0 = std::max(0, cx - r), y0 = std::max(0, cy - r);
+        const int x1 = std::min(w - 1, cx + r), y1 = std::min(h - 1, cy + r);
+        return g(x1 + 1, y1 + 1) - g(x0, y1 + 1) - g(x1 + 1, y0) + g(x0, y0);
+    };
+    auto lotsAround = [&](int cx, int cy) { return window(sum, cx, cy, reach); };
+    // LandmarkAnchoring: free buildable tiles inside build range and outside every landmark's reach
+    // are room for the district to grow into, a lot per kLandmarkRoomTilesPerLot tiles.
+    const bool anchoring = botConfig().force.landmarkAnchoring && !lowValueLots && !allowedCentres;
+    std::vector<int> room;
+    if (anchoring) {
+        auto prefix = [&](std::vector<int>& grid) {
+            for (int y = 1; y <= h; ++y) for (int x = 1; x <= w; ++x)
+                grid[size_t(y) * (w + 1) + x] += grid[size_t(y) * (w + 1) + x - 1] + grid[size_t(y - 1) * (w + 1) + x]
+                    - grid[size_t(y - 1) * (w + 1) + x - 1];
+        };
+        std::vector<int> owned(size_t(w + 1) * (h + 1), 0);
+        for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x)
+            if (DuneCity::isConstructionAnchor(getMap().getTile(x, y)->getOwner(), getHouse()->getHouseID()))
+                owned[size_t(y + 1) * (w + 1) + x + 1] = 1;
+        prefix(owned);
+        room.assign(size_t(w + 1) * (h + 1), 0);
+        for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x) {
+            const auto* tile = getMap().getTile(x, y);
+            if (tile->hasAStructure() || tile->isRoad() || !DuneCity::isCityZoneTerrain(tile->getType())
+                || window(owned, x, y, BUILDRANGE) == 0) continue;
+            bool reached = false;
+            for (const Coord c : palaces) reached = reached || std::max(std::abs(c.x - x), std::abs(c.y - y)) <= reach;
+            if (!reached) room[size_t(y + 1) * (w + 1) + x + 1] = 1;
+        }
+        prefix(room);
+    }
+    struct Candidate { int key, lots, room, x, y; };
+    std::vector<Candidate> candidates;
+    for (int y = 0; y + size.y <= h; ++y)
+        for (int x = 0; x + size.x <= w; ++x) {
+            if (allowedCentres && !(*allowedCentres)[size_t(y + 1) * w + x + 1]) continue;
+            const int lots = lotsAround(x + 1, y + 1);
+            const int roomLots = anchoring ? window(room, x + 1, y + 1, reach) / Force::kLandmarkRoomTilesPerLot : 0;
+            // Existing lots pay at once; room only once it is zoned.
+            if (lots + roomLots >= minLots) candidates.push_back({lots * 10 + roomLots * 6, lots, roomLots, x, y});
+        }
+    std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) { return a.key > b.key; });
+    constexpr size_t kChecked = 600;
+    int bestScore = std::numeric_limits<int>::min(), bestLots = 0, bestCleared = 0, bestRoom = 0, bestDense = 0, bestClearCost = 0;
+    Coord best = Coord::Invalid();
+    for (size_t i = 0; i < candidates.size() && i < kChecked; ++i) {
+        const auto& c = candidates[i];
+        if (c.key <= bestScore) break;   // sorted: nothing later can beat the best
+        const Coord pos(c.x, c.y);
+        std::vector<Uint32> cleared;
+        const bool redevelop = redevelopmentZones(item, pos, cleared);
+        if (!redevelop && !placeableAmongOwnUnits(c.x, c.y, size.x, size.y, item)) continue;
+        // LowValuePalaces / FrontPalaces (default off) judge ground access with the lots they clear already gone:
+        // the yard re-checks it at placement after the demolition, and a site that opened a passage there was
+        // refused (quantbot_city_lessons, 2477d8a29: ground_access_kept=0 on every retry).
+        const bool lessonSearch = lowValueLots || allowedCentres;
+        // The yard refuses a Palace inside a reactor's blast sites at placement (reactorPlacementAllowed); the
+        // lesson searches did not ask, and 143 of 207 expired LowValuePalaces plans were held off on it (b4f427671).
+        if ((lessonSearch && (nearExpiredLessonSite(pos)
+                              || !TacticalSafetyPolicy::reactorPlacementAllowed(item, reactorClearance(item, pos))))
+            || overlapsReservedStructure(c.x, c.y, size.x, size.y) || nearRecentStructureLoss(c.x, c.y, size.x, size.y)
+            || dangerAt(pos, size) > 0 || !preservesGroundAccess(item, pos, lessonSearch && redevelop ? &cleared : nullptr)
+            || !cityRoadImpact(getMap(), c.x, c.y, size.x, size.y, item).preservesConnections) continue;
+        // Each demolished lot costs kPalaceClearLotCost; with PalaceDenseClearing a denser lot costs its
+        // whole tax (density x land value over the landmark's +40), and such a site must still net
+        // the district minimum.
+        int clearCost = 0, dense = 0;
+        if (auto* sim = currentGame->getCitySimulation()) for (const Uint32 id : cleared) {
+            const auto* zone = currentGame->getObjectManager().getObject(id);
+            if (!zone) continue;
+            const Coord z = zone->getLocation();
+            const int density = getMap().getTile(z.x, z.y)->getCityZoneDensity();
+            dense += int(density > Force::kPalaceClearDensity);
+            clearCost += Force::landmarkClearCost(density, sim->getLandValueMap().worldGet(z.x, z.y));
+        }
+        const int score = c.key - clearCost;
+        if (dense > 0 && score < minLots * 10) continue;
+        if (score > bestScore) {
+            bestScore = score; best = pos; bestLots = c.lots; bestCleared = int(cleared.size()); bestRoom = c.room;
+            bestDense = dense; bestClearCost = clearCost;
+        }
+    }
+    traceDecision("palace_district_site", AITelemetry::Record().set("item", item).set("valid", best.isValid()).set("x", best.x)
+        .set("y", best.y).set("lots", bestLots).set("room", bestRoom).set("cleared", bestCleared).set("dense_cleared", bestDense).set("clear_cost", bestClearCost).set("candidates", int(candidates.size()))
+        .set("palaces", int(palaces.size())));
+    return best;
 }
 
 Coord QuantBot::findRedevelopmentSite(Uint32 item) {
@@ -584,9 +718,12 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool localRepair = itemID == Structure_RepairYard && repairCapacityDemandActive()
         && getHouse()->getNumItems(Structure_RepairYard) > 0 && !acceptedRepair;
     if (localRepair && !repairPlacementReady) return Coord::Invalid();
+    // ParkDistricts (default off): a Park is only ever placed where it raises our R/C land value.
+    if (itemID == Structure_Park) return findParkDistrictSite();
 	// Check per-build-cycle cache first
+	// A threat-tolerant search (a held finished building) neither reads nor writes the cache.
 	auto cacheIt = placementCache.find(itemID);
-	if (cacheIt != placementCache.end()) {
+	if (!placementToleratesThreat && cacheIt != placementCache.end()) {
         AITelemetry::log().performance(getGameCycleCount(),getHouse()->getHouseID(),"ai.placement_cache_hit",1,itemID,false);
 		return cacheIt->second;
 	}
@@ -610,6 +747,15 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     bool haveBestSite = false;
     auto bestReactorRank = TacticalSafetyPolicy::reactorSiteRank(100000,100000,-1,false,0,std::numeric_limits<int>::min());
     int candidates = 0, threatRejected = 0, blastRejected = 0, lossRejected = 0;
+    int bestThreat = std::numeric_limits<int>::max();
+    // Protocol 141 (TacticalSafetyPolicy::ordinarySiteUnderFireAllowed): an ordinary search may
+    // take a site under light fire, after every safe one; the old spacing refuses any fire.
+    const bool oldSpacing = usesOldEnemySpacing();
+    const bool rankThreat = placementToleratesThreat || !oldSpacing;
+    // A pass may stop early only once it holds a safe site (or any site, when threats are tolerated).
+    auto bestSettled = [&] {
+        return bestLocation.isValid() && (placementToleratesThreat || bestThreat <= 0);
+    };
 
 	bool itemIsBuilder = (itemID == Structure_HeavyFactory
 		|| itemID == Structure_RepairYard
@@ -648,6 +794,30 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
         }
     }
 
+    // LandmarkAnchoring (default off): R/C lots fill the reach of own (or reserved) Palaces and
+    // Stadiums, industry keeps out of it.
+    std::vector<Coord> landmarkCentres;
+    if (DuneCity::isCityZoneStructure(itemID) && botConfig().force.landmarkAnchoring && botConfig().force.palaceDistricts) {
+        auto landmark = [](Uint32 id) { return id == Structure_Palace || id == Structure_Stadium; };
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && structure->getHealth() > 0 && landmark(structure->getItemID()))
+                landmarkCentres.push_back(structure->getLocation() + Coord(1, 1));
+        for (const auto& entry : reservedStructures)
+            if (landmark(entry.second.item)) landmarkCentres.push_back(entry.second.location + Coord(1, 1));
+    }
+
+    // CityLandValueSiting: a Palace or Stadium lifts land value by its park bonus (40) within 8 tiles
+    // (CityEffects.h); its site is worth the own residential and commercial lots that bonus reaches.
+    std::vector<Coord> landValueLots;
+    const bool landValueBooster = botConfig().force.cityLandValueSiting && currentGame && currentGame->isCitySimEnabled()
+        && (itemID == Structure_Palace || itemID == Structure_Stadium)
+        && cityCampaignSkill(QuantBotCityCampaignSkills::LandValueSiting);
+    if (landValueBooster)
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner() == getHouse() && (structure->getItemID() == Structure_ZoneResidential
+                    || structure->getItemID() == Structure_ZoneCommercial))
+                landValueLots.push_back(structure->getLocation());
+
     // Resolve nearest origins and full-footprint pollution separation once,
     // instead of scanning every neighbour again at every candidate. These
     // fields include the same live buildings and other yards' reservations.
@@ -657,6 +827,8 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     const bool newSensitive = newRole == DuneCity::CityRole::Residential || newRole == DuneCity::CityRole::Commercial;
     const bool newPolluter = DuneCity::getPollutionEmission(itemID, DuneCity::getStructureMaxLevel(itemID)) > 0;
     const bool needCityDistances = citySim && (newSensitive || newPolluter);
+    const bool separateIndustry = citySim && itemID == Structure_ZoneIndustrial
+        && (botConfig().force.industrySeparation || industrySeparationSearch);
     bool cityDistancesReady=false;
     auto& nearestResidential=placementDistances.nearestResidential;
     auto& nearestCommercial=placementDistances.nearestCommercial;
@@ -873,16 +1045,66 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
     };
     bool bestSpread = false;
 
+    // CampaignHelperProtectedRepair (default off): the support house's Repair Yard is re-ranked,
+    // among exactly the sites this search accepts, by depth behind its own front toward the
+    // nearest visible enemy (the map centre when none is visible). The switch is tested first.
+    const bool protectedRepair = botConfig().force.campaignHelperProtectedRepair
+        && itemID == Structure_RepairYard && campaignEconomySupport() && baseCenter.isValid();
+    struct RepairSite {
+        Coord at; bool spread; bool shielded; int64_t depth;
+        bool safe; int infill; int tier; int score; bool relaxed; SiteQuality quality;
+    };
+    std::vector<RepairSite> repairSites;
+    int threatDX = 0, threatDY = 0;
+    int64_t frontDepth = 0;
+    std::vector<uint8_t> shieldTiles;
+    // A large own building within this many tiles toward the threat shields a site.
+    constexpr int kRepairShieldReach = 12;
+    if (protectedRepair) {
+        Coord threat = Coord::Invalid();
+        int nearestThreat = std::numeric_limits<int>::max();
+        auto considerThreat = [&](Coord at) {
+            const int distance = std::max(std::abs(at.x-baseCenter.x), std::abs(at.y-baseCenter.y));
+            if (distance < nearestThreat) { nearestThreat = distance; threat = at; }
+        };
+        for (const Coord enemy : visibleEnemyBases) considerThreat(enemy);
+        if (threat.isInvalid())
+            for (const auto* unit : getUnitList())
+                if (unit->getOwner() && unit->getOwner()->getTeamID() != getHouse()->getTeamID()
+                    && unit->isActive() && unit->getHealth() > 0 && unit->getItemID() != Unit_Sandworm
+                    && unit->getLocation().isValid() && unit->isVisible(getHouse()->getTeamID()))
+                    considerThreat(unit->getLocation());
+        if (threat.isInvalid()) threat = Coord(mapW/2, mapH/2);
+        threatDX = threat.x - baseCenter.x;
+        threatDY = threat.y - baseCenter.y;
+        // The front is the own building reaching furthest toward the threat. Projections
+        // use doubled coordinates so footprint centres stay exact integers.
+        frontDepth = std::numeric_limits<int64_t>::min();
+        shieldTiles.assign(static_cast<size_t>(mapW)*mapH, 0);
+        for (const auto* structure : getStructureList()) {
+            if (structure->getOwner() != getHouse() || structure->getHealth() <= 0
+                || structure->getItemID() == Structure_Wall || structure->getItemID() == Structure_Park) continue;
+            const Coord at = structure->getLocation(), size = structure->getStructureSize();
+            frontDepth = std::max(frontDepth, int64_t(2*at.x + size.x - 2*baseCenter.x)*threatDX
+                + int64_t(2*at.y + size.y - 2*baseCenter.y)*threatDY);
+            if (size.x*size.y < 4) continue;
+            for (int x = std::max(0, at.x); x < std::min(mapW, at.x + size.x); ++x)
+                for (int y = std::max(0, at.y); y < std::min(mapH, at.y + size.y); ++y)
+                    shieldTiles[static_cast<size_t>(y)*mapW + x] = 1;
+        }
+        if (frontDepth == std::numeric_limits<int64_t>::min()) frontDepth = 0;
+    }
+
     // Keep the fast ordinary search, but never treat its averaged base centre
     // as the limit of a spread-out city's buildable territory.
     AITelemetry::PerformanceScope candidateScope("ai.placement.candidates",
         getGameCycleCount(), getHouse()->getHouseID(), static_cast<int>(itemID));
     for (int searchPass=0; searchPass<3; ++searchPass) {
         if (searchPass==1) {
-            if (bestLocation.isValid() && itemID != Structure_NuclearPlant && !(spreadVsDeathHand && !bestSpread)) break;
+            if (bestSettled() && itemID != Structure_NuclearPlant && !(spreadVsDeathHand && !bestSpread)) break;
             startX=0; startY=0; endX=mapW-newSizeX; endY=mapH-newSizeY;
         }
-        if (searchPass==2 && ((bestLocation.isValid() && !(spreadVsDeathHand && !bestSpread)) || !roadingFallbackItem)) break;
+        if (searchPass==2 && ((bestSettled() && !(spreadVsDeathHand && !bestSpread)) || !roadingFallbackItem)) break;
         // Only the road-layout preferences are dropped. Engine placement, ground
         // egress, reservations, blast clearance and threat rules still decide.
         const bool relaxRoading = searchPass==2;
@@ -965,8 +1187,18 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 if (itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall
                     && itemID != Structure_NuclearPlant
                     && nearRecentStructureLoss(placeLocationX, placeLocationY, newSizeX, newSizeY)) { ++lossRejected; continue; }
+                // A finished building that has found no safe site for kHeldThreatGrace accepts
+                // threatened ground (placementToleratesThreat): the least threatened site wins below.
+                // Otherwise light fire (one enemy weapon) is a fallback after every safe site and
+                // heavy fire is refused (protocol 141).
+                int siteThreat = 0;
                 if (itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall) {
-                    if (dangerAt(Coord(placeLocationX, placeLocationY), Coord(newSizeX, newSizeY)) > 0) { ++threatRejected; continue; }
+                    siteThreat = dangerAt(Coord(placeLocationX, placeLocationY), Coord(newSizeX, newSizeY));
+                    if (!placementToleratesThreat
+                        && !TacticalSafetyPolicy::ordinarySiteUnderFireAllowed(siteThreat, itemID, oldSpacing)) {
+                        ++threatRejected; continue;
+                    }
+                    if (siteThreat > 0) ++threatRejected;
                     if (!TacticalSafetyPolicy::reactorPlacementAllowed(itemID, clearsReactorAt(placeLocationX, placeLocationY))) { ++blastRejected; continue; }
                 }
                 const auto roads = cityRoadImpact(getMap(), placeLocationX, placeLocationY, newSizeX, newSizeY, itemID);
@@ -1002,7 +1234,9 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 				for (int j = placeLocationY - 1; j <= placeLocationEndY; j++) {
 					if (getMap().tileExists(i, j) && (getMap().getSizeX() > i) && (0 <= i) && (getMap().getSizeY() > j) && (0 <= j)) {
 					if (getMap().getTile(i, j)->hasAStructure()) {
-						// Favor being near our buildings, avoid enemy buildings
+						// Favor being near our buildings. An enemy building next door costs
+						// nothing since protocol 141 (it was -10 a tile): a base may grow
+						// right up to the enemy's, as a player's may.
 						if (getMap().getTile(i, j)->getOwner() == getHouse()->getHouseID()) {
 							adjacentFriendlyStructureTiles++;
 							locationScore += cityZonePlacement ? 0 : 10;  // compact bases only; lots keep frontage instead
@@ -1031,7 +1265,7 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 							}
 						}
 						else {
-							locationScore -= 10;
+							locationScore += TacticalSafetyPolicy::enemyBorderTileScore(oldSpacing);
 						}
 					}
 					else if (!getMap().getTile(i, j)->isRock() && !getMap().getTile(i, j)->hasPreparedFoundation()) {
@@ -1335,6 +1569,15 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 					}
 				}
 
+				if (!landmarkCentres.empty()) {
+					bool reached = false;
+					for (const Coord c : landmarkCentres)
+						reached = reached || std::max(std::abs(c.x - placeLocationX), std::abs(c.y - placeLocationY))
+							<= ForceConcentrationPolicy::kPalaceReachTiles;
+					if (reached) locationScore += isIndustrial ? -ForceConcentrationPolicy::kLandmarkLotBonus
+						: ForceConcentrationPolicy::kLandmarkLotBonus;
+				}
+
 				if (isIndustrial) {
 					// I clusters with other I (pollution doesn't affect I)
 					locationScore += nearbyInd * 10;
@@ -1363,6 +1606,14 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 			}
 		}
 
+                if (landValueBooster) {
+                    // The simulation stamps the bonus with a linear falloff over Chebyshev distance.
+                    const int cx = placeLocationX + newSizeX / 2, cy = placeLocationY + newSizeY / 2;
+                    const int bonus = DuneCity::getParkLandValueBonus(itemID), radius = DuneCity::getParkLandValueRadius(itemID);
+                    for (const auto& lot : landValueLots)
+                        locationScore += DuneCity::falloff(bonus, std::max(std::abs(lot.x + 1 - cx), std::abs(lot.y + 1 - cy)), radius + 1);
+                }
+
                 int siteTier = 0;
                 // Plain numbers per candidate; the telemetry record is written once, for the
                 // chosen site, after the search (it used to be built as JSON for every candidate).
@@ -1371,6 +1622,16 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
                 if (needCityDistances) {
                     prepareCityDistances();
                     const int separation=pollutionSeparation.footprint(placeLocationX,placeLocationY,newSizeX,newSizeY);
+                    // IndustrySeparation (default off) and every PollutionRelocation site: no new
+                    // Industrial zone within the pollution stamp's reach of an own R/C lot.
+                    if (itemID == Structure_ZoneIndustrial && nearRelocatedFrom(placeLocationX, placeLocationY)) {
+                        ++pollutionRejected;
+                        continue;
+                    }
+                    if (separateIndustry && RedevelopmentPolicy::industryTooCloseToHomes(separation)) {
+                        ++pollutionRejected;
+                        continue;
+                    }
                     const int nearestR=nearestResidential.get(placeLocationX,placeLocationY);
                     const int nearestC=nearestCommercial.get(placeLocationX,placeLocationY);
                     const int nearestI=nearestIndustrial.get(placeLocationX,placeLocationY);
@@ -1437,12 +1698,35 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 				// Pick this location if it has the best score. force.spreadVsDeathHand: a site
 				// spaced from the other critical buildings outranks every unspaced one.
                 const bool spread = spreadVsDeathHand && spreadFromDeathHandSites(placeLocationX, placeLocationY);
-				if (spreadVsDeathHand && spread != bestSpread ? spread
+                // A protected repair site is chosen among safe sites; a site under light fire is
+                // left to the ordinary least-threatened pick below.
+                if (protectedRepair && (placementToleratesThreat || siteThreat <= 0)) {
+                    const int64_t depth = frontDepth
+                        - (int64_t(2*placeLocationX + newSizeX - 2*baseCenter.x)*threatDX
+                            + int64_t(2*placeLocationY + newSizeY - 2*baseCenter.y)*threatDY);
+                    bool shielded = false;
+                    const int span = std::max(std::abs(threatDX), std::abs(threatDY));
+                    const int centreX = placeLocationX + newSizeX/2, centreY = placeLocationY + newSizeY/2;
+                    for (int step = 1; span > 0 && step <= kRepairShieldReach && !shielded; ++step) {
+                        const int x = centreX + threatDX*step/span, y = centreY + threatDY*step/span;
+                        if (x < 0 || y < 0 || x >= mapW || y >= mapH) break;
+                        if (x >= placeLocationX && x < placeLocationX + newSizeX
+                            && y >= placeLocationY && y < placeLocationY + newSizeY) continue;
+                        shielded = shieldTiles[static_cast<size_t>(y)*mapW + x] != 0;
+                    }
+                    SiteQuality repairQuality = quality;
+                    repairQuality.tier = siteTier; repairQuality.score = locationScore;
+                    repairSites.push_back({Coord(placeLocationX, placeLocationY), spread, shielded, depth,
+                        lossRisk == 0, infill, siteTier, locationScore, relaxRoading, repairQuality});
+                }
+				if (rankThreat && siteThreat != bestThreat ? siteThreat < bestThreat
+                    : spreadVsDeathHand && spread != bestSpread ? spread
                     : itemID == Structure_NuclearPlant ? reactorRank > bestReactorRank
                     : factoryPlacement ? factoryRank > bestFactoryRank
                     : CityPlacementPolicy::preferCitySite(lossRisk==0,infill,siteTier,locationScore,
                         bestSafe,bestInfill,bestSiteTier,bestLocationScore)) {
                     bestSpread = spread;
+                    bestThreat = siteThreat;
                     bestReactorRank = reactorRank;
                     bestFactoryRank = factoryRank;
                     bestSiteTier = siteTier;
@@ -1458,15 +1742,53 @@ Coord QuantBot::findPlaceLocation(Uint32 itemID) {
 	}
 
     } // search passes
+    // CampaignHelperProtectedRepair: never the shallowest accepted site while a deeper one
+    // exists; then a shielded site, then depth, then the ordinary preference above.
+    const RepairSite* protectedPick = nullptr;
+    if (protectedRepair && !repairSites.empty()) {
+        int64_t shallowest = repairSites.front().depth;
+        for (const auto& site : repairSites) shallowest = std::min(shallowest, site.depth);
+        const bool deeperExists = std::any_of(repairSites.begin(), repairSites.end(),
+            [&](const RepairSite& site) { return site.depth > shallowest; });
+        for (const auto& site : repairSites) {
+            if (deeperExists && site.depth == shallowest) continue;
+            if (!protectedPick) { protectedPick = &site; continue; }
+            const RepairSite& best = *protectedPick;
+            const bool better = spreadVsDeathHand && site.spread != best.spread ? site.spread
+                : site.shielded != best.shielded ? site.shielded
+                : site.depth != best.depth ? site.depth > best.depth
+                : CityPlacementPolicy::preferCitySite(site.safe, site.infill, site.tier, site.score,
+                    best.safe, best.infill, best.tier, best.score);
+            if (better) protectedPick = &site;
+        }
+        bestLocation = protectedPick->at;
+        bestSite = protectedPick->quality;
+        haveBestSite = true;
+        bestSpread = protectedPick->spread;
+        roadingRelaxed = protectedPick->relaxed;
+    }
     if (haveBestSite) bestQuality = siteQualityRecord(bestSite);
+    if (protectedPick)
+        bestQuality.set("protected_repair", 1).set("repair_shielded", protectedPick->shielded)
+            .set("repair_depth", static_cast<int64_t>(protectedPick->depth))
+            .set("repair_threat_dx", threatDX).set("repair_threat_dy", threatDY)
+            .set("repair_candidates", static_cast<int>(repairSites.size()));
     if (spreadVsDeathHand)
         bestQuality.set("death_hand_spread",bestSpread ? 1 : 0)
             .set("death_hand_sites",static_cast<int>(deathHandSites.size()));
-    if (bestLocation.isInvalid()) {
-        bestLocation = findRedevelopmentSite(itemID);
-        if (bestLocation.isValid()) { bestQuality.set("redevelopment",1); roadingRelaxed=false; }
+    // A safe redevelopment site outranks an ordinary site under light fire.
+    const bool bestUnderFire = !protectedPick && !placementToleratesThreat && bestLocation.isValid()
+        && bestThreat > 0 && bestThreat != std::numeric_limits<int>::max();
+    if (bestLocation.isInvalid() || bestUnderFire) {
+        const Coord redevelopment = findRedevelopmentSite(itemID);
+        if (redevelopment.isValid()) {
+            bestLocation = redevelopment; bestThreat = 0;
+            bestQuality.set("redevelopment",1); roadingRelaxed=false;
+        }
     }
-	placementCache[itemID] = bestLocation;
+	if (!placementToleratesThreat) placementCache[itemID] = bestLocation;
+    if (placementToleratesThreat) bestQuality.set("threat_tolerated",1);
+    bestQuality.set("site_threat",bestLocation.isValid() && bestThreat != std::numeric_limits<int>::max() ? bestThreat : 0);
     bestQuality.set("roading_relaxed",roadingRelaxed)
         .set("legal_candidates",candidates).set("threat_rejections",threatRejected)
         .set("blast_rejections",blastRejected).set("recent_loss_rejections",lossRejected)
@@ -2149,6 +2471,244 @@ Coord QuantBot::findPerimeterTurretLocation() {
         .set("valid", best.isValid()).set("depth", p.depth).set("forward_x", p.forward.x).set("forward_y", p.forward.y)
         .set("turrets", int(turrets.size())));
     return best;
+}
+
+Coord QuantBot::findClusterTurretLocation(bool palaces) {
+    AITelemetry::PerformanceScope perfScope("ai.findClusterTurretLocation", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Force = ForceConcentrationPolicy;
+    using QuantBotInternal::clusterCoreRank;
+    using QuantBotInternal::footprintDistance;
+    struct Core { int rank; Uint32 id; Coord origin, size; };
+    std::vector<Core> cores;
+    std::vector<Coord> turrets, rockets;   // rockets: the anti-air guard a Palace counts (PalaceTurrets)
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        if (structure->getItemID() == Structure_RocketTurret || structure->getItemID() == Structure_GunTurret)
+            turrets.push_back(structure->getLocation());
+        if (structure->getItemID() == Structure_RocketTurret) rockets.push_back(structure->getLocation());
+        const int rank = palaces ? (structure->getItemID() == Structure_Palace ? 0 : -1)
+            : clusterCoreRank(structure->getItemID());
+        if (rank >= 0) cores.push_back({rank, structure->getObjectID(), structure->getLocation(), structure->getStructureSize()});
+    }
+    for (const auto& entry : reservedStructures)
+        if (entry.first != planningBuilder
+            && (entry.second.item == Structure_RocketTurret || entry.second.item == Structure_GunTurret)) {
+            turrets.push_back(entry.second.location);
+            if (entry.second.item == Structure_RocketTurret) rockets.push_back(entry.second.location);
+        }
+    std::stable_sort(cores.begin(), cores.end(), [](const Core& a, const Core& b) {
+        return a.rank != b.rank ? a.rank < b.rank : a.id < b.id;
+    });
+    const Coord base = findBaseCentre(getHouse()->getHouseID());
+    const Coord front = base.isValid() ? observedFrontDirection(base) : Coord::Invalid();
+    const int frontScale = front.isValid() ? std::max(1, std::abs(front.x) + std::abs(front.y)) : 1;
+    const int reach = Force::kClusterReachTiles;
+    for (const auto& core : cores) {
+        int have = 0;
+        for (const Coord turret : palaces ? rockets : turrets)
+            if (footprintDistance(turret, core.origin, core.size) <= reach) ++have;
+        if (have >= (palaces ? Force::kPalaceGuardTurrets : Force::kClusterPerCore)) continue;
+        const Coord centre(core.origin.x + core.size.x / 2, core.origin.y + core.size.y / 2);
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        for (int y = std::max(0, core.origin.y - reach); y <= std::min(getMap().getSizeY() - 1, core.origin.y + core.size.y - 1 + reach); ++y) {
+            for (int x = std::max(0, core.origin.x - reach); x <= std::min(getMap().getSizeX() - 1, core.origin.x + core.size.x - 1 + reach); ++x) {
+                const Coord p(x, y);
+                const int d = footprintDistance(p, core.origin, core.size);
+                if (d < 1 || d > reach) continue;
+                if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
+                if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, p)) continue;
+                if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+                if (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
+                int passable = 0;
+                for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                    if ((!ox && !oy) || !getMap().tileExists(x + ox, y + oy)) continue;
+                    const Tile* tile = getMap().getTile(x + ox, y + oy);
+                    if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+                }
+                if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+                int nearest = -1;
+                for (const Coord turret : turrets) {
+                    const int t = std::max(std::abs(turret.x - x), std::abs(turret.y - y));
+                    if (nearest < 0 || t < nearest) nearest = t;
+                }
+                // Packed beside the cluster's turrets (mutual cover), then facing the front,
+                // then close to the core it protects.
+                const int packed = nearest < 0 ? 0 : nearest <= 2 ? 300 : nearest <= 3 ? 150 : 0;
+                const int facing = front.isValid()
+                    ? std::clamp((front.x * (x - centre.x) + front.y * (y - centre.y)) * 10 / frontScale, -60, 60) : 0;
+                const int score = packed + facing - d * 20;
+                if (score > bestScore) { bestScore = score; best = p; }
+            }
+        }
+        if (best.isValid()) {
+            traceDecision("cluster_turret_site", AITelemetry::Record().set("x", best.x).set("y", best.y)
+                .set("core", core.id).set("core_rank", core.rank).set("cluster_turrets", have)
+                .set("turrets", int(turrets.size())).set("palace", palaces));
+            return best;
+        }
+    }
+    traceDecision("cluster_turret_site", AITelemetry::Record().set("valid", false).set("cores", int(cores.size()))
+        .set("turrets", int(turrets.size())).set("palace", palaces));
+    return Coord::Invalid();
+}
+
+// AirRaidTurrets (on by default; QuantBotAirDefencePolicy.h). Stefan, 2026-11-23: "also make the
+// ai respond when being bombed by planes by having more turrets dispersed". The city planner
+// (findCityTurretPlaceLocation) covers the assets the city cannot lose and the perimeter and
+// cluster searches face a ground front; this one spreads. It ranks the own buildings that have no
+// own Rocket Turret within kCoverTiles (buildings near a recent bomb hit first, then the one
+// farthest from the turrets) and, beside the best of them, takes the legal tile farthest from the
+// turrets. The legality checks are the ones every turret search here uses. One bounded window per
+// building tried, at most kTargetsTried of them.
+Coord QuantBot::findAirRaidTurretSite(int* uncovered, bool* nearHit) {
+    AITelemetry::PerformanceScope perfScope("ai.findAirRaidTurretSite", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Air = QuantBotAirDefencePolicy;
+    if (uncovered) *uncovered = 0;
+    if (nearHit) *nearHit = false;
+    const auto& raid = getHouse()->getAirRaid();
+    const Uint32 now = getGameCycleCount();
+    // Only Rocket Turrets fire at aircraft, so only they count as cover and for the spacing.
+    std::vector<Coord> turrets;
+    for (const StructureBase* structure : getStructureList())
+        if (structure->getOwner() == getHouse() && structure->getHealth() > 0
+            && structure->getItemID() == Structure_RocketTurret) turrets.push_back(structure->getLocation());
+    for (const auto& entry : reservedStructures)
+        if (entry.first != planningBuilder && entry.second.item == Structure_RocketTurret)
+            turrets.push_back(entry.second.location);
+    struct Target { int rank; Uint32 id; Coord origin, size, hit; };
+    std::vector<Target> targets;
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        const Uint32 item = structure->getItemID();
+        // The city is every building of the house; its turrets and walls are not what a plane bombs it for.
+        if (item == Structure_RocketTurret || item == Structure_GunTurret || item == Structure_Wall) continue;
+        const Coord origin = structure->getLocation(), size = structure->getStructureSize();
+        int nearest = Air::kNoTurret;
+        for (const Coord turret : turrets)
+            nearest = std::min(nearest, Air::footprintDistance(turret.x, turret.y, origin.x, origin.y, size.x, size.y));
+        if (Air::covered(nearest)) continue;
+        int hitDistance = Air::kNoHit;
+        Coord hit = Coord::Invalid();
+        for (int i = 0; i < raid.hitCount; ++i) {
+            if (!Air::bombedRecently(raid.hits[i].cycle, now)) continue;
+            const int d = Air::footprintDistance(raid.hits[i].x, raid.hits[i].y, origin.x, origin.y, size.x, size.y);
+            if (d < hitDistance) { hitDistance = d; hit = Coord(raid.hits[i].x, raid.hits[i].y); }
+        }
+        targets.push_back({Air::targetRank(hitDistance, nearest), structure->getObjectID(), origin, size,
+                           hitDistance <= Air::kHitNeighbourhoodTiles ? hit : Coord::Invalid()});
+    }
+    if (uncovered) *uncovered = int(targets.size());
+    // Best first; the object id breaks ties, so every peer tries the same buildings in the same order.
+    std::sort(targets.begin(), targets.end(), [](const Target& a, const Target& b) {
+        return a.rank != b.rank ? a.rank > b.rank : a.id < b.id;
+    });
+    const int reach = Air::kSiteReachTiles;
+    const size_t tries = std::min(targets.size(), size_t(Air::kTargetsTried));
+    for (size_t i = 0; i < tries; ++i) {
+        const Target& target = targets[i];
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        for (int y = std::max(0, target.origin.y - reach); y <= std::min(getMap().getSizeY() - 1, target.origin.y + target.size.y - 1 + reach); ++y) {
+            for (int x = std::max(0, target.origin.x - reach); x <= std::min(getMap().getSizeX() - 1, target.origin.x + target.size.x - 1 + reach); ++x) {
+                const int d = Air::footprintDistance(x, y, target.origin.x, target.origin.y, target.size.x, target.size.y);
+                if (d < 1 || d > reach) continue;
+                int nearest = Air::kNoTurret;
+                for (const Coord turret : turrets)
+                    nearest = std::min(nearest, Air::tileDistance(turret.x, turret.y, x, y));
+                if (!Air::spacedEnough(nearest)) continue;
+                if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
+                if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
+                if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+                if (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
+                int passable = 0;
+                for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                    if ((!ox && !oy) || !getMap().tileExists(x + ox, y + oy)) continue;
+                    const Tile* tile = getMap().getTile(x + ox, y + oy);
+                    if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+                }
+                if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+                const int score = Air::siteScore(nearest,
+                    target.hit.isValid() ? Air::tileDistance(target.hit.x, target.hit.y, x, y) : Air::kNoHit, d);
+                if (score > bestScore) { bestScore = score; best = Coord(x, y); }
+            }
+        }
+        if (best.isValid()) {
+            if (nearHit) *nearHit = target.hit.isValid();
+            return best;
+        }
+    }
+    return Coord::Invalid();
+}
+
+// AirportTurrets (off by default; QuantBotAirDefencePolicy.h). Stefan, 2026-11-26: "also
+// airports need decent rocket turret defenses". The own Airports in object-id order; the first
+// with fewer than kAirportGuardTurrets own Rocket Turrets (standing or reserved) in its ring gets
+// the ring tile farthest from every own Rocket Turret, then nearest the Airport. The legality
+// checks are the ones every turret search here uses. One bounded window per Airport.
+Coord QuantBot::findAirportGuardSite(Uint32* airport, int* ring, int* unguarded) {
+    AITelemetry::PerformanceScope perfScope("ai.findAirportGuardSite", getGameCycleCount(), getHouse()->getHouseID());
+    namespace Air = QuantBotAirDefencePolicy;
+    if (airport) *airport = NONE_ID;
+    if (ring) *ring = 0;
+    if (unguarded) *unguarded = 0;
+    std::vector<Coord> turrets;
+    struct Port { Uint32 id; Coord origin, size; };
+    std::vector<Port> ports;
+    for (const StructureBase* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || structure->getHealth() <= 0) continue;
+        if (structure->getItemID() == Structure_RocketTurret) turrets.push_back(structure->getLocation());
+        else if (structure->getItemID() == Structure_Airport)
+            ports.push_back({structure->getObjectID(), structure->getLocation(), structure->getStructureSize()});
+    }
+    for (const auto& entry : reservedStructures)
+        if (entry.first != planningBuilder && entry.second.item == Structure_RocketTurret)
+            turrets.push_back(entry.second.location);
+    std::sort(ports.begin(), ports.end(), [](const Port& a, const Port& b) { return a.id < b.id; });
+    const int reach = Air::kAirportGuardReachTiles;
+    Coord found = Coord::Invalid();
+    for (const Port& port : ports) {
+        int have = 0;
+        for (const Coord turret : turrets)
+            have += int(Air::footprintDistance(turret.x, turret.y, port.origin.x, port.origin.y, port.size.x, port.size.y) <= reach);
+        if (Air::airportGuarded(have)) continue;
+        if (unguarded) ++*unguarded;
+        if (found.isValid()) continue;   // count the rest, search only the first
+        int bestScore = std::numeric_limits<int>::min();
+        Coord best = Coord::Invalid();
+        for (int y = std::max(0, port.origin.y - reach); y <= std::min(getMap().getSizeY() - 1, port.origin.y + port.size.y - 1 + reach); ++y) {
+            for (int x = std::max(0, port.origin.x - reach); x <= std::min(getMap().getSizeX() - 1, port.origin.x + port.size.x - 1 + reach); ++x) {
+                const int d = Air::footprintDistance(x, y, port.origin.x, port.origin.y, port.size.x, port.size.y);
+                if (d < 1 || d > reach) continue;
+                int nearest = Air::kNoTurret;
+                for (const Coord turret : turrets)
+                    nearest = std::min(nearest, Air::tileDistance(turret.x, turret.y, x, y));
+                if (!Air::airportGuardSpaced(nearest)) continue;
+                if (!placeableAmongOwnUnits(x, y, 1, 1, Structure_RocketTurret)) continue;
+                if (overlapsReservedStructure(x, y, 1, 1) || !preservesGroundAccess(Structure_RocketTurret, Coord(x, y))) continue;
+                if (!cityRoadImpact(getMap(), x, y, 1, 1, Structure_RocketTurret).preservesConnections) continue;
+                if (currentGame->isCitySimEnabled()
+                    && wouldLandlockNeighbouringZone(getMap(), getHouse()->getHouseID(), x, y, 1, 1)) continue;
+                int passable = 0;
+                for (int oy = -1; oy <= 1; ++oy) for (int ox = -1; ox <= 1; ++ox) {
+                    if ((!ox && !oy) || !getMap().tileExists(x + ox, y + oy)) continue;
+                    const Tile* tile = getMap().getTile(x + ox, y + oy);
+                    if (!tile->isMountain() && !tile->hasAStructure()) ++passable;
+                }
+                if (!FrontBatteryPolicy::keepsCorridor(passable)) continue;
+                const int score = Air::airportGuardSiteScore(nearest, d);
+                if (score > bestScore) { bestScore = score; best = Coord(x, y); }
+            }
+        }
+        if (best.isValid()) {
+            found = best;
+            if (airport) *airport = port.id;
+            if (ring) *ring = have;
+        }
+    }
+    return found;
 }
 
 bool QuantBot::selectCityServiceInvestment(const BuilderBase* builder, int money, bool emergency,

@@ -115,15 +115,10 @@ public:
         populationLabel_.setVisible(showPop || isTurret);
         if (isTurret) setFitted(populationLabel_, "Police: 15%");
         if (showPop) {
-            std::string text;
-            if (itemID == Structure_Palace) {
-                const int resPop = DuneCity::getStructurePopulation(pStructure, level);
-                const int comPop = DuneCity::getPalaceCommercialPopulation(level);
-                text = " R: " + std::to_string(resPop) + " C: " + std::to_string(comPop);
-            } else {
-                const int pop = DuneCity::getStructurePopulation(pStructure, level);
-                text = " Pop: " + std::to_string(pop);
-            }
+            // A Palace is one residential zone since 2026-11-22 (no commercial half), so it
+            // shows a plain population like any residential building.
+            const int pop = DuneCity::getStructurePopulation(pStructure, level);
+            std::string text = " Pop: " + std::to_string(pop);
             if (maxLevel > 0 && !pZone) {
                 text += " (lvl " + std::to_string(level) + "/" + std::to_string(maxLevel) + ")";
             }
@@ -193,13 +188,14 @@ private:
             case Structure_HeavyFactory:     return "Role: I-medium";
             case Structure_RepairYard:       return "Role: I-medium";
             case Structure_StarPort:         return "Role: Seaport";
-            case Structure_Palace:           return "Role: R+C Palace";
+            case Structure_Palace:           return "Role: R Palace";
             case Structure_PoliceStation:    return "Role: Police";
             case Structure_Barracks:         return "Role: Infantry";
             case Structure_WOR:              return "Role: Infantry";
             case Structure_GunTurret:        return "Park: 1 fountain";
             case Structure_RocketTurret:     return "Park: 1 fountain";
             case Structure_Wall:             return "Role: Park bonus";
+            case Structure_Park:             return "Role: Park";
             case Structure_WindTrap:         return "Role: Wind Power";
             case Structure_NuclearPlant:     return "Role: Nuclear Power";
             default:                         return "Role: \xE2\x80\x94";

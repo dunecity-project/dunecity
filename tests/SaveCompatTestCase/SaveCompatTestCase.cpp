@@ -47,7 +47,8 @@ TEST_CASE("Save compat: Tornie 546 IDs append without replacing city or legacy o
     for(int index = 0; index < 14; ++index) REQUIRE(appended[index] == 74 + index);
     REQUIRE(Structure_Chemipost == 73);
     REQUIRE(Structure_ResearchLab == 88);
-    REQUIRE(Num_ItemID == 89);
+    REQUIRE(Structure_Park == 89);   // save 9888: appended after every earlier ID
+    REQUIRE(Num_ItemID == 90);
     REQUIRE(isStructure(Structure_Doublefinery));
     REQUIRE(isStructure(Structure_Slowpost));
     REQUIRE_FALSE(isUnit(Structure_Slowpost));
@@ -92,6 +93,11 @@ TEST_CASE("Save compat: SAVEGAMEVERSION is 9811 or higher",
     // 9882/MOD17's pace/area/damage layout is frozen; 9883/MOD18 drops area and adds scenery.
     // 9884/MOD19 adds technology installments and captured per-house research payment state.
     // 9885 first persists the repair-demand anchor and pressure clock; this boundary stays frozen.
+    // 9888 appends the Park structure (item 89); an older save's Park row comes from ObjectData.ini.
+    REQUIRE(SAVEGAMEVERSION_START_TECH_LEVEL == 9889);
+    REQUIRE(SAVEGAMEVERSION >= SAVEGAMEVERSION_START_TECH_LEVEL);
+    REQUIRE(SAVEGAMEVERSION_PARK == 9888);
+    REQUIRE(SAVEGAMEVERSION >= SAVEGAMEVERSION_PARK);
     REQUIRE(SAVEGAMEVERSION_REPAIR_CAPACITY == 9885);
     REQUIRE(SAVEGAMEVERSION >= SAVEGAMEVERSION_REPAIR_CAPACITY);
     REQUIRE(SAVEGAMEVERSION_RESEARCH_INSTALLMENTS == 9884);

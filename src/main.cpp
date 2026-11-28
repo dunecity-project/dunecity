@@ -55,6 +55,7 @@
 #include <misc/SDL2pp.h>
 #include <misc/RendererInitialization.h>
 #include <misc/md5.h>
+#include <misc/AnalyticsInstallID.h>
 #include <misc/WebRuntime.h>
 #include <misc/MacTrackpad.h>
 
@@ -281,9 +282,19 @@ void setVideoMode(int displayIndex)
         exit(EXIT_FAILURE);
     }
     // Create renderer (VSync set separately for macOS compatibility)
+    // createStartupRenderer walks every compiled driver and logs each failure
+    // (issue #120); only when none works do we stop, and then say so on screen.
     renderer = createStartupRenderer(window);
     if (!renderer) {
-        fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
+        const std::string error = SDL_GetError();
+        fprintf(stderr, "SDL_CreateRenderer failed: %s\n", error.c_str());
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_CreateRenderer failed: %s", error.c_str());
+        const std::string message = "DuneCity could not start its graphics renderer.\n\n" + error
+#if defined(__linux__) && !defined(__ANDROID__)
+            + "\n\nTry starting it with SDL_RENDER_DRIVER=software, and please report this with your log."
+#endif
+            ;
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DuneCity", message.c_str(), window);
         exit(EXIT_FAILURE);
     }
 
@@ -1258,9 +1269,38 @@ int main(int argc, char *argv[]) {
 
             settings.general.playIntro = myINIFile.getBoolValue("General","Play Intro",false);
             settings.general.playerName = myINIFile.getStringValue("General","Player Name","Player");
+            {
+                // Created once per installation and kept with the settings, so resetting them
+                // resets it. Never derived from the device, account, name or network, and never
+                // logged; only the match analytics report sends it (misc/AnalyticsInstallID.h).
+                bool created = false;
+                settings.general.analyticsInstallID = AnalyticsInstallID::loadOrCreate(myINIFile, created);
+                if(created) {
+                    if(myINIFile.saveChangesTo(configfilepath)) {
+                        // The browser keeps the settings file in IDBFS; write it through so a reload keeps the id.
+                        WebRuntime::syncPersistentFiles();
+                    } else {
+                        SDL_Log("Warning: could not save the analytics installation id to the configuration file");
+                    }
+                }
+            }
             settings.general.language = myINIFile.getStringValue("General","Language","en");
             settings.general.scrollSpeed = myINIFile.getIntValue("General","Scroll Speed",50);
             settings.general.wasdCamera = myINIFile.getBoolValue("General","WASD Camera",false);
+            {
+                // Personal shortcuts: missing keys keep defaults, bad values recover (misc/Hotkeys.h).
+                std::map<std::string, std::string> hotkeyEntries;
+                for(const Hotkeys::ActionInfo& action : Hotkeys::actions()) {
+                    if(myINIFile.hasKey("Hotkeys", action.iniKey))
+                        hotkeyEntries[action.iniKey] = myINIFile.getStringValue("Hotkeys", action.iniKey);
+                }
+                Hotkeys::LoadResult hotkeys = Hotkeys::load(hotkeyEntries);
+                if(hotkeys.replacedRetiredDefaults)
+                    SDL_Log("Saved hotkeys were an earlier version's defaults; using the current defaults");
+                for(const std::string& warning : hotkeys.warnings)
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", warning.c_str());
+                settings.hotkeys = hotkeys.bindings;
+            }
 #ifdef DUNECITY_MOBILE
             // Without a right mouse button, a tap on an enemy attacks and a tap on the ground moves.
             constexpr bool defaultLeftClickOrders = true;
@@ -1409,6 +1449,27 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.researchPace = TechResearch::sanitize(myINIFile.getIntValue("Game Options", "Research Pace", 1));
             settings.gameOptions.technologyInstallments = myINIFile.getBoolValue("Game Options", "Technology Installments", false);
             settings.gameOptions.trooperAntiAir = myINIFile.getBoolValue("Game Options", "Trooper Anti-Air", true);
+            settings.gameOptions.trooperOrnithopterReach = myINIFile.getBoolValue("Game Options", "Trooper Ornithopter Reach", true);
+            settings.gameOptions.cityPlaneDefence = myINIFile.getBoolValue("Game Options", "City Plane Defence", true);
+            settings.gameOptions.cityPlaneBombing = myINIFile.getBoolValue("Game Options", "City Plane Bombing", true);
+            settings.gameOptions.airportOrnithopterPatrol = myINIFile.getBoolValue("Game Options", "Airport Ornithopter Patrol", false);
+            settings.gameOptions.cityPlaneCarpetBombing = myINIFile.getBoolValue("Game Options", "City Plane Carpet Bombing", true);
+            settings.gameOptions.cityPlaneBombingRuns = myINIFile.getBoolValue("Game Options", "City Plane Bombing Runs", true);
+            settings.gameOptions.cityPlanePurchase = myINIFile.getBoolValue("Game Options", "City Plane Purchase", true);
+            settings.gameOptions.cityPlaneBuildTime = myINIFile.getBoolValue("Game Options", "City Plane Build Time", true);
+            settings.gameOptions.cityPlaneFreePerAirport = myINIFile.getBoolValue("Game Options", "City Plane Free Per Airport", true);
+            settings.gameOptions.cityPlaneCrashBombs = myINIFile.getBoolValue("Game Options", "City Plane Crash Bombs", true);
+            settings.gameOptions.zoneGarrisons = myINIFile.getBoolValue("Game Options", "Zone Garrisons", true);
+            settings.gameOptions.fremenPalaceWorm = myINIFile.getBoolValue("Game Options", "Fremen Palace Worm", true);
+            settings.gameOptions.parksCountAsRoads = myINIFile.getBoolValue("Game Options", "Parks Count As Roads", true);
+            settings.gameOptions.saboteurHunt = myINIFile.getBoolValue("Game Options", "Saboteur Hunt", true);
+            settings.gameOptions.saboteurSkipsCityZones = myINIFile.getBoolValue("Game Options", "Saboteurs Skip City Zones", true);
+            settings.gameOptions.aiInfantryTactics = myINIFile.getBoolValue("Game Options", "AI Infantry Tactics", true);
+            settings.gameOptions.hospitalCare = myINIFile.getBoolValue("Game Options", "Hospital Care", true);
+            // "Turrets Target Units Only" (the rule's first key, its inverse) counts when the current key is absent.
+            settings.gameOptions.turretsFireOnBuildings = myINIFile.hasKey("Game Options", "Turrets Can Fire On Buildings")
+                ? myINIFile.getBoolValue("Game Options", "Turrets Can Fire On Buildings", false)
+                : !myINIFile.getBoolValue("Game Options", "Turrets Target Units Only", true);
             settings.gameOptions.starportPopulation = myINIFile.getBoolValue("Game Options", "Starport Population", true);
             settings.gameOptions.alliedControl = myINIFile.getBoolValue("Game Options", "Allied Control", false);
             settings.gameOptions.alliedBuilding = myINIFile.getBoolValue("Game Options", "Allied Building", false);
@@ -1416,6 +1477,13 @@ int main(int argc, char *argv[]) {
             settings.gameOptions.chaosMode = myINIFile.getBoolValue("Game Options", "Chaos Mode", false);
             settings.gameOptions.sellingBuildings = myINIFile.getBoolValue("Game Options", "Selling Buildings", true);
             settings.gameOptions.immortalHumanPlayer = myINIFile.getBoolValue("Game Options","Immortal Human Player",false);
+
+            // Dune City plays with Manual Carryall Drops on. A profile that stored "off" in its
+            // Dune City section before that became the default gets the default once.
+            if(adoptCarryallDropDefault(myINIFile)) {
+                SDL_Log("Dune City options: Manual Carryall Drops follows the mod default (on) from now on");
+                myINIFile.saveChangesTo(getConfigFilepath());
+            }
 
             pTextManager = std::make_unique<TextManager>();
 

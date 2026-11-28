@@ -427,24 +427,18 @@ void SFXManager::loadNonEnglishVoice(const std::string& languagePrefix) {
     // "Bloom located"
     lngVoice[BloomLocated] = getChunkFromFile(languagePrefix + "BLOOM.VOC");
 
-    // "Warning Wormsign"
-    if(ModManager::instance().isTornieFamilyContentActive()) {
-        lngVoice[WarningWormSign] = getChunkFromFile(languagePrefix + "WARNING.VOC");
-        if(pFileManager->exists(languagePrefix + "WORMY.VOC")) {
-            try {
-                auto worm = getChunkFromFile(languagePrefix + "WORMY.VOC");
-                lngVoice[WarningWormSign] = concat2Chunks(lngVoice[WarningWormSign].get(), worm.get());
-            } catch(const std::runtime_error& e) {
-                SDL_LogWarn(SDL_LOG_CATEGORY_AUDIO, "Optional '%sWORMY.VOC' unavailable: %s",
-                            languagePrefix.c_str(), e.what());
-            }
+    // "Warning Wormsign": the "Wormsign" half is optional. FRENCH.PAK has no
+    // FWORMY.VOC, so French says "Warning" alone; a missing or unreadable WORMY
+    // file must never stop the game from starting (issue #129).
+    lngVoice[WarningWormSign] = getChunkFromFile(languagePrefix + "WARNING.VOC");
+    if(pFileManager->exists(languagePrefix + "WORMY.VOC")) {
+        try {
+            auto worm = getChunkFromFile(languagePrefix + "WORMY.VOC");
+            lngVoice[WarningWormSign] = concat2Chunks(lngVoice[WarningWormSign].get(), worm.get());
+        } catch(const std::runtime_error& e) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_AUDIO, "Optional '%sWORMY.VOC' unavailable: %s",
+                        languagePrefix.c_str(), e.what());
         }
-    } else if(pFileManager->exists(languagePrefix + "WORMY.VOC")) {
-        auto WarningChunk = getChunkFromFile(languagePrefix + "WARNING.VOC");
-        auto WormSignChunk = getChunkFromFile(languagePrefix + "WORMY.VOC");
-        lngVoice[WarningWormSign] = concat2Chunks(WarningChunk.get(), WormSignChunk.get());
-    } else {
-        lngVoice[WarningWormSign] = getChunkFromFile(languagePrefix + "WARNING.VOC");
     }
 
     // "Our base is under attack"

@@ -242,7 +242,10 @@ CustomGameMenu::CustomGameMenu(bool multiplayer, bool LANServer, CustomPlaySetup
             // chooser open; Next checks again before a game is set up.
             const auto gate = ensureDune2RArtworkReady(availableMods[choice].name);
             if(!gate.ready && !gate.message.empty()) openWindow(MsgBox::create(gate.message));
+            // The new mod brings its own rule defaults; the tech level chosen for this match stays.
+            const int chosenTechLevel = currentGameOptions.startTechLevel;
             currentGameOptions = effectiveGameOptions = manager.loadEffectiveGameOptions(settings.gameOptions);
+            currentGameOptions.startTechLevel = chosenTechLevel;
             allowJoinAfterStartCheckbox.setEnabled(connectionChoice.getSelectedIndex() == 1 && OnlineModPolicy::approved());
             if(!OnlineModPolicy::approved()) allowJoinAfterStartCheckbox.setChecked(false);
         } else {

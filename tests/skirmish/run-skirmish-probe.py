@@ -28,6 +28,14 @@ Each runtime uses fresh leased profiles; failed scratch and all output logs rema
                partner in the house: two players, base on positive power, in-game screenshots,
                smoke run
   partner-quantbot a full qBotMedium partner in the player's house loads
+  city-park    DuneCity 96: the player's yard builds a Park, CMD_PLACE_STRUCTURE places it beside
+               the player's lots (no road ring, their land value rises, its own block stays
+               undeveloped), screenshot, save/load; then a QuantBot with ParkDistricts plants parks
+  city-redevelop  DuneCity 96, one saved start replayed per arm: RoadLaneParks, LotParks,
+               PollutionRelocation and IndustrySeparation each act with their switch on (orders
+               placed at their sites, polluter moved clear of the homes, no Industrial zone within
+               5 tiles of a home) and lift the land value of the lots they are for above the OFF
+               arm; nothing fires with them off
   partner-fighter  a qBotFighterMedium partner plays a minute with the human idle: nothing is
                queued, upgraded or placed in the player's house (docs/ai-roles.md)
   spectate     the screen's Spectate (DuneCity 96, Ordos + 1 ally + 2 enemies, qBotHard with a
@@ -36,6 +44,9 @@ Each runtime uses fresh leased profiles; failed scratch and all output logs rema
                screenshots); the choice is remembered and Spectate off seats the human again
   render       whole-map pictures (4 px per tile) and terrain measurements of map-editor random
                maps and of generated maps; --render-save adds the map a saved match started from
+  spectate-planes  Stefan's spectated 192x192 Random Skirmish of 2026-11-24 from his saved settings
+               (seed 262441038, four qBotBrutal, Game Speed 2, 2x zoom, 960x600): the first City
+               Airplane flies within five minutes, the renderer draws it and the radar marks it
   civ-menu     Civilization Wars settings, remembered seed, generic multiplayer starts/lobby/wire rules
   civ-1v1      fixed kit, fifteen turrets/base (ten front), positive full-cost city income,
                original research deadline and at least ten game minutes with all QuantBot seats
@@ -60,6 +71,7 @@ import sys
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import managed_profile, require_free_space, scratch_dir
+from probe_profile import NATIVE_TARGET, native_build_commands, native_build_data_dir, native_probe_binary, native_probe_data_dir, native_probe_includes, native_probe_relative  # noqa: E402
 sys.path.insert(0, str(root / 'tests/menu'))
 from probe_process import processes, run, check_output
 from probe_fixture import prepare_fixture
@@ -82,7 +94,7 @@ out.mkdir(parents=True, exist_ok=True)
 cases = args.cases.split(',')
 known_cases = {'menu', 'mp-lobby', 'legacy-map', 'vanilla-1v1', 'allied-2v3', 'city-192', 'stefan-128',
                'partner-support', 'partner-quantbot', 'partner-fighter', 'spectate', 'render',
-               'civ-menu', 'civ-1v1', 'civ-2v2', 'civ-3v3', 'civ-research'}
+               'civ-menu', 'civ-1v1', 'civ-2v2', 'civ-3v3', 'civ-research', 'city-park', 'city-redevelop', 'spectate-planes'}
 if not cases or any(case not in known_cases for case in cases):
     parser.error('--cases must name existing probe cases')
 if args.research_payment and cases != ['civ-research']:
@@ -98,8 +110,8 @@ if args.size:
 require_free_space(sweep='if-low')
 run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
 
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-commands = check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+commands = native_build_commands(build)
 production_link = shlex.split(next(line for line in commands if ' -o ' + target + ' ' in line))
 production_link = production_link[production_link.index('&&') + 1:]
 production_link = production_link[:production_link.index('&&')]
@@ -119,7 +131,8 @@ def compile_fixture(work):
     main = main.replace(clamp, '(void)displayIndex;')
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
     position = main.index('int main(')
-    main = main[:position] + '#include "' + str(root / 'tests/skirmish/skirmish-probe.inc') + '"\n' + main[position:]
+    main = (main[:position] + ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
+            + '#include "' + str(root / 'tests/skirmish/skirmish-probe.inc') + '"\n' + main[position:])
     source, obj = work / 'skirmish-main.cpp', work / 'skirmish-main.o'
     source.write_text(main)
     menu_source, menu_obj = work / 'civ-wars-menu.cpp', work / 'civ-wars-menu.o'
@@ -144,10 +157,7 @@ def compile_fixture(work):
     menu_compile = compile_command.copy()
     menu_compile[menu_compile.index('-o') + 1] = str(menu_obj)
     menu_compile[menu_compile.index('-c') + 1] = str(menu_source)
-    app = work / 'skirmish-probe.app/Contents'
-    (app / 'MacOS').mkdir(parents=True)
-    (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    binary = app / 'MacOS/skirmish-probe'
+    binary = native_probe_binary(build, work, 'skirmish-probe')
     link = production_link.copy()
     link[link.index('-o') + 1] = str(binary)
     link = [str(obj) if arg.endswith('/main.cpp.o') else arg for arg in link]
@@ -160,11 +170,12 @@ def compile_fixture(work):
 
 
 fixture_root = args.fixture_dir.resolve() if args.fixture_dir else build / 'skirmish-probe-fixture'
-binary = prepare_fixture(root, build, out, fixture_root, 'skirmish-probe.app/Contents/MacOS/skirmish-probe',
+binary = prepare_fixture(root, build, out, fixture_root, native_probe_relative('skirmish-probe'),
                          commands, production_link, compile_fixture,
                          require_prepared=bool(args.fixture_dir and not args.prepare_only))
 if args.prepare_only:
-    print('SKIRMISH_FIXTURE_READY: ' + str(binary.parents[3]), flush=True)
+    print('SKIRMISH_FIXTURE_READY: ' + str(binary.parents[len(native_probe_relative('skirmish-probe').parts) - 1]),
+          flush=True)
     sys.exit(0)
 
 # Engine diagnostics that mean a generated map or match is broken. Occupied
@@ -173,10 +184,82 @@ problem = re.compile(r'invalid|occupied\s+(?:position|tile)|error|exception|fail
 # Pre-existing startup lines unrelated to the match (mod/asset discovery in an empty profile).
 startup_noise = re.compile(r'Error loading|Warning: could not|libpng', re.IGNORECASE)
 
+# Stefan's settings on the MacBook Air when he reported "planes now appear to be invisible"
+# (2026-11-24, 1.0.877 candidate): the zoom, his dunecity game options and the Random Skirmish
+# screen as he left it. The [Video] size comes from the case's size above.
+STEFAN_SPECTATED_VIDEO = 'Preferred Zoom Level = 1\nScaler = ScaleHD\n'
+STEFAN_SPECTATED_SKIRMISH = """Custom Game Mod = dunecity
+[Game Options]
+Game Speed = 2
+[Game Options dunecity]
+Game Speed = 2
+Concrete Required = false
+Fog of War = false
+Start with Explored Map = true
+City Effects = true
+Plan Building Sites = true
+Retry Planned Placement = true
+Shared Yard Queue = true
+Slow City Year = true
+Selling Buildings = true
+Shared Factory Queue = true
+Micropolis Land Value = true
+Mountain Scenery = true
+Unpowered Zones Vacate = true
+Trooper Anti-Air = true
+Starport Population = true
+Carryall Drop Default = 1
+Manual Carryall Drops = true
+Trooper Ornithopter Reach = true
+City Plane Defence = true
+City Plane Bombing = true
+Airport Ornithopter Patrol = false
+City Plane Carpet Bombing = true
+City Plane Bombing Runs = true
+City Plane Purchase = true
+Saboteur Hunt = true
+[Random Skirmish]
+Map Size = 192
+Spice = 0
+Symmetric = true
+Seed = 262441038
+Fixed Seed = true
+House = -1
+Credits = 20000
+Allies = 0
+Enemies = 3
+Enemies Allied = false
+Mode = 1
+Mod = dunecity
+Tech Level = 9
+Ally AI = qBotBrutal
+Ally Base = 4
+Ally Army = 5
+Ally City = 4
+Enemy AI = qBotBrutal
+Enemy Base = 5
+Enemy Army = 0
+Enemy City = 4
+Player AI = qBotBrutal
+Player Base = 5
+Player Army = 0
+Player City = 4
+Spectate = true
+Spectate AI = qBotBrutal
+Sandworms = 0
+Research Lab = true
+Sand Percent = 35
+Rock Percent = 55
+Mountain Percent = 10
+"""
+
+
 def run_cases(work):
     summary = []
     for case in cases:
         sizes = ((640, 480), (1280, 720)) if case in ('menu', 'civ-menu', 'civ-research', 'civ-1v1', 'civ-2v2', 'civ-3v3') else ((1024, 768),)
+        if case == 'spectate-planes':
+            sizes = ((960, 600),)
         if selected_size and selected_size not in sizes:
             parser.error('--size is not an existing size for ' + case)
         payments = (args.research_payment,) if args.research_payment else ('off', 'on')
@@ -193,6 +276,9 @@ def run_cases(work):
             (profile / 'Dune City.ini').write_text(
                 f'[Video]\nPhysical Width = {width}\nPhysical Height = {height}\nWidth = {width}\nHeight = {height}\n'
                 f'Interface Height = {height}\nFullscreen = false\n[General]\nPlay Intro = false\nPlayer Name = Skirmish tester\n')
+            if case == 'spectate-planes':
+                ini = (profile / 'Dune City.ini').read_text().replace('[General]\n', STEFAN_SPECTATED_VIDEO + '[General]\n', 1)
+                (profile / 'Dune City.ini').write_text(ini + STEFAN_SPECTATED_SKIRMISH)
             env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
                        SKIRMISH_PROBE_OUT=str(case_out), SKIRMISH_PROBE_CASE=case, SKIRMISH_SOURCE_DIR=str(root))
             if payment is not None:

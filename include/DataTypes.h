@@ -21,6 +21,7 @@
 #include <Definitions.h>
 #include <TechResearch.h>
 #include <misc/SDL2pp.h>
+#include <misc/Hotkeys.h>
 
 // Libraries
 #include <string>
@@ -182,6 +183,7 @@ public:
     public:
         bool            playIntro;          ///< Play the intro when starting the game?
         std::string     playerName;         ///< The name of the player used for multiplayer games
+        std::string     analyticsInstallID; ///< Anonymous random id of this installation; match analytics only (misc/AnalyticsInstallID.h)
         std::string     language;           ///< Language code: "en" = English, "fr" = French, "de" = German
         int             scrollSpeed;        ///< Scroll speed in pixels
         bool            showTutorialHints;  ///< If true, tutorial hints are shown during the game
@@ -206,6 +208,9 @@ public:
         bool            customGameOnline = false;  ///< Custom game setup: last Offline/Online choice (remembered across games)
         std::string     customGameMod;             ///< Custom game setup: last mod the player picked (empty: follow the active mod)
     } general;
+
+    /// Personal command shortcuts ([Hotkeys] in the player's config file; misc/Hotkeys.h).
+    Hotkeys::Bindings hotkeys = Hotkeys::Bindings::defaults();
 
     class VideoClass {
     public:
@@ -328,7 +333,26 @@ public:
                     && (researchLab == goc.researchLab)
                     && (researchPace == goc.researchPace)
                     && (technologyInstallments == goc.technologyInstallments)
+                    && (startTechLevel == goc.startTechLevel)
+                    && (saboteurHunt == goc.saboteurHunt)
+                    && (saboteurSkipsCityZones == goc.saboteurSkipsCityZones)
+                    && (aiInfantryTactics == goc.aiInfantryTactics)
+                    && (hospitalCare == goc.hospitalCare)
+                    && (turretsFireOnBuildings == goc.turretsFireOnBuildings)
                     && (trooperAntiAir == goc.trooperAntiAir)
+                    && (trooperOrnithopterReach == goc.trooperOrnithopterReach)
+                    && (cityPlaneDefence == goc.cityPlaneDefence)
+                    && (cityPlaneBombing == goc.cityPlaneBombing)
+                    && (airportOrnithopterPatrol == goc.airportOrnithopterPatrol)
+                    && (cityPlaneCarpetBombing == goc.cityPlaneCarpetBombing)
+                    && (cityPlaneBombingRuns == goc.cityPlaneBombingRuns)
+                    && (cityPlanePurchase == goc.cityPlanePurchase)
+                    && (cityPlaneBuildTime == goc.cityPlaneBuildTime)
+                    && (cityPlaneFreePerAirport == goc.cityPlaneFreePerAirport)
+                    && (cityPlaneCrashBombs == goc.cityPlaneCrashBombs)
+                    && (parksCountAsRoads == goc.parksCountAsRoads)
+                    && (zoneGarrisons == goc.zoneGarrisons)
+                    && (fremenPalaceWorm == goc.fremenPalaceWorm)
                     && (starportPopulation == goc.starportPopulation)
                     && (alliedControl == goc.alliedControl)
                     && (alliedBuilding == goc.alliedBuilding)
@@ -376,13 +400,35 @@ public:
             optStr += "/researchLab=" + std::to_string(researchLab);
             optStr += "/researchPace=" + std::to_string(static_cast<std::uint32_t>(researchPace));
             optStr += "/technologyInstallments=" + std::to_string(technologyInstallments);
+            optStr += "/startTechLevel=" + std::to_string(startTechLevel);
             optStr += "/trooperAntiAir=" + std::to_string(trooperAntiAir);
+            // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
+            if(!trooperOrnithopterReach) optStr += "/trooperOrnithopterReach=0";
+            // The city plane rules likewise: only a state other than the default is spelled out.
+            if(!cityPlaneDefence) optStr += "/cityPlaneDefence=0";
+            if(!cityPlaneBombing) optStr += "/cityPlaneBombing=0";
+            if(airportOrnithopterPatrol) optStr += "/airportOrnithopterPatrol=1";
+            if(!cityPlaneCarpetBombing) optStr += "/cityPlaneCarpetBombing=0";
+            if(!cityPlaneBombingRuns) optStr += "/cityPlaneBombingRuns=0";
+            if(!cityPlanePurchase) optStr += "/cityPlanePurchase=0";
+            if(!cityPlaneBuildTime) optStr += "/cityPlaneBuildTime=0";
+            if(!cityPlaneFreePerAirport) optStr += "/cityPlaneFreePerAirport=0";
+            if(!cityPlaneCrashBombs) optStr += "/cityPlaneCrashBombs=0";
+            if(!parksCountAsRoads) optStr += "/parksCountAsRoads=0";
+            if(!zoneGarrisons) optStr += "/zoneGarrisons=0";
+            if(!fremenPalaceWorm) optStr += "/fremenPalaceWorm=0";
             optStr += "/starportPopulation=" + std::to_string(starportPopulation);
             optStr += "/alliedControl=" + std::to_string(alliedControl);
             optStr += "/alliedBuilding=" + std::to_string(alliedBuilding);
             optStr += "/easyMode=" + std::to_string(easyMode);
             optStr += "/chaosMode=" + std::to_string(chaosMode);
             optStr += "/sellingBuildings=" + std::to_string(sellingBuildings);
+            // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
+            if(!saboteurHunt) optStr += "/saboteurHunt=0";
+            if(!saboteurSkipsCityZones) optStr += "/saboteurSkipsCityZones=0";
+            if(!aiInfantryTactics) optStr += "/aiInfantryTactics=0";
+            if(!hospitalCare) optStr += "/hospitalCare=0";
+            if(turretsFireOnBuildings) optStr += "/turretsFireOnBuildings=1";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
             
             // FNV-1a hash
@@ -456,8 +502,114 @@ public:
         TechResearch::Pace researchPace = TechResearch::Pace::Normal;
         /// Opt-in: start research and builder upgrades without their full price; pay while they run.
         bool        technologyInstallments = false;
+        /// Custom Game "Tech level": 1-9 replaces the map's [BASIC] TechLevel for the match;
+        /// 0 keeps the map's level. A per-match choice: never written to the saved defaults.
+        int         startTechLevel = 0;
+        /// The Saboteur's own hunt. A Palace releases it hunting for a human house too; it goes for
+        /// the nearest enemy building or vehicle, goes off as soon as it is in reach, picks again at
+        /// once when its target vanishes or something nearer turns up beside it, and an AI player's
+        /// army orders do not reach it while it hunts. Off is the unit up to 1.0.876 (same nearest
+        /// target, but a stop next to it before it blows up, a human's Saboteur waiting in Guard,
+        /// army orders applied), kept so the two can be compared in one build
+        /// (tests/units/run-saboteur-effect-probe.py). INI key "Saboteur Hunt" only.
+        bool        saboteurHunt = true;
+        /// Saboteurs Skip City Zones (Stefan, 2026-11-28: "make sabateurs not target r/i/c (not
+        /// valuable enough) unless it is garissoned"; "saboteurs should skip r/i/c"): Saboteurs do not
+        /// pick Residential, Commercial or Industrial zones as targets unless soldiers are garrisoned
+        /// inside (docs/zone-garrisons.md), however built up or populated the zone is, and a Saboteur
+        /// drops a zone it picked once its garrison has gone. A target its owner ordered is kept. Off
+        /// is the rule up to protocol 149 (any zone the nearest target), kept so both can be
+        /// compared in one build. INI key "Saboteurs Skip City Zones"; bit 4 of the MOD20 byte, set
+        /// when off.
+        bool        saboteurSkipsCityZones = true;
+        /// City games: enable QuantBot garrisons, capture raids/levies/chains, reinforcement,
+        /// infantry squads, production lanes and infantry in the army mix. Individual QuantBot
+        /// config switches remain independent overrides. Inert in non-city games.
+        bool        aiInfantryTactics = true;
+        /// City games: Hospitals heal infantry (Stefan, 2026-11-27; dunecity/HospitalCare.h). A wounded
+        /// soldier sent for repair walks or is flown beside an own Hospital and heals there, five at a time;
+        /// a Hospital with a patient keeps its type. Off, infantry are sent to Repair Yards as up to
+        /// protocol 145. INI key only; bit 6 of the MOD20 byte, set when off.
+        bool        hospitalCare = true;
+        /// Turrets Can Fire On Buildings (Game Rules, default off): off, Rocket and Gun Turrets fire on
+        /// units only, never on buildings or city zones, as in the original game, whose turret script
+        /// searched units alone. Stefan, 2026-11-27: "rocket turrets cannot fire on enemy buildings -
+        /// this did not happenin the original - only on units. make this default behaviour", "same with
+        /// gun turrets", and "we can add a option for "turrets can fire on buildings" as an option that
+        /// can be turned on but it should be off by default". On, turrets also fire on buildings, as up
+        /// to protocol 146. INI key "Turrets Can Fire On Buildings" (the earlier key "Turrets Target
+        /// Units Only" is still read, inverted, when the new one is absent); bit 5 of the MOD20 byte,
+        /// set when on.
+        bool        turretsFireOnBuildings = false;
         /// DuneCity-content trooper small rockets track aircraft; ignored by other content.
         bool        trooperAntiAir;
+        /// Part of Trooper Anti-Air (so DuneCity content only): a rocket Trooper answers an
+        /// Ornithopter anywhere in its weapon range - without sight of the ground below it, the
+        /// moment it comes into range and without first turning to face it (Trooper.cpp). Off is
+        /// the rule up to 1.0.876, kept so the two can be compared in one build
+        /// (tests/units/run-trooper-ornithopter-effect.py, run-trooper-stance-probe.py). INI key only.
+        bool        trooperOrnithopterReach = true;
+        /// Rocket Turrets fight the city airplane (Unit_AmbientAirplane) as they fight an
+        /// Ornithopter: seen at triple range, taken the cycle it comes into reach, and shot at with
+        /// a rocket that flies to where the plane will be. Off is the rule up to 1.0.876 (the plane
+        /// is an ordinary target and the rocket aims at where it was). On or off, anti-air never
+        /// holds fire for where the crash lands (Stefan, 2026-11-25). INI key only.
+        bool        cityPlaneDefence = true;
+        /// A cruising city airplane drops bombs on enemy buildings under its course
+        /// (AmbientAirplane::dropBombs, CityAircraft::kBomb*). Off is the unarmed plane up to
+        /// 1.0.876. INI key only.
+        bool        cityPlaneBombing = true;
+        /// An Airport sends out pairs of Ornithopters on the Palace timer, as up to 1.0.876.
+        /// Off (the default) it launches the city airplane and helicopter only. INI key only.
+        bool        airportOrnithopterPatrol = false;
+        /// With City Plane Bombing: the plane lays a stick of bombs along its course while enemy
+        /// buildings are under it, one bomb every half tile, each a larger Ornithopter rocket
+        /// impact (CityAircraft::kStick*). Off is the single aimed bomb per building tile of the
+        /// first bombing rule (kBomb*). INI key only.
+        bool        cityPlaneCarpetBombing = true;
+        /// Each leg of a city airplane's flight is a run across a random enemy building and on
+        /// beyond it (AmbientAirplane::pickBombingRun). Off is Micropolis's random waypoint
+        /// anywhere on the map. INI key only.
+        bool        cityPlaneBombingRuns = true;
+        /// A powered Airport launches a city airplane at once for CityAircraft::kPlanePrice
+        /// credits (Airport::buyAirplane): a button for a human, a budget rule for QuantBot
+        /// (QuantBot::buyCityAirplanes). Off, planes only come from the Airport's free roll.
+        /// INI key only.
+        bool        cityPlanePurchase = true;
+        /// A bought plane takes build time (Stefan, 2026-11-26: "make buying planes take time - so
+        /// however long it takes for 1500 credits worth of unit by default it takes that long"): the
+        /// Airport takes the price at the order and launches the plane when built, one at a time, so
+        /// more Airports build more (Airport::planeBuildCycles, 57.6 s). Off, a bought plane launches at
+        /// once, as up to protocol 136. INI key only.
+        bool        cityPlaneBuildTime = true;
+        /// Each Airport has its own free plane (Stefan, 2026-11-26: "you get a free plane per airport"):
+        /// up to one free plane in the air per Airport, each on its own five-minute clock. Off, a house
+        /// has one free plane in the air whatever its Airports, as up to protocol 136. INI key only.
+        bool        cityPlaneFreePerAirport = true;
+        /// A plane that is shot down explodes as three of its own bombs, laid along its heading a
+        /// stick's spacing apart (Stefan, 2026-11-26: "make planes blow up as 3 of their bombs when
+        /// they die, current explosion too small"; AmbientAirplane::crash). Off, the crash is one stick
+        /// bomb's damage on the tile it falls on, as up to protocol 138. INI key only.
+        bool        cityPlaneCrashBombs = true;
+        /// City games: a Park is a road for the city simulation (Stefan, 2026-11-27: "count a park
+        /// as a road (without the movement bonus) as a way to also increase value"). A lot beside
+        /// a Park has road access for zone growth, and city traffic may cross Parks; units get no
+        /// road speed on a Park, and a Park still blocks them as any building does (Tile::
+        /// isRoadConnection, DuneCity::isTrafficConnector). Off, a Park is scenery only, as up to
+        /// protocol 142. INI key only.
+        bool        parksCountAsRoads = true;
+        /// City games: Soldiers and Troopers sent with the capture order occupy Residential,
+        /// Commercial and Industrial zones (Stefan, 2026-11-27: "i want infantry and troopers to be
+        /// able to occupy friendly and enemy R/I/C - using the capture command"). Inside they fire
+        /// out from behind sandbags; an enemy zone nobody holds becomes the occupier's house's
+        /// (ZoneStructureGarrison.cpp, docs/zone-garrisons.md). Off, a zone is captured as any
+        /// building is, as up to protocol 143. INI key only.
+        bool        zoneGarrisons = true;
+        /// A Fremen Palace calls a sandworm its house controls instead of Fremen warriors (Stefan,
+        /// 2026-11-27: "i want freeman house to get a worm as its palace special"): Hunt eats enemy
+        /// units on its sand, Spice Bloom bursts it into a spice field (include/units/
+        /// PalaceWormRules.h). Off, the Fremen Palace calls warriors, as up to protocol 144. INI key only.
+        bool        fremenPalaceWorm = true;
         /// City games: a house needs a displayed city population of DuneCity::kStarportPopulation
         /// (5,000) to start a Starport (docs/city-economy-balance.md, "Starport population").
         bool        starportPopulation;

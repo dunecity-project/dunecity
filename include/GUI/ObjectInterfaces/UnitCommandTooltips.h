@@ -8,53 +8,110 @@
 #include <string>
 
 /**
-    Tooltips for the unit command and mode buttons, each naming its hotkey (GitHub #87,
-    docs/rts-controls.md). With the WASD camera on, the camera letters A, S, D and Q need
-    Shift, and the tooltip says so. Built when the panel is built, like every other tooltip.
+    Tooltips for the unit command and mode buttons, each naming the effective hotkey from the
+    player's bindings (GitHub #87, misc/Hotkeys.h, docs/rts-controls.md). With the WASD camera
+    on, an unmodified W/A/S/D binding needs Shift, and the tooltip says so; an unbound action
+    says "unbound". Built when the panel is built, like every other tooltip.
 */
 namespace UnitCommandTooltips {
 
-inline std::string withHotkey(const std::string& label, const std::string& key, bool wasdNeedsShift,
-                              const std::string& help) {
-    const std::string shown = (wasdNeedsShift && settings.general.wasdCamera) ? "Shift+" + key : key;
-    return label + " (" + shown + ")" + (help.empty() ? std::string() : ": " + help);
+/// The effective key of 'action' for display, e.g. "Shift+G", or "unbound".
+inline std::string hotkeyText(Hotkeys::Action action) {
+    const std::string name = Hotkeys::displayName(settings.hotkeys.effective(action, settings.general.wasdCamera));
+    return name.empty() ? _("unbound") : name;
+}
+
+/// " (Hotkey: U)" for the structure and sidebar tooltips; empty when the action is unbound.
+inline std::string hotkeySuffix(Hotkeys::Action action) {
+    const std::string name = Hotkeys::displayName(settings.hotkeys.effective(action, settings.general.wasdCamera));
+    return name.empty() ? std::string() : " (" + _("Hotkey") + ": " + name + ")";
+}
+
+inline std::string withHotkey(const std::string& label, Hotkeys::Action action, const std::string& help) {
+    return label + " (" + hotkeyText(action) + ")" + (help.empty() ? std::string() : ": " + help);
 }
 
 inline std::string move() {
-    return withHotkey(_("Move"), "M", false, _("walk to a position; Shift+click queues waypoints"));
+    return withHotkey(_("Move"), Hotkeys::Action::Move, _("walk to a position; Shift+click queues waypoints"));
 }
 inline std::string attackMove() {
-    return withHotkey(_("Attack Move"), "A", true,
+    return withHotkey(_("Attack Move"), Hotkeys::Action::AttackMove,
         _("click ground to walk there fighting, an enemy or a spice bloom to attack it, Ctrl+click ground to fire at it; Shift queues"));
 }
 inline std::string patrol() {
-    return withHotkey(_("Patrol"), "Q", true, _("attack-move back and forth from here; Shift+click adds patrol points"));
+    return withHotkey(_("Patrol"), Hotkeys::Action::Patrol, _("attack-move back and forth from here; Shift+click adds patrol points"));
+}
+inline std::string guard() {
+    return withHotkey(_("Guard"), Hotkeys::Action::Guard, _("Unit will not move from location"));
+}
+inline std::string areaGuard() {
+    return withHotkey(_("Area Guard"), Hotkeys::Action::AreaGuard, _("Unit will engage any unit within guard range"));
 }
 inline std::string hold() {
-    return withHotkey(_("Hold"), "H", false, _("never move, fire only at enemies within weapon range"));
+    return withHotkey(_("Hold"), Hotkeys::Action::Hold, _("never move, fire only at enemies within weapon range"));
+}
+inline std::string ambush() {
+    return withHotkey(_("Ambush"), Hotkeys::Action::Ambush, _("Unit will not move until enemy unit spotted"));
+}
+inline std::string hunt() {
+    return withHotkey(_("Hunt"), Hotkeys::Action::Hunt, _("Unit will immediately start to engage an enemy unit"));
+}
+inline std::string retreat() {
+    return withHotkey(_("Retreat"), Hotkeys::Action::Retreat, _("Unit will retreat back to base"));
+}
+/// 'help' differs between the single-unit and the group panel.
+inline std::string sabotage(const std::string& help) {
+    return withHotkey(_("Sabotage"), Hotkeys::Action::Sabotage, help);
+}
+inline std::string deploy() {
+    return withHotkey(_("Build a new construction yard"), Hotkeys::Action::DeployMCV, std::string());
+}
+inline std::string destruct() {
+    return withHotkey(_("Self-destruct this unit"), Hotkeys::Action::SelfDestruct, std::string());
+}
+inline std::string heal() {
+    return withHotkey(_("Heal an allied unit"), Hotkeys::Action::Heal, std::string());
+}
+inline std::string movementPaths() {
+    return withHotkey(_("Show or hide movement paths for selected units"), Hotkeys::Action::ToggleMovementPaths, std::string());
 }
 inline std::string stop() {
-    return withHotkey(_("Stop"), "S", true, _("unit will not move or attack"));
+    return withHotkey(_("Stop"), Hotkeys::Action::Stop, _("unit will not move or attack"));
 }
 inline std::string carryallDrop() {
-    return withHotkey(_("Request Carryall drop"), "D", true, _("fly the unit to a position"));
+    return withHotkey(_("Request Carryall drop"), Hotkeys::Action::CarryallDrop, _("fly the unit to a position"));
 }
-inline std::string capture() {
-    return withHotkey(_("Capture"), "C", false, _("take over a building; Shift queues"));
+/// ZONES: the Zone Garrisons rule is on in a city game, so Capture on a zone occupies it. Capture is the only
+/// zone order (Stefan, 2026-11-28: "capture button acts as garrison button if used on own r/i/c no need for 2
+/// different buttons, just capture").
+inline std::string capture(bool zones = false) {
+    return withHotkey(_("Capture"), Hotkeys::Action::Capture, zones
+        ? _("take over an enemy building or zone; on your own R/C/I zone, garrison it (soldiers fire out from inside); Shift queues")
+        : _("take over a building; Shift queues"));
 }
 inline std::string returnHarvester() {
-    return withHotkey(_("Return harvester"), "H", false, _("deliver spice to a refinery; Shift queues"));
+    return withHotkey(_("Return harvester"), Hotkeys::Action::Hold, _("deliver spice to a refinery; Shift queues"));
 }
 inline std::string repairUnit() {
-    return withHotkey(_("Repair"), "R", false, _("send this unit to a repair yard"));
+    return withHotkey(_("Repair"), Hotkeys::Action::Repair, _("send this unit to a repair yard"));
+}
+/// Infantry in a city game with Hospital Care (dunecity/HospitalCare.h, repairButtonFor).
+inline std::string healAtHospital() {
+    return withHotkey(_("Heal"), Hotkeys::Action::Repair, _("send this soldier to a Hospital"));
+}
+inline std::string needsHospital() {
+    return _("Needs a Hospital: soldiers heal only at a Hospital, which a city of 256 residents gets");
+}
+inline std::string saboteurCannotHeal() {
+    return _("A Saboteur cannot be healed");
 }
 
 /// The unit panel's formation buttons (docs/formations.md): Off, then the shapes in
 /// FormationPlanner::Shape order. A shape also forms the selected units up where they stand.
 inline std::string formationChoice(int choice) {
-    if(choice <= 0) return withHotkey(_("Formations off"), "Ctrl+F", false, _("each unit moves on its own"));
+    if(choice <= 0) return withHotkey(_("Formations off"), Hotkeys::Action::ToggleFormationMoves, _("each unit moves on its own"));
     const auto shape = [](const std::string& label, const std::string& help) {
-        return withHotkey(label, "Ctrl+Shift+F", false, help + "; " + _("forms the selection up where it stands"));
+        return withHotkey(label, Hotkeys::Action::NextFormationShape, help + "; " + _("forms the selection up where it stands"));
     };
     switch(FormationPlanner::shapeAt(choice - 1)) {
         case FormationPlanner::Shape::Pincer:

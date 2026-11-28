@@ -26,6 +26,8 @@ rs160-vanilla): a generated multiplayer Random Skirmish map with one start per h
 Fortress with a 20,000-credit army and in DuneCity a 40,000 city (Rock High, Spice Medium) -
 Stefan's 4P DuneCity free-for-all - from the seed (map seed and match seed), played in that mod
 with --game-options (default his options, tests/performance/data/stefan-game-options.ini).
+A bundled map plays the harness default mod (vanilla, no city) unless --map-mod names one:
+--map-mod dunecity --houses harkonnen sardaukar neutral --maps 3waysplit is Stefan's 3P city game.
 
 Army role metrics may be unavailable in observer-only samples (roles_measured=0 or negative
 role values). Reports show those reserve metrics as unmeasured, retaining raw position statistics.
@@ -41,18 +43,22 @@ army, harvesters, structures, factories, kill and loss value) to samples.csv, wh
 army stands each minute (FFA_ARMY_SAMPLE: inside or outside its base, per QuantBot role, at the
 bundle or perimeter, the outnumbered verdict) to army.csv, its waves to waves.csv and the
 composition per unit-mix slot every 10 game minutes and at the end (value built, lost and
-standing, combat reward; docs/ai-play-styles.md, section 8) to mix.csv; the run directory is
+standing, combat reward; docs/ai-play-styles.md, section 8) to mix.csv and every Saboteur's release,
+sabotage or loss to saboteurs.csv, every building a QuantBot placed (with the gap to the nearest
+enemy building) to placements.csv; the run directory is
 deleted straight away and games already in games.csv are skipped. --report prints the tables
 used in docs/formations.md, scored by tests/ai/match_score.py (placement score, time-outs
 negative, verdict on the paired difference; --scoring legacy for the old rule).
 """
 import argparse
+import configparser
 import csv
 import itertools
 import re
 import shutil
 import statistics
 import subprocess
+import os
 import sys
 import threading
 import time
@@ -63,6 +69,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import finish_game, probe_binary, require_free_space, scratch_dir  # noqa: E402
+import activation  # noqa: E402
 import match_score  # noqa: E402
 
 MAP_DIR = root / 'data/maps/multiplayer'
@@ -75,7 +82,8 @@ MAPS = {
     'sihaya-pip': '2P - 128x31 - 1v1 - Sihaya-Pip.ini',
     'x-factor': '2P - 32x32 - X-Factor.ini',
 }
-HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5}
+HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardaukar': 4, 'mercenary': 5,
+                 'neutral': 6}
 HOUSE_PAIRS = (('atreides', 'harkonnen'), ('ordos', 'atreides'), ('harkonnen', 'ordos'))
 FFA_HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar')
 KEY = ('tag', 'difficulty', 'map', 'seed', 'sides')
@@ -84,7 +92,14 @@ DUEL_HOUSE_FIELDS = ('alive', 'kill_value', 'loss_value', 'structures_destroyed'
                      'army_value', 'army_units', 'home_kill', 'home_loss', 'focus', 'converges', 'bundle_orders',
                      'gate_holds', 'gate_timeouts', 'raid_orders', 'turret_targets', 'press_on_orders',
                      'finish_waves', 'fortified_holds', 'sonic_retargets', 'surplus_peak', 'siege_orders',
-                     'siege_holds', 'assault_holds', 'assault_waves', 'strategy')
+                     'siege_holds', 'assault_holds', 'assault_waves',
+                     'airlift_rear', 'airlift_flank', 'airlift_retreats', 'airlift_retreat_units', 'airlift_rescues', 'airlift_strikes',
+                     'airlift_ordered', 'airlift_lifted', 'airlift_landed', 'airlift_lost', 'airlift_lost_waiting', 'airlift_cancelled', 'carryalls',
+                     'carryalls_built', 'carryalls_lost', 'airlift_no_front', 'airlift_no_trip', 'airlift_no_carryalls', 'airlift_no_group', 'airlift_no_point',
+                'airlift_defeat_passes', 'airlift_retreat_no_carryall', 'airlift_retreat_no_fighter', 'airlift_rescues_damaged',
+                'airlift_rescues_alone', 'airlift_ferried', 'airlift_squad_retreats', 'airlift_harvester_raids', 'airlift_perimeter_raids',
+                'airlift_raid_units', 'airlift_raid_retargets', 'airlift_raid_no_target', 'airlift_raid_no_group',
+                'airlift_raid_no_carryall', 'airlift_base_defence', 'airlift_harvester_defence', 'strategy')
 HOUSE_ROW_FIELDS = KEY + ('slot', 'house', 'label', 'eliminated_s', 'place') + DUEL_HOUSE_FIELDS + ('start_mix',)
 SAMPLE_FIELDS = ('minute', 'credits', 'army_value', 'army_units', 'harvesters', 'structures', 'factories',
                  'kill_value', 'loss_value', 'alive', 'crush_kills')
@@ -98,6 +113,132 @@ ARMY_FIELDS = ('minute', 'roles_measured', 'army_value', 'inside_value', 'outsid
                'free_value', 'free_inside_value', 'at_bundle_value', 'at_perimeter_value', 'stuck_value', 'outnumbered',
                'garrisoned', 'own_estimate', 'enemy_sum', 'enemy_strongest', 'bundle_base_tiles', 'perimeter_base_tiles')
 ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
+# One row per Saboteur event the engine logs: its Palace release, the object it blew up, or its
+# loss with nothing sabotaged (tests/ai/saboteur-effect-report.py).
+# 'order' rows are an AI player's army orders addressed to a Saboteur (the first six of each, with
+# the function that gave them; refused=1 when the Saboteur kept its own hunt) and 'mode' rows its
+# attack-mode changes. hit and lost rows carry its totals (orders, overwrites, refused).
+# 'target' rows are each new target (the first eight a Saboteur), with garrison (soldiers inside a target
+# zone, -1 for anything else) and own (1: its own choice, 0: an order); zone_skip / zone_drop /
+# zone_violation are the match rule Saboteurs Skip City Zones acting, giving up an evacuated zone, and
+# the in-game check's failure (tests/units/saboteur-zone-report.py reads them).
+SABOTEUR_EVENTS = (('SABOTEUR_RELEASED:', 'released'), ('SABOTEUR_HIT:', 'hit'), ('SABOTEUR_LOST:', 'lost'),
+                   ('SABOTEUR_ORDER:', 'order'), ('SABOTEUR_MODE:', 'mode'), ('SABOTEUR_TARGET:', 'target'),
+                   ('SABOTEUR_ZONE_SKIP:', 'zone_skip'), ('SABOTEUR_ZONE_DROP:', 'zone_drop'),
+                   ('SABOTEUR_ZONE_RULE:', 'zone_violation'))
+SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehicle', 'price', 'cycle', 'age_s',
+                   'orders', 'overwrites', 'refused', 'killer', 'killer_item', 'killer_house', 'target_dist', 'mode',
+                   'order', 'caller', 'busy', 'from', 'to', 'garrison', 'own', 'zone_item', 'picked_item', 'next_item')
+SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
+# One row per Fremen Palace worm event the engine logs (match rule Fremen Palace Worm): summoned,
+# bloom_order, hunt (QuantBot's order to eat PREY), ate (one per meal, with the victim's item and
+# price), redirected (another controller's ORDER to it, BY which function), bloom_cancelled, spice
+# (a burst's SPICE_TILES and its REFINERY_DIST to the nearest own refinery), and how it ended:
+# bloom, expired, sated or beaten.
+WORM_FIELDS = ('house', 'object', 'x', 'y', 'kills', 'cycles_left', 'item', 'price', 'victim_house', 'palace',
+               'aim_x', 'aim_y', 'cycle', 'prey', 'order', 'by', 'spice_tiles', 'refinery_dist')
+WORM_ROW_FIELDS = KEY + ('event',) + WORM_FIELDS
+# One row per Hospital trip event (match rule Hospital Care, dunecity/HospitalCare.h): a soldier
+# sent (why: order, auto, redirect), healed, or ended early (why: lost, hospital_lost, left_bed,
+# reordered, stalled).
+HOSPITAL_FIELDS = ('house', 'object', 'item', 'hp', 'max_hp', 'hospital', 'why', 'cycle')
+HOSPITAL_ROW_FIELDS = KEY + ('event',) + HOSPITAL_FIELDS
+# One row per Zone Garrisons event (docs/zone-garrisons.md, ZONE_GARRISON: lines): QuantBot orders
+# (event=order why=defend|take|raid|levy|reinforce|front|chain), their ends (order_ended why=no_zone|
+# held_by_other|no_progress), soldiers in (entered, taken=1 for an enemy zone), out (exit: low_health,
+# destroyed, hurt), captured zones handed back (returned), releases, levy training, shots at aircraft
+# from a garrison (fired_air) and other controllers' refused orders (redirect_refused).
+GARRISON_FIELDS = ('house', 'why', 'unit', 'item', 'zone', 'zone_house', 'occupants', 'taken', 'previous_house',
+                   'holder', 'deployed', 'remaining', 'destroyed', 'low_health', 'hurt', 'health', 'max_health',
+                   'target_item', 'order', 'by', 'price', 'soldiers', 'shots', 'air_shots', 'men', 'cycle')
+GARRISON_ROW_FIELDS = KEY + ('event',) + GARRISON_FIELDS
+# One row per infantry-squads line (docs/infantry-squads.md): foot-soldier orders (INFANTRY_ORDER), squads
+# delivered (INFANTRY_SQUAD), the measured infantry share (INFANTRY_MIX), Barracks/WOR lanes (INFANTRY_LANE),
+# QuantBot's infantry purchases with their reason (INFANTRY_BUY) and the Barracks/WOR tax census
+# (CITY_INFANTRY_HOUSING).
+INFANTRY_KINDS = ('INFANTRY_ORDER', 'INFANTRY_SQUAD', 'INFANTRY_MIX', 'INFANTRY_LANE', 'INFANTRY_BUY',
+                  'INFANTRY_DELIVERY', 'INFANTRY_MIX_DELIVERED', 'CITY_INFANTRY_HOUSING')
+INFANTRY_FIELDS = ('house', 'event', 'builder', 'builder_item', 'item', 'men', 'expected', 'price', 'squad_offered',
+                   'ai', 'share_bps', 'opening_bps', 'learning', 'reward_milli', 'loss_milli', 'score', 'type',
+                   'infantry_value', 'military_value', 'on_share', 'producer', 'have', 'busy', 'deficit', 'credits',
+                   'count', 'reason', 'year', 'buildings', 'housed', 'population', 'tax_eighths', 'cycle')
+INFANTRY_ROW_FIELDS = KEY + ('kind',) + INFANTRY_FIELDS
+# One row per city house a city year (CITY_ZONE_CHURN, CityEffectsRuntime.cpp): its zone counts and
+# how often its zones changed density, population and Hospital/Church overlay that year.
+ZONE_FIELDS = ('house', 'year', 'cycle', 'days', 'r', 'c', 'i', 'hospitals', 'churches', 'hospital_days',
+               'hosp_on', 'hosp_off', 'church_on', 'church_off', 'grew', 'declined', 'pop_changes')
+ZONE_ROW_FIELDS = KEY + ZONE_FIELDS
+# Rocket Turrets at the front (include/players/TurretFrontPolicy.h): every city house's turret count,
+# upkeep and population every two minutes (ledger), each front order (front: rule front_reinforce,
+# turret_creep or turret_advance) and each rear turret retired (retire). tests/ai/turret-front-report.py.
+TURRET_EVENTS = (('TURRET_LEDGER:', 'ledger'), ('TURRET_FRONT:', 'front'), ('TURRET_RETIRE:', 'retire'),
+                 ('TURRET_FRONT_PLACED:', 'placed'), ('TURRET_FRONT_ENGAGED:', 'engaged'),
+                 ('TURRET_FRONT_MISSED:', 'missed'), ('TURRET_FRONT_STATE:', 'state'))
+TURRET_FIELDS = ('house', 'rocket_turrets', 'gun_turrets', 'police_stations', 'funding', 'turret_upkeep_milli_per_min',
+                 'credits', 'population', 'rule', 'x', 'y', 'cost', 'cover', 'goal', 'attack_value', 'forward', 'edge',
+                 'army_lead', 'object', 'enemy_dist', 'sold', 'refund', 'standing', 'keep', 'delay', 'target',
+                 'army_units', 'mode', 'reinforce', 'creep', 'advance', 'drill', 'retired', 'cycle')
+# One row per house-game whose label plays a play style with declared activation events
+# (tests/ai/activation-events.json): how often it fired and reached its effect (tests/ai/activation.py).
+ACTIVATION_ROW_FIELDS = KEY + ('house', 'label') + activation.FIELDS
+TURRET_ROW_FIELDS = KEY + ('event', 'label') + TURRET_FIELDS
+# Lessons from Stefan's Metropolis save (include/players/CityLessonsPolicy.h): every stats pass
+# CityLauncherArmy held the vehicle mix (kind launcher_army) and every LowValuePalaces plan, placement,
+# effect and expiry (kind low_value_palace, its event). tests/ai/city-lessons-report.py.
+# CITY_LOTS (kind city_lots): every 3 game minutes each QuantBot house's R/C lots, low-value lots and mean
+# land value, so an arm's low-lot share compares with the control's.
+LESSON_EVENTS = (('LAUNCHER_ARMY:', 'launcher_army'), ('LOW_VALUE_PALACE:', 'low_value_palace'),
+                 ('FRONT_PALACE:', 'front_palace'), ('CITY_LOTS:', 'city_lots'),
+                 # EconomyFirst (Stefan's Air game, 2026-11-28): tests/ai/economy-first-report.py.
+                 ('ECONOMY_FIRST:', 'economy_first'), ('ECONOMY_STATE:', 'economy_state'), ('BUILD_ORDER:', 'build_order'),
+                 ('MCV_DEPLOYED:', 'mcv_deployed'), ('MCV_LOST:', 'mcv_lost'))
+LESSON_FIELDS = ('house', 'event', 'passes', 'launcher_bps', 'ornithopter_bps', 'launchers', 'ornithopters',
+                 'launcher_value', 'vehicle_value', 'x', 'y', 'low_lots', 'lots_standing', 'lv_before', 'lv_now',
+                 'lv_after', 'rise', 'palace_stands', 'palaces', 'credits', 'wait_s', 'met', 'enemy_tiles',
+                 'turrets_ahead', 'lots', 'price', 'project_passes', 'pending_passes', 'saving_passes',
+                 'preempted_passes', 'ordered_passes', 'held_passes', 'blocked', 'reason', 'turrets', 'allowed_tiles',
+                 'yards', 'mcvs', 'yard_target', 'was', 'capacity', 'refinery_bays', 'yard_refineries', 'zones_r',
+                 'zones_c', 'zones_i', 'nuclear', 'windtraps', 'police', 'rocket_turrets', 'heavy_factories',
+                 'population', 'tax_per_min', 'power', 'unit_built', 'structure_built', 'hold', 'threat', 'producer',
+                 'item', 'rule', 'hold_passes', 'threat_passes', 'zones', 'spice', 'houses', 'ordered', 'half_his', 'yards_lost', 'mcvs_lost', 'choice', 'home', 'start_x', 'start_y', 'travelled', 'target_x', 'target_y', 'to_target',
+                 'escorts', 'hit_by', 'hit_s', 'age_s', 'footprints', 'free_footprints', 'pacing', 'paced', 'spent', 'allowance', 'orders', 'cycle')
+LESSON_ROW_FIELDS = KEY + ('kind', 'label') + LESSON_FIELDS
+# One row per city airplane event the engine logs: an Airport launching one, a bomb dropped, a
+# building a bomb destroyed, a plane shot down, an Ornithopter an Airport sent out on
+# patrol, and a plane an Airport sold (tests/ai/city-plane-report.py).
+PLANE_EVENTS = (('CITY_PLANE_LAUNCHED:', 'launched'), ('CITY_PLANE_BOMB:', 'bomb'), ('CITY_PLANE_KILL:', 'kill'),
+                ('CITY_PLANE_DOWN:', 'down'), ('CITY_PLANE_PATROL:', 'patrol'), ('CITY_PLANE_BOUGHT:', 'bought'),
+                ('CITY_AIR_DEFENCE:', 'air_defence'), ('CITY_PLANE_CRASH:', 'crash'),
+                ('CITY_PLANE_CRASH_KILL:', 'crash_kill'), ('CITY_FIRST_BOMB:', 'first_bomb'),
+                ('CITY_HOUSE_OUT:', 'house_out'), ('CITY_AIRPORT_COVER:', 'airport_cover'),
+                ('CITY_PLANE_NEAR_AIRPORT:', 'near_airport'), ('CITY_AIRPORT_GUARD:', 'airport_guard'),
+                ('CITY_PLANE_UNIT_KILL:', 'unit_kill'), ('CITY_PLANE_LEFT:', 'left'),
+                ('CITY_AIRPORT_EXTRA:', 'airport_extra'))
+PLANE_FIELDS = ('house', 'object', 'target_house', 'target_item', 'target_name', 'price', 'killer_house',
+                'killer_item', 'bombs', 'released', 'bought', 'cycle', 'enemy_destroyed', 'enemy_credits', 'enemy_hp',
+                'own_destroyed', 'own_credits', 'own_rocket_turrets', 'threat', 'rocket_turrets', 'gun_turrets',
+                'structures_lost', 'item', 'x', 'y', 'airport', 'airport_house', 'airport_dist', 'stage', 'dist',
+                'ring', 'reach', 'powered', 'health', 'turret_at', 'own', 'source', 'airports',
+                'flights_ended', 'value_per_flight', 'build_cycles')
+PLANE_ROW_FIELDS = KEY + ('event',) + PLANE_FIELDS
+# One row per building a QuantBot placed (not slabs or roads): the clear tiles to the nearest enemy
+# building (enemy_gap 0 = touching, -1 = none standing), the tactical danger on the site and
+# whether a held building took it (protocol 141, "build right up to enemy buildings").
+PLACED_FIELDS = ('house', 'item', 'x', 'y', 'enemy_gap', 'enemy_item', 'threat', 'tolerated', 'old_spacing', 'cycle')
+PLACED_ROW_FIELDS = KEY + ('label',) + PLACED_FIELDS
+# One row per house and unit/structure type at the end of a game (UNIT_ECONOMY, House::logUnitEconomy):
+# built, lost, price and the combat record's damage value, for tests/ai/unit-economy-report.py.
+UNIT_ECONOMY_FIELDS = ('phase', 'house', 'item', 'name', 'kind', 'price', 'built', 'lost', 'damage_value', 'kill_bonus',
+                       'kills', 'hits', 'cycle')
+UNIT_ECONOMY_ROW_FIELDS = KEY + UNIT_ECONOMY_FIELDS
+# Each QuantBot house's power stock and building room once a game minute (QUANTBOT_ROOM), and every Wind
+# Trap it retired with the room it had then (WIND_TRAP_RETIRED): room.csv and windtraps.csv.
+ROOM_FIELDS = ('minute', 'house', 'wind_traps', 'nuclear', 'zones', 'free_rock', 'footprints', 'room_blocked',
+               'built_out', 'produced', 'required')
+ROOM_ROW_FIELDS = KEY + ROOM_FIELDS
+WIND_TRAP_FIELDS = ('house', 'object', 'cycle', 'wind_traps', 'nuclear', 'lots_near', 'free_rock', 'footprints',
+                    'room_blocked', 'built_out', 'produced', 'required')
+WIND_TRAP_ROW_FIELDS = KEY + WIND_TRAP_FIELDS
 SKIRMISH_OPTIONS = root / 'tests/performance/data/stefan-game-options.ini'
 lock = threading.Lock()
 
@@ -145,6 +286,16 @@ def map_path(name):
     if name in MAPS:
         return MAP_DIR / MAPS[name]
     for path in MAP_DIR.glob('*.ini'):
+        if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
+            return path
+    # A custom-game map shipped among the single-player maps, e.g. 3waysplit (Stefan's 3P 192x192
+    # city game, 2026-11-27): the same file-stem rule.
+    for path in (root / 'data/maps/singleplayer').glob('*.ini'):
+        if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
+            return path
+    # A test-only map of a game Stefan played, kept out of the game's own map list, e.g. air-1v3 (his last
+    # Air game, 2026-11-28; tests/ai/maps).
+    for path in (root / 'tests/ai/maps').glob('*.ini'):
         if path.stem.rsplit(' - ', 1)[-1].lower().replace(' ', '-') == name.lower():
             return path
     raise SystemExit(f'Unknown map {name}')
@@ -252,7 +403,18 @@ def build_probe(args, scratch):
 
 
 
+def apply_env(args):
+    """Set the --env variables for the games this process plays. Called from play() as well as
+    after parsing: the cluster loads this file without its command-line dispatch (cluster_unit.py),
+    so code after parse_args() never runs on a worker. On 2026-11-23 that made five balance arms
+    replay the baseline digit for digit."""
+    for item in getattr(args, 'env', None) or []:
+        name, _, value = item.partition('=')
+        os.environ[name] = value
+
+
 def play(args, scratch, binary, key):
+    apply_env(args)
     tag, difficulty, name, seed, sides_text = key
     sides = side_list(sides_text)
     out = scratch / f'{name}-{seed}-{abs(hash(sides_text)) % 10**8}-{tag}'
@@ -263,20 +425,34 @@ def play(args, scratch, binary, key):
                '--local-spectator', '--enemy-difficulty', difficulty, '--partner-difficulty', difficulty,
                '--minutes', str(args.minutes), '--seed', seed, '--capture-mib', '256',
                '--wall-timeout', str(args.wall_timeout), '--path-workers', '1']
+    game_options = args.game_options
     if generated := skirmish(name):
         size, mod = generated
         command += ['--skirmish-ffa-size', str(size), '--skirmish-map-seed', seed,
-                    '--mod', 'Dune2R' if mod == 'dune2r' else mod,
-                    '--game-options', str(args.game_options or SKIRMISH_OPTIONS)]
+                    '--mod', 'Dune2R' if mod == 'dune2r' else mod]
+        game_options = game_options or SKIRMISH_OPTIONS
     else:
         command += ['--custom-map', str(game_map(name, scratch))]
-        if args.game_options:
-            command += ['--game-options', str(args.game_options)]
+        if args.map_mod:
+            command += ['--mod', 'Dune2R' if args.map_mod == 'dune2r' else args.map_mod]
+    # The lobby convenience option enables all infantry switches. Keep runtime OFF/ON arms independent.
+    options = configparser.ConfigParser(strict=False, interpolation=None)
+    options.optionxform = str
+    if game_options:
+        options.read(game_options)
+    if not options.has_section('Game Options'):
+        options.add_section('Game Options')
+    options.set('Game Options', 'AI Infantry Tactics', 'false')
+    options_path = scratch / (out.name + '-game-options.ini')
+    with options_path.open('w') as handle:
+        options.write(handle)
+    command += ['--game-options', str(options_path)]
     if not args.ai_telemetry:
         command.append('--no-ai-telemetry')
     assert '--army-deploys-regression-observer' not in command
     started = time.time()
     outcome = subprocess.run(command, cwd=root, capture_output=True, text=True)
+    options_path.unlink(missing_ok=True)
     wall = round(time.time() - started)
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
@@ -343,6 +519,104 @@ def play(args, scratch, binary, key):
         if number in numbers:
             mixes.append({**dict(zip(KEY, key)), 'house': numbers[number], 'label': label_of[number],
                           **{f: sample.get(f, '') for f in MIX_FIELDS}})
+    saboteurs = []
+    for l in lines:
+        for marker, event in SABOTEUR_EVENTS:
+            if marker in l:
+                data = parse(l, marker)
+                saboteurs.append({**dict(zip(KEY, key)), 'event': event,
+                                  **{f: data.get(f, '') for f in SABOTEUR_FIELDS}})
+    append(results / 'saboteurs.csv', SABOTEUR_ROW_FIELDS, saboteurs)
+    worms = []
+    for l in lines:
+        if 'PALACE_WORM:' in l:
+            data = parse(l, 'PALACE_WORM:')
+            worms.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
+                          **{f: data.get(f, '') for f in WORM_FIELDS}})
+    append(results / 'worms.csv', WORM_ROW_FIELDS, worms)
+    hospital = []
+    for l in lines:
+        if 'HOSPITAL_CARE:' in l:
+            data = parse(l, 'HOSPITAL_CARE:')
+            hospital.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
+                             **{f: data.get(f, '') for f in HOSPITAL_FIELDS}})
+    append(results / 'hospital.csv', HOSPITAL_ROW_FIELDS, hospital)
+    garrison = []
+    for l in lines:
+        if 'ZONE_GARRISON:' in l:
+            data = parse(l, 'ZONE_GARRISON:')
+            garrison.append({**dict(zip(KEY, key)), 'event': data.get('event', ''),
+                             **{f: data.get(f, '') for f in GARRISON_FIELDS}})
+    append(results / 'garrison.csv', GARRISON_ROW_FIELDS, garrison)
+    infantry = []
+    for l in itertools.chain(lines, activation.infantry_mix_deliveries(lines)):
+        for kind in INFANTRY_KINDS:
+            if kind + ':' in l:
+                data = parse(l, kind + ':')
+                infantry.append({**dict(zip(KEY, key)), 'kind': kind, **{f: data.get(f, '') for f in INFANTRY_FIELDS}})
+                break
+    append(results / 'infantry.csv', INFANTRY_ROW_FIELDS, infantry)
+    zones = [{**dict(zip(KEY, key)), **{f: d.get(f, '') for f in ZONE_FIELDS}}
+             for d in (parse(l, 'CITY_ZONE_CHURN:') for l in lines if 'CITY_ZONE_CHURN:' in l)]
+    append(results / 'zones.csv', ZONE_ROW_FIELDS, zones)
+    turrets = []
+    for l in lines:
+        for marker, event in TURRET_EVENTS:
+            if marker in l:
+                data = parse(l, marker)
+                number = int(data.get('house', -1))
+                turrets.append({**dict(zip(KEY, key)), 'event': event, 'label': label_of.get(number, ''),
+                                **{f: data.get(f, '') for f in TURRET_FIELDS}})
+                if number in numbers:
+                    turrets[-1]['house'] = numbers[number]
+    append(results / 'turrets.csv', TURRET_ROW_FIELDS, turrets)
+    lessons = []
+    for l in lines:
+        for marker, kind in LESSON_EVENTS:
+            if marker in l:
+                data = parse(l, marker)
+                number = int(data.get('house', -1))
+                lessons.append({**dict(zip(KEY, key)), 'kind': kind, 'label': label_of.get(number, ''),
+                                **{f: data.get(f, '') for f in LESSON_FIELDS}})
+                if number in numbers:
+                    lessons[-1]['house'] = numbers[number]
+    append(results / 'lessons.csv', LESSON_ROW_FIELDS, lessons)
+    registry = activation.load_registry()
+    styles = {HOUSE_NUMBERS[h]: activation.style_of(l) for h, l in sides}
+    counted = activation.count(lines, styles, registry)
+    append(results / 'activation.csv', ACTIVATION_ROW_FIELDS,
+           [{**dict(zip(KEY, key)), 'house': numbers[n], 'label': label_of[n], 'style': styles[n], 'fired': f, 'succeeded': s}
+            for n, (f, s) in sorted(counted.items())])
+    planes = []
+    for l in lines:
+        for marker, event in PLANE_EVENTS:
+            if marker in l:
+                data = parse(l, marker)
+                planes.append({**dict(zip(KEY, key)), 'event': event,
+                               **{f: data.get(f, '') for f in PLANE_FIELDS}})
+    append(results / 'planes.csv', PLANE_ROW_FIELDS, planes)
+    placements = []
+    for l in lines:
+        if 'AI_PLACED:' in l:
+            data = parse(l, 'AI_PLACED:')
+            number = int(data['house'])
+            placements.append({**dict(zip(KEY, key)), 'label': label_of.get(number, ''),
+                               **{f: data.get(f, '') for f in PLACED_FIELDS}})
+            if number in numbers:
+                placements[-1]['house'] = numbers[number]
+    append(results / 'placements.csv', PLACED_ROW_FIELDS, placements)
+    for marker, name, fields, row_fields in (('QUANTBOT_ROOM:', 'room.csv', ROOM_FIELDS, ROOM_ROW_FIELDS),
+                                             ('WIND_TRAP_RETIRED:', 'windtraps.csv', WIND_TRAP_FIELDS,
+                                              WIND_TRAP_ROW_FIELDS)):
+        rows = [{**dict(zip(KEY, key)), **{f: data.get(f, '') for f in fields}}
+                for data in (parse(l, marker) for l in lines if marker in l)]
+        append(results / name, row_fields, rows)
+    economy = []
+    for l in lines:
+        if 'UNIT_ECONOMY:' in l:
+            data = parse(l, 'UNIT_ECONOMY:')
+            economy.append({**dict(zip(KEY, key)), **{f: data.get(f, '') for f in UNIT_ECONOMY_FIELDS}})
+    append(results / 'units.csv', UNIT_ECONOMY_ROW_FIELDS, economy)
     append(results / 'houses.csv', HOUSE_ROW_FIELDS, house_rows)
     append(results / 'samples.csv', SAMPLE_ROW_FIELDS, samples)
     append(results / 'waves.csv', WAVE_ROW_FIELDS, waves)
@@ -482,7 +756,7 @@ def baseline_table(args, games, houses):
         if c:
             print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
                   f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
-                  f'{c.verdict} {args.baseline} |')
+                  f'{activation.verdict(x, f"{c.verdict} {args.baseline}", activation.summarise(houses, args.activation_rows, activation.load_registry()))} |')
 
 
 def baseline_tag_table(args, games, houses, base_games, base_houses):
@@ -505,7 +779,7 @@ def baseline_tag_table(args, games, houses, base_games, base_houses):
         if c:
             print(f'| {x} v {y} | {c.n} | {c.candidate:.3f} | {c.control:.3f} | {c.difference:+.3f} '
                   f'({c.low:+.2f}..{c.high:+.2f}) | {100 * c.candidate_draws:.0f}% / {100 * c.control_draws:.0f}% | '
-                  f'{c.verdict} tag {args.baseline_tag} |')
+                  f'{activation.verdict(x, f"{c.verdict} tag {args.baseline_tag}", activation.summarise(houses, args.activation_rows, activation.load_registry()))} |')
 
 
 def report_pairs(args, games, houses, samples, waves):
@@ -519,6 +793,9 @@ def report_pairs(args, games, houses, samples, waves):
     print(f'| Pairing (first label\'s side) | Games | {score_columns(args)} | Strict | Elim. W-L / time-outs | '
           'Win min (median) | Loss min (median) | Structures lost / destroyed per game | Verdict |')
     print('|---|---|---|---|---|---|---|---|---|---|' + ('' if args.scoring == 'legacy' else '---|'))
+    summaries = activation.summarise(houses, args.activation_rows, activation.load_registry())
+    if summaries:
+        print('\n'.join([''] + activation.table(summaries) + ['']))
     for pair in args.pairs.split(','):
         x, y = pair.split(':')
         rows = pair_scores(games, houses, x, y, args)
@@ -532,7 +809,7 @@ def report_pairs(args, games, houses, samples, waves):
         print(f'| {x} v {y} | {len(rows)} | {fmt_ci(rows, args)} | {statistics.mean(strict):.3f} | '
               f'{len(wins)}-{len(losses)} / {len(rows) - len(wins) - len(losses)} | '
               f'{statistics.median(wins) if wins else 0:.1f} | {statistics.median(losses) if losses else 0:.1f} | '
-              f'{lost:.1f} / {destroyed:.1f} | {compare(rows, args).verdict} {y} |')
+              f'{lost:.1f} / {destroyed:.1f} | {activation.verdict(x, f"{compare(rows, args).verdict} {y}", summaries)} |')
     if args.baseline:
         baseline_table(args, games, houses)
     if args.baseline_tag:
@@ -658,7 +935,12 @@ def report_ffa(args, games, houses):
     mean = lambda values: (statistics.mean(v[0] for v in values), statistics.mean(1.0 if v[1] else 0.0 for v in values))
     print(f'\nPer game (mean over a label\'s houses), against {control} in the same games '
           f'({"interval of the score against 0.5" if legacy else "difference = score - control score, 95% bootstrap"}):\n')
-    print(f'| Label | Games | Score | Control score | {"95% CI" if legacy else "Difference (95% CI)"} | '
+    summaries = activation.summarise(rows, args.activation_rows, activation.load_registry())
+    if summaries:
+        print('\nActivation (tests/ai/activation.py): an arm whose behaviour reached its effect in fewer than half of '
+              'its house-games is NOT TESTED, whatever its score.\n')
+        print('\n'.join(activation.table(summaries)))
+    print(f'\n| Label | Games | Score | Control score | {"95% CI" if legacy else "Difference (95% CI)"} | '
           'Alive at a time-out (share of houses) own / control | Verdict |')
     print('|---|---|---|---|---|---|---|')
     for label in labels:
@@ -675,7 +957,7 @@ def report_ffa(args, games, houses):
         interval = f'{c.low:.2f}-{c.high:.2f}' if legacy else f'{c.difference:+.3f} ({c.low:+.2f}..{c.high:+.2f})'
         print(f'| {label} | {c.n} | {c.candidate:+.3f} | {c.control:+.3f} | {interval} | '
               f'{100 * statistics.mean(p[2] for p in pairs):.0f}% / {100 * statistics.mean(p[3] for p in pairs):.0f}% | '
-              f'{c.verdict} {control} |')
+              f'{activation.verdict(label, f"{c.verdict} {control}", summaries)} |')
     timeouts = sum(1 for g in valid.values() if not g['winner_label'])
     print(f'\nTime-outs (two or more houses alive at the limit): {timeouts} of {len(valid)}')
 
@@ -793,6 +1075,7 @@ def report(args):
             rows += [r for r in read(extra / name) if keep(r) and r['tag'] == args.baseline_tag]
         return rows
     games, houses = load('games.csv'), load('houses.csv')
+    args.activation_rows = load('activation.csv')
     if args.ffa:
         report_ffa(args, games, houses)
         report_ffa_army(args, games, houses, load('waves.csv'), load('army.csv'))
@@ -824,6 +1107,8 @@ parser.add_argument('--ffa', help='Free-for-all: one label for self-play, two la
 parser.add_argument('--game-options', type=Path,
                     help='[Game Options] INI for every game (default: the lobby defaults; rs<size>-<mod> maps: '
                          'tests/performance/data/stefan-game-options.ini)')
+parser.add_argument('--map-mod', help='The mod a bundled (not rs<size>-<mod>) map plays, e.g. dunecity for the '
+                    '3waysplit city game; default the harness default (vanilla, no city simulation)')
 parser.add_argument('--control', help='FFA report: the label every other label is compared with (default the second --ffa label)')
 parser.add_argument('--baseline-tag', help='Report: compare with this tag (another code version, e.g. the last release): '
                                            '1v1 pairings side by side in the same setup; a one-label FFA game by game '
@@ -845,6 +1130,9 @@ parser.add_argument('--seed-per-map', type=int, default=0, metavar='STRIDE',
 parser.add_argument('--jobs', type=int, default=4, help='Games played in parallel')
 parser.add_argument('--ai-telemetry', action='store_true', help='Keep the AI decision log (events.jsonl)')
 parser.add_argument('--rebuild', action='store_true', help='Rebuild the probe binary even if one exists')
+parser.add_argument('--env', action='append', default=[], metavar='KEY=VALUE',
+                    help='Set an environment variable for every game played (repeatable): the engine\'s '
+                         'experiment-only overrides, e.g. DUNECITY_TEST_FREE_PLANE_SECONDS=120')
 parser.add_argument('--report', action='store_true')
 parser.add_argument('--minutes-shown', default='5,10,15,20,30,40,60', help='Report: economy table minutes')
 parser.add_argument('--adjudicate', type=float, default=1000,
@@ -852,6 +1140,7 @@ parser.add_argument('--adjudicate', type=float, default=1000,
                          'least this many credits')
 match_score.add_arguments(parser)
 args = parser.parse_args()
+apply_env(args)
 if bool(args.pairs) == bool(args.ffa):
     parser.error('Give exactly one of --pairs and --ffa.')
 if args.ffa:

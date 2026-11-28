@@ -103,6 +103,43 @@ public:
     /// True when this worm leaves `object` alone because it belongs to the summoner's team.
     bool spares(const ObjectBase& object) const;
 
+    /**
+        The Fremen Palace worm (match rule GameOptionsClass::fremenPalaceWorm; Stefan, 2026-11-27:
+        "i want freeman house to get a worm as its palace special - it has full control over the
+        worm and can eat enemy units with it via hunt, or can explode to create spice"). Unlike
+        every other sandworm it belongs to the house whose Palace called it, not to the Natives:
+        it takes that house's orders, never eats its team, is credited with what it eats, never
+        sleeps and leaves after PalaceWorm::kLifetimeMs or PalaceWorm::kMeals meals
+        (include/units/PalaceWormRules.h). Created only by createPalaceWorm().
+    */
+    static Sandworm* createPalaceWorm(House* owner);
+    bool isPalaceWorm() const { return palaceWorm; }
+    /// Game cycles before a Palace worm leaves on its own; 0 for any other worm.
+    Sint32 getPalaceWormCyclesLeft() const { return palaceWormCyclesLeft; }
+    Sint32 getKills() const { return kills; }
+    /// Where a Spice Bloom order will burst, or invalid when the worm has none.
+    const Coord& getBloomTarget() const { return bloomTarget; }
+    bool hasBloomOrder() const { return bloomTarget.isValid(); }
+    /**
+        The Spice Bloom order: travel to (x,y), or to the nearest sand tile this worm can reach
+        within PalaceWorm::kBloomSnapTiles of it, and burst there into a spice field, which ends
+        the worm. A Move, Attack, Guard or Stop order cancels it.
+        \return false (nothing changes) for any other worm or a spot it cannot reach
+    */
+    bool doSpiceBloom(int x, int y);
+    void handleSpiceBloomClick(int x, int y);
+    /// Game::CursorMode_SpiceBloom click: every selected Palace worm of the local player bursts at (x,y).
+    static bool handleSelectedSpiceBloomClick(int x, int y);
+
+    void doMove2Pos(int xPos, int yPos, bool bForced) override;
+    void doAttackObject(const ObjectBase* pTargetObject, bool bForced) override;
+    void doAttackPos(int xPos, int yPos, bool bForced) override;
+    using GroundUnit::doMove2Pos;
+    using GroundUnit::doAttackObject;
+
+    /// A Palace worm that burst or left is not a loss; one beaten by the enemy is.
+    bool lostWhenDestroyed() const override { return !palaceWorm || !palaceWormSpent; }
+
 protected:
     const ObjectBase* findTarget() const override;
     void engageTarget() override;
@@ -123,6 +160,18 @@ private:
     Sint32 summonerHouseID = HOUSE_INVALID; ///< See setSummoner().
     /// Captured once at initial Civ Wars deployment; sleep and movement never change it.
     Coord respawnOrigin = Coord::Invalid();
+
+    // Fremen Palace worm (saved from SAVEGAMEVERSION_PALACE_WORM)
+    bool   palaceWorm = false;              ///< See createPalaceWorm().
+    Sint32 palaceWormCyclesLeft = 0;        ///< Cycles before it leaves on its own
+    Coord  bloomTarget = Coord::Invalid();  ///< Spice Bloom order, see doSpiceBloom()
+    bool   palaceWormSpent = false;         ///< Burst or left (transient: set just before destroy())
+    void   noteBloomCancelled(const char* order);
+    bool   takingDamage = false;            ///< Inside handleDamage() (transient): its retaliation orders do not cancel a bloom trip
+
+    /// Ends a Palace worm that burst or left on its own. Calls destroy(): return false from update().
+    void palaceWormLeave(const char* why);
+    void palaceWormBurst();
 };
 
 #endif // SANDWORM_H

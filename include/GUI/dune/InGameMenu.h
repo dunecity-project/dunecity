@@ -25,6 +25,8 @@
 #include <GUI/Spacer.h>
 #include <GUI/Label.h>
 
+#include <string>
+
 class InGameMenuButton : public TextButton {
 public:
     Point getMinimumSize() const override;
@@ -63,6 +65,7 @@ public:
     void onSave();
     void onSaveMap();
     void onRestart();
+    void onRestartDifficulty();
     void onQuit();
     void onSkipMission();
 
@@ -83,6 +86,7 @@ private:
     InGameMenuButton  resumeButton;
     InGameMenuButton  gameSettingsButton;
     InGameMenuButton  restartGameButton;
+    InGameMenuButton  restartDifficultyButton;
     InGameMenuButton  saveGameButton;
     InGameMenuButton  saveMapButton;
     InGameMenuButton  loadGameButton;

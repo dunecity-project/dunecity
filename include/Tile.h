@@ -442,6 +442,8 @@ public:
     }
     bool isConcrete() const noexcept { return (type == Terrain_Slab); }
     bool isExploredByHouse(int houseID) const { return houseID >= 0 && houseID < NUM_HOUSES && explored[houseID]; }
+    /// The cycle this house last had the tile in sight (0: never, or only at the first cycle).
+    Uint32 getLastAccess(int houseID) const { return houseID >= 0 && houseID < NUM_HOUSES ? lastAccess[houseID] : 0; }
     bool isExploredByTeam(int teamID) const;
 
     bool isFoggedByHouse(int houseID) const noexcept;
@@ -508,6 +510,10 @@ public:
         if (r) { destroyedStructureTile = DestroyedStructure_None; damage.clear(); deadUnits.clear(); }
     }
     bool isRoadConnection() const;
+    /// A Park on this tile, while the match rule Parks Count As Roads is on: a road for the city
+    /// simulation's zone access and traffic, never for unit movement.
+    bool isParkRoad() const;
+    static bool parksCountAsRoads();
     bool hasCityZone() const noexcept { return cityZoneType_ != DuneCity::ZoneType::None; }
 
 

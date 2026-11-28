@@ -8,6 +8,8 @@
 // read from the live objects so any controller (QuantBot, AI Player, human) is measured alike.
 #include <units/UnitBase.h>
 #include <structures/StructureBase.h>
+#include <players/QuantBot.h>
+#include <dunecity/CityConstants.h>
 
 #include <map>
 #include <set>
@@ -111,6 +113,27 @@ inline void sampleMix(Game& game, const House* house, int minute, bool final) {
             join(built).c_str(), join(lost).c_str(), join(army).c_str(), join(reward).c_str());
 }
 
+/// A QuantBot house's power stock and the building room its last rock survey measured (free rock
+/// tiles in build range, free 2x2 footprints capped at kCrampedFootprints, no site for a production
+/// building), once a game minute (vanilla-match.py room.csv). Read from the bot, never computed here.
+inline void sampleRoom(const House* house, int minute) {
+    for (const auto& player : house->getPlayerList()) {
+        const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+        if (!bot) continue;
+        int zones = 0;
+        for (const auto* structure : structureList)
+            if (structure->getOwner() == house && structure->getHealth() > 0
+                && DuneCity::isCityZoneStructure(structure->getItemID())) ++zones;
+        SDL_Log("QUANTBOT_ROOM: minute=%d house=%d wind_traps=%d nuclear=%d zones=%d free_rock=%d footprints=%d "
+                "room_blocked=%d built_out=%d produced=%lld required=%lld",
+                minute, house->getHouseID(), house->getNumItems(Structure_WindTrap),
+                house->getNumItems(Structure_NuclearPlant), zones, bot->availableBaseRock, bot->availableBaseFootprints,
+                int(bot->baseProductionRoomBlocked), int(bot->baseBuiltOut()),
+                (long long)house->getProducedPower(), (long long)house->getPowerRequirement());
+        return;
+    }
+}
+
 inline void sample(Game& game, bool final = false) {
     const int minute = static_cast<int>(game.getGameCycleCount() / MILLI2CYCLES(60000));
     for (const House* house : playingHouses(game)) {
@@ -137,6 +160,7 @@ inline void sample(Game& game, bool final = false) {
                 house->getKillValue(), house->getLossValue(), crushCount.of(house->getHouseID()));
         // The composition at 10, 20, 30... game minutes and at the end (docs/ai-play-styles.md, section 8).
         if (final || (minute > 0 && minute % 10 == 0)) sampleMix(game, house, minute, final);
+        sampleRoom(house, minute);
     }
     FfaArmy::sample(game);
     DuneCityAudit::sample(game);

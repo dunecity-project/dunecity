@@ -455,3 +455,65 @@ TEST_CASE("Aircraft art provenance records the original XPM sources", "[city][ai
     CHECK(manifest.find("scripts/import-micropolis-aircraft.py") != std::string::npos);
     CHECK(manifest.find("GPL-3.0-or-later") != std::string::npos);
 }
+
+TEST_CASE("A computer player buys planes only when its own planes have paid", "[city][aircraft]") {
+    using namespace DuneCity::CityAircraft;
+    // No evidence yet: the free plane flies first.
+    CHECK_FALSE(purchasePays(1000000, 0));
+    CHECK_FALSE(purchasePays(1000000, kPurchaseEvidenceFlights - 1));
+    CHECK(purchasePays(kPlanePrice, 1));
+    CHECK_FALSE(purchasePays(kPlanePrice - 1, 1));
+    // Three flights ended: they must have destroyed 4500 credits between them.
+    CHECK_FALSE(purchasePays(3 * kPlanePrice - 1, 3));
+    CHECK(purchasePays(3 * kPlanePrice, 3));
+    // A defended city (391 credits a flight in the first AI matches) does not pay; an open one does.
+    CHECK_FALSE(purchasePays(391 * 100, 100));
+    CHECK(purchasePays(5600 * 100, 100));
+}
+
+TEST_CASE("A computer player with heaps of money buys planes that do not pay", "[city][aircraft]") {
+    using namespace DuneCity::CityAircraft;
+    // Twice a full ten planes' price beyond its reserves, and for as long as that lasts.
+    CHECK(kRichSurplus == 30000);
+    // Stefan, 2026-11-24: "maybe you get one free plane every 5 mins".
+    CHECK(kFreePlaneMs == 300000);
+    CHECK_FALSE(richBuys(kRichSurplus - 1));
+    CHECK(richBuys(kRichSurplus));
+    CHECK(richBuys(1000000));
+}
+
+TEST_CASE("Another Airport is built only when its free planes repay its price in 20 minutes", "[city][aircraft]") {
+    using namespace DuneCity::CityAircraft;
+    // 5,000 over 20 minutes with a free plane every five minutes: 1,250 a flight.
+    CHECK_FALSE(extraAirportPays(1000000, kAirportEvidenceFlights - 1, 5000));
+    CHECK(extraAirportPays(1250, kAirportEvidenceFlights, 5000));
+    CHECK_FALSE(extraAirportPays(1249, kAirportEvidenceFlights, 5000));
+    // A two-minute clock (an experiment) halves the bar's flights: 500 a flight.
+    CHECK(extraAirportPays(500, 10, 5000, 120000));
+    CHECK_FALSE(extraAirportPays(499, 10, 5000, 120000));
+    CHECK_FALSE(extraAirportPays(1000000, 10, 5000, 0));
+    // A production line alone (no free plane, 57.6 s a plane at 1,500): (v - 1500) x 20.8 >= 5,000.
+    CHECK(extraAirportPays(1740, 10, 5000, 0, 1500, 57600));
+    CHECK_FALSE(extraAirportPays(1739, 10, 5000, 0, 1500, 57600));
+    CHECK_FALSE(extraAirportPays(1500, 10, 5000, 0, 1500, 57600));   // a plane that only repays itself
+    // Both: the free plane's 1,000 x 4 plus the line's 100 x 20.8 is 6,083.
+    CHECK(extraAirportPays(1000, 10, 5000, 300000, 900, 57600));
+    CHECK_FALSE(extraAirportPays(900, 10, 5000, 300000, 1500, 57600));   // 900 x 4 = 3,600, no margin
+}
+
+TEST_CASE("The city airplane is scored like a unit and bought against the army's score", "[city][aircraft]") {
+    using namespace DuneCity::CityAircraft;
+    // Value destroyed (milli credits) per price of the flights that ended, plus one price of prior.
+    CHECK(planePerformanceScore(0, 0) == 0);
+    CHECK(planePerformanceScore(int64_t(kPlanePrice) * 1000 * 2, 1) == 1000000);      // 3000 destroyed, one flight: x1.0
+    CHECK(planePerformanceScore(int64_t(606) * 1000 * 10, 10) == 367272);            // an ordinary AI city: x0.37
+    // Bought at the army's own score, between x0.5 and x1.0.
+    CHECK(planeBuyScore(0) == kPlaneBuyScoreCeiling);
+    CHECK(planeBuyScore(300000) == kPlaneBuyScoreFloor);
+    CHECK(planeBuyScore(700000) == 700000);
+    CHECK(planeBuyScore(2500000) == kPlaneBuyScoreCeiling);
+    CHECK_FALSE(planeWorthBuying(int64_t(100000) * 1000, 0, 700000));                // no flight has ended
+    CHECK_FALSE(planeWorthBuying(int64_t(606) * 1000 * 10, 10, 700000));             // x0.37 against x0.7
+    CHECK(planeWorthBuying(int64_t(5746) * 1000 * 10, 10, 700000));                  // a thin city: x3.5
+}
+

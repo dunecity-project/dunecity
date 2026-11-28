@@ -36,6 +36,8 @@
 #include <GUI/dune/SaveMapWindow.h>
 #include <INIMap/MatchMapExport.h>
 #include <misc/MenuPalette.h>
+#include <GUI/dune/RestartDifficultyWindow.h>
+#include <players/EnemyDifficultyPolicy.h>
 
 
 Point InGameMenuButton::getMinimumSize() const {
@@ -48,8 +50,11 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
     const bool canJoin=pNetworkManager && pNetworkManager->isServer() && pNetworkManager->getDirectTransport() && pNetworkManager->getDirectTransport()->allowsLateJoin();
     const bool canRequest=currentGame->isSpectating() && pNetworkManager && pNetworkManager->getDirectTransport();
     const bool canSaveMap=MatchMapExport::available(*currentGame);
+    // Restart against enemies on a difficulty the player picks (EnemyDifficultyPolicy.h).
+    const bool canDifficulty = !bMultiplayer && !EnemyDifficultyPolicy::current(
+        currentGame->getGameInitSettings().getHouseInfoList(), isCampaignGameType(currentGame->gameType)).empty();
     const int buttons = 3 + (canJoin ? 1 : 0) + (canRequest ? 1 : 0) + (bMultiplayer ? 2 : 3)
-        + (canSkip ? 1 : 0) + (canSaveMap ? 1 : 0);
+        + (canSkip ? 1 : 0) + (canSaveMap ? 1 : 0) + (canDifficulty ? 1 : 0);
     const int width = std::min(440,getRendererWidth()-32);
     const int height = 92 + buttons*40 + (buttons-1)*6;
     auto background = GUIStyle::getInstance().createBackground(width, height);
@@ -107,6 +112,10 @@ InGameMenu::InGameMenu(bool bMultiplayer, int color)
     if(!bMultiplayer) {
         gap();addButton(loadGameButton,_("Load Game"),std::bind(&InGameMenu::onLoad,this));
         gap();addButton(restartGameButton,_("Restart Game"),std::bind(&InGameMenu::onRestart,this));
+    }
+    restartDifficultyButton.setVisible(canDifficulty);restartDifficultyButton.setEnabled(canDifficulty);
+    if(canDifficulty) {
+        gap();addButton(restartDifficultyButton,_("Restart on New Difficulty"),std::bind(&InGameMenu::onRestartDifficulty,this));
     }
     gap();addButton(gameSettingsButton,_("Game Settings"),std::bind(&InGameMenu::onSettings,this));
     if (bMultiplayer) {
@@ -174,6 +183,16 @@ bool InGameMenu::handleKeyPress(SDL_KeyboardEvent& key) {
 }
 
 void InGameMenu::onChildWindowClose(Window* pChildWindow) {
+    if(auto* difficulty = dynamic_cast<RestartDifficultyWindow*>(pChildWindow)) {
+        // Restart against the chosen enemies; later campaign missions keep them.
+        if(!difficulty->getChosenClass().empty()) {
+            currentGame->setNextGameInitSettings(EnemyDifficultyPolicy::withEnemies(
+                currentGame->getGameInitSettings(), difficulty->getChosenClass(), isCampaignGameType(currentGame->gameType)));
+            currentGame->resumeGame();
+            currentGame->quitGame();
+        }
+        return;
+    }
     LoadSaveWindow* pLoadSaveWindow = dynamic_cast<LoadSaveWindow*>(pChildWindow);
     if(pLoadSaveWindow != nullptr) {
         std::string FileName = pLoadSaveWindow->getFilename();
@@ -264,6 +283,14 @@ void InGameMenu::onRestart()
     pQstBox->setTextColor(color);
 
     openWindow(pQstBox);
+}
+
+void InGameMenu::onRestartDifficulty()
+{
+    const bool campaign = isCampaignGameType(currentGame->gameType);
+    const std::string current = EnemyDifficultyPolicy::current(currentGame->getGameInitSettings().getHouseInfoList(), campaign);
+    if(current.empty()) return;
+    openWindow(RestartDifficultyWindow::create(EnemyDifficultyPolicy::choices(campaign), current, color));
 }
 
 void InGameMenu::onQuit()

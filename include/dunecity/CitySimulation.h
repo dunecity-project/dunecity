@@ -11,6 +11,7 @@
 #include <dunecity/CrimeUnrestPolicy.h>
 #include <dunecity/CityDemandNoticePolicy.h>
 #include <dunecity/ParkTerrainPolicy.h>
+#include <dunecity/HospitalCare.h>
 
 class InputStream;
 class OutputStream;
@@ -111,7 +112,6 @@ public:
     int16_t getIndValve() const;
 
     int32_t getTotalFunds() const;
-    void setTotalFunds(int32_t v) { totalFunds_ = v; }
     /// A house's tax rate (percentage of population paid annually), 0-20.
     int16_t getCityTax(int houseID) const {
         return houseID >= 0 && houseID < kMaxCityHouses ? houseState_[houseID].taxRate : kDefaultCityTaxRate;
@@ -213,10 +213,6 @@ public:
     // Phase/milestone methods used by Game.cpp
     int getPhaseCycle() const { return 9; } // Always return 9 so milestone check runs
     void checkAndTriggerMilestones(int32_t totalPop, int32_t totalFunds, int32_t resPop, int32_t comPop, int32_t indPop, bool hasRoads);
-    /// Deduct from the player's credit pool. Returns false (no deduction)
-    /// if insufficient funds. Implemented in CityEffectsRuntime.cpp so it
-    /// can access pLocalHouse directly.
-    bool spendCityFunds(int32_t amount);
 
     /// Troopers a crime outbreak raised: all owned by the Natives house (nullptr when none rose
     /// because the origin's owner has no opposing house with a base).
@@ -231,7 +227,12 @@ public:
     */
     CrimeTroops raiseCrimeTroopers(const StructureBase* origin, int requested);
 
+    /// Hospitals heal infantry: trips and census overlays (dunecity/HospitalCare.h); saved.
+    HospitalCareState& hospitalCare() { return hospitalCare_; }
+    const HospitalCareState& hospitalCare() const { return hospitalCare_; }
+
 private:
+    HospitalCareState hospitalCare_;
     bool initialized_ = false;
     bool milestones_[NUM_MILESTONES] = {};
     bool milestoneFirstZoneAchieved_ = false;
@@ -286,6 +287,21 @@ private:
 
     /// Decay growth rate map toward zero each scan tick.
     void decayGrowthRateMap();
+
+    /// Every cycle: Hospital trips, admissions and healing (HospitalCare::update); the first call
+    /// after a load puts the saved census overlays back on their zones. CityEffectsRuntime.cpp.
+    void runHospitalCare();
+    bool hospitalOverlaysPending_ = false; ///< Set by load(); not serialized.
+
+    /// Zone type changes a house's city made this city year, logged once a year as
+    /// CITY_ZONE_CHURN (vanilla-match.py zones.csv). Logging only: never read by the simulation,
+    /// not serialized (a loaded game starts its year's counts at zero).
+    struct ZoneChurn {
+        int grew = 0, declined = 0, popChanges = 0;
+        int hospitalOn = 0, hospitalOff = 0, churchOn = 0, churchOff = 0;
+        int hospitalDays = 0, censuses = 0;
+    };
+    ZoneChurn zoneChurn_[kMaxCityHouses] = {};
 };
 
 } // namespace DuneCity

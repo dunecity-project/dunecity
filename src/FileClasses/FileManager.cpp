@@ -16,6 +16,9 @@
  */
 
 #include <FileClasses/FileManager.h>
+#include <FileClasses/VocPlaceholder.h>
+#include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 
 #include <globals.h>
 
@@ -80,7 +83,7 @@ bool isPakEnabledForFallbackLookup(const Pakfile& pakFile) {
 }
 
 std::vector<std::string> getFilenameCaseVariants(const std::string& filename);
-bool isTinyVocPlaceholder(const std::string& filename, SDL_RWops* rwop);
+using VocPlaceholder::isTinyVocPlaceholder;
 
 sdl2::RWops_ptr openFromNamedPak(const std::vector<std::unique_ptr<Pakfile>>& pakFiles, const std::string& filename, const std::string& pakNameUpper) {
     for(const auto& pPakFile : pakFiles) {
@@ -205,15 +208,6 @@ sdl2::RWops_ptr openExternalFileIfPresent(std::string filepath) {
         }
     }
     return nullptr;
-}
-bool isTinyVocPlaceholder(const std::string& filename, SDL_RWops* rwop) {
-    const auto upperFilename = strToUpper(filename);
-    if(upperFilename.size() < 4 || upperFilename.substr(upperFilename.size() - 4) != ".VOC") {
-        return false;
-    }
-
-    const auto size = SDL_RWsize(rwop);
-    return size >= 0 && size <= 32;
 }
 }
 
@@ -382,6 +376,33 @@ sdl2::RWops_ptr FileManager::openFile(const std::string& filename) {
 }
 
 sdl2::RWops_ptr FileManager::openCampaignFile(const std::string& filename) {
+    // The DuneCity campaign's missions are bundled city maps (misc/DuneCityCampaign.h).
+    if(DuneCityCampaign::isCampaignFilename(filename)) {
+        std::vector<std::string> candidates;
+        for(const auto& searchPath : getSearchPath()) {
+            addCampaignCandidates(candidates, searchPath + "/" + DuneCityCampaign::kMapDirectory, filename);
+        }
+        for(const auto& candidate : candidates) {
+            if(auto rwop = openExternalFileIfPresent(candidate)) return rwop;
+        }
+        THROW(io_error, "Cannot find DuneCity campaign file '%s' in %s!", filename, DuneCityCampaign::kMapDirectory);
+    }
+
+    // Reworked missions are the bundled RWRK_ maps, the same files the Custom Game list shows.
+    if(ReworkedCampaign::isReworkedFilename(filename)) {
+        std::vector<std::string> candidates;
+        for(const auto& searchPath : getSearchPath()) {
+            addCampaignCandidates(candidates, searchPath + "/" + ReworkedCampaign::kMapDirectory, filename);
+        }
+        for(const auto& candidate : candidates) {
+            if(auto rwop = openExternalFileIfPresent(candidate)) {
+                SDL_Log("FileManager: using reworked campaign file '%s' from '%s'", filename.c_str(), candidate.c_str());
+                return rwop;
+            }
+        }
+        THROW(io_error, "Cannot find reworked campaign file '%s' in %s!", filename, ReworkedCampaign::kMapDirectory);
+    }
+
     const auto upperFilename = strToUpper(filename);
     const bool familyData = upperFilename == "CAMPAIGNPLAN.INI"
         || (upperFilename.rfind("COOP/", 0) == 0 && hasIniExtension(filename));
@@ -495,36 +516,26 @@ sdl2::RWops_ptr FileManager::openFileFromNamedPak(const std::string& filename, c
     return openFromNamedPakCaseInsensitive(pakFiles, filename, strToUpper(pakName));
 }
 
+// exists() and existsInPak() look in the same places as openFile() and
+// openFileFromPak() and skip tiny VOC placeholders by the same rule, so a "yes"
+// here means the open will succeed (issue #129).
 bool FileManager::exists(const std::string& filename) const {
 
     for(const auto& modDataPath : getActiveModDataPaths()) {
-        auto modFilename = modDataPath + "/" + filename;
-        if(getCaseInsensitiveFilename(modFilename)) {
+        if(VocPlaceholder::hasUsableFile(filename, modDataPath + "/" + filename)) {
             return true;
         }
     }
 
     // try finding external file
     for(const std::string& searchPath : getSearchPath()) {
-        auto externalFilename = searchPath + "/";
-        externalFilename += filename;
-        if(getCaseInsensitiveFilename(externalFilename)) {
+        if(VocPlaceholder::hasUsableFile(filename, searchPath + "/" + filename)) {
             return true;
         }
     }
 
     // now try finding in one pak file
-    for(const auto& pPakFile : pakFiles) {
-        if(!isPakEnabledForFallbackLookup(*pPakFile)) {
-            continue;
-        }
-
-        if(pPakFile->exists(filename)) {
-            return true;
-        }
-    }
-
-    return false;
+    return existsInPak(filename);
 }
 
 bool FileManager::existsInPak(const std::string& filename) const {
@@ -533,7 +544,7 @@ bool FileManager::existsInPak(const std::string& filename) const {
             continue;
         }
 
-        if(pPakFile->exists(filename)) {
+        if(VocPlaceholder::hasUsablePakEntry(*pPakFile, filename)) {
             return true;
         }
     }

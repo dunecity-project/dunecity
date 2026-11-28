@@ -1,4 +1,5 @@
 #include "QuantBotInternal.h"
+#include <dunecity/HospitalCare.h>
 #include <players/QuantBotCityPolicy.h>
 #include <players/HumanPlayer.h>
 #include <House.h>
@@ -28,6 +29,9 @@ int QuantBot::getCityPopulationLimit(int mapArea) const {
     // helpers in a human-controlled house and support-mode controllers.
     const bool hardCityMatch = difficulty == Difficulty::Hard && botConfig().force.hardCityMatch;
     int limit = QuantBotCityPolicy::populationLimit(static_cast<int>(difficulty), mapArea, hardCityMatch);
+    // A population goal is never above the bot's own ceiling: the house it serves must reach it.
+    if (const int goal = objectiveTarget(MissionObjectivePolicy::Population); goal > 0 && limit != QuantBotCityPolicy::kUnlimited)
+        limit = std::max(limit, goal + goal / 4);
     // Hard grows past its base ceiling while another house's city (last census, the same
     // structure population the ceiling is checked against) is bigger, up to that city.
     const auto* sim = currentGame->getCitySimulation();
@@ -228,8 +232,39 @@ int QuantBot::campaignAllyHarvesterLimit() const {
 }
 
 bool QuantBot::campaignPolicyApplies() const {
+    // The DuneCity campaign's missions are Custom-Game city maps: its QuantBots keep the Custom
+    // rules those maps were balanced for (misc/DuneCityCampaign.h).
+    if(currentGame && currentGame->getGameInitSettings().isDuneCityCampaign()) return false;
     return currentGame && (isCampaignGameType(currentGame->gameType)
         || (isScenarioGameType(currentGame->gameType) && botConfig().force.singleMissionCampaignPolicy));
+}
+
+bool QuantBot::objectivePlanningActive() const {
+    if (!currentGame || botConfig().force.cityObjectivePlanning == 0 || switchedOff() || getHouse() == nullptr) return false;
+    if (!currentGame->getMissionObjectives().isActive()) return false;
+    const House* outcome = currentGame->getOutcomeHouse();
+    return outcome != nullptr && outcome->getTeamID() == getHouse()->getTeamID();
+}
+
+bool QuantBot::customRulesGame() const {
+    if (!currentGame) return false;
+    const auto& init = currentGame->getGameInitSettings();
+    const auto type = init.getGameType();
+    return type == GameType::CustomGame || type == GameType::CustomMultiplayer || init.isDuneCityCampaign();
+}
+
+bool QuantBot::objectiveGracePeriod() const {
+    if (!currentGame || getHouse() == nullptr) return false;
+    const auto& objectives = currentGame->getMissionObjectives();
+    if (!objectives.enemyAttacksHeld(getGameCycleCount())) return false;
+    const House* outcome = currentGame->getOutcomeHouse();
+    return outcome != nullptr && outcome->getTeamID() != getHouse()->getTeamID();
+}
+
+int QuantBot::objectiveTarget(int goal) const {
+    if (goal < 0 || goal >= MissionObjectivePolicy::GoalCount || !objectivePlanningActive()) return 0;
+    const auto& targets = currentGame->getMissionObjectives().targets;
+    return targets.used[goal] ? std::max(1, targets.value[goal]) : 0;
 }
 
 bool QuantBot::isCampaignEnemy() const {
@@ -242,9 +277,28 @@ CampaignDifficultyPolicy::Profile QuantBot::campaignProfile() const {
     // The second difficulty lever: the value one ground wave may hold. Easy keeps its smaller
     // early-mission waves in proportion (900 / 1,200 of 1,700 at the defaults).
     const auto& force=botConfig().force;
-    if (difficulty==Difficulty::Easy) profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
+    if (difficulty==Difficulty::Easy) {
+        profile.value=int(int64_t(profile.value)*force.campaignEasyWaveValue/1700);
+        if (easiestCampaign()) {
+            profile.value=EasiestPolicy::waveValue(profile.value);
+            profile.units=EasiestPolicy::waveUnits(profile.units);
+        }
+    }
     else if (difficulty==Difficulty::Medium) profile.value=force.campaignMediumWaveValue;
-    else if (difficulty==Difficulty::Hard) profile.value=force.campaignHardWaveValue;
+    else if (difficulty==Difficulty::Hard) {
+        profile.value=force.campaignHardWaveValue;
+        if(force.campaignHouseWaveExperiment && isCampaignEnemy() && !currentGame->isCitySimEnabled()) {
+            int bases=0;
+            for(int h=0;h<NUM_HOUSES;++h) {
+                const auto* house=getHouse(h);
+                if(house && !house->isNatives() && house->isAlive()
+                   && house->getTeamID()==getHouse()->getTeamID()
+                   && house->getNumStructures()>house->getNumItems(Structure_Wall)+house->getNumItems(Structure_Park)) ++bases;
+            }
+            profile.value=CampaignDifficultyPolicy::hardWaveValue(profile.value,bases,force.campaignHouseWaveExperiment,
+                force.campaignHouseWaveOneValue,force.campaignHouseWaveTwoValue,force.campaignHouseWaveThreeValue);
+        }
+    }
     return profile;
 }
 
@@ -264,6 +318,8 @@ bool QuantBot::reserveDamagedUnitForRepair(const UnitBase* unit) const {
     // A deviated unit is refused by our repair yards for as long as we hold it, so reserving it
     // has the same effect as reserving an aircraft: withdrawn from every order, never healed.
     if (!unit->isEligibleForRepair()) return false;
+    // HospitalInfantry: a soldier on a Hospital trip belongs to the trip until it is healed.
+    if (unit->isInfantry() && sendsInfantryToHospital() && DuneCity::HospitalCare::tripOf(unit)) return true;
     if (retreatPreserveActive() && !fighterOnly() && unit->isAGroundUnit() && !unit->isInfantry()
         && QuantBotInternal::mobileCombatItem(unit->getItemID()) && getHouse()->hasRepairYard()
         && !declinesUnfundedRepair(unit)) {
@@ -404,6 +460,7 @@ void QuantBot::updateCampaignWave() {
         const auto& force=botConfig().force;
         const int waitSeconds=earlySignal ? 0
             : difficulty==Difficulty::Easy ? force.campaignEasyOpeningDelaySec
+                + (easiestCampaign() ? EasiestPolicy::kCampaignOpeningDelaySec : 0)
             : difficulty==Difficulty::Medium ? force.campaignMediumOpeningDelaySec
             : difficulty==Difficulty::Hard ? force.campaignHardOpeningDelaySec : 0;
         const auto delay=CampaignDifficultyPolicy::openingDelayMs(static_cast<int>(difficulty),
@@ -499,7 +556,13 @@ bool QuantBot::campaignControlsUnit(const UnitBase* unit) {
             && unit->isActive() && unit->isRespondable()
             && unitRole(unit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free && unit->getAttackMode()==HUNT
             && !unit->isMoving() && !unit->hasATarget()) {
-            if (const auto* objective=campaignObjective(unit,0)) {
+            // CampaignHelperSingleTarget (default off): the house the wave is finishing first.
+            const ObjectBase* objective = nullptr;
+            if (botConfig().force.campaignHelperSingleTarget && campaignEconomySupport())
+                if (const int house = campaignHelperTargetHouse(unit); house >= 0)
+                    objective = campaignHelperTargetStructure(unit, house);
+            if (!objective) objective = campaignObjective(unit,0);
+            if (objective) {
                 doAttackObject(unit,objective,true);
                 return true;
             }

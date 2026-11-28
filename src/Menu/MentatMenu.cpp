@@ -187,7 +187,8 @@ void MentatMenu::update() {
 
         mouthAnim.getAnimation()->setNumLoops(text.empty() ? 0 : text.length()/25 + 1);
 
-        textLabel.setText(text);
+        // The final text is read, not spoken: the mouth stays closed.
+        textLabel.setText(currentMentatTextIndex >= (int) mentatTexts.size() ? finalText : text);
         textLabel.setVisible(true);
         textLabel.resize(620,240);
     }

@@ -35,7 +35,8 @@ typedef enum {
     Bullet_SonicTrike = 12,        ///< Tornie: shorter and weaker Sonic Trike wave
     Bullet_Heal = 13,             ///< Tornie: Deviator-style healing missile with direct flight
     Bullet_Slow = 14,             ///< Tornie 546: timed slowing, no conventional damage
-    Bullet_Napalm = 15            ///< Tornie 546: Palace missile with persistent impact-area fire
+    Bullet_Napalm = 15,           ///< Tornie 546: Palace missile with persistent impact-area fire
+    Bullet_Bomb = 16              ///< DuneCity: bomb dropped by the city airplane (save 9890)
 } BulletID_enum;
 
 typedef enum {
@@ -52,7 +53,8 @@ typedef enum {
     Explosion_Flames = 10,
     Explosion_SpiceBloom = 11,
     Explosion_FlameImpact = 12,       ///< Tornie: damaging ground fire without the destroyed-vehicle opening frames
-    Explosion_FlameImpactVisual = 13 ///< Tornie: visual-only companion flames around the damaging impact
+    Explosion_FlameImpactVisual = 13, ///< Tornie: visual-only companion flames around the damaging impact
+    Explosion_Bomb = 14               ///< DuneCity: the city airplane's heavy bomb, a large explosion drawn four tiles wide (save 9891)
 } ExplosionID_enum;
 
 typedef enum {
@@ -115,7 +117,7 @@ typedef enum {
     // Extended structure IDs — placed after units to preserve save-compat
     // for all pre-existing IDs.  isStructure() handles the gap.
     Structure_Stadium = 48,           ///< DuneCity: Stadium civic building (land-value boost, 3x3)
-    Structure_Airport = 49,           ///< DuneCity: Airport economic building (commercial boost, 3x3)
+    Structure_Airport = 49,           ///< DuneCity: Airport economic building (commercial boost, 4x4; 3x3 when compact)
     Structure_ExtLastID = 49,
 
     // Extended unit IDs — placed after extended structures to preserve
@@ -173,7 +175,8 @@ typedef enum {
     Unit_FastHarvester = 86,
     Unit_TameSandworm = 87,
     Structure_ResearchLab = 88,        ///< Optional per-house technology research, all content families.
-    ItemID_LastID = 88,
+    Structure_Park = 89,               ///< DuneCity: 1x1 Micropolis park (10 credits, park land-value terrain; save 9888)
+    ItemID_LastID = 89,
 
     Num_ItemID
 } ItemID_enum;
@@ -233,7 +236,7 @@ inline bool isUnit(int itemID) { return (itemID >= Unit_FirstID && itemID <= Uni
     \param itemID   the ID of the item (e.g. Structure_ConstructionYard)
     \return true if it is a structure, false otherwise
 */
-inline bool isStructure(int itemID) { return (itemID >= Structure_FirstID && itemID <= Structure_LastID) || (itemID >= Structure_Stadium && itemID <= Structure_ExtLastID) || (itemID >= Structure_AdvancedWindTrap && itemID <= Structure_AdvancedWindTrapMK2) || itemID == Structure_TechCenter || itemID == Structure_AdvancedWindTrapMK3 || itemID == Structure_Scoutpost || itemID == Structure_LoveFactory || itemID == Structure_Flamepost || itemID == Structure_ChaosFactory || itemID == Structure_Chemipost || itemID == Structure_Doublefinery || itemID == Structure_Slowpost || itemID == Structure_ResearchLab; }
+inline bool isStructure(int itemID) { return (itemID >= Structure_FirstID && itemID <= Structure_LastID) || (itemID >= Structure_Stadium && itemID <= Structure_ExtLastID) || (itemID >= Structure_AdvancedWindTrap && itemID <= Structure_AdvancedWindTrapMK2) || itemID == Structure_TechCenter || itemID == Structure_AdvancedWindTrapMK3 || itemID == Structure_Scoutpost || itemID == Structure_LoveFactory || itemID == Structure_Flamepost || itemID == Structure_ChaosFactory || itemID == Structure_Chemipost || itemID == Structure_Doublefinery || itemID == Structure_Slowpost || itemID == Structure_ResearchLab || itemID == Structure_Park; }
 
 /**
     This function determines if the specified itemID is a DuneCity zone structure.

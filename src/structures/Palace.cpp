@@ -38,6 +38,8 @@
 #include <units/UnitBase.h>
 #include <units/Trooper.h>
 #include <units/Saboteur.h>
+#include <units/SandWorm.h>
+#include <units/PalaceWormRules.h>
 
 #include <GUI/ObjectInterfaces/PalaceInterface.h>
 
@@ -211,6 +213,22 @@ bool Palace::usesKleshmershNapalm() const {
             || getTornieMainRebelsSpecialWeapon() == TornieRebelsSpecialWeapon::Napalm);
 }
 
+bool Palace::usesPalaceWorm() const {
+    if(currentGame == nullptr || !currentGame->getGameInitSettings().getGameOptions().fremenPalaceWorm) return false;
+    // The Tornie family keeps its own Palace rules (and has its own tame worm).
+    if(ModManager::instance().isTornieFamilyContentActive()) return false;
+    return getHouseFallbackHouse(static_cast<HOUSETYPE>(getTechnologyHouseID())) == HOUSE_FREMEN;
+}
+
+Sandworm* Palace::findPalaceWorm(const House* house) {
+    for(auto* unit : unitList) {
+        if(unit->getItemID() != Unit_Sandworm || unit->getOwner() != house) continue;
+        auto* worm = static_cast<Sandworm*>(unit);
+        if(worm->isPalaceWorm() && worm->isActive()) return worm;
+    }
+    return nullptr;
+}
+
 bool Palace::usesLightVehicleCall() const {
     const HOUSETYPE originalHouse = static_cast<HOUSETYPE>(getTechnologyHouseID());
 
@@ -298,7 +316,7 @@ void Palace::doSpecialWeapon() {
 
         case HOUSE_ATREIDES:
         case HOUSE_FREMEN: {
-            if(callFremen()) {
+            if(usesPalaceWorm() ? summonPalaceWorm() : callFremen()) {
                 specialWeaponTimer = getMaxSpecialWeaponTimer();
                 AchievementEvents::palace(getOwner());
             }
@@ -485,6 +503,60 @@ bool Palace::callFremen() {
     }
 }
 
+/**
+    The Fremen Palace worm (include/units/PalaceWormRules.h): it surfaces on the sand tile nearest
+    the Palace that no worm or ground object holds, searched ring by ring (nearest first, then
+    lowest y and x), and waits in Guard for a human owner's orders. An AI owner's worm hunts, and a
+    QuantBot owner takes it over in QuantBot::managePalaceWorm. With a worm of the house still out, or no sand on the map, nothing
+    happens and the Palace keeps its charge.
+*/
+bool Palace::summonPalaceWorm() {
+    if(findPalaceWorm(getOwner()) != nullptr) {
+        if(getOwner() == pLocalHouse) currentGame->addToNewsTicker(_("The worm is still out"));
+        return false;
+    }
+    const Coord centre = getLocation() + Coord(getStructureSize().x/2, getStructureSize().y/2);
+    const int maxRing = std::max(currentGameMap->getSizeX(), currentGameMap->getSizeY());
+    // Ring by ring outwards; the nearest by straight-line distance wins (then lowest y and x). A
+    // tile in ring r is at least r away, so the search ends once r*r passes the best found.
+    Coord spot = Coord::Invalid();
+    int best = std::numeric_limits<int>::max();
+    for(int ring = 1; ring <= maxRing && ring*ring <= best; ++ring) {
+        for(int y = centre.y - ring; y <= centre.y + ring; ++y) {
+            for(int x = centre.x - ring; x <= centre.x + ring; ++x) {
+                if(std::max(std::abs(x - centre.x), std::abs(y - centre.y)) != ring) continue;
+                if(!currentGameMap->tileExists(x, y)) continue;
+                const Tile* tile = currentGameMap->getTile(x, y);
+                if(tile->isRock() || tile->hasAnUndergroundUnit() || tile->hasAGroundObject()) continue;
+                const int distance = (x - centre.x)*(x - centre.x) + (y - centre.y)*(y - centre.y);
+                if(distance < best || (distance == best && (y < spot.y || (y == spot.y && x < spot.x)))) {
+                    best = distance;
+                    spot = Coord(x, y);
+                }
+            }
+        }
+    }
+    if(spot.isInvalid()) {
+        if(getOwner() == pLocalHouse) currentGame->addToNewsTicker(_("No sand for the worm"));
+        return false;
+    }
+    Sandworm* worm = Sandworm::createPalaceWorm(getOwner());
+    worm->deploy(spot);
+    // An AI house's worm hunts from the start: an AI Player has no orders for it, and QuantBot
+    // sets its own on its next pass (QuantBot::managePalaceWorm).
+    if(getOwner()->isAI()) worm->doSetAttackMode(HUNT);
+    SDL_Log("PALACE_WORM: event=summoned house=%d object=%u x=%d y=%d palace=%u cycle=%u", getOwner()->getHouseID(),
+            worm->getObjectID(), spot.x, spot.y, objectID, currentGame->getGameCycleCount());
+    if(getOwner() == pLocalHouse) {
+        currentGame->addToNewsTicker(_("The worm has come"));
+    } else {
+        // Every other player hears the worm sign, as a wild worm's prey does.
+        soundPlayer->playVoice(WarningWormSign, currentGame->getInterfaceHouseID());
+    }
+    recordPalaceSpawn(this, worm, nullptr);
+    return true;
+}
+
 bool Palace::spawnSaboteur() {
     if(getOwner()->isUnitLimitReached(Unit_Saboteur)) {
         if(getOwner() == pLocalHouse) {
@@ -509,10 +581,16 @@ bool Palace::spawnSaboteur() {
 
     saboteur->deploy(spot);
 
+    // A released Saboteur goes for the nearest enemy building or vehicle on its own, whoever
+    // owns the Palace (Saboteur::findTarget()). A human owner can still order it somewhere else. With
+    // the match rule off (the rule up to 1.0.876) only an AI house's Saboteur hunts.
+    const bool hunts = getOwner()->isAI()
+        || currentGame->getGameInitSettings().getGameOptions().saboteurHunt;
+    if(hunts) saboteur->doSetAttackMode(HUNT);
+    saboteur->markReleased();
+    SDL_Log("SABOTEUR_RELEASED: house=%d object=%u ai=%d cycle=%u", getOwner()->getHouseID(),
+            saboteur->getObjectID(), getOwner()->isAI() ? 1 : 0, currentGame->getGameCycleCount());
     if(getOwner()->isAI()) {
-        SDL_Log("PALACE: Spawning AI saboteur at (%d,%d), setting to HUNT mode", spot.x, spot.y);
-        saboteur->doSetAttackMode(HUNT);
-        SDL_Log("PALACE: Saboteur attack mode after setting: %d", saboteur->getAttackMode());
         currentGame->addToNewsTicker(_("@DUNE.ENG|79#Saboteur is approaching"));
         soundPlayer->playVoice(SaboteurApproaching, currentGame->getInterfaceHouseID());
     }

@@ -44,6 +44,7 @@
 #include <misc/format.h>
 #include <misc/MenuPalette.h>
 #include <misc/MenuLayout.h>
+#include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
 #include <misc/MobilePlatform.h>
 
 #include <algorithm>
@@ -74,13 +75,14 @@ OptionsMenu::OptionsMenu() : MenuBase()
     title.setTextFontSize(22);
     title.setAlignment(Alignment_HCenter);
     windowWidget.addWidget(&title, Point(left, 18), Point(540, 30));
-    const char* tabNames[] = {"General", "Graphics", "Audio", "Controls", "Advanced"};
+    const char* tabNames[] = {"General", "Graphics", "Audio", "Controls", "Advanced", "Hotkeys"};
+    constexpr int tabCount = 6;
     // Desert skins draw the original background's house crests (53x54, 11 px in) in the top
     // corners: on a narrow screen the tab row narrows to stay between them.
     const int crestClear = MenuTheme::isDesertUISkin() ? 11 + 53 + 6 : 0;
-    const int tabPitch = std::min(108, (getSize().x - 2 * crestClear) / 5);
-    const int tabLeft = tabPitch == 108 ? left : (getSize().x - 5 * tabPitch + 4) / 2;
-    for(int page = 0; page < 5; ++page) {
+    const int tabPitch = std::min(540 / tabCount, (getSize().x - 2 * crestClear) / tabCount);
+    const int tabLeft = tabPitch == 540 / tabCount ? left : (getSize().x - tabCount * tabPitch + 4) / 2;
+    for(int page = 0; page < tabCount; ++page) {
         pageButtons[page].setText(_(tabNames[page]));
         pageButtons[page].setToggleButton(true);
         pageButtons[page].setOnClick([this, page] { showPage(page); });
@@ -394,12 +396,48 @@ OptionsMenu::OptionsMenu() : MenuBase()
         row.addWidget(&box,480); row.addWidget(Spacer::create(),0.5);
         pages[3].addWidget(VSpacer::create(6)); pages[3].addWidget(&row,32);
     };
-    addControl(cameraKeysHBox,wasdCameraCheckbox,"WASD camera (Shift+A attack, Shift+D drop)",settings.general.wasdCamera);
-    wasdCameraCheckbox.setTooltipText(_("With WASD: Shift+S stops selected units. T selects matching units on screen; Ctrl+T selects across the map; Shift+T toggles time."));
+    addControl(cameraKeysHBox,wasdCameraCheckbox,"WASD camera (W/A/S/D hotkeys then need Shift)",settings.general.wasdCamera);
+    wasdCameraCheckbox.setTooltipText(_("Off: W, A, S and D are command keys (A Attack Move, S Stop, D Carryall drop). On: they scroll the map and a command on one of them needs Shift; the Hotkeys tab and the tooltips show the keys in effect."));
     addControl(mouseOrdersHBox,leftClickOrdersCheckbox,"Left-click orders (drag to select, right-click cancels)",settings.general.leftClickOrders);
     addControl(movementPathsHBox,movementPathsCheckbox,"Show movement paths for selected units",settings.general.showMovementPaths);
     addControl(formationMovesHBox,formationMovesCheckbox,"Move groups in formation",settings.general.formationMoves);
-    formationMovesCheckbox.setTooltipText(_("Two or more ground units ordered to one spot spread out in the chosen shape (Box, Combined arms, Line or Column) and keep the slowest one's pace; attack-move and patrol hunt in formation until they meet the enemy. Ctrl+F switches it in game, Ctrl+Shift+F picks the shape, and the unit panel shows both; picking a shape forms the selected units up in it where they stand."));
+    formationMovesCheckbox.setTooltipText(fmt::sprintf(_("Two or more ground units ordered to one spot spread out in the chosen shape (Box, Combined arms, Line or Column) and keep the slowest one's pace; attack-move and patrol hunt in formation until they meet the enemy. %s switches it in game, %s picks the shape, and the unit panel shows both; picking a shape forms the selected units up in it where they stand."),
+        UnitCommandTooltips::hotkeyText(Hotkeys::Action::ToggleFormationMoves),
+        UnitCommandTooltips::hotkeyText(Hotkeys::Action::NextFormationShape)));
+
+    // Hotkeys: every configurable command shortcut, edited on a copy until Apply.
+    pendingHotkeys = settings.hotkeys;
+    hotkeyListBox.setOnDoubleClick(std::bind(&OptionsMenu::onHotkeyChange, this));
+    pages[hotkeysPage].addWidget(&hotkeyListBox, 1.0);
+    pages[hotkeysPage].addWidget(VSpacer::create(4));
+    hotkeyChangeButton.setText(_("Change..."));
+    hotkeyChangeButton.setTooltipText(_("Press the new key for the selected command (Esc cancels). A key used by another command moves here."));
+    hotkeyChangeButton.setOnClick(std::bind(&OptionsMenu::onHotkeyChange, this));
+    hotkeyClearButton.setText(_("Clear"));
+    hotkeyClearButton.setTooltipText(_("Remove the selected command's hotkey"));
+    hotkeyClearButton.setOnClick(std::bind(&OptionsMenu::onHotkeyClear, this));
+    hotkeyDefaultsButton.setText(_("Defaults"));
+    hotkeyDefaultsButton.setTooltipText(_("Restore every default hotkey (Apply keeps them)"));
+    hotkeyDefaultsButton.setOnClick(std::bind(&OptionsMenu::onHotkeyDefaults, this));
+    hotkeyButtonsHBox.addWidget(Spacer::create(), 0.5);
+    hotkeyButtonsHBox.addWidget(&hotkeyChangeButton, 160);
+    hotkeyButtonsHBox.addWidget(Spacer::create(), 10);
+    hotkeyButtonsHBox.addWidget(&hotkeyClearButton, 120);
+    hotkeyButtonsHBox.addWidget(Spacer::create(), 10);
+    hotkeyButtonsHBox.addWidget(&hotkeyDefaultsButton, 160);
+    hotkeyButtonsHBox.addWidget(Spacer::create(), 0.5);
+    pages[hotkeysPage].addWidget(&hotkeyButtonsHBox, 28);
+    pages[hotkeysPage].addWidget(VSpacer::create(2));
+    hotkeyStatusLabel.setTextFontSize(12);
+    hotkeyStatusLabel.setAlignment(static_cast<Alignment_Enum>(Alignment_Left | Alignment_VCenter));
+    hotkeyStatusLabel.setText(_("Select a command, then Change (or double-click) and press the new key."));
+    pages[hotkeysPage].addWidget(&hotkeyStatusLabel, 36);
+    hotkeyFixedLabel.setTextFontSize(10);
+    hotkeyFixedLabel.setAlignment(static_cast<Alignment_Enum>(Alignment_Left | Alignment_Top));
+    hotkeyFixedLabel.setText(_(Hotkeys::fixedShortcutsSummary()));
+    pages[hotkeysPage].addWidget(&hotkeyFixedLabel, 50);
+    refreshHotkeyList();
+    hotkeyListBox.setSelectedItem(0);
 
 
     audioHBox.addWidget(Spacer::create(), 0.5);
@@ -526,7 +564,8 @@ OptionsMenu::~OptionsMenu()
 
 void OptionsMenu::showPage(int page) {
     lastPage = page;
-    for(int i = 0; i < 5; ++i) {
+    if(page != hotkeysPage) capturingHotkey = -1;
+    for(int i = 0; i < 6; ++i) {
         pages[i].setVisible(i == page);
         pages[i].setEnabled(i == page);
         pageButtons[i].setToggleState(i == page);
@@ -601,6 +640,8 @@ void OptionsMenu::onChangeOption(bool bInteractive) {
 
     bChanged |= (settings.network.serverPort != atoi(portTextBox.getText().c_str()));
     bChanged |= (settings.network.metaServer != metaServerTextBox.getText());
+    bChanged |= (settings.hotkeys != pendingHotkeys);
+    if(hotkeyListBox.getNumEntries() > 0 && displayedHotkeyWasd != wasdCameraCheckbox.isChecked()) refreshHotkeyList();
 
     acceptButton.setEnabled(bChanged);
 }
@@ -628,6 +669,8 @@ void OptionsMenu::onOptionsOK() {
         return;
     }
 
+    capturingHotkey = -1;
+
     settings.general.scrollSpeed = scrollSpeedDropDownBox.getSelectedEntryIntData();
     settings.general.wasdCamera=wasdCameraCheckbox.isChecked();
     settings.general.leftClickOrders=leftClickOrdersCheckbox.isChecked();
@@ -635,6 +678,7 @@ void OptionsMenu::onOptionsOK() {
     settings.general.formationMoves=formationMovesCheckbox.isChecked();
     settings.general.diagnosticLogs=diagnosticLogsCheckbox.isChecked();
     settings.general.aiDecisionLog=aiDecisionLogCheckbox.isChecked();
+    settings.hotkeys = pendingHotkeys;
     settings.general.playerName = playername;
     std::string languageFilename = (languageDropDownBox.getSelectedEntryIntData() < 0) ? "English.en.po" : availLanguages[languageDropDownBox.getSelectedEntryIntData()];
     settings.general.language = languageFilename.substr(languageFilename.size()-5,2);
@@ -873,11 +917,30 @@ void OptionsMenu::saveConfiguration2File() {
     myINIFile.setIntValue("Game Options", "Research Pace", static_cast<int>(settings.gameOptions.researchPace));
     myINIFile.setBoolValue("Game Options", "Technology Installments", settings.gameOptions.technologyInstallments);
     myINIFile.setBoolValue("Game Options", "Trooper Anti-Air", settings.gameOptions.trooperAntiAir);
+    myINIFile.setBoolValue("Game Options", "Trooper Ornithopter Reach", settings.gameOptions.trooperOrnithopterReach);
+    myINIFile.setBoolValue("Game Options", "City Plane Defence", settings.gameOptions.cityPlaneDefence);
+    myINIFile.setBoolValue("Game Options", "City Plane Bombing", settings.gameOptions.cityPlaneBombing);
+    myINIFile.setBoolValue("Game Options", "Airport Ornithopter Patrol", settings.gameOptions.airportOrnithopterPatrol);
+    myINIFile.setBoolValue("Game Options", "City Plane Carpet Bombing", settings.gameOptions.cityPlaneCarpetBombing);
+    myINIFile.setBoolValue("Game Options", "City Plane Bombing Runs", settings.gameOptions.cityPlaneBombingRuns);
+    myINIFile.setBoolValue("Game Options", "City Plane Purchase", settings.gameOptions.cityPlanePurchase);
+    myINIFile.setBoolValue("Game Options", "City Plane Build Time", settings.gameOptions.cityPlaneBuildTime);
+    myINIFile.setBoolValue("Game Options", "City Plane Free Per Airport", settings.gameOptions.cityPlaneFreePerAirport);
+    myINIFile.setBoolValue("Game Options", "City Plane Crash Bombs", settings.gameOptions.cityPlaneCrashBombs);
+    myINIFile.setBoolValue("Game Options", "Zone Garrisons", settings.gameOptions.zoneGarrisons);
+    myINIFile.setBoolValue("Game Options", "Fremen Palace Worm", settings.gameOptions.fremenPalaceWorm);
+    myINIFile.setBoolValue("Game Options", "Parks Count As Roads", settings.gameOptions.parksCountAsRoads);
+    myINIFile.setBoolValue("Game Options", "Saboteur Hunt", settings.gameOptions.saboteurHunt);
+    myINIFile.setBoolValue("Game Options", "Saboteurs Skip City Zones", settings.gameOptions.saboteurSkipsCityZones);
+    myINIFile.setBoolValue("Game Options", "AI Infantry Tactics", settings.gameOptions.aiInfantryTactics);
+    myINIFile.setBoolValue("Game Options", "Hospital Care", settings.gameOptions.hospitalCare);
+    myINIFile.setBoolValue("Game Options", "Turrets Can Fire On Buildings", settings.gameOptions.turretsFireOnBuildings);
     myINIFile.setBoolValue("Game Options", "Starport Population", settings.gameOptions.starportPopulation);
     myINIFile.setBoolValue("Game Options","Immortal Human Player",settings.gameOptions.immortalHumanPlayer);
 
     myINIFile.setIntValue("Network","ServerPort",settings.network.serverPort);
     myINIFile.setStringValue("Network","MetaServer",settings.network.metaServer);
+    for(const auto& [key, value] : settings.hotkeys.toEntries()) myINIFile.setStringValue("Hotkeys", key, value);
 
     myINIFile.saveChangesTo(getConfigFilepath());
 }
@@ -1032,4 +1095,119 @@ void OptionsMenu::onChildWindowClose(Window* pChildWindow) {
 
         onChangeOption(true);
     }
+}
+
+std::string OptionsMenu::hotkeyEntryText(Hotkeys::Action action) const {
+    // The effective key for the WASD choice currently ticked on the Controls tab.
+    const std::string key = Hotkeys::displayName(pendingHotkeys.effective(action, wasdCameraCheckbox.isChecked()));
+    return _(Hotkeys::info(action).label) + ":  " + (key.empty() ? _("unbound") : key);
+}
+
+void OptionsMenu::refreshHotkeyList() {
+    displayedHotkeyWasd = wasdCameraCheckbox.isChecked();
+    for(const Hotkeys::ActionInfo& action : Hotkeys::actions()) {
+        const int index = static_cast<int>(action.action);
+        const std::string text = hotkeyEntryText(action.action);
+        if(index < hotkeyListBox.getNumEntries()) {
+            if(hotkeyListBox.getEntry(index) != text) hotkeyListBox.setEntry(index, text);
+        } else {
+            hotkeyListBox.addEntry(text, index);
+        }
+    }
+}
+
+void OptionsMenu::onHotkeyChange() {
+    const int index = hotkeyListBox.getSelectedEntryIntData();
+    if(index < 0 || index >= Hotkeys::actionCount) {
+        hotkeyStatusLabel.setText(_("Select a command first."));
+        return;
+    }
+    capturingHotkey = index;
+    hotkeyStatusLabel.setText(fmt::sprintf(_("Press the new key for %s (Esc cancels)."),
+                                           _(Hotkeys::info(static_cast<Hotkeys::Action>(index)).label)));
+}
+
+void OptionsMenu::onHotkeyClear() {
+    capturingHotkey = -1;
+    const int index = hotkeyListBox.getSelectedEntryIntData();
+    if(index < 0 || index >= Hotkeys::actionCount) {
+        hotkeyStatusLabel.setText(_("Select a command first."));
+        return;
+    }
+    assignHotkey(static_cast<Hotkeys::Action>(index), Hotkeys::Binding{});
+}
+
+void OptionsMenu::onHotkeyDefaults() {
+    capturingHotkey = -1;
+    pendingHotkeys = Hotkeys::Bindings::defaults();
+    refreshHotkeyList();
+    hotkeyStatusLabel.setText(_("Default hotkeys restored. Apply keeps them, Back discards them."));
+    onChangeOption(true);
+}
+
+bool OptionsMenu::assignHotkey(Hotkeys::Action action, const Hotkeys::Binding& binding) {
+    const std::string label = _(Hotkeys::info(action).label);
+    const Hotkeys::AssignResult result = Hotkeys::assign(pendingHotkeys, action, binding);
+    switch(result.outcome) {
+        case Hotkeys::AssignOutcome::Rejected:
+            hotkeyStatusLabel.setText(fmt::sprintf(_("%s: %s."), Hotkeys::displayName(binding), _(result.reason)));
+            return false;
+        case Hotkeys::AssignOutcome::Unchanged:
+            hotkeyStatusLabel.setText(fmt::sprintf(_("%s is unchanged."), label));
+            return true;
+        case Hotkeys::AssignOutcome::Assigned:
+            break;
+    }
+    if(!binding.bound()) {
+        hotkeyStatusLabel.setText(fmt::sprintf(_("%s is now unbound."), label));
+    } else if(result.displaced) {
+        hotkeyStatusLabel.setText(fmt::sprintf(_("%s now uses %s; %s is unbound."), label, Hotkeys::displayName(binding),
+                                               _(Hotkeys::info(*result.displaced).label)));
+    } else {
+        hotkeyStatusLabel.setText(fmt::sprintf(_("%s now uses %s."), label, Hotkeys::displayName(binding)));
+    }
+    refreshHotkeyList();
+    onChangeOption(true);
+    return true;
+}
+
+void OptionsMenu::handleHotkeyCapture(const SDL_KeyboardEvent& key) {
+    const auto action = static_cast<Hotkeys::Action>(capturingHotkey);
+    const Hotkeys::Capture captured = Hotkeys::capture(key.keysym.sym, key.keysym.mod);
+    switch(captured.kind) {
+        case Hotkeys::CaptureKind::Waiting:
+            return;
+        case Hotkeys::CaptureKind::Cancel:
+            capturingHotkey = -1;
+            hotkeyStatusLabel.setText(_("Change cancelled."));
+            return;
+        case Hotkeys::CaptureKind::Rejected:
+            // Keep waiting so the player can press another key.
+            hotkeyStatusLabel.setText(fmt::sprintf(_("%s. Press another key (Esc cancels)."), _(captured.reason)));
+            return;
+        case Hotkeys::CaptureKind::Captured:
+            if(assignHotkey(action, captured.binding)) {
+                capturingHotkey = -1;
+            } else {
+                hotkeyStatusLabel.setText(hotkeyStatusLabel.getText() + " " + _("Press another key (Esc cancels)."));
+            }
+            return;
+    }
+}
+
+bool OptionsMenu::doInput(SDL_Event& event) {
+    // While a hotkey is being captured the key press belongs to the capture: Escape cancels it
+    // instead of leaving Settings, and no text reaches a text box.
+    if(capturingHotkey >= 0 && !hasChildWindow()) {
+        if(event.type == SDL_KEYDOWN) {
+            handleHotkeyCapture(event.key);
+            return !isQuiting();
+        }
+        if(event.type == SDL_TEXTINPUT) return !isQuiting();
+        if(event.type == SDL_MOUSEBUTTONDOWN) {
+            capturingHotkey = -1;
+            hotkeyStatusLabel.setText(_("Change cancelled."));
+        }
+    }
+    return MenuBase::doInput(event);
 }

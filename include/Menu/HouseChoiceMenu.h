@@ -34,7 +34,9 @@
 
 class HouseChoiceMenu : public MenuBase {
 public:
-    explicit HouseChoiceMenu(bool online = true, bool keepRules = false, bool showLobby = false);
+    /// @a duneCity: the main menu's DuneCity Campaign (Stefan, 2026-11-21): the same choices
+    /// without the connection, maps and mod choices; offline, Atreides, the DuneCity mod.
+    explicit HouseChoiceMenu(bool online = true, bool keepRules = false, bool showLobby = false, bool duneCity = false);
     virtual ~HouseChoiceMenu();
 
     void onChildWindowClose(Window* pChildWindow) override;
@@ -50,6 +52,10 @@ public:
     /// The player class of every enemy house.
     static const std::string& getEnemyClass() { return s_enemyClass; }
     static int getCampaignSkin() { return s_campaignSkin; }
+    /// Play the reworked RWRK_ maps (misc/ReworkedCampaign.h) instead of the original missions.
+    static bool isReworkedMaps() { return s_reworkedMaps && !s_duneCityCampaign; }
+    /// Maps: DuneCity - the ten-mission Atreides city campaign (misc/DuneCityCampaign.h).
+    static bool isDuneCityCampaign() { return s_duneCityCampaign; }
     static const SettingsClass::GameOptionsClass& getGameOptions() { return s_currentGameOptions; }
 
 private:
@@ -60,6 +66,12 @@ private:
     void onModSelectionChanged(bool interactive);
     void updateModDescription();
     void updateHouseChoice();
+    void refreshHouseChoices();
+    bool reworkedMapsAllowed() const;
+    bool duneCityCampaignAllowed() const;
+    /// The DuneCity Campaign screen: the start mission's name and goals for the enemy AI chosen.
+    void updateMissionDescription();
+    bool showsRemasteredWatermark() const override { return s_reworkedMaps && !duneCityOnly; }
 
     void onHouseLeft();
     void onHouseRight();
@@ -85,8 +97,11 @@ private:
 
     DropDownBox     startLevelDropDown;
     DropDownBox     campaignSkinDropDown;
+    DropDownBox     campaignMapsDropDown;
     DropDownBox     modDropDown;
     TextView        modDescription;
+    Label           missionLabel;
+    TextView        missionDescription;
     std::vector<ModInfo> availableMods;
     TextButton      backButton;
     Label          supportDescription;
@@ -97,7 +112,9 @@ private:
     TextButton      gameOptionsButton;
 
     bool showLobby;
+    bool duneCityOnly; ///< the DuneCity Campaign screen
     CustomGamePlayerPolicy::HouseRoster houseChoices;
+    std::vector<int> reworkedHouses; ///< houses with all 22 reworked missions
     int currentHouseChoiceScrollPos;
 
     // Static storage for AI settings
@@ -108,6 +125,8 @@ private:
     static std::string s_partnerClass;
     static std::string s_enemyClass;
     static int s_campaignSkin;
+    static bool s_reworkedMaps;
+    static bool s_duneCityCampaign;
     static SettingsClass::GameOptionsClass s_currentGameOptions;
 };
 

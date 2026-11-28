@@ -28,6 +28,7 @@
 #include <players/QuantBot.h>
 
 #include <structures/RepairYard.h>
+#include <dunecity/HospitalCare.h>
 #include <units/Carryall.h>
 #include <units/HarvesterHelpers.h>
 #include <units/UnitMovementPolicy.h>
@@ -274,6 +275,18 @@ Carryall* GroundUnit::findFreeCarrier() const {
         if(carryall->isDropOfferer() || !carryall->isOwnedCarrier()) {
             continue;  // A delivery flight that removes itself; booking it strands the unit.
         }
+        // AirliftReserve (QuantBot, default 0): the army's own Carryalls take no other work.
+        bool reserved = false;
+        for(const auto& player : owner->getPlayerList()) {
+            const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+            if(bot != nullptr && bot->airliftReserves(carryall, this)) {
+                reserved = true;
+                break;
+            }
+        }
+        if(reserved) {
+            continue;
+        }
         return carryall;
     }
 
@@ -405,6 +418,14 @@ void GroundUnit::doRepair() {
         // Central block for every explicit repair order: the sidebar/hotkey command
         // (CMD_UNIT_SENDTOREPAIR), every bot that asks a damaged unit to withdraw, and the
         // carryall that repairs badly damaged cargo on pickup all arrive here.
+        return;
+    }
+
+    // Infantry in a city game with Hospital Care go to a Hospital and nowhere else: with no
+    // Hospital (or a Saboteur) the order does nothing. A Repair Yard never repaired a soldier
+    // (InfantryBase::checkPos does not run the yard arrival above), it only walked there.
+    if(DuneCity::HospitalCare::replacesRepairYard(this)) {
+        DuneCity::HospitalCare::sendToHospital(this);
         return;
     }
 

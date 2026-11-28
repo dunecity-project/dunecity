@@ -16,6 +16,7 @@
  */
 
 #include "QuantBotInternal.h"
+#include <dunecity/HospitalCare.h>
 
 using QuantBotInternal::mobileCombatItem;
 
@@ -113,7 +114,9 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 
     // Single missions already use campaign mode, including the legacy OFF arm.
     // Policy scope is separate from campaign progression and saved AI mode.
-    if (isScenarioGameType(currentGame->gameType) || currentGame->gameType == GameType::LoadSavegame) {
+    // The DuneCity campaign's maps are Custom-Game city maps: every QuantBot keeps Custom rules there.
+    if ((isScenarioGameType(currentGame->gameType) || currentGame->gameType == GameType::LoadSavegame)
+        && !currentGame->getGameInitSettings().isDuneCityCampaign()) {
 		gameMode = GameMode::Campaign;
 	}
 	else {
@@ -151,7 +154,7 @@ QuantBot::QuantBot(House* associatedHouse, const std::string& playername, Diffic
 
 std::string QuantBot::getDifficultyName() const {
     switch (difficulty) {
-        case Difficulty::Easy: return "easy";
+        case Difficulty::Easy: return easiest ? "easiest" : "easy";
         case Difficulty::Medium: return "medium";
         case Difficulty::Hard: return "hard";
         case Difficulty::Brutal: return "brutal";
@@ -175,6 +178,11 @@ void QuantBot::init() {
 
 
 QuantBot::~QuantBot() = default;
+
+bool QuantBot::aiInfantryTacticsEnabled(bool configured) const {
+    return configured || (currentGame != nullptr && currentGame->isCitySimEnabled()
+        && currentGame->getGameInitSettings().getGameOptions().aiInfantryTactics);
+}
 
 
 bool QuantBot::hasExplicitUnitCountOverride() const {
@@ -224,8 +232,24 @@ int QuantBot::configuredCustomHarvesterLimit() const {
     const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
     if (mapsize <= 4096) return 0;
     const auto& settings = botConfig().getSettings(static_cast<int>(difficulty));
-    const int configured = mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    int configured = mapsize <= 16384 ? settings.harvesterLimitCustomLargeMap : settings.harvesterLimitCustomHugeMap;
+    if (easiestCustom()) configured = EasiestPolicy::harvesterCeiling(configured);
     return openingCombatBudgetActive() ? std::min(configured, 4) : configured;
+}
+
+bool QuantBot::easiestCustom() const {
+    return easiest && currentGame && gameMode == GameMode::Custom && !builderOnly() && !campaignPolicyApplies();
+}
+
+bool QuantBot::easiestCampaign() const {
+    return easiest && currentGame && isCampaignEnemy();
+}
+
+int QuantBot::easiestArmyCeiling() const {
+    if (!easiest || militaryValueLimit <= 0) return 0;
+    if (easiestCampaign())
+        return initialMilitaryValue < 0 ? 0 : EasiestPolicy::campaignArmyCeiling(initialMilitaryValue, militaryValueLimit);
+    return easiestCustom() ? EasiestPolicy::customArmyCeiling(militaryValueLimit) : 0;
 }
 
 bool QuantBot::openingCombatBudgetActive() const {
@@ -262,6 +286,8 @@ int QuantBot::planningMilitaryBudget(int committedValue, int productionCash, int
     if (forceVariant(kForceSpendAtCap))
         return QuantBotBuildPolicy::surplusMilitaryBudget(militaryValueLimit, productionCash,
                                                           ForceConcentrationPolicy::kSurplusMaxPercent);
+    // QuantBot Easiest stops buying army at its lower ceiling.
+    if (const int ceiling = easiestArmyCeiling(); ceiling > 0) return std::min(militaryValueLimit, ceiling);
     return militaryValueLimit;
 }
 
@@ -285,6 +311,31 @@ void QuantBot::update() {
 	if (getHouse() == nullptr) {
 		return;
 	}
+
+    // Once the house and its match rules exist, report the actual per-player config, not the
+    // menu's active mod or the on-disk defaults (a custom-game mod can differ from both).
+    if (!zoneGarrisonRulesLogged_) {
+        zoneGarrisonRulesLogged_ = true;
+        const auto& force = botConfig().force;
+        const auto& rules = currentGame->getGameInitSettings().getGameOptions();
+        SDL_Log("ZONE_GARRISON_RULES: house=%d city=%d option=%d rule=%d role=%d"
+                " configured_garrison=%d configured_front=%d configured_reinforce=%d"
+                " configured_raid=%d configured_levy=%d configured_chain=%d"
+                " garrison=%d front=%d reinforce=%d raid=%d levy=%d chain=%d"
+                " squads=%d infantry_mix=%d infantry_lanes=%d cycle=%u",
+            getHouse()->getHouseID(), int(currentGame->isCitySimEnabled()), int(rules.aiInfantryTactics),
+            int(rules.zoneGarrisons), int(role), int(force.zoneGarrison), int(force.zoneFrontGarrison),
+            int(force.zoneGarrisonReinforce), int(force.zoneCaptureRaid), int(force.zoneCaptureLevy),
+            int(force.zoneCaptureChain), int(aiInfantryTacticsEnabled(force.zoneGarrison)),
+            int(aiInfantryTacticsEnabled(force.zoneFrontGarrison)),
+            int(aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)),
+            int(aiInfantryTacticsEnabled(force.zoneCaptureRaid)),
+            int(aiInfantryTacticsEnabled(force.zoneCaptureLevy)),
+            int(aiInfantryTacticsEnabled(force.zoneCaptureChain)),
+            int(aiInfantryTacticsEnabled(force.squadOrders)),
+            int(aiInfantryTacticsEnabled(force.infantryInMix)),
+            int(aiInfantryTacticsEnabled(force.infantryLanes)), getGameCycleCount());
+    }
 
 	// Switched off by its human partner: no orders, no building, no planning.
 	if (switchedOff()) return;
@@ -325,6 +376,16 @@ void QuantBot::update() {
 
         if (campaignCityEconomy()) noteCampaignOriginalState();
 
+        if (botConfig().force.campaignRepairRoleFix) {
+            // Helpers of every tier and Medium+ enemies may establish repairs.
+            // Easy enemies retain their authored setup without adding a yard.
+            if (campaignPolicyApplies() && getHouse()->getTechLevel() > 4
+                && !(isCampaignEnemy() && difficulty == Difficulty::Easy)) {
+                initialItemCount[Structure_RepairYard] = std::max(1, initialItemCount[Structure_RepairYard]);
+                initialItemCount[Structure_Radar] = std::max(1, initialItemCount[Structure_Radar]);
+                initialItemCount[Structure_LightFactory] = std::max(1, initialItemCount[Structure_LightFactory]);
+            }
+        } else {
 		// Allow campaign controllers one repair yard. A Medium opponent gets exactly one,
         // whatever the mission starts it with; Medium support keeps its starting count.
 		// Note: supportMode sets gameMode to Custom, so check currentGame->gameType instead
@@ -345,6 +406,8 @@ void QuantBot::update() {
 
 			logDebug("Allow Campaign AI one Repair Yard (support: %s)", builderOnly() ? "yes" : "no");
 		}
+
+        }
 
 		// Calculate the total military value of the player
 		initialMilitaryValue = 0;
@@ -377,6 +440,11 @@ void QuantBot::update() {
 		// Use config values for campaign mode
         harvesterLimit = diffSettings.harvesterLimitPerRefineryMultiplier * initialRefineryBays();
 		militaryValueLimit = lround(initialMilitaryValue * diffSettings.militaryValueMultiplier);
+		// An Easy campaign opponent rebuilds to 1.5 times its starting army (CampaignEasyArmyPercent),
+		// whatever multiplier a saved configuration still holds.
+		if (difficulty == Difficulty::Easy)
+			militaryValueLimit = CampaignDifficultyPolicy::easyArmyCeiling(initialMilitaryValue,
+				config.force.campaignEasyArmyPercent, militaryValueLimit);
 
 		logDebug("  Difficulty: %s", 
 			difficulty == Difficulty::Defend ? "Defend" :
@@ -698,6 +766,10 @@ void QuantBot::update() {
 		// we are not updating this AI player this cycle
 		return;
 	}
+    // Thinking speed on the DuneCity campaign ladder: a slower tier skips whole passes (units, army
+    // posture and building), deterministically from the cycle counter and staggered by house.
+    if (const int passes = cityCampaignThinkPasses(); passes > 1
+        && (scheduleCycle / AIUPDATEINTERVAL + Uint32(scheduleHouse)) % Uint32(passes) != 0) return;
 
     // The remembered enemy army (docs/formations.md "Round 5"; the defence candidates E, G, A,
     // R and U and the late-game target choices H and Z read it), before anything this pass consults it.
@@ -776,6 +848,12 @@ void QuantBot::update() {
 
     updateCampaignWave();
 	checkAllUnits();
+    // Zone Garrisons (ZoneGarrison switch): soldiers into threatened own zones, out when quiet,
+    // and into empty enemy zones they pass (QuantBotGarrison.cpp).
+    updateZoneGarrisons();
+    // Redevelopment orders: placed at their site or lost, then their effect on the lots read.
+    updateRedevelopmentOrders();
+    keepParkPassages();
     // After this pass's unit orders: whoever ended up idle on a planned site is asked off it.
     if (!fighterOnly()) keepPlannedSitesClear();
 
@@ -795,7 +873,10 @@ void QuantBot::update() {
 	}
 
 	if (!builderOnly()) {
-		if (attackTimer <= 0) {
+		if (attackTimer <= 0 && objectiveGracePeriod()) {
+			// A campaign mission's opening grace period ([EVENTS] FirstEnemyAttack): no wave yet.
+			attackTimer = MILLI2CYCLES(15000);
+		} else if (attackTimer <= 0) {
 			attack(militaryValue);
 		} else {
 			attackTimer -= AIUPDATEINTERVAL;
@@ -848,7 +929,8 @@ void QuantBot::onObjectWasBuilt(const ObjectBase* pObject) {
 
 void QuantBot::onDecrementStructures(int itemID, const Coord& location) {
     if (currentGame
-            && itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall)
+            && itemID != Structure_RocketTurret && itemID != Structure_GunTurret && itemID != Structure_Wall
+            && itemID != Structure_Park)
         recentStructureLosses.push_back({location, getStructureSize(itemID), getGameCycleCount(), static_cast<Uint32>(itemID)});
     if (itemID == Structure_RocketTurret) ++forceStats.turretsLost;
     dangerUpdated = std::numeric_limits<Uint32>::max();
@@ -859,6 +941,7 @@ void QuantBot::onDecrementStructures(int itemID, const Coord& location) {
 /// When we take losses we should hold off from attacking for longer...
 void QuantBot::onDecrementUnits(int itemID) {
     traceDecision("unit_lost", AITelemetry::Record().set("item", itemID));
+    if (isCarryallUnit(itemID)) ++airliftStats.carryallsLost;
     // Material mobile-combat attrition for the posture machine. Only our own
     // mobile combat units count: transports, workers, MCVs, saboteurs, worms and
     // ambient traffic are economic or incidental losses and must never be able
@@ -967,8 +1050,10 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
         const bool autonomousAttack = engineHuntAttack(pGroundUnit);
 		// Stop him dead in his tracks if he's going to rally point. An MCV keeps
 		// driving: a colonist halted under fire is the one that does not arrive.
+		// A soldier on its way to a Hospital keeps walking (HospitalInfantry).
 		if (!autonomousAttack && unitRole(pGroundUnit, {UnitRole::Human}) == UnitRole::Free && pGroundUnit->wasForced()
-			&& !QuantBotInternal::harvesterItem(pGroundUnit->getItemID()) && pGroundUnit->getItemID() != Unit_MCV) {
+			&& !QuantBotInternal::harvesterItem(pGroundUnit->getItemID()) && pGroundUnit->getItemID() != Unit_MCV
+			&& !DuneCity::HospitalCare::tripOf(pGroundUnit)) {
 			doMove2Pos(pGroundUnit,
 				pGroundUnit->getLocation().x,
 				pGroundUnit->getLocation().y,
@@ -1015,6 +1100,10 @@ void QuantBot::onDamage(const ObjectBase* pObject, int damage, Uint32 damagerID)
 			}
 		}
 		else if (pGroundUnit->getItemID() == Unit_MCV) {
+			if (const auto it = cityLessons.mcvTracks.find(pGroundUnit->getObjectID()); it != cityLessons.mcvTracks.end()) {
+				it->second.hitBy = pDamager->getItemID();
+				it->second.hitCycle = getGameCycleCount();
+			}
 			// A colonist under fire: its escort turns on the attacker.
 			for (const auto& entry : colonistEscorts()) {
 				if (entry.second != pGroundUnit->getObjectID()) continue;
@@ -1250,6 +1339,10 @@ bool QuantBot::humanControls(const UnitBase* unit) const {
     const auto it = manualUnitOrders.find(unit->getObjectID());
     return it != manualUnitOrders.end() && (getGameCycleCount()-it->second < MILLI2CYCLES(120000)
         || unit->wasForced() || unit->isMoving() || unit->hasATarget());
+}
+
+bool QuantBot::sendsInfantryToHospital() const {
+    return botConfig().force.hospitalInfantry && !switchedOff() && DuneCity::HospitalCare::enabled();
 }
 
 QuantBot::UnitRole QuantBot::unitRole(const UnitBase* unit, UnitRoles among) const {

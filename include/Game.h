@@ -32,6 +32,7 @@
 #include <INIMap/INIMapLoader.h>
 #include <GameInitSettings.h>
 #include <Trigger/TriggerManager.h>
+#include <MissionObjectives.h>
 #include <players/Player.h>
 #include <players/HumanPlayer.h>
 #include <misc/SDL2pp.h>
@@ -94,6 +95,11 @@ class Game
 {
 public:
     CursorAppearance::Action getHoverCursorAction() const;
+    /// The cursor the Capture mode (MODE) shows over tile (X, Y): its own symbol over a
+    /// target the click would order the selection at, a plain pointer elsewhere.
+    CursorAppearance::Action orderCursorAction(int mode, int x, int y) const;
+    /// orderCursorAction() at the mouse position.
+    CursorAppearance::Action getOrderCursorAction() const;
     const ChaosMode& getChaosMode() const { return chaosMode; }
     bool canPlayerControlHouse(const House* playerHouse, const House* owner) const;
     bool canPlayerControlHouse(Uint8 playerID, const House* owner) const;
@@ -181,6 +187,9 @@ public:
         \return the trigger manager
     */
     TriggerManager& getTriggerManager() { return triggerManager; };
+    /// Authored DuneCity mission goals ([OBJECTIVES], docs/city-campaign.md).
+    MissionObjectives& getMissionObjectives() { return missionObjectives; }
+    const MissionObjectives& getMissionObjectives() const { return missionObjectives; }
 
     /**
         Get the explosion list.
@@ -788,6 +797,13 @@ private:
     */
     void handleKeyInput(SDL_KeyboardEvent& keyboardEvent);
 
+    /// Whether a configurable shortcut applies here (city tools need the city simulation).
+    bool isHotkeyAvailable(Hotkeys::Action action) const;
+    /// Runs one configurable shortcut; 'extraShift' is Shift held on top of a Shift-less binding.
+    void runHotkeyAction(Hotkeys::Action action, bool extraShift);
+    /// Stop, Guard and Area Guard keys: CMD_UNIT_SETMODE for every selected unit this player commands.
+    void setSelectedUnitsAttackMode(ATTACKMODE mode);
+
     /**
         Performs a building placement
         \param  xPos    x-coordinate in map coordinates
@@ -827,7 +843,6 @@ private:
         \return true if capture is possible
     */
     bool handleSelectedObjectsCaptureClick(int xPos, int yPos);
-
     /**
         Handles a city zone placement click.
         \param  xPos    x-coordinate in map coordinates
@@ -950,7 +965,8 @@ public:
         CursorMode_Placing,
         CursorMode_CityZone,
         CursorMode_CityRoad,
-        CursorMode_Patrol
+        CursorMode_Patrol,
+        CursorMode_SpiceBloom             ///< Picks where the selected Palace worm bursts (Sandworm::doSpiceBloom)
     };
 
     /// Player position orders that go through issuePositionOrder().
@@ -1285,6 +1301,11 @@ private:
     CursorManager       cursorManager;          ///< This manages all hardware cursors
 
     TriggerManager      triggerManager;         ///< This is the manager for all the triggers the scenario has (e.g. reinforcements)
+    MissionObjectives   missionObjectives;      ///< [OBJECTIVES] goals; saved from SAVEGAMEVERSION 9887
+    /// The objectives panel's last lines and their textures (rebuilt only when the text changes).
+    std::vector<std::pair<std::string, bool>> objectivePanelLines;
+    std::vector<sdl2::texture_ptr> objectivePanelTextures;
+    void drawObjectivesPanel();
 
     bool    bQuitGame = false;                  ///< Should the game be quited after this game quit
     MatchControlState matchControl;

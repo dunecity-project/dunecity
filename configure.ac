@@ -86,5 +86,5 @@ elif test "${host}" = "x86_64-w64-mingw32" ; then
 		dunecitydatadir='.'
 fi
 
-AC_CONFIG_FILES(Makefile src/Makefile tests/Makefile)
+AC_CONFIG_FILES(Makefile src/Makefile)
 AC_OUTPUT

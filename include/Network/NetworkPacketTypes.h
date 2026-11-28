@@ -299,7 +299,8 @@
 //     and moves at the sixteen-heading speeds; a plane shot down crashes with a Death Hand impact
 //     credited to its shooter (AmbientAirplane::crash -> Bullet::detonateDeathHand); RocketTurret,
 //     Launcher, EliteLauncher, Trooper and Scoutpost hold fire while that blast would land on their
-//     own team (AmbientAirplane::crashEndangers). No saved state change.
+//     own team (AmbientAirplane::crashEndangers, removed 2026-11-25: anti-air always fires).
+//     No saved state change.
 // 93: The Natives house (feat/natives-house, unreleased on its own): a new house slot,
 //     HOUSE_NATIVES = 12 (NUM_HOUSES 13, team 0, no players), owns every sandworm and every city
 //     crime trooper; worms no longer count for or are controlled by the house a map names, crime
@@ -378,7 +379,160 @@
 //      would desync. Private development identity and save format remain unchanged.
 // 123: QuantBot repair-capacity demand treatment and its saved/runtime pressure
 //      clock; observer runtime 9 carries the same continuation state (save 9885).
-#define NETWORK_PROTOCOL_VERSION            123
+// 124: Campaign QuantBots build Repair Yards for every helper and for Medium and
+//      harder opponents (only Easy opponents are denied), and defer Construction Yard
+//      upgrades until power, income and a cash reserve exist. Older peers queue
+//      different AI construction and would desync. Save format unchanged.
+// 125: Original Campaign AI production and authored TEAM.EMC execution, including
+//      saved team state (9886), free upgrades and script-owned attack targets.
+// 126: Original Campaign AI wakes only once the other side's sight uncovers one of its
+//      ground units (Dune II isAIActive), not at the first update. Older peers start its
+//      production and team scripts at once and would desync. In authored missions it
+//      also keeps each computer house's own MaxUnit under the default unit override and
+//      creates no mission teams (the original loader rejects every campaign team line).
+//      Save format unchanged.
+// 127: QuantBot defaults change decisions: a campaign support house attacks at its unit
+//      cap and upgrades its Construction Yard after its first Light Factory; vanilla
+//      custom/skirmish QuantBots buy concreted payback windtraps. Older peers would desync.
+//      Save format unchanged.
+// 128: A unit a map starts with on a spice bloom leaves the bloom intact instead of setting
+//      it off (UnitBase::deployAtMapStart), so older peers would desync on such a map; the
+//      reworked campaign's co-op games need the RWRK_ maps new in 1.0.873. Save format
+//      unchanged.
+// 129: A player's unit a carryall drops keeps its own attack mode (Guard after a lift) instead
+//      of Area Guard (Carryall::deployUnit), so older peers would desync. Save format
+//      unchanged.
+// 130: The DuneCity campaign (docs/city-campaign.md): a map's [OBJECTIVES] city goals end the
+//      game (population, treasury, crime, land value, pollution), [EVENTS] BreachN opens a
+//      mountain wall at its minute (BreachTrigger), and QuantBot plans for the goals of the
+//      house it serves. Older peers would end or simulate those maps differently. Save 9887.
+// 131: The Park structure (item 89; Num_ItemID 90, so the ObjectData hash changes): a 1x1
+//      city-mode park that adds park land-value terrain. Older peers cannot build, place or
+//      load it. Save 9888.
+// 132: QuantBot Easiest (player class qBotEasiest, appended to the lobby's class list): QuantBot
+//      Easy with a lower army ceiling, half the harvesters and no attack before minute 10 in
+//      custom games, and smaller, later waves as a campaign opponent (EasiestPolicy.h). Older
+//      peers do not know the class. Save format unchanged. Also in 132, campaign opponents
+//      (CampaignDifficultyPolicy.h): Easy rebuilds to 1.5 times its starting army (was twice),
+//      Medium raids with ornithopters, Hard and Brutal add a Silo at 90% full storage; an
+//      Easiest wave is half of Easy's with one unit fewer.
+// 133: MOD20 carries the hashed Custom Game starting tech level (save 9889): the host's choice of
+//      1-9 replaces the map's [BASIC] TechLevel, 0 keeps it. Older peers cannot read the block.
+//      Also in 133, Saboteurs (match rule GameOptionsClass::saboteurHunt, default on, INI key
+//      "Saboteur Hunt"): a Palace releases one in Hunt for a human house too, a hunting Saboteur
+//      goes off as soon as it is in reach, picks again at once when its target vanishes or
+//      something nearer turns up beside it, and refuses an AI player's army orders. An older
+//      peer would desync. The rule's off state is hashed and is bit 7 of the MOD20 byte, so a
+//      default setup's stream and hash are unchanged; no new marker, number or save format.
+//      Also in 133, Trooper Anti-Air (DuneCity content): a rocket Trooper's own search takes an
+//      Ornithopter anywhere in weapon range without sight of the ground below it
+//      (Trooper::targetsWithoutGroundSight()). An older peer would desync. Save format unchanged.
+//      It is the match rule GameOptionsClass::trooperOrnithopterReach (default on, INI key
+//      "Trooper Ornithopter Reach"). Its off state is hashed and is bit 1 of the MOD15 Trooper
+//      Anti-Air byte, so a default setup's stream and hash are unchanged; no new marker or number.
+//      Under the same rule an idle Trooper takes an Ornithopter the cycle it comes into range
+//      (Trooper::targeting()) and fires before its turn is finished (firesAtAircraftUnfaced()).
+//      Also in 133, three city plane match rules (INI keys only, hashed and carried only in their
+//      non-default state as bits 2-4 of the same MOD15 byte): City Plane Defence (default on:
+//      Rocket Turrets see the city airplane at triple range, take it the cycle it comes into
+//      reach, their rocket flies to the meeting point, and anti-air only holds the shot that
+//      could bring it down onto its own side), City Plane Bombing (default on: the airplane
+//      drops Bullet_Bomb on enemy buildings under its course; its bomb load is saved, save
+//      format 9890) and Airport Ornithopter Patrol (default off: an Airport no longer sends out
+//      Ornithopters). An older peer would desync on all three.
+//      Also in 133, three more city plane rules as bits 5-7 of that byte (every bit of it is
+//      now in use), each default on: City Plane Carpet Bombing (a stick of bombs every half
+//      tile while enemy buildings are under the plane), City Plane Bombing Runs (each leg of a
+//      flight crosses a random enemy building) and City Plane Purchase (an Airport launches a
+//      plane for 1500 credits: CMD_AIRPORT_BUY_AIRPLANE, appended after
+//      CMD_RESEARCH_TECH_LEVEL, and QuantBot's own purchases). Save format 9891.
+//      Also in 133 (still unreleased): CMD_HOUSE_REPAIR_RETURN, appended after
+//      CMD_AIRPORT_BUY_AIRPLANE, switches whether the issuer's Repair Yards have repaired units
+//      flown back to where they were picked up (House::repairReturnEnabled, save format 9893).
+// 134: A city airplane that is shot down crashes with one stick bomb's damage on its own tile
+//      (AmbientAirplane::smallCrash) instead of a Death Hand impact, and anti-air always fires at
+//      an enemy plane: the hold on a shot that could bring it down onto its own side is gone.
+//      A 133 peer would desync. Save format unchanged.
+// 135: A QuantBot yard holding a finished building with no safe site for a minute places it on
+//      the least threatened legal site instead of holding it (and every later order) for good;
+//      the wait is part of the observer checkpoint. A 134 peer would desync. Save format unchanged.
+// 136: An Airport built during the game has its free plane ready at once, also in the first five
+//      minutes (Airport::init). A 135 peer would desync. Save format unchanged.
+// 137: Two city plane rules, default on, as bits 2-3 of the MOD18 city rules byte (set when off):
+//      City Plane Build Time (a bought plane is paid at the order and launched when its Airport has
+//      built it, one at a time, 57.6 s; Airport::planeBuildCycles) and City Plane Free Per Airport
+//      (each Airport has its own free plane on its own five-minute clock). QuantBot's ExtraAirports
+//      is on. A 136 peer refuses the byte. Save format 9899 (an Airport's purchase clock from an
+//      older save is cleared, so it does not finish building a plane that was never ordered).
+// 138: QuantBot's infantry share of the army's value is measured like a unit-mix slot
+//      (UnitMixPolicy::measuredInfantryBps) instead of the fixed 18/15/12/10% difficulty quota, so
+//      AI production differs. A 137 peer would desync. Save format unchanged.
+// 139: Match rule City Plane Crash Bombs, default on, as bit 4 of the MOD18 city rules byte (set
+//      when off): a shot-down plane explodes as three of its bombs, two tiles apart along its
+//      heading (AmbientAirplane::crash). A 138 peer refuses the byte. Save format unchanged.
+// 140: A Saboteur's charge is a hit through ObjectBase::handleDamage, so its kill and hit points
+//      are credited to the Saboteur (Stats screen, kill counts, the AI's onHostile* callbacks), and
+//      a Saboteur that blew up its target is no longer counted as lost (House::decrementUnits).
+//      A 139 peer would desync. Save format unchanged.
+// 141: QuantBot may build right up to enemy buildings (Stefan, 2026-11-27): an enemy building on a
+//      site's border no longer lowers its score, and a site under light enemy fire (one weapon's
+//      reach) is taken after every safe site instead of refused (TacticalSafetyPolicy::
+//      enemyBorderTileScore, ordinarySiteUnderFireAllowed). AI placement differs, so a 140 peer
+//      would desync. Save format unchanged.
+// 142: QuantBot's NuclearConsolidation retires a Wind Trap only while its base is low on building
+//      room (Stefan, 2026-11-27): built out, or fewer than kWindTrapRetireFreeRock free rock tiles
+//      (ForceConcentrationPolicy::windTrapRetirementRoomLow). AI demolition differs, so a 141 peer
+//      would desync. Save format unchanged.
+// 143: match rule Parks Count As Roads (default on, bit 6 of the MOD18 city rules byte, set only
+//      when off): a Park is a road connection for city traffic and zone access (Tile::
+//      isRoadConnection). Zone growth differs, so a 142 peer would desync. Save format unchanged.
+// 144: match rule Zone Garrisons (default on, bit 5 of the MOD18 city rules byte, set only when
+//      off): Soldiers and Troopers sent with the capture order occupy Residential, Commercial and
+//      Industrial zones, fire out, and take enemy zones nobody holds; CMD_ZONE_EVACUATE brings them
+//      out. Save format 9900 (a zone's garrison).
+// 145: match rule Fremen Palace Worm (default on, bit 7 of the MOD18 city rules byte, set only
+//      when off): a Fremen Palace calls a sandworm its house controls instead of Fremen warriors;
+//      CMD_SANDWORM_SPICEBLOOM bursts it into spice. A worm can belong to a player, so friendly fire
+//      and the bite follow its owner's team (ObjectBase::isWildSandworm). Save format 9901.
+// 146: match rule Hospital Care (default on, bit 6 of the MOD20 starting tech level byte, set only
+//      when off): wounded infantry sent for repair heal beside an own Hospital, five at a time, and
+//      a Hospital with a patient keeps its overlay; the civic overlays are now designated per house
+//      (they used the local player's counts). QuantBot switch HospitalInfantry (default off). A 145
+//      peer would desync. Save format 9902 (hospital trips and overlays).
+// 147: match rule Turrets Can Fire On Buildings (default off, bit 5 of the MOD20 starting tech level
+//      byte, set only when on): by default Rocket and Gun Turrets fire on units only, never on buildings or zones, as
+//      in the original game. A 146 peer would desync. Save format unchanged (the bit is in the
+//      settings stream; a save made before protocol 147 loads with turrets firing on units only).
+// 148: Zone Garrisons follow-up: a garrison leaves a zone below 60% health on its own, a captured
+//      zone returns to its original owner once its garrison is gone, and soldiers thrown out of a
+//      destroyed zone lose half their hit points. A 147 peer would desync. Save format 9903 (a
+//      captured zone's original owner). The Soldier's default price is 30 (ObjectData).
+// 149: Hospitals and Churches stay on their zones: a house gains or loses at most one Hospital a
+//      quarter year / a year (one Church a quarter / half year), only one older than four (two)
+//      city years is removed; the census no longer re-picks them every city day. A wounded
+//      soldier given a move order onto or beside an own Hospital, or right-clicking it, heals
+//      there (walk-in). A 148 peer would desync. Save format 9904 (civic overlay pacing).
+// 150: infantry squads (docs/infantry-squads.md): the default object table offers Infantry (three
+//      Soldiers for 50) at the Barracks and Troopers (three Troopers for 200) at the WOR, which the AI
+//      Player and campaign AI buy; in a city game a Barracks or WOR counts as a top-density
+//      Residential zone (40 residents, taxed), stamps +13 land value over 6 tiles and polices at half a
+//      Police Station's strength. QuantBot switches SquadOrders, InfantryLanes and InfantryInMix
+//      (default off). A 149 peer would desync. Save format unchanged.
+// 151: match rule Saboteurs Skip City Zones (default on, bit 4 of the MOD20 starting tech level byte,
+//      set only when off; the level is the low four bits): a Saboteur choosing its own target passes
+//      over Residential, Commercial and Industrial zones nobody garrisons and gives up one whose
+//      garrison has gone; an order its owner gives is kept (Saboteur::passesOver). Targets differ, so a
+//      149 peer would desync. Save format unchanged.
+// 152: city match option AI Infantry Tactics (default on; bit 1 of the MOD19 installments byte
+//      is set when off). QuantBot's nine infantry/garrison config switches are ORed with this
+//      city-only rule; vanilla is unaffected. AI decisions differ, so 151 peers are refused.
+//      Save layout unchanged; the default leaves the settings byte as before.
+// 153: Five infantry fit in a zone. Occupied zones cannot redevelop or change civic type. Each takes
+//      10% of actual building HP lost and regenerates while inside (ObjectData
+//      GarrisonHealTime, default 60 seconds for a full heal). Old peers desync.
+//      Save 9905 preserves fractional damage and regeneration remainders.
+// 155: QuantBot checkpoint streams include EconomyFirst opening decision counters (save 9906).
+#define NETWORK_PROTOCOL_VERSION            155
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

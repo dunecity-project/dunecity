@@ -46,6 +46,7 @@
 #include <misc/string_util.h>
 #include <misc/IMemoryStream.h>
 
+#include <INIMap/INIMapLoader.h>
 #include <INIMap/INIMapPreviewCreator.h>
 #include <INIMap/MapPlayerSectionUtils.h>
 
@@ -57,6 +58,7 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <players/EnemyDifficultyPolicy.h>
 
 
 #define PLAYER_HUMAN        0
@@ -328,7 +330,8 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     readinessLabel.setTextFontSize(12);
     if(!isCoopGameType(gameInitSettings.getGameType()))
         readinessLabel.setText(_("Spice income: multiplies credits from harvester deliveries. 2x = double."));
-    mainVBox.addWidget(&readinessLabel, 22);
+    readinessHBox.addWidget(&readinessLabel, 1.0);
+    mainVBox.addWidget(&readinessHBox, 22);
 
     mainVBox.addWidget(Spacer::create(), 0.04);
 
@@ -448,6 +451,32 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
 #endif
     mapPropertyNamesVBox.addWidget(Label::create(_("City sim") + ":"));
     mapPropertyValuesVBox.addWidget(&mapPropertyCity);
+    // A new custom game may start at another tech level than its map's. Campaign co-op takes
+    // its level from the mission, a saved game from the save, and Civilization Wars always
+    // starts at its own level 1, so those show nothing or only the level. It sits on the hint
+    // line: a row of its own under the map properties does not fit the 640x480 family lobby.
+    const GameType setupGameType = gameInitSettings.getGameType();
+    if((setupGameType == GameType::CustomGame || setupGameType == GameType::CustomMultiplayer)
+       && !gameInitSettings.getCoopCampaignContext()) {
+        const int chosenTechLevel = std::clamp(gameInitSettings.getGameOptions().startTechLevel, 0, 9);
+        techLevelLabel.setText(_("Tech level") + ":");
+        readinessHBox.addWidget(&techLevelLabel, 80);
+        if(setup && bServer && !gameInitSettings.isCivilizationWars()) {
+            setupTechLevel.addEntry(_("Map") + " (" + std::to_string(mapTechLevel) + ")", 0);
+            for(int level = 1; level <= 9; ++level) setupTechLevel.addEntry(std::to_string(level), level);
+            setupTechLevel.setSelectedItem(chosenTechLevel);
+            setupTechLevel.setTooltipText(_("The tech level every house starts at. Map uses the level the map was made for."));
+            setupTechLevel.setOnSelectionChange([this](bool interactive) {
+                if(!interactive) return;
+                setup->rules.startTechLevel = setupTechLevel.getSelectedEntryIntData();
+                rebuildSetup(true);
+            });
+            readinessHBox.addWidget(&setupTechLevel, 90);
+        } else {
+            mapPropertyTech.setText(std::to_string(chosenTechLevel != 0 ? chosenTechLevel : mapTechLevel));
+            readinessHBox.addWidget(&mapPropertyTech, 90);
+        }
+    }
     rightVBox.addWidget(Spacer::create());
 
     mainVBox.addWidget(Spacer::create(), 0.04);
@@ -903,7 +932,7 @@ CustomGamePlayers::CustomGamePlayers(const GameInitSettings& newGameInitSettings
     }
 
     if(setup && setup->players.changeEventList.empty() && !setup->online) {
-        const int ai = PlayerFactory::getIndexByPlayerClass("qBotEasy");
+        const int ai = PlayerFactory::getIndexByPlayerClass(EnemyDifficultyPolicy::kDefaultEnemy);
         for(int row = 0; row < numHouses; ++row) {
             if(getSeatPlayer(2*row) == PLAYER_OPEN) selectSeatPlayer(2*row, ai);
         }
@@ -2602,6 +2631,7 @@ void CustomGamePlayers::extractMapInfo(INIFile* pMap)
 
 
     mapPropertyLicense.setText(pMap->getStringValue("BASIC","License", "-"));
+    mapTechLevel = INIMapLoader::authoredTechLevel(*pMap);
 
     // find Brain=Human
     int currentIndex = 0;

@@ -2264,6 +2264,34 @@ TEST_CASE("Medium and Hard campaign waves use fixed credits and independent open
     CHECK(openingDelayMs(2,1599783965,45000,0)!=openingDelayMs(2,1599783965,45000,1));
 }
 
+TEST_CASE("Campaign house budgets soften added bases while total pressure increases", "[quantbot][campaign]") {
+    using CampaignDifficultyPolicy::hardWaveValue;
+    for(int bases:{0,1,2,3,4,8}) CHECK(hardWaveValue(3500,bases,0)==3500);
+    for(int arm:{1,2}) {
+        CHECK(hardWaveValue(3500,1,arm)==4000);
+        CHECK(hardWaveValue(3500,0,arm)==hardWaveValue(3500,1,arm));
+        int previous=hardWaveValue(3500,1,arm);
+        for(int bases=2;bases<=8;++bases) {
+            const int value=hardWaveValue(3500,bases,arm);
+            CHECK(value<=previous);
+            CHECK(bases*value>(bases-1)*previous);
+            CHECK(hardWaveValue(7000,bases,arm)==2*value);
+            previous=value;
+        }
+    }
+    CHECK(hardWaveValue(3500,2,1)==3000);
+    CHECK(hardWaveValue(3500,3,1)==2500);
+    CHECK(hardWaveValue(3500,2,2)==3250);
+    CHECK(hardWaveValue(3500,3,2)==3000);
+    // Explicit budgets permit independent response measurements; switching OFF
+    // must ignore every candidate value, including custom mod wave values.
+    for(int bases:{0,1,2,3,4,8}) {
+        CHECK(hardWaveValue(4500,bases,0,6500,2500,1500)==4500);
+        CHECK(hardWaveValue(4500,bases,3,6500,2500,1500)==
+            (bases<=1 ? 6500 : bases==2 ? 2500 : 1500));
+    }
+}
+
 TEST_CASE("Custom attacks commit a strict share of the owned ground army", "[quantbot][army][regression]") {
     using namespace SimpleArmyPolicy;
     std::vector<Responder> infantry;
@@ -2532,6 +2560,19 @@ TEST_CASE("The yard unlocks bulk concrete as soon as the technology allows", "[q
 }
 
 // ---------------------------------------------------------------------------
+// Campaign upgrades must leave cash for the economy, including at a low-cash
+// mission start where single slabs remain a legal way to build a refinery.
+TEST_CASE("Campaign yard upgrades spend only established economic surplus", "[QuantBotBuildPolicy]") {
+    using QuantBotBuildPolicy::campaignYardUpgradeFunded;
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, false, false, 1000, 500, 0));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, true, true, 5000, 500, 2000));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(false, true, false, 5000, 500, 2000));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, true, false, 2499, 500, 2000));
+    REQUIRE(campaignYardUpgradeFunded(true, true, false, 2500, 500, 2000));
+    REQUIRE_FALSE(campaignYardUpgradeFunded(true, true, false, 3500, 500, 4000));
+    REQUIRE(campaignYardUpgradeFunded(true, true, false, 4500, 500, 4000));
+}
+
 // Foundation planning
 // ---------------------------------------------------------------------------
 
@@ -3417,4 +3458,33 @@ TEST_CASE("Anti-air floor never lowers a share, invents budget or breaks the cap
     CHECK(cappedFloored[4] <= 8000);
     CHECK(cappedFloored[2] == UnitMixPolicy::kMobileAntiAirFloorBps);
     CHECK(std::accumulate(cappedFloored.begin(), cappedFloored.end(), 0) == 10000);
+}
+
+TEST_CASE("Support power payback counts repairs and refinery pay over its horizon", "[quantbot][power][economy]") {
+    using namespace QuantBotPowerInvestmentPolicy;
+    // Stefan's doesntupgrade helper: 100 of 210 power, two concreted windtraps close it.
+    Investment state;
+    state.deficit = 110;
+    state.generatorOutput = 100;
+    state.unitCapital = 320;
+    state.spendable = 3244;
+    state.netIncome = 5120;
+    state.incomeMinutes = QuantBotSpendingPolicy::horizonMinutes;
+    state.repairMilliPerHitpoint = 3277;   // 13 credits of repair a game minute
+    REQUIRE(packageCapital(state) == 640);
+    REQUIRE(avoidedRepairPerMinute(state) == 13);
+    REQUIRE(evaluate(state) == Verdict::RepairsTooCheap); // OFF: repairs alone need 49 minutes
+
+    state.refineryLossPerMinute = refineryPayLossPerMinute(1280);
+    REQUIRE(state.refineryLossPerMinute == 15);
+    state.paybackMinutes = 25;            // (13 + 15) * 25 = 700 >= 640
+    REQUIRE(evaluate(state) == Verdict::BuyForPayback);
+    REQUIRE(buys(Verdict::BuyForPayback));
+    state.paybackMinutes = 20;            // 560 < 640: the old gates decide
+    REQUIRE(evaluate(state) == Verdict::RepairsTooCheap);
+    state.paybackMinutes = 25;
+    state.spendable = 639;                // never past the cash it has after the reserve
+    REQUIRE(evaluate(state) == Verdict::Unaffordable);
+    REQUIRE(refineryPayLossPerMinute(0) == 0);
+    REQUIRE(refineryPayLossPerMinute(-100) == 0);
 }

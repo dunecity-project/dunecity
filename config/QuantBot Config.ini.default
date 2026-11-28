@@ -495,6 +495,39 @@ CampaignHomeFields=2
 # Campaign support, positive initial spice, actual ground attack on a live worker only.
 # Reuse sized rescue: 0=OFF, 1=require 100% threat coverage, 2=require 150%; buildings unchanged.
 CampaignSizedWorkerRescue=0
+# Campaign support with a Starport builds its first Heavy Factory only after its first Repair
+# Yard, and only once the Starport has no tank, siege tank or launcher in stock at or below list
+# price (or cash is above 2,500): the Starport supplies the early army. Hashed; OFF builds the
+# Heavy Factory as soon as it is chosen. City campaigns are unchanged.
+CampaignHelperFactoryLast=1
+# Campaign support troops that are not out with an attack wave do not chase a target, or answer a
+# ground contact, more than this many tiles from the nearest building the house owns; they return
+# to their assembly point. 0=OFF. Hashed.
+CampaignHelperDefenceLeash=14
+# Campaign support lays no concrete, except under Light and Heavy Factories, the High-Tech Factory,
+# WOR and Barracks (CampaignHelperFactoryConcrete): a producer on bare rock starts at half health
+# and builds at half speed. Hashed; OFF lays concrete under every building.
+CampaignHelperNoConcrete=1
+CampaignHelperFactoryConcrete=1
+# Campaign support with a Starport available builds this many refineries before the Starport, and
+# grows to the refinery goal once its Repair Yard stands, both bounded by the map's spice; it
+# plans 1.75 harvesters per refinery and keeps one carryall per CarryallRatio harvesters.
+# 0=OFF for each. Hashed.
+CampaignHelperOpeningRefineries=6
+CampaignHelperRefineryGoal=8
+CampaignHelperCarryallRatio=2
+# Campaign support upgrades its Construction Yard once its first Light Factory stands, outside the
+# deferred spare-cash rule (0=OFF, 1=as soon as affordable, 2=after Light Factory, 3=after Heavy
+# Factory, 4=after Heavy Factory and the full harvester fleet). Hashed.
+CampaignHelperYardUpgradeTiming=2
+# Campaign support at the ground unit limit attacks with the army it has when that army is below its
+# readiness: the strength floor can otherwise ask for more than the unit cap can hold. Hashed.
+CampaignHelperUnitCapLaunch=1
+# Custom and skirmish QuantBots playing vanilla power rules buy the windtraps that close a power
+# shortage when its running cost (repairs plus the refinery pay a damaged refinery loses) repays
+# them within this many game minutes, ordering them only when the yard has nothing else to build.
+# 0=OFF. Hashed.
+VanillaPowerPayback=25
 ResearchLab=1
 # Research is a technology prerequisite, not optional expansion after the opening fleet.
 # Hashed OFF/ON control; the match Research Lab option and normal human legality still apply.
@@ -622,6 +655,82 @@ ThreatTurrets=1
 # Denser observed-ground cover (175 value/rocket), still 2-8 locally and 12 reactive total.
 # Default off: the final paired trial did not meet the +1 rocket/house acceptance gate.
 MoreRocketTurrets=0
+# Stefan, 2026-11-23: "also make the ai respond when being bombed by planes by having more turrets
+# dispersed". While city airplane bombs land on a house's buildings, and for three game minutes
+# after the last one, it adds Rocket Turrets spread through its city: beside a building with no own
+# Rocket Turret within 8 tiles, first near the bomb hits, at least 6 tiles from the other Rocket
+# Turrets. At most 2 a minute, 8 a raid and 24 Rocket Turrets in all; bought only from cash above
+# the build pass's largest reserve plus 500, and only when the house can power it. 0 = off.
+AirRaidTurrets=1
+# Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings". 1 (protocol 141):
+# an enemy building on a site's border costs the site nothing (it was -10 a tile), and a site under
+# light enemy fire (one weapon's reach) is taken after every safe site instead of refused; heavy fire
+# (two weapons or more) still waits for a held finished building's minute. 0 = the spacing before 141
+# (play style @old-enemy-spacing, for experiment arms).
+BuildUpToEnemy=1
+# Stefan, 2026-11-27: the Fremen Palace calls a worm (match rule Fremen Palace Worm). 1: it hunts an enemy
+# army standing on its sand and bursts into spice near our refineries when there is none (or before it
+# would leave unused); 0: it bursts for spice at once; 2: it only hunts (play styles @palace-worm-0/-2).
+PalaceWorm=1
+# Stefan, 2026-11-24: "on skirmish with fully built base the ai doesn't build rocket turret defenes
+# and everyones base gets steamrolled by a plane". As soon as another team has an Airport or has
+# flown a city airplane (and bombing is on), a house spreads Rocket Turrets through its city by the
+# AirRaidTurrets coverage rule before the first bomb lands: one a minute, until it has 16 Rocket
+# Turrets. With this on, these turrets and the ones against a raid are paid ahead of strategic and
+# civic savings; only the economy's reserve must remain. 0 = off (AirRaidTurrets as it was).
+# Default off: in 48 paired matches the houses ordered 21 such turrets a game instead of 1.6 and
+# lost the same buildings to bombs (+4 a game, -14 to +23).
+AirThreatTurrets=0
+# Stefan, 2026-11-26: "also airports need decent rocket turret defenses". Every own Airport keeps
+# 4 Rocket Turrets (standing and queued) within 5 tiles of its footprint, spread round it, and a
+# lost one is ordered again; one order a build pass, from cash beyond the economy's reserve, never
+# saved for. City games with City Plane Bombing only. 0 = off.
+# Default off: in 48 paired matches the ring filled (93% of Airports by minute 20 against 65%) but
+# bombs destroyed the same Airports (1.04 a game against 1.10); level on placement in 288 mixed games.
+AirportTurrets=0
+# Stefan, 2026-11-27: Hospitals heal infantry (match rule Hospital Care). With this on, a QuantBot
+# soldier below 60% health goes to the nearest own Hospital with a free bed once no armed enemy has
+# been within weapon reach of it for 500 cycles (about 8 s); 6+ tiles away it also asks for a
+# Carryall. It is reserved until healed. 0 = off: AI infantry are never sent to a Hospital.
+# Default off: level in two 288-game mixed screens. Sent under fire (onDamage): on - off -0.017
+# (-0.09..+0.06), 637 of 891 trips a game died on the way. Out of contact only: -0.005
+# (-0.09..+0.07), 55 of 64 trips a game healed.
+HospitalInfantry=0
+# Stefan, 2026-11-27: Rocket Turrets at the front (include/players/TurretFrontPolicy.h). All off
+# until measured. A Rocket Turret costs 15 credits a city year of police upkeep (7.5 a minute with
+# Slow City Year), so a turret pays only while something is in its range.
+# FrontTurrets: an attacked building cluster gets turrets until its cover matches the attack.
+FrontTurrets=0
+# AdvancingTurrets: a belt of turrets at the base's enemy-facing edge, moved forward behind the army.
+AdvancingTurrets=0
+# TurretCreep: turrets within range of enemy buildings where at most one enemy turret reaches.
+TurretCreep=0
+# RearTurretRetire: turrets far from every enemy are sold (demolished where selling is off), four
+# every two minutes, keeping the base's own coverage need.
+RearTurretRetire=0
+# TurretDrill: once the base's edge stands within 24 tiles of an enemy building, a dense mass of
+# Rocket Turrets is built straight toward and into that base, as close as each yard can place it,
+# for as long as cash beyond the economy's reserve lasts (no count cap). Stefan, 2026-11-27: "i just
+# build turrets into their base as a mass and they carved a hole in the ebemy base" (TurretFrontPolicy.h).
+TurretDrill=0
+# Low/no-spice city economy (below 20,000 spice per living house): yards from usable home room, up to 9;
+# MCV/plant/opening-zone savings capped at half of cash above 2,000; Palace opening and idle R/C/I zoning.
+# Space rule: settle away when home has fewer than four free 2x2 footprints. Spice-rich maps never act.
+# Stefan, 2026-11-28: "try different things". Experimental variants, all default off; one binary for all arms.
+EconomyFirst=0
+# 0 none; 1 all non-MCV unit orders; 2 Starport-only: factory-value 3,850 by minute 3, 8,050 by 10.
+# Pacing stops after minute 10 and releases under a core threat. Construction MCVs are outside this budget.
+EconomyFirstUnitPacing=0
+# New Rocket Turret orders: none before minute 3, 29 by 10, 50 by 20, 77 by 31; emergencies still come first.
+EconomyFirstTurrets=0
+# Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
+# it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
+# destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes
+# (CityAircraft::extraAirportPays), from spare cash only: each Airport has its own free plane (City Plane
+# Free Per Airport) and builds one bought plane at a time (City Plane Build Time; counted while every
+# Airport is busy). A rich house (30,000 beyond its reserves and the Airport's price) with every
+# Airport building orders more, up to 8, whatever the payback. 0 = off.
+ExtraAirports=1
 # Save a solvent city's first useful Starport instead of zoning its price away.
 CityStarportSupply=1
 # Forecast earned-income overflow after useful production, including T1 refinery vaults.
@@ -640,6 +749,26 @@ FundedClassicProduction=1
 # Six standing; reactive air floor up to18. Infantry strategy retains its existing quota.
 # ON at Stefan's direction despite unproven adoption/Starport acceptance; see HANDOVER.
 TrooperSupport=1
+# Zone Garrisons (match rule): Soldiers and Troopers garrison own city zones that enemies close on
+# (7 tiles), come out when none is within 11, and take empty enemy zones within 5 tiles of them.
+# 0 = QuantBot never uses garrisons. docs/zone-garrisons.md has the OFF/ON evidence.
+ZoneGarrison=0
+# A free Soldier or Trooper takes each empty enemy zone with no enemy unit or turret near it and
+# stays inside (a captured zone returns to its owner once its garrison is gone).
+ZoneCaptureRaid=0
+# Barracks train a levy of cheap Soldiers that walks into the nearest enemy zones.
+ZoneCaptureLevy=0
+# House to house (Stefan, 2026-11-27): Troopers reinforce threatened garrisons; our zones nearest the
+# enemy get a garrison first; soldiers take the next enemy zone across the street from a zone we hold.
+ZoneGarrisonReinforce=0
+ZoneFrontGarrison=0
+ZoneCaptureChain=0
+# Infantry squads (Stefan, 2026-11-28): infantry orders take the offer cheapest per man (the three-man
+# squad when it is; 0 = never a squad); another Barracks/WOR by the factory lane rule; in a city game the
+# Barracks/WOR build to the measured infantry share, not only against aircraft. docs/infantry-squads.md.
+SquadOrders=0
+InfantryLanes=0
+InfantryInMix=0
 # Stateless existing-composition/technology experiment; paired outcomes rejected adoption.
 # Default OFF. No saved budget, save-format change or protocol change.
 SimpleTechSavings=0
@@ -663,6 +792,9 @@ FleetRepairYards=1
 # Queued bays, idle bays and transport/access failures do not justify repeats.
 # Campaign rebuild permissions and Medium's existing limits are unchanged.
 RepairCapacityDemand=false
+# Default OFF: repaired AI units avoid locally superior enemies within 8 tiles of pickup.
+# Redirect to the existing protected base rally; human units are unchanged.
+RepairReturnCheck=0
 # Experimental pre-ladder (1.0.807) Custom Medium, default 0 = current. 1: no banked-credit
 # surplus army and no heavy-factory walk after the starport opening; 2: also the standing
 # 40% raid share instead of whole-army waves. Easy/Hard/Brutal and campaigns are unchanged.

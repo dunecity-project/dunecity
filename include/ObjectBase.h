@@ -88,6 +88,16 @@ public:
     virtual Coord getClosestCenterPoint(const Coord& objectLocation) const;
 
     virtual bool canAttack(const ObjectBase* object) const;
+    /// A Natives sandworm, which every unit may attack whoever's side it is near. A house's own
+    /// worm (the Fremen Palace worm) is not wild: it is attacked like any unit of that house.
+    bool isWildSandworm() const;
+
+    /**
+        May the autonomous target search pick this candidate although this object's team
+        does not currently see the ground tile below it? Nobody may, except a Trooper under
+        the Trooper Anti-Air rule for an Ornithopter in rocket range.
+    */
+    virtual bool targetsWithoutGroundSight(const ObjectBase& candidate) const { return false; }
 
     virtual Coord getCenterPoint() const;
 

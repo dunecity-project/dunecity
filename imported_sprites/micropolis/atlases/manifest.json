@@ -22,7 +22,7 @@
     "airport": {
       "columns": 9,
       "rows": 1,
-      "cell": 48,
+      "cell": 64,
       "models": 1
     },
     "stadium": {
@@ -36,6 +36,12 @@
       "rows": 1,
       "cell": 48,
       "models": 1
+    },
+    "park": {
+      "columns": 8,
+      "rows": 1,
+      "cell": 16,
+      "models": 5
     },
     "roads": {
       "columns": 16,

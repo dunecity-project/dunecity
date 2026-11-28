@@ -3,6 +3,8 @@
 #include <GUI/dune/InGameMenu.h>
 #include <GUI/dune/SaveMapWindow.h>
 #include <INIMap/MatchMapExport.h>
+#include <GUI/dune/RestartDifficultyWindow.h>
+#include <players/EnemyDifficultyPolicy.h>
 #include <House.h>
 #include <Map.h>
 #include <Tile.h>
@@ -129,7 +131,7 @@ void requireFit(Window& window, std::initializer_list<Widget*> controls) {
 
 void requirePauseFit(InGameMenu& menu) {
     requireFit(menu, {&menu.title, &menu.onlineNotice, &menu.resumeButton, &menu.saveGameButton,
-        &menu.saveMapButton, &menu.loadGameButton, &menu.restartGameButton, &menu.gameSettingsButton,
+        &menu.saveMapButton, &menu.loadGameButton, &menu.restartGameButton, &menu.restartDifficultyButton, &menu.gameSettingsButton,
         &menu.quitButton, &menu.skipMissionButton, &menu.pauseGameButton, &menu.joinRequestsButton, &menu.requestPlayButton});
 }
 
@@ -679,6 +681,134 @@ void verifyAvailability(const GameInitSettings& randomInit) {
     }
 }
 
+// "Restart on New Difficulty" in the real pause menu of a generated skirmish: the button opens a
+// dialog listing the five QuantBot difficulties with the current one selected; Cancel leaves the
+// game alone; Restart queues the same map against the chosen enemy, easier or harder, and that
+// restart is a real game against the chosen class. Rule: EnemyDifficultyPolicy.h.
+void verifyRestartDifficulty(const GameInitSettings& randomInit) {
+    const auto withEnemy = [&](const std::string& playerClass) {
+        GameInitSettings init = randomInit;
+        bool enemy = false;
+        for(auto& house : init.houseInfoList) {
+            if(EnemyDifficultyPolicy::detail::hasHuman(house)) continue;
+            for(auto& player : house.playerInfoList) { player.playerClass = playerClass; enemy = true; }
+        }
+        menuRequire(enemy, "Restart difficulty fixture has no enemy house");
+        return init;
+    };
+    const auto enemyClasses = [](const GameInitSettings& init) {
+        std::vector<std::string> classes;
+        for(const auto& house : init.getHouseInfoList()) {
+            if(EnemyDifficultyPolicy::detail::hasHuman(house)) continue;
+            for(const auto& player : house.playerInfoList) classes.push_back(player.playerClass);
+        }
+        return classes;
+    };
+    const auto pauseColor = [](Game& game) { return getHouseColorRGB(getHouseVisualHouse(game.getInterfaceHouseID()), 3); };
+    const auto playsAgainst = [](Game& game, const std::string& playerClass) {
+        for(int i = 0; i < NUM_HOUSES; ++i) {
+            House* house = game.getHouse(i);
+            if(house == nullptr || house == pLocalHouse) continue;
+            for(const auto& player : house->getPlayerList())
+                if(player->getPlayerclass() == playerClass) return true;
+        }
+        return false;
+    };
+    const auto openDialog = [](InGameMenu& pause) {
+        click(pause.restartDifficultyButton);
+        auto* dialog = dynamic_cast<RestartDifficultyWindow*>(pause.pChildWindow);
+        menuRequire(dialog != nullptr, "Restart on New Difficulty does not open its dialog");
+        return dialog;
+    };
+    // Picks a row of the dialog's list and presses Restart; returns the settings the game queued.
+    const auto restartOn = [&](Game& game, const GameInitSettings& from, int row, const std::string& expected) {
+        InGameMenu pause(false, pauseColor(game));
+        auto* dialog = openDialog(pause);
+        dialog->difficulty.setSelectedItem(row);
+        click(dialog->restartButton);
+        pause.processChildWindowOpenCloses();
+        const GameInitSettings next = game.nextGameInitSettings;
+        menuRequire(!pause.hasChildWindow() && game.bQuitGame && next.getGameType() == from.getGameType()
+                    && next.getFiledata() == from.getFiledata() && !enemyClasses(next).empty(),
+                    "Restart on New Difficulty did not queue a restart of the same map");
+        for(const auto& playerClass : enemyClasses(next))
+            menuRequire(playerClass == expected, "Restart on New Difficulty queued another enemy class than the one chosen");
+        menuRequire(game.whatNext() == GAME_LOAD, "Restart on New Difficulty is not carried out as a restart");
+        return next;
+    };
+
+    GameInitSettings easiest;
+    {
+        const auto hard = withEnemy("qBotHard");
+        Match match(hard);
+        match.advance(16);
+        InGameMenu pause(false, pauseColor(*match.game));
+        menuRequire(pause.restartDifficultyButton.isVisible() && pause.restartDifficultyButton.isEnabled()
+                    && pause.restartDifficultyButton.getText() == _("Restart on New Difficulty"),
+                    "Pause menu does not offer Restart on New Difficulty against QuantBot Hard");
+        requirePauseFit(pause);
+        menuCapture(pause, "restart-difficulty-pause");
+        auto* dialog = openDialog(pause);
+        const auto size = dialog->getSize();
+        menuRequire(size.x > 0 && size.y > 0 && size.x <= 640 && size.y <= 480, "Restart difficulty dialog does not fit 640x480");
+        const std::vector<std::string> expected{"QuantBot Easiest", "QuantBot Easy", "QuantBot Medium", "QuantBot Hard", "QuantBot Brutal"};
+        menuRequire(dialog->difficulty.getNumEntries() == static_cast<int>(expected.size()),
+                    "Restart difficulty dialog does not list the five QuantBot difficulties outside a campaign");
+        for(int i = 0; i < dialog->difficulty.getNumEntries(); ++i)
+            menuRequire(dialog->difficulty.getEntry(i) == expected[i], "Restart difficulty dialog lists the difficulties in another order");
+        menuRequire(dialog->difficulty.getSelectedIndex() == 3
+                    && dialog->currentLabel.getText().find("QuantBot Hard") != std::string::npos,
+                    "Restart difficulty dialog does not start on the difficulty being played");
+        menuCapture(*dialog, "restart-difficulty-dialog");
+        // Cancel, by button and by Escape, leaves the running game alone.
+        const auto before = match.game->computeStateDigest();
+        dialog->difficulty.setSelectedItem(0);
+        click(dialog->cancelButton);
+        pause.processChildWindowOpenCloses();
+        dialog = openDialog(pause);
+        SDL_KeyboardEvent escape{};
+        escape.keysym.sym = SDLK_ESCAPE;
+        dialog->handleKeyPress(escape);
+        pause.processChildWindowOpenCloses();
+        menuRequire(!pause.hasChildWindow() && !match.game->bQuitGame
+                    && match.game->nextGameInitSettings.getGameType() == GameType::Invalid
+                    && match.game->computeStateDigest() == before
+                    && enemyClasses(match.game->getGameInitSettings()) == enemyClasses(hard),
+                    "Cancelling Restart on New Difficulty changed the running game");
+        // Easier: Hard to Easiest, the first row.
+        easiest = restartOn(*match.game, hard, 0, "qBotEasiest");
+    }
+    GameInitSettings brutal;
+    {
+        // The queued settings start a real game against QuantBot Easiest, and the dialog opens on it.
+        Match match(easiest);
+        match.advance(16);
+        menuRequire(playsAgainst(*match.game, "qBotEasiest"), "The restarted game does not play against QuantBot Easiest");
+        InGameMenu pause(false, pauseColor(*match.game));
+        requirePauseFit(pause);
+        auto* dialog = openDialog(pause);
+        menuRequire(dialog->difficulty.getSelectedIndex() == 0, "Restart difficulty dialog does not open on QuantBot Easiest");
+        click(dialog->cancelButton);
+        pause.processChildWindowOpenCloses();
+        // Harder works too: Easiest to Brutal, the last row.
+        brutal = restartOn(*match.game, easiest, 4, "qBotBrutal");
+    }
+    {
+        Match match(brutal);
+        match.advance(16);
+        menuRequire(playsAgainst(*match.game, "qBotBrutal"), "The restarted game does not play against QuantBot Brutal");
+    }
+    {
+        // An enemy the player cannot change (QuantBot Defend): no button, the other controls stay.
+        Match match(withEnemy("qBotDefend"));
+        match.advance(16);
+        InGameMenu pause(false, pauseColor(*match.game));
+        menuRequire(!pause.restartDifficultyButton.isVisible() && pause.restartGameButton.isVisible(),
+                    "Pause menu offers a new difficulty for an enemy that has none");
+        requirePauseFit(pause);
+    }
+}
+
 } // namespace SaveAsMapProbe
 
 void verifySaveAsMap() {
@@ -759,6 +889,7 @@ void verifySaveAsMap() {
                 "Map export destination does not distinguish SP and MP user maps");
     requiresRuntimeError([] { MatchMapExport::playerCount(""); }, "Map export accepted empty map data");
     verifyAvailability(randomInit);
+    verifyRestartDifficulty(randomInit);
     verifyListsAndStarts(exported);
     menuRequire(previousConfig.saveChangesTo(getConfigFilepath()), "Cannot restore the Save as Map fixture profile choices");
     settings.general.customGameMod = previousCustomMod;
@@ -768,5 +899,5 @@ void verifySaveAsMap() {
     // The navigation runner accepts exactly one final MENU_PROBE_PASS line.
     SDL_Log("SAVE_AS_MAP_OK: Random Skirmish and Civilization Wars start/current exact files, live mutations,"
             " editor and Custom Game lists, four playable starts, independent worms, spectator/campaign policy, safe names,"
-            " confirmed/cancelled overwrites, real dialog clicks and 640x480 crest-safe controls");
+            " confirmed/cancelled overwrites, real dialog clicks, 640x480 crest-safe controls and Restart on New Difficulty");
 }

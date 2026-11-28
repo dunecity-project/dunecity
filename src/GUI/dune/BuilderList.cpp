@@ -35,6 +35,7 @@
 #include <FileClasses/LoadSavePNG.h>
 #include <GUI/dune/StructureSizePreview.h>
 #include <units/HarvesterHelpers.h>
+#include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
 
 #include <structures/BuilderBase.h>
 #include <structures/StarPort.h>
@@ -419,8 +420,9 @@ void BuilderList::draw(Point position) {
             }
 
             const auto structureSize = isStructure(buildItem.itemID) ? getStructureSize(buildItem.itemID) : Coord(0, 0);
-            const bool extendedFootprint = ModManager::instance().isTornieFamilyContentActive()
-                && isStructure(buildItem.itemID) && (structureSize.x > 3 || structureSize.y > 3);
+            // The lattice art covers three cells each way. A larger footprint (Tornie's wide
+            // structures, the 4x4 Airport) repeats its cells instead of sampling past them.
+            const bool extendedFootprint = isStructure(buildItem.itemID) && (structureSize.x > 3 || structureSize.y > 3);
             if(extendedFootprint) {
                 drawStructureSizePreview(renderer, pGFXManager->getUIGraphic(UI_StructureSizeLattice),
                     pGFXManager->getUIGraphic(UI_StructureSizeConcrete), button.x + 1, button.y + 1,
@@ -565,7 +567,7 @@ void BuilderList::drawOverlay(Point position) {
         std::string text = resolveItemName(buildItemIter->itemID);
 
         if(buildItemIter->itemID == pBuilder->getCurrentProducedItem() && pBuilder->mayPlaceByHand()) {
-            text += " (Hotkey: P)";
+            text += UnitCommandTooltips::hotkeySuffix(Hotkeys::Action::PlaceStructure);
         }
         if(pBuilder->isRepeating(buildItemIter->itemID)) {
             text += " - repeating (Alt+click: stop, right-click: cancel)";

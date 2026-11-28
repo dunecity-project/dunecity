@@ -49,13 +49,13 @@ TEST_CASE("PoliceStation: annual upkeep is 100 (designer-tuned from SC's 500)",
     REQUIRE(getPoliceAnnualCost(Structure_PoliceStation) == 100);
 }
 
-TEST_CASE("PoliceStation: replaces Barracks/WOR as the police source",
+TEST_CASE("PoliceStation: the full police source; Barracks/WOR police at half",
           "[police-station][police][regression]") {
-    // The whole point of the PoliceStation: Barracks/WOR no longer count
-    // toward crime reduction. Verify the absence so a future refactor
-    // that re-adds them is noisy.
-    REQUIRE(getPoliceCoverage(Structure_Barracks)   == 0);
-    REQUIRE(getPoliceCoverage(Structure_WOR)        == 0);
+    // The PoliceStation replaced Barracks/WOR as the full-coverage source (they once gave a full station's
+    // coverage). Since Stefan, 2026-11-28 ("and infantry and wor have 50% police effect") they give exactly
+    // half, never full, and cost no upkeep. Pinned so a refactor that changes either is noisy.
+    REQUIRE(getPoliceCoverage(Structure_Barracks)   == getPoliceCoverage(Structure_PoliceStation) / 2);
+    REQUIRE(getPoliceCoverage(Structure_WOR)        == getPoliceCoverage(Structure_PoliceStation) / 2);
     REQUIRE(getPoliceAnnualCost(Structure_Barracks) == 0);
     REQUIRE(getPoliceAnnualCost(Structure_WOR)      == 0);
 }

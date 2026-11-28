@@ -35,6 +35,8 @@
 #include <structures/Refinery.h>
 #include <structures/RepairYard.h>
 #include <structures/WindTrap.h>
+#include <structures/ZoneStructure.h>
+#include <dunecity/ZoneGarrisonPolicy.h>
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/TrackedUnit.h>
@@ -134,6 +136,26 @@ void InfantryBase::doCaptureStructure(Uint32 targetStructureID) {
 }
 
 void InfantryBase::doCaptureStructure(const StructureBase* pStructure) {
+    // Zone Garrisons: an own zone with room is occupied; an enemy zone is entered and taken, or,
+    // while enemy soldiers hold it, fired on until they are gone (engageTarget).
+    if(const auto* zone = dynamic_cast<const ZoneStructure*>(pStructure);
+       zone != nullptr && ZoneStructure::garrisonsEnabled() && canCaptureStructures()) {
+        const bool own = zone->getOwner()->getTeamID() == getOwner()->getTeamID();
+        if(own && !zone->mayEnterGarrison(this)) {
+            SDL_Log("ZONE_GARRISON: event=refused_at_order house=%d unit=%u item=%d zone=%u occupants=%d health=%d max_health=%d cycle=%u",
+                    owner->getHouseID(), objectID, itemID, zone->getObjectID(), zone->getGarrisonSize(),
+                    zone->getHealth().lround(), zone->getMaxHealth(), currentGame->getGameCycleCount());
+            return;
+        }
+        // A soldier already beside the zone walks straight in.
+        if(!moving && location.isValid()
+           && blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance
+           && const_cast<ZoneStructure*>(zone)->enterGarrison(this)) return;
+        if(own) doMove2Object(zone);
+        else doAttackObject(zone, true);
+        doSetAttackMode(CAPTURE);
+        return;
+    }
 
     if((ModManager::instance().isTornieFamilyContentActive() && !canCaptureStructures())
        || (pStructure == nullptr) || (pStructure->canBeCaptured() == false)
@@ -226,6 +248,27 @@ bool InfantryBase::canPass(int xPos, int yPos) const {
 }
 
 void InfantryBase::checkPos() {
+    // Zone Garrisons: a capture-ordered soldier standing beside its zone walks in (and an enemy zone
+    // nobody holds becomes its house's); a zone enemy soldiers hold is fired on instead. Checked on
+    // every cycle the soldier stands within reach, not only the cycle it stopped: one that stopped a
+    // step short, or whose zone changed hands after it stopped, would otherwise wait there forever.
+    if(attackMode == CAPTURE && !moving && ZoneStructure::garrisonsEnabled() && location.isValid()) {
+        if(auto* zone = dynamic_cast<ZoneStructure*>(target.getObjPointer())) {
+            if(blockDistance(location, zone->getClosestPoint(location)) <= DuneCity::ZoneGarrison::kEntryDistance
+               && !zone->heldAgainst(this)) {
+                if(zone->enterGarrison(this)) return;
+                // Full, too damaged, or no longer ours to enter: the order ends here.
+                SDL_Log("ZONE_GARRISON: event=refused_at_zone house=%d unit=%u item=%d zone=%u occupants=%d health=%d max_health=%d zone_house=%d cycle=%u",
+                        owner->getHouseID(), objectID, itemID, zone->getObjectID(), zone->getGarrisonSize(),
+                        zone->getHealth().lround(), zone->getMaxHealth(), zone->getOwner()->getHouseID(),
+                        currentGame->getGameCycleCount());
+                setTarget(nullptr);
+                doSetAttackMode(GUARD);
+                return;
+            }
+        }
+    }
+
     if(moving && !justStoppedMoving) {
         if(++walkFrame > 39) {
             walkFrame = 0;
@@ -483,6 +526,13 @@ void InfantryBase::checkPos() {
 }
 
 void InfantryBase::destroy() {
+    // Zone Garrisons: a soldier killed on its way into a zone (the match log accounts for every order).
+    if(attackMode == CAPTURE && ZoneStructure::garrisonsEnabled()) {
+        if(const auto* zone = dynamic_cast<const ZoneStructure*>(target.getObjPointer())) {
+            SDL_Log("ZONE_GARRISON: event=died_on_way house=%d unit=%u item=%d zone=%u cycle=%u",
+                    owner->getHouseID(), objectID, itemID, zone->getObjectID(), currentGame->getGameCycleCount());
+        }
+    }
     if(currentGameMap->tileExists(location) && isVisible()) {
         Tile* pTile = currentGameMap->getTile(location);
 
@@ -500,7 +550,7 @@ void InfantryBase::destroy() {
                 // this unit has captured a building
             }
 
-        } else if(getItemID() != Unit_Saboteur) {
+        } else if(fallsWhenDestroyed()) {
             // "normal" dead
             pTile->assignDeadUnit( DeadUnit_Infantry,
                                         owner->getHouseID(),

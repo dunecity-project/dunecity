@@ -1,10 +1,33 @@
 # Linux renderer startup and issue #120
 
 The Linux startup path prefers an accelerated SDL renderer with target-texture
-support. If none can initialize, it now retries the software renderer by its
-explicit driver index, still requiring target textures. Other platforms keep
-their existing acceleration requirement. An explicit `SDL_RENDER_DRIVER`
-preference is tried first using SDL's normal hint precedence.
+support. If none can initialize, it falls back to the software renderer, still
+requiring target textures. Other platforms keep their existing acceleration
+requirement. This shipped in 1.0.865.
+
+## Fallback order (next release after 1.0.878)
+
+SDL's own `SDL_CreateRenderer(window, -1, ...)` search ends with "Couldn't find
+matching render driver" and throws away the reason each backend failed, which
+is all the 1.0.864 log could tell us. `createStartupRenderer`
+(`include/misc/RendererInitialization.h`) now walks the compiled drivers itself,
+by explicit index, in the order `startupRendererOrder` gives:
+
+1. the driver named by `SDL_RENDER_DRIVER` (or the Windows `direct3d11` default
+   hint), of any kind, so `SDL_RENDER_DRIVER=software` is always honoured; an
+   unknown name is logged and ignored;
+2. every accelerated driver with target textures, in SDL's priority order
+   (Linux: `opengl`, `opengles2`, `opengles`);
+3. on Linux desktop and with the dummy video driver, `software`.
+
+Each failure is logged as `Render driver <name> failed: <SDL error>`, a
+recovery as `Renderer fallback: ...; continuing with <driver>`, and the chosen
+driver as `Render driver: <name>`. Only when every candidate fails does start-up
+stop, and then it shows a message box with all the errors (and on Linux the
+`SDL_RENDER_DRIVER=software` hint) instead of exiting silently. VSync is set
+after creation and never blocks start-up. `RendererFallbackOrderTestCase.cpp`
+(in `dunelegacy_tests`, every platform) checks the order without a display;
+`renderer_initialization` (Linux) checks real recovery with the dummy driver.
 
 ## Evidence from 1.0.864
 
@@ -15,6 +38,10 @@ The official 1.0.864 AppImage (SHA-256
 and Linux x64 tarball (SHA-256
 `34731b2295a57c3ac9160868db45bfd58370f783128cba1945e4ef4419ffe94d`)
 contain statically linked SDL with only GLES2 and software render drivers.
+The 1.0.878 AppImage was rechecked on 2026-11-26: its binary contains the
+`opengl`, `opengles2`, `opengles` and `software` drivers, and the AppImage
+bundles no libGL/libEGL/libGLX (only libdbus), so the system NVIDIA or Mesa GL
+libraries are the ones SDL loads.
 `SDL_GetNumRenderDrivers_REAL` returns two, and the binaries contain
 `GLES2_RenderDriver` and `SW_RenderDriver` but no `GL_RenderDriver`.
 Desktop OpenGL/GLX is therefore missing from those builds.

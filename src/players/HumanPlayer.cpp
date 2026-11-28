@@ -94,7 +94,7 @@ void HumanPlayer::onProduceItem(Uint32 itemID) {
         return;
     }
 
-    if(itemID == Structure_Slab1 || itemID == Structure_Slab4) {
+    if(itemID == Structure_Slab1 || itemID == Structure_Slab4 || itemID == Structure_Park) {
         return;
     }
 

@@ -31,7 +31,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import discard_profile_assets, headless_asset_arguments, remove_tree, require_free_space  # noqa: E402
+from probe_profile import (discard_profile_assets, headless_asset_arguments, probe_binary, remove_tree,  # noqa: E402
+                           require_free_space)
 
 MAP = root / 'data/maps/singleplayer/5P - 128x128 - All against Atreides.ini'
 OPTIONS = root / 'tests/ai/all-against-atreides-options.ini'
@@ -173,7 +174,7 @@ def report(game):
 probe = out / 'probe'
 subprocess.run(campaign(probe, '--minutes', '1', '--seed', str(args.seeds[0])), cwd=root, check=True,
                capture_output=True, text=True)
-binary = probe / 'balance-probe.app/Contents/MacOS/balance-probe'
+binary = probe_binary(probe)   # macOS app bundle, or the recorded Linux/Windows path
 remove_tree(probe / 'profile')
 started = time.time()
 with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:

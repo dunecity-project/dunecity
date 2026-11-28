@@ -10,7 +10,7 @@ inline int defenseWeight(int item) {
     // Every real building needs protection, including outlying R/C/I districts.
     // Surface tiles and defensive emplacements do not recursively demand turrets.
     if (!isStructure(item) || item == Structure_Slab1 || item == Structure_Slab4
-        || item == Structure_Road || item == Structure_PowerLine || item == Structure_Wall
+        || item == Structure_Road || item == Structure_PowerLine || item == Structure_Wall || item == Structure_Park
         || item == Structure_GunTurret || item == Structure_RocketTurret) return 0;
     return 1;
 }

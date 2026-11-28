@@ -27,7 +27,6 @@
 #include <ScreenBorder.h>
 #include <SoundPlayer.h>
 #include <mod/ModManager.h>
-#include <units/AmbientAirplane.h>
 
 EliteLauncher::EliteLauncher(House* newOwner) : TrackedUnit(newOwner) {
     EliteLauncher::init();
@@ -109,9 +108,8 @@ void EliteLauncher::destroy() {
 
 bool EliteLauncher::canAttack(const ObjectBase* object) const {
     return ((object != nullptr)
-            && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->getItemID() == Unit_Sandworm)
-            && object->isVisible(getOwner()->getTeamID())
-            && !AmbientAirplane::crashEndangers(*this, *object));
+            && ((object->getOwner()->getTeamID() != owner->getTeamID()) || object->isWildSandworm())
+            && object->isVisible(getOwner()->getTeamID()));
 }
 
 void EliteLauncher::playAttackSound() {

@@ -18,6 +18,7 @@
 #include "ObjectData.h"
 
 #include <globals.h>
+#include <Game.h>
 
 #include <FileClasses/FileManager.h>
 #include <FileClasses/INIFile.h>
@@ -198,6 +199,7 @@ void ObjectData::loadFromINIFile(const std::string& filename, bool preferUserCon
         SDL_Log("[ObjectData] Unit limits: Small=%d, Medium=%d, Large=%d, Huge=%d", 
                 unitLimitSmallMap, unitLimitMediumMap, unitLimitLargeMap, unitLimitHugeMap);
     }
+    garrisonHealTime = std::max(1, objectDataFile->getIntValue("Map Settings", "GarrisonHealTime", 60));
 
     // load default structure values
     ObjectDataStruct structureDefaultData[NUM_HOUSES];
@@ -376,6 +378,7 @@ void ObjectData::save(OutputStream& stream) const
     stream.writeSint32(unitLimitMediumMap);
     stream.writeSint32(unitLimitLargeMap);
     stream.writeSint32(unitLimitHugeMap);
+    stream.writeSint32(garrisonHealTime);
 }
 
 void ObjectData::load(InputStream& stream, int savedItemCount, int savedHouseCount)
@@ -391,6 +394,7 @@ void ObjectData::load(InputStream& stream, int savedItemCount, int savedHouseCou
     // and we're loading that save in an older build, skip the extras.
     int itemsToLoad = (savedItemCount <= Num_ItemID) ? savedItemCount : Num_ItemID;
     int itemsToSkip = (savedItemCount > Num_ItemID) ? (savedItemCount - Num_ItemID) : 0;
+    loadedItemCount = itemsToLoad;
 
     for(int i=0;i<itemsToLoad;i++) {
         for(int h=0;h<savedHouseCount;h++) {
@@ -438,6 +442,8 @@ void ObjectData::load(InputStream& stream, int savedItemCount, int savedHouseCou
     unitLimitMediumMap = stream.readSint32();
     unitLimitLargeMap = stream.readSint32();
     unitLimitHugeMap = stream.readSint32();
+    garrisonHealTime = currentGame == nullptr || currentGame->getLoadedSavegameVersion() >= SAVEGAMEVERSION_ZONE_GARRISON_HEALTH
+        ? std::max(1, stream.readSint32()) : 60;
 }
 
 int ObjectData::loadIntValue(const INIFile& objectDataFile, const std::string& section, const std::string& key, char houseChar, int defaultValue) {
@@ -568,6 +574,7 @@ std::string ObjectData::getEffectiveHash() const {
     dataStr += std::to_string(unitLimitMediumMap);
     dataStr += std::to_string(unitLimitLargeMap);
     dataStr += std::to_string(unitLimitHugeMap);
+    dataStr += ":GarrisonHealTime=" + std::to_string(garrisonHealTime);
     
     // FNV-1a hash (consistent across platforms)
     uint64_t hash = 14695981039346656037ULL;

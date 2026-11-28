@@ -66,8 +66,8 @@ TEST_CASE("Total renderer failure preserves both errors without disturbing an ex
     REQUIRE(renderer);
     REQUIRE(createStartupRenderer(window.get(), true) == nullptr);
     const std::string error = SDL_GetError();
-    REQUIRE(error.find("Accelerated renderer:") != std::string::npos);
-    REQUIRE(error.find("software renderer:") != std::string::npos);
+    REQUIRE(error.find("No usable SDL renderer") != std::string::npos);
+    REQUIRE(error.find("software: ") != std::string::npos);
     REQUIRE(SDL_RenderClear(renderer.get()) == 0);
 }
 

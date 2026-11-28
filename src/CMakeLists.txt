@@ -227,6 +227,7 @@ target_sources(dunecity
         GUI/dune/GameOptionsWindow.cpp
         GUI/dune/LoadSaveWindow.cpp
         GUI/dune/SaveMapWindow.cpp
+        GUI/dune/RestartDifficultyWindow.cpp
         GUI/dune/InGameMenu.cpp
         GUI/dune/InGameSettingsMenu.cpp
         GUI/dune/NewsTicker.cpp
@@ -299,11 +300,20 @@ target_sources(dunecity
         players/QuantBotSaveLoad.cpp
         players/QuantBotColonisation.cpp
         players/QuantBotBuild.cpp
+        players/QuantBotPalaceWorm.cpp
         players/QuantBotBuildProducers.cpp
         players/QuantBotBuildYard.cpp
         players/QuantBotPlacement.cpp
+        players/QuantBotParks.cpp
+        players/QuantBotGarrison.cpp
+        players/QuantBotInfantry.cpp
+        players/QuantBotInfantry.cpp
+        players/QuantBotTurretFront.cpp
+        players/QuantBotCityLessons.cpp
+        players/QuantBotRedevelop.cpp
         players/QuantBotArmy.cpp
         players/QuantBotBlob.cpp
+        players/QuantBotAirlift.cpp
         players/QuantBotForce.cpp
         players/QuantBotStyle.cpp
         players/QuantBotStrategy.cpp
@@ -356,8 +366,10 @@ target_sources(dunecity
         structures/NuclearPlant.cpp
         structures/PoliceStation.cpp
         structures/Stadium.cpp
+        structures/Park.cpp
         structures/Airport.cpp
         structures/ZoneStructure.cpp
+        structures/ZoneStructureGarrison.cpp
 
         # Units
         units/UnitBase.cpp
@@ -435,6 +447,9 @@ target_sources(dunecity
         Trigger/TriggerManager.cpp
         Trigger/ReinforcementTrigger.cpp
         Trigger/TimeoutTrigger.cpp
+        Trigger/BreachTrigger.cpp
+        MissionBriefing.cpp
+        MissionObjectives.cpp
 
         # DuneCity - city-building simulation layer
         dunecity/CitySimulation.cpp
@@ -445,14 +460,17 @@ target_sources(dunecity
         dunecity/CityScanner.cpp
         dunecity/CityBudget.cpp
         dunecity/CityEvaluation.cpp
+        dunecity/HospitalCare.cpp
 
         # misc
+        misc/AnalyticsInstallID.cpp
         misc/draw_util.cpp
         misc/FileSystem.cpp
         misc/fnkdat.cpp
         misc/format.cpp
         misc/FrameYield.cpp
         misc/IFileStream.cpp
+        misc/ReworkedCampaign.cpp
         misc/md5.cpp
         misc/OFileStream.cpp
 
@@ -1122,10 +1140,14 @@ elseif(APPLE)
                 \"\${CMAKE_INSTALL_PREFIX}/dunecity.app/Contents/Resources/licenses/SDL3-LICENSE.txt\" COPYONLY)
         endif()
         message(STATUS \"Bundling macOS runtime dependencies...\")
+        # The SDL2 library's directory is searched too: a Homebrew library may name
+        # a sibling through @rpath (brotli 1.2.1's libbrotlidec asks for
+        # @rpath/libbrotlicommon.1.dylib, and freetype 2.15 needs libbrotlidec), and
+        # BundleUtilities resolves such a name only in the directories it is given.
         fixup_bundle(
             \"\${CMAKE_INSTALL_PREFIX}/dunecity.app\"
             \"\${_runtime_libraries}\"
-            \"${DUNECITY_MACOS_DEPENDENCY_DIRS}\"
+            \"${DUNECITY_MACOS_DEPENDENCY_DIRS};$<TARGET_FILE_DIR:SDL2::SDL2>\"
         )
         # BundleUtilities flattens framework-root executable symlinks. Restore
         # Sparkle's complete, already portable framework before signing, keeping

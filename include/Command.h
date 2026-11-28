@@ -90,6 +90,10 @@ typedef enum {
 
     CMD_AI_SUPPORT_ROLE,              ///< AI_SUPPORT_ROLE(ROLE): AIRole for the QuantBot partner in the issuing human's house
     CMD_RESEARCH_TECH_LEVEL,          ///< RESEARCH_TECH_LEVEL(LAB_OBJECT_ID), next level for its owner
+    CMD_AIRPORT_BUY_AIRPLANE,         ///< AIRPORT_BUY_AIRPLANE(AIRPORT_OBJECT_ID), match rule City Plane Purchase
+    CMD_HOUSE_REPAIR_RETURN,          ///< HOUSE_REPAIR_RETURN(ENABLED), issuing player's house only: Repair Yards fly repaired units back
+    CMD_ZONE_EVACUATE,                ///< ZONE_EVACUATE(ZONE_OBJECT_ID): the soldiers garrisoning an own zone come out (Zone Garrisons)
+    CMD_SANDWORM_SPICEBLOOM,          ///< SANDWORM_SPICEBLOOM(OBJECT_ID, X, Y): the Fremen Palace worm bursts into spice there (Fremen Palace Worm)
 
     CMD_MAX
 } CMDTYPE;

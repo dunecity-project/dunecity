@@ -174,9 +174,13 @@ private:
     bool                tornieFamilyPresentation = false;
     Uint32              aircraftCountCycle = static_cast<Uint32>(-1);
     const House*        aircraftCountHouse = nullptr;
-    /// Builder types with a shortcut on the empty-selection sidebar, in build order.
-    static constexpr std::array<int, 9> kBuilderShortcutTypes{
-        Structure_ConstructionYard, Structure_Barracks, Structure_WOR, Structure_Worfinery,
+    /// Builder types with a shortcut on the empty-selection sidebar, in build order. The
+    /// Airport is no builder but sells city airplanes from its panel, and one Airport among
+    /// thousands of city buildings is hard to find on the map (Stefan, 2026-11-23: "make airport
+    /// available on the side menu so you can find it"); it comes second so it is not the row
+    /// a short sidebar leaves out.
+    static constexpr std::array<int, 10> kBuilderShortcutTypes{
+        Structure_ConstructionYard, Structure_Airport, Structure_Barracks, Structure_WOR, Structure_Worfinery,
         Structure_LightFactory, Structure_HeavyFactory, Structure_HighTechFactory,
         Structure_StarPort, Structure_ChaosFactory};
     std::array<TextButton, kBuilderShortcutTypes.size()> builderButtons; ///< Opens a builder's build menu

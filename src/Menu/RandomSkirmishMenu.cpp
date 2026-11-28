@@ -69,6 +69,8 @@ GameInitSettings makeInit(const Result& result, const SettingsClass::GameOptions
         sharedHouse = sharedHouse || (house.role == Role::Human && PlayerFactory::getByPlayerClass(house.partnerClass) != nullptr);
     auto matchOptions = rules;
     matchOptions.researchLab = params.techLevel < 9 && params.researchLab;
+    // The generated map carries the level chosen here; no Custom Game override applies.
+    matchOptions.startTechLevel = 0;
     GameInitSettings init(result.name, result.ini, sharedHouse, matchOptions);
     // Custom Game's offline Spectate: the human seat goes to an AI and the local player only
     // watches. Local to this machine; never serialized or sent anywhere.
@@ -807,6 +809,7 @@ void RandomSkirmishMenu::onCancel() {
 SettingsClass::GameOptionsClass RandomSkirmishMenu::getMatchRules() const {
     auto options = rulesChosen ? rules : effectiveGameOptions;
     options.researchLab = techBox.getSelectedEntryIntData() < 9 && researchLabBox.isChecked();
+    options.startTechLevel = 0;
     return options;
 }
 

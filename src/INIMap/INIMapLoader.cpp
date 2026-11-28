@@ -10,6 +10,8 @@
 #include <players/Player.h>
 #include <players/AIPlayer.h>
 #include <players/HumanPlayer.h>
+#include <players/OriginalCampaignPolicy.h>
+#include <players/QuantBotConfig.h>
 #include <Map.h>
 #include <ScreenBorder.h>
 #include <MapSeed.h>
@@ -17,6 +19,7 @@
 #include <RadarView.h>
 
 #include <structures/StructureBase.h>
+#include <structures/Airport.h>
 #include <structures/WindTrap.h>
 #include <units/UnitBase.h>
 #include <structures/ZoneStructure.h>
@@ -25,6 +28,8 @@
 
 #include <Trigger/ReinforcementTrigger.h>
 #include <Trigger/TimeoutTrigger.h>
+#include <Trigger/BreachTrigger.h>
+#include <MissionObjectives.h>
 
 #include <misc/format.h>
 #include <misc/exceptions.h>
@@ -40,6 +45,8 @@
 #include <globals.h>
 
 #include <algorithm>
+#include <map>
+#include <sstream>
 #include <vector>
 
 namespace {
@@ -220,6 +227,13 @@ void INIMapLoader::load() {
     loadAITeams();
     loadView();
     loadChoam();
+    loadObjectivesAndEvents();
+}
+
+int INIMapLoader::authoredTechLevel(const INIFile& map) {
+    const int defaultTechLevel = (ModManager::instance().isInitialized()
+                                  && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Tornie") ? 9 : 8;
+    return map.getIntValue("BASIC","TechLevel", defaultTechLevel);
 }
 
 /**
@@ -233,9 +247,7 @@ void INIMapLoader::loadMap() {
     pGame->loseFlags = inifile->getIntValue("BASIC","LoseFlags",1);
 
     if(pGame->techLevel == 0) {
-        const int defaultTechLevel = (ModManager::instance().isInitialized()
-                                      && ModManager::instance().getContentBase(ModManager::instance().getActiveModName()) == "Tornie") ? 9 : 8;
-        pGame->techLevel = inifile->getIntValue("BASIC","TechLevel", defaultTechLevel);
+        pGame->techLevel = authoredTechLevel(*inifile.get());
     }
 
     int timeout = inifile->getIntValue("BASIC","TIMEOUT",0);
@@ -699,6 +711,14 @@ void INIMapLoader::loadHouses()
             playerSectionsOnMap.erase(playerSectionsOnMap.begin() + randomIndex);
         }
 
+        // The DuneCity campaign keeps a map's rivalries: the campaign roster puts every computer
+        // house on team 2, but Brain=Team3 / Team4 houses there fight each other too.
+        if(pGame->getGameInitSettings().isDuneCityCampaign() && houseID != pGame->getGameInitSettings().getHouseID()) {
+            const std::string brain = strToLower(inifile->getStringValue(houseName, "Brain", ""));
+            int brainTeam = 0;
+            if(brain.rfind("team", 0) == 0 && parseString(brain.substr(4), brainTeam) && brainTeam >= 2 && brainTeam < NUM_TEAMS)
+                resolvedHouseInfo.team = brainTeam;
+        }
         // Keep only fully resolved entries. A skipped Random entry used to remain
         // in houseInfoListSetup and could later bind local vision to the wrong slot.
         pGame->houseInfoListSetup.push_back(resolvedHouseInfo);
@@ -719,9 +739,36 @@ void INIMapLoader::loadHouses()
                 startingCredits = inifile->getIntValue("Player1", "Credits", DEFAULT_STARTINGCREDITS);
         }
 
+        // DuneCity campaign [DIFFICULTY] (docs/city-campaign.md): an enemy house's strength for its AI's
+        // difficulty. The grace period follows the strongest enemy (loadObjectivesAndEvents).
+        if(pGame->getGameInitSettings().isDuneCityCampaign() && houseID != pGame->getGameInitSettings().getHouseID()) {
+            std::string difficulty;
+            for(const auto& info : resolvedHouseInfo.playerInfoList) {
+                const auto* data = PlayerFactory::getByPlayerClass(info.playerClass);
+                if(data != nullptr && !data->getDifficulty().empty()) { difficulty = data->getDifficulty(); break; }
+            }
+            const int permille = MissionObjectivePolicy::enemyStrengthPermille(*inifile.get(), difficulty);
+            if(permille != 1000) {
+                const int scaled = MissionObjectivePolicy::scaledCredits(startingCredits, permille);
+                SDL_Log("DuneCity campaign: %s (%s) at strength %d per mille, credits %d -> %d",
+                        houseName.c_str(), difficulty.c_str(), permille, startingCredits, scaled);
+                startingCredits = scaled;
+            }
+            if(!difficulty.empty()) enemyStrengthPermille = std::max(enemyStrengthPermille, permille);
+        }
+
         int maxUnits = 0;
-        if(currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride >= 0) {
-            maxUnits = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride;
+        const int unitOverride = currentGame->getGameInitSettings().getGameOptions().maximumNumberOfUnitsOverride;
+        const bool originalCampaignHouse = getQuantBotConfig().originalCampaignAI
+            && std::any_of(resolvedHouseInfo.playerInfoList.begin(), resolvedHouseInfo.playerInfoList.end(),
+                           [](const GameInitSettings::PlayerInfo& info) { return info.playerClass == "CampaignAIPlayer"; });
+        if(OriginalCampaignPolicy::keepsAuthoredUnitCap(originalCampaignHouse, isScenarioGameType(pGame->gameType), unitOverride)) {
+            // Dune II: every computer house keeps the MaxUnit its mission authored. The shipped
+            // "unlimited" override would otherwise let it build without end (docs/original-campaign-ai.md).
+            const int maxUnit = inifile->getIntValue(houseName, "MaxUnit", OriginalCampaignPolicy::defaultUnitCap);
+            maxUnits = inifile->getIntValue(houseName, "MaxUnits", maxUnit);
+        } else if(unitOverride >= 0) {
+            maxUnits = unitOverride;
         } else {
             // Use map size defaults from ObjectData.ini
             const int mapsize = currentGameMap->getSizeX() * currentGameMap->getSizeY();
@@ -988,6 +1035,128 @@ void INIMapLoader::loadStructures()
 
     const bool neutralContent = isTornieContentActive()
         && !ModManager::instance().isTornieCustomUnitsAndBuildingsEnabled();
+
+    // ---- Airport footprints ----
+    // Stefan, 2026-11-23: "make an airport 4x4 squares not 3x3". Maps written before that give
+    // every Airport the room of a 3x3 building, and on many of them a fourth row or column would
+    // land on a neighbour, a pre-placed unit or the map edge. The map files stay as they are;
+    // every Airport line is decided here, before any structure is placed, the same way on every
+    // machine:
+    //   1. Count, per tile, the structure lines whose footprint covers it. An Airport line counts
+    //      as the 3x3 at its file position, every other line as getStructureSize() of its item.
+    //      Road lines are noted apart; concrete is a foundation and counts as free ground.
+    //   2. In file order, each Airport tries the 4x4 footprints that contain that 3x3: growing
+    //      east and south, west and south, east and north, west and north. It takes the first
+    //      that lies inside the map and none of whose tiles another structure line or an earlier
+    //      Airport's chosen footprint covers, or holds a ground object (the units, which are
+    //      loaded before the structures) or a city zone. Its choice is counted for later Airports.
+    //   3. Step 2 runs twice: first for a footprint that also leaves every road line of the map
+    //      alone, and only if there is none for one that takes road tiles, as any building placed
+    //      on a road does. Those road lines are then skipped (airportTookRoad).
+    //   4. An Airport with no such footprint stays compact: 3x3 at its file position.
+    struct AirportFootprint { int fileX, fileY, x, y; bool compact; };
+    std::map<int, AirportFootprint> airportFootprints;      // by line number in the map file
+    const int mapSizeX = currentGameMap->getSizeX();
+    const int mapSizeY = currentGameMap->getSizeY();
+    std::vector<char> airportTookRoad(static_cast<size_t>(mapSizeX) * mapSizeY, 0);    // road tiles under a grown Airport
+    {
+        // Reads a [STRUCTURES] line the way the placement loop below does, without logging:
+        // true, with the item and its top-left tile, for a line that loop tries to place as a
+        // wall, a road or a structure. Concrete is left out.
+        const auto readStructureLine = [&](const INIFile::Key& key, int& itemID, int& x, int& y) {
+            const std::string keyName = key.getKeyName();
+            const bool gen = keyName.compare(0,3,"GEN") == 0;
+            if(!gen && keyName.compare(0,2,"ID") != 0) return false;
+            std::string HouseStr, BuildingStr, health, PosStr;
+            if(gen) {
+                PosStr = keyName.substr(3);
+                splitString(key.getStringValue(), HouseStr, BuildingStr);
+            } else {
+                splitString(key.getStringValue(), HouseStr, BuildingStr, health, PosStr);
+            }
+            int pos;
+            if(!parseString(PosStr, pos) || (pos < 0)) return false;
+            const int houseID = getHouseID(HouseStr);
+            if(houseID == HOUSE_UNUSED || houseID == HOUSE_INVALID) return false;
+            if(gen) {
+                if(BuildingStr == "Wall") itemID = Structure_Wall;
+                else if(BuildingStr == "Road") itemID = Structure_Road;
+                else return false;
+            } else {
+                itemID = getItemIDByName(BuildingStr);
+                if((itemID == ItemID_Invalid) || !isStructure(itemID)) return false;
+                if(neutralContent) itemID = neutralVanillaMapItem(itemID);
+                if(isTornieMapObject(itemID) && !isTornieContentActive()) return false;
+                if(itemID == Structure_Slab1 || itemID == Structure_Slab4) return false;
+            }
+            if(itemID == 0 || !pGame->objectData.data[itemID][House::factionForRuntimeHouse(houseID)].enabled) return false;
+            x = getXPos(pos);
+            y = getYPos(pos);
+            return true;
+        };
+
+        std::vector<int> claims(airportTookRoad.size(), 0);
+        std::vector<char> roadLine(airportTookRoad.size(), 0);
+        const auto claim = [&](int x, int y, const Coord& size, int delta) {
+            for(int j = y; j < y + size.y; ++j)
+                for(int i = x; i < x + size.x; ++i)
+                    if(currentGameMap->tileExists(i, j)) claims[j * mapSizeX + i] += delta;
+        };
+
+        std::vector<int> airportLines;
+        for(const INIFile::Key& key : inifile->getSection("STRUCTURES")) {
+            int itemID = ItemID_Invalid, x = 0, y = 0;
+            if(!readStructureLine(key, itemID, x, y)) continue;
+            if(itemID == Structure_Road) {
+                if(currentGameMap->tileExists(x, y)) roadLine[y * mapSizeX + x] = 1;
+            } else if(itemID == Structure_Airport) {
+                claim(x, y, Coord(3, 3), 1);
+                airportFootprints[key.getLineNumber()] = AirportFootprint{x, y, x, y, true};
+                airportLines.push_back(key.getLineNumber());
+            } else {
+                claim(x, y, getStructureSize(itemID), 1);
+            }
+        }
+
+        const Coord fullSize = getStructureSize(Structure_Airport);
+        for(const int line : airportLines) {
+            AirportFootprint& airport = airportFootprints[line];
+            claim(airport.fileX, airport.fileY, Coord(3, 3), -1);     // its own 3x3 never blocks it
+            for(const bool keepRoads : {true, false}) {
+                for(const Coord shift : {Coord(0, 0), Coord(-1, 0), Coord(0, -1), Coord(-1, -1)}) {
+                    const int x = airport.fileX + shift.x;
+                    const int y = airport.fileY + shift.y;
+                    bool fits = x >= 0 && y >= 0 && x + fullSize.x <= mapSizeX && y + fullSize.y <= mapSizeY;
+                    for(int j = y; fits && j < y + fullSize.y; ++j) {
+                        for(int i = x; fits && i < x + fullSize.x; ++i) {
+                            const Tile* pTile = currentGameMap->getTile(i, j);
+                            fits = claims[j * mapSizeX + i] == 0 && !(keepRoads && roadLine[j * mapSizeX + i])
+                                && !pTile->hasAGroundObject() && !pTile->hasCityZone();
+                        }
+                    }
+                    if(fits) {
+                        airport.x = x;
+                        airport.y = y;
+                        airport.compact = false;
+                        break;
+                    }
+                }
+                if(!airport.compact) break;
+            }
+            claim(airport.x, airport.y, airport.compact ? Coord(3, 3) : fullSize, 1);
+            if(!airport.compact) {
+                // Only the added row and column: a road line under the file's own 3x3 is the
+                // map's business and loads as it always did.
+                for(int j = airport.y; j < airport.y + fullSize.y; ++j) {
+                    for(int i = airport.x; i < airport.x + fullSize.x; ++i) {
+                        const bool own = i >= airport.fileX && i < airport.fileX + 3 && j >= airport.fileY && j < airport.fileY + 3;
+                        if(!own && roadLine[j * mapSizeX + i]) airportTookRoad[j * mapSizeX + i] = 1;
+                    }
+                }
+            }
+        }
+    }
+
     for(const INIFile::Key& key : inifile->getSection("STRUCTURES")) {
         std::string tmpkey = key.getKeyName();
         std::string tmp = key.getStringValue();
@@ -1022,7 +1191,13 @@ void INIMapLoader::loadStructures()
                     continue;
                 }
             } else if(BuildingStr == "Road" && pGame->objectData.data[Structure_Road][faction].enabled) {
-                getOrCreateHouse(houseID)->placeStructure(NONE_ID, Structure_Road, getXPos(pos), getYPos(pos), true);
+                // A road under the row or column an Airport grew by ("Airport footprints" above)
+                // is not laid: the Airport stands there, or will once its line is reached. The
+                // house is still created here, in the order it always was.
+                House* roadOwner = getOrCreateHouse(houseID);
+                const bool underAirport = currentGameMap->tileExists(getXPos(pos), getYPos(pos))
+                    && airportTookRoad[getYPos(pos) * mapSizeX + getXPos(pos)];
+                if(!underAirport) roadOwner->placeStructure(NONE_ID, Structure_Road, getXPos(pos), getYPos(pos), true);
             } else if((BuildingStr != "Concrete") && (BuildingStr != "Wall") && (BuildingStr != "Road")) {
                 logWarning(key.getLineNumber(), "Invalid building string: '" + BuildingStr + "'!");
                 continue;
@@ -1071,7 +1246,32 @@ void INIMapLoader::loadStructures()
 
             const int faction = House::factionForRuntimeHouse(houseID);
             if (itemID != 0 && pGame->objectData.data[itemID][faction].enabled) {
-                ObjectBase* newStructure = getOrCreateHouse(houseID)->placeStructure(NONE_ID, itemID, getXPos(pos), getYPos(pos), true);
+                House* placer = getOrCreateHouse(houseID);
+                ObjectBase* newStructure = nullptr;
+                if(itemID == Structure_Airport) {
+                    // "Airport footprints" above: 4x4 where the map has the room, else compact.
+                    const auto chosen = airportFootprints.find(key.getLineNumber());
+                    const bool full = chosen != airportFootprints.end() && !chosen->second.compact;
+                    if(full) {
+                        newStructure = placer->placeStructure(NONE_ID, itemID, chosen->second.x, chosen->second.y, true);
+                    }
+                    if(newStructure == nullptr) {
+                        // Also the way out if the game refuses a chosen 4x4 site after all: the
+                        // map keeps its Airport, at the size it was written for.
+                        Airport::CompactPlacement compactAirport;
+                        newStructure = placer->placeStructure(NONE_ID, itemID, getXPos(pos), getYPos(pos), true);
+                    }
+                    // One line per Airport line, for the map checks.
+                    const auto* placed = dynamic_cast<const Airport*>(newStructure);
+                    SDL_Log("AIRPORT_FOOTPRINT: map=%s line=%d file=(%d,%d) chosen=(%d,%d) chosen_size=%s placed=(%d,%d) placed_size=%dx%d",
+                            mapname.c_str(), key.getLineNumber(), getXPos(pos), getYPos(pos),
+                            full ? chosen->second.x : getXPos(pos), full ? chosen->second.y : getYPos(pos),
+                            full ? "4x4" : "3x3",
+                            placed ? placed->getLocation().x : -1, placed ? placed->getLocation().y : -1,
+                            placed ? placed->getStructureSizeX() : 0, placed ? placed->getStructureSizeY() : 0);
+                } else {
+                    newStructure = placer->placeStructure(NONE_ID, itemID, getXPos(pos), getYPos(pos), true);
+                }
                 if(newStructure == nullptr) {
                     logWarning(key.getLineNumber(), "Invalid or occupied position for '" + BuildingStr + "': '" + PosStr + "'!");
                     continue;
@@ -1138,7 +1338,7 @@ void INIMapLoader::loadExtraCoopForces() {
                            || !currentGameMap->tileExists(x, y)) continue;
                         const auto* tile = currentGameMap->getTile(x, y);
                         if(tile->hasAGroundObject() || !unit->canPass(x, y)) continue;
-                        unit->deploy(Coord(x, y));
+                        unit->deployAtMapStart(Coord(x, y));
                         unit->doSetAttackMode(AREAGUARD);
                         placed = true;
                     }
@@ -1445,5 +1645,46 @@ HOUSETYPE INIMapLoader::getHouseID(const std::string& name) {
         return housename2house[lowerName];
     } else {
         return getHouseByName(lowerName);
+    }
+}
+
+
+void INIMapLoader::loadObjectivesAndEvents() {
+    auto& objectives = pGame->getMissionObjectives();
+    objectives.loadFromINI(*inifile.get());
+    if(enemyStrengthPermille > 0 && enemyStrengthPermille != 1000) {
+        objectives.enemyFirstAttackCycle = MissionObjectivePolicy::scaledGrace(objectives.enemyFirstAttackCycle, enemyStrengthPermille);
+        SDL_Log("DuneCity campaign: enemy grace period %u cycles at strength %d per mille",
+                objectives.enemyFirstAttackCycle, enemyStrengthPermille);
+    }
+    objectives.conquestWins = (pGame->winFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0
+        && (pGame->loseFlags & WINLOSEFLAGS_AI_NO_BUILDINGS) != 0;
+    const int timeout = inifile->getIntValue("BASIC", "TIMEOUT", 0);
+    if(timeout > 0 && (pGame->winFlags & WINLOSEFLAGS_TIMEOUT) != 0) {
+        objectives.deadlineCycle = MILLI2CYCLES(timeout * 60 * 1000);
+        objectives.deadlineWins = (pGame->loseFlags & WINLOSEFLAGS_TIMEOUT) != 0;
+    }
+
+    if(!inifile->hasSection("EVENTS")) return;
+    for(const INIFile::Key& key : inifile->getSection("EVENTS")) {
+        const std::string name = key.getKeyName();
+        if(name.rfind("Breach", 0) != 0 || name.find("Message") != std::string::npos) continue; // FirstEnemyAttack: MissionObjectives
+        std::vector<int> values;
+        std::string field;
+        std::istringstream input(key.getStringValue());
+        bool valid = true;
+        while(std::getline(input, field, ',')) {
+            int value = 0;
+            if(!parseString(field, value)) { valid = false; break; }
+            values.push_back(value);
+        }
+        if(!valid || values.size() < 5 || values[0] < 0 || values[3] <= 0 || values[4] <= 0) {
+            logWarning(key.getLineNumber(), "Invalid breach event (minute,x,y,width,height[,worms]): " + key.getStringValue());
+            continue;
+        }
+        const int worms = values.size() > 5 ? std::clamp(values[5], 0, 8) : 0;
+        const std::string message = inifile->getStringValue("EVENTS", name + "Message", "");
+        pGame->getTriggerManager().addTrigger(std::make_unique<BreachTrigger>(
+            MILLI2CYCLES(static_cast<Uint32>(values[0]) * 60 * 1000), values[1], values[2], values[3], values[4], worms, message));
     }
 }

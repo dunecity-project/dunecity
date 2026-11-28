@@ -3,6 +3,8 @@
 #include <mod/Dune2RAssetManager.h>
 #include <Network/ENetHttp.h>
 
+#include "TestSourceDir.h"
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -19,8 +21,7 @@ struct CatalogFixture {
         / ("dune2r-catalog-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::string contents;
     CatalogFixture() {
-        const auto source = std::filesystem::path(std::getenv("DUNE_CITY_SOURCE_DIR"))
-                            / "mods/Dune2R/asset-catalog.ini";
+        const auto source = testSourceDir() / "mods/Dune2R/asset-catalog.ini";
         std::filesystem::create_directories(root);
         std::filesystem::copy_file(source, root / "asset-catalog.ini");
         std::ifstream input(source);
@@ -313,9 +314,7 @@ TEST_CASE("Dune2R asset SHA-256 matches the standard vector", "[Dune2RAssets]") 
 }
 
 TEST_CASE("Dune2R source catalog loads immutable packs", "[Dune2RAssets]") {
-    const char* source = std::getenv("DUNE_CITY_SOURCE_DIR");
-    REQUIRE(source != nullptr);
-    const auto modPath = std::filesystem::path(source) / "mods" / "Dune2R";
+    const auto modPath = testSourceDir() / "mods" / "Dune2R";
     Dune2RAssetManager manager(modPath.string());
     REQUIRE(manager.getRevision().size() == 40);
     REQUIRE(manager.getRevision().find_first_not_of("0123456789abcdef") == std::string::npos);
@@ -734,8 +733,6 @@ TEST_CASE("Dune2R downloader resumes and verifies a live asset", "[Dune2RAssets]
         SKIP("Set DUNE2R_NETWORK_TEST=1 to run the live GitHub download check");
     }
 
-    const char* source = std::getenv("DUNE_CITY_SOURCE_DIR");
-    REQUIRE(source != nullptr);
     const std::string revision = "1275ed1036828b8f3365395c66ca4499cd2d266a";
     const std::string baseURL = "https://raw.githubusercontent.com/VR48/dunecity/" + revision
                                 + "/mods/Dune2R/graphics_hd/units";

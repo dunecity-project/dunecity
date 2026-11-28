@@ -72,7 +72,8 @@ private:
 
     typedef enum {
         Type_ReinforcementTrigger = 1,      ///< the trigger is of type ReinforcementTrigger
-        Type_TimeoutTrigger = 2             ///< the trigger is of type TimeoutTrigger
+        Type_TimeoutTrigger = 2,            ///< the trigger is of type TimeoutTrigger
+        Type_BreachTrigger = 3              ///< the trigger is of type BreachTrigger (SAVEGAMEVERSION 9887)
     } TriggerType;
 
     /**

@@ -211,7 +211,102 @@
 // 9883: MOD18 drops obsolete research map area and adds mountain scenery; MOD17/9882 stays frozen.
 // 9884: MOD19 adds technology installments; houses capture study terms and exact payments.
 // 9885: QuantBot persists sustained, serviceable repair-capacity pressure.
-#define SAVEGAMEVERSION     9885
+// 9887: Game saves the authored mission objectives ([OBJECTIVES]) after the win/lose flags, and
+//       triggers may be the new BreachTrigger (type 3, [EVENTS] BreachN).
+// 9888: The Park structure (Structure_Park, item 89): the ObjectData table and every per-item
+//       house table hold 90 items, and a Park object may follow. No field changes: an older save
+//       stores 89 rows and its Park row takes the active ObjectData.ini (Game::loadSaveGame).
+// 9889: GameInitSettings MOD20 appends the Custom Game starting tech level (0 = the map's level).
+//       No other field changes; the bump keeps older builds from misreading the longer block.
+// 9890: The city airplane (AmbientAirplane) saves its bomb load, rearm timer and bomb sight tile
+//       after its flight budget; a plane from an older save gets a full load. A Bullet may be the new Bullet_Bomb
+//       (16). The Airport still saves its Ornithopter patrol timer and pair counter, which stand
+//       still unless the match rule Airport Ornithopter Patrol is on. The three city plane rules
+//       are bits 2-4 of the MOD15 Trooper byte, set only in their non-default state.
+// 9891: The city airplane also saves its stick tail counter and stick clock (AmbientAirplane::
+//       stickGap, stickPhase) after the bomb sight tile, and an Airport saves its plane
+//       purchase cooldown after the patrol counters. An Explosion may be the new Explosion_Bomb
+//       (14). Three more city plane rules are bits 5-7 of the MOD15 Trooper byte.
+// 9892: The city airplane also saves whether it was bought (AmbientAirplane::bought) after the
+//       stick clock: the Airport's free plane is counted apart from bought planes.
+// 9893: A House saves whether its Repair Yards have repaired units flown back to where they
+//       were picked up (House::repairReturnEnabled, CMD_HOUSE_REPAIR_RETURN) after its
+//       auto-repair flag. A house from an older save has it on, which is what yards did before.
+// 9894: QuantBot saves its Carryall manoeuvres after the repair-capacity wait: the units under
+//       a lift order, the planned rear or flank drop and the retreat state (QuantBot::
+//       saveAirlift). An older save has none; a bot plans its next manoeuvre afresh.
+// 9895: The Airport is 4x4 tiles and saves whether it is compact (Airport::compact, 3x3) after
+//       its purchase cooldown. An Airport from an older save is compact: its tiles in that save
+//       hold a 3x3 claim.
+// 9896: QuantBot's Carryall manoeuvre state (9894) grows: every lift job saves its objective,
+//       and the planned harvester or perimeter raid, its retry clock and the raid counts follow
+//       the retreat state (QuantBot::saveAirlift). A 9894 or 9895 save has none of these.
+// 9897: An Airport saves the clock of its free plane (Airport::freePlaneTimer) after the compact
+//       flag: the free plane now takes as long as a Palace takes to make a Saboteur. An older
+//       save's Airports start with a full clock.
+// 9898: A House saves its record of city airplane bombs on its buildings after the research
+//       payment state (House::saveAirRaid): the cycle of the last bomb, up to eight recent hit
+//       tiles with their cycles, and the count and clock of the Rocket Turrets its QuantBot
+//       ordered against the raid (AirRaidTurrets). A house from an older save has no record:
+//       it has not been bombed.
+// 9899: City Plane Build Time: an Airport's saved purchase clock is the build of a bought plane.
+//       An older save's clock followed a plane already launched and is cleared on load.
+// 9900: Zone Garrisons: a Residential, Commercial or Industrial zone saves the soldiers inside it
+//       (object ids in the order they entered), its garrison's target and its search clock after
+//       its residential population. An older save's zones are empty.
+// 9901: Fremen Palace Worm: a sandworm saves whether it is a Palace worm, its life left and its
+//       Spice Bloom target after its Civ Wars origin. An older save's worms are wild.
+// 9902: Hospitals heal infantry: the CitySimulation block ends with the hospital state
+//       (DuneCity::HospitalCareState): the census's civic overlays (zone id, Hospital or Church)
+//       and every soldier's Hospital trip (soldier, Hospital, tile, stage, carried, start cycle).
+//       An older save has none; its first census designates the overlays again.
+// 9904: Civic overlay pacing: after the hospital state, the city day each Hospital and Church
+//       overlay was put on its zone and each house's last Hospital and Church change
+//       (HospitalCareState::savePacing). An older save's overlays count from the day it loads.
+// 9905: Garrison health: ObjectData adds GarrisonHealTime; each zone saves the
+//       damage and regeneration remainders of its occupants, in entry order.
+// 9906: QuantBot persists its EconomyFirst opening spend, zone/turret orders and policy latches.
+#define SAVEGAMEVERSION     9906
+/// First save with EconomyFirst opening resource reservations and accepted material markers.
+#define SAVEGAMEVERSION_ECONOMY_FIRST_STATE 9906
+/// First save with exact garrison damage/healing remainders and the healing rate.
+#define SAVEGAMEVERSION_ZONE_GARRISON_HEALTH 9905
+/// First save with the civic overlay pacing record (Hospitals and Churches stay on their zones).
+#define SAVEGAMEVERSION_CIVIC_PACING 9904
+/// First save with a captured zone's original owner (Zone Garrisons: an emptied captured zone returns).
+#define SAVEGAMEVERSION_ZONE_GARRISON_RETURN 9903
+/// First save with the Hospital trips and civic overlays (Hospital Care).
+#define SAVEGAMEVERSION_HOSPITAL_CARE 9902
+/// First save with a sandworm's Palace worm state (Fremen Palace Worm).
+#define SAVEGAMEVERSION_PALACE_WORM 9901
+/// First save with a zone's garrison (Zone Garrisons).
+#define SAVEGAMEVERSION_ZONE_GARRISON 9900
+/// First save whose Airport purchase clock is a plane's build (City Plane Build Time).
+#define SAVEGAMEVERSION_CITY_PLANE_BUILD_TIME 9899
+/// First save with a House's record of bomb hits and its air raid turret orders.
+#define SAVEGAMEVERSION_AIR_RAID_RECORD 9898
+/// First save with an Airport's free plane clock.
+#define SAVEGAMEVERSION_AIRPORT_FREE_PLANE_CLOCK 9897
+/// First save with the raid part of QuantBot's Carryall manoeuvre state.
+#define SAVEGAMEVERSION_AIRLIFT_RAIDS 9896
+/// First save whose Airports say whether they are compact (3x3) or the full 4x4.
+#define SAVEGAMEVERSION_AIRPORT_4X4 9895
+/// First save with QuantBot's Carryall manoeuvre state.
+#define SAVEGAMEVERSION_AIRLIFT 9894
+/// First save whose houses carry the Repair Yard "Return units" switch.
+#define SAVEGAMEVERSION_REPAIR_RETURN 9893
+/// First save whose city airplanes say whether they were bought.
+#define SAVEGAMEVERSION_CITY_PLANE_FREE 9892
+/// First save with the stick gap counter of a city airplane and an Airport's purchase cooldown.
+#define SAVEGAMEVERSION_CITY_PLANE_PURCHASE 9891
+/// First save whose city airplanes carry a bomb load and that may hold a Bullet_Bomb.
+#define SAVEGAMEVERSION_CITY_PLANE_BOMBS 9890
+/// First save whose GameInitSettings carries the Custom Game starting tech level (MOD20).
+#define SAVEGAMEVERSION_START_TECH_LEVEL 9889
+/// First save that may hold Park objects (item 89; Num_ItemID 90).
+#define SAVEGAMEVERSION_PARK 9888
+/// First save with MissionObjectives and BreachTrigger.
+#define SAVEGAMEVERSION_MISSION_OBJECTIVES 9887
 /// First save with the integrated Tornie 1.0.546 state (independent of upstream save versions).
 #define SAVEGAMEVERSION_TORNIE546 9878
 /// First save with the Natives house slot (NUM_HOUSES 13); older ones stored NUM_PLAYER_HOUSES.
@@ -234,6 +329,8 @@
 #define SAVEGAMEVERSION_RESEARCH_INSTALLMENTS 9884
 /// First save with the repair-capacity pressure anchor and simulation clock.
 #define SAVEGAMEVERSION_REPAIR_CAPACITY 9885
+/// Original Campaign AI mode, authored team membership and schedule.
+#define SAVEGAMEVERSION_ORIGINAL_CAMPAIGN_AI 9886
 
 // v1.0.0–v1.0.7 shipped SAVEGAMEVERSION 9810 with Num_ItemID=48.
 // v1.0.8–v1.0.10 also used 9810 but with Num_ItemID=52 (4 items added

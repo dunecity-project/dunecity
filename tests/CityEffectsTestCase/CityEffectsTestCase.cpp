@@ -42,9 +42,9 @@ TEST_CASE("getStructureCityRole categorises mapped buildings", "[city-effects][r
     REQUIRE(getStructureCityRole(Structure_HeavyFactory)     == CityRole::Industrial);
     REQUIRE(getStructureCityRole(Structure_RepairYard)       == CityRole::Industrial);
     REQUIRE(getStructureCityRole(Structure_Refinery)         == CityRole::Industrial);
-    // Starport and Airport have specific city roles
+    // The Starport is industrial; the Airport, as in Micropolis, has no role and no population
     REQUIRE(getStructureCityRole(Structure_StarPort)         == CityRole::Industrial);
-    REQUIRE(getStructureCityRole(Structure_Airport)          == CityRole::Commercial);
+    REQUIRE(getStructureCityRole(Structure_Airport)          == CityRole::None);
     // Barracks/WOR are residential (infantry garrison = population)
     REQUIRE(getStructureCityRole(Structure_Barracks)         == CityRole::Residential);
     REQUIRE(getStructureCityRole(Structure_WOR)              == CityRole::Residential);
@@ -190,14 +190,15 @@ TEST_CASE("Police coverage: PoliceStation full, gun turrets 15%, rocket turrets 
     REQUIRE(getPoliceCoverage(Structure_HeavyFactory)  == 0);
 }
 
-TEST_CASE("Police coverage: Barracks and WOR no longer count as police (regression)",
+TEST_CASE("Police coverage: Barracks and WOR police at half a station (regression)",
           "[city-effects][police][regression]") {
-    // Barracks and WOR are infantry-production buildings only. Adding
-    // them used to grant full police coverage, which was a design bug:
-    // putting a barracks down would magically turn slums luxury. Police
-    // Station is now the sole full-coverage source.
-    REQUIRE(getPoliceCoverage(Structure_Barracks)  == 0);
-    REQUIRE(getPoliceCoverage(Structure_WOR)       == 0);
+    // History: Barracks and WOR once granted FULL police coverage, which was a design bug (a barracks
+    // turned slums luxury), so the Police Station became the sole full-coverage source and they had none.
+    // Stefan, 2026-11-28: "and infantry and wor have 50% police effect": half a station, never full, and
+    // no upkeep of their own (docs/infantry-squads.md).
+    REQUIRE(getPoliceCoverage(Structure_Barracks)  == kPoliceCoverageFull / 2);
+    REQUIRE(getPoliceCoverage(Structure_WOR)       == kPoliceCoverageFull / 2);
+    REQUIRE(getPoliceCoverage(Structure_Barracks)  < getPoliceCoverage(Structure_PoliceStation));
     REQUIRE(getPoliceAnnualCost(Structure_Barracks) == 0);
     REQUIRE(getPoliceAnnualCost(Structure_WOR)      == 0);
 }
@@ -270,9 +271,11 @@ TEST_CASE("Non-zone city-role buildings ALSO contribute population at their leve
     REQUIRE(getZonePopulation(Structure_Refinery, 1)       == 1);
     REQUIRE(getZonePopulation(Structure_Refinery, 2)       == 3);
     REQUIRE(getZonePopulation(Structure_Refinery, 3)       == 3);
-    // Barracks/WOR are residential high
-    REQUIRE(getZonePopulation(Structure_Barracks, 1)       == 16);
+    // Barracks/WOR are residential high, at top density from level 1 (Stefan, 2026-11-28)
+    REQUIRE(getZonePopulation(Structure_Barracks, 1)       == 40);
     REQUIRE(getZonePopulation(Structure_Barracks, 3)       == 40);
+    REQUIRE(getZonePopulation(Structure_WOR, 1)            == 40);
+    REQUIRE(getZonePopulation(Structure_Barracks, 0)       == 0);
     REQUIRE(getZonePopulation(Structure_WOR, 3)            == 40);
     // Vacant — contributes nothing
     REQUIRE(getZonePopulation(Structure_Refinery, 0)       == 0);
@@ -325,16 +328,16 @@ TEST_CASE("Annual tax uses Micropolis easy weighting and rate", "[city-effects][
     CHECK(computeAnnualTaxRevenue(100,7,250) == 255);
 }
 
-TEST_CASE("Palace contributes both R and C at every occupied tier", "[city-effects][tax]") {
+TEST_CASE("Palace pays one unboosted residential zone at every occupied tier", "[city-effects][tax]") {
+    // Stefan, 2026-11-22: "nerf palaces slightly, make it only have 1 residential not residential
+    // and commercial". Without the 2x private-zone boost that halves a top-density Palace's own tax.
     CHECK(isTaxableCityStructure(Structure_Palace));
     for (int level=0;level<=3;++level) {
         const int residential=getZonePopulation(Structure_ZoneResidential,level);
-        const int commercial=getZonePopulation(Structure_ZoneCommercial,level);
-        const int base=taxablePopulationEighths(Structure_Palace,residential,level);
-        CHECK(base == residential+8*commercial);
+        CHECK(taxablePopulationEighths(Structure_Palace,residential,level) == residential);
     }
     // Aggregate100 buildings to verify rates without per-building truncation.
-    CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_Palace,40,3),7,128) == 10453);
+    CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_Palace,40,3),7,128) == 5226);
     CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_ZoneResidential,40,3),7,128) == 10453);
     CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_ZoneCommercial,5,3),7,128) == 10453);
     CHECK(computeAnnualTaxRevenue(100*taxablePopulationEighths(Structure_ZoneIndustrial,4,3),7,128) == 8362);
@@ -738,7 +741,7 @@ TEST_CASE("getTaxTableEntry: low tax is positive, high tax is strongly negative"
 
 // --- Palace role and population ----------------------------------------------
 
-TEST_CASE("Palace hosts one residential and one commercial zone",
+TEST_CASE("Palace hosts one residential zone and no commercial zone",
           "[city-effects][role][palace]") {
     REQUIRE(getStructureCityRole(Structure_Palace) == CityRole::Residential);
     REQUIRE(getStructureMaxLevel(Structure_Palace) == 3);
@@ -746,10 +749,10 @@ TEST_CASE("Palace hosts one residential and one commercial zone",
     REQUIRE(getZonePopulation(Structure_Palace, 1) == 16);
     REQUIRE(getZonePopulation(Structure_Palace, 2) == 24);
     REQUIRE(getZonePopulation(Structure_Palace, 3) == 40);
-    // Palace commercial portion = one zone: 1/3/5
-    REQUIRE(getPalaceCommercialPopulation(1) == 1);
-    REQUIRE(getPalaceCommercialPopulation(2) == 3);
-    REQUIRE(getPalaceCommercialPopulation(3) == 5);
+    // No commercial portion since 2026-11-22 (was one zone: 1/3/5)
+    REQUIRE(getPalaceCommercialPopulation(1) == 0);
+    REQUIRE(getPalaceCommercialPopulation(2) == 0);
+    REQUIRE(getPalaceCommercialPopulation(3) == 0);
     REQUIRE(getPalaceCommercialPopulation(0) == 0);
 }
 
@@ -758,9 +761,14 @@ TEST_CASE("Palace hosts one residential and one commercial zone",
 TEST_CASE("Starport and Airport have correct city roles",
           "[city-effects][role]") {
     REQUIRE(getStructureCityRole(Structure_StarPort) == CityRole::Industrial);
-    REQUIRE(getStructureCityRole(Structure_Airport)  == CityRole::Commercial);
+    REQUIRE(getStructureCityRole(Structure_Airport)  == CityRole::None);
     REQUIRE(getStructureMaxLevel(Structure_StarPort) == 3);
-    REQUIRE(getStructureMaxLevel(Structure_Airport)  == 3);
+    REQUIRE(getStructureMaxLevel(Structure_Airport)  == 0);
+    // Micropolis getPollutionValue(): airport tiles 100, twice a developed industrial tile.
+    REQUIRE(getPollutionEmission(Structure_Airport, 0) == 100);
+    REQUIRE(getPollutionEmission(Structure_Airport, 3) == 100);
+    REQUIRE(getPollutionEmission(Structure_ZoneIndustrial, 3) == 50);
+    REQUIRE(getZonePopulation(Structure_Airport, 3) == 0);
 }
 
 // --- Traffic pollution -------------------------------------------------------
@@ -904,13 +912,13 @@ TEST_CASE("Regression: Only a stadium raises the residential cap",
     CHECK(withCivic.resValve >= noCivic.resValve);
 }
 
-TEST_CASE("Regression: Palace provides dual R+C population per spec",
+TEST_CASE("Regression: Palace provides one residential zone's population",
           "[city-effects][regression][scenario]") {
-    // Palace is residential-role with one R and one C contribution.
+    // Palace is residential-role with one R contribution and no C (2026-11-22).
     REQUIRE(getStructureCityRole(Structure_Palace) == CityRole::Residential);
     REQUIRE(getZonePopulation(Structure_Palace, 1) == 16);   // One R L1
     REQUIRE(getZonePopulation(Structure_Palace, 3) == 40);   // One R L3
-    REQUIRE(getPalaceCommercialPopulation(3) == 5);          // One C L3
+    REQUIRE(getPalaceCommercialPopulation(3) == 0);          // No C half
     // Palace provides a stadium-level land-value bonus.
     REQUIRE(getParkLandValueBonus(Structure_Palace) == kStadiumLandValueBonus);
 }
@@ -959,8 +967,7 @@ TEST_CASE("Government buildings retain roles without paying tax", "[city-effects
     for (const int item : {Structure_ConstructionYard, Structure_WindTrap,
             Structure_LightFactory, Structure_Refinery, Structure_Silo,
             Structure_HeavyFactory, Structure_HighTechFactory, Structure_RepairYard,
-            Structure_StarPort, Structure_Airport, Structure_Barracks,
-            Structure_WOR, Structure_Radar, Structure_IX, Structure_TechCenter,
+            Structure_StarPort, Structure_Airport, Structure_Radar, Structure_IX, Structure_TechCenter,
             Structure_PoliceStation, Structure_RocketTurret, Structure_GunTurret}) {
         CAPTURE(item);
         CHECK_FALSE(isTaxableCityStructure(item));
@@ -974,6 +981,33 @@ TEST_CASE("Government buildings retain roles without paying tax", "[city-effects
     CHECK(taxablePopulationEighths(Structure_ZoneCommercial, 5, 3) == 80);
     CHECK(taxablePopulationEighths(Structure_ZoneIndustrial, 4, 3) == 64);
     CHECK(taxablePopulationEighths(Structure_ZoneResidential, 0, 3) == 0);
+}
+
+TEST_CASE("Barracks and WOR are taxable top-density residential", "[city-effects][tax]") {
+    // Stefan, 2026-11-28: "both wor and infantry barracks count as a high density residential and is taxable".
+    // Each adds the population and the tax base of a level-3 Residential zone (40 people, 80 eighths).
+    for (const int item : {Structure_Barracks, Structure_WOR}) {
+        CAPTURE(item);
+        CHECK(isTaxableCityStructure(item));
+        CHECK(getStructureCityRole(item) == CityRole::Residential);
+        for (const int level : {1, 2, 3}) {
+            CAPTURE(level);
+            CHECK(effectiveCityLevel(item, level) == 3);
+            CHECK(getZonePopulation(item, level) == getZonePopulation(Structure_ZoneResidential, 3));
+            CHECK(taxablePopulationEighths(item, getZonePopulation(item, level), level)
+                == taxablePopulationEighths(Structure_ZoneResidential, 40, 3));
+        }
+        CHECK(taxablePopulationEighths(item, 40, 3) == 80);
+        CHECK(getZonePopulation(item, 0) == 0);   // an empty (unpowered) building houses nobody
+        // "and they moderately increase land value": a third of the Palace's stamp over 6 tiles.
+        CHECK(getParkLandValueBonus(item) == 13);
+        CHECK(getParkLandValueRadius(item) == 6);
+        CHECK_FALSE(usesParkTerrain(item));
+        CHECK(getParkLandValueBonus(item) * 3 <= getParkLandValueBonus(Structure_Palace));
+        // "and infantry and wor have 50% police effect": half a station, no upkeep of their own.
+        CHECK(getPoliceCoverage(item) * 2 == getPoliceCoverage(Structure_PoliceStation));
+        CHECK(getPoliceAnnualCost(item) == FixPoint(0));
+    }
 }
 
 TEST_CASE("Reduced infrastructure tiers cap loaded jobs and emissions", "[city-effects][role]") {
@@ -992,12 +1026,12 @@ TEST_CASE("Rocket coverage and upkeep are fifteen percent of a police station", 
     REQUIRE(getPoliceAnnualCost(Structure_RocketTurret) * 100 == getPoliceAnnualCost(Structure_PoliceStation) * 15);
 }
 
-TEST_CASE("Palace population and local supply match one R and C zone through level three", "[city-effects][palace]") {
+TEST_CASE("Palace population and local supply match one R zone and no C through level three", "[city-effects][palace]") {
     for (int level = 0; level <= 4; ++level) {
         REQUIRE(getZonePopulation(Structure_Palace, level) == getZonePopulation(Structure_ZoneResidential, level));
-        REQUIRE(getPalaceCommercialPopulation(level) == getZonePopulation(Structure_ZoneCommercial, level));
+        REQUIRE(getPalaceCommercialPopulation(level) == 0);
         REQUIRE(getResidentialSupply(Structure_Palace, level) == getResidentialSupply(Structure_ZoneResidential, level));
-        REQUIRE(getCommercialSupply(Structure_Palace, level) == getCommercialSupply(Structure_ZoneCommercial, level));
+        REQUIRE(getCommercialSupply(Structure_Palace, level) == 0);
     }
     REQUIRE(getStructureMaxLevel(Structure_Palace) == 3);
 }

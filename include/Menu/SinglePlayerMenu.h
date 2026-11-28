@@ -44,7 +44,11 @@ private:
     // Shared entry point for the opening menu and Single Player menu.
 public:
     static void playCampaign(bool showLobby = false);
+    /// The main menu's DuneCity Campaign (misc/DuneCityCampaign.h): the campaign screen without
+    /// connection, maps or mod choices, on the DuneCity mod.
+    static void playDuneCityCampaign();
 private:
+    static void runCampaign(bool showLobby, bool duneCity);
     void onCampaign();
     void onCustom();
     void onSkirmish();

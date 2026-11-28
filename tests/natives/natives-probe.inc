@@ -29,6 +29,7 @@
 #include <misc/IFileStream.h>
 #include <dunecity/CitySimulation.h>
 #include <units/AmbientAirplane.h>
+#include <misc/AnalyticsInstallID.h>
 #endif
 
 #include <cstdlib>
@@ -527,7 +528,7 @@ void runSave9868() {
 
 // ---------------------------------------------------------------------------------------------
 // Release 1.0.852 feature interactions: the Natives house against the spectated game end, the
-// city airplane's Death Hand crash, match analytics, campaign win/lose and lockstep peers.
+// city airplane's crash, match analytics, campaign win/lose and lockstep peers.
 // ---------------------------------------------------------------------------------------------
 
 /// Destroys every object of @a house except @a keep, round after round (destroyed buildings can
@@ -644,9 +645,30 @@ void expectWatchedEnd(Game& game, const std::string& label, Uint32 decided, int 
             game.finishedLevelCycle, decided, text.c_str(), natives(game)->getNumUnits());
 }
 
+/// This installation's analytics id is in @a payload exactly once, on the row of the human player
+/// named @a ownName, or nowhere when @a ownName is empty (a spectated game has no own row).
+void expectInstallID(const std::string& payload, const std::string& label, const std::string& ownName) {
+    const std::string& id = settings.general.analyticsInstallID;
+    nRequire(AnalyticsInstallID::isValid(id), label + ": the probe profile has no valid analytics installation id");
+    size_t fields = 0;
+    for(size_t at = payload.find("install_id"); at != std::string::npos; at = payload.find("install_id", at + 1)) ++fields;
+    nRequire(fields == (ownName.empty() ? 0u : 1u), label + ": " + std::to_string(fields) + " install_id fields, expected "
+             + (ownName.empty() ? "none" : "one, on " + ownName + "'s row"));
+    nRequire(payload.substr(0, payload.find("\"players\":")).find(id) == std::string::npos, label + ": the installation id is outside the player rows");
+    if(ownName.empty()) return;
+    const size_t at = payload.find(",\"install_id\":\"" + id + '"');
+    nRequire(at != std::string::npos, label + ": the install_id is not this installation's id");
+    const size_t row = payload.rfind("{\"slot\":", at);
+    nRequire(row != std::string::npos, label + ": the install_id is not in a player row");
+    const std::string head = payload.substr(row, at - row);
+    nRequire(head.find("\"player_name\":\"" + ownName + '"') != std::string::npos && head.find("\"controller\":\"human\"") != std::string::npos,
+             label + ": the install_id is on another row: " + head);
+}
+
 /// The analytics end payload: one row per player, Natives nowhere, the right winner (-1: none).
 void expectAnalytics(Game& game, const std::string& label, int winnerHouse) {
     const std::string payload = game.buildMatchAnalyticsPayload(true);
+    expectInstallID(payload, label, game.isObserving() ? std::string() : settings.general.playerName);
     nRequire(payload.find("\"house_name\":\"Natives\"") == std::string::npos, label + ": the analytics payload names the Natives");
     nRequire(payload.find("\"house_slot\":" + std::to_string(HOUSE_NATIVES) + ",") == std::string::npos,
              label + ": the analytics payload has a Natives row");
@@ -663,8 +685,11 @@ Coord mapCentre() { return Coord(currentGameMap->getSizeX() / 2, currentGameMap-
 
 /// Spectated DuneCity free-for-all (the view's house and three QuantBots): the deciding blow comes
 /// from the Natives - a crime trooper kills the last unit, a crime trooper brings down a city
-/// airplane whose Death Hand takes the last building, the same crash takes both last teams at once.
-void runSpectatedInteractions() {
+/// airplane whose crash takes the last building. With @a doubleWipe (case spectated-double-wipe,
+/// run with DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1) one Death Hand crash takes both last teams at
+/// once: since 2026-11-24 a crash in the game hits only the tile it falls on, so one crash cannot
+/// take two houses' last buildings, but the simultaneous end it decides is still the game's rule.
+void runSpectatedInteractions(bool doubleWipe) {
     const Params p = skirmishParams("dunecity", 3, true);
     const Result result = generateFor(p);
     std::vector<int> enemies;
@@ -680,6 +705,10 @@ void runSpectatedInteractions() {
         eliminate(*game, enemies[0]);
         nRequire(!game->finished, "The spectated game ended with two houses left");
     };
+    nRequire(AmbientAirplane::smallCrash() != doubleWipe,
+             doubleWipe ? "The double wipe needs DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1"
+                        : "DUNECITY_TEST_PLANE_DEATH_HAND_CRASH is set for the game's own crash");
+    if(!doubleWipe) {
     {
         // A crime trooper kills the last unit of the second-to-last house.
         std::unique_ptr<Game> game;
@@ -707,19 +736,31 @@ void runSpectatedInteractions() {
         ObjectBase* last = lastStand(*game, loser, Structure_WindTrap, mapCentre());
         stripTo(*game, enemies[1], {last->getObjectID()});
         runCycles(*game, 60);      // the stripped buildings' explosions die down first
-        last->setHealth(20);       // the crash's Death Hand takes it; nothing else does meanwhile
+        last->setHealth(20);       // the crash, on its footprint, takes it; nothing else does meanwhile
         AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(enemies[2]), last->getLocation() + Coord(1, 1));
         plane->setHealth(10);      // two trooper rockets bring it down
         const Uint32 planeID = plane->getObjectID();
+        const House* sender = game->getHouse(enemies[2]);
         const int unitKills = natives(*game)->getNumDestroyedUnits(), structureKills = natives(*game)->getNumDestroyedStructures();
+        const int senderStructureKills = sender->getNumDestroyedStructures();
         nativesAttack(*game, plane, 2, plane->getLocation() + Coord(0, 4));
         untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "the Natives shooting down the plane");
         const Uint32 decided = untilOut(*game, loser, 20, "plane crash");
-        nRequire(natives(*game)->getNumDestroyedStructures() == structureKills + 1 && natives(*game)->getNumDestroyedUnits() > unitKills,
-                 "The crash's kills are not credited to the Natives");
+        // The Natives are credited the plane they shot down. What its crash destroys is the plane's
+        // damage and goes to the house that sent it, whoever shot it down (Stefan, 2026-11-23:
+        // "does the damage dealt include damage when it crashes? it has a nuclear missile effect
+        // so that should be counted"; AmbientAirplane::crash). Up to 0fb66768b the crash was dealt
+        // in the shooter's name and this check asked for the building on the Natives' record.
+        nRequire(natives(*game)->getNumDestroyedUnits() > unitKills, "The plane the Natives shot down is not their kill");
+        nRequire(natives(*game)->getNumDestroyedStructures() == structureKills,
+                 "The crash's kill is on the Natives' record, not on the plane's house's");
+        nRequire(sender->getNumDestroyedStructures() == senderStructureKills + 1,
+                 "The crash's kill is not credited to the house that sent the plane");
         expectWatchedEnd(*game, "spectated plane crash", decided, enemies[2]);
         expectAnalytics(*game, "spectated plane crash", enemies[2]);
         nEnd(game);
+    }
+    return;
     }
     {
         // The crash takes the last building of both remaining houses: nobody has won, and the
@@ -837,24 +878,31 @@ void runCampaignInteractions() {
         // shoot. The first has taken damage already (two trooper rockets bring it down), so the
         // troopers need not outlast the base defence that turns on them.
         AmbientAirplane* plane = hoveringPlane(*game, enemy, target->getLocation() + Coord(1, 1));
-        AmbientAirplane* second = hoveringPlane(*game, enemy, target->getLocation() + Coord(2, 1));
+        // On the same tile: the crash reaches half a tile (AmbientAirplane::crash).
+        AmbientAirplane* second = hoveringPlane(*game, enemy, target->getLocation() + Coord(1, 1));
         plane->setHealth(10);
         const Uint32 planeID = plane->getObjectID(), secondID = second->getObjectID();
         House* nativesHouse = game->getOrCreateNativesHouse();
         const int nativeKills = nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures();
+        const int senderKills = enemy->getNumDestroyedUnits() + enemy->getNumDestroyedStructures();
         const int planeLosses = enemy->getNumLostItems(Unit_AmbientAirplane);
         nativesAttack(*game, plane, 3, plane->getLocation() + Coord(0, 4));
         untilGone(*game, planeID, MILLI2CYCLES(60 * 1000), "the Natives shooting down the campaign plane");
         untilGone(*game, secondID, 4, "the chained crash");
         runCycles(*game, 300);
         nRequire(!game->finished, "The campaign mission ended on a crash that decided nothing");
-        nRequire(nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures() >= nativeKills + 2,
-                 "The crash and its chain are not credited to the Natives");
+        // The plane they shot down is the Natives' kill; the second plane, which the first one's
+        // crash takes, is the crash's kill and so the plane's house's (see the spectated case).
+        nRequire(nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures() >= nativeKills + 1,
+                 "The plane the Natives shot down is not their kill");
+        nRequire(enemy->getNumDestroyedUnits() + enemy->getNumDestroyedStructures() >= senderKills + 1,
+                 "The chained crash is not credited to the house that sent the plane");
         nRequire(enemy->getNumLostItems(Unit_AmbientAirplane) == planeLosses + 2, "The enemy did not lose both planes");
         for(QuantBot* bot : bots) nRequire(!bot->campaignAIAttackFlag, "A Natives crash provoked the campaign AI's offensive");
         SDL_Log("NATIVES_PROBE: campaign mission %d: Natives shot down %s's plane over its %s, chained crash, %d Natives kills, "
-                "mission running, campaign AI not provoked", mission, houseName(enemy->getHouseID()).c_str(),
-                targetName.c_str(), nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures());
+                "%d kills of the planes' house, mission running, campaign AI not provoked", mission, houseName(enemy->getHouseID()).c_str(),
+                targetName.c_str(), nativesHouse->getNumDestroyedUnits() + nativesHouse->getNumDestroyedStructures() - nativeKills,
+                enemy->getNumDestroyedUnits() + enemy->getNumDestroyedStructures() - senderKills);
         nEnd(game);
     }
     for(const bool playerFalls : {false, true}) {
@@ -870,7 +918,7 @@ void runCampaignInteractions() {
         nRequire(!game->finished, "The mission ended before its deciding crash");
         ObjectBase* building = lastStand(*game, game->getHouse(last), Structure_WindTrap, mapCentre());
         stripTo(*game, last, {building->getObjectID()});
-        building->setHealth(20);   // the crash's Death Hand takes it; nothing else does meanwhile
+        building->setHealth(20);   // the crash, on its footprint, takes it; nothing else does meanwhile
         AmbientAirplane* plane = hoveringPlane(*game, game->getHouse(playerFalls ? static_cast<int>(HOUSE_ATREIDES) : enemies.back()),
                                                building->getLocation() + Coord(1, 1));
         plane->setHealth(10);      // two trooper rockets bring it down
@@ -973,6 +1021,8 @@ void runLockstepInteractions() {
                 peer.name.c_str(), peer.digests.size(), decided, peer.finishedAt, peer.won ? 1 : 0, peer.watched,
                 nativesHouse->getNumUnits(), peer.digests.back().c_str());
         if(peer.observer) expectWatchedEnd(*game, "lockstep spectator", decided, guestHouse);
+        // Two human rows on every peer: the id goes on the peer's own row only, never the other human's.
+        expectInstallID(game->buildMatchAnalyticsPayload(true), "lockstep " + peer.name, peer.observer ? std::string() : peer.name);
         nEnd(game);
     }
     settings.general.playerName = "Natives tester";
@@ -1122,7 +1172,8 @@ int runNativesProbe() {
     else if(kind == "crime") runCrime();
     else if(kind == "winlose") runWinLose();
     else if(kind == "save9868") runSave9868();
-    else if(kind == "spectated-interactions") runSpectatedInteractions();
+    else if(kind == "spectated-interactions") runSpectatedInteractions(false);
+    else if(kind == "spectated-double-wipe") runSpectatedInteractions(true);
     else if(kind == "played-interactions") runPlayedInteractions();
     else if(kind == "campaign-interactions") runCampaignInteractions();
     else if(kind == "lockstep-interactions") runLockstepInteractions();

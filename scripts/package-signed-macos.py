@@ -71,12 +71,16 @@ def main():
         for p in sorted(bundles, key=lambda p: len(p.parts), reverse=True): run(*sign, p)
         run(*sign, app)
         run("codesign", "--verify", "--deep", "--strict", app)
-        run(sys.executable, Path(__file__).with_name("verify-macos-runtime.py"), app)
         upload = root / "submission.zip"
         run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, upload)
         notarize(upload, args.notary_profile, args.notary_keychain, args.output / "app-notarization.json")
         run("xcrun", "stapler", "staple", app)
         run("xcrun", "stapler", "validate", app)
+        # First launch only after the ticket is written. Launching code Apple has
+        # already notarized (a rerun of the same source) can put the bundle under
+        # macOS App Management; the runner's stapler was then refused the write in
+        # the third 1.0.868 attempt. Nothing below writes into the bundle.
+        run(sys.executable, Path(__file__).with_name("verify-macos-runtime.py"), app)
         run("spctl", "--assess", "--type", "execute", "--verbose=2", app)
         # Both final containers carry the already stapled app.
         run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, zip_path)

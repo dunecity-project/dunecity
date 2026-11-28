@@ -1,3 +1,3930 @@
+> **Frozen 2026-11-28.** History only. New feature write-ups go to `docs/handover/YYYY-MM-DD-<slug>.md`; current
+> state is the coordinator's status record (`AGENTS.md`, "Read first").
+
+## 2026-11-28 - Saboteurs Skip City Zones: Saboteurs leave R/C/I zones alone unless garrisoned (protocol 151)
+
+Stefan, 2026-11-28: "also make sabateurs not target r/i/c (not valuable enough) unless it is garissoned", then,
+on the first name: "also i said saboteurs should skip r/i/c not empty zones".
+
+**Default change (match rule, protocol 151, save format unchanged).** `GameOptionsClass::saboteurSkipsCityZones`,
+INI key `Saboteurs Skip City Zones`, default on; bit 4 of the MOD20 starting tech level byte, set only when off
+(the level is now the low four bits; a level above 9 is still refused); in the options hash only when off.
+Protocol 150 is the infantry squads (agreed with that session; the numbers are fixed whatever the commit order).
+- A Saboteur choosing its own target (its hunt, `Saboteur::searchOwn`, and the nearer-target check on the way)
+  leaves out Residential, Commercial and Industrial zones that no soldier garrisons
+  (`Saboteur::passesOver`: `ZoneStructure::getGarrisonSize() == 0`). How built up or populated the zone is
+  plays no part. A garrisoned zone is a target like any building.
+- A zone it chose itself that loses its garrison while it walks there is given up for the next target, or Guard
+  when nothing is left (`Saboteur::dropUngarrisonedZone`; an AI house's Saboteur looks again every ten seconds).
+- **Interpretation (mine, listed as such):** the rule is about automatic target selection. A target its owner
+  orders (a right-click on a zone) is kept, garrisoned or not. After a load, a human's Saboteur forgets which
+  target it chose itself (as before), so a zone it was walking to then counts as an order; an AI house's
+  hunting Saboteur still drops it.
+- Off is the rule up to protocol 149, kept so both can be compared in one build
+  (`tests/ai/game-options/saboteur-zones-{on,off}.ini`).
+
+**Match log.** `SABOTEUR_TARGET` and `SABOTEUR_HIT` gain `garrison=` (soldiers in a target zone, -1 for anything
+else) and `own=` (1: its own choice). New: `SABOTEUR_ZONE_SKIP` (once per new choice, the zone the old rule would
+have taken), `SABOTEUR_ZONE_DROP`, and the in-game check `SABOTEUR_ZONE_RULE: event=violation` (an own choice that
+is an ungarrisoned zone). `vanilla-match.py` writes them to `saboteurs.csv`; `tests/units/saboteur-zone-report.py`
+fails a game with any own ungarrisoned zone target or violation line (`--rule on`).
+
+### Acceptance
+
+| Request line | Test | Measured | Result |
+|---|---|---|---|
+| 1. A released Saboteur never selects an ungarrisoned R/C/I zone | `saboteur-zone-report.py --rule on` over the ON arm; probe `city-zones-skipped`, `only-ungarrisoned-zones` | ON: 0 zone targets, 0 own ungarrisoned, 0 violations, 24/24 games pass; the rule fired (165 `SABOTEUR_ZONE_SKIP`) in 20/24. OFF: 144 ungarrisoned zone targets, 72 blown up, in 20/24. Stefan's Air game (before): 2 of 95 targets, 1 blown up | pass |
+| 2. A garrisoned zone is still a target, chosen when best; its garrison's fate | probe `garrisoned-zone`, `garrison-decides`, `garrison-leaves` | picked and blown up; the front Soldier dies in the blast (cover), the other comes out at 20 -> 10 HP; a populated zone without a garrison is passed for an unbuilt one with a Soldier inside; an evacuated zone is given up. No garrisoned zone came within reach in the real games (the AI garrison switches are off) | pass (probe only) |
+| 3. Saboteurs still find other targets: the share reaching a target does not fall | ON/OFF arms, paired by seed | any target: OFF 75.9% (715/942), ON 74.3% (690/929), -1.8 points (95% CI -4.0 to +0.4); a non-zone target: OFF 68.3%, ON 74.3%, +5.4 (+2.1 to +8.9); lost on the way 171 -> 187 | level within noise; not shown to fall, not proven |
+
+Arms: `rs160-dunecity`, four Brutal QuantBots (Ordos, Mercenary, Harkonnen, Atreides: the two Palaces that release
+Saboteurs), 45 minutes, seeds 9101-9124, 24 games each, AWS, build `f85b41bb2` (same behaviour as the renamed
+`45af7a17a`), jobs `20261128T132305-sabz-on-55a4c3` / `20261128T132312-sabz-off-e5016c`; results
+`~/Documents/projects/outputs/saboteur-zones-20261128/`. Game outcomes identical in both arms (Ordos 7, Atreides 4,
+Harkonnen 2, 11 time-outs, no errors).
+
+**Deviation:** none from the request. The garrison-leaves drop and Guard-when-nothing-left are additions so a
+Saboteur does not finish a walk to a zone that stopped being a target.
+
+**Tests.** `saboteur_zone_probe` (headless, nightly; 13 cases, human and QuantBot owners, real Palace release, real
+capture and Evacuate commands, the player's right-click through `Game::doInput`) passed at `45af7a17a` on AWS (job
+`20261128T132619-ctest-bff24d`, with `saboteur_target_probe` and `saboteur_effect_probe`); settings round trip in
+`CoopGameSettingsTestCase` ("Saboteurs Skip City Zones defaults on ..."). The nightly at the release candidate
+`e76c5e908` passed every saboteur test, with the four AI gates 4/4 there. Pushed to origin in `96c1a3ff5`
+(Stefan's Air build). Commits: `1ee54918d` (rule), `f85b41bb2` (probe fix), `45af7a17a` (rename, garrison-decides).
+
+**Not verified:** a game where garrisoned zones are in an enemy Saboteur's reach (the AI garrison switches are off,
+so none came up in the measured games); `perf_regression` was run by the release candidate's qualifying set, not by
+this session.
+
+## 2026-11-28 - Infantry squads: three men at a discount, the AI's Barracks/WOR, taxable infantry housing (protocol 150)
+
+Stefan, 2026-11-28: "in the original dune you could build three troopers for a discount - i think maybe 3 were
+200 credits?", then: "yes and the ai should use it if it wants to build these men. also additional infantry and wor
+should be built if the ai needs more capacity similar to factories. also include infantry in the calculation for
+what to build (same performance algorithm). also both wor and infantry barracks count as a high density
+residential and is taxable" ... "and they moderately increase land value" ... "and infantry and wor have 50% police
+effect". Rules and switches: `docs/infantry-squads.md`.
+
+**Default changes (protocol 150, save format unchanged):**
+- The default object table offers **Infantry** (three Soldiers for 50, build time 32) and **Troopers** (three
+  Troopers for 200, build time 56). The build times are the singles', as in the original squads
+  (`mods/Tornie/ObjectData.ini`, `mods/Jericho/ObjectData.ini`).
+- **AI Player and the campaign AI now buy squads**, from their existing priority tables. QuantBot does not, unless
+  SquadOrders is on.
+- A **Barracks or WOR** in a city game:
+  - counts as a top-density Residential zone: 40 residents and 80 tax eighths;
+  - stamps +13 land value over 6 tiles;
+  - polices at half a Police Station's strength (coverage 500), scaled by funding and power;
+  - has no upkeep, and is not a Police Station anywhere else.
+
+Numbers that are not Stefan's (the integrator's, for him to change): Infantry 50, land value +13 over 6 tiles, no
+police upkeep.
+
+**QuantBot switches (default off; recommendation below once measured):** SquadOrders, InfantryLanes, InfantryInMix.
+Found while building:
+- In a city game the Barracks never built.
+- The WOR and the capital loop bought infantry only against observed aircraft.
+- So the measured infantry share (`938eae7c7`) never decided city infantry. InfantryInMix is that fix.
+
+### Acceptance list (one assert each; player path: `infantry_squad_probe`; real games: `infantry_squads_real_game`, three rs160-dunecity Brutal games, all three switches on)
+
+| Request | Observable fact, with its number | Test | Measured | Result |
+|---|---|---|---|---|
+| "three troopers for a discount ... 3 were 200 credits" | build lists: Soldier 30 / Infantry 50, Trooper 100 / Troopers 200; one click = exactly that price and exactly three men; one Move click sends all three; singles stay 1 man | probe build_list, troopers, infantry, singles; real_game S1 | lists as stated; 200 / 50 taken by the builder, 3 men each; all three Troopers arrived; 197 squads in 3 games, 0 short of three | PASS |
+| "the ai should use it if it wants to build these men" | >= 90% of the men QuantBot buys where a squad is offered come as squads, every house-game; switch off: 0 squad orders | real_game S2 (switch on) | 100% in all 10 house-games that bought men | MET (default off) |
+| "additional infantry and wor ... similar to factories" | >= 90% of infantry backlogs answered by an order within 60 s; a second Barracks/WOR stands in >= half the house-games; men delivered per minute rises after the lane in >= 75% of lanes | real_game S3 (switch on) | 0 backlogs, 0 lanes in 12 house-games | **NOT MET: not done** |
+| "include infantry in the calculation for what to build" | the infantry share moves >= 1 point off its opening in every learning house-game; >= 3 share purchases per house-game; infantry bought by minute 20 worth half the share where it is >= 2% | real_game S4 (switch on) | share moved in 12/12; share purchases per house-game 0,0,0,0,0,0,4,8,10,10,11,30; half the share bought in 7 of 12 | **NOT MET: not done** |
+| "count as a high density residential and is taxable" | +80 tax eighths and +40 residents per Barracks/WOR, built from the yard list with a map click; back when destroyed; every census row 80 x buildings | probe barracks_tax, wor_tax; real_game S5; CityEffectsTestCase | +80 / +40 for each, both back when destroyed; 156 census rows, 0 off the rule | PASS |
+| "and they moderately increase land value" | nearby own lots rise > 0 and by 20-50% of a Palace's rise on the same spot | probe land_value; CityEffectsTestCase | +22 against the Palace's +91.5 (24%), Barracks and WOR | PASS |
+| "and infantry and wor have 50% police effect" | coverage within 4 units of half a Police Station's on every cell, and 0.48-0.52 of it where the station gives >= 200 (integer rounding: 3 smoothing passes), also at 50% funding; crime on each lot = crime before police less that coverage | probe police; CityEffectsTestCase, PoliceStationTestCase | 0.478-0.500 on every cell, crime taken off on 5 of 6 lots | PASS |
+
+Green at test commit `821e61e5a` (tree `7d86685a`), AWS job `20261128T142017-ctest-3c82f4`: 11 of 11, including
+`skirmish_generator_tests` and its matrix, and the city-park and city-redevelop probes. Landed on top of `dc41fe127`,
+so the qualifying set reruns on the landed commit.
+
+**The three AI lines (default-off QuantBot switches) are not all done.** SquadOrders meets its line. InfantryLanes
+and InfantryInMix do not, and they stay off:
+- InfantryLanes found no backlog in 12 house-games. One WOR fills a typical 10% infantry share in 3-4 minutes, so
+  capacity was never the limit.
+- InfantryInMix still has 6 of 12 house-games with no purchase for the share. Atreides' first Barracks waits behind
+  the city cash reserves.
+`infantry_squads_real_game` fails on S1 and S5 (rules every game plays) and reports S2-S4 as MET / NOT MET; with
+`--strict-ai` they fail it too.
+
+**Found and fixed on the way:**
+- The squads' first AWS run (`afb827470`) failed on three counts:
+  - Two unit tests pinned "Barracks/WOR give no police coverage", from when their full coverage was removed as a
+    design bug. They now pin half a station.
+  - Three probe construction faults: cost read from the credit balance, a detached yard plot, and a crime-drop
+    ratio that clamping makes meaningless.
+  - The AI paths: the support path refused a squad when three men overshot its target; the order gate took city
+    infantry only against aircraft; Atreides had no Barracks.
+- The generator: `SkirmishGenerator::populationOf` asked the game for a Barracks/WOR's population (now 40), so every
+  DuneCity seed with one in its base got fewer zones. The generator plans them at 16, as its maps were made, so
+  every seed generates the same map. The game counts the 40.
+
+**Deviations:**
+- A squad is three single units, not one three-man unit, so garrisons, capture, beds and the levy count men.
+- A lost squad man is valued at the single's price in the infantry score.
+- SquadOrders rounds up: a squad is admitted wherever one more man is (target, share, budget, cash: a builder pays
+  as it builds).
+- InfantryLanes: the factory lane rule must hold 2 minutes with a deficit of >= 3 orders per lane (a lane added on one
+  busy moment did not raise output: 10 -> 10, 13 -> 7 men per 10 minutes).
+- A generated city holds 24 more residents per Barracks/WOR than the generator's estimate (the generator plans them at
+  16 so seeds keep their maps).
+
+## 2026-11-28 - EconomyFirst: the AI out of the poverty trap on low / no spice maps (Stefan's last Air game); approved on, shipped OFF
+
+Stefan, 2026-11-28, about his last game on the Air: "i did the building for the ai and we obliterated the enemy
+opponents"; then "yes the ai needs to escape the poverty trap on low / no spice maps". His map: Random Skirmish 4P
+192x192 1v3 FFA DuneCity T9, seed 817478863, no spice, 20,000 credits each, a prebuilt city of 92 zones, 1 yard,
+2 Nuclear Plants and 8 Rocket Turrets per house; he and a Brutal QuantBot Fighter shared Neutral against three
+Brutal QuantBots. Commits `6a5bf7339` to `a88f19825`; default on in the commit titled "EconomyFirst on by default". Evidence: `~/Documents/projects/outputs/air-game-20261128/`
+(`measure/report-*.md`, `measure/scores-*.md`). His map and his game options are test data in `tests/ai/maps/`
+(kept out of the game's map list).
+
+**Measured cause on his map** (control houses, 72 house-games, `ECONOMY_STATE` / `BUILD_ORDER` lines):
+- Where the 20,000 goes: 18,650 on units in the first two minutes (median), 4,725 on buildings; credits then sit
+  at 400-700 for the whole game. The Starport's bargains and the Heavy Factory's "largest affordable deficit" take
+  most of it.
+- Why one yard: the city yard target rises with demand, but a city MCV is only bought when `canFundCapacityMcv`
+  passes its opening-capital test; with the money gone it never does (0 MCVs in 72 house-games by minute 10).
+- What holds the yard: in the first ten minutes its orders were 316 city-protection turrets, 284 rocket-defence
+  turrets, 184 Police Stations and 118 Palaces against 844 zone orders, all through one yard.
+- Why Nuclear is "not available": the power rule needs the Nuclear Plant's price in hand; below 1,000 credits it
+  builds a Wind Trap ("CITY-POWER: Building Windtrap (no Nuclear available ...)").
+
+**The switch** (`EconomyFirst`, default off, play style `economy-first`; `CityLessonsPolicy.h`,
+`QuantBotCityLessons.cpp`): only while the map's spice is below 20,000 per living house, and until the house has
+his minute-31 population (6,734):
+- the city yard target follows his schedule: 4 yards, 6 from minute 15, 9 from minute 20;
+- unit producers keep 10,000 credits for the yards, released for the factories while an enemy unit is within 12
+  tiles of a yard, factory, Starport, Nuclear Plant or Palace; the Starport buys nothing;
+- a Heavy Factory short of the yard target orders the MCV itself from that cash (upgrading first if it must);
+- an idle yard orders a zone in his R/C/I mix (134/93/101) whatever the demand valves say, while zones are under
+  70% of the yard's orders (his first ten minutes: 76 of 113).
+
+**Activation test** `economy_first` (headless, nightly; its own small fixed numbers, not the acceptance test):
+passed on AWS at `6c2363a6a` (20261128T101603-ctest-c952cf), 8/8: ON fired, ordered 4 MCVs and stood 3 yards by
+minute 5, bought 5,300 of units in the first two minutes against 16,200 off, ordered 16 economy-first zones and
+added 22 zones by minute 10 against -2 off; off it never acted; on a spice-rich map it logged spice_rich and did
+not act.
+
+**Acceptance: his footprint on his map** (at `a88f19825`, 90-minute games, 24 house-games with the switch, 72
+control; median; share of his number; his zones, Nuclear Plants and Palaces are orders, the AI's are standing,
+zones net of losses):
+
+| Minute | Measure | Stefan | EconomyFirst | Control |
+|---:|---|---:|---|---|
+| 3 | yards | 4 | 4, reached his footprint | 1 (25%) |
+| 23 | yards | 9 | 5, not reached, 56% | 1 (11%) |
+| 10 / 20 / 31 | zones added | 76 / 201 / 328 | 38 / 90 / 212, not reached, 51% / 45% / 65% | -1 / 12 / 29 (-1% / 6% / 9%) |
+| 10 / 20 / 31 | Nuclear Plants | 3 / 7 / 12 | 2 / 3 / 5, not reached, 67% / 43% / 42% | 2 / 2 / 2 |
+| 10 / 20 / 31 | Palaces | 6 / 8 / 15 | 1 / 2 / 2, not reached, 17% / 25% / 17% | 2 / 2 / 2 |
+| 10 / 20 / 31 | population | 3,130 / 4,918 / 6,734 | 2,490 / 3,653 / 6,220, not reached, 80% / 74% / 92% | 1,835 / 2,120 / 2,509 (59% / 43% / 37%) |
+| 31 | tax a second | 247 | 118, not reached, 48% | 48 (19%) |
+
+One line reaches his footprint (yards by minute 3); population at minute 31 is at 92%. Measured at `6c2363a6a`,
+before its MCVs stayed at home, the same arm had 21% of his zones and 50% of his population at minute 31 and
+scored +0.341 level: about 24 of 81 MCVs were lost on colony trips before deploying.
+
+**Activation per arm** (in-game assertion per house-game: a second yard deployed, and by minute 10 an MCV ordered
+and 10 zones added):
+
+| Map | Spice | Fired | Effect reached | Score, all games | Score, games where it reached its effect |
+|---|---|---:|---:|---|---|
+| His map (air-1v3), `a88f19825` | none | 24/24 | 22/24 | **+0.852 [+0.444, +1.222] beats** | +1.051 [+0.727, +1.333] (22 games) |
+| His map, `6c2363a6a` (MCVs on colony trips) | none | 24/24 | 17/24 | +0.341 [-0.066, +0.762] level | +0.709 [+0.248, +1.098] (17 games) |
+| BigCityLife (2,000 credits, 16 bloom tiles), `a88f19825` | low | 24/24 | 19/24 | **+0.492 [+0.169, +0.833] beats** | +0.481 [+0.107, +0.865] (19 games) |
+| Both low-spice maps pooled, `a88f19825` | | 48/48 | 41/48 | **+0.672 [+0.409, +0.926] beats** | +0.787 [+0.501, +1.025] (41 games) |
+| Fortress / `/weak` (Brutal formation duels, 18 games each, `47dfee5c1`) | (no city) | 0 | - | identical to default: +1.333 / -1.889 both | - |
+| 3waysplit | none | 8/24 | 0/24, **NOT TESTED** | +0.026 [+0.000, +0.078] | - |
+| Metropolis | rich | 0/24 early | 0/24, **NOT TESTED** (did not act: spice-rich) | -0.086 [-0.431, +0.281] | - |
+| rs192-dunecity 4P | rich (about 780,000) | 21/24 after minute 31 | 0/24 by minute 10 | -0.086 [-0.487, +0.322] | - |
+
+3waysplit has no spice but starts every house with about 20,000 people and 408 tax a second: no poverty trap,
+and the switch stands down at once (his minute-31 population). On Metropolis it logged spice_rich and did nothing.
+On rs192 it began only once the harvesters had taken the map's spice below the line (after minute 31). Neither
+spice-rich map shows harm. The "effect reached" score picks games after the fact and is not evidence for a
+default: the default rule reads the all-games interval, which includes 0.
+
+**BigCityLife** (4P 192x192, 2,000 credits, a 49-zone city, no spice but 16 bloom tiles; Stefan's options; 120
+minutes, 24 house-games, 72 control): with the switch the house reaches his minute-31 footprint on three lines,
+9 yards (his 9), 338 zones added (his 328) and 8,288 population (his 6,734), and 237 tax a second (his 247, 96%;
+control 78). Nuclear Plants 7 (his 12, 58%), Palaces 6 (his 15, 40%). Units in the first ten minutes 0 against
+the control's 11,650; 20 of 24 houses stood down at his population.
+
+**Default reverted to OFF for this build.** Stefan approved default on ("Yes, turn on", 2026-11-28; the rule
+he was told first: the default ships only if the qualifying set is green). The nightly at `54a8a1189` and the Mini
+re-runs at `5ac9ab8ed` (after the ordering fix `a3aba2e6a`) showed 12 behaviour failures with it on, among them
+`quantbot_no_spice_income_low-cash` ("tax never became usable income"), `quantbot_no_spice_city` (the power-stall
+control did not buy the cheap import: the Starport is held), `quantbot_starport_dunecity`, `quantbot_shared-spending_dunecity`
+(the cash hold starved affordable military production), `quantbot_mcv_deployment` (no colony trip), the three
+`quantbot_air-defense_*`, `brutal_unit_override_probe`, both `local_spectator_worm_startup_*` (no view-house unit) and
+`cross_platform_city_medium` (recorded digest). So this build ships it off; the switch, the ordering fix and the
+`turret_front_probe` pin stay, and the default returns when that per-test table is clean. The scores below were
+measured on a build with these failures and do not yet justify the default.
+
+**Measured case for the default** (Stefan, 2026-11-28, asked with this table). Its 95% interval is
+above 0 on the low-spice maps (pooled +0.672), it is identical on Fortress and `/weak`, and it does not act on
+spice-rich maps. "Low / no spice" in code (`CityLessonsPolicy::lowSpiceMap`, read every build pass): the spice
+left on the whole map (`QuantBot::lastCalculatedSpice`, rescanned every 500 cycles) below 20,000 times the
+living houses (80,000 with four houses, 60,000 with three). Above it the switch logs `spice_rich` once and does
+nothing; a rich map harvested down below the line turns it on then (rs192 after minute 31). It stands down for
+good once the house has 6,734 people. The switch stays: `EconomyFirst=0` (play style `economy-first-off`)
+measures the old behaviour; match controls labelled `default` now have it on.
+
+**Not done / deviations:**
+- His footprint is not reached on his map: yards 5 of 9 by minute 23, tax 48%, Nuclear Plants 5 of 12, Palaces 2
+  of 15. The MCV losses (about 24 of 81 before deploying, on colony trips) are fixed in `a88f19825`; the engine
+  counts a deploy as a lost MCV too, so mcvs_lost overstates losses.
+- The 7 house-games that missed the effect at `6c2363a6a` were the houses attacked first (an enemy at the core in
+  63% of passes against 39%); 6 of the 7 were eliminated. The hold is already released under that threat.
+- He had a Fighter partner: his own orders were all building while the AI fought for him. With the cash hold a
+  house builds about 7,600 of units in ten minutes against the control's 25,075, and 7 of 24 houses missed the
+  effect because their new zones were destroyed early. The hold releases while an enemy is near the core (12
+  tiles), a stand-off he did not have.
+- `economy_first` asserts zones placed by minute 10 (42 against 7 at `e76c5e908`) and prints, as a KNOWN SHORTFALL
+  not asserted, zones standing net of losses: with the hold on, the house is under-armed and loses what it builds
+  when attacked early (seed 9461 after `f7afe2384` / `a3aba2e6a`: 5 standing net against -1, 2 yards lost); the
+  default is off for this reason among the twelve; the line returns to an assert when the hold lets affordable
+  defence and units through.
+- Palaces: the switch does not order them; the house stays at the map's 2 (his 15 by minute 31). Next arm:
+  LowValuePalaces with EconomyFirst on (proposed, not on).
+- Scope: low / no spice maps only (his words); spice-rich maps are measured only for harm.
+- Not run: one Brutal AI with a Builder-role partner on his map (the harness plays one QuantBot per house).
+
+**Gates with the default on:** the four AI gates, the nightly tier, `perf_regression`, `economy_first` and
+`quantbot_city_lessons` run at the default-on commit; results are added here when they finish.
+
+## 2026-11-28 - Lessons from Stefan's Metropolis save (seewhatidid): LowValuePalaces, FrontPalaces, CityLauncherArmy proven and measured; all stay OFF
+
+Stefan, 2026-11-27: "i saved a game seewhatidid on the mba for metropolis where i added more palaces to improve
+land, added rocket turrets as a maginot and built a lot of launchers. and my ai is doing better than its
+opponents. why is it i can do these things but you can't? analyse the save and the logs and come up with ai
+behaviour to test. make sure you are actually doing what is asked and not just imagining you are doing it."
+The turret line is the turret-front entry above. This entry covers the Palaces and the Launchers. Commits
+`266584f5a`, `c2b2e1c7e`, `2477d8a29`, `86dcb77ea`, `b32015479`, `1e4224cc0`, `b4f427671`, `e603c584f`.
+Evidence: `~/Documents/projects/outputs/seewhatidid-20261127/` (`analysis/acceptance-list.md` holds his
+measured footprint; `measure/report-e603c584f.txt`, `measure/NOTES.md`).
+
+**What he did** (read from his saves by the game at minutes 72, 95 and 120; `analysis/acceptance-list.md`):
+- 19 Palaces by minute 72 and 26 by minute 95. They stood on the enemy side of his city, 10-31 tiles from enemy
+  buildings and behind his turret clumps. His low-value lots (land value 80 or less) were 9% of his R/C lots at
+  minute 72; the AI houses had 30-51%.
+- Launchers were 83% of his combat vehicles at minute 72. He lost 1,052 Launchers by minute 120.
+- Across every house and 24 AI-vs-AI games, Launchers returned 2.5 credits of damage per credit spent.
+  Siege Tank 1.5, Tank 0.8, Ornithopter 0.4.
+
+**Switches** (QuantBotConfig [Force Concentration], default off; play styles `default@low-value-palaces`,
+`default@front-palaces`, `default@city-launcher-army`, `default@city-lessons` = Launchers + LowValuePalaces):
+- LowValuePalaces plans a Palace on the site with the most low-value R/C lots in reach (6 or more). This counts
+  lots another Palace already reaches, because stamps add up. The Palace is saved for, and the zones under the
+  site are cleared.
+- FrontPalaces plans a Palace 10-31 tiles from the nearest enemy building, with 3 or more own Rocket Turrets
+  within 10 tiles that are nearer the enemy, and 6 or more own lots in reach. At most one plan every 2 minutes.
+- CityLauncherArmy moves the vehicle mix's Ornithopter share into Launchers and keeps Launchers at least 70% of
+  the mix.
+
+**Acceptance** (`quantbot_city_lessons`, headless nightly CTest that exits non-zero, passed on AWS at
+`e603c584f`, job `20261128T065755-ctest-dc727b`, 609 s). The measured lines come from Metropolis, brutal, his
+options, 120 minutes, 24 house-games per arm against 216 control house-games:
+
+| His action | Test / measure | Measured (`e603c584f`) | His | Result |
+|---|---|---|---|---|
+| more Palaces | CTest: ON places the Palace on its planned site, its 6+ low lots +10 two minutes later; OFF plans none | passes | - | pass |
+| ... the pace | low-value Palaces by minute 72, 15+ in half the house-games | median 17.5 (6-33), 16/24 house-games | 19 | pass |
+| ... "to improve land" | lots of each placed Palace rise 10+ | 418/441, mean +60 | - | pass |
+| ... the result | low-value lot share at minute 72 of 20% or less, in half the house-games | median 23%, 8/20 house-games (control 35%); city-lessons arm 22%, 6/13 | 9% | **not met** |
+| ... mean lot land value, minute 72 | - | 119 (control 98) | 176 | measured |
+| Palaces on the enemy side behind turrets | CTest: front Palace placed 10-31 tiles from the enemy with 3+ turrets ahead, standing after 5 minutes | passes | - | pass |
+| ... the pace | front Palaces by minute 72 | median 18, 387/432 standing after 5 min | 19 | pass |
+| a lot of Launchers | CTest: in 10 minutes Launchers at least 50% of vehicle value built, no Ornithopter | passes | - | pass |
+| ... the army | fielded Launcher share from minute 50, 60%+ in half the house-games | 70%, 14/24 (city-lessons arm) | 83% | pass |
+| ... the losses | Launchers lost per house-game | 1,057 (control 364) | 1,052 by m120 | measured |
+
+**Activation per arm** (`vanilla-match.py` lessons log, every arm fired in 24/24 house-games unless noted):
+
+| Arm | Metropolis | rs192-dunecity 4P |
+|---|---|---|
+| LowValuePalaces | 21.5 planned / 18.6 placed / 2.7 expired per game, 418/441 rose 10+ | 9.5 / 6.9 / 2.5, 152/163 rose 10+ |
+| FrontPalaces | 20.9 planned / 18.3 placed, 387/432 standing at 5 min | **NOT TESTED**: 2.1 / 1.3, no site in 522 searches with 3 turrets ahead in the band |
+| city-lessons (both) | Launchers 24/24, Palaces 21.3 placed | Launchers 24/24, Palaces 5.5 placed |
+| CityLauncherArmy alone (`266584f5a`) | 24/24, fielded 71% | 24/24, fielded 74% |
+
+**Scores** (placement score, paired against control, 95% interval). Each cell gives the house-games where every
+switched-on behaviour passed its in-game assertion (Stefan, 2026-11-28: "we need assertions during the game to
+ensure the ai is actually doing the bahaviour we ask for"; city-lessons-report.py, applied to these runs after
+the fact: Launchers >= 50% of vehicles built with no Ornithopter, a low-value Palace whose lots rose 10+ standing,
+a front Palace standing after 5 minutes, a drill turret that engaged):
+
+| Arm | Metropolis | rs192 4P |
+|---|---|---|
+| LowValuePalaces | 24/24 passed; +0.059 [-0.331, +0.441] level | 24/24; -0.069 [-0.429, +0.297] level |
+| FrontPalaces | 24/24; +0.030 [-0.331, +0.394] level | 9/24, **NOT TESTED** |
+| city-lessons | 24/24; -0.163 [-0.544, +0.252] level | 0/24, **NOT TESTED** (was reported level) |
+| CityLauncherArmy (`266584f5a`) | 24/24; **-0.397 [-0.689, -0.113] loses** | 0/24, **NOT TESTED** (was reported level) |
+| Combined: CityLauncherArmy + both Palace switches + TurretDrill (`453036b0f`) | 22/24 (drill 24, front Palace 24, Launcher 23, low-value Palace 23); +0.053 [-0.336, +0.440] level | 0/24, **NOT TESTED** (Launcher 0/24, front Palace 5/24) |
+| CityLauncherArmy + TurretDrill (`453036b0f`) | 23/24; -0.034 [-0.304, +0.248] level | - |
+
+The rs192 Launcher rows were not tested: in every house-game the Starport's bargains bought Ornithopters (50 in
+4 games, 20261128T110127-cla-orni); fixed in `2baea1b53` (no Ornithopter bargain while CityLauncherArmy is on).
+The combined rs192 arm is re-run at `f30b3554a`.
+
+**Combined run** (Stefan, 2026-11-28, "Yes, test together"): the turret switch is TurretDrill alone, the one
+`turret_drill_save` asserts 8/8 against his save. At minute 72 on Metropolis the combined arm placed 643 drill
+orders, 518 placed, 498 engaged, 97% of drill turrets touching (his 94%), 384 Rocket Turrets standing (house 0 in
+his save 358, control 278), 12 front Palaces (his 19), 62% Launchers fielded from minute 50 (his 83%), 957
+Launchers lost per game. The switches interfere: low-value Palaces by minute 72 fell from 17.5 (alone) to 3.5;
+of 165 expired plans 86 waited on another Palace pending (the front Palace plan holds the slot) and 110 were
+pre-empted. With the drill in front, CityLauncherArmy no longer loses on Metropolis (-0.397 alone, -0.034 with
+the drill), but no interval is above 0.
+
+**Decision.** All three stay OFF. No interval is above 0, so no Fortress or /weak check was needed.
+CityLauncherArmy loses on Metropolis on its own. It fields his share and loses his number of Launchers
+(1,006 a game against control 390), but without his turret line in front of them.
+
+**What it took to make the Palaces land** (each was a measured cause, not a guess):
+1. `c2b2e1c7e`: the yard did not know the lesson sites and cleared them for other buildings.
+2. `86dcb77ea`: ground access was judged with the low-value zones still standing.
+3. `b32015479`: the next plan waited for the last effect.
+4. `e603c584f`: sites inside a reactor blast area were refused by the yard. This was 143 of 207 expired plans.
+Placed per Metropolis game: 0.1, then 7.2, 9.9, 14.2 and 18.6.
+
+**Deviations:**
+- LowValuePalaces places by low-value lots wherever they are. He placed his on the enemy side; FrontPalaces is
+  that placement.
+- The lesson site search differs from the shipped `palace_district` search in three ways. It judges ground
+  access with the cleared zones removed. It keeps out of reactor blast areas, and the shipped search still does
+  not. It skips a site whose plan expired for 10 minutes.
+- FrontPalaces needs 3 own turrets ahead. On rs192 the AI's turrets are rarely in that band, so the arm is not
+  tested there.
+
+**Not done:** the low-value lot share is 23% against the 20% line. A lesson Palace lifts its lots from a median
+32 to 89. In 165 of 441 groups the mean stays 80 or less, because lots that start near 0 need a second Palace
+over them. Plans also slow after minute 36 (gaps of 1-3 minutes); the cause of the slowdown is not logged.
+
+**Gates** (default-off paths; the e603c584f change runs only with a lesson switch on):
+- at `b4f427671`: the four AI gates passed (`20261128T060038-ctest-76b14f`), and the nightly tier passed 265/265
+  (`20261128T060042-ctest-68b321`). `perf_regression` passed on the Mini after a full rebuild.
+- at `e603c584f`: the four AI gates passed (`20261128T082727-ctest-98db4c`), the nightly tier passed 265/265
+  (`20261128T082731-ctest-3162dd`), and `perf_regression` passed on the Mini (123 s).
+
+## 2026-11-28 - Fremen Palace worm: real assertion tests through the player's path, the AI's worm no longer taken by the base defence, re-measured (v4)
+
+Stefan, 2026-11-27: "i want freeman house to get a worm as its palace special - it has full control over the
+worm and can eat enemy units with it via hunt, or can explode to create spice where the ai wants near its base.
+make an agent for doing this along with tweaking the ai behaviour." Then: "you need to make sure you include REAL
+assert tests to make sure the things you add actually work", and "i ask you to try things. you say you do and it
+doesn't work so then i do it and it does ... you need more assertions". Follows the 2026-11-27 entry below.
+Commits `cc09c95fa` (player-path and AI-level probe cases, real-game test, a bloom trip survives being shot),
+`c3e54081a`, `517b634b7`, `07bce9e68`, `71a8cb9f3`, `75f6898d0`, `80261e3a8` (defence scramble), `d1ad80aa6`
+(activation houses). Evidence: `~/Documents/projects/outputs/palace-worm-20261127/v4/` (`report.txt`).
+
+**Results** (`palace_worm_probe` and `palace_worm_real_game`, both headless nightly CTests that exit non-zero;
+AWS `20261128T024605-ctest-4dbe8e` at `80261e3a8`, both passed, the same values as the Mini):
+
+| Request line | Test (assert) | Measured | Result |
+|---|---|---|---|
+| Fremen gets a worm as its Palace special | probe `player-hunt-button`: Palace panel button (hidden while charging, sandworm picture and tooltip, sends `CMD_PALACE_SPECIALWEAPON`, charge used); `bundled-deserted` (4P Deserted); real_game A1 | 1 Fremen-owned worm per press; real games 13 / 2 / 17 worms, 0 for other houses | pass |
+| ... only Fremen; the warriors otherwise | probe `player-warriors-rule-on-1` (Atreides), `player-warriors-rule-off-3`; real_game A2 | button shows and calls 12 warriors, no worm; 0 worms with the rule off | pass |
+| full control over the worm | probe `control`, `player-hunt-button`, `player-attack-click`, `bundled-deserted` (click select, Guard, Move, Hunt buttons and map clicks through `Game::doInput`) | Move click reached 76,114 in 18 s (Deserted); ordered onto rock it stops on the sand; Attack cursor on a Tank eaten in 13 s, right click on a Quad in 16 s; second Palace's button disabled "still out" | pass |
+| can eat enemy units with it via hunt | probe `player-hunt-button`, `hunt`, `bundled-deserted`; real_game A3 | Hunt button: Tank eaten in 15 s, the one on rock spared, 2 kills credited to Fremen; Deserted: Harkonnen Tank in 50 s; real games 199 hunt orders, 97 units eaten, meals in 3/3 | pass |
+| can explode to create spice | probe `player-spice-bloom`, `bundled-deserted` | Spice Bloom button + click at 40,22: burst in 16 s, 47 spice tiles; Deserted click at 77,98: 35 tiles; right click cancels, deep rock refused | pass |
+| where the AI wants near its base | probe `bloom-near-refinery`, `ai-level-0/1`; real_game A4 | 48 spice tiles beside the Refinery; real games 7 of 14 bursts with >= 30 tiles within 18 tiles of a refinery (needs half; median 18.5) | pass, at the threshold |
+| tweaking the AI (an agent for it) | probe `ai-level-1/0/2`, `bloom-under-fire` (both owners); real_game A5, A6; activation harness on v4 | level 1 hunts then bursts, 0 bursts at 2, 0 hunts at 0; hit 6 times on its way it keeps the bloom order; real games 23/26 hunting worms ate, 14/21 bloom orders burst, 0 orders from other controllers; v4: fired and reached its effect in 96% of 80 Fremen house-games (tested) | pass |
+
+**Deviations** (caps Stefan did not ask for; none stops the asked-for thing): one worm per house at a time (a
+second charged Palace's button is disabled while it is out); 5-minute charge; 3-minute life or 6 meals, a worm on
+its way to burst at the end bursts where it is; beaten to half health it leaves; it stays on sand (units on rock
+cannot be eaten, a bloom aimed at rock moves to sand within 6 tiles); AI: prey under 250 credits is not hunted,
+bloom sites keep 8 tiles from enemy units and are searched within 14 (then 30) tiles of a refinery.
+
+**What the tests found** (all fixed):
+- *A bloom trip did not survive being shot* (`cc09c95fa`): `UnitBase::handleDamage` in Hunt answers the shooter
+  with `doAttackObject`, which cleared the worm's bloom target, and QuantBot re-ordered the same spot every pass.
+  Orders made while a Palace worm takes damage no longer cancel its trip; a trip whose path search gave up
+  bursts where it stands.
+- *The base-defence scramble took the AI's worm* (`80261e3a8`): `scrambleUnitsAndDefend` enlisted it against
+  intruders and the defence upkeep in `checkAllUnits` re-targeted it every pass: 35 orders and 27 cancelled bloom
+  trips in three games. It now skips sandworms (only Palace worms belong to a house; nothing changes with the
+  rule off). Redirections are logged (`PALACE_WORM: event=redirected ... by=<caller>`) and counted.
+- *Test faults*: the fixture's still enemy is a HumanPlayer and a local game makes the last HumanPlayer local, so
+  the player-path cases ran as Harkonnen (`517b634b7`); an AI house's worm leaves the Palace in Hunt, so QuantBot
+  need not order a hunt there (`71a8cb9f3`; its orders are asserted in the ai-level cases, and every hunt order is
+  now logged, `07bce9e68`); on 4P Deserted the Fremen QuantBot never builds a Palace before it is wiped out (18
+  min), so the real-game test plays `rs160-dunecity` 9101-9103, where Fremen starts with a Palace, and clears
+  its result folders first (a rerun read the last build's `games.csv`) (`75f6898d0`).
+- *Harness*: only Fremen can call a worm, so with all four FFA houses labelled `default@palace-worm-1` the
+  activation harness counted 320 house-games (24%, NOT TESTED). `activation-events.json` entries may now name
+  `"houses"`; the palace-worm styles name Fremen (`d1ad80aa6`, unit-tested).
+
+**Measured (v4, `80261e3a8`)**: `rs160-dunecity`, four QuantBot Brutal houses, 45 min, seeds 9101-9180,
+`fremen-worm-on.ini` (label `default@palace-worm-1`) against `fremen-worm-off.ini` (warriors), 80 paired games,
+none failed. Worms 968 (12.1 a Fremen game), meals 2,652 (33.1), 698,170 credits of units eaten, 610 bursts (7.6);
+524/644 hunting worms ate (81%), 610/724 bloom orders burst (84%), 11 trips cancelled by a move order from the
+worm's own controller, 0 orders from other controllers. Fremen placement **-0.015 (-0.114 to +0.090): level** with the
+warriors, and tested (96% activation); wins 4 -> 6 (+0.025, -0.025 to +0.075); time-outs 50.0% -> 57.5% (no
+difference shown). v3 was -0.021 (-0.132 to +0.090). Only Fortress Brutal was measured, not Hard or `/weak`.
+
+**Gates at `80261e3a8`**: the four AI gates, `dunelegacy_tests` and `genome_registry_contract` passed on AWS
+(`20261128T024618-ctest-bf3926`, 6/6); `perf_regression` passed on the Mini (105 s). Nightly
+`-L nightly -LE gui` (`20261128T024705-ctest-873093`): 264/265 passed, `palace_worm_probe` and `palace_worm_real_game` among them; the
+one failure, `zone_garrison_real_game` (its A9, soldiers pulled away, on both machines, read from a stale
+results folder), belongs to the Zone Garrisons work (its folder fix is `b970eeb1c`).
+
+**Not exercised:** a real mouse in a window. The clicks are SDL mouse events pushed through `Game::doInput` and
+the panel buttons are pressed through their own `handleMouseLeft`, on the dummy video driver; the cursor drawing
+and a real window's coordinate scaling were not checked. No release was made: the Air's app does not contain
+these commits.
+
+## 2026-11-28 - Turret front v2/v3: every switch proven to fire, the turret drill, NOT TESTED verdicts; acceptance list
+
+Stefan, 2026-11-27, after the first measurement: "i have a feeling the reason you think none of these things work is
+because you aren't actually doing that ... you need much much more tests to prove you have actually implemented a
+feature"; "i just build turrets into their base as a mass and they carved a hole in the ebemy base. you have
+definitely not been trialling this properly"; "i ask you to try things. you say you do and it doesn't work so then i
+do it and it does ... you need more assertions". Commits `2204d67b7` and `96d8bf9b4` (activation harness),
+`d2234a3fc`, `18c0cfb2d`, `d3db38e2a`, `df1bc9a02` (triggers, drill, order tracking). Evidence:
+`~/Documents/projects/outputs/turret-front-v3-20261127/`, `turret-front-v4-20261127/`; Stefan's footprint:
+`~/Documents/projects/outputs/seewhatidid-20261127/analysis/acceptance-list.md` (seewhatidid session).
+
+- **Why v1 measured nothing.** In the v1 games below, `AdvancingTurrets` waited for the army to stand 4 tiles ahead
+  of the base edge, which never happened on 3waysplit. `TurretCreep` needed bases within reach, which rs192 never
+  had. `RearTurretRetire` never fired on rs192. No switch logged whether its turrets reached their effect. The v1
+  "level" verdicts for those cells are corrected to NOT TESTED in the entry below.
+- **Activation harness (CLAUDE.md "Asked-for behaviour", rule 4).**
+  - `tests/ai/activation.py` reads `tests/ai/activation-events.json`, where a play style declares the log lines
+    that show its switch fired and the lines that show it reached its effect.
+  - `vanilla-match.py` counts them per house-game into `activation.csv`.
+  - `vanilla-match.py --report`, `play-style-matrix.py` and `turret-front-report.py` print each arm's fire and
+    effect rates. The verdict reads **NOT TESTED** when the effect was reached in under half the house-games.
+  - `quantbot_activation_report` (8 unit tests, one a real `--report` run) asserts that an arm with zero events
+    reads NOT TESTED.
+  - Registered by: the turret front (7 styles), worm, redevelop, city lessons; hospital is pending.
+- **Order tracking.** Every turret-front order is followed:
+  - `TURRET_FRONT_PLACED`: the site holds an own Rocket Turret.
+  - `TURRET_FRONT_ENGAGED`: that turret's target is an enemy unit. This line is the effect event.
+  - `TURRET_FRONT_MISSED`: not placed within 3 minutes.
+  - `TURRET_FRONT_STATE` (every 2 minutes) logs the edge, the army lead, per-mode ordered/placed/engaged/missed,
+    and why waiting sites went unbuilt (not reached, yard busy, unavailable, site gone, power, funds).
+- **Trigger fixes.**
+  - (b) The belt no longer waits for the army. It holds 6 turrets within 12 tiles of the base's front edge and
+    then advances one tile at a time. It may not widen past its goal, and it keeps 4 tiles from enemy buildings
+    and out of reach of enemy turrets.
+  - (c) Creep targets the visible enemy defenders and has no 12-turret cap.
+  - (e) New `TurretDrill` (default off, play styles `turret-drill`; `drillhit` = the same with turrets firing on
+    buildings):
+    - starts once the base edge is within 24 tiles of an enemy building;
+    - builds a touching mass of Rocket Turrets 4 to 12 tiles from enemy buildings, where at most one enemy turret
+      reaches, nearest first, then most target value in range, then most own turrets touching;
+    - has no count cap; it scans every 2 s while drilling;
+    - spends down to 1,000 credits;
+    - while a drill site waits, no factory spends that turret's price plus 1,000 credits.
+- **Headless probe `turret_front_probe`** (nightly; 16 cases; each runs twice and the two runs must match):
+  AWS, `df1bc9a02`, gate job `20261127T230643-ctest-0d75cc`, all 16 pass:
+
+  | case | switch on: what it must do | measured |
+  |---|---|---|
+  | reinforce-on / -off / -far | a turret beside the attacked Refinery; none when off or when the attack is far | 1 ordered, placed, engaged; none; none |
+  | advance-on / -noarmy / -off | the belt moves toward the enemy without waiting for the army | 12 placed, 4 side by side, moved 32 tiles (with and without an army); none |
+  | creep-on / -off / -covered | a turret in reach of the enemy defenders, which then fall; none when off or covered by enemy turrets | 1 placed, engaged, defenders 520 → 504; none; none |
+  | retire-on / -off | rear turrets sold, front and Palace turrets kept | 4 of 20 rear retired, front 4/4 and Palace 2/2 standing; all 26 standing |
+  | drill-on | a touching mass placed into the enemy base, which kills the defenders | 12 ordered, 11 placed, 8 engaged; nearest 4 tiles, 7 touching; defenders 520 → 0; 88 unit targets, 0 building targets |
+  | drill-buildings | the same with "Turrets Can Fire On Buildings" on | 11 placed; enemy buildings 800 → 190; 54 building targets |
+  | drill-turrets | the mass forms against a base with enemy turrets | 10 placed, 7 touching, 4 tiles from an enemy building |
+  | drill-off / -far | no drill order when off, or when no enemy building is within 24 tiles | none; none |
+- **Acceptance list** (each request line, what shows it, the test, the measured value):
+  | request line | observable, with a number | test | measured | result |
+  |---|---|---|---|---|
+  | "houses should try use them offensively" | turrets placed in reach of enemy units/buildings, and the enemy falls | `turret_front_probe` drill-on, creep-on; games | probe: drill defenders 520 → 0, creep 520 → 504; games: drill fired in 100% of Metropolis and 3waysplit house-games (54% on rs192), 80-88% of orders placed, 93-99% of those engaged | PASS (probe and Metropolis/3waysplit); rs192 fires in only 54% |
+  | "increase the amount of them on front lines under attack" | a turret beside the attacked building; none when off or the attack is far | `turret_front_probe` reinforce-on/-off/-far; games | probe: 1 ordered, placed, engaged; none; none. Games: fired 92-100%, 77-96% placed, 97-98% engaged; Metropolis +0.528 [+0.05, +0.93] | PASS |
+  | "a maginot line which moves forward" | the belt holds 6 turrets and advances toward the enemy, with or without an army | `turret_front_probe` advance-on/-noarmy/-off; games | probe: 12 placed, moved 32 tiles both ways; games (moving-line): advance fired 100% on every map, 68-83% placed, 90-99% engaged; score level (-0.128 [-0.35, +0.10]) | PASS for the behaviour; no score gain |
+  | "they carved a hole in the enemy base" (Stefan's seewhatidid save, minute 72 → 95) | the AI from his save reaches his footprint within half: ≥ 38 new turrets, ≥ 80% touching, median stand-off 8-14, ≥ 9 within 8 tiles, ≥ 154k R-Turret damage and above control, ≥ 138 Ordos structures lost and above control | `turret_drill_save` (new, nightly, AWS) | AWS `20261128T015523-ctest-9aa34e` at `cafd31f9a`: 226 ordered, 184 placed, 183 engaged (control 0 ordered); 188 new (control 28); 90% touching; median 10 (control 15); 39 within 8 (control 0); 393k damage, 1,397 kills (control 231k); Ordos lost 280 (control 234), all enemies 652 (599). Same numbers as the demonstration job, so the run is deterministic | PASS, 8/8 (`TURRET_DRILL_ACCEPTANCE: 0 failed`) |
+  | the same with "Turrets Can Fire On Buildings" on | as above | demonstration job `20261127T230553-tf-demo0c-b726e5` (one game per arm) | m95: 160 new, 88% touching, median 10, 33 within 8, 401k damage; Ordos lost 162 vs control-bld 200 | FAIL on Ordos lost (the turrets spread fire across all enemies: 671 structures lost in all) |
+  | "the listed return of 7.4x ... is slightly misleading given the ongoing cost" | the report shows return after upkeep beside the listed one | `turret-front-report.py` columns `upkeep paid`, `return with upkeep` | control 6.51x listed → 1.64x with upkeep (v3, 48 games); drill 5.54x → 1.70x vs 6.13x → 1.43x (v4) | PASS (reported) |
+  | turret creep toward enemy defenders | a turret within reach of visible enemy defenders | `turret_front_probe` creep-on/-off/-covered; games | probe passes; games fired 100% on Metropolis and 3waysplit, **29% on rs192** | PASS in probe; NOT TESTED on rs192 |
+  | rear turrets retire as the line moves | rear turrets sold, front and Palace turrets kept | `turret_front_probe` retire-on/-off; games | probe: 4 of 20 rear sold, front 4/4 and Palace 2/2 kept; games: fired 100% on 3waysplit, **0% Metropolis, 12% rs192** | PASS in probe; **NOT TESTED in games** |
+  | turrets fire on units only by default | with the option off no building targets; with it on, building targets | `turret_target_probe`, `turret_front_probe` drill-on vs drill-buildings | 88 unit / 0 building targets off; 54 building targets on | PASS |
+- **Measured games** (one switch house against default houses, labels rotated, Brutal, Stefan's game options):
+  Return with upkeep counts each standing turret's police upkeep (15% of police) over the game.
+
+  | arm (games per map: Metropolis 12, 3waysplit 12, rs192 24) | pooled score diff [95% CI] | verdict | time-outs | return listed → with upkeep | per map |
+  |---|---|---|---:|---|---|
+  | front-turrets (reinforce) | +0.141 [-0.07, +0.36] | level | 38% | 5.42x → 1.58x | Metropolis **beats** +0.528 [+0.05, +0.93]; 3waysplit 12/12 time-outs; rs192 level +0.019 |
+  | moving-line (advance + retire) | -0.128 [-0.35, +0.10] | level | 33% | 6.23x → 1.72x | retire part not tested on Metropolis (0%) and rs192 (12%) |
+  | turret-creep | +0.264 [+0.002, +0.505] | beats (pooled) | 27% | 5.47x → 1.65x | Metropolis **beats** +0.535 [+0.08, +0.91]; 3waysplit **beats** +0.50 [+0.125, +0.875]; rs192 **NOT TESTED** (29%) |
+  | turret-front-all | +0.110 [-0.13, +0.34] | level | 33% | 4.89x → 1.69x | retire part not tested on Metropolis (8%) and rs192 (29%); advance 42% on 3waysplit |
+  | turret-drill (v4, `df1bc9a02`) | +0.031 [-0.19, +0.25] | level | 33% | 5.54x → 1.70x (control 6.13x → 1.43x) | Metropolis -0.060 [-0.55, +0.44]; 3waysplit 11/12 time-outs, no difference; rs192 +0.093 [-0.28, +0.44], fired 54%. Ends with 4.4k credits vs 26.8k |
+  | drillhit (drill, buildings fire on) | +0.013 [-0.20, +0.22] | level | 33% | 5.16x → 1.68x (control 6.30x → 1.51x) | Metropolis -0.058; 3waysplit 11/12 time-outs; rs192 +0.056, fired 54% |
+
+  v3 control: 6.51x listed → 1.64x with upkeep. Every row's activation table is in the two report files.
+- **Deviations from Stefan's play, with reasons:**
+  - Drill start: only when the base edge is within 24 tiles of an enemy building. Stefan started his mass from
+    where his base already touched theirs. On rs192 this fires in 54% of house-games (bases further apart). Not a
+    blocker in his position (the save test fires), but it limits the drill on large maps.
+  - Stand-off 4 to 12 tiles from enemy buildings: his median was 10, the drill's 10-11. Kept.
+  - At most one enemy turret in reach of a site: stops the mass being built under a turret wall; his save had none
+    in reach. Kept, flagged.
+  - 1,000-credit reserve and factory hold: needed for the yard to build at all (most unbuilt sites were "yard busy").
+  - The demonstration is one game per arm, so it is a single sample; the CTest repeats it nightly.
+  - With buildings fire on, the drill's turrets spread across all three enemies, so Ordos (house 2) lost fewer
+    structures than in the control (162 vs 200) though all enemies lost 671. Not fixed.
+- **Decision:** No switch becomes a default; all stay off.
+  - **Creep** is a candidate: beats the control pooled and on Metropolis and 3waysplit, but rs192 is NOT TESTED
+    (29%) and only Brutal was run; Fortress and /weak are not run. It stays off until those pass.
+  - **Retire** is NOT TESTED in games (0-29% outside 3waysplit). The parts of moving-line and turret-front-all
+    that depend on it are not measured.
+  - **Drill** reaches Stefan's footprint from his save (`turret_drill_save`) and in its own Metropolis/3waysplit
+    games fires every time, but scores level: it spends the house down to ~4k credits and the extra kills do not
+    turn into placements. Reinforce and advance are level.
+  - Gates at `df1bc9a02` (AWS `20261127T230643-ctest-0d75cc`): the four AI gates, `turret_front_probe`,
+    `turret_target_probe` and `quantbot_activation_report` pass. `dunelegacy_tests` failed on the hotkey change
+    (`62481c681`), fixed in `db2dd887b`. Nightly `20261127T230648-ctest-7fcfe1`: 258/264; the six failures belong
+    to other sessions (hotkeys, quantbot_city_lessons, zone_garrison_real_game, palace_worm_probe/_real_game).
+    `perf_regression` passed on the Mini with every switch on (123.72 s).
+  - `cafd31f9a` adds `turret_drill_save` and Stefan's save as `tests/saves/data/seewhatidid-dunecity.dls.gz`.
+
+## 2026-11-28 - Zone Garrisons: Garrison button, no pulling soldiers away, Troopers reinforce, house-to-house switches; acceptance list and real-game test
+
+Stefan, 2026-11-27: "and sto the ai pulling soldiers away on their way in"; "also allow troopers to reinforce
+garrisons - they keep their weapns so troopers can hit air, attack with their missiles etc. we want to be
+fighting house to house basically"; "i cant garison my own buildings there no button. and the capture also
+doesn't work on my own"; "i ask you to try things. you say you do and it doesn't work ... you need more
+assertions". Commits `62481c681` (button, guards, switches, tests), `db2dd887b` and `7825a34bb` (every order
+accounted for), `a2ae13b7c` (front and chain without caps), `ea261f47d` and `b970eeb1c` (real-game test fixes). Rules: `docs/zone-garrisons.md`.
+Evidence: `~/Documents/projects/outputs/zone-garrison-h2h-20261127/`.
+
+**Correction to the entry below ("Zone Garrisons follow-up").** It says no build contained Zone Garrisons.
+That was wrong: `git tag --contains` found no tag, but staging build `staging-bcd28813a...` (bcd28813a has
+513531d5d) does contain it, staged on Stefan's Air. The Mini's `/Applications/DuneCity.app` (1.0.788) is not
+his. What Stefan tried in a game was 1.0.880, which has no garrison code. The Garrison button, the
+pulling-away fix and the capture fixes of this entry are in neither build.
+
+### Acceptance list (one assert each; real games: `zone_garrison_real_game`, three rs160-dunecity Brutal games, every switch on; player path: `zone_garrison_probe`, dummy driver)
+
+| Request | Observable fact, with its number | Test | Measured | Result |
+|---|---|---|---|---|
+| "occupy friendly ... R/I/C using the capture command" | the AI garrisons its own zones (≥1 defend order and ≥5 own-zone entries a game) | real_game A1 | defend orders a game 357 / 458 / 445; own-zone entries 506 / 1,092 / 1,159 | PASS |
+| | a player's Capture button and map click on an own zone puts the Soldier inside; panel 1/4; Evacuate brings it out | probe player_own_zone | passed | PASS |
+| "...and enemy ... it now is owned by the house that occupies it" | ≥3 enemy zones taken a game | real_game A2 | zones taken a game 53 / 43 / 19 | PASS |
+| | Soldier + Trooper, C key, click: zone taken, panel "(captured)" | probe player_take | passed | PASS |
+| "make infantry cost 30 credits" | the Barracks build list prices the Soldier at 30; every levy Soldier bought at 30 | probe price; real_game A3 | Barracks list 30; 585 levy Soldiers, all at 30 | PASS |
+| "evacuate ... when it gets below X% health (test different)" | garrisons leave below 60% (≥3 exits, all below 60%); X measured at 0/25/40/60 | probe low_health; real_game A4 | 165 low-health exits, all below 60%; 278 soldiers out | PASS |
+| "if the building explodes they are ejected but are damaged" | ≥1 zone destroyed with soldiers inside, soldiers out alive, hit points lost; probe 20→10 | probe destroyed; real_game A5 | 8 zones destroyed with soldiers inside, 9 out, 193 hp lost; probe 20 -> 10 | PASS |
+| "if units evacuate the building returns to its original owners control" | ≥1 captured zone handed back a game; probe: Evacuate, killed and low-health garrisons all hand back | probe return, player_take; real_game A6 | zones handed back a game 37 / 37 / 15 | PASS |
+| "the ai tries capuring undefended buildings" | raid orders every game, zones taken | real_game A7 | raid orders a game 39 / 5 / 1; 115 zones taken | PASS |
+| "mass spamming infantry to try capture buildings" | ≥10 levy Soldiers and ≥10 levy orders a game | real_game A8 | levy Soldiers a game 101 / 271 / 213; levy orders 218 / 428 / 415 | PASS |
+| "sto the ai pulling soldiers away on their way in" | ≤2% of orders end with no logged outcome; ≥85% of own-zone orders of living soldiers to standing zones go in (≤1.18 per entry) | real_game A9; probe no_pull | 6,940 orders: 2,872 in, 2,666 died on the way, 1,101 ended, 83 refused at the door, 100 walking at the end, 118 (1.7%) taken away; own-zone 2,760/2,953 (1.07 orders per entry); 4,573 other controllers' orders refused; probe: 9 orders refused | PASS |
+| "allow troopers to reinforce garrisons" | reinforce orders every game, ≥3 Troopers joining held zones, mixed garrisons | real_game A10; probe reinforce | reinforce orders a game 103 / 169 / 292; 1,165 Troopers joined held zones; 166 mixed garrisons | PASS |
+| "they keep their weapns so troopers can hit air, attack with their missiles" | ≥100 garrison shots, ≥1 at aircraft; probe: a garrisoned Trooper hits an Ornithopter and a tank | real_game A11; probe trooper_air, trooper_tank | 15,738 garrison shots, 2,657 at aircraft; probe: Ornithopter hit, tank hit (4 hp) | PASS |
+| "fighting house to house" | front orders and ≥5 chain orders every game | real_game A12 | front orders a game 308 / 717 / 622; chain orders 291 / 968 / 1,066 | PASS |
+| "i cant garison my own buildings there no button" | Garrison button (I) for Soldiers/Troopers, hidden for a tank and with the rule off; Garrison symbol over own/enemy zones, pointer over sand; click on own zone garrisons | probe garrison_button, garrison_button_rule_off | passed | PASS |
+| "the capture also doesn't work on my own" | Capture on an own zone garrisons it (button and C key); tooltip mentions zones | probe player_own_zone, garrison_button | passed | PASS |
+
+**Deviations** (caps and conditions not in the requests, none stopping the asked-for thing):
+- 4 soldiers a zone.
+- 6 capture orders a house a pass, all behaviours together.
+- The levy keeps 16 Soldiers and 300 credits.
+- A soldier gives up after 45 s without getting closer.
+- The front is our 4 zones nearest the enemy, 2 soldiers each.
+- The chain works the 2 nearest enemy zones at a time, with soldiers from within 40 tiles.
+- A9 was first written as "75% of all own-zone orders go in". That failed at 71% because 411 soldiers died under
+  fire on the way. It was restated to count only soldiers that lived and zones that stood; deaths are shown, not
+  counted as pulling away.
+- ZoneFrontGarrison (12-tile front) and ZoneCaptureChain (only from garrisoned zones) first had conditions that
+  stopped them. The harness gave both NOT TESTED (28% and 0% of house-games), and `a2ae13b7c` removed the
+  conditions.
+
+### Measured (rs160-dunecity, Brutal, 288 paired games each vs `default`, `vanilla-match.py --report` with activation)
+
+| Arm (play style) | Build | Fired / reached effect (of 576 house-games) | Score difference (95% CI) | Verdict |
+|---|---|---|---|---|
+| ZoneGarrison (`zone-garrison`) | `db2dd887b` | 100% / 100% | +0.005 (-0.08..+0.09) | level |
+| ZoneCaptureRaid (`zone-capture-raid`) | `db2dd887b` | 82% / 55% | -0.014 (-0.09..+0.07) | level |
+| ZoneCaptureLevy (`zone-capture-levy`) | `db2dd887b` | 99% / 53% | -0.039 (-0.12..+0.04) | level |
+| ZoneGarrisonReinforce (`zone-garrison-reinforce`, with ZoneGarrison) | `db2dd887b` | 99% / 100% | -0.013 (-0.09..+0.06) | level |
+| ZoneFrontGarrison (`zone-front-garrison`) | `db2dd887b` | 28% / 28% | -0.002 | NOT TESTED (12-tile cap) |
+| ZoneFrontGarrison | `a2ae13b7c` | 100% / 100% | +0.013 (-0.06..+0.09) | level |
+| ZoneCaptureChain (`zone-capture-chain`) | `db2dd887b` | 0% / 0% | +0.000 | NOT TESTED (garrisoned zones only) |
+| ZoneCaptureChain | `a2ae13b7c` | 94% / 74% | -0.051 (-0.13..+0.03) | level |
+| all six (`house-to-house`) | `db2dd887b` | 100% / 100% | +0.007 (-0.07..+0.08) | level |
+| all six (`house-to-house`) | `a2ae13b7c` | 100% / 100% | -0.033 (-0.11..+0.04) | level |
+
+The AI does the house-to-house fighting but does not win more for it. The chain sends soldiers up to 40 tiles
+into an enemy city: in the real-game test, 1,510 of its 2,325 orders ended with the soldier killed on the way and
+85 went in. The levy behaves the same way: 752 of 1,061 orders ended with the soldier killed on the way. Raid orders
+take zones but fire in only 82% of house-games and reach their effect in 55%.
+
+All switches stay **off**: no arm's 95% interval is above 0.
+
+### Gates
+
+- **At `7825a34bb`** (default QuantBot behaviour as at `b970eeb1c`; `a2ae13b7c` only changes code behind
+  switches that are off):
+  - the four AI gates: 4/4 (`20261128T005838-ctest-9443f7`);
+  - `perf_regression` on the Mini: 123.0 s (`20261128T005848-ctest-3c5963`);
+  - nightly `-L nightly -LE gui`: 260/264 (`20261128T005843-ctest-71868b`). The four failures:
+    - `quantbot_city_lessons`: the city-lessons session's "planned Palace never stood".
+    - `palace_worm_probe` and `palace_worm_real_game`: the worm session's work.
+    - `zone_garrison_real_game`: it checked a stale results folder left by an earlier run (0.21 s), fixed in
+      `b970eeb1c`.
+- **At `b970eeb1c`:** `zone_garrison_probe` 23/23 and `zone_garrison_real_game` 12/12, both passed
+  (`20261128T030329-ctest-47352a`).
+- **At `db2dd887b`:** `dunelegacy_tests` passed (`20261127T232655-ctest-f5d882`).
+
+### Not verified
+
+A person's mouse in a windowed game. The probe drives the same widgets and SDL events on the dummy driver.
+
+## 2026-11-28 - Hospitals: slow, paced type changes; walk-in healing; infantry never use a Repair Yard (protocol 149, save 9904)
+
+Stefan, 2026-11-27: "also make buildings change type much slower, especially hospitals the building type keeps changing
+from hospital to something else in the games... this doesn't seem correct. recheck the metropolis souce and ensure we
+are not changing building type too frequently as it doesn't seem right, also make hospitals change slower. and allow a
+infrantry or trooper to be walked / moved into a hospital to heal. curently this does not work." Then: "the repair
+request for infantry take them to repair factory". Commits fc2241edb (churn logging), 3698f1d10, 09f82e271, 2f280589a,
+0004ddb72, 88f72f8ce, ac6ba9ed6, 15e3779b6, 862049370, 80e8407a5, 3ddbbd523. Not released. Evidence:
+`~/Documents/projects/outputs/zone-churn-20261127/` (`churn.py` reads the `CITY_ZONE_CHURN` lines of `zones.csv`).
+
+**What was wrong.** The census re-picked the Hospital and Church overlays every city day by a stride over the house's
+populated R zones. Any zone added or lost shifted the stride, so the overlay moved even though no zone changed. It was
+not zone growth: our R/C/I density changes are no faster than Micropolis (below).
+
+**Micropolis checked (`../simcity`, read-only).** Micropolis has Hospitals as separate zones: `makeHospital` turns
+one empty R zone into a Hospital when `needHospital > 0` (hospitalPop vs resPop >> 8), at most one per valve update;
+`doHospitalChurch` removes a surplus one with `getRandom(20) == 0` per cityTime, so a surplus one lasts ~20 city
+days, and one that is needed is never moved. `doResidential` evaluates a zone 1 time in 8 per cityTime and grows with
+P ~ (6388 + z)/65536 or declines (z < 350) with P ~ (6388 - z)/65536: about 1.0-1.4 density changes per zone per city
+year. Ours measured 0.46 (Stefan's 4P map) and 0.48 (Metropolis) per zone per city year, so zone growth is
+unchanged.
+
+**Rules now** (`include/dunecity/HospitalCare.h`, `src/dunecity/CityEffectsRuntime.cpp`):
+- An overlay stays on its zone. It leaves only when the zone is lost, retyped or empty, and never while locked (a
+  soldier walks to, flies to, waits at or heals at it).
+- Per house, at most one Hospital is added per 12 city days (a quarter year), on the eligible zone farthest from the
+  house's other civic zones; a surplus one is removed at most one per 48 city days and only after it has stood 4 city
+  years (192 days), youngest first. Churches: one added per 12 days, one removed per 24, minimum life 2 years.
+- The pacing state (each overlay's day made, each house's last add/remove) is saved: save 9904.
+- **Walk-in:** a move order (Move button, right-click, group move) that ends on or beside an own Hospital
+  (Chebyshev 1; a formation slot within 2 tiles) books a bed and heals there, as the Repair button would, but on foot.
+  Also the right-click (`MOVE2OBJECT`) and the Capture cursor on an own Hospital. Player commands; an AI house only
+  with HospitalInfantry. Protocol 149 (the command handlers changed what a move does).
+- **No Repair Yard for infantry** with Hospital Care in a city game: the order, the AI and the Carryall pickup send
+  soldiers only to Hospitals (`HospitalCare::replacesRepairYard`). No Hospital: the order does nothing and the button
+  is disabled with "Needs a Hospital: soldiers heal only at a Hospital, which a city of 256 residents gets". All beds
+  full: they wait. Rule off or no city: the old Repair Yard behaviour. This replaces "With no Hospital it falls back
+  to a Repair Yard" in the 2026-11-27 Hospital Care entry.
+
+**Before / after in real games** (12 games each, brutal QuantBots, 45 minutes; before at fc2241edb, after at
+86dcb77ea):
+
+| Measure (per house, city years) | 4P map before | 4P map after | Metropolis before | Metropolis after |
+|---|---|---|---|---|
+| Hospital type changes per Hospital per city year | 4.03 | **0.17** | 14.34 | **0.17** |
+| Hospitals made per Hospital per city year | 2.06 | 0.14 | 7.23 | 0.17 |
+| Hospitals removed per Hospital per city year | 1.96 | **0.03** | 7.11 | **0.005** |
+| Hospital-days per removal (expected life) | 24 days | 1,493 days | 7 days | 10,407 days |
+| Church changes per R zone per city year | 0.492 | 0.019 | 1.642 | 0.013 |
+| R/C/I density changes per zone per city year | 0.46 | 0.48 | 0.48 | 0.49 |
+| Hospitals per house (mean) | 7.35 | 7.31 | 29.5 | 20.6 |
+
+Hospital changes are 24x (4P) and 84x (Metropolis) slower; removals 61x and 1,400x slower. A game is ~16 (4P) and
+~22 (Metropolis) city years per house. Micropolis removes a surplus Hospital after ~20 city days on average; ours
+now keeps one for years. Zone density changes are unchanged (they were already about half Micropolis's 1.0-1.4).
+Metropolis houses hold fewer Hospitals at a time (20.6 vs 29.5) because new ones come one per quarter year (listed under deviations). Rows from `zones.csv`; job ids 20261127T171017,
+20261127T171025 (before), 20261128T023227, 20261128T023233 (after).
+
+**Acceptance list** (CLAUDE.md "Asked-for behaviour"). Every test runs a real game headless and exits non-zero on a
+failed assert; all are cases of `hospital_care_probe` (`tests/units/hospital-care-probe.inc`). Values are from the
+AWS nightly at df1bc9a02 (job 20261127T230648-ctest-7fcfe1, aws-mel2), which contains all the commits above.
+
+| # | Stefan asked | Observable fact | Test (case) | Measured | Result |
+|---|---|---|---|---|---|
+| 1 | "troopers and infantry ... healed ... via a hospital R zone" | Repair button on a wounded Trooper in the played Metropolis city: walks to a Hospital, leaves at full health; on a small map it walks past a nearer Repair Yard | metro_repair, ui_repair | health 100% after the trip; 1 click = 1 command | pass |
+| 2 | "carryalls can also pick them up" | Repair button on a soldier 20+ tiles (Metropolis) / 35 tiles (small map) from a Hospital: lifted by a Carryall, healed beside it | metro_carryall, ui_carryall, carryall | lifted at cycle 327, healed at 837 (carryall case) | pass |
+| 3 | "a single hispital can heal up to 5 men at a time" | 7 wounded soldiers on one Hospital: never more than 5 heal at once, the rest wait, all 7 leave at full health | metro_beds, ui_beds, cap | max healing 5, 2 waited | pass |
+| 4 | "while a hospital is healing ... walking ... carryalled ... it cannot change type" | 0 type changes on a Hospital at every census while soldiers walk to, fly to, wait at or heal at it | lock_healed, metro_beds, pacing (days 185-205) | 0 changes; 118 patient visits on the first Hospital | pass |
+| 5 | "make buildings change type much slower, especially hospitals" / "recheck the metropolis souce" | Hospital changes per Hospital per city year in real games, before vs after; none removed within 192 city days; at most one change per house per census | AWS churn games; pacing; metro_stable | Hospital changes per Hospital per city year 4.03 -> 0.17 (4P), 14.34 -> 0.17 (Metropolis); pacing case: 3 made a quarter year apart, 2 removed after 4 years a year apart, never two a census; metro_stable: 36 made, 0 removed | pass |
+| 6 | "allow a infrantry or trooper to be walked / moved into a hospital to heal" | Right-click onto its Hospital, Move button beside it, group move: heals to full. Not for a healthy soldier, a move 4 tiles off, an enemy Hospital, a Saboteur, or with the rule off | walkin_rightclick, walkin_move, walkin_group, walkin_not, walkin_rule_off | 1 + 1 + 3 soldiers at 100%; 0 walk-ins in the 4 negative cases | pass |
+| 7 | "the repair request for infantry take them to repair factory" | Hospital Care, no Hospital: button disabled ("Needs a Hospital"); button, R hotkey and right-click on the Repair Yard leave the soldier where it stood; also in the played Metropolis city before its first census; rule off: books the yard as before | ui_no_hospital, metro_no_hospital, ui_no_hospital_rule_off | 0 Repair Yard bookings, 0 tiles moved | pass |
+| 8 | QuantBot HospitalInfantry (activation and effect) | Switch on: a quiet wounded bot soldier is sent and healed; off: none in 3000 cycles | bot_quiet, bot_off; AWS screen | sent 537 cycles after the enemy left; 32.1 sent / 27.7 healed per ON house-game, 0 OFF | pass (stays off: level) |
+
+**Deviations** (not asked for; none stops the asked-for thing):
+- A Hospital is an R zone the census marks, one per 256 residents, at most one per 8 populated zones (Micropolis's
+  resPop >> 8). A city below 256 residents has none; the button then says so.
+- Walk-in counts only a move ending on or beside the Hospital (2 tiles for a formation slot); a soldier walking past
+  a Hospital is not diverted.
+- The Saboteur is not healed (one-use demolition unit); its button says "cannot be healed".
+- A fast-growing city reaches its Hospital quota over several quarter years rather than at once.
+
+**HospitalInfantry** (QuantBot, off) is registered with the activation harness
+(`tests/ai/activation-events.json`: fire `HOSPITAL_CARE: event=sent why=quiet`, success `event=healed`). In the
+out-of-contact screen it sent 32.1 and healed 27.7 soldiers per ON house-game (0 OFF); level result, stays off.
+
+**Verification.** `hospital_care_probe` (27 cases) passed on AWS (nightly df1bc9a02 and again at 7825a34bb); the four
+AI gates, `save_roundtrip_probe`, `repair_return_probe`, `carryall_flight_probe` passed in the same nightly;
+`perf_regression` passed on the Mini at 3ddbbd523 (125.59 s). The nightly's six failures are other features'
+(zone_garrison_real_game, quantbot_city_lessons, palace_worm_probe/real_game, and the hotkey tests the Zone Garrisons
+`I` key broke, fixed in db2dd887b).
+
+## 2026-11-27 - Zone Garrisons follow-up: 30-credit Soldier, garrisons leave below 60%, captured zones return, capture AI switches (protocol 148, save 9903)
+
+Stefan, 2026-11-27: "ok make 2 changes. 1 make infantry cost 30 credits. next make troopers and infantry
+evacuate buildings with an evacuate when it gets below X% health (test different). if the building explodes
+they are ejectedb ut are damaged. if units evacuate the building returns to its original owners control.
+also try behaviour where the ai tries capuring undefended buildings or mass spamming infantry to try capture
+buildings". Commits `780ac0988` (rules, switches), `893c5acc0` (player-path probe; a zone at 0 health leaves
+its soldiers to destroy()), `02d76ddb5` (a soldier beside its zone enters on any cycle), `16fb9f8ac` (60%),
+`d50947a36` (docs), `c46f29fad` (a soldier keeps its order when a comrade takes the zone, never shoots its zone).
+Full rules and tables: `docs/zone-garrisons.md`. Evidence: `~/Documents/projects/outputs/zone-garrison-followup-20261127/`.
+
+- **Soldier price 30** (`config/ObjectData.ini.default`, was 60): DuneCity, vanilla and Dune2R content. Mods
+  with their own ObjectData (Tornie, ArcaKev, Jericho and Lite forms, community mods) keep their prices.
+- **Garrisons leave a zone below 60% health** (`kEvacuateHealthPercent`), and nobody enters or takes a zone that
+  damaged. `DUNECITY_TEST_GARRISON_EVACUATE_PERCENT` overrides it for experiments only. Measured at 0/25/40/60
+  (288 mixed games each, all three AI switches on in one arm): placement -0.046 / -0.002 / -0.064 / +0.009, all
+  level; exchange value flat; soldiers out alive per entry 53% / 59% / 59% / 65%; garrisons caught in an
+  exploding zone 14 / 2.2 / 0.7 / 0.9 a game (29 traced self-play games). 60 keeps the most soldiers alive.
+- **Thrown out of a ruin:** soldiers lose half their maximum hit points, never below 1.
+- **Captured zones return** to the house they were taken from once the garrison is gone (Evacuate, low
+  health, or the last soldier killed), unless that house is defeated. Saved (9903). Zone panel: `(captured)`.
+- **Three capture bugs the player-path test found** (all fixed): a soldier only tried its zone on the cycle it
+  stopped moving; a soldier sent at an enemy zone dropped its order when a comrade took the zone first (its
+  cached `targetFriendly` was stale and `canAttack` on an own zone failed); and soldiers walking into an empty
+  enemy zone shot it on the way (the Dune Legacy capture branch falls through to firing; a zone was at 183/200
+  when taken). A capture-ordered soldier now enters on any cycle it stands within reach, re-reads its zone's
+  owner, and never fires on its zone unless enemy soldiers hold it.
+- **QuantBot:** a captured zone keeps its garrison (release empties own zones only). New switches, default OFF:
+  `ZoneCaptureRaid` (free soldiers take empty enemy zones with no enemy unit or turret near) and
+  `ZoneCaptureLevy` (Barracks train up to 16 Soldiers that walk into the nearest enemy zones). Paired against
+  `default`, 288 games each on `rs160-dunecity` Brutal: ZoneGarrison -0.009 (-0.09..+0.08), raid -0.016
+  (-0.10..+0.07), levy -0.027 (-0.11..+0.05), all three +0.009 (-0.07..+0.09). All level: **all stay off.**
+  Extra maps, 72 games each at `16fb9f8ac`: raid on `rs192-dunecity` (start from nothing) +0.028
+  (-0.12..+0.18), levy +0.011 (-0.14..+0.16); Metropolis (`--maps metropolis --map-mod dunecity`) raid +0.022
+  (-0.10..+0.14), levy -0.032 (-0.16..+0.09), 59-60 of 72 time-outs. Level everywhere.
+- **Player-path test** (CLAUDE.md, "Player features"): `zone_garrison_probe` now selects units, presses the unit
+  panel's real Capture button and the C key, clicks the zone with a real SDL mouse event through
+  `Game::doInput`, and presses the zone panel's real Evacuate button: own zone in and out, a Soldier and a
+  Trooper taking an enemy zone (panel says captured, Evacuate hands it back), full / ally / damaged zones
+  refused, an enemy's Evacuate disabled. 16 cases.
+- **Why "nothing to do with infantry works":** no tag or staging build contains Zone Garrisons. v1.0.880 was
+  tagged at 01:49 on 2026-11-27, the feature landed at 09:52; `/Applications/DuneCity.app` on the Mini is
+  1.0.788. Stefan needs a build from `c46f29fad` or later to try it.
+- **Gates at `c46f29fad`:** the four AI gates passed, with `zone_garrison_probe` 16/16
+  (`20261127T201946-ctest-de3733`). `perf_regression` on the Mini passed, 128.7 s
+  (`20261127T201959-ctest-85329e`). Nightly `-L nightly -LE gui`: 259/263 (`20261127T201953-ctest-bb738a`).
+  The 4 failures are other sessions' work in progress, failing in their own runs too:
+  - `palace_worm_probe` and `palace_worm_real_game`: no worm called.
+  - `quantbot_redevelop_low_save`: 2 of 149 lane Parks unjoined.
+  - `quantbot_city_lessons`: "ON's planned Palace never stood on its site". Added at `5f6a3b266`, it has
+    failed in every run since; no run without this follow-up exists.
+- **Queue:**
+  - Jobs at a new revision waited 1-2 h with no tree. Trees are reused only once no game runs on them, and
+    long backlogs never let that happen.
+  - `aws` was stopped mid-batch ("user-initiated stop"), losing 19 of 48 trace sets.
+  - `aws` kept retrying a source that cannot build (`3698f1d`, `formation-duel.py` probe) every 30 minutes.
+- **Next release notes:** "Soldiers cost 30 credits. A garrison leaves a zone below 60% health, and soldiers
+  thrown out of a destroyed zone are hurt. A captured zone goes back to its owner when its garrison leaves or
+  dies. Multiplayer protocol 148, save format 9903."
+- **Not verified:** a real windowed game with a person's mouse (the probe drives the same widgets and SDL
+  events on the dummy driver).
+
+## 2026-11-27 - Redevelopment: Stefan's request as an acceptance list, asserted on his save (`quantbot_redevelop_low_save`)
+
+Stefan: "there's still lots of low value see mba save low. the AI could benefit from demolishing and rebuilding to
+either remove pollution from an area buy moving factories and industrial zones to different areas or by adding in
+more palaces or parks. count a park as a road (without the movement bonus) as a way to also increase value and then
+test different ai behaviours around destroying and rebuilding zones or detroying and adding palaces. also it has
+lots of 2 lane roads which is a waste. we can remove some roads as long as we maintain paths out of the base (dont
+introduce performanc eissues evaluating thiugh)." Per CLAUDE.md "Asked-for behaviour: an acceptance list first",
+each line below is one assert in the headless nightly CTest `quantbot_redevelop_low_save`
+(`tests/ai/land-value-continuation.py --ctest`): his save `tests/saves/data/low-dunecity.dls.gz` continued 20
+minutes in five arms at once (off, road-lane-parks, lot-parks, pollution-relocation, industry-separation). Commits
+`0282e5c8d`, `6340a551c`, `11a341fab`, `0c14b4a0d`, and the generated-map probe change after them.
+
+| Request line (Stefan, 2026-11-27) | Test | Measured (low.dls, 20 minutes, `0c14b4a0d`) | Result |
+|---|---|---|---|
+| nothing fires with the switches off | `quantbot_redevelop_low_save` | 0 redevelopment orders | PASS |
+| "demolishing and rebuilding ... moving ... industrial zones to different areas" | `quantbot_redevelop_low_save` | 6 Industrial zones rebuilt elsewhere, the old one demolished (need 3) | PASS |
+| ... to a different area: the new site costs our homes at most half the old one | `quantbot_redevelop_low_save` | 6 of 6 (2 beyond 5 tiles of every home) | PASS |
+| ... "to remove pollution from an area" | `quantbot_redevelop_low_save` | the homes round a moved zone cleaner in 6 of 6 reads | PASS |
+| ... more land value there | `quantbot_redevelop_low_save` | raised in 4 of 6 reads (need half) | PASS |
+| "moving factories" | - | no switch moves one (the save has no Dune factory; besides Industrial zones its polluters are 1-2 Refineries and an Airport a house) | NOT DONE |
+| "adding in more palaces" / "destroying and adding palaces" | `quantbot_city_lessons` (LowValuePalaces, seewhatidid-ai session; real games on Metropolis and rs192, not his save) | passed on AWS at `86dcb77ea` (job `20261128T014319-ctest-7d7220`): ON places the Palace on its planned site of 6+ lots at land value 80 or less, those lots +10 two minutes later; OFF never plans one. Screen: 9.9 Palaces a game on Metropolis, lots +60 (225/237 rose 10+); 3.7 on rs192, +61; score level | pass (built by that session) |
+| "adding in more ... parks" (spare lanes) | `quantbot_redevelop_low_save` | 182 Parks standing on their chosen lane tiles (need 10) | PASS |
+| "adding in more ... parks" (cleared lots) | `quantbot_redevelop_low_save` | 89 Parks on cleared lots (need 5) | PASS |
+| ... "as a way to also increase value" (lane Parks) | `quantbot_redevelop_low_save` | raised in 118 of 178 reads (need half) | PASS |
+| ... "as a way to also increase value" (lot Parks) | `quantbot_redevelop_low_save` | raised in 52 of 88 reads (need half) | PASS |
+| "count a park as a road (without the movement bonus)" | `quantbot_redevelop_low_save`; `skirmish_generator_probe_city-park` | 252 of 252 Parks are road connections with no unit road speed | PASS |
+| "destroying and rebuilding zones" | `quantbot_redevelop_low_save` | 53 lots demolished and rebuilt as Parks, 6 zones moved | PASS |
+| "lots of 2 lane roads ... we can remove some roads" | `quantbot_redevelop_low_save` | second-lane road tiles at the end 1,578 vs 2,357 off | PASS |
+| "as long as we maintain paths out of the base" (round each lane Park) | `quantbot_redevelop_low_save` | 0 of 172 lane Parks leave units no way round (1 retired when later building closed the way) | PASS |
+| "as long as we maintain paths out of the base" (yards to the map edge) | `quantbot_redevelop_low_save` | 0 of 14 Construction Yards lost their path | PASS |
+| "dont introduce performance issues evaluating though" | `quantbot_redevelop_low_save`; `perf_regression` | searches 0.9 s of a 210 s arm (need <= 2%); perf_regression passed | PASS |
+| IndustrySeparation (the industry siting follow-up) | `quantbot_redevelop_low_save` | 0 of 24 new Industrial zones within 5 tiles of a home (switch off, in the relocation arm: 109 of 131) | PASS |
+
+**What the test found and fixed.**
+- In his dense city 61 of 73 relocation searches found no ground clear of homes. Relocation now takes the ordinary
+  Industrial site when it at least halves the harm.
+- Ordinary growth rebuilt Industrial zones on the sites just vacated, so a site vacated by a relocation now takes
+  no new Industrial zone for 10 minutes.
+- Later building closed the unit path round 2 of 149 lane Parks. A Park that has become the only unit link is now
+  removed and its road restored, checked once a game second.
+- LotParks lifted its lots by +0.1 a lot on average: its gain estimate counted blocks held at the land-value floor
+  by pollution. `ParkDistrictPolicy::blockGain` now counts no gain there.
+
+**Deviations from the request (listed, none stops the asked-for thing).**
+- A relocation needs harm of 40 or more to our homes.
+- Park searches run every 8 s and relocation searches every 30 s.
+- A spare-lane Park needs a 2x2 road square.
+- A lot is cleared only at land value 64 or less, density 1 or less, and 24 total gain.
+
+**Not done.** Moving factories (none in his save; Refineries and Airports are not moved). Palaces belong to the
+seewhatidid-ai session's LowValuePalaces (`quantbot_city_lessons`), coordinated so that it is built once; that
+test passed at `86dcb77ea` (2026-11-28). The shipped PalaceDistricts rule still re-sites 2-9 Palaces a house
+(`planned_site_blocked`); that is not caused by the redevelopment switches, which are off in that test.
+
+Gates at the final code commit `dda235ff0`, all on the Mini, where AWS was full of other sessions' games: the four
+AI gates passed (job `20261127T211933-ctest-747924`), as did `perf_regression`, `dunelegacy_tests`, both skirmish
+probes and `quantbot_redevelop_low_save`.
+
+## 2026-11-27 - Redevelopment switches proven to act, re-measured with fire counts; IndustrySeparation added; all stay OFF
+
+Stefan, 2026-11-27: "i have a feeling the reason you think none of these things work is because you aren't
+actually doing that ... you need much much more tests to prove you have actually implemented a feature". He was
+right about these switches. Commits `96d8bf9b4` (the counters, due-search trigger, relocation built then
+demolished, IndustrySeparation and the probe: that commit carries another session's message because it took my
+staged index), `d2f92f512`, `5c891c405`, `cd8eba149`, `1f61881b5`, `8e520fdcd`, `e940e96c5`, and the
+activation registry entries. Evidence: `~/Documents/projects/outputs/redevelop-20261127/` (`screen-v5.md`,
+`analyse_v5.py`). Full write-up: docs/formations.md "Redevelopment for land value".
+
+- **Why the earlier "level" results measured nothing.** `placeYardChoice` dropped the chosen site of every rule
+  outside an allowlist, so every lane, lot and relocation order was re-sited by the ordinary search; the
+  spare-lane passage test refused every junction tile; the 2-in-120-second relocation window missed the idle
+  yard; a lot cleared at the order was lost when the order was released. All fixed.
+- **Proof.** `skirmish_generator_probe_city-redevelop_1024x768` (nightly): each switch ON acts at its chosen site
+  and lifts the lots it is for above the OFF arm from one saved start (relocation: land value 151 vs 92); OFF
+  never acts. Per-house counters with why-counters: `SCENARIO_SWITCH_ACTIVITY`, houses.csv `switch_activity`,
+  and `REDEVELOP:` / `INDUSTRY_PLACED:` / `HOME_PLACED:` lines registered in `tests/ai/activation-events.json`.
+- **Screens v5** (276 games an arm, `e940e96c5`): RoadLaneParks and LotParks fire in 97-100% / 62-100% of
+  house-games and lift the lobby's land value by about 1.5 (significant), scores level. PollutionRelocation fires
+  in every lobby game (254 of 264 relocations raised their lots; land value -2.0, population +3.7k) but is
+  **not tested** on the weak-seat and ladder maps (fired in 26% and 29%: no zone cost its homes 40).
+  IndustrySeparation cuts Industrial zones near homes from 909 to 16 and 820 to 6; ladder set **+0.039
+  [+0.002, +0.090]**, weak seat -0.041, all -0.006; **not tested** in the lobby (no Industrial zone built).
+  No all-games interval above 0: all stay off. IndustrySeparation is the candidate for a longer screen.
+- HomeSeparation (no new R/C lot within 5 tiles of a polluter) was added and removed the same day: the homes it
+  refused were cleaner and worth more than the average home.
+- Gates at `e940e96c5`: the four AI gates passed, `perf_regression` passed on the Mini. Nightly 251/262: every
+  failure is another session's (7 genome/sweep tests on `CityLessonsPolicy::kLauncherArmyBps` from `5f6a3b266`,
+  `zone_garrison_probe`, `palace_worm_probe`, `palace_worm_real_game`, `quantbot_city_lessons`); the
+  redevelopment and park probes and `dunelegacy_tests` pass.
+
+## 2026-11-27 - Rocket Turrets at the front: four QuantBot switches, first measurement (v1; corrected by the v2/v3 entry), all stay OFF; the upkeep-inclusive turret return
+
+Stefan, 2026-11-27: "as you can see rocket turrets have an amazing return. houses should try use them offensively
+and also try increase the amount of them on front lines under attack, run a subagent to test out different
+approaches to a maginot line which moves forward. keep in mind though that the listed return of 7.4x for rocket
+turrets is slightly misleading given the ongoing cost in the budget for them (15% of police)". Commits
+`5f258d385`, `faf6ab1e0` (build fix), `fc0aa393d`, `853d0c9f9`, `103437ac3`, `d68ca645e` (switches, ledger,
+report); `cafa5968e` and `d754b2dc1` (`vanilla-match.py` plays 3waysplit as a city game: Neutral is a house,
+`--map-mod dunecity`). Evidence: `~/Documents/projects/outputs/turret-front-20261127/` (`report.md` rs192,
+`report-3waysplit.md`).
+
+- **The upkeep.** A Rocket Turret costs 15 credits a city year in the police budget (`getPoliceAnnualCost`; a
+  Police Station is 100), scaled by police funding and paid every cycle. That is 7.5 credits a game minute with
+  Slow City Year (the default), 15 without. A turret standing 33 minutes has paid its price again. The end-of-game
+  return (damage value / price x built) ignores both the upkeep and the turrets the map starts with
+  (3waysplit: Harkonnen 336, Sardaukar 610, Neutral 711).
+  - Stefan's 1.0.880 3waysplit game (4h39m, turrets could still hit buildings): Sardaukar (winner) listed 7.4x,
+    4.3x counting map turrets, **0.94x with upkeep**; Harkonnen 15.2x / 8.8x / 2.1x; Neutral 18.9x / 8.7x / 2.1x.
+    Upkeep was 76-78% of every house's turret cost; the winner ended with 1,099 turrets, about 8,200 credits a
+    minute.
+  - Today's default (turrets fire on units only), 3waysplit city games, 150 min, Brutal, control houses (144
+    house-games): listed 18.1x, 5.2x counting map turrets, **1.26x with upkeep**; upkeep 76% of the cost
+    (Harkonnen 2.16x, Sardaukar 1.35x, Neutral 0.88x). Not a controlled comparison with Stefan's game (other
+    version, shorter games), and the units-only rule is the implemented default, not a measured choice.
+- **Switches** (`[Force Concentration]`, `QuantBotTurretFront.cpp`, `TurretFrontPolicy.h`, play styles
+  `front-turrets`, `advancing-turrets`, `turret-creep`, `rear-turret-retire`, `moving-line` = advancing +
+  retire, `turret-front-all`; env overrides `DUNECITY_TEST_*` for experiments). All default OFF.
+  - (a) `FrontTurrets`: an own building cluster with visible enemy ground units on it gets Rocket Turrets until
+    local cover matches the attackers' value (2 + 1 per 400 credits, at most 10).
+  - (b) `AdvancingTurrets`: while the army's lead stands 4+ tiles ahead of the base's enemy-facing edge, a belt
+    of 6 turrets is kept at that edge and extended toward the enemy, 3 tiles behind the army, never within 10
+    tiles of an enemy building.
+  - (c) `TurretCreep`: turrets within range of enemy buildings' surroundings where at most one enemy turret
+    reaches (12 at most). With turrets firing on units only, they cover the army's advance and shoot the
+    defenders, not the buildings.
+  - (d) `RearTurretRetire`: every 2 minutes up to 4 turrets at least 28 tiles from every enemy building and 16
+    tiles behind the house's own front edge, with no enemy unit within 16, are sold (demolished where selling
+    is off), keeping the house's coverage need, at least 12, and air cover by Airports and Palaces.
+  - `TURRET_LEDGER` (every city house, every 2 minutes: turrets, police funding, upkeep, credits, population),
+    `TURRET_FRONT` and `TURRET_RETIRE` lines feed `turrets.csv`; `tests/ai/turret-front-report.py` makes the
+    per-arm table. perf_regression passed at `d68ca645e` with the defaults and with all four switches on.
+- **Measured** (one switch house against two default houses, labels rotated, `match_score.py` placement). **Correction
+  (v2/v3 entry):** v1 logged no effect events, so no cell below shows the switch reached its effect; cells where
+  the switch never fired are NOT TESTED, not level, and the v1 triggers of (b) and (c) were replaced:
+
+  | Arm | rs192 3P (36 or 18 games) | 3waysplit city, 150 min (12 games) | Return with upkeep (arm / control, 3waysplit) | Note |
+  |---|---|---|---|---|
+  | front-turrets | +0.000 [-0.375, +0.417] | +0.104 [+0.000, +0.260] | 1.37x incl. map turrets / 1.26x | 397 orders a house-game on 3waysplit; credits up |
+  | advancing-turrets | -0.167 [-0.542, +0.167] | NOT TESTED (never fired) | = control | the army never stood 4 tiles ahead of the edge on 3waysplit |
+  | turret-creep | NOT TESTED (never fired) | +0.000 [+0.000, +0.000] | 1.76x (built-only basis) | rs192 bases are 29-120 tiles apart |
+  | rear-turret-retire | NOT TESTED (never fired alone) | -0.125 [-0.375, +0.000] | 1.61x (built-only basis) | 151 retired a house-game on 3waysplit, all demolished |
+  | moving-line | -0.125 [-0.500, +0.250] | -0.125 [-0.375, +0.000] | 1.61x (built-only basis) | on 3waysplit only the retire part fired |
+  | turret-front-all | -0.125 [-0.458, +0.250] | **+0.427 [+0.104, +0.802]** | 1.42x / 1.26x | see below |
+
+  Time-outs: 0% on rs192 (games end by minute 59); 92-100% on 3waysplit, 75% with all four on.
+- **Decision: all four stay OFF.** No switch that fired beats the control on either map. All four together beat it on
+  3waysplit, but only through the four games where Neutral (the strongest start) had them and eliminated both
+  others; with Harkonnen or Sardaukar holding them the games timed out. On rs192 the same arm is level and halves
+  the house's population (1,040 against 2,094) and credits. Pooled over both maps: +0.013 [-0.286, +0.326].
+  Fortress and `/weak` were not run. A confirmation would need more 3waysplit seeds with the arm on Harkonnen and
+  Sardaukar, plus Fortress and `/weak`.
+- **Upkeep effect of the switches:** front turrets and all-on lower upkeep's share of turret cost (76% to 63-69%)
+  because the turrets they build fight; rear retirement removes about 150 map turrets a house-game but did not
+  help placement.
+
+## 2026-11-27 - Turrets fire on units only; Game Rules option "Turrets Can Fire On Buildings" (default off, protocol 147)
+
+Stefan, 2026-11-27: "rocket turrets cannot fire on enemy buildings - this did not happenin the original - only on
+units. make this default behaviour", "same with gun turrets", and "i don't want turrets shoot only uinits to be
+assessed. i want it to be implemented. we can add a option for "turrets can fire on buildings" as an option that
+can be turned on but it should be off by default, as in dune 2 by default turrets could not attack enemy
+buildings". Commits `2979efc5d` (rule, protocol 147), `2f58b959f` (probe build fix), and the rename commit
+that adds this entry.
+
+- **Default:** Rocket and Gun Turrets fire on units only: never on buildings or city zones, by their own search,
+  in retaliation or on a player's attack order (`TurretBase::targetAllowed`; Scoutposts unchanged). The original
+  game's turret script searched units alone, for both turret types. This is the implemented default, not a
+  measured choice.
+- **Option `Turrets Can Fire On Buildings`**, off by default, a checkbox in Game Rules (right column, under
+  Rocket-Turrets Need Power; in the Tornie-family layout Allied control and Allied construction share a row and
+  Building sales moves to the left column, so both columns keep 14 rows in the 430px frame) and INI key
+  `Turrets Can Fire On Buildings`. On, turrets also fire on buildings, as
+  up to protocol 146. The earlier key `Turrets Target Units Only` (its inverse) is still read when the new key
+  is absent (`applyGameOptionsFromConfig`, `main.cpp`, `ModManager`), so older INI files and mods keep working.
+- **Wire and hash:** bit 5 of the MOD20 byte, set only when the option is on. That is the same bit, with the same
+  meaning on the wire, as before the rename, so no protocol bump beyond 147. The options hash spells the rule
+  out only when on (`/turretsFireOnBuildings=1`), so default setups keep their hash.
+- **Tests:** `CoopGameSettingsTestCase` (wire bit, pre-MOD20 streams, INI round trip, old-key fallback, hash),
+  `turret_target_probe` (default: a building and a zone beside both turrets stay at full health while an enemy
+  Quad is shot; option on: they are damaged), and `menu_navigation_probe` (the checkbox is on screen in both the
+  vanilla and the Tornie-family layout, off by default, and switches that rule alone).
+
+## 2026-11-27 - Zone Garrisons: Soldiers and Troopers occupy R/C/I zones with the capture order (protocol 144, save 9900)
+
+Stefan, 2026-11-27: "i want infantry and troopers to be able to occupy friendly and enemy R/I/C - using the
+capture command. if they enter it the building needs a garasioned look with sandbags added to it like in C&C and
+it now is owned by the house that occupies it. AI can also garasion its own buildings defensively when under
+attack or when enemy is looking to caputre the building - this will make infantry far more valuable."
+Commits `513531d5d` (feature), `2f0ebb38d` (build fix: two hunks staged into the wrong place), `52ba57f47` and
+`fa60fc5ea` (probe), `d89b7a9c4` (QuantBot churn fix), `57074f6c5` (bolder sandbags). Full rules:
+`docs/zone-garrisons.md`. Evidence: `~/Documents/projects/outputs/zone-garrison-20261127/`.
+
+- **Match rule Zone Garrisons**, default on (bit 5 of the MOD18 city rules byte, set only when off; INI key
+  `Zone Garrisons`). A Soldier or Trooper sent with the capture order to an own R/C/I zone walks in from any
+  neighbouring tile (four a zone); an empty enemy zone is walked into and becomes its house's (owner, tiles,
+  power draw, counts move; density, residents, overlay and health stay). An ally's zone is refused. Inside,
+  soldiers are hidden like Carryall cargo and fire out with their own weapons at the nearest visible enemy unit
+  (kills credited to them). A zone enemy soldiers hold can't be entered: a capture order fires on it, and every
+  hit on a held zone also takes half off the first soldier inside, so attackers shoot it empty and walk in.
+  Evacuate button (`CMD_ZONE_EVACUATE`, owner only); an emptied zone stays with its owner; a destroyed, sold or
+  demolished zone puts its soldiers out beside the ruin. Off: zones are captured as before.
+- **Look.** Sandbags drawn in code over the 2x2 lot (original art): two staggered courses on every side with a
+  firing slit, the house colour along the front, an olive helmet per soldier. Zone panel: `Garrison: n/4`.
+  Pictures: `pictures/garrison-zoom0..2.png` and `garrison-zoom2-closeup.png` (dummy-driver software renderer,
+  from `57074f6c5`).
+- **Choices where the request left room:** four soldiers a zone (one a tile); allies' zones never taken or
+  shared; cover halves damage to the front soldier instead of immunity; garrisons shoot units, not buildings;
+  soldiers enter from any adjacent tile, never standing on the building.
+- **Save 9900** (a zone's garrison, target, search clock), **protocol 144**. The redevelopment session took
+  143, the worm 145/9901, hospitals 146/9902, the turret front 147.
+- **QuantBot `ZoneGarrison`, default OFF** (`QuantBotGarrison.cpp`; play style `zone-garrison`): garrisons own
+  zones enemies close on (7 tiles; a capture-capable soldier counts triple), releases them when none is within
+  11, takes empty enemy zones within 5 tiles of its soldiers, at most 6 orders a house a pass. Stateless.
+  `Player`'s order helpers now leave a soldier on its way into a zone alone (`garrisonBound`): QuantBot never
+  used capture mode before, so nothing changes with the switch off.
+- **Measured** (`rs160-dunecity`, four Brutal QuantBots, seeds 9101-9148, 45 min, AWS):
+  - Self-play ON, 12 games each version: v1 (`2979efc5d`) 22,055 orders for 4,393 entries and 752 zones
+    taken (soldiers re-ordered every pass by the army, defence and formation passes, or at zones with no free
+    side); v2 (`d89b7a9c4`) 8,729 orders, 5,211 entries, 884 zones taken, 2,669 releases.
+  - Mixed OFF/ON, 288 games each version (paired by game, `match_score.py`):
+
+    | Version | ON score | OFF score | Difference (95% CI) | Wins ON / OFF | Time-outs |
+    |---|---:|---:|---|---:|---:|
+    | v1 `2979efc5d` | -0.117 | -0.067 | -0.050 (-0.13..+0.03) | 68 / 76 | 144/288 |
+    | v2 `d89b7a9c4` | -0.101 | -0.079 | -0.022 (-0.11..+0.06) | 73 / 76 | 139/288 |
+
+    Level both times, with the same alive-at-time-out share (37/37%, 36/36%). The default rule needs the
+    interval above 0, so **ZoneGarrison stays off**. The player-facing rule is on.
+- **Tests.** `zone_garrison_probe` (headless nightly; 11 cases: own zone, take, fire out, assault, evacuate,
+  destroyed, ally, containment, save/load, rule off, pictures): passed at `fa60fc5ea`
+  (`20261127T122335-ctest-ba19a0`). `CoopGameSettingsTestCase` protocol 144 round trip; command tables.
+- **Gates:** at `a4422b571` (all garrison code and both AI fixes): the four AI gates 4/4 (`20261127T124057-ctest-51a7a5`); the nightly tier `-L nightly -LE gui` 257/257 (`20261127T124102-ctest-dd0940`; seven tests failed in 0.0-0.1 s on `aws` and passed on `aws-mel2`, a worker fault); `perf_regression` on the Mini 126.3 s (`20261127T124111-ctest-89a399`). `57074f6c5` (bolder sandbags, drawing only) after them: `zone_garrison_probe` passed (`20261127T124256-ctest-fae6d9`).
+- **Next release notes:** "Infantry can garrison city zones: send Soldiers or Troopers with the capture order
+  into your own Residential, Commercial or Industrial zones (four each) to fire out from behind sandbags, or
+  into an enemy zone nobody holds to take it. Shoot a held zone to empty it. Evacuate brings them out.
+  Multiplayer protocol 144, save format 9900."
+- **Not verified:** a real windowed game (pictures are the dummy driver's renderer); a human player's capture
+  clicks and the Evacuate button in a live game (the probe drives the same commands).
+
+## 2026-11-27 - The Fremen Palace calls a sandworm its house controls (Fremen Palace Worm, protocol 145, save 9901)
+
+Stefan, 2026-11-27: "i want freeman house to get a worm as its palace special - it has full control over the
+worm and can eat enemy units with it via hunt, or can explode to create spice where the ai wants near its base".
+Commits `5c9ecb9ab` (rule, worm, UI, AI, tests), `46a783a7e` (nearest sand, burst on expiry, AI timing),
+`01db4bfd9`, `c3bd624e8`, `0a169ff2a` (probe and two engine fixes it found), `ce65f24dd` (Civ Wars save test).
+Evidence: `~/Documents/projects/outputs/palace-worm-20261127/` (`report-v1.txt`, `v2/report.txt`, `v3/report.txt`).
+
+- **Match rule Fremen Palace Worm** (default on; INI key "Fremen Palace Worm"; bit 7 of the MOD18 city rules byte,
+  set only when off, so the byte is now full and no value is refused). A Fremen Palace (house fallback Fremen,
+  not the Tornie family) calls a `Unit_Sandworm` owned by its house (`Sandworm::createPalaceWorm`). Off, and for
+  Atreides either way, the Palace calls Fremen warriors as before.
+- **Rules** (`include/units/PalaceWormRules.h`): charge 5 minutes as before (the Atreides/Ordos cadence; a worm is
+  strong on sand and useless against an army on rock, so not a 10-minute Death Hand weapon); one worm a house at
+  a time (a second Palace keeps its charge); it surfaces on the sand tile nearest the Palace; life 3 game minutes
+  (then it dives; one on its way to a bloom bursts where it is) or 6 meals (a wild worm sleeps after 3); beaten
+  to half health it leaves, the only ending counted as a loss. **Rock**: it never leaves sand; Hunt takes only
+  units standing on sand in its own sand region, map-wide; a move onto rock stops at the sand's edge.
+- **Control**: a human's worm waits in Guard and takes Move/Attack/Guard/Hunt orders. **Spice Bloom** (unit panel
+  button, `CursorMode_SpiceBloom`, `CMD_SANDWORM_SPICEBLOOM`): it travels to the spot (a spot on rock moves to the
+  nearest reachable sand within 6 tiles; deeper is refused) and bursts into a radius-4 spice field with a thick
+  centre (about 50 tiles, ~5,500 spice). A Move, Attack, Guard or Stop order cancels it.
+- **A worm can now belong to a player.** The `|| Unit_Sandworm` exemption in every `canAttack` (ObjectBase,
+  Trooper, Soldier, Launchers, Ornithopter, Rocket Turret, Scoutpost) is `ObjectBase::isWildSandworm` (owned by
+  the Natives), so its own side never shoots it and enemies attack it like any unit they see; its bite spares
+  its owner's team (`Map::damage`); `Game::retagSandwormsToNatives` skips it. Its meals go through
+  `handleDamage`, so they are credited to its house: Stats shows a Sandworm row with its kills and hit points,
+  and the house's kill counts include the victims (`palace_worm_probe` checks both).
+- **QuantBot** (`QuantBotPalaceWorm.cpp`; config `PalaceWorm`, default 1, hashed only when not 1): each pass it
+  hunts the most valuable enemy cluster on its sand it can reach in time (value >= 250 credits); with none, with
+  one meal left, or when the trip home (twice the straight line plus 20 s) would use up its life, it bursts at the
+  sand site within 14 (else 30) tiles of a refinery that gains the most plain sand, away from enemies. 0 = burst
+  at once, 2 = hunt only (play styles `@palace-worm-0`, `@palace-worm-2`). An AI Player's worm hunts.
+- **Engine fixes the probe found**: while a worm eats, `findTarget` finds nothing and `UnitBase::targeting` drops
+  a hunter with no target to Guard (two tiles of sight), so a human's hunting worm stopped after one meal; a
+  Palace worm now waits out its meal before searching (wild worms unchanged). The worm's life ran only in an
+  unfinished game (copied from the shimmer drawing), which only the probe's decided two-house fixture noticed.
+- **Save 9901**: a sandworm saves whether it is a Palace worm, its life left and its bloom target after its Civ
+  Wars origin. **Protocol 145** (new command, rule bit, friendly-fire change). Taken in order with the parallel
+  sessions: redevelopment 143, garrison 144/9900, this 145/9901, hospital 146/9902, turret front 147.
+
+**Measured** (`tests/ai/palace-worm-report.py`, `vanilla-match.py` now writes `worms.csv`): `rs160-dunecity`, four
+QuantBot Brutal houses (Fremen, Harkonnen, Atreides, Ordos; Fortress starts include a Palace), 45 minutes, game
+options `fremen-worm-off.ini` (warriors, the control) / `fremen-worm-on.ini`, Fremen's placement score paired by seed.
+
+| Run (source) | Arm | Games | Fremen placement vs warriors (95% interval) | Worms: bloom / expired / sated / beaten |
+|---|---|---:|---|---|
+| v1 (`fb6958544`) | hunt, else bloom (1) | 40 | +0.071 (-0.056 to +0.202) | 143 / 145 / 23 / 103 |
+| v1 | bloom only (0) | 40 | +0.038 (-0.096 to +0.177) | 382 / 61 / 16 / 38 |
+| v1 | hunt only (2) | 40 | -0.054 (-0.208 to +0.106) | 0 / 103 / 212 / 107 |
+| v2 (`46a783a7e`) | hunt, else bloom (1) | 80 | +0.011 (-0.109 to +0.138) | 583 / 100 / 4 / 232 |
+| v2 | bloom only (0) | 80 | -0.028 (-0.119 to +0.064); wins -0.050 (-0.100 to -0.013) | 921 / 103 / 0 / 73 |
+| **v3 (`0a169ff2a`, final)** | **hunt, else bloom (1)** | **80** | **-0.021 (-0.132 to +0.090)** | **563 / 103 / 7 / 260** |
+
+Final run: 971 worms, 2,581 meals, 684,390 credits of enemy units eaten (about 8,550 a game, 265 a meal);
+Fremen wins 9 -> 6 (-0.037, -0.113 to +0.037); time-outs 51.2% -> 55.0% (no difference shown). The worm is
+**level with the warriors** on the placement rule: neither better nor worse at 80 paired games. It ships as the
+default because Stefan asked for it as the Fremen special, not because it beat the control; the old warriors
+remain one INI switch away. Tuning: hunting alone eats the most and scores lowest; bursting at once wins fewer
+games; hunt-then-bloom is the default. v1 -> v2 cut unused worms from a third to a tenth. Only Fortress Brutal
+was measured; Hard, `/weak` and other starts were not.
+
+**Tests.** `palace_worm_probe` (new, headless nightly, vanilla and dunecity): control (surfaces at 24,31 beside
+the Palace, move order through the command, stops at rock, own Trooper may not target it, a second charge waits),
+Hunt for a human and a QuantBot owner (both Tanks on sand eaten, the one on rock and its own Quad spared; 2
+kills credited), Spice Bloom (deep rock refused, rock snapped to sand, a move cancels it, the command bursts it
+into 47 spice tiles, not lost), life (180 s, out of time on the way bursts, 6 meals sated, beaten = lost),
+QuantBot bursting beside its refinery, full save/load of a worm on its way to burst, warriors with the rule off
+and for Atreides. `CoopGameSettingsTestCase` round-trips bit 7; `QuantBotStrategyTestCase` the PalaceWorm knob;
+the Civ Wars legacy-worm check now cuts the 9901 bytes too and checks a 9881-9900 record.
+
+**Gates.** The four AI gates passed on `0a169ff2a` (AWS `20261127T110956-ctest-ed281f`, 4/4); `perf_regression`
+passed on the Mini at `0a169ff2a` (131 s, PERF_BUDGET_OK). Nightly `-L nightly -LE gui` at `0a169ff2a`
+(`20261127T110952-ctest-e9d2ca`): 253/257; `palace_worm_probe` passed; the two `civilization_wars_probe_civ-1v1`
+failures were this change's save bytes in that test's legacy record (fixed in `ce65f24dd`; rerun
+`20261127T113435-ctest-6f6888`: all eight Civ Wars probes and `palace_worm_probe`, 9/9 passed); `zone_garrison_probe` ("a soldier did not come out of the ruin") and
+`turret_target_probe` (its probe main did not compile) belong to the garrison and turret-front changes and were
+reported to those sessions (turret: probe runner lacked `-fno-access-control`, fixed in `2f58b959f`; garrison:
+its "destroyed" case killed the soldier with the zone's damage, fixed in `fa60fc5ea`).
+
+## 2026-11-27 - City redevelopment for land value: Parks Count As Roads (protocol 143); three QuantBot switches, all off
+
+Stefan, 2026-11-27, from the Spectator view of a Brutal AI city (the Air's `low.dls`): "there's still lots of low
+value ... the AI could benefit from demolishing and rebuilding to either remove pollution from an area buy moving
+factories and industrial zones to different areas or by adding in more palaces or parks. count a park as a road
+(without the movement bonus) ... it has lots of 2 lane roads which is a waste. we can remove some roads as long as
+we maintain paths out of the base". Commits 3342d22d9 (rule, switches, tests, audit), fb21024c1 (the save's mod
+revision fixture), b19c288bb, b3ca03cad, f04996622, 7ace04b61 (fixes found by the save runs), 33e44a746 (docs).
+Not released. Full write-up: docs/formations.md, "Redevelopment for land value". Evidence:
+`~/Documents/projects/outputs/redevelop-20261127/` (`low-save.ini` is the frozen save, `screen-v4.md`, `save7/`).
+
+- **Why the land value is low** (`tests/ai/land-value-audit.inc`): in the three Brutal cities the low lots
+  (<= 80; 159, 444 and 493 of 386, 755 and 821 R/C lots) carry pollution 70-147, three quarters of them sit so far
+  from their city's centre that the distance term gives <= 40, and 87% lie outside every Palace/Stadium reach.
+  Crime plays no part. The polluters are ~300 Industrial zones a house mixed through the lots (no factories). A
+  quarter of the road tiles are a second lane (every building paves a one-tile ring).
+- **Rule Parks Count As Roads** (default on; MOD18 city-rules bit 6, set only when off; protocol 143; save format
+  unchanged): a Park is a road connection for city traffic and zone access (`Tile::isRoadConnection`), never for
+  unit speed. Tests: `ParkTestCase`, `CoopGameSettingsTestCase` (protocol 143), `city-park` skirmish probe (a lot
+  whose last road tile becomes a Park keeps traffic access on, loses it off, no unit road flag) - passed on AWS.
+- **QuantBot switches**, `[Force Concentration]`, all default off (`QuantBotRedevelop.cpp`, `RedevelopmentPolicy.h`,
+  play styles `road-lane-parks`, `lot-parks`, `pollution-relocation`, `redevelop-all`): RoadLaneParks (Parks on the
+  spare lane of two-lane strips, every road and unit path through the tile kept by a local ring test), LotParks
+  (clear a cheap own lot for Parks that lift its neighbours), PollutionRelocation (rebuild the most harmful
+  Industrial zone where Industrial siting puts it). Searches run in short game-time windows: 11 ms (lane) and 6 ms
+  (lot) a call, at most once per 8 s a house.
+- **Measured and left off.** Final screens at 7ace04b61, 276 paired games an arm: no score interval above 0
+  (RoadLaneParks -0.039, LotParks -0.016, PollutionRelocation -0.003, all three -0.024). LotParks: lobby land value
+  +1.7 but population -0.9k, weak seat -2.0k; RoadLaneParks: weak seat -1.7k. PollutionRelocation: lobby land value
+  -4.4, population +2.5k (and +1.8k at 240 minutes), placement unchanged. In `low.dls` RoadLaneParks raised house 0's
+  lot land value 111 -> 117 in 30 minutes.
+- **Gates:** the four AI gates passed on AWS at 3342d22d9 (20261127T095515-ctest-d85748); `perf_regression` passed on
+  the Mini at f04996622 (20261127T110338-ctest-e54bb7); nightly tier `-L nightly -LE gui` at 7ace04b61
+  (20261127T114821-ctest-12c4b7): 256 of 257 passed; the one failure, zone_garrison_probe ("a soldier did not come
+  out of the ruin"), was the garrison probe's own ruin case, fixed by fa60fc5ea, and passed at ce4bedffb
+  (20261127T123811-ctest-f71737).
+- **Next lever** (not done): site new Industrial zones beyond the 5-tile pollution reach of R/C lots, and more
+  landmarks where low lots lie outside every reach.
+- Harness: `tests/ai/land-value-continuation.py --freeze SAVE INI` freezes a save; `--game-options INI` continues it
+  per arm on the queue. The save's mod revision lives in `tests/saves/data/workshop/revisions/f7ffc687...`.
+  scenario-matrix `houses.csv` now carries end-of-game credits, population and land value.
+
+## 2026-11-27 - Hospitals heal infantry: five beds, a type lock, Carryall delivery (Hospital Care, protocol 146, save 9902)
+
+Stefan, 2026-11-27: "i want troopers and infantry to be able to be healed / repaied via a hospital R zone -
+carryalls can also pick them up in dune city. a single hispital can heal up to 5 men at a time. while a hospital is
+healing me or while a unit is walking to get healed or being carryalled to be healed it cannot change type from
+hospital to something else". Commits fb6958544 (feature), 9e6aaa901, aa930e15c, 5de90205c, 25744ee43, dd760c684,
+761c3b95c, 7ad441dba, 6650f99ad (out-of-contact rule). Not released. Code: `include/dunecity/HospitalCare.h` (rules, saved state), `src/dunecity/HospitalCare.cpp`.
+Evidence: `~/Documents/projects/outputs/hospital-care-20261127/`.
+
+**Rules chosen.** Match rule **Hospital Care**, default on (INI key; bit 6 of the MOD20 starting-tech-level byte,
+set only when off; the level mask is now 0x3F, bits 4-5 of that byte are free).
+- A Hospital is an own Residential zone the census gave the Hospital overlay. Every infantry type but the Saboteur
+  can be healed.
+- The repair order (sidebar button/hotkey, `CMD_UNIT_SENDTOREPAIR` -> `GroundUnit::doRepair`) sends a wounded
+  soldier to the nearest own Hospital with a bed not yet claimed by five, else the nearest one. With no Hospital
+  it fell back to a Repair Yard (replaced 2026-11-28: infantry never use a Repair Yard; see that entry).
+- The soldier walks (forced move) to a free tile beside the 2x2 zone; 6+ tiles away it also asks for a Carryall,
+  whose ordinary pickup flies it there. Beside the Hospital it heals standing up and holds its bed (HOLD: fires at
+  enemies in range, never chases off); its own mode comes back when it leaves.
+- **Five at a time** (`kHospitalBeds`); the rest wait beside it, and a waiting soldier moves to another own
+  Hospital with a free bed when there is one.
+- **Rate** 1 HP every 4 cycles per patient (a quarter of a Repair Yard's single bay; five beds = 1.25 yards of
+  throughput). **Cost** 0.2 credits a HP: a Soldier from near death costs about 4 credits, 6.7% of its price, as a
+  Quad's full repair is 6.5% of its price. No cash, no healing that tick.
+- **Automatic**, as for vehicles and Repair Yards: a soldier below half health, not holding, not forced, whose
+  house has Carryalls, goes by itself - for human houses always, for AI houses only with QuantBot HospitalInfantry
+  on. Checked every 32 cycles from the hospital update (`InfantryBase::checkPos` never runs `GroundUnit`'s).
+- **Lock.** Every trip - walking, carried, waiting, healing - is a claim on its Hospital. A claimed zone keeps its
+  overlay through every census and uses its house's quota first; `HospitalCare::isLockedHospital(zone)` is the
+  query for redevelopment (the redevelopment session skips Hospital-overlay zones altogether). The claim ends when
+  the soldier is healed, dies, is ordered elsewhere (its destination leaves the Hospital), changes owner, the zone
+  is lost or changes owner (garrison capture), or the walk comes no closer for a game minute.
+- The census overlays are now designated **per house** from each house's own population. They used the local
+  player's counts for every house, which differed between peers and spectators; harmless while cosmetic, a desync
+  once Hospitals heal.
+- **Save 9902**: the CitySimulation block ends with `HospitalCareState`: the census overlay roster (zone id,
+  Hospital/Church) and every trip (soldier, Hospital, tile, stage, carried, progress clock, closest distance, prior
+  mode). The roster, not the drawn overlay, decides; the first city phase after a load redraws the overlays. An
+  older save has neither; its first census designates them. **Protocol 146.**
+- Match logs: `HOSPITAL_CARE: event=sent|healed|ended why=...`; `vanilla-match.py` writes `hospital.csv`.
+
+**QuantBot: HospitalInfantry** ([Force Concentration], default off; play styles `@hospital-infantry`,
+`@hospital-infantry-off`). On (6650f99ad), a soldier below 60% health goes to a Hospital only once no armed enemy
+has been within weapon reach of it for 500 cycles (`kHospitalQuietCycles`, about 8 s; checked every 32 cycles over
+9 tiles, either side's reach + 1, the quiet clock saved). 6+ tiles away it also asks for a Carryall. A soldier on a
+trip is reserved as Repair (`reserveDamagedUnitForRepair`) and is not halted under fire. The engine's half-health
+automatic rule stays for human houses only. The first version sent soldiers from `onDamage` (screen 1 below).
+
+**Measured: left off, twice.** Screen 1, sent under fire: 288 mixed games on faf6ab1e0 (AWS 20261127T105107-hospital-mixed2-a5daa9): Stefan's 4P
+DuneCity free-for-all (`rs160-dunecity`, Fortress starts, four Brutal QuantBots, 45 min, seeds 9101-9148),
+`--ffa default,default@hospital-infantry`, two houses each, every balanced assignment.
+
+| 288 games, two houses a label | default (off) | @hospital-infantry (on) |
+|---|---:|---:|
+| Mean placement score | -0.093 | -0.109 |
+| Paired on - off (95%) | | -0.017 (-0.09..+0.06), level |
+| Wins (sole survivor) / eliminated | 72 / 280 | 63 / 272 |
+| Alive at a time-out (share of houses) | 39% | 42% |
+| Kill / loss value per house | 140,996 / 143,993 | 143,085 / 141,070 |
+
+Time-outs 153 of 288 games. With the switch on, a game had 891 Hospital trips (841 from `onDamage` below 60%, 50
+automatic): 234 healed, 637 soldiers died on the way (a median 169 cycles after they were sent; they are sent
+while under fire), 8 re-ordered, 6 lost their Hospital, 3 left a bed. Not a default under the rule (interval
+not above 0, point estimate negative); `/weak` is a formation duel without a city, so Hospitals cannot act there.
+The first 12 games (761c3b95c, `mixed-v1-guard-beds`) had healing soldiers in Guard leave their bed after a median 44 cycles
+(5,361 of 12,561 trips) and be sent again, up to 216 times; healing soldiers now hold (7ad441dba).
+
+Screen 2, out of contact only (6650f99ad, run on 33e44a746; AWS 20261127T115547-hospital-quiet-82e3c2, same map,
+seeds and assignments; `mixed-quiet`):
+
+| 288 games, two houses a label | default (off) | @hospital-infantry (on) |
+|---|---:|---:|
+| Mean placement score | -0.078 | -0.083 |
+| Paired on - off (95%) | | -0.005 (-0.09..+0.07), level |
+| Wins (sole survivor) / eliminated | 76 / 310 | 85 / 311 |
+| Alive at a time-out (share of houses) | 33% | 31% |
+| Kill / loss value per house | 138,288 / 139,125 | 137,151 / 137,083 |
+
+Time-outs 127 of 288 games. The rule works as meant: a game had 64 trips (all but 26 in 288 games sent by the
+quiet rule), 55 healed, 6 soldiers died on the way, 1 re-ordered, 1 lost its Hospital. That restores about 1,140
+HP a game for 228 credits, a few soldiers' worth, too little to move placement in a 40-minute four-house game.
+Screen 1 healed more soldiers (234 a game) but threw away 637; neither moved the score. Not a default
+under the rule (interval not above 0 in either screen). The player feature is unaffected (default on).
+
+**Tests.** `HospitalCareStateTestCase` (beds and claims, save round trip, damaged stream refused); CoopGameSettings:
+MOD20 bit 6 round trip with every tech level and the Saboteur bit, older streams play the rule, the off bit does not
+admit a level above 9. `hospital_care_probe` (headless nightly, ~12 s, run twice and compared): seven soldiers on
+one Hospital - never more than five heal, two wait, all leave at full health paying 22 credits, back in Guard;
+overflow to a second Hospital; the lock held while walking, healing and flying and released by healing,
+`CMD_UNIT_MOVE2POS` and death, with the census clearing the zone after each release; a Trooper 35 tiles away
+flown by a Carryall and healed; the automatic rule (human soldier at 40% goes, an AI Player's and a 75% one stay,
+rule off sends nobody and refuses the order); a save with five healing, one waiting and one in a Carryall loads the
+same trips and overlays and plays the next 600 cycles identically; a Brutal QuantBot soldier with HospitalInfantry on
+stays while an armed enemy Quad is 3 tiles away and is sent 537 cycles after the Quad leaves (`bot_quiet`).
+
+**Verified.** Mini `build-int` on 761c3b95c, faf6ab1e0 and 33e44a746 (the out-of-contact rule): `dunelegacy_tests` (1,499 cases) and
+`hospital_care_probe` passed; `perf_regression` passed on the Mini (761c3b95c, 122 s). AWS nightly tier
+`-L nightly -LE gui` on faf6ab1e0 (20261127T105135-ctest-c54d0c): 252 of 256 passed, including the four AI gates
+(`quantbot_all_against_atreides`, `_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`),
+`hospital_care_probe`, `save_roundtrip_probe`, `repair_return_probe`, `carryall_flight_probe` and
+`genome_registry_contract`. The four failures belong to sibling sessions' probes and were fixed there:
+`zone_garrison_probe` (52ba57f47), `palace_worm_probe` (01db4bfd9) and both `civilization_wars_probe_civ-1v1`
+(ce65f24dd; the legacy sandworm record check did not cut the new Palace worm bytes).
+
+**Also fixed in the shared tree.** Index patches of the protocol 143-145 commits had landed at shifted offsets:
+513531d5d and 5c9ecb9ab did not build (GameInitSettings had a stray `| (zoneGarrisons ...)` after a statement and
+closed the MOD18 reader early; 2f0ebb38d fixed the first). fb6958544 committed the working-tree placement of those
+hunks in GameInitSettings, QuantBotConfig, QuantBot.h/.cpp, tests/CMakeLists.txt and the QuantBot Config default.
+A `dunecity-queue submit ... --results RESULTS` writes into the checkout and blocks staging builds: pass an absolute
+path under `~/Documents/projects/outputs`.
+
+## 2026-11-27 - Released 1.0.880 (v1.0.880, 2c8c3deb1): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Stefan: "once all subagents finish deploy game" / "release game i mean". Everything since 1.0.879 in one release:
+a free plane per Airport, plane build time with the Airport build panel, crash bombs, QuantBot extra Airports,
+the measured infantry share, saboteur credit and spectator markers, building up to enemy buildings, Windtraps kept
+while the base has room, an Airport built in the opening launching its plane at once, and the DuneCity Campaign
+Mission 10 fix. Network protocol 142, save format 9899. Evidence log:
+`~/Documents/projects/outputs/release-1.0.880/gates.md` on the Mini.
+
+- **Candidates on the way.** cd80fe9c9 and 2f9f0812d were superseded: Stefan found the Airport panel still said
+  "Buy airplane" (2f9f0812d added Build airplane and a progress bar), then the AWS nightly caught three
+  air-defense probes still sized for the removed fixed infantry quota (fixed in 0da919e96 and 30758f6cd; the
+  infantry change had skipped the nightly on request). Lesson: an AI default change still runs the nightly tier.
+- **Gates at 8223904f0 (code of 2c8c3deb1):** AWS `-L nightly -LE gui` 253/253 (20261127T014707); Mini
+  perf_regression (117.8 s), dunelegacy_tests, genome_registry_contract; integration CI 45842884604; Mini
+  qualification 45844899338 (15:02-15:54 UTC).
+- **Tag build 45853938149:** attempt 1 failed only the packaged pointer gate ("Stationary fullscreen pointer lies
+  outside the logical viewport"): the Mini pointer sat at 0,1079. CentrePointer.app centred it; attempt 2 passed
+  (release 16:52 UTC). Check the Mini pointer before tagging.
+- **Channels:** SourceForge 45862743052, browser 45862743013, website deploys 45862730591 and 45862980431;
+  Chrome showed "App v1.0.880" at dunelegacy.com/play; `release-automation.py verify v1.0.880 --live` passed.
+  Reservation completed and research resumed. Android held; TestFlight not part of this release.
+- **MacBook Air:** the published notarized zip (sha256 7abad9c2...) is in `/Applications/dunecity.app`, executable
+  6c6cc32d...; published 1.0.879 kept as the backup.
+
+## 2026-11-27 - Saboteurs: kills credited, spectators see them (sab.dls; unreleased, protocol 140)
+
+Stefan's `sab.dls` (1.0.880 staging, 4P 192x192 Metropolis, four QuantBot Brutal, spectating): "saboteurs are
+still broken ... they are supposed to go blow things up". His Stats screen for Ordos: Saboteur 9 active, 0 kills,
+97 deaths, 0 damage. Then: "no they can kill vehicles as well not just buildings i just couldnt see them doing it".
+
+- **They were blowing things up.** His own game log on the Air has a `SABOTEUR_*` line per Saboteur. Up to the
+  screenshot (cycle 96233) Ordos released 106: 62 blew something up (`SABOTEUR_HIT`, 50 vehicles and 42 buildings
+  over the whole session) and 35 were shot. 62 + 35 = 97, the "deaths".
+- **Cause 1, the Stats screen.** The charge destroyed its target directly (`setHealth(0); destroy()`), bypassing
+  `ObjectBase::handleDamage`, so the Saboteur was never credited a kill or a hit point (`House::addCombatReward`,
+  `informHasKilled`, the AI's `onHostileUnitKilled` / `onHostileStructureDestroyed`), and its own `destroy()` went
+  through `UnitBase::destroy -> House::decrementUnits`, counting each detonation as a loss. Now the lethal hit goes
+  through `handleDamage` while the Saboteur still exists, and a Saboteur that set its charge off is not counted as
+  lost (`UnitBase::lostWhenDestroyed`, `House::decrementUnits(itemID, lost)`). Kills count units only, as for every
+  type; a building shows in Damage.
+- **Cause 2, spectating.** Frames rendered from his save as a spectator (`game-perf.py --saboteur-shots DIR`, new;
+  it centres the view on a live Saboteur every 64 cycles and writes the rendered frame, three more where one
+  vanished): the Saboteur is drawn, but as a few grey pixels among city blocks, and its charge went off as a medium
+  explosion, the same flash as any light unit dying. Now, for a spectator only (`Game::isObserving`): a ring about a
+  tile across, three pixels of the owner's radar colour between dark edges, pulsing over 0.6 s, and a two-pixel line
+  to its target (`Saboteur::blitToScreen`); on the radar a five-pixel black square with a white inside and the
+  owner's colour in the middle (`RadarView::updateRadarSurface`; an x in the owner's colour vanished on its own
+  territory, `0b1f4d9b8` -> `192e01002`). For everyone, a detonation is a large explosion (Dune II's saboteur blast
+  is its own big explosion; same random draw). Drawing only. Frames before/after:
+  `~/Documents/projects/outputs/saboteur-effect-20261127/spectator-frames/`.
+- **Target rule: unchanged from 1.0.880** (nearest enemy building or vehicle, Saboteur Hunt). Dune Dynasty / Dune II,
+  for the record: the sabotage script (DUNE.PAK `UNIT.EMC`, unit type 6, action 9, decoded) loops
+  `Delay(120); SetTarget(FindBestTarget(4)); SetDestination(target)` until the target is an enemy; mode 4 takes the
+  enemy *building* with the highest (priorityBuild + priorityTarget) / distance anywhere its house has seen (Heavy
+  Factory and Repair 600, Palace 400, Yard/Windtrap/Refinery 300 ...), units only with no building left; it detonates
+  by walking into the building (`Structure_Damage(s, 500)`) or onto the unit's tile (500-damage explosion). That rule
+  was committed in `e66e1af1b` (with vehicles within 5 tiles competing on the same value / distance scale, at
+  Stefan's "make it like dynasty but allow them to also blow up vehicles") and reverted in `e13b42b63` at his
+  correction above. Its 48-game AWS comparison against 1.0.880 (Brutal FFA, rs160-dunecity/vanilla, seeds
+  9101-9124; `~/Documents/projects/outputs/saboteur-effect-20261127/`): structures 91 -> 163, vehicles 653 -> 502,
+  value destroyed 262,175 -> 271,125 (no difference), lost unused 191 -> 299, time-outs 25.0% -> 35.4%.
+- **sab.dls before / after** (same window, cycles 98298-122719: Stefan's own 1.0.880 game after the save, against a
+  headless continuation of the save with the fix; `run-campaign-balance.py --load-save --save-profile`, the two
+  workshop revisions copied from the Air): Ordos released 38 / 36, blew up 25 (18 buildings, 7 vehicles) / 29 (24,
+  5); Mercenary 39 / 39, 20 (15, 5) / 23 (20, 3). Same rule, so the same behaviour. Stats at the end of the
+  continuation (minute 42), Ordos Saboteur: hits 64 (every `SABOTEUR_HIT` of the continuation), kills 15, damage
+  12,153 hit points, deaths 148 = the 106 counted at the save (67 detonations + 39 shot, the old count) + 42 shot
+  since; it showed 0 hits / 0 damage at the save. Mercenary: 55 hits, 19 kills, 8,252 hit points.
+- **Tests.** `saboteur_target_probe`: the nearest-building and nearest-vehicle cases require the credit (a vehicle:
+  1 kill and its hit points; a building: its hit points) and no loss; a shot Saboteur is one loss and no hit. On the
+  pre-fix source it fails (AWS job `20261127T011005-ctest-996850`, side ref `refs/ai-recovery/saboteur-credit-probe-on-prefix`:
+  "the sabotage was not credited to the Saboteur (kills 0, damage 0)"). A new `SABOTEUR_TARGET` log line records each
+  target a released Saboteur takes.
+- **Commits:** `e66e1af1b` (credit + Dune II rule), `e13b42b63` (rule back to 1.0.880, credit kept, probe),
+  `0b1f4d9b8` and `192e01002` (spectator markers, large blast). Logs of every Saboteur line, both games:
+  `~/Documents/projects/outputs/saboteur-effect-20261127/sab-dls/`.
+- **Protocol 140** (the credit runs the AI callbacks and changes the house's loss counts; a 139 peer would desync).
+  Save format unchanged.
+- **Gates.** AWS job `20261127T004645-ctest-a686c8` at `e13b42b63`: the four AI gates, both Saboteur probes and
+  `dunelegacy_tests` passed. AWS nightly tier (`-L nightly -LE gui`) at `244b89029` (all four Saboteur commits plus
+  other sessions'): job `20261127T012533-ctest-d4cebe`, 252/253 passed; the one failure is the new
+  `quantbot_wind_trap_retirement` of the Wind Trap commit (probe binary exits 1 on Linux; reported to that session).
+  Mini `perf_regression` passed at `db1a02b5d` (103.3 s).
+- **Next release notes:** "Saboteurs: what they blow up now counts on the Stats screen (kills and damage), and one
+  that blew something up is no longer counted as a death. Spectators see every Saboteur, marked in its owner's
+  colour with a line to its target and on the minimap, and its charge goes off as a large explosion.
+  Multiplayer protocol 140."
+- **Not verified:** a windowed game on a real display (frames are the dummy driver's software renderer); a human
+  player's own Saboteur on the Stats screen in a real match (the probe covers the credit for a human owner).
+
+## 2026-11-27 - QuantBot keeps its Wind Traps while its base has room to build (protocol 142)
+
+Stefan, 2026-11-27: "windtraps being destroyed should only be when the ai is low on free building space. if it
+has space it should keep the windtraps, not blow them up". Commits `b3f7cb075` (measurement only), `895fe60e1`
+(test-only start overrides), `afc49f278` (rule, probe, protocol 142), `b901f7d1e` (probe fixture). Evidence:
+`~/Documents/projects/outputs/windtrap-room-20261127/`.
+
+- **The one trigger.** QuantBot removes its own Wind Traps in one place only: NuclearConsolidation
+  (`planCityEconomyProjects`, default on since 2026-11-21, city skirmish games). With a reactor standing, more
+  than 2 Wind Traps and power to spare after one more goes, it demolished one per build pass, the one with
+  most own lots within 6 tiles, without asking whether it needed the ground. Nothing else in QuantBot sells or
+  demolishes a Wind Trap (the other demolitions are R/C/I lots).
+- **Measured** (new `WIND_TRAP_RETIRED` line and per-minute `QUANTBOT_ROOM` sample; `vanilla-match.py` writes
+  `windtraps.csv` and `room.csv`), four Brutal QuantBots, seeds 9101-9148:
+  - Stefan's `rs160-dunecity` (Fortress, 45 min): **0 retirements** in 48 games. Houses start with 2 reactors
+    and 1 Wind Trap and never own more than 3; free rock in build range never below 1,061 tiles.
+  - The same map from a Construction Yard (`--env BALANCE_SKIRMISH_BASE=1 BALANCE_SKIRMISH_ARMY=0
+    BALANCE_SKIRMISH_CITY=0`, 60 min): **1,450 retirements**, 30 a game, 191 of 192 houses (median 8, up to
+    14), from minute 7 (median 14). Every one with room: free rock 202-1,229 tiles (median 342), 4 free
+    footprints, never built out. Bases are built out only after minute 40 (8 of 104 houses at 60).
+- **Rule** (`ForceConcentrationPolicy::windTrapRetirementRoomLow`): retire only while the base is low on room
+  as the rock survey already measures it - built out (`baseBuiltOut()`: fewer than 4 free 2x2 footprints or
+  no site for a production building, the colonisation line) or fewer than `kWindTrapRetireFreeRock` = 48 free
+  rock tiles in build range (the line `rockExpansionNeeded` uses). When low, the choice is unchanged (most
+  lots first, never below 2). The reactor project and the generator choice are unchanged. Default, no switch.
+- **Before/after** (parent `0b1f4d9b8` against `afc49f278`, same seeds):
+
+| Setup | Arm | Retired / game | Wind Traps held at 15 / 30 / 60 min | Produced - required power at 30 min | Short of power at 30 min | Buildings placed / game | Time-outs |
+|---|---|---:|---|---:|---:|---:|---:|
+| CY start, 60 min | before | 30.2 | 4.27 / 1.77 / 1.36 | 2,091 | 5 of 192 | 1,411 | 26 of 48 |
+| CY start, 60 min | after | 1.8 (all built out) | 8.97 / 8.69 / 5.69 | 2,400 | 3 of 192 | 1,311 | 21 of 48 |
+| rs160 Fortress, 45 min | before = after | 0 | identical samples | identical | identical | 1,058 | 25 of 48 |
+
+  CY start, paired by house: army value -238 at minute 15 ([-323, -151]), -321 at 20 ([-732, +89]), -941 at
+  30 ([-2,113, +279]); structures +5 (the kept Wind Traps); credits level; reactors level (0.71 / 0.73 at 15).
+  Games ended with one house left 22 -> 27, eliminations per game 1.88 -> 2.15.
+- **Test:** `quantbot_wind_trap_retirement` (headless nightly) drives the production
+  `planCityEconomyProjects()`: with room nothing goes over repeated passes; each low-room reason (few
+  footprints, no production site, free rock below 48) retires one, most lots first; down to 2 and never below.
+  On the old rule it fails at the first pass with room (70 -> 69; `refs/ai-recovery/windtrap-probe-old-rule`,
+  AWS `20261127T005749-ctest-a0d665`).
+- **Protocol 142** (AI demolition differs; a 141 peer would desync). Save format unchanged.
+- **Gates** at `afc49f278`: AWS `-L nightly -LE gui` `20261127T011946-ctest-7cb607` 251 of 253 passed,
+  including `quantbot_all_against_atreides`, `_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`.
+  Failed: `quantbot_wind_trap_retirement` (its floor phase ran out of power: a reactor gives about 1,100 here;
+  every earlier phase passed; fixed in `b901f7d1e`, which passes on AWS `20261127T014423-ctest-cbe82a`) and `quantbot_enemy_border_site` (the
+  protocol 141 session's probe, under repair there; unrelated to retirement). Mini `perf_regression` passed at
+  `afc49f278` (CPU mean 0.035/0.250, house p99 0.074/1.000, house max 2.450/10.000, eight-house CPU p99
+  1.357/1.600, frame CPU p99 4.181/5.500, main-loop frame p99 4.524/8.000, menu other 0.002/0.300).
+
+## 2026-11-27 - QuantBot may build right up to enemy buildings (protocol 141)
+
+Stefan, 2026-11-27: "also allow ai to build buildings right up to enemy buildings". Commit `8cf652a47`, test
+follow-ups `8384aefba`, `f5747bdce`, `13cf7cd7e`, `244b89029`. Evidence:
+`~/Documents/projects/outputs/enemy-border-20261127/` (`new`, `old`, `mixed`; `tests/ai/enemy-gap-report.py`).
+
+- **The engine never stopped it.** `House::placeStructure` / `Map::okayToPlaceStructure` ask only for free rock
+  (no city zone, no unit unless ignored) within build range of the house's own tiles; enemy buildings next door
+  are legal. Left alone.
+- **QuantBot rules that kept it away, and what changed** (`TacticalSafetyPolicy::enemyBorderTileScore`,
+  `ordinarySiteUnderFireAllowed`):
+  - `findPlaceLocation` charged -10 for every enemy building tile on a site's border ring (the mirror of +10
+    for an own one). **Now 0.**
+  - Tactical danger (`refreshTacticalDanger`: 100 for each visible enemy unit or structure that can attack, the
+    Palace excepted, over its weapon range + 2) refused any site with danger > 0, until a finished building
+    had been held 60 s (`867b03c5f`). **Now light fire (one weapon, danger <= 100) is a fallback taken after
+    every safe site, least threatened first; heavy fire (two weapons or more) keeps the 60 s rule.** Reactors
+    keep their own fire rule. A search pass stops early only on a safe site, a protected repair site is picked
+    among safe sites, a safe redevelopment site outranks a light-fire one. Turrets and walls never had the
+    danger rule.
+- **Kept, as site preferences, not spacing bans:** factories and the Nuclear Plant prefer the rear
+  (`rearScore`, the enemy-clearance rank); -100 for an enemy unit on a site's border; own recent losses
+  (`nearRecentStructureLoss`, loss risk); the city side rule (-30 a side touching any building, own or enemy);
+  the special searches (`findPalaceDistrictSite`, `findRedevelopmentSite`, the prepared-foundation substitute)
+  still require danger 0. `placeYardStructure` re-searches a planned site that came under any fire.
+- **On by default, no menu switch.** QuantBot Config.ini `BuildUpToEnemy` (hashed only when off) and play style
+  `@old-enemy-spacing` exist for experiment arms only. **Protocol 141**; save format unchanged.
+- **Measurement.** Each placed building logs `AI_PLACED` (clear tiles to the nearest enemy building);
+  `vanilla-match.py` writes `placements.csv`. Stefan's setup: `rs160-dunecity`, four Brutal QuantBots, seeds
+  9101-9148, 45 min, AWS, source `97a8d5816` (= `8cf652a47` before the air-defense probe commit).
+  - Self-play, 48 games each arm, per arm buildings (not slabs or roads) / city lots: new 18,591 / 34,688,
+    old 18,459 / 34,047 (96.8 v 96.1 buildings a house-game). Median gap to the nearest enemy building 47 tiles
+    in both: on this map bases stay far apart and build range limits growth. Touching an enemy building:
+    buildings 9 v 4, lots 12 v 6; within 2 tiles 30 v 12 and 61 v 32; within 5 tiles 58 v 46 and 184 v 95.
+    Lots placed under light fire 778 v 7. Time-outs 27 v 29 of 48.
+  - Mixed (old and new spacing in the same games, 288 games): placement score -0.104 v -0.100, difference
+    -0.004 (95% -0.09..+0.08), level; time-out share 40% v 42%. Touching: buildings 12 v 8, lots 17 v 14.
+- **Tests.** `quantbot_enemy_border_site` (nightly, headless): with one candidate site, an enemy Wind Trap on
+  its corner, the old spacing scores exactly 10 a trap tile below the new one; light fire over every site is
+  taken (refused by the old spacing), a safe site beats a better-scored light-fire one, heavy fire is refused.
+  Unit tests in `QuantBotStrategyTestCase.cpp` (policy values, config default, round trip, hash).
+- **Gates.** Four AI gates on `8cf652a47` (AWS `20261127T004231-ctest-8a3576`): 4 of 4 passed.
+  Nightly `-L nightly -LE gui` on `8384aefba` (AWS `20261127T005512-ctest-b448c0`): 241 of 252; the 11
+  failures were this probe's first fixture (rebuilt since), seven genome/sweep contracts missing the new key
+  (registry entry `13cf7cd7e`; all seven pass there, `20261127T011801-ctest-569e44`) and the three
+  air-defense probes (fixture fixed by `30758f6cd`; pass at `13cf7cd7e`). `perf_regression` on the Mini at
+  `f5747bdce`: passed (102 s).
+  The probe at `244b89029` with `quantbot_held_site_threat`: 2 of 2 passed (`20261127T012326-ctest-8ac381`).
+  Not pushed: the release coordinator ships the batch as 1.0.880.
+
+## 2026-11-27 - City planes: a shot-down plane explodes as three of its bombs (City Plane Crash Bombs, protocol 139)
+
+Stefan, 2026-11-26: "make planes blow up as 3 of their bombs when they die, current explosion too small". Commits
+`6d2dd896e` (rule, crash, tests) and `b94ecd3c0` (aircraft in reach; round-trip test). Evidence:
+`~/Documents/projects/outputs/plane-crash-139-20261127/` (`summary.md`, `economics.md`).
+
+- **City Plane Crash Bombs** (match rule, default on): `AmbientAirplane::crash` bursts three `Bullet_Bomb` blasts
+  through `Map::damage`, the middle one where the plane was hit and the others two tiles before and after it along
+  its heading, a stick's spacing (`CityAircraft::kCrashBombs`, `kCrashBombSpacingTiles`, `crashBombOffset`). Each
+  is the plane's own bomb: `stickDamage()` (250) on the building it lands on, the bomb's splash on other teams'
+  buildings and its tile and a half against ground units under City Plane Carpet Bombing, drawn as
+  `Explosion_Bomb`. A bomb never hits an aircraft, but the crash still spares nobody, as before: an aircraft within
+  half a tile of a burst takes the bomb's damage under the one-bomb crash's Dynasty air rule, so a plane hovering
+  over a crash still goes down with it (`natives_probe`, "the chained crash"). It does not call
+  `House::noteBombHit`: a crash is not a raid the defender answers. Off, the crash is one bomb's damage on its tile,
+  as in 1.0.880. `DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1` still overrides both.
+- INI key "City Plane Crash Bombs"; bit 4 of the MOD18 city rules byte (accepted mask now `~31`), hashed and
+  streamed only when off, so a default setup's stream and options hash are unchanged; a 138 peer refuses the byte.
+  **Protocol 139**; save format unchanged (no new saved state). The saboteur fix after it is 140.
+- **Tests.** `city_plane_effect` `checkCrashBombs`: Gun Turrets at x 28, 30, 32 and 36 under a plane shot down
+  over x 30 flying east; with the rule on, the three under the bombs take a full bomb and the one at 36 nothing;
+  off, only the one at 30. Its older crash checks keep the rule off (`Rules::crashBombs`), and
+  `city_aircraft_probe` pins it off for its one-bomb against Death Hand fixture. `CoopGameSettingsTestCase`
+  round-trips the bit. Game options `city-plane-crash-off.ini` / `city-plane-crash-on.ini`.
+
+**OFF (1.0.880) against ON**, build `6d2dd896e`, `rs160-dunecity`, four Brutal QuantBots, seeds 9101-9148, 45
+minutes, per game, paired (jobs `20261127T000755-job-a5a9af`, `-000802-job-3dcae1`):
+
+| Measure | OFF | ON | Difference (95% interval) |
+|---|---:|---:|---|
+| Planes shot down | 27.3 | 26.8 | -0.5 (-2.6 to +1.6) |
+| Enemy buildings destroyed by crashes | 7.9 | 37.5 | +29.5 (+26.1 to +33.0) |
+| ... their value | 1,116 | 5,450 | +4,334 (+3,492 to +5,176) |
+| Enemy units destroyed by crashes | 0.4 | 7.4 | +7.0 (+5.5 to +8.6) |
+| Own buildings destroyed by own crashes | 0 | 0 | 0 |
+| Enemy value destroyed by planes, all sources | 43,382 | 49,675 | |
+| Crash share of plane value | 3% | 13% | |
+| Bought planes' return per credit | 0.67 | 0.80 | |
+| Time-outs | 24/48 | 21/48 | |
+
+Crashes now destroy about 4.7 times the buildings a game (1.40 a crash against 0.29). Games end as before
+(winners 0:16 1:4 2:3 5:1 against 0:17 1:4 2:2 5:4; mean end 40.7 against 40.5 minutes).
+
+**Gates.** AWS at `b94ecd3c0` (`20261127T004319-ctest-69ef4c`): the four AI gates, `dunelegacy_tests`,
+`natives_probe`, `city_plane_effect` (crash_bombs on: Gun Turrets at 28, 30 and 32 lost 200 of 200, at 36 none,
+three explosions; off: only 30), `city_aircraft_probe` and `city_plane_flights`, 9 of 9 passed. The nightly at
+`6d2dd896e` (`20261127T000807-ctest-07557d`) found the wrong hash assertion and the chained crash, both fixed in
+`b94ecd3c0`, and the air-defense probe failure that was already in 2f9f0812d (fixed in `0da919e96`). The full
+nightly and `perf_regression` at the release tip run with the 1.0.880 release.
+
+**Next release notes:** "A plane that is shot down now explodes as three of its bombs along its path, so a crash
+over a city takes out several buildings."
+
+## 2026-11-26 - Troopers: no fixed infantry share; infantry is measured like every other unit (protocol 138)
+
+Stefan, 2026-11-26: "i want it on - i never wanted a 10% rule for troopers", then "ok so i don't want a 10%
+trooper. ever. i want it to be a performance based ratio like other units. no need to test". Supersedes the
+switch in the entry below. Commits `938eae7c7` and the protocol 138 commit after it.
+
+- **Gone:** the fixed infantry quota per difficulty (Easy/Defend 18%, Medium 15%, Hard 12%, Brutal 10%, from
+  1.0.529), the TrooperMeasuredShare switch, its `DUNECITY_TEST_TROOPER_MEASURED_SHARE` override and play style.
+  There is no option or fallback.
+- **Now, every difficulty:** infantry is one more slot of the unit mix (`UnitMixPolicy::measuredInfantryBps`,
+  `QuantBot::planUnitMix`), scored and shared exactly as the ten vehicle slots are: performance score (credits
+  destroyed per credit lost, one price of prior), blended with the mean slot score while its evidence is thin
+  (`exploredScores`), sharpened (share^1.5), capped at 80%, and like a slot it may reach 0. Before the mix
+  learns, it takes an untested type's share of the configured starting mix (about 12-16% with full factories,
+  up to a third with only light vehicles). The score is the infantry the house buys: Troopers and their squads
+  once it can field them, else the Barracks soldiers; soldiers that walk out of destroyed buildings do not count.
+  An Infantry strategy keeps its own share; the Trooper anti-air floor (TrooperSupport) is unchanged. The House
+  Stats window's Trooper % shows the measured share.
+- **Protocol 138** (AI production differs; a 137 peer would desync). Save format unchanged.
+- **Not measured, at Stefan's word.** The earlier switch measurement (entry below) only covered the learning
+  phase with the old opening quota. Gates on `9d57d5e68` (AWS `20261126T221043-ctest-3ac0ea`): `quantbot_scenario_matrix`,
+  `quantbot_ffa_army_deploys`, `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, 4 of 4
+  passed. Not run at Stefan's word: the nightly tier, `perf_regression`, the unit tests (staging CI runs them).
+
+## 2026-11-26 - City planes: a free plane per Airport and plane build time are the rules; QuantBot builds Airports, more when rich (protocol 137, save 9899)
+
+Stefan, 2026-11-26, after the economics entry below: "you get a free plane per airport. you need to think that
+the free plane alone gets you free damage. you also need to think about the games i showed you - if an ai has a
+lot of money planes win games. they abliterate the enemy", with "make buying planes take time" standing.
+Commits `15e4a5ece` (rules, AI, tests), `cb4860e4c` and `f34f14340` (test fixes). Evidence:
+`~/Documents/projects/outputs/plane-rules-137-20261126/` (`summary-arms.md`, `report-rs160.md`).
+
+- **City Plane Free Per Airport** (match rule, default on): each Airport has its own free plane on its own five-
+  minute clock; off is one free plane in the air per house, as up to 136.
+- **City Plane Build Time** (match rule, default on): a bought plane is paid at the order and launched when its
+  Airport has built it, one at a time: the factory rule at the Ornithopter's rate, 1500 / 600 x 96 x 15 = 3,600
+  cycles, 57.6 s. Off, it launches at once.
+- Both are INI keys ("City Plane Free Per Airport", "City Plane Build Time"), hashed and streamed only when off
+  (bits 2-3 of the MOD18 city rules byte), so a default setup's stream and options hash are unchanged; a 136 peer
+  refuses the byte. **Protocol 137. Save 9899**: an older save's Airport purchase clock is cleared on load so it
+  does not finish a plane that was never ordered. `DUNECITY_TEST_FREE_PLANE_PER_AIRPORT` and
+  `DUNECITY_TEST_PLANE_BUILD_TIME` (0/1) remain experiment overrides (used for save continuations).
+- **QuantBot ExtraAirports on** (config hash of the default unchanged): another Airport, up to 4, when its free
+  planes and, with every Airport building, its production repay 5,000 within 20 minutes
+  (`CityAircraft::extraAirportPays`); a rich house (`richBuys` beyond the Airport's price) with every Airport
+  building orders more, up to 8 (`kMaxAirportsPerRichHouse`), whatever the payback. Logs `CITY_AIRPORT_EXTRA`
+  (`rich=`).
+- **Tests.** `city_plane_effect`: `checkBuildTime` (3,600 cycles, paid at the order, two Airports build two at
+  once) and `checkFreePerAirport` (three Airports, three free planes by 5:10; one with the rule off); its older
+  checks and `city_aircraft_probe` (the Micropolis singleton) pin both rules off. `CoopGameSettingsTestCase`
+  round-trips both bits. Game options `city-plane-136.ini` / `city-plane-137.ini`; vanilla-match
+  `BALANCE_EXTRA_CREDITS=house:credits|all:credits` for rich starts.
+
+**OFF (136) against ON (137)**, same build `15e4a5ece`, `rs160-dunecity`, four Brutal QuantBots:
+
+| Arm | Games | Flights | Free | Bought | Extra Airports | Enemy value destroyed | Shot down | Winner (house: games) | Ends, min (mean) | Time-outs |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|
+| Ordinary, 45 min, 136 | 48 | 35.2 | 22.6 | 12.6 | 0 | 46,826 | 89% | 0:13 1:4 2:3 5:2 | 41.3 | 54% |
+| Ordinary, 45 min, 137 | 48 | 29.5 | 23.4 | 6.1 | 0.92 | 41,925 | 91% | 0:15 1:4 2:3 5:2 | 41.0 | 50% |
+| Harkonnen +150,000, 60 min, 136 | 24 | 58.4 | 0.3 | 58.1 | 0 | 156,453 | 51% | 0:24 | 4.5 | 0% |
+| Harkonnen +150,000, 60 min, 137 | 24 | 38.8 | 11.1 | 27.8 | 6.62 | 111,109 | 53% | 0:24 | 8.1 | 0% |
+| All +100,000, 60 min, 136 | 24 | 54.6 | 0.6 | 54.0 | 0 | 204,314 | 58% | 0:2 1:4 2:2 5:5 | 37.9 | 45% |
+| All +100,000, 60 min, 137 | 24 | 106.2 | 55.5 | 50.7 | 23.67 | 243,365 | 86% | 0:8 1:2 2:1 5:4 | 44.2 | 37% |
+
+(per game; jobs `20261126T203013-job-f5b8c7`, `-c135c3`, `-9be453`, `-05ebe8`, `-c5da1a`, `-dfc1e6`.)
+
+- **Ordinary game:** half the bought planes (-5.46, -7.79 to -3.38), 15 fewer buildings bombed (-24.3 to -6.1);
+  time-outs -4 points (-12 to +4), eliminations +0.04, length -0.3 min: no measured change in outcome.
+- **A rich house still wins with planes, deliberately and more slowly.** Under 136 a house given 150,000 bought
+  31 planes in the first game minute, destroyed 255 buildings that minute and had the three others out by 4.5
+  minutes. Under 137 it builds Airports (6.6 extra a game, up to its 8) and turns them into 28 planes and 11 free
+  ones; it still wins all 24, by 8.1 minutes. The defenders shoot down about half its planes either way.
+- **When every house is rich**, 137 gives each about six Airports and twice the flights, and the turrets, given the
+  minutes the build time buys, shoot down 86% instead of 58%. Under 136 the four wiped each other's cities in the
+  first minute.
+
+**Gates** at `f34f14340`: AWS `-L nightly -LE gui` (the four AI gates included) `20261126T212839-ctest-d66b7d`
+passed 251/251 (`quantbot_all_against_atreides`, `_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+`city_plane_effect`, `city_plane_flights`, `city_aircraft_probe` among them); at `15e4a5ece` everything passed but `city_aircraft_probe` (the singleton check, fixed in `f34f14340`)
+and `dunelegacy_tests` (the old bit-2 refusal, fixed in `cb4860e4c`). Mini: `dunelegacy_tests` 1,560 passed,
+`perf_regression` passed at `15e4a5ece` and at `f34f14340` (118 s).
+
+**Next release notes:** "Every Airport now has its own free plane every five minutes, and a bought plane takes
+about a minute to build at its Airport, one at a time: more Airports, more planes. The AI builds extra Airports
+when its planes pay, and many when it is rich. Multiplayer protocol 137."
+
+## 2026-11-26 - Troopers: the fixed infantry quota explained; TrooperMeasuredShare built, measured and left off
+
+Stefan, 2026-11-26, on his House Stats window (Brutal, Trooper x0.7, "Trooper %: infantry cap" 10.00): "why do
+troopers have a fixed 10% ratio ?? i never asked for that". Commit `7b2981581`. Evidence:
+`~/Documents/projects/outputs/trooper-share-20261126/` (`report-trooper.md`, `trooper_report.py`).
+
+**Where the 10% came from.** `QuantBot::planUnitMix` sets `pass.infantryPercent` per difficulty: Easy and Defend
+18%, Medium 15%, Hard 12%, Brutal 10% (`QuantBotBuild.cpp`). It came in with DuneCity 1.0.529 (`b3148b960`,
+2026-08-23, "diversify QuantBot unit production"); the original Dune Legacy QuantBot built no infantry. Nobody
+measured it. It is both a cap and a target: the WOR and Barracks build infantry while infantry is under that share
+of the army's value (`QuantBotBuildProducers.cpp`), and the Trooper reserve fills up to it. Only an Infantry
+strategy replaces it. The ten vehicle slots get their share from their measured score; the Trooper did not.
+
+**TrooperMeasuredShare ([Force Concentration], default off; `DUNECITY_TEST_TROOPER_MEASURED_SHARE=0/1`; play style
+`trooper-measured-share`).** Once the mix is learning, the infantry share is the Trooper's score taken as one more
+slot of the mix (`UnitMixPolicy::measuredInfantryBps`): blended with the mean slot score while its evidence is thin
+(as `exploredScores` does), sharpened like the slots (share^1.5), capped at 80% like a slot and never below 1%.
+The Trooper support floor against aircraft and an Infantry strategy's share are unchanged. In Stefan's screenshot
+(Trooper x0.7 among slots x0.5-x1.9) it gives about 5%.
+
+**Measured** (AWS, source `7b2981581`, four Brutal QuantBots, 45 minutes, Stefan's game options):
+
+| `rs160-dunecity`, 48 paired self-play games | Off | On | Paired (95%) |
+|---|---:|---:|---:|
+| Troopers lost a game (4 houses) | 1,055 | 1,036 | -19 (-42 to +4) |
+| Trooper damage value a game | 100,550 | 98,505 | -2,045 (-4,676 to +446) |
+| Trooper damage per credit lost | 0.99 | 0.98 | |
+| Time-outs | 50% | 50% | +0 (-8 to +8 points) |
+
+Placement (`match_score.py`), half the houses each, every balanced assignment: `rs160-dunecity` 288 games,
+`default@trooper-measured-share` -0.101 against `default` -0.084, paired -0.017 (-0.098 to +0.065), level, 50%
+time-outs; `rs160-vanilla` 144 games, paired +0.000 (-0.135 to +0.134), level, 8% time-outs (Troopers lost 16.8 a
+game either way: on this map the quota hardly binds). Why so little changed: at the end of a city game the measured
+share is about 7% (median; quartiles 5-10%, from `units.csv`), close to the 10% it replaces.
+
+**Left off** under the default rule (interval not above 0). Nothing is worse either, so turning it on is Stefan's
+call: it removes a number nobody chose at no measurable cost. Not measured: Hard, Medium, Easy (their fixed quota is
+higher, 12-18%, so the switch would move them further), campaigns, `/weak`.
+
+**Verified.** Mini `build-int`: `dunelegacy_tests` (two new cases, 17 assertions) and `genome_registry_contract`
+passed. The AWS nightly tier with the four AI gates runs on the tip that carries this commit (the plane economics
+session's protocol 137 re-run), and staging is pushed only after it passes.
+
+## 2026-11-26 - Airports and Rocket Turrets: measured in Stefan's case; AirportTurrets built, measured and left off
+
+Stefan, 2026-11-26: "also airports need decent rocket turret defenses". Commits `3c6e011ba` (switch, logging),
+`df791bc07` (report, play style). Evidence: `~/Documents/projects/outputs/airport-turrets-20261126/` (`report.md`).
+Protocol and save format unchanged; the switch is off, so the game plays as before.
+
+**What QuantBot did before.** No turret rule looked at Airports. The core and perimeter rules ring the yard,
+factories, refineries and the ground front; AirRaidTurrets spreads turrets through the city after bombs land;
+AirThreatTurrets (off) does the same before the first bomb; PalaceTurrets (off) guards Palaces. A city plane picks
+its runs from every enemy building (`AmbientAirplane::pickBombingRun`), so nothing aims it at an Airport either.
+
+**Stefan's case, measured** (48 games, seeds 9101-9148, `rs160-dunecity` fully built start, four Brutal QuantBots,
+45 minutes, `city-plane-b52-on.ini`, AWS, source `5f87e77d3`). Each house starts with its Airport and 8 Rocket
+Turrets. At minute 1 the median Airport has 1 Rocket Turret within 5 tiles (74 of 192 Airports none, 5% four or
+more), and 7 that reach a plane over it (16 tiles). The other rules raise the ring to a median of 3 by minute 10
+(42% with four or more) and 4 by minute 20 (65%). Of 955 enemy plane approaches to an Airport (within 16 tiles),
+62% were shot down before they reached it and 11% reached it; of those, 55% were shot down near it afterwards.
+Bombs destroyed 1.10 Airports a game (of 4).
+
+**AirportTurrets ([Force Concentration], default off; `DUNECITY_TEST_AIRPORT_TURRETS=0/1` for match arms).** Every
+own Airport keeps 4 Rocket Turrets, standing and queued, within 5 tiles of its footprint, spread round it
+(farthest from the own turrets, then nearest the Airport); a lost one is ordered again. One order a build pass,
+from cash beyond the economy's reserve, never saved for; a Wind Trap first when the turret could not be powered.
+City games with City Plane Bombing only (`QuantBotAirDefencePolicy.h`, `findAirportGuardSite`).
+
+| 48 paired self-play games, every house off or on | Off | On | Paired on - off (95%) |
+|---|---:|---:|---:|
+| Airports with 4+ ring turrets, minute 5 / 10 / 20 | 11 / 42 / 65% | 49 / 88 / 93% | |
+| Enemy approaches shot down before reaching an Airport | 62% | 64% | +2.0 points (-3.4 to +7.5) |
+| ... reached it and shot down near it afterwards | 55% | 73% | +0.65 a game (+0.17 to +1.17) |
+| ... reached it and got away, a game | 0.96 | 0.67 | -0.29 (-0.60 to +0.02) |
+| Bombs on Airports a game | 3.90 | 4.75 | +0.85 (-0.50 to +2.23) |
+| Airports destroyed by bombs a game | 1.10 | 1.04 | -0.06 (-0.50 to +0.38) |
+| Buildings lost to planes a game | 207 | 221 | +14 (-11 to +40) |
+| Flights shot down | 88.6% | 88.8% | +0.1 points |
+| Ring turrets ordered / credits, a game (four houses) | 0 / 0 | 12.1 / 3,031 | |
+| Time-outs | 54% | 56% | +2 points (-12 to +17) |
+
+**Placement** (`tests/ai/match_score.py`): 288 mixed games on the same seeds, `--ffa default,default@airport-turrets`
+(two houses each, every balanced assignment): `default@airport-turrets` -0.106, `default` -0.074, paired -0.032
+(-0.111 to +0.055), level; 49% time-outs, alive at a time-out 45% / 46%. Airports lost to bombs 0.50 / 0.54 a game,
+buildings lost to planes 110 / 115 a game (two houses each); 1,528 ring credits a game. Self-play seats moved by
+-0.05 to +0.03, none measurably.
+
+**Left off.** The ring fills and kills more of the planes that reach the Airport, but after they have bombed: the
+Airports lost are the same, as AirThreatTurrets found for the city (a plane drops its stick before more turrets
+bring it down). Not a default under the rule (interval not above 0; point estimate negative) at about 750 credits
+a house. What would keep Airports standing lies on the plane's or the Airport's side (Airport hit points, the
+Airport firing itself, turrets that come with it); Stefan has not asked for those, and they were not built.
+
+**New match logs (diagnostics only).** `CITY_AIRPORT_COVER` (once a game minute per Airport: ring and plane-reach
+Rocket Turrets of its team, Gun Turrets in the ring, power, health), `CITY_PLANE_NEAR_AIRPORT` (a plane's first
+approach to and first pass over each enemy Airport), `CITY_AIRPORT_GUARD` (each order and its price), and
+`x y airport airport_house airport_dist` on `CITY_PLANE_DOWN`. `vanilla-match.py` writes them to `planes.csv`;
+`tests/ai/airport-turrets-report.py` reads them.
+
+**Verified on `5f87e77d3`.** AWS: the four AI gates with `city_aircraft_probe`, `city_plane_effect` and
+`city_plane_flights`, 7 of 7 passed (`20261126T192443-ctest-8b6179`); the headless nightly tier
+(`-L nightly -LE gui`), 251 of 251 passed (`20261126T192447-ctest-b0d659`). Mini `build-int`: `dunelegacy_tests`
+and `genome_registry_contract` passed; `perf_regression` passed (115 s, run by the tech-level session on the same
+commit). `city_plane_flights` failed once on aws-mel2 before passing on aws: `run.log` held a byte that is not
+UTF-8 and `run-city-plane-flights.py` reads it as UTF-8 (`read_text()`); the same probe passed on aws-mel2 in the
+nightly at the same commit. Harness follow-up: read the log with `errors='replace'`.
+
+## 2026-11-26 - City planes: economics measured; build time, a free plane per Airport and ExtraAirports behind switches (no default changed)
+
+Stefan: "for airplanes we really want to see how many units or buildings they destroy (and total value) vs their
+cost (1500) to see if they make economic sense"; then "the airport economic value should be factored in by the ai
+to determine if it makes sense to buy more airports", "make buying planes take time - so however long it takes for
+1500 credits worth of unit by default it takes that long", and after `planeswin.dls` "city airplanes did way more
+damage than any other unit by a wide margin". Evidence: `~/Documents/projects/outputs/plane-economics-20261126/`
+(`summary.md`, `report-base-*.md`, `base-unit-economy.md`) and `.../planes-economics-20261126/planeswin/`.
+
+- **Logging (`9a8efe680`, `0963ba80b`).** Bomb and crash kills name the plane (`object=`); new `CITY_PLANE_UNIT_KILL`
+  (units, own team flagged), `CITY_PLANE_LEFT`, and `UNIT_ECONOMY` per house and type (built, lost, price,
+  combat-record damage value, kills; `kind=unit|structure`) at the end of real games, matches and save
+  continuations. Reports: `tests/ai/city_plane_economics.py` (per flight, from launch to end; value = build price
+  of enemy objects destroyed, a zone at its 100 build price, partial damage not counted), appended per arm by
+  `city-plane-report.py`; `tests/ai/unit-economy-report.py` (every type, value per credit spent and lost).
+- **Switches (`b9b3bc0f8`, `6c85576dd`), all experiment-only env, defaults unchanged, save format unchanged:**
+  `DUNECITY_TEST_PLANE_PRICE`; `DUNECITY_TEST_FREE_PLANE_PER_AIRPORT=1` (a free plane per Airport, its own clock);
+  `DUNECITY_TEST_PLANE_BUILD_TIME=1` (a bought plane is paid at the order and launched when built, one at a time
+  per Airport; build time is the factory rule, an item takes BuildTime x 15 cycles, at the house's Ornithopter
+  rate: 1500 / 600 x 96 x 15 = 3,600 cycles, 57.6 s; the saved purchase clock is the timer); QuantBot
+  `ExtraAirports` (off; `DUNECITY_TEST_EXTRA_AIRPORTS`): another Airport, up to 4, from spare cash, when free planes
+  or (with build time, all Airports busy) the margin of bought planes repays 5,000 in 20 minutes
+  (`CityAircraft::extraAirportPays`, unit-tested).
+- **Airport premise.** Airport 5,000, power 40, no upkeep. Stefan's 16.5 minutes is 5,000 / (one 1,500 plane every
+  five minutes). In the game a second Airport adds nothing: the city counts one (`hasAirport`), one free plane per
+  house is in the air and a launch restarts every Airport's clock, bought planes are capped at 10. QuantBot builds
+  exactly one, as the commercial civic.
+
+**Economics, 48 AWS games** (`rs160-dunecity`, four Brutal QuantBots, 45 min, `city-plane-b52-on.ini`, seeds
+9101-9148, `6c85576dd`; job `20261126T192341-job-65189d`):
+
+| Per flight | Flights | Mean value | Median | Repay 1,500 | Buildings | Units | Shot down |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Free | 1,084 | 1,551 | 1,050 | 36% | 6.90 | 2.66 | 95% |
+| Bought | 605 | **936** | 700 | 19% | 4.06 | 1.31 | 77% |
+
+A game: 35.2 flights, 12.6 bought (18,906 spent), 46,826 enemy value destroyed (11,796 by bought planes, **0.62
+credits back per credit**), 207 buildings and 76 units. Crashes 3% of the value. Minutes 0-10: 3,169 a flight;
+30-45: 883. Per credit spent by type (combat record, a plane flight priced 1,500 as if bought): Siege Tank 2.34,
+Sonic Tank 2.32, Quad 2.18, Rocket Turret 2.01, Launcher 1.91, Tank 1.75, **City airplane 1.61**, Devastator 1.45,
+Ornithopter 0.77. Bought planes are below break-even and planes are mid-field, not above it.
+
+**OFF/ON, same seeds and build** (jobs `-f0b4ba` buildair, `-85afe1` buildonly, `-8c6ad6` freeair; all-on
+`20261126T193504-allon-e6dcc8` by another session, build time + ExtraAirports + AirportTurrets):
+
+| Against base, a game | Build time | Build time + ExtraAirports | Free plane per Airport + ExtraAirports | All on |
+|---|---:|---:|---:|---:|
+| Planes bought | -6.75 (-9.65 to -4.08) | -5.31 (-7.69 to -3.21) | +0.15 | -3.54 (-8.58 to +2.17) |
+| Buildings lost to bombs | -24.6 (-38.0 to -11.9) | -17.5 (-26.8 to -7.8) | +1.5 | -10.4 (-33.4 to +13.7) |
+| Extra Airports | 0 | 0.88 | 0.04 | 0.81 |
+| Time-outs (base 54%) | -2 points | -4 points | 0 | +10 points (-4 to +25) |
+| Houses eliminated (base 2.00) | +0.02 | +0.04 | 0 | -0.38 (-0.73 to -0.04) |
+
+Placement by seat moves nowhere that the rules could explain (every house plays the same rules). Build time removes
+half the bought planes and costs no measurable outcome. ExtraAirports buys Airports that do not pay: it judges
+by the house's combat record per ended flight (about 2,400, free flights and partial damage included), while a
+bought plane destroys 936; QuantBot's plane purchase uses the same optimistic record.
+
+**planeswin.dls** (Stefan's Air, 1.0.878, 192x192, four QuantBots; saved at minute 206.5, the game ends at 209.7).
+Harkonnen bought 882 planes from minute 122 (837 by minute 206.5), up to 29 a minute, from one Airport, as a rich house
+(`CityAircraft::richBuys`). To minute 206.5 its planes did 1.12M damage value, 17.9% of its total and its largest
+type, at 0.86 per credit lost (Launcher 1.84, Siege Tank 1.45, Devastator 1.42, Tank 0.96, Ornithopter 0.65):
+volume, not strength. Continuation on the Mini: OFF Harkonnen wins at 209.7 after buying 68 more; build time +
+ExtraAirports, and all on, Harkonnen wins at 212.8 after buying 6, keeping 356,816 credits.
+Over the whole game (`planeswin/analysis.md`, `timeline.md`): Harkonnen's city outgrew the rest from minute 80
+(1,207 zones at the end); from minute 122 its credits sat at the 30,000 rich-buy line and everything above became
+planes (25 per ten minutes, rising to 211), their damage rising from 12k to 237k per ten minutes. Sardaukar (out
+at 186) and Mercenary (200) lost 12% and 16% of their buildings' value to planes; Fremen, the last rival, 32%,
+most of it in its last 30 minutes. A rich house's planes finished the game.
+
+**Stefan's decision (2026-11-26):** "you get a free plane per airport. you need to think that the free plane alone
+gets you free damage ... if an ai has a lot of money planes win games". So: a free plane per Airport and plane
+build time become match rules, on by default; QuantBot builds extra Airports (ExtraAirports on), valued on their
+free planes' damage and, for a rich house, as production lines; no stat nerf. That change, its OFF/ON evidence
+(rs160 and a rich start) and its gates follow in a later entry. Nothing above changed a default.
+
+## 2026-11-26 - Released 1.0.879 (v1.0.879, 82b5dbc05): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Stefan: "Release 1.0.879". The held-building yard fix (protocol 135), French voices launch crash (#129) and the
+Linux render-driver fallback (#120); save format 9898 unchanged. Evidence log:
+`~/Documents/projects/outputs/release-1.0.879/gates.md` on the Mini. Not in it: `cb2e156fc` and later commits.
+
+- **Qualification:** integration CI 45767568090 passed first time; qualification 45769556905 on the Mini
+  (06:38-07:30 UTC); `reuse-qualification` found it without `--run-id`.
+- **GitHub:** tag pushed 07:31 UTC; Build Dune Legacy run 45775943770 succeeded at the first attempt (release
+  08:06 UTC). Release v1.0.879 is Latest and non-draft, 25 assets.
+- **SourceForge:** sync run 45780454034 succeeded. **Browser:** publish run 45780453892 and website deploys
+  45780444983 and 45780640119 succeeded; in Chrome, dunelegacy.com/play reached the main menu showing "App v1.0.879".
+- **Live verify:** `release-automation.py verify v1.0.879 --live` passed. Reservation completed and research resumed.
+- **Android:** held. **TestFlight:** not part of this release.
+- **MacBook Air:** the published macOS zip (sha256 fe9adc5a..., matches SHA256SUMS; Notarized Developer ID) is in
+  `/Applications/dunecity.app`, executable 05d46ef7...; 1.0.878 kept as the backup.
+
+## 2026-11-26 - An Airport built in the first five minutes launches its free plane at once (after 1.0.879)
+
+Stefan, 2026-11-26: "make a plane spawn when an airport is built, not the first one after 5 mins".
+Ends the opening hold of 2026-11-24 for built Airports. Protocol 136; save format unchanged.
+
+- **Before.** `Airport::init` set `freePlaneTimer = charge - min(cycle, charge)`: an Airport built at minute 2 waited
+  until minute 5 for its first free plane.
+- **Now.** `freePlaneTimer = cycle == 0 ? charge : 0`. An Airport placed during the game (any minute) is ready at once
+  and launches at its next five-second tick, when powered and the house has no free plane in the air. Only the map
+  loader places structures at cycle 0 (scenario maps, generated cities, Fortress bases), so a fully built start still
+  charges five minutes and nobody opens with every house bombing. The one-free-plane-in-the-air rule is unchanged, so
+  a second Airport does not launch while the first one's plane flies.
+- **Tests.** `city_plane_effect` `checkAirportBuiltPlane` now builds the Airport in the opening and requires the
+  plane ready and launched within ten seconds; `checkAirport` (a pre-placed Airport, two planes in eleven minutes)
+  and the spectate-planes probe (first plane by 5:05 on a Fortress start) are unchanged.
+
+## 2026-11-26 - A finished building with no safe site no longer stalls its yard (acantplace.dls)
+
+Stefan's `acantplace.dls` (1.0.878, 4P 192x192 Metropolis, Dune City mod; spectating): Atreides' Construction
+Yard showed "PLACE IT" on a Stadium indefinitely.
+
+- **Cause.** Atreides borders enemy cities with about 1,500 visible Rocket Turrets; each stamps tactical danger
+  10 tiles round it. `findPlaceLocation` rejects any site with danger > 0, so on load 780 of 846 legal Stadium
+  sites were threat-rejected and the other 66 failed ground access. `placeYardStructure` holds a finished
+  building until a legal site exists, so the yard held the Stadium (and therefore built nothing else).
+  Headless continuation of the save: held 26 game minutes, 0 Atreides buildings placed in the first 15.
+- **Fix (`867b03c5f`).** `QuantBot::heldWithoutSiteSince` records when a yard first held a finished building
+  for want of a site. After `kHeldThreatGrace` (60 s) the search runs with `placementToleratesThreat`: threatened
+  sites are accepted and the least threatened wins, bypassing `placementCache`; a planned site blocked only by
+  danger is kept. Reactors (own cancel-and-refund rule), roads and slabs are excluded. The map is part of the
+  observer checkpoint (`saveObserverRuntime`); a disk load starts the wait again. **Protocol 135**, save 9898
+  unchanged.
+- **Result on the save:** Stadium placed after 1.0 game minute on a site with one threat stamp (danger 100);
+  17 Atreides placements in the first 15 minutes; only the Stadium needed the tolerant search.
+- **Tests.** New `quantbot_held_site_threat` (headless nightly, `tests/ai/held-site-threat-probe.inc`): danger on
+  every tile, the Stadium is held inside the grace, then placed away from the most threatened site.
+  Mini `build-int`: `dunelegacy_tests` and `perf_regression` passed. AWS `-L nightly -LE gui` at `03159401a`:
+  job `20261126T151240-ctest-fa9a7d` passed 251/251 (the four AI gates and the new probe included).
+- **Next release notes:** "AI: a finished building is no longer held forever when enemy turrets cover every
+  site in its base; after a minute it is placed on the safest site available. Multiplayer protocol 135."
+
+## 2026-11-26 - French voices no longer crash the game at launch on FWORMY.VOC (#129)
+
+Issue #129 (macOS, 1.0.876/877, French player): the game quit at start with `io_error`
+"FileManager.cpp:383: Cannot find 'FWORMY.VOC'!" (the `/Users/stefan/actions-runner-dunecity/...` path in the
+message is only `__FILE__` from the Mini build runner).
+
+- **Cause (`af59bacd0`).** Reproduced headless on the 1.0.878 build with `Language = fr`, vanilla mod. The data
+  directory (macOS app Resources) ships 30-byte stand-in VOCs from the Tornie voice set, `FWORMY.VOC` among them,
+  since 1.0.522; `FRENCH.PAK` has no `FWORMY.VOC`. `FileManager::exists()` counted the stand-in, `openFile()`
+  skips tiny VOC placeholders, found nothing else and threw from `SFXManager::loadNonEnglishVoice("F")`, whose
+  non-Tornie wormsign branch had no try/catch. Every mod was affected, not only Tornie.
+- **Fix.** The placeholder rule is in `include/FileClasses/VocPlaceholder.h`; `openFile()`, `exists()` and
+  `existsInPak()` all use it. The wormsign line loads "Warning" and adds "Wormsign" only when it can, for every
+  mod, so French says "Warning" alone. German is unchanged (`GERMAN.PAK` has both halves, no loose G stand-ins).
+- **Tests.** `tests/VocPlaceholderTestCase.cpp` (`[filemanager][voc]`, ctest `voc_placeholder_tests`).
+  `dunelegacy_tests` in `build-int`: 1,476 passed / 2 skipped. Headless launches on the new build reached the
+  main menu for French with vanilla, Tornie, TornieLite, Jericho and Dune2R, and German with vanilla and Tornie.
+  **Not verified:** a packaged macOS build, Windows/Linux packages, or hearing the voice in a game.
+- **Next release notes:** "Fixed a crash at start-up when the language is set to French."
+
+## 2026-11-26 - Linux renderer start-up tries each driver and logs why it failed (#120)
+
+Issue #120 (Linux Mint, NVIDIA 595 open driver, 1.0.864 AppImage): quit after "Setting video mode..." with
+`SDL_CreateRenderer failed: Couldn't find matching render driver`.
+
+- **Already fixed in 1.0.865** (`677e075d2`): desktop OpenGL is compiled into the Linux SDL again and Linux falls
+  back to software. Rechecked the published 1.0.878 AppImage: its binary has `opengl`, `opengles2`, `opengles`
+  and `software`, and it bundles no libGL/libEGL/libGLX (only libdbus), so the system NVIDIA/Mesa GL is used.
+  No packaging change was needed.
+- **This batch (`20c055ac4`).** SDL's `-1` search hides each backend's own error. `createStartupRenderer` now
+  walks the drivers by index: `SDL_RENDER_DRIVER` first, then accelerated drivers with target textures in SDL's
+  order, then software (Linux/dummy only, as before). Each miss is logged (`Render driver X failed: ...`); if all
+  fail, a message box shows the errors (with the `SDL_RENDER_DRIVER=software` hint on Linux). Other platforms keep
+  their acceleration requirement. `RendererFallbackOrderTestCase.cpp` in `dunelegacy_tests` checks the order
+  headlessly; the Linux `renderer_initialization` test's expected error text was updated.
+- **Verified.** macOS `build-int` at `af59bacd0`: ctest `dunelegacy_tests` passed (1,476 cases, 0 failed); the Linux `renderer_initialization` cases passed
+  against the new header on macOS with the dummy video driver (Homebrew SDL). **Not verified:** a real Linux
+  NVIDIA desktop (none available); Linux CI (build-linux, test-linux) runs on push.
+- **Issue reply** asks the reporter to try 1.0.878 normally and with `SDL_RENDER_DRIVER=software`.
+- **Next release notes:** "Linux: if the graphics renderer cannot start, the game now tries each available
+  renderer in turn, logs why each failed, and shows an error instead of closing silently."
+
+## 2026-11-25 - Released 1.0.878 (v1.0.878, 1bda52dd0): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Stefan: "Release 1.0.878". The small plane crash and always-firing anti-air (entry below), network protocol 134,
+save format 9898 unchanged. Evidence log: `~/Documents/projects/outputs/release-1.0.878/gates.md` on the Mini.
+
+- **Qualification:** integration CI 45519638257 passed first time; qualification 45521326471 on the Mini
+  (00:51-01:42 UTC); `reuse-qualification` found it without `--run-id`.
+- **GitHub:** tag pushed 01:43 UTC; Build Dune Legacy run 45527827421 succeeded at the first attempt
+  (select-inputs passed, release 02:23 UTC). Release v1.0.878 is Latest and non-draft.
+- **SourceForge:** sync run 45532645509 succeeded. **Browser:** publish run 45532645583 and website deploy
+  45532783978 succeeded; in Chrome, dunelegacy.com/play reached the main menu showing "App v1.0.878".
+- **Live verify:** `release-automation.py verify v1.0.878 --live` passed (package hashes, updater signatures,
+  browser artifact hashes, SourceForge defaults, website links and What's New). Reservation completed and
+  research resumed.
+- **Android:** held. **TestFlight:** not part of this release.
+- **MacBook Air:** the published macOS zip (sha256 d1f090cf..., matches SHA256SUMS; Notarized Developer ID) is in
+  `/Applications/dunecity.app`, executable 37c73630...; 1.0.877 kept as the backup.
+- The Mini pointer was at the left edge (0,1018); `CentrePointer.app` moved it to 960,540 this time (no Screen
+  Sharing connection was open), so the tag build did not wait for Stefan.
+
+## 2026-11-25 - City planes: the small crash is the default, and anti-air always fires at planes
+
+Stefan, 2026-11-24: "Yes, make it default" (the small crash measured in the entry below). Stefan, 2026-11-25:
+turrets should always fire at planes, with no check on whether the crash would hit their own base.
+
+- **Small crash (`4da2dc216`).** A plane shot down does one stick bomb's damage (250, half a tile) on the tile it
+  falls on, in its owner's name; the shooter is credited the plane. `DUNECITY_TEST_PLANE_DEATH_HAND_CRASH=1`
+  (experiment only, never a match rule) restores the Death Hand impact.
+- **Always fire (`4d9cd7b10`).** `AmbientAirplane::crashEndangers` and `crashWouldHit` are gone, and with them the
+  hold in RocketTurret, Scoutpost, Launcher, EliteLauncher and Trooper `canAttack`. City Plane Defence keeps its
+  other parts (triple sight, the rocket that leads the plane).
+- **Tests.** `city_aircraft_probe` and `city_plane_effect` check that anti-air fires at a plane over its own
+  wall, with the killing shot, and at one flying onto the turret; the shot-down check expects the small crash.
+  `natives_probe`'s double wipe runs as its own case with the Death Hand switch.
+- **Verified.** Unit tests 1,547 passed / 3 skipped; `perf_regression` on the Mini passed (118 s, on
+  `4da2dc216`); AWS nightly `-L nightly -LE gui` on `4d9cd7b10`: 249 of 249 passed
+  (20261125T090444-ctest-35f8f8). Protocol 133 and the save format are unchanged. **Not verified:** the OP
+  192x192 map, Metropolis-size games and human play with the new rules.
+- **Next release notes:** "A city airplane that is shot down now crashes with one bomb's blast on its own tile
+  instead of a Death Hand impact. Anti-air always fires at enemy planes, over its own base too."
+- **Queue.** The first nightly (20261124T231606-ctest-ac6c79) stayed open nine hours: its two failed tests
+  waited for a retry on `aws`, which an admission hold kept from ever starting. Fixed in the runner
+  (`~/.local/share/dunecity-runner` `7df3848`): a failed test is final when no other host can take the retry.
+
+## 2026-11-24 - City planes: a small crash for shot-down planes, measured behind a switch; default unchanged
+
+Stefan, after his `OP.dls` game on 1.0.877 (four QuantBot Brutal, 192x192): "IT SEEMS LIKE MAYBE PLANES ARE A BIT
+OVERPOWERED?". In that game shot-down planes did 45% of all plane damage through their Death Hand crash (33 of
+45 planes shot down; Fremen's planes destroyed 1.34 credits per credit spent against 0.95 for its army; Ordos lost
+53% of everything it lost to planes). Analysis: `~/Documents/projects/outputs/op-save-20261124/analysis.md`.
+
+**The switch (`0abdd9bc7`).** `DUNECITY_TEST_PLANE_SMALL_CRASH=1` (experiment only, read once per process, never a
+match rule): a shot-down plane does one stick bomb's damage (250) within half a tile of where it falls, instead of
+the Death Hand impact (`AmbientAirplane::crash`, `smallCrash`). Same damager, credit and CITY_PLANE_CRASH logging.
+Without the variable the game is unchanged.
+
+**48 paired AWS games** (seeds 9101-9148, `rs160-dunecity` fully built start, four Brutal QuantBots, 45 minutes,
+`city-plane-b52-on.ini`; jobs `20261124T223920-job-d6981f` off, `20261124T223926-job-242be6` on; results
+`~/Documents/projects/outputs/op-save-20261124/small-crash/`, `report-off-on.md`):
+
+| A game | Death Hand crash (default) | Small crash |
+|---|---:|---:|
+| Buildings lost to planes, bombs and crashes | 254 | **211** (paired -43, -67 to -19) |
+| ... to crashes | 82 | 10 |
+| ... to bombs | 172 | 201 (+29, +9 to +49) |
+| Crash share of plane damage (credits) | 38% | 4% |
+| Credits destroyed a flight (a plane costs 1500) | 1,374 | 963 |
+| Flights / planes bought | 34.9 / 12.6 | 36.1 / 13.5 (not separable) |
+| Time-outs | 50% | 58% (+8 points, -6 to +23) |
+| Placement | | no house moved measurably |
+
+Bombs destroy more with the small crash because the buildings a crash used to flatten are still there for the next
+stick. No building of the plane's own side was lost to a crash in either arm. QuantBot kept buying planes.
+
+**Gates on `0abdd9bc7`** (switch off, AWS `20261124T223934-ctest-b6a575`): `quantbot_all_against_atreides`,
+`quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+`city_aircraft_probe`, `city_plane_flights`, `city_plane_effect` passed. Mini: `dunelegacy_tests` 1,547 passed,
+3 skipped (needs `DUNE_CITY_SOURCE_DIR` when run outside ctest).
+
+**Default left as is, for Stefan.** The Death Hand crash is his rule (2026-10-22, "the equivalent of a nuclear
+missile attack"). Making the small crash the default also needs the fixtures that rely on the Death Hand reworked:
+`natives-probe.inc` (a crash taking the last buildings of two houses at once, the chained crash, the deciding
+crash) and `city-plane-effect.inc` (`crash_credit`), then the nightly tier (`-L nightly -LE gui`) on AWS.
+`crashWouldHit` (used only with City Plane Defence off) still assumes the Death Hand reach. Not measured: the OP
+seed itself (192x192 is not a `vanilla-match.py` map), Metropolis stalemates, a human player.
+
+## 2026-11-24 - Released 1.0.877 (v1.0.877, 22db4add0): GitHub, SourceForge, browser /play, website; installed on the MacBook Air
+
+Live and verified 2026-11-24. Evidence log: `~/Documents/projects/outputs/release-1.0.877/gates.md` on the Mini.
+
+- **GitHub:** Build Dune Legacy run 45315989321 attempt 2, 08:02-08:35 UTC. Release v1.0.877 is Latest and non-draft, with 26 assets and SHA256SUMS. `release-automation.py verify v1.0.877 --live` passed: package hashes, updater signatures, browser artifact hashes, SourceForge defaults, website links and What's New.
+- **SourceForge:** sync run 45357525661 succeeded.
+- **Browser:** publish run 45357525703 and website deploy 45357799293 succeeded. In Chrome, dunelegacy.com/play reached the main menu showing "App v1.0.877".
+- **Website:** Deploy to Droplet 45357516874 succeeded.
+- **Android:** held. **TestFlight:** not part of this release.
+- **MacBook Air:** the published macOS zip is installed (notarized; executable sha256 1e94c119…). The dev build 1c1766b8d is kept as the backup.
+
+Why it took about five hours after the tag:
+
+1. The tag build failed in select-inputs. The qualification run 45307252716 never appeared in GitHub's `qualify-release.yml/runs?status=success` listing, though the unfiltered listing showed it. `reuse_qualification` searches only that filtered listing, so after two hours I re-qualified.
+2. A re-qualification on hosted macos-15 (45330318472) hit its 120-minute limit at 210/246 tests, all passing. The hosted fallback cannot finish the nightly tier.
+3. A dispatch from `integrate/feature-batch` (45345621057) was refused by the Mini at job set-up, because the runner binding's `control_ref` is `refs/heads/main`. Dispatch qualification from `main`.
+4. The run dispatched from `main` (45345834899) qualified on the Mini in 51 minutes. Re-running the failed jobs of the same tag run then worked. Nothing was retagged.
+
+Follow-ups:
+
+- `reuse_qualification` should fall back to the unfiltered listing (titles are only a discovery hint; the receipt establishes trust).
+- The hosted qualification fallback should be removed or given a tier it can finish.
+- The aws admission hold (`~/.local/state/dunecity-queue/admission-holds/aws.json`, owner claude 4f4f3963, from the release) is still in place. The workspace guard refuses to let an agent delete it; Stefan can remove it, since the queue's own 25 GB floor still protects aws.
+- Test builds installed on the Air must show the `dev` suffix (built with DUNECITY_RELEASE_BUILD=OFF), e.g. 1.0.877dev (Stefan, 2026-11-24).
+
+## 2026-11-24 - "Invisible" city planes: they fly and draw; at Game Speed 2 they cross the view in a third of a second; the radar now marks them (in the 1.0.877 candidate)
+
+Stefan, testing `1c1766b8d` on the MacBook Air: "planes now appear to be invisible. can't see it on screen during
+testing on mba". Commits `a117ff9c6` (probe), `8a4d817c2` (radar marker, probe requires it, player guide).
+
+**Cause, from his own files** (read over SSH, nothing run on the Air): his `Dune City.log` has 13 City Airplane
+launches (the first four at cycle 19,032, 5.08 game minutes), 70 buildings bombed and planes shot down over the
+watched house's base. So the planes flew. He was spectating (Random Skirmish `Spectate = true`, 192x192, four
+qBotBrutal, seed 262441038) with the global `[Game Options] Game Speed = 2`, the fastest setting, set during the
+match (the ini was written at 11:48:44). The live match ran 143,541 cycles in 282 s, 509 a second, eight times the
+default. A plane flies 10.24 world units a cycle: it crosses his 960x600 view (1,632 world units at the 2x zoom)
+in 159 cycles, 0.32 s at that speed (2.55 s at the default), and is shot down within about 0.4 s of reaching a
+city. With the five-minute clock a house launches once every 37 s of real time at that speed; with the two-minute
+clock he had played before it was two and a half times as often. Nothing in `5d2e19fca..1c1766b8d` touches drawing.
+
+**The render, reproduced on the Mini.** New probe case `skirmish_generator_probe_spectate-planes_960x600` starts his
+match from his saved settings through the Random Skirmish screen: the same launches on the same cycle as his log,
+the plane drawn by the game's renderer (1,740 pixels where it flies, against the same view with the plane moved
+off the map). Pictures: `../outputs/city-planes-20261124/visible/` (`spectate-plane.png`, `-crop.png`, `-radar.png`).
+
+**Fix (drawing only, no rule, save or simulation change).** On the radar a plane was a tile colour: one pixel in its
+house's colour like any unit, and a 192-tile map on the 128-pixel radar skips every third column and row, so for
+a third of its path it was not drawn at all. `RadarView::updateRadarSurface` now draws every plane the viewer can
+see as a white cross five pixels wide (all planes to an observer; others under the rules of the radar's tile
+colours, `radarShowsCityPlane`). A plane crossing the 192 map stays on the radar for about 2.3 s of real time at
+Game Speed 2. The probe requires the cross (9 pixels changed on the radar; 0 is what the old radar gives, since
+moving the plane does not change its tile's colour) and the first plane within five minutes and one Airport tick.
+
+**Tests on `8a4d817c2`.** AWS `aws-mel2` `20261124T120006-ctest-380e8a`: the four AI gates and the three plane probes, 7 of 7 passed. Mini: `perf_regression` passed (122 s); the new probe passed on `build-int` at Game Speed 2. The headless nightly tier `20261124T120009-ctest-5c2257` was still running at this commit.
+
+**Not verified.** Not seen on the Air's real screen by an agent; the packaged static build was not rendered (the
+probe links the Mini's `build-int`). The main view is unchanged: at Game Speed 2 a plane there is still a third of
+a second; at the default speed it is two and a half seconds.
+
+## 2026-11-24 - City planes nerfed for the opening: free plane every five minutes, none in the first five; AirThreatTurrets measured and left off (in the 1.0.877 candidate)
+
+Stefan, after playing `5d2e19fca`: "i just tried the game and the planes seem overpowered. on skirmish with fully
+built base the ai doesn't build rocket turret defenes and everyones base gets steamrolled by a plane. we need to
+nerf them a bit somehow so they don't decide the game but still allow really built up houses to spam them as a
+form of economic victory via manufacturing. so early game balance. maybe you get one free plane every 5 mins plus
+whatever else you think is best". Commits `45549eced` (rules, switch, logging), `1c1766b8d` (switch default off
+after measurement). Protocol 133, save format unchanged. Not pushed, no version bump by this session.
+
+**What changed for players.**
+- The free plane comes every five minutes again (`CityAircraft::kFreePlaneMs`), not two.
+- Nobody bombs in the first five minutes of a game. An Airport that stands at the start charges first (as
+  before); one built in the first five minutes is ready when they are up, not at once
+  (`Airport::Airport`, `freePlaneTimer = charge - min(cycle, charge)`); one built later is ready at once.
+- Unchanged, on the evidence below: the building splash (50%), the price (1500), ten planes in the air, the
+  computer player's buy rules (performance score against its army's, or 30,000 credits to spare).
+
+**Stefan's case is the measured case.** `vanilla-match.py --maps rs160-dunecity` hard-codes his Random Skirmish
+start (`VanillaMatch::makeSkirmishInit`: Fortress base, army 5, city 4). Each house starts with 8 Rocket Turrets,
+4 Gun Turrets, its Airport and a city of about ninety zones beyond the turrets. All arms below are 48 games on
+seeds 9101-9148, four Brutal QuantBots, 45 minutes, `tests/ai/game-options/city-plane-b52-on.ini`.
+
+| 48 fully built four-house games | Before balance (`matches5/before`) | Two-minute clock (`n1-now`, = `5d2e19fca`) | **Final** (`n2-off`, = `1c1766b8d`) |
+|---|---:|---:|---:|
+| Buildings lost to bombs and crashes a game, by minute 10 | 22 | 179 | **56** |
+| ... by minute 20 | 46 | 254 | **117** |
+| ... by minute 45 | 92 | 419 | **254** |
+| Flights a game | 29 | 53 | **35** |
+| Flights shot down | 90% | 88% | **87%** |
+| Credits destroyed a flight, bombs and crash (a plane costs 1500) | 591 | 1,519 | **1,374** |
+| Planes bought a game | 6.1 | 11.9 | **12.6** |
+| Time-outs | 58% | 29% | **50%** |
+| Game length, minutes | 41.5 | 36.7 | **40.5** |
+
+- Final against the two-minute clock, paired: buildings bombed a game -143 (-164 to -122); time-outs +21 points
+  (+4 to +38); houses eliminated a game -0.38 (-0.77 to 0.00); game length +3.8 minutes (+1.2 to +6.4).
+  Placement: Mercenary -0.22 (-0.38 to -0.04), no other house moved measurably (Harkonnen +0.21, -0.02 to +0.44).
+- **Do planes decide an ordinary game now?** New logging (`CITY_HOUSE_OUT`, `CITY_PLANE_CRASH_KILL`, below), final
+  arm: of 99 houses eliminated, 4% lost more than half their buildings to planes; for the median eliminated
+  house planes took 16% of what it lost. Not measured for the two-minute arm (no logging then).
+- **The AI's Rocket Turrets when its first bomb landed** (`CITY_FIRST_BOMB`, final arm): 11 (median, 0 to 78), at
+  minute 5.3 (median). The fully built start's 8 plus the ones its core and perimeter rules add.
+
+**Building splash: kept at 50%.** With the five-minute clock (`n1-free300*`, on `91951bf49`):
+
+| Splash on buildings | 50% (kept) | 25% | none |
+|---|---:|---:|---:|
+| Buildings lost by minute 10 / 20 / 45 | 56 / 117 / 254 | 46 / 100 / 244 | 41 / 93 / 222 |
+| Credits a flight | 1,374 | 1,196 | 1,193 |
+| Time-outs | 50% | 50% | 52% |
+
+The clock moved the opening from 179 to 56 buildings; removing the splash on top took 15 more and left
+time-outs where they were. Kept, so that a rich house's planes still pay (Stefan: "still allow really built up
+houses to spam them as a form of economic victory").
+
+**AirThreatTurrets ([Force Concentration], built, measured, default off).** Stefan's "the ai doesn't build rocket
+turret defenes" asked for it: a house that can be bombed (another team has an Airport or has flown a plane)
+spreads Rocket Turrets by the AirRaidTurrets coverage rule before the first bomb, one a minute up to 16, paid
+ahead of strategic and civic savings. 48 paired games on `45549eced`, off (`n2-off`) against on (`n2-on`):
+
+| | Off (default) | On |
+|---|---:|---:|
+| Buildings lost by minute 10 / 20 / 45 | 56 / 117 / 254 | 56 / 116 / 254 |
+| Buildings bombed a game, paired | | +4 (-14 to +23) |
+| Anti-air turrets ordered a game (threat / raid) | 0 / 1.6 | 9.2 / 11.9 |
+| Rocket Turrets at the first bomb (median) | 11 | 11 |
+| Flights shot down | 87% | 86% |
+| Time-outs | 50% | 40% (-10 points, -27 to +6) |
+| Placement | | no house moved measurably |
+
+A plane over a city is shot down about three seconds after it arrives whether eleven Rocket Turrets stand there
+or sixteen, and it has dropped its stick by then. What lowers the bombing is how often a plane comes. The rule
+stays as a switch (`AirThreatTurrets=1`; `DUNECITY_TEST_AIR_THREAT_TURRETS=0/1` for match arms).
+
+**The rich-house route (Metropolis, four AIs with about a million credits, six-minute probe game).** `run-city-plane-flights.py` on `1c1766b8d`: 827 flights, 789 of them bought (1.18 million credits), 96% shot
+down, 600 credits destroyed a flight, 1,155 buildings bombed in six minutes, 28% of the map: the same as on
+`5d2e19fca`, as it must be, since the nerf changed only the free plane's clock and the probe sets its own
+half-minute clock (`Airport::testFreePlaneCycles`). The purchase rules were not touched. On 2P City, 16 Rocket
+Turrets for 1,342 buildings: 5,928 credits a flight, 36% of the map in six minutes.
+
+**New match logging.** `CITY_FIRST_BOMB` (Rocket and Gun Turrets a house has when the first bomb lands on it,
+`Bullet.cpp`), `CITY_PLANE_CRASH_KILL` (one line per building of another team a crash destroys, with its owner),
+`CITY_HOUSE_OUT` (buildings an eliminated house lost, `vanilla-match.inc`), `threat=` on `CITY_AIR_DEFENCE`.
+`vanilla-match.py` records them in `planes.csv` (events `first_bomb`, `crash_kill`, `house_out`). Results:
+`../outputs/city-planes-20261124/nerf/` (`report-now-final.md`, `report-n2-off-on.md`).
+
+**Tests and gates on `1c1766b8d`.** AWS (`aws-mel2`): `20261124T005410-ctest-48e7d9` - the four AI gates
+(`quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`,
+`quantbot_ffa_army_deploys`), `city_aircraft_probe`, `city_plane_effect` and `city_plane_flights` passed;
+`20261124T005413-ctest-d4fc4b` - the whole headless nightly tier (`-L nightly -LE gui`), 248 of 248 passed.
+Mini, `build-int` at `1c1766b8d`: `dunelegacy_tests`, `genome_registry_contract`, `perf_regression` (124 s)
+passed; at `45549eced` also `natives_probe`, `city_aircraft_probe` and `city_plane_effect` (one seed: free
+launches at 5:00 and 10:00 of eleven minutes; an Airport built at cycle 10 ready 18,740 cycles later, at the
+five minutes; one built after them launched 272 cycles after placement). Unit tests: `AirThreatTurrets` policy
+and config (`QuantBotStrategyTestCase`), `kFreePlaneMs == 300000` (`CityAircraftPolicyTestCase`).
+
+**Not verified.** No game against a human on these rules, nothing on a real screen by an agent. Stefan's
+"steamrolled" game was not replayed. The time-out rate is back near the level before any plane balance (50%
+against 58%): planes no longer break ordinary stalemates; whether a rich house still does is the Metropolis line
+above. 2P City and the 3P/6P maps were not re-measured.
+
+## 2026-11-23 - Stats: Trooper and City Airplane rows; natives and Stats probes follow the plane's rules (in the 1.0.877 candidate)
+
+Stefan on `5d2e19fca`, spectating a Brutal Harkonnen: "i can't see the % for troopers or airplanes" / "on the
+left". Commit `93f6f8f18`; protocol 133, save format unchanged.
+
+- **Two rows under the ten unit-mix slots of the Army allocation table** (`HouseStatsWindow::refreshAllocation`,
+  `kTrooperRow`, `kPlaneRow`). Neither type has a goal share of army value, so the last column holds the number
+  that does govern it and the note says which.
+  - Trooper: performance as a slot is scored (`UnitMixPolicy::performanceScore` on the house's Trooper record,
+    one price of prior); per cent = the infantry cap (`AllocationSnapshot::infantryQuotaBps`).
+  - City Airplane, in a city game once the house has an Airport or has flown a plane:
+    `CityAircraft::planePerformanceScore`; per cent = that score as a share of the house's buy score
+    (`QuantBot::getCityPlaneBuyScore`), so 100 or more means it buys. `-` until a build pass has set the buy
+    score, which needs an Airport.
+  - The note is three lines: "Performance x: score. Goal %: share of army value." / "Trooper %: infantry cap."
+    with the anti-air floor or "- = not allocated." / "City Airplane %: of its buy score x1.0; buys at 100."
+    The separate "Infantry cap" and "City Airplane: x.., bought at .." lines are gone.
+  - The table's header and rows take 16 lines instead of 18 and the note 40 instead of 60: at 640x480 the
+    left column was already full to the window's edge with ten rows.
+- **The unit table says City Airplane** (`HouseStatsWindow::unitName`); the unit data's item name stays
+  "Ambient Airplane".
+- **Two stale tests, both failing in the nightly tier of the 1.0.877 pre-release run; the game was right.**
+  - `natives_probe` ("The crash's kills are not credited to the Natives"): since `0fb66768b` a crash is the
+    plane's damage and goes to the house that sent it. The spectated and campaign checks now require the plane
+    on the Natives' record and what the crash destroys on the plane's house's.
+  - `stats_ui_*` ("An excluded unit type is listed for this house"): stale since `3fff76592`, which listed the
+    City Airplane in the unit table at Stefan's request. The probe now requires it there by name and checks
+    both new rows against the house's record, the infantry cap and the buy score.
+- **Why this got to a release run:** these changes were gated on the four AI gates, the plane probes and
+  `perf_regression`, not on the nightly tier. A default or scoring change needs
+  `dunecity-queue ctest ... -L nightly -LE gui` as well.
+
+**Tests on `93f6f8f18`, Mini, `build-int`:** `dunelegacy_tests`, `natives_probe`, `stats_ui_640x480`,
+`stats_ui_1920x1080` and `stats_ui_vanilla` passed. The 640x480 screenshot of the probe was read by an agent:
+twelve rows, Trooper x0.9 / 18.00, City Airplane x0.3 / 70.00, three note lines inside the window.
+
+**Not verified.** Not seen in a real game on the MacBook Air. Stefan asked for "the %"; what each per cent
+means was this session's choice. A human player's own house still shows no allocation table at all, so no
+Trooper or City Airplane row either. The nightly tier was not rerun on AWS by this session.
+
+## 2026-11-23 - City planes, final rules: crash counted, building splash, performance score, Airport as in Micropolis, free plane every two minutes (unreleased, after 1.0.876)
+
+Stefan, playing `e640f8f66` and later builds: "does the damage dealt include damage when it crashes? it has a
+nuclear missile effect so that should be counted"; "the plane should drop bombs when it will splash enemy units
+or buildings with them, also it starts dropping bombs slighly too last when aproaching a building"; "also
+include planes in the performance scores so we know how cost effective it is compared to other units. think
+about how we could include it in the ratio for when to buy them as well"; "also reduce the free plane from 5
+mins to 2 mins. also airport should not have population unless the original did, make it like micropolis. also
+it should have pollution like micropolis". Commits `0fb66768b`, `66780f5ef`, `071c3d2c0`, `d9d4126d1`,
+`77aa1aad7`, `5d2e19fca`; protocol 133, save format unchanged by these. This entry replaces the numbers of the
+balance entry below, which counted bombs only and had the five-minute free plane.
+
+**What changed (defaults, no switch).**
+- **The crash is the plane's damage** (`0fb66768b`). The Death Hand blast of a shot-down plane was dealt in the
+  name of the house that shot it down. It is now dealt by the plane and its owner
+  (`AmbientAirplane::crash`, `Bullet::detonateDeathHand`), so the Stats row, the house's combat record and
+  QuantBot's buy rule include it. One `CITY_PLANE_CRASH:` line per crash gives the buildings and credits it
+  destroyed, the enemy's and the plane's own side's; `vanilla-match.py` records it as event `crash`.
+- **Splash on buildings, and an earlier start** (`66780f5ef`). A heavy bomb that misses a building of another
+  team by up to a tile and a half splashes it with half of what a unit there would take: 125 within half a tile
+  of the footprint, 62 to a tile, 31 beyond; a direct hit is still 250 (`stickBuildingDamage`, `Map.cpp`). The
+  bomber's own side's buildings take no splash. A stick starts with a bomb the cycle the next bomb would do at
+  least 125 to an enemy building or ground unit (`AmbientAirplane::bombEffectAt`, `kStickStartDamage`), half a
+  tile before the sight reaches a building, and carries on while a bomb would do at least 62
+  (`kStickCarryDamage`). It used to wait three cycles after the sight had entered the first building.
+  `CITY_PLANE_KILL` is logged for every building a bomb destroys, direct or by splash.
+- **The plane has a performance score and is bought against the army's** (`071c3d2c0`).
+  `CityAircraft::planePerformanceScore`: credits its bombs and crashes destroyed over the price of every ended
+  flight plus one price of prior, the formula of `UnitMixPolicy::performanceScore`. The Stats window shows it
+  under the allocation table with the score the house buys at. QuantBot buys while the plane's score is at
+  least its army's own, held between x0.5 and x1.0 (`planeBuyScore`, `planeWorthBuying`); this replaces "a
+  flight must destroy its price". The heaps-of-money rule (`richBuys`, 30,000 spare) is unchanged.
+- **Airport as in Micropolis** (`5d2e19fca`). No city role, level or population: in Micropolis it is only
+  counted (`simulate.cpp`, `case AIRPORT: airportPop++`) and lifts the commercial cap, which DuneCity already
+  does through `hasAirport`. It emits 100 pollution, Micropolis's value for airport tiles (a developed
+  industrial tile is 50); QuantBot's placement treats it as a polluter.
+- **Free plane every two minutes** (`kFreePlaneMs`), not five.
+
+**Before and after, with crash damage counted.** Before is the plane before any balance (turrets at 24 tiles,
+100 hit points, no splash on buildings, five-minute free plane), run on the same build through the
+experiment-only variables; the earlier stick start, the crash credit and the new buy rule are in both arms.
+The middle column is `e640f8f66` as the balance entry measured it (bombs only).
+
+| Defence | Measure | Before | `e640f8f66` | Now (`5d2e19fca`) |
+|---|---|---:|---:|---:|
+| Ordinary AI city (48 AWS games, rs160, four Brutal QuantBots, 45 min) | credits destroyed per flight, bombs | 259 | 606 | 1,022 |
+| | ... by its crash | 332 | not counted | 497 |
+| | ... together (a plane costs 1,500) | 591 | | 1,519 |
+| | buildings per flight, bombs and crash | 1.55 + 1.59 | 3.73 | 5.95 + 1.95 |
+| | flights shot down | 90% | 90% | 88% |
+| | flights per game | 29 | | 53 |
+| | planes bought per game | 6.1 | | 11.9 |
+| | buildings bombed per game | 45 | 118 | 316 (+270, +252 to +287) |
+| | time-outs | 58% | 58% | 29% (-29 points, -50 to -8) |
+| | game length, minutes | 41.5 | | 36.7 (-4.9, -7.5 to -2.3) |
+| Thin: 2P City, 16 Rocket Turrets for 1,342 buildings (one six-minute probe game) | credits per flight, free planes only | 6,532 (7 flights) | | 4,372 (10 flights) |
+| | ... with the AI buying | 6,532 (none bought) | | 5,928 (1 bought) |
+| | flights shot down | 3 of 7 | | 6 of 10 |
+| | buildings bombed, share of the map | 26% | | 25% and 36% |
+| Saturated: Metropolis, 928 Rocket Turrets, free planes only | credits per flight | 292 | | 575 |
+| | flights shot down | 37 of 40 | | 38 of 40 |
+| Saturated, four AIs with about a million credits buying freely | credits per flight | 333 | | 600 |
+| | flights shot down | 97% | | 96% |
+| | buildings bombed in six minutes | 579 (14% of the map) | | 1,155 (28%) |
+| | credits spent on planes | 1.32 million | | 1.18 million |
+
+- In ordinary AI games Atreides' placement rose (+0.18, +0.03 to +0.34); no other house's moved measurably.
+  Houses eliminated per game 2.00 and 2.44 (+0.44, -0.02 to +0.85). No building of the plane's own side was
+  lost to its own crash in any of the 96 games. The AI's air-raid turrets: 1.25 and 2.35 a game.
+- The time-out rate of ordinary AI games halved. That is the first package that moved it: the two-minute clock
+  nearly doubles the flights, and splash with the earlier start takes a flight from 3.7 to 6 buildings. The two
+  were not measured apart in this round (the clock alone, at 24 tiles and 100 hit points, gave 111 buildings a
+  game against 40 in the earlier round).
+- In an ordinary AI city a plane now destroys about what it costs. On 2P City the difference between the
+  columns is inside one game's noise (7 and 10 flights). The probe games use a half-minute free-plane clock
+  (`Airport::testFreePlaneCycles`), so their totals per game overstate a real game's; per-flight numbers do not.
+- Results: `../outputs/city-planes-20261123e/matches5/` (`before`, `after`, `report-before-after.md`).
+
+**Tests and gates on `5d2e19fca`.** AWS `20261123T230001-ctest-761c52`: `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`,
+`quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`, `city_aircraft_probe` and `city_plane_flights` passed.
+The seventh, `city_plane_effect`, was running on the `aws` worker when AWS stopped it (no spot capacity) and was
+still queued behind the 1.0.877 release job when this was written, so the full registered test was run on the
+Mini instead and passed (554 s). Mini: `dunelegacy_tests`, `city_aircraft_probe`,
+`city_plane_effect` again with one seed (a bomb a quarter tile off an enemy Wind Trap takes 125, none off an own one; four
+Wind Traps under a crash are credited to the plane's house as 1,200 credits; 5 free launches in 11 minutes; a
+plane 302 cycles after an Airport is built, the next 7,500 cycles later), `city_plane_flights` and
+`perf_regression` (124 s) passed. `CityAircraftPolicyTestCase` covers the score and the buy rule,
+`CityEffectsTestCase` the Airport's role and pollution.
+
+**Installed.** The coordinating session reports `5d2e19fca` on the MacBook Air since 23:19 (not installed by
+this session). Not pushed, no version bump by this session.
+
+**Not verified.** Nothing on a real screen by an agent. No game against a human on these rules: Stefan's "too
+strong" game was before anti-air fired at all, and this build bombs 2.7 times as many buildings a game as
+`e640f8f66` did in AI matches. The clock and the splash were not measured apart. Troopers against the plane
+were not measured. The Stats line was checked by its test, not by eye.
+
+## 2026-11-23 - City planes: balance. Turrets reach them at 16 tiles, 150 hit points, bombs on units (unreleased, after 1.0.876)
+
+Stefan, after `noimpact` (a Metropolis game on `3339071a8`: 1,234 planes bought for about 1.85 million credits,
+1,268 of 1,291 shot down, median life 11 seconds, 47% dropped nothing, 579 buildings worth 120,700 credits):
+"why are turrets reaching 24 tiles?? thatv sounds insane", "we need to BALANCE the plans", "don't nerf them too
+much", "the idea is it should be able to deal some real damage to enemy bases to break up a stalemate", "also
+get planes to drop bombs on enemy units as well". Commits `9956e8ec6` (bombs on units), `e640f8f66` (the
+balance); not pushed, no version bump; protocol 133, save format unchanged by these two.
+
+**What changed (defaults, no switch).**
+- A Rocket Turret reaches a city airplane, and its rocket chases one, at twice its WeaponRange: 16 tiles
+  (`CityAircraft::kTurretPlaneReachFactor`; it was the Ornithopter's three times, 24, which Ornithopters keep).
+- The plane has 150 hit points (`kPlaneHitPoints`), five turret rockets instead of four. Every mod's unit data
+  was seeded with 100, so a new game that reads exactly 100 gets 150 (`AmbientAirplane::applyBalance`, after the
+  unit data is loaded); `config/ObjectData.ini.default` says 150. A saved game keeps what it saved.
+- The stick also starts over enemy ground units (not Sandworms, never aircraft). Against units the heavy bomb's
+  blast reaches a tile and a half: 250 within half a tile, 125 to a tile, 62 and 31 beyond
+  (`stickUnitDamage`). Buildings still take damage only when the bomb lands on them. Bombing runs still aim at
+  buildings.
+- Unchanged on the evidence: speed, bomb damage 250, price 1500, the five-minute free plane, rockets that go
+  off on contact.
+
+**Before and after** (before: 24 tiles, 100 hit points; both with bombs on units).
+
+| Defence | Measure | Before | After |
+|---|---|---:|---:|
+| Ordinary AI city (48 AWS games, rs160, four Brutal QuantBots) | credits destroyed per flight | 215 | 606 |
+| | buildings per flight | 1.42 | 3.73 |
+| | flights shot down | 92% | 90% |
+| | buildings bombed per game | 40 | 118 (+78, +68 to +88) |
+| | time-outs | 52% | 58% (+6 points, -10 to +21) |
+| Thin: 2P City, 16 Rocket Turrets for 1,342 buildings (six-minute probe game) | credits destroyed per flight | 3,882 | 5,746 |
+| | flights shot down | 7 of 12 | 8 of 11 |
+| | median life of a plane | 25 s | 40 s |
+| Saturated: Metropolis, 928 Rocket Turrets, free planes only | credits destroyed per flight | 119 | 383 |
+| | flights shot down | 39 of 40 | 39 of 40 |
+| Saturated, four AIs with about a million credits buying freely | credits destroyed per flight | 170 | 318 |
+| | flights shot down | 97% | 97% |
+| | buildings destroyed in six minutes | 624 (15% of the map) | 1,285 (31%) |
+| | credits spent on planes | 1.33 million | 1.21 million |
+
+No house's placement moved in the AWS games. The probe games use a half-minute free-plane clock
+(`Airport::testFreePlaneCycles`), so their totals per game overstate a real game's; the per-flight numbers do not.
+
+**What was tested and not chosen** (same 48 AWS games unless said; `../outputs/city-planes-20261123e/matches2/`,
+tables `report-base-*.md`).
+- Free plane every 2 minutes or every minute instead of 5 (at 24 tiles, 100 hit points): 111 and 180 buildings a
+  game against 40, time-outs 54% and 46% (not separable). Kept at five minutes: the chosen package already
+  triples the bombing, and five minutes was Stefan's own rule.
+- Reach 16 alone: 411 credits a flight, 83 buildings a game. Reach 16 with 300 bomb damage: 487 and 76.
+- **Speed is the cliff.** A turret rocket is 12% faster than the plane. 15% more speed: 34% shot down, 3,127
+  credits a flight, 635 buildings a game; on Metropolis 87% of the map in six minutes (reach 16 alone: 26%).
+  125 hit points with 10% more speed: 77%. "Strong" (150, +15%, 300) and "heavy" (200, +15%, 350): 633 and 631
+  buildings a game. Do not raise the plane's speed without raising the rockets'.
+- Rockets going off on contact (Stefan: "is the rockets hitting planes too much of a nerf? test that also"):
+  no. With the older rockets 228 credits a flight against 215, 40.3 buildings a game against 40.1.
+- No package moved the time-out rate of ordinary AI games measurably. The stalemate effect is measured on
+  Metropolis, where rich AIs now take about a third of a 928-turret map in six minutes at a loss.
+
+**The first AWS round was void.** `matches/free60`, `free120`, `reach2`, `hitsoff` and the first `s-*` arms
+replayed the baseline digit for digit: the cluster loads the harness without its command-line dispatch
+(`cluster_unit.py`), so variables set after `parse_args()` never reached a worker, and an `env` prefix is refused
+by the queue ("--rev requires a distributed batch harness"). `vanilla-match.py --env KEY=VALUE` now applies them
+in `play()`; a two-game check showed 107 and 103 launches against 20 and 24 before the valid round ran.
+Experiment-only variables, read per process and never a match rule: `DUNECITY_TEST_FREE_PLANE_SECONDS`,
+`DUNECITY_TEST_PLANE_REACH_FACTOR`, `DUNECITY_TEST_PLANE_ROCKET_HITS`, `DUNECITY_TEST_PLANE_HP`,
+`DUNECITY_TEST_PLANE_SPEED_PCT`, `DUNECITY_TEST_BOMB_DAMAGE`.
+
+**Tests and gates on `e640f8f66`.** AWS job `20261123T215825-ctest-de8966`: the four AI gates, `city_aircraft_probe`,
+`city_plane_flights` and `city_plane_effect` all passed. Mini: `dunelegacy_tests`, `city_aircraft_probe`,
+`city_plane_effect` (one seed; three enemy tanks in the open get a four-bomb stick and are destroyed, three own
+tanks get none; rocket cut-off at 16 tiles; a rocket leaves a plane at 120 of 150), `city_plane_flights`,
+`perf_regression` (122 s) passed. A 48-game set on the final commit with no test variable
+(`20261123T215829-b2-final-eb5d82`, `matches2/final`) is identical to the tested package digit for digit (606
+credits a flight, 117.9 buildings a game); QuantBot ordered 2.04 air-raid Rocket Turrets a game in it.
+
+**Not verified.** Nothing on a real screen by an agent. No game against a human. The AI's turret response was
+counted in match logs only. A plane now needs five turret rockets or two Launcher rockets; Troopers were not
+measured against it.
+
+## 2026-11-23 - Carryalls, second set: the harvester raid is a default in vanilla Construction Yard starts; more Carryalls, reserve, squad retreat, perimeter raid and flown-in defence stay off (unreleased, after 1.0.876)
+
+Stefan: "try building more carryalls, try defining when a squad is outnumbers and should retreat and retreat
+them, they can either retreat using their own movement or get a carryall if available. also try doing targetted
+carryall drops onto enemy harvesters or to undefended parts of the base permimeter of an enemy. also use them to
+rush to the defence of a base under attack or to the defence of harvesters under attack", then "also try different
+maps. try vanilla maps as well, custom games, etc." Commits 167f740d1 to 73c3d93a2 on `integrate/feature-batch`;
+not pushed, no version bump. Save format 9896 (the raid part of QuantBot's Carryall state); protocol stays 133.
+Full tables and every switch: `docs/formations.md`, "Carryall manoeuvres, second set".
+
+- **Built**, each behind its own `[Force Concentration]` key: `AirliftCarryalls` up to 12, `AirliftReserve`
+  (the newest Carryalls take no harvester or repair work), `SquadRetreat` (an outmatched wave falls back on the
+  ground: 1.3x for 9 s or 2.0x at once, the ratio is `[Army Recovery] LocalWithdrawBps`), `SquadRetreatAirlift`
+  (a withdrawing unit 20 tiles or more from the rally takes a free Carryall), `AirliftHarvesterDrop` and
+  `AirliftPerimeterDrop` (free units at home flown beside an enemy harvester or building that no enemy weapon
+  covers), `AirliftBaseDefence` and `AirliftHarvesterDefence` (a distant defender flown to the attacker).
+- **Measured** on five kinds of game, about 9,900 games on AWS in rounds 4 to 10: his 4-player DuneCity
+  free-for-all; the same in the vanilla mod; other sizes (128, 192) and Dune2R; vanilla 1v1 from Construction
+  Yard starts on four bundled maps as the Custom Game lobby starts them (Hard and Brutal); vanilla 4-player
+  free-for-all from Construction Yard starts on two bundled maps. The first set (rear and flank drops, retreat
+  lift, rescue, ferry) was also played on the vanilla settings.
+- **The harvester raid by Carryall is now a default** (c2f25d3fc), scoped to where it won: Custom games, Hard
+  and Brutal, no city simulation, a house that started without a Refinery (a Construction Yard or MCV start), not
+  allied with a human (`QuantBot::airliftHarvesterDropActive`). With no extra fleet and no reserve:
+
+  | Setting | Games | Score difference (95%) |
+  |---|---|---|
+  | vanilla 1v1, Hard, fresh seeds (replication) | 192 | +0.542 (+0.27..+0.81) |
+  | vanilla 1v1, Brutal, fresh seeds (replication) | 192 | +0.458 (+0.19..+0.73) |
+  | vanilla 1v1, Hard / Brutal, the round before | 96 / 48 | +0.208 (-0.17..+0.62) / +0.667 (+0.17..+1.17) |
+  | vanilla 4-player free-for-all, Hard | 192 / 96 | +0.035 (-0.08..+0.16) / +0.006 (-0.17..+0.18) |
+  | Fortress 1v1 duel, Hard / Brutal | 144 / 144 | -0.194 (-0.47..+0.10) / -0.181 (-0.50..+0.12) |
+  | Fortress `/weak` (paired with default `/weak`, v none) | 108 | +0.312 (+0.19..+0.44) |
+  | vanilla Fortress free-for-all / his DuneCity free-for-all | 48 / 96 | -0.076 (-0.31..+0.17) / -0.063 (-0.22..+0.10) |
+
+  The default rule is met (interval above 0, replicated; not worse on Brutal, Fortress or `/weak`). Because every
+  Fortress estimate is negative, Fortress starts do not get it; city games from a Construction Yard were not
+  played and do not get it; Easy and Medium were not played and do not get it. **His own DuneCity free-for-alls
+  are unchanged.** A raiding house flies 18 to 19 raids and about 65 units a game and loses about 10 of them
+  waiting for a Carryall.
+  The shipped default against an explicit off (round 10, source c2f25d3fc, seeds 8401 to 8412): Hard +0.479
+  (+0.10..+0.88) and Brutal +0.625 (+0.25..+1.00), 96 games each, 19.3 and 19.8 raids a house-game against 0; and
+  0 raids in 24 DuneCity and 24 vanilla Fortress free-for-alls, where the default is out of scope.
+- **Everything else stays off, with the reason:**
+  - *More Carryalls.* As first built (added to the transport target) 3, 6 and 10 extra scored -0.54, -1.33 and
+    -1.75 in vanilla 1v1, the largest effect in the study: the transport target outranks army and economy spending.
+    Fixed in 9e03f4262 to a leftover purchase at the High-Tech Factory; that version is level in all five settings
+    (+0.13, +0.04, +0.05, -0.03, -0.03). A house already builds 13 to 28 Carryalls a game on these maps.
+  - *Carryall reserve.* Harvesters lose their transport: every arm with a reserve of four loses on the vanilla
+    Construction Yard maps (retreat by air -0.52 and -1.08, flown-in defence -0.81 and -1.00).
+  - *Squad retreat on the ground.* 17 of 23 estimates are positive, none conclusive; the best are +0.153
+    (-0.02..+0.32) and +0.091 (-0.04..+0.21) on the vanilla 4-player maps, 96 and 192 games.
+  - *Retreat by Carryall, defenders flown in.* Level to negative without the reserve (defence loses the vanilla
+    4-player free-for-all at -0.28), losing with it.
+  - *Perimeter raid.* Loses in four of five settings (-0.23 to -0.57).
+  - *First set on vanilla maps.* Level or losing, as in the DuneCity free-for-all.
+- **Mistakes of mine in this round, both corrected:** the first vanilla submissions named two 1v1 maps and both
+  4-player maps by file name instead of the harness's short name and were refused for those maps (rerun complete
+  as `v1v1` and `vffa`, the only ones quoted); and the first `AirliftCarryalls` design above cost every arm that
+  used it, so round 4's vanilla numbers for the retreat-by-air and defence arms mix that cost in (round 7 separates
+  it).
+- **Evidence:** `~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`r4` to `r10`, `tables-*.md`,
+  `matrix-*.md`, the submit scripts and the two table scripts).
+
+- **Gates and checks.** AWS, source 73c3d93a2 (the last commit that touches source: three comment dates on top
+  of c2f25d3fc), job `20261123T212709-ctest-df2ee8`: 11 of 11 passed - `quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+  `repair_return_probe`, `quantbot_carryall_repair`, `stalled_carryall_probe`, `carryall_flight_probe`,
+  `menu_probe_fixture`, `save_roundtrip_probe`, `dunelegacy_tests`. The same eleven passed at c2f25d3fc
+  (`20261123T211027-ctest-397a98`). On the Mini at 73c3d93a2, built in `build-int`: `perf_regression` passed in
+  126.2 s and `dunelegacy_tests` passed, in a validated staging batch. This entry is a documentation-only commit
+  on top.
+- **Not done:** no fixture probe for the manoeuvres (their evidence is the match counts, the config unit test
+  and the gates); no human-against-AI play of the raid; Easy, Medium and city games from a Construction Yard start
+  were not measured, which is why they are outside the default's scope.
+
+## 2026-11-23 - City planes, third round: anti-air that fires, the AI's buying and turret response, balance (unreleased, after 1.0.876)
+
+Stefan kept playing on the MacBook Air and reported. Commits `f99b9c40b` to `a43a63c30`, not pushed, no version
+bump, protocol 133, save format 9898. Installed on the Air: `3339071a8` (07:55 UTC; backups there: the 1.0.876
+release app and the `3e368c611` build; package `../outputs/install-mba-20261123-3339071a8/`).
+
+**The bug** ("check the save on my mba nothittingplanes - rocket turrets are no longer attacking planes, neither
+are launchers. the planes seem to die when they turn from their own bombs"; "rockets fired at them seem to go
+right through them"). His save, with its Workshop mod and revision copied to scratch, replayed for one game
+minute by `run-city-plane-effect.py --replay-save` (a new diagnosis mode; `--replay-mod`,
+`--replay-workshop-revision`): of 62,559 turret-plane pairs in reach 3% might fire, 59% were held by
+`AmbientAirplane::crashEndangers` (the shot that would bring the plane down onto the shooter's own side; with
+rockets already in flight counted, every shot over a city was the killing one) and 38% by the hold for planes
+the rocket cannot catch in 24 tiles; Launchers 99% held. Damaged planes bombed on until they flew clear and died
+there. Bombs never hurt them. A Launcher's rocket had no test against aircraft at all.
+- With City Plane Defence on nothing holds its fire for the crash (Stefan: "yes they can crash it in their own
+  city"). Off keeps the rule up to 1.0.876.
+- A Launcher's rocket flies to the meeting point and goes off on touching the plane; any rocket fired at a city
+  airplane goes off on another enemy plane it touches (`AmbientAirplane::touchedBy`, `Bullet.cpp`).
+- Same save, same minute, before and after: buildings lost 926 and 92; rockets fired by turrets 417 and 623;
+  planes flying at the end 22 and 0.
+
+**Rules changed on his word.**
+- "AI buys freely too", "ai should figure out when it makes sense to buy", "if the ai has heaps and heaps of
+  money then spawning 10 could be useful to break up the enemy base", "no don't cap the planes. I want plans to
+  act as a counter to a massively built city where the game becomes a stalemate": QuantBot has no wait between
+  purchases. It buys when its own planes have destroyed at least 1500 credits per ended flight
+  (`CityAircraft::purchasePays`, from the house's combat record, one flight of evidence) or when it has 30,000
+  credits beyond its reserves and cash floor (`richBuys`), for as long as that holds; ten in the air is the only
+  limit. A wave of ten every two minutes was built (`db2a480bf`) and removed (`3339071a8`) at his word.
+- "delay the time you get a free plane to be the time it takes to get a saboteur": `Airport::freePlaneTimer`
+  (saved from 9897), five minutes, the Ordos Palace's charge; the panel shows it; a launch restarts every Airport
+  of the house. "when you build an airport you should get one": an Airport placed after cycle 0 has its free
+  plane ready; one standing at the start charges first.
+- "also make the ai respond when being bombed by planes by having more turrets dispersed": a bomb on a building
+  notes it with the owner (`House::noteBombHit`, saved from 9898). While bombed in the last three game minutes
+  QuantBot wants every building within eight tiles of a Rocket Turret of its own: one order at a time, two a
+  minute, eight a raid, none at 24 Rocket Turrets, each at least six tiles from its others, near the hits first,
+  only from money beyond its reserves plus 500 and with power (`QuantBotAirDefencePolicy.h`,
+  `planAirRaidDefence`, `findAirRaidTurretSite`). Switch `[Force Concentration] AirRaidTurrets`, default on.
+  In the 48 final matches it fired in 35 games, 1.35 turrets a game. The 24-turret cap means a house on
+  Metropolis (150 to 290 turrets) never uses it.
+
+**His last game** (8-player random FFA, 94 minutes, build `4ead1dc0c`): bombs destroyed 1,160 buildings
+(187,775 credits), 387 of them in the first four minutes from 38 free flights; 2 planes bought. "the planes
+basically won the game - too strong". Then: "we need a balance with these planes, don't nerf them too much".
+
+**Balance, measured on `3339071a8`** (credits of buildings one flight destroys; a plane costs 1500):
+- 2P City, 16 Rocket Turrets for 1,342 buildings: 3,572 (32 buildings, plane lasts 27 s, 70% of flights earn
+  their price).
+- Ordinary AI city, 48 AWS matches (`../outputs/city-planes-20261123e/matches/report-off-on.md`): 224 (1.6
+  buildings). 92% of 1,231 flights shot down, half within 10 s of take-off, 97% within 20 s; 35% dropped no
+  bomb; 90% of kills by Rocket Turrets. Bombs destroyed 40 buildings a game (545 before the fix and the
+  five-minute clock); time-outs 50% (60% with the 4cf0fd5c4 rules, difference not separable); 2.46 planes
+  bought a game at a median minute 34. Stefan: "224 credits per flight seems a bit low unless thees a lot of
+  defence", then "why are turrets reaching 24 tiles?? thatv sounds insane". The reach is the Ornithopter rule
+  (three times WeaponRange 8) that the first plane change extended to planes, because at ten tiles a second an
+  8-tile reach gives a turret under one reload of time.
+- Metropolis, 928 Rocket Turrets: 49 (plane lasts 9 s). With a million credits a house the rich rule bought 838
+  planes in six minutes for 500 buildings.
+- Experiment-only overrides, read once per process and never part of the match rules:
+  `DUNECITY_TEST_FREE_PLANE_SECONDS`, `DUNECITY_TEST_PLANE_REACH_FACTOR` (turret reach against planes as a
+  multiple of WeaponRange, 1 to 3). Four arms were queued on `a43a63c30` over the same 48 games: free plane
+  every 60 and 120 seconds, reach 16 tiles, and reach 16 with 120 seconds. **If no later entry reports them, the
+  results are in `../outputs/city-planes-20261123e/matches/` (`free60`, `free120`, `reach2`, `reach2free120`,
+  against `on`) and the reach and clock are still 24 tiles and five minutes.**
+
+**Tests and gates.** `city_plane_effect`: rocket cut-off, a rocket taking the near of two planes in line, a
+Launcher's rocket hitting (75), the killing shot fired over an own wall, free plane at 5:00 and 10:00, a plane
+302 cycles after an Airport is built. `city_plane_flights`: coverage per building, the purchase evidence, and
+the half-the-map bound on bombing without purchases; it keeps a half-minute clock (`Airport::testFreePlaneCycles`).
+`CityAircraftPolicyTestCase`: `purchasePays`, `richBuys`. AWS `20261123T185552-ctest-3eef37` on `3339071a8`:
+all seven passed. Mini: `dunelegacy_tests`, `city_aircraft_probe`, `perf_regression` (127 s) passed.
+`genome_registry_contract` was already failing at HEAD for twelve Airlift and SquadRetreat keys of another
+session; the `AirRaidTurrets` key is registered.
+
+**Not verified.** Nothing on a real screen by an agent. The turret response was not seen in a whole-game probe
+(the bombed AI on 2P City had 960 credits), only counted in match logs. No game against a human. The AI's
+purchases with the rich rule in ordinary matches are rare (2.46 a game), so that rule is measured mainly on
+Metropolis.
+
+## 2026-11-23 - Carryalls: manual drops on by default reach old profiles, a Return units switch on Repair Yards, QuantBot's mass Carryall manoeuvres (unreleased, after 1.0.876)
+
+Stefan: "make manual carryall drop on by default on dune city. make a button for setting repairyards to return
+unit to where it was picked up from for repair or not (a toggle on the right hand menu)"; then "get the ai to test
+different mass carry all drop movements - to retreat or to attack. could be behind enemy or to the side flanking
+or a rescue etc. also would make carryalls more valuable to have". Commits 0ab915e86 to aa0dd1b7e on
+`integrate/feature-batch`; not pushed, no version bump. Protocol stays 133 (unreleased), save format 9893 (the
+switch) and 9894 (QuantBot's manoeuvre state).
+
+### Part 1: the default and the switch
+
+- **Why manual drops were still off for him.** The Dune City default has been on since 1.0.799 (`BundledGameOptions::
+  city`). Every options save (Options, or Game Rules with "Remember for new games") writes all options into
+  `[Game Options dunecity]`, so a section first written before then, and every re-save of it since, carries
+  `Manual Carryall Drops = false` over the mod default. His MacBook Air profile, read (not changed) on 2026-11-23,
+  has exactly that: off in the Dune City section, in a section last saved by a recent build (it has `Starport
+  Population`, not yet `Saboteur Hunt`). `tests/performance/data/stefan-game-options.ini` (captured 2026-10-18)
+  still had it on. The game statistics database does not record match rules, so how many other players are in that
+  state cannot be counted.
+- **Decision: one reset, then the choice is the player's.** A stored "off" is not evidence of a choice, because the
+  file stores every option on every save, and the one profile that could be checked holds an "off" its owner does
+  not want. A narrower rule was considered and rejected: dropping the value only from sections last saved before
+  v1.0.842 (the first release that writes a key 1.0.799 did not) would have left his own profile off. So start-up
+  (`adoptCarryallDropDefault`, `src/globals.cpp`, called from `main()` after the options are read) removes a
+  stored `Manual Carryall Drops = false` from `[Game Options dunecity]` once and writes `Carryall Drop Default = 1`
+  into the section. Every later options save writes that key too, so an "off" saved from then on stays off. A player
+  who did untick it on purpose gets it ticked once and unticks it once more. Vanilla, Dune2R, Tornie and Civ Wars
+  keep their own defaults (off) and their sections are not touched; saved games keep their saved rule.
+- **What Repair Yards did before, kept as the starting state.** A Carryall that picks up a unit bound for a Repair
+  Yard sets the unit's guard point to the pickup tile (`Carryall::pickupTarget`). When the repair is done the yard
+  books a free Carryall to fly the unit to its guard point if that is six or more tiles away and the match rule
+  Manual Carryall Drops is on (`RepairYard::updateStructureSpecificStuff`); with no free Carryall, or the rule off,
+  it releases the unit beside itself. A unit that drove in has no pickup tile; its guard point is still the spot it
+  guarded, so it is flown back there. None of that changed.
+- **The switch: "Return units on / off"** in the Repair Yard's side panel (`RepairYardInterface`), under the city
+  statistics. Off: the repaired unit is released beside the yard and no Carryall comes. It is **one switch per
+  house**, shown on every Repair Yard of that house, not one per yard: a damaged unit takes whichever free yard is
+  nearest (`GroundUnit::doRepair`), the player never picks the yard, so a per-yard setting would make the same
+  tank come back or not depending on which bay happened to be free. The button queues `CMD_HOUSE_REPAIR_RETURN`
+  (appended after `CMD_AIRPORT_BUY_AIRPLANE`; issuer's own house only, like auto repair), so it is in the command
+  stream of multiplayer games and replays. `House::repairReturnEnabled` is saved after the auto-repair flag from
+  format 9893; an older save loads on. The button is hidden while Manual Carryall Drops is off (there is no return
+  flight to switch) and disabled for another house's yard and for observers. A Carryall already booked for a
+  return when the switch goes off still makes that flight.
+- **AI houses** start on and never change it: that is what they did before, and QuantBot's transport planning
+  counts a finished repair waiting for its return flight as Carryall demand. In a house a human shares with a
+  QuantBot partner the human's switch applies to both, and QuantBot no longer counts a return flight that is
+  switched off (`QuantBotBuild.cpp`).
+- **Test: `repair_return_probe`** (`tests/units/repair-return-probe.inc`, `run-repair-return-probe.py`; headless,
+  nightly; 176 s on the Mini). Each case is a Custom Game started through the main menu's own steps
+  (`initialCustomGameRules`, the map and rules screen, the lobby's Start) from a profile holding his saved options
+  (`tests/ai/game-options/saboteur-hunt-on.ini` as `[Game Options dunecity]`), the switch is clicked in the real
+  panel and the trips are flown by `Game::updateGameState()`. Each case runs twice and must log the same cycles.
+  Results of the run at e898f959d (`build-int/repair-return-probe/`):
+
+  | Case | Result |
+  |---|---|
+  | on (starting state) | picked up at cycle 282, in the bay 607, Carryall takes it 976, set down 1283 on its pickup tile (29,27) |
+  | off (button clicked; command runs the next cycle) | released beside the yard at 54,57, no Carryall; switched on again, the next unit returns to its post |
+  | drove in, on | no Carryall until it is in the bay; flown back to the post it guarded |
+  | drove in, off / house without a Carryall | stays beside the yard |
+  | save | off survives save and load with a unit in the bay (which then stays by the yard); on again survives too; format 9893 |
+  | old save (format 9854) | all four houses load on |
+  | QuantBot house | starts on, its repaired unit is flown out; the human's command does not change it |
+  | Manual Carryall Drops off | no return flight, button hidden |
+  | default, four profiles | fresh: on. His options: on. Section saved before the revision with off: on, key removed, revision 1; an off saved afterwards is kept and offered. Off saved after the revision: off |
+
+- Not verified on a real screen: the button's place and text in the panel at his resolution. The probe checks it is
+  visible, enabled and clickable in the 640x480 dummy-driver panel.
+
+### Part 2: QuantBot's mass Carryall manoeuvres (five switches, none earned the default)
+
+- **Before:** QuantBot never ordered a Carryall. Combat units were lifted only by the engine (repair trips, three
+  failed paths, the 30-second stall rescue). Hindsight and `docs/formations.md` had no earlier Carryall assault,
+  airlift or rear attack; the nearest prior results were the split and flank ground waves S and T ("one
+  concentrated wave is better") and withdrawals, which are off because they cost wins.
+- **Built** (`src/players/QuantBotAirlift.cpp`, called from the unit pass after `concentrateForces()`; Custom games
+  only; `[Force Concentration]` keys, each hashed when on; state saved from format 9894): `AirliftRearDrop`,
+  `AirliftFlankDrop`, `AirliftRetreatLift`, `AirliftRescue` (with `AirliftRescueHealth`, `AirliftRescueCutOff`),
+  `AirliftFerry` (added after round 2, because splitting lost), `AirliftGroup`, `AirliftCarryalls`. What each does
+  is in `docs/formations.md`, "Mass Carryall manoeuvres". A Carryall carries one unit, so every manoeuvre flies
+  sorties and only orders a unit while a Carryall is free to book.
+- **Measured** in his game: 4-player DuneCity free-for-all on generated 160x160 maps, Fortress starts, his options,
+  QuantBot Brutal, 45 game minutes, two candidate and two control houses per game, 96 games an arm, 15 arms, 1,440
+  games on AWS (`tests/ai/vanilla-match.py --ffa default@airlift-<arm>,default --control default`, seeds 9101 to
+  9116). Paired placement-score difference against the control houses of the same game, 95% bootstrap interval:
+
+  | Manoeuvre | Fired (house-games) | Units lifted a house-game | Lost in the air / waiting | Score difference (95%) | Verdict |
+  |---|---|---|---|---|---|
+  | Rear drop, 6 units (round 2) | 64% | 7.9 | 0.03 / 0.0 | -0.072 (-0.23..+0.09) | level |
+  | Rear drop, 12 units | 64% | 13.2 | 0.01 / 0.0 | -0.174 (-0.34..-0.01) | loses |
+  | Flank drop, 6 units (round 2) | 71% | 9.9 | 0.03 / 0.0 | -0.211 (-0.36..-0.06) | loses |
+  | Flank drop, 12 units | 69% | 15.9 | 0.06 / 0.0 | -0.220 (-0.36..-0.07) | loses |
+  | Retreat lift | 19% | 0.8 | 0.00 / 0.0 | -0.020 (-0.20..+0.16) | level |
+  | Rescue, below 50% health or cut off | 94% | 119.7 | 0.26 / 43.7 | -0.150 (-0.31..+0.01) | level |
+  | Rescue, below 25% health only | 97% | 39.5 | 0.05 / 69.5 | -0.013 (-0.15..+0.14) | level |
+  | Rescue, cut-off units only | 97% | 79.9 | 0.33 / 11.4 | -0.083 (-0.24..+0.08) | level |
+  | Ferry to the wave's front | 47% | 31.0 | 0.01 / 0.0 | -0.057 (-0.23..+0.11) | level |
+  | Three more Carryalls, no manoeuvre | - | - | - | +0.002 (-0.17..+0.18) | level |
+
+  Games timed out in 4% to 34% of an arm's games, and candidate and control houses were alive at a time-out within
+  four points of each other in every arm. The full table (round 1 with the stricter first version of the drops, the
+  no-fleet arms, Carryalls built and lost per arm) is in `docs/formations.md`.
+- **Decision: every switch stays off; no default changed and no gate was touched.** The rule needs the interval
+  above 0 and none is. Why: a drop takes the dearest units out of the wave and they fight apart (a candidate house
+  killed 9,000 to 16,000 credits less than a control house in round 2), and it loses more the more it carries; a
+  rear drop often has no ground behind a base on the map's rim; the retreat lift finds no free Carryall in 7 of the
+  9 passes a house-game it is wanted; the rescue pulls 107 to 172 units a house-game out of fights, or, kept to
+  units below a quarter health, loses most of them before the Carryall arrives; the ferry is safe and changes
+  nothing.
+- **Does QuantBot build more Carryalls, and does it pay?** With `AirliftCarryalls=3` a house builds 0.8 more a
+  house-game (2.3 more for a house that survives: 19.7 against 17.4) and loses them at about the same rate. Alone
+  that scores +0.002 (-0.17..+0.18): neither a gain nor a measurable cost. A control house that survives the 45
+  minutes already builds 16 to 21 Carryalls and loses 11 to 13 of them, so in these games Carryalls are a running
+  cost of about 800 credits each. Nothing here made them worth more.
+- **Not done:** vanilla Construction Yard starts, 1v1 and Hard were not played; the Fortress, Brutal and `/weak`
+  "not worse" runs of the default rule were not needed because nothing passed its first half. The manoeuvres have
+  no fixture probe; their evidence is the per-house counts in the match reports (`tests/ai/airlift-report.py`), the
+  config unit test `[ai][config][airlift]` and the gates. During development one edit of two source files ran
+  about 30 seconds while another session's `perf_regression` held the checkout (a refused claim was not checked);
+  the files were put back at once and the change was re-applied under a claim.
+- **Evidence:** `~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`dc-ffa`, `dc-ffa-r2`, `dc-ffa-r3`:
+  per-arm `games.csv`, `houses.csv`, `summary.txt` and `cluster-evidence`; `report.txt` and `airlift-report.txt`
+  per round; `smoke1` to `smoke3`). Queue jobs `20261123T1608*-lift-*`, `20261123T1629*-lift2-*`,
+  `20261123T1647*-lift3-*`.
+
+### Gates and checks
+
+- AWS, source aa0dd1b7e (the last code commit), job `20261123T165547-ctest-d0ef72`: 11 of 11 passed -
+  `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`,
+  `quantbot_ffa_army_deploys`, `repair_return_probe`, `quantbot_carryall_repair`, `stalled_carryall_probe`,
+  `carryall_flight_probe`, `menu_probe_fixture`, `save_roundtrip_probe`, `dunelegacy_tests`. An earlier run at
+  64104487a (`20261123T160939-ctest-ea304b`, before rounds 2 and 3) passed 10 of 10.
+- `perf_regression` on the Mini: passed in 104.7 s at b2cdcedb0, which is aa0dd1b7e plus another session's
+  change to a city plane probe only. A first run at aa0dd1b7e also passed (124.1 s), but the workspace wrapper did
+  not accept it as a validated batch because that probe file was edited while it ran.
+- `repair_return_probe` on the Mini at e898f959d: passed (176 s). Built in `build-int` at aa0dd1b7e.
+- This entry, the `docs/formations.md` section and the `HOWTOPLAY.md` paragraph are a documentation-only commit
+  on top; the gates were not run again for it.
+
+## 2026-11-23 - Airport 4x4 from the full Micropolis sprite; 3x3 where a map or save has no room (unreleased, after 1.0.876)
+
+Stefan: "make an airport 4x4 squares not 3x3 you can look at the original unskrunken sprite from micropolis".
+Commit `8bf33b94e` (not pushed, no version bump; protocol 133, save format 9895).
+
+- **Art.** `scripts/build-city-atlases.py` takes a cell size per entry: the airport atlas is 576x64 (nine 64 px
+  frames from the 6x6-tile, 96 px Micropolis airport), stadium and nuclear plant stay at 48. Only
+  `atlases/airport.png` and `atlases/manifest.json` changed. Pillow 11.3.0 re-encodes five other atlases with the
+  same pixels and different bytes when the script runs; they were restored, so do not commit them after a rerun.
+- **Footprint.** `Structure_Airport` is 4x4 for every Airport a player, an AI or the editor places (`sand.cpp`,
+  `Airport::init`). `StructureBase::destroy` threw on any size it did not know; it has a 4x4 wreck table now.
+- **Compact (3x3) Airports** (`Airport::compact`, saved from 9895) draw the same cell scaled into three tiles
+  (`StructureBase::blitToScreen`). They are: every Airport of a save older than 9895, whose tiles hold a 3x3
+  claim, and a scenario Airport with no room. No map file was changed.
+- **Scenario maps** (`INIMapLoader::loadStructures`). Every structure line claims its tiles first, an Airport its
+  3x3 at the file position. Then each Airport, in file order, tries the 4x4 footprints growing east/south,
+  west/south, east/north, west/north; it takes the first inside the map with no tile claimed by another line, an
+  earlier Airport's choice or an object already on the map (the pre-placed units), first without taking tiles
+  that have a Road line, then with (those Road lines are skipped). None fits: compact at the file position. One
+  `AIRPORT_FOOTPRINT:` log line each. By a model of the rule, 13 of the 22 Airports on the bundled maps become
+  4x4 and 9 stay 3x3; eight of the 13 take three to seven road tiles (Metropolis lines 652, 688, 2729; 2P City
+  241, 5179; Ash Quarter 191; Alkozeltser 6186, 6555). The road-second pass is one line to drop if roads should
+  always block. `Airport::CompactPlacement` is the loader's RAII hint to `House::placeStructure`.
+- **Tests.** `city_aircraft_probe` has a footprint phase: an ordinary Airport is 4x4 on sixteen tiles; destroying
+  it does not throw and frees them; a 4x4 and a compact Airport survive save and load; nine fixture Airports
+  through the real loader (free ground, zones east and south, boxed in, east edge, a unit to the east, an earlier
+  Airport's footprint, the two road cases). `CitySpritePolicyTestCase` and the skirmish generator's catalogue
+  follow the size; the generator's pinned digests did not move. `city_plane_effect`'s pictures show both sizes
+  (looked at: correct). Mini: `dunelegacy_tests`, `city_aircraft_probe` passed on `8bf33b94e`.
+- **Gates on the Airport build.** AWS job `20261123T162927-ctest-0e17a6` (`ef2a81ac9`): the four AI gates,
+  `bundled_three_way_startup`, `city_aircraft_probe` and `city_plane_effect` passed; `city_plane_flights` died
+  with SIGSEGV on both workers. The crash was in the probe, not the game (`runCityPlaneFlights` read the ground
+  object of a tile whose building a bomb had destroyed since the sight entered it; the earlier runs passed by
+  timing). Fixed in `b2cdcedb0`; it then passed on the Mini and on AWS (`20261123T170259-ctest-423b20`, 392 s).
+  Mini: `perf_regression` passed (122.8 s). No off/on AI matches were run for the Airport's size.
+- **Installed** on `Stefans-MacBook-Air.local`, `/Applications/dunecity.app`, 05:30 UTC: `build-int` as built
+  from `8bf33b94e` (before the later Carryall commit `485291f04`); hashes and deep signature verified there, no
+  launch by an agent. Backups there: the 1.0.876 release app and the `6cb58d1e8` build. Package and receipt:
+  `../outputs/install-mba-20261123-8bf33b94e/`.
+- **Known gaps.** A compact Airport is over-estimated by one row and column where code asks the item for its
+  size instead of the object: the map editor and map preview (`MapEditor.cpp`, `MapEditorRadarView.cpp`,
+  `INIMapPreviewCreator.cpp`) and two AI spots (`QuantBotPlacement.cpp:491`, `QuantBotForce.cpp:1050`).
+  `scripts/validate_city_maps.py` still checks a 3x3 Airport and does not know the loader's rule. The Dune2
+  graphics skins' airport art was drawn for three tiles and is stretched onto four. No old save was loaded (none
+  with an Airport at hand); the compact path is tested through the loader and a 9895 save. Not behind a switch:
+  the MOD15 byte has no bit left and a footprint is not a match rule.
+
+## 2026-11-23 - City planes after Stefan played them: heavy bomb, ten planes, rocket cut-off, Airport shortcut; installed on the MBA (unreleased, after 1.0.876)
+
+Stefan played `4f2d99bf8` and then `f4de2f8cd` on the MacBook Air and changed the rules of the entry below. His
+words, in order, and what each became (commits `4f2d99bf8`, `3fff76592`, `ededc735d`, `6cb58d1e8`; not pushed, no
+version bump; protocol still 133, save format 9892 for these changes and 9893/9894 with the Carryall session's):
+
+- **"no limit on planes in the air"**, then **"it still limits me to one in flight, i should be able to buy more
+  planes, up to 10"**. What held him to one was the one-a-minute-per-Airport wait, with flights of half a minute. A
+  player now buys as fast as he can pay, up to `kMaxPlanesPerHouse` = 10 in the air. The wait
+  (`kPurchaseCooldownMs`, `Airport::purchaseCooldown`) is now only QuantBot's own pace: one plane a minute per
+  Airport, the pace its matches were measured at. **My choice, for Stefan to correct.**
+- **"the normal plane that respawns should be free"**. It was; it is now also counted apart from bought planes
+  (`AmbientAirplane::bought`, `freePlanes`, save 9892), so it comes back half a minute after the last free plane
+  whatever the house has bought.
+- **"make a new bomb ... i want a big explosion. drop less frequently them but they should do more damage. a direct
+  hit in the middle of a residential for example should destroy it and 2 hits should be taking out other
+  buildings"**. `kStickDamage` 250 (was 60); one bomb every 12.5 cycles, two tiles of flight (was two a tile);
+  the first bomb of a stick `kStickLeadCycles` = 3 after the sight enters a building, half a tile inside it; one
+  tail bomb. `Explosion_Bomb` is a large building explosion drawn four tiles wide with `Sound_ExplosionLarge`; the
+  falling bomb is the Death Hand rocket's picture. One hit destroys every 200-point building (zones, Wind Trap,
+  turrets, Heavy Factory, Repair Yard, Silo, Wall), two everything else up to 500, a Nuclear Plant takes three, a
+  Palace four.
+- **"one hit right in the middle should not destroy heavy factory or repair yard, two hits should though"**, then,
+  after playing, **"actually the damage looks ok."** A 60% cap for buildings larger than 2x2 went in (`92b3a0804`)
+  and came out again (`ededc735d`). The bomb is the flat 250.
+- **"missiles chasing a plan just keep going forever. there needs to be a distance cutoff"**. A turret rocket is
+  1.13 times as fast as the plane, so after a plane flying away it flew nine times the gap (probe: 44.7 tiles for
+  a 5-tile gap). A rocket chasing a city airplane now goes off 3 x WeaponRange = 24 tiles from where it was fired
+  (`kRocketChaseRangeFactor`, `Bullet::updateDynastyProjectile`, also a Trooper's rocket), and a Rocket Turret
+  takes no plane its rocket cannot meet inside that distance (`RocketTurret::canMeetCityPlane`).
+- **"include plane in the unit performance stats"**: the City Airplane is no longer hidden from the Stats window's
+  unit table (`HouseStatsWindow.cpp`). Its bombs were already credited to it (`ObjectBase::handleDamage`).
+- **"change the plane icon so it doesn't just look like an ornithopter when selected"**: `Picture_CityAirplane`
+  and `Picture_CityHelicopter` are made from the aircraft's own sprite sheets (`GFXManager.cpp`, `sand.cpp`).
+- **"make airport available on the side menu so you can find it"**: `Structure_Airport` is second in
+  `GameInterface::kBuilderShortcutTypes`; `Game::selectBuilderOfType` selects the house's Airport that can sell a
+  plane now. The view does not move.
+- **"is 1500 too cheap"** and the flight-length correction are in the entry below.
+
+**Measured.**
+- `city_plane_effect` (AWS, 1,182 s): one stick over a Wind Trap, Rocket Turret, Refinery 0 left, Construction
+  Yard 150, Palace 500; twenty Wind Traps side by side 21 bombs, none standing; ten planes bought at once from one
+  Airport, the eleventh refused; rocket after a plane flying away from 5 tiles: 44.7 tiles without the cut-off
+  (control: range set to 240), 4.5 with it; head-on from 26 tiles still hits. Defence per pass is nearly
+  unchanged by the cut-off: 0.27 planes shot down a pass (0.29 before). The stick against the aimed bombs: 4.50
+  against 3.79 bombs a run, 1.76 against 1.03 buildings (+0.74, +0.56 to +0.91), at most 5 of 22 buildings in one
+  run; a Construction Yard fell to a single run 3 times in 117 (two hits on a diagonal), a Palace never.
+- `city_plane_flights` (Mini, default configuration, six game minutes, one seed; coverage is now per building
+  that stays under the sight for two tiles of flight): base 17% of those buildings bombed, defaults 100%;
+  buildings destroyed per flight 0.52 base, 21.9 defaults; on 2P City (16 Rocket Turrets) the defaults destroyed
+  35% of the buildings on the map in six minutes (471 of 1,342). **Open for Stefan:** that is far more than the
+  first stick (about 22% in 13.5 minutes); he played it and said the damage looks ok.
+- AI matches on AWS, `1731106a4`, 48 pairs, rs160-dunecity, four QuantBot Brutal, 45 minutes, 4cf0fd5c4 rules
+  against the defaults (`../outputs/city-planes-20261123c/matches/report-off-on.md`): buildings destroyed by bombs
+  per game 74.9 against 545.4; per flight 0.53 against 7.21; planes shot down per game 115.5 against 59.4;
+  time-outs 58% against 10% (-48 points, -67 to -29); houses eliminated 1.79 against 2.83; game length 41.7
+  against 32.0 minutes; planes bought 1.58 a game; no house's placement separable from 0. 1,462 Rocket Turrets
+  fell to bombs in the 48 default games.
+- Gates on `1731106a4`: AWS job `20261123T155042-ctest-17bd4d`, all seven passed (four AI gates, three plane
+  probes). Mini: `dunelegacy_tests`, `city_aircraft_probe` passed; `perf_regression` failed once on `f4de2f8cd`
+  (one house update of 93 ms, `house_max` 14.6 against a budget of 10, means well inside budget, the Mini busy
+  with other sessions) and passed on the rerun on `6cb58d1e8` (126 s).
+
+**Installed** on `Stefans-MacBook-Air.local`, `/Applications/dunecity.app`: `4f2d99bf8` at 03:56 UTC, `f4de2f8cd`
+at 04:28, `6cb58d1e8` at 04:55 (each swapped in when Stefan closed the game; hashes and deep signature verified
+there; no launch or graphical check by an agent). `6cb58d1e8` also carries the Carryall session's commits up to
+`e898f959d`. Backups on the Air: the 1.0.876 release app and the `f4de2f8cd` build. Packages and receipts:
+`../outputs/install-mba-20261123-6cb58d1e8/`, `-f4de2f8cd/`.
+
+**Not verified.** Nothing on a real screen by an agent: the explosion's size, the bomb picture, the icons, the
+Stats row and the two buttons are untested beyond headless renders and commands. No network game. The AI's pace
+with the new bomb was measured only at one plane a minute per Airport.
+
+## 2026-11-23 - City planes: a bomb stick that never runs out, bombing runs, planes for 1500 credits (unreleased, after 1.0.876)
+
+Stefan, after playing `4cf0fd5c4` on the MBA: "next allow the ai to spawn planes for 1500 credits. also the planes
+don't seem to be dropping bombs on enemy cities, so fix that. they should drop bombs like a b-52 does as they fly
+over. using a ornithopter attack explosion but make it a bit bigger and deadlier"; then "the planes DO go over an
+enemy city - i don't think this was tested properly", "planes racks don't empty", "the planes own bombs shouldn't
+hurt it, and they should take a while to drop ... so that the plane has already passed the bombs". Commits
+0c9dca9b6 to 6f5687ba4 (engine final at 0ab621bfb) on `integrate/feature-batch`; not pushed, no version bump.
+
+- **Why he saw no bombs, in the build he played.** Bombing was on. His own log from the Air (Custom Game, 4P -
+  192x192 - Metropolis, every house a QuantBot Brutal and watched, 148 to 289 Rocket Turrets a house, 114 game
+  minutes) has 660 flights, 2,725 `CITY_PLANE_BOMB` lines (73% of flights dropped one) and 76 buildings destroyed.
+  A plane carried six bombs and released one per enemy building tile under its sight, so the rack was empty about a
+  second after the first enemy building, a median 8.5 s after take-off; the next bomb came back after 8 s and a plane
+  lived a median 13 s. Reproduced on the Mini on that map: the plane had an empty rack for 85% of the cycles its
+  centre was over an enemy building (931 of 1,096 samples), and it passes over 22 tiles of enemy building per
+  flight. With his own `Dune City.ini` on 2P - 192x192 - City (the local human against one AI) the 24-bomb stick of
+  0c9dca9b6 was still empty for 89% (4,842 of 5,440 cycles). Second cause: of 348 bombs that landed in the
+  reproduction, 90 left a building on exactly 1 hit point. Two 100-point bombs land six cycles apart on a 200-point
+  zone, and a repairing building regains 1/6 hit point a cycle (`StructureBase::update`: every AI building below
+  half health, and a human's with auto-repair).
+- **Why the tests of 2026-11-22 passed.** `city_plane_effect` flew single passes over a 22-building base whose
+  buildings did not repair and counted bombs and buildings per run; the AI matches counted bombs and buildings per
+  game. Nothing measured what share of the enemy buildings under a plane got a bomb, and no test played a city.
+- **Every link checked with his own options file** (copied to scratch on the Mini, never into the repository; game
+  started through the same code the menus run): the six rules are at their defaults in the options as `main()` reads
+  them, in the mod's effective options, in the Random Skirmish screen's start, in a campaign start, in the Custom Game
+  screen, its lobby, the settings stream and in the game; his file has none of the keys and the mod's
+  `GameOptions.ini` has none, so the defaults apply. A save of his made before 9890 (format 9888, two planes in the
+  air) loads with the rules at their defaults and plays on. A second older save could not be checked: the headless
+  probe waited in the Workshop download prompt for a mod that save needs. On 2P City with the human seat both
+  directions bomb (132 bombs from the human's planes on the AI, 146 the other way, in six minutes). On that map the
+  city is 1,222 zones, 18 Police Stations, 8 Nuclear Plants and 2 Airports, all structures a bomb can hit, and 8,659
+  road tiles, which are tile state and never a target. Not done as asked: `4cf0fd5c4` was not built separately (one
+  build tree); the evidence for that build is his own log, and the reproduction is the base arm of the new probe,
+  which plays that build's rules in the current binary.
+- **The stick** (match rule `City Plane Carpet Bombing`, default on, INI key only; `AmbientAirplane::dropStick`).
+  A stick starts with a bomb the cycle an enemy building comes under the bomb sight and releases one every 25/8
+  cycles, exactly two a tile on an axis heading, for as long as one is under it, and two more after the last (one
+  tile), so it runs across a road between two zones. **There is no rack**: no load, no rearm. Nothing is released
+  while the sight is over a building of the plane's own team. A bomb does 60 (the Ornithopter's rocket does 45) and
+  bursts as that rocket's explosion drawn half again as large (`Explosion_Bomb`), with its sound. 120 a tile
+  crossed: a zone or Wind Trap (200) crossed through both tiles is destroyed, also while repairing; a Rocket Turret
+  keeps 80, a Construction Yard 160 of 400, a Refinery 90 of 450, a Palace 640 of 1000. Ground units under the
+  stick take the ordinary splash whoever owns them (a tank on the road between two bombed Wind Traps: 200 to 155
+  for the defender's, 200 to 128 for the plane's own). Off, the plane drops one aimed 100-point bomb per building
+  tile from a rack of six, as in `4cf0fd5c4`.
+- **The fall** (both bomb kinds; `CityAircraft::kBombSightDistance`, `kBombFallCycles`). The sight is three tiles
+  ahead of the plane and a bomb takes 75 cycles (1.2 s) to reach it, at 2.56 world units a cycle against the plane's
+  10.24. The plane flies 12 tiles in that time, so it is 9 tiles past the impact when the bomb goes off; the blast
+  reaches ground units one tile away. Measured: 73 cycles from the release being visible to the explosion, impact on
+  the building tile that was under the sight, plane 8 whole tiles past it.
+- **Own bombs** (`Map::damage`). `Bullet_Bomb` never damages an aircraft: not the plane that dropped it, another of
+  its house, an ally, an enemy plane or an Ornithopter. In `4cf0fd5c4` a bomb could not damage an aircraft either
+  (it is a ground blast); it is now an explicit rule with a test.
+- **Bombing runs** (`City Plane Bombing Runs`, default on; `AmbientAirplane::pickBombingRun`). Each leg of a flight
+  is aimed at a living building of another team, drawn evenly from all of them with the game's random generator, and
+  ends twelve tiles beyond it on the same line, kept on the map. Off: Micropolis's random waypoint. Five minutes
+  (`kAirplaneMaxTicks`) is only the upper bound of a flight: the plane is retired when its centre crosses the map
+  edge, and it turns too wide to stay in after a waypoint near the edge. Measured in `flights-1` (corrected
+  2026-11-23, earlier text here and in the Rocket Turret entry below said a flight lasts five minutes): flights that were
+  not shot down ended after a median 23 to 25 seconds on 2P City with runs (longest 141 s) and 34 to 40 seconds
+  with random waypoints (longest 305 s), 13 to 19 seconds on Metropolis.
+- **Is 1500 too cheap?** (Stefan asked, 2026-11-23.) Building prices destroyed per flight, bought and free planes
+  alike: 391 credits in the AWS matches (3.0 buildings, shot down after a median 12.9 s), 861 on Metropolis
+  (6.1 buildings, 14.6 s), about 1,700 on 2P City with eight Rocket Turrets a house (14.5 buildings, 31 s). On
+  Metropolis the four houses spent 84,000 credits a game on 56 planes for 31,000 credits more destroyed; all 56
+  are the one-a-minute-per-Airport limit, so with a million credits the price does not bind. 97% of flights in
+  the AWS matches were the free plane. Not changed.
+- **Buying a plane** (`City Plane Purchase`, default on; `Airport::buyAirplane`, `CMD_AIRPORT_BUY_AIRPLANE`,
+  `QuantBot::buyCityAirplanes`). Choices made, for Stefan to correct: a powered Airport launches a plane at once for
+  1500 credits; no limit on planes in the air (Stefan, 2026-11-23: "no limit on planes in the air"; the first
+  version, measured below, stopped at three per house); an Airport sells one a minute; the free roll is unchanged
+  and still only launches for a house with no plane. A human gets a **Buy airplane 1500** button on the Airport
+  panel at the same price and limits. QuantBot buys at the end of its build pass, only while another team has a
+  building, and only if after paying it still holds its largest reserve of that pass (economy, strategic, civic,
+  city working capital) plus 3000: one Airport can never cost it more than 1500 credits a minute.
+- **Formats.** Protocol stays 133 (unreleased) with a note; the three rules are bits 5-7 of the MOD15 Trooper byte,
+  set only when off, so every bit of that byte is now in use. Save format **9891**: the plane saves its stick tail
+  counter and clock, the Airport its purchase cooldown, and an explosion may be `Explosion_Bomb`. A 9890 save (the
+  MBA build) takes the older-save path (no stick in progress, cooldown 0); none was available to load in a test.
+- **Whole games through the Custom Game path** (`tests/units/run-city-plane-flights.py`, CTest
+  `city_plane_flights`: `initialCustomGameRules()`, `CustomGameMenu`, the `CustomGamePlayers` lobby and its Start
+  with the shipped default options; 13.5 game minutes, seeds 4711-4713, Mini, 6f5687ba4; each arm adds one rule,
+  base is the build of `4cf0fd5c4`):
+
+  | Per arm (6 games) | base | + stick | + runs | + purchase (defaults) |
+  |---|---:|---:|---:|---:|
+  | Enemy building tiles under the bomb sight that got a bomb | 20% | 98% | 98% | 98% |
+  | Flights that released a bomb | 83% | 79% | 92% | 95% |
+  | Bombs per flight | 4.9 | 54.7 | 83.5 | 78.4 |
+  | Buildings destroyed per flight | 0.48 | 5.12 | 7.79 | 7.22 |
+  | Most buildings destroyed by one flight | 10 | 32 | 51 | 49 |
+  | Buildings destroyed by bombs per game | 22.7 | 243.8 | 379.0 | 488.7 |
+  | ... of the buildings at the start | 0.8% | 8.9% | 13.9% | 17.9% |
+  | Planes bought per game / credits spent | 0 | 0 | 0 | 28.5 / 42,750 |
+
+  Paired by map and seed: stick +4.28 buildings per flight (+3.35 to +4.90); runs +0.20 of flights bombing (+0.12
+  to +0.29) and +5.36 buildings per flight (+1.87 to +9.40); purchase +19 flights a game (+6 to +33) and +110
+  buildings a game (+31 to +177). By map, defaults: Metropolis (928 Rocket Turrets, every house an AI with a
+  million credits) 685 buildings a game, 16.7% of those at the start, a plane lasting a median 14.7 s, 56 planes
+  bought; City (16 Rocket Turrets, the human seat idle) 292 buildings a game, 21.8%, a plane lasting 25.8 s, one
+  plane bought. 171 purchases in all; the least a house held after paying was 13,468 credits. The probe's own
+  default configuration (one seed, six minutes): 22% against 98% of tiles bombed.
+  **Open for Stefan:** with a rack that never empties and runs aimed at enemy buildings, a lightly defended city
+  loses about a fifth of its buildings in 13.5 minutes. Each pass still leaves Construction Yards, Palaces,
+  Refineries and turrets standing; the levers are `kStickDamage`, the Bombing Runs rule (5.7% without it on City)
+  and Rocket Turrets.
+- **Unit probe** (`city_plane_effect`, Mini, 6f5687ba4; 117 paired runs over an undefended 22-building base whose
+  buildings do not repair): aimed bombs 3.79 bombs and 1.03 buildings a run, stick 14.57 bombs and 1.28 buildings
+  (+0.26, +0.16 to +0.37), four at most, no Construction Yard or Palace in one run; the plane keeps 100 hit points
+  on every run. Fixed cases: the stick's five buildings as above; two Wind Traps a tile apart 12 bombs, both
+  destroyed; own and allied buildings beside the target untouched; forty walls 82 bombs, none standing; a
+  repairing Wind Trap left on 1 by the aimed bombs and destroyed by the stick; two bomb blasts centred on five
+  aircraft change none of them and take a tank there from 200 to 170; purchase: four planes 6,000 credits (the
+  fourth was refused under the first version's three-plane limit), another house's command refused, 3,750 cycles of cooldown, a house under 1500 refused; the
+  save keeps stick counters and cooldown. Pictures of a run: `effect-1/aimed.png`, `stick.png` (looked at: a
+  dotted line of bombs drops back from the plane and bursts behind it; the bomb picture is a few pixels).
+- **AI matches** (AWS, `vanilla-match.py --ffa default --houses harkonnen atreides ordos mercenary`, Brutal, 45
+  min, `rs160-dunecity`, seeds 9101-9148, 6f5687ba4; 48 games per arm, none failed; arms
+  `tests/ai/game-options/city-plane-b52-{off,on,nopurchase}.ini`, off = the rules of `4cf0fd5c4`; paired per game):
+
+  | Per game | 4cf0fd5c4 rules | Defaults | Difference (95% interval) |
+  |---|---:|---:|---|
+  | Flights that released a bomb | 62.5% | 92.8% | +30.3 points (+28.2 to +32.4) |
+  | Bombs per flight | 3.37 | 36.06 | +32.69 (+31.58 to +33.79) |
+  | Buildings destroyed per flight | 0.42 | 3.12 | +2.70 (+2.57 to +2.83) |
+  | Buildings destroyed by bombs | 68.5 | 474.5 | +406.0 (+368.8 to +444.5) |
+  | Credits destroyed by bombs | 6,219 | 61,350 | +55,131 (+50,371 to +59,973) |
+  | Planes bought / credits spent | 0 | 4.08 / 6,125 | +4.08 (+2.90 to +5.38) |
+  | Planes shot down | 143.3 | 138.4 | -4.9 (-21.7 to +11.3) |
+  | Time-outs | 50% | 44% | -6 points (-25 to +12) |
+  | Houses eliminated before the end | 1.88 | 2.10 | +0.23 (-0.17 to +0.65) |
+  | Game length, minutes | 40.9 | 39.2 | -1.7 (-4.2 to +0.7) |
+
+  Placement score: Ordos -0.345 to -0.106 (+0.240, +0.033 to +0.439); Atreides -0.109, Harkonnen +0.042, Mercenary
+  -0.099, none separable from zero. The stick and runs without purchases give the same picture (Ordos +0.269,
+  +0.057 to +0.476); purchases on top of them change nothing measurable in bombs or buildings, and placement by
+  at most 0.04 (Mercenary +0.042, +0.007 to +0.087; Ordos -0.030, -0.064 to -0.002). An AI house in these games
+  rarely has 4,500 spare credits: four planes bought a game against 157 launched. Buildings destroyed over the 48
+  default games: 16,933 zones, 4,182 Walls, 409 Silos, 371 Repair Yards, 364 Heavy Factories, 186 Wind Traps, 14
+  Palaces, 11 Construction Yards. Why the plane rules lift Ordos, as on 2026-11-22, is not investigated.
+- **Gates.** AWS `20261123T125147-ctest-d72850` on 6f5687ba4: `quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+  `city_aircraft_probe`, `city_plane_flights` (444 s) and `city_plane_effect` (1,135 s) all passed. Mini on
+  6f5687ba4: `dunelegacy_tests`, `city_aircraft_probe`, `perf_regression` (124.6 s), `city_plane_effect` and
+  `city_plane_flights` passed. Match jobs `20261123T125132-b52-off-8d2095`, `20261123T125139-b52-on-5d61c6`,
+  `20261123T125143-b52-nopurchase-df7231`. Results: `../outputs/city-planes-20261123b/`.
+- **Not verified.** Nothing on a real screen: the pictures are headless renders at 640x480, the sound and the
+  Airport's Buy button were not seen or clicked (the command behind the button is tested). No human played; the
+  human seat in the City games stood idle. A network game, a game between this build and the MBA's, and loading
+  a 9890 save were not tried. `4cf0fd5c4` itself was not rebuilt. Launchers and Troopers still aim at where a
+  plane was. The balance of an unlimited stick against a human's city is measured only as above.
+
+## 2026-11-23 - Local build of the feature batch installed on the MBA; macOS packaging fix (unreleased, after 1.0.876)
+
+Stefan: "install on my mba".
+
+- Installed `integrate/feature-batch` `4cf0fd5c4` (not pushed) on `Stefans-MacBook-Air.local` at
+  `/Applications/dunecity.app`, 2026-11-23 00:38 UTC, the game not running there. It shows 1.0.876 (no version
+  bump) and carries protocol 133 and save format 9890: the Custom Game tech level selector, Trooper Ornithopter
+  Reach, Saboteur Hunt and the three city plane rules. It cannot play online with the released 1.0.876, and a
+  game saved by it does not load in the released 1.0.876.
+- Package: `cmake --install build-int` (BundleUtilities, ad-hoc signed), executable SHA256
+  `6ccafbdcb765b85f005d39c42f272b4b064b4a25cf990b851a5c5ae7b9ab6acf`. On the Mini: no Homebrew or local link
+  paths in the bundle, `codesign --verify --deep --strict`, `scripts/verify-macos-runtime.py` passed. On the
+  Air: archive and executable hashes match and the deep signature verifies; no launch or graphical check there.
+  The app it replaced (the 1.0.876 installed 2026-11-22) is at
+  `/Applications/.dunecity-backup-before-4cf0fd5c4-20261123T003853Z/dunecity.app`. Archive, log and receipt:
+  `../outputs/install-mba-20261123/`.
+- **Packaging fix (`4cf0fd5c4`).** `cmake --install build-int` stopped in `fixup_bundle` with "otool -l failed"
+  on `@rpath/libbrotlicommon.1.dylib`. Homebrew updated on 2026-11-21: freetype 2.15 needs `libbrotlidec`, and
+  brotli 1.2.1's `libbrotlidec` names `libbrotlicommon` through `@rpath`, which BundleUtilities resolves only in
+  the directories it is given. The SDL2 library's directory is now in that list (`src/CMakeLists.txt`); for a
+  vcpkg build it is the directory already listed. CI's macOS build was not run for this commit.
+
+## 2026-11-23 - City planes: Rocket Turrets shoot them down, planes bomb, Airports launch no Ornithopters (unreleased, after 1.0.876)
+
+Stefan: "next planes. rocket turrets aren't shooting at enemy planes it is broken. fix it. also make planes drop
+bombs as they fly over enemy buildings strong enough bombs to destroy some buildings. also remove ornithopter spawn
+from airports. and tell me how a plane respawns after being shot down". Commits 2aee7c5ab, c6d2e2e4e, 013546d0c,
+7a143d236 and 6f9f67e1c on `integrate/feature-batch`; not pushed, no version bump.
+
+- **What a plane is.** The City Airplane, `AmbientAirplane` (`Unit_AmbientAirplane`), launched by an `Airport`,
+  which also launches the traffic helicopter `AmbientHelicopter`. Neither can be selected or ordered.
+- **How a plane comes back** (`Airport::updateCityAircraft`, unchanged): every 5 game seconds each alive Airport of
+  a powered house in a city game rolls 1 in 6 for a plane and, failing that, 1 in 13 for the helicopter. The roll
+  does nothing while the house has a plane, so a new one follows a mean 30 s after the old one was shot down or left
+  (one Airport; more Airports only shorten the wait). It costs nothing, appears three tiles east of the Airport's
+  centre and takes off east (already westbound within 20 tiles of the east edge). One plane and one helicopter per
+  house, not counted as fighting units. Human and AI owners are the same. A flight is straight legs to random points
+  over the whole map for five minutes (`kAirplaneMaxTicks`), then out over the nearest edge. Shot down, it crashes
+  as a Death Hand credited to the shooter (2026-10-22 entry).
+- **Rocket Turrets, reproduced first** in the Dune City mod's options (explored map, no fog, turrets need power;
+  a scratch probe at b2065778e, 480 passes of an enemy plane over 1-6 turrets, alone or around a base): no plane
+  shot down, 0.0-0.2 of its 100 hit points lost per pass, a rocket fired in 16-32% of passes. Per turret-cycle
+  with the plane inside weapon range: 55-64% held (`AmbientAirplane::crashEndangers`: the crash could land on
+  the turret's own side anywhere along the lead), 26-27% no target yet (seen only inside 8 tiles, searched once
+  a second, and the plane flies 10 tiles a second), 8-13% turning. And the rockets that were fired missed: a
+  turret rocket flies 11.52 world units a cycle against the plane's 10.24 and aimed at where the plane was.
+- **City Plane Defence** (`GameOptionsClass::cityPlaneDefence`, default on, INI key `City Plane Defence`):
+  a Rocket Turret sees the plane at triple range like an Ornithopter (`RocketTurret::findTarget`,
+  `ObjectBase::targetInWeaponRange`), takes it the cycle it comes into reach when it has no target
+  (`cityPlaneInReach` over `AmbientAirplane::all()`, nothing looked at while no plane exists), always fires the
+  rocket, never the close cannon, and the rocket flies to the point where the two meet, solved again at every
+  movement step in integers (`CityAircraft::intercept`, `Bullet::updateDynastyProjectile`). Anti-air (turrets,
+  Launchers, Troopers, Scoutposts) holds only the shot that, with the shots already on their way, could take
+  the plane's last hit points while the crash would land on its own side; for a turret that is judged from one
+  tile short of the meeting point to four tiles beyond it. Off is 1.0.876.
+- **City Plane Bombing** (`cityPlaneBombing`, default on, INI key `City Plane Bombing`): a cruising plane follows
+  the point 1.5 tiles ahead on its course and drops a bomb each time that point enters a tile of an enemy
+  building (`AmbientAirplane::dropBomb`), none for a building the bombs already falling will destroy. The bomb
+  is the new `Bullet_Bomb` (16): the large shell's picture falling behind the plane for about a quarter of a
+  second, a medium explosion with its sound, smoke on a building below half health. It does 100 to the building
+  it lands on and the ordinary half-tile splash to units there. Load 6, one bomb back per 8 s
+  (`CityAircraft::kBomb*`). Chosen from the mod's hit points: two bombs take a Wind Trap, zone, turret or Heavy
+  Factory (200) and a Spice Silo (150); a Construction Yard (400) needs four, a Refinery (450) or Radar (500)
+  five, a Palace (1000) ten; a full load is 600. The plane never leaves its course for a target, never aims at
+  own or allied buildings (and a bomb only damages a building its impact point lies on), and human and AI planes
+  are the same: an AI uses it by owning an Airport. Off is the unarmed plane.
+- **Airport Ornithopter Patrol** (`airportOrnithopterPatrol`, default off, INI key `Airport Ornithopter Patrol`):
+  the Airport's pair of Ornithopters on the Palace timer (`Airport::updateStructureSpecificStuff`) only runs
+  with the rule on. That was the only path: an Airport has no build list, QuantBot orders Airports as a city
+  requirement and never for Ornithopters, and no map or mod data spawns them. The timer and pair counter stay
+  in the save and stand still. Ornithopters an Airport sent out in an older save stay ordinary units. The
+  Airport panel shows the city airplane's state instead. High-Tech Factory Ornithopters are unchanged.
+- **Stream and saves.** The three rules are INI keys without a menu entry, hashed only in their non-default state
+  and carried as bits 2-4 of the MOD15 Trooper byte, so a default setup's stream and hash are unchanged; noted
+  under protocol 133, no new number. Save format 9890: the plane saves its bomb load, rearm timer and bomb
+  sight tile, and a save may hold a `Bullet_Bomb`.
+- **Controlled encounters, off against on in one build** (`city_plane_effect`,
+  `tests/units/run-city-plane-effect.py`, Mini, the mod's options; paired by encounter, 95% bootstrap interval of
+  on - off). 480 passes of an enemy plane over 1, 2, 4 or 6 Rocket Turrets, alone or around a base, three
+  headings, five offsets, seeds 1-4, bombing off in both arms:
+
+  | Per pass | Off | On | On - off (95% interval) |
+  |---|---:|---:|---|
+  | Passes with a rocket fired at the plane | 38.5% | 100% | +61.5 points (+57.1 to +65.8) |
+  | Rockets fired | 0.55 | 5.04 | +4.49 (+4.28 to +4.70) |
+  | Plane hit points removed (of 100) | 0.0 | 67.6 | +67.5 (+65.0 to +70.1) |
+  | Planes shot down, all | 0.00 | 0.29 | +0.29 (+0.25 to +0.33) |
+  | Planes shot down, 1 or 2 turrets | 0.00 | 0.00 | 0 (28.5 and 55.8 hit points removed) |
+  | Planes shot down, 4 turrets | 0.00 | 0.40 | +0.40 (+0.32 to +0.49) |
+  | Planes shot down, 6 turrets | 0.00 | 0.75 | +0.75 (+0.68 to +0.82) |
+  | Defender hit points lost to own rockets and crashes | 0.0 | 0.8 | +0.8 (+0.4 to +1.1) |
+  | Defender buildings lost that way | 0 | 0 | 0 |
+
+  Turret-cycles with the plane inside weapon range, off -> on: held 58% -> 28%, no target yet 25% -> 1%,
+  turning 12% -> 46%, reloading 4% -> 24%. About one rocket per turret hits per pass (the reload allows two
+  shots; the second is a tail chase that the 64-tile fixture often ends at the map edge), so one or two turrets
+  never bring a fresh plane down in one pass; damage stays on the plane. Planes came down a mean 15.5 tiles from
+  the middle of the site, never nearer than 6. The defender's 0.8 hit points are rockets that met the plane over
+  an own building and did their 30 there (the Dynasty blast rule, as under an Ornithopter). With the killing
+  shot judged only two tiles past the meeting point (013546d0c) one of 160 crashes took a turret; with four
+  (7a143d236) none did, at 0.33 -> 0.29 planes shot down per pass.
+  117 bombing runs over an undefended base of 22 buildings (three headings, offsets -6..6, seeds 1-3): bombs
+  per run 0 -> 3.79, building hit points removed 0 -> 359, buildings destroyed 0 -> 1.03 (+0.85 to +1.21),
+  credits destroyed 0 -> 225 (+179 to +273). 100 runs dropped a bomb, 75 destroyed a building, 3 at most (950
+  credits); no Construction Yard or Palace fell in a run. Destroyed: Wind Trap 39, Wall 30, Spice Silo 15,
+  zones 26, Heavy Factory 10.
+  Fixed cases: one run takes a Wind Trap (two bombs), leaves a Construction Yard at 200 of 400 and a Palace at
+  700 of 1000; own and allied Wind Traps and walls beside a bombed enemy Wind Trap are untouched; twelve enemy
+  walls in a row cost six bombs and six stand; the saved plane keeps bombs, timer and sight tile; an Airport in
+  eleven game minutes launches 13 planes and no Ornithopter (rule on: its pair, timer running); off, a turret
+  holds every shot at a plane over its own wall, on, only the killing one.
+- **AI matches** (AWS, `vanilla-match.py --ffa default --houses harkonnen atreides ordos mercenary`, Brutal, 45
+  min, `rs160-dunecity`, seeds 9101-9148, 7a143d236; 48 games per arm, none failed;
+  `tests/ai/city-plane-report.py`; arms `tests/ai/game-options/city-plane-rules-{off,on}.ini`, off = all three
+  rules as in 1.0.876; paired per game):
+
+  | Per game | Off | On | On - off (95% interval) |
+  |---|---:|---:|---|
+  | City planes launched | 77.3 | 180.3 | +102.9 (+88.0 to +118.5) |
+  | City planes shot down | 0.23 | 153.6 | +153.4 (+137.0 to +170.8) |
+  | Bombs dropped | 0 | 608 | +608 (+540 to +679) |
+  | Buildings destroyed by bombs | 0 | 68.4 | +68.4 (+63.3 to +73.5) |
+  | Credits destroyed by bombs | 0 | 6327 | +6327 (+5695 to +6982) |
+  | Ornithopters sent out by Airports | 23.3 | 0 | -23.3 (-25.2 to -21.3) |
+  | Time-outs | 56% | 54% | -2 points (-23 to +19) |
+  | Houses eliminated before the end | 1.77 | 1.88 | +0.10 (-0.31 to +0.52) |
+  | Game length, minutes | 41.8 | 41.5 | -0.3 (-2.2 to +1.7) |
+
+  7352 of 7372 planes shot down fell to Rocket Turrets (17 to Launchers). Bombs destroyed 3285 buildings: Wall
+  2257, zones 766, Spice Silo 168, Heavy Factory 23, Repair Yard 21, Refinery 12, Police Station 11, Construction
+  Yard 5, Palace 1. A plane now lasts under a minute on average instead of its five. Time-outs, eliminations and
+  game length do not move. Placement score by house (`match_score.py`; every house plays the same rules, so
+  this only shows whether a seat is favoured): Ordos -0.436 -> -0.116, +0.319 (+0.132 to +0.524); Atreides
+  +0.010 -> -0.104 (-0.115, -0.299 to +0.057); Harkonnen -0.045 -> -0.108 (-0.062, -0.257 to +0.116);
+  Mercenary +0.023 -> -0.089 (-0.111, -0.288 to +0.069). Ordos, clearly last before, ends level with the
+  others. Two more arms place the cause: with only the patrol removed Ordos is +0.071 (-0.010 to +0.158) and
+  Harkonnen -0.073 (-0.153 to -0.007), time-outs 65%; with only the plane and turret rules (patrol kept)
+  Ordos is +0.278 (+0.094 to +0.465). So it is the bombing and shooting down, not the missing Ornithopters. Why
+  it helps Ordos in particular was not investigated.
+- **Found in the matches and fixed (6f9f67e1c, presentation only):** every crash is a Death Hand impact and shook
+  every screen wherever it was; at 154 crashes a game that is one every 16 s. A crash now only shakes a screen
+  that shows it or is within eight tiles of it (`Bullet::detonateDeathHand(..., shake)`); the Palace missile is
+  unchanged. The bomb's explosion sound was placed with world instead of tile coordinates.
+- **Tests and gates.** Final source 6f9f67e1c: Mini `city_plane_effect` (CSVs byte-identical to 7a143d236's),
+  `dunelegacy_tests` (new MOD15 city plane byte case; the unknown-bit case now uses bit 5), `city_aircraft_probe`
+  (it pins the two plane rules off and still checks the 1.0.876 hold-fire) and `perf_regression`
+  (121.9 s) passed; AWS job `20261123T005609-ctest-771cd7` passed the same six tests as below
+  (`city_plane_effect` 1003 s). On 7a143d236 (same simulation) AWS job
+  `20261123T003716-ctest-444475` passed `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`,
+  `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`, `city_aircraft_probe` and `city_plane_effect` (1061 s
+  on Linux against 7 min on the Mini; its CTest limit is raised from 1800 to 3000 s), and the Mini passed
+  `perf_regression` (121.6 s). Match jobs: `20261123T003705-planes-off-a766b0`,
+  `20261123T003711-planes-on-9cea20`, `20261123T004907-planes-nopatrol-fcc272`,
+  `20261123T004911-planes-armed-patrol-e9b91d`. Tables, CSVs and the two extra option files:
+  `~/Documents/projects/outputs/city-planes-20261123/` (`effect-5/summary.md`, `matches/report*.md`).
+- **Switching a rule back** (hosts decide in multiplayer): `[Game Options]` in `Dune City.ini`,
+  `City Plane Defence = false`, `City Plane Bombing = false`, `Airport Ornithopter Patrol = true`.
+- **Not measured or not done:** a human watching the build (the bomb's look and sound, the Airport panel text
+  `City airplane / In flight / Next flight soon / Needs power`, the shake limit) - nothing here was checked on a
+  screen; which match Stefan's complaint came from (the reproduction is the mod's options on an open 64-tile
+  fixture, not his map); Launchers and Troopers against planes beyond the shared hold-fire rule (their rockets
+  still aim at where the plane was; 17 and 1 of 7372 kills); maps other than the generated 160 map, difficulties
+  other than Brutal, team games and human opponents in the match tier; why the plane rules lift Ordos; a network
+  game between two builds; loading a 9889 save that holds a plane beyond the version gate in the code (the
+  fixture saves and loads 9890); the nightly tier beyond the tests named. A plane shot down still comes back
+  free about half a minute later, so in AI matches a house loses and relaunches a plane about once a minute.
+
+## 2026-11-22 - Trooper Ornithopter Reach: cause in the owner's settings, fix, off/on measurements (unreleased, after 1.0.876)
+
+Stefan: "test that these fixes improve performance of these units", and, after the first measurement showed the
+sight fix (entry below) changes nothing on explored ground without fog: reproduce what he saw in his own settings.
+This entry supersedes the entry below where they differ.
+
+- His settings: a Custom Game with the Dune City mod (1.002) plays `loadEffectiveGameOptions`, the INI overlaid
+  by the mod's GameOptions.ini: Start with Explored Map = true, Fog of War = false. Every team sees all ground,
+  so the sight rule of f3d496874 never bites there. The mod's Trooper is the stock one (range 5, sight 1,
+  damage 5, reload 150 cycles, turn 0.09); the Ornithopter has 25 HP, range 5 and flies about 8 tiles a second.
+- What a player saw, measured at 12d148f88 (`trooper-stance-probe`, 228 encounters): never the gun (0 gun shots
+  at an Ornithopter in any case), and trooper rockets that are fired mostly hit. But a Trooper on **Guard**, the
+  stance a factory leaves it in, fired only when the Ornithopter was nearly on top of it: first shot at a mean
+  1.5 tiles when the Ornithopter strafed a Harvester three tiles away, no shot at all on a fly-past two tiles
+  off, and a Guard squad of three that was attacked lost all three and shot down nothing, while the same squad
+  on Hunt shot the Ornithopter down every time without loss. Causes, from a per-cycle trace:
+  1. a Trooper without a target searches once a second and on Guard only inside weapon range; the strafing
+     Ornithopter is inside that range for about 10 cycles (0.16 s) per 5.5 s pass. The Guard Trooper had no
+     target for 70% of the in-range time (Area Guard 22-45%, Hunt 3-7%: they search wider and re-find it);
+  2. it had to finish turning before firing (one direction per ~11 cycles): 13-22% of the in-range time when
+     attacked, 44-77% on a fly-past;
+  3. on a plain move order a Trooper never fights (nor does a Launcher): unchanged, that is the move order;
+     in Ambush it waits until it is hit or the enemy is within its one-tile sight: unchanged.
+  Yardsticks in the same spot: a Rocket Turret picks at 8-10 tiles, fires 3.5-8 rockets, 0.2-1.2 hit; a
+  Launcher fires 2-3 rockets, at most one hits. A single Trooper cannot win alone in either arm: an
+  Ornithopter rocket does 45 and a Trooper has 45 HP.
+- Fix (4c49c15ff), under the same switch: an idle rocket Trooper on Guard, Area Guard, Hunt or Hold, or on an
+  attack-move, takes an enemy Ornithopter the cycle it comes into weapon range (`Trooper::targeting`,
+  `ornithopterInRange`: a grid lookup that does nothing while no enemy house owns an Ornithopter) and fires
+  without waiting for its turn (`UnitBase::engageTarget` asks `firesAtAircraftUnfaced`). A Trooper with a
+  target or a ground-fire order keeps it. Other aircraft, ground targets, flame Troopers and other content are
+  unchanged.
+- Switch (7c1fb855d): `GameOptionsClass::trooperOrnithopterReach`, default on, INI key `Trooper Ornithopter
+  Reach`, no menu entry. It covers all three parts (sight, cadence, facing); off is 1.0.876. Hashed only when
+  off, and carried as bit 1 of the MOD15 Trooper Anti-Air byte, so a default setup's stream, save and hash are
+  unchanged: no new marker, protocol or save number (noted under protocol 133). Trooper Anti-Air stays on in
+  both arms of every comparison, so the rocket tracks in both.
+- Controlled engagements, off against on in one build (`trooper_ornithopter_effect`, Mini, 4c49c15ff; raids of
+  1-3 Ornithopters on 1, 3 and 6 Guard Troopers, three approach paths, two distances; paired by encounter, 95%
+  bootstrap interval of on - off):
+
+  | Ground (seeds) | Pairs | Ornithopters shot down | Troopers lost | First shot at | First kill, both arms |
+  |---|---:|---|---|---|---|
+  | Explored, no fog: his options (1-4) | 216 | 0.47 -> 0.90, +0.43 (+0.34 to +0.53) | 2.30 -> 1.45, -0.84 (-1.03 to -0.67) | 2.8 -> 4.4 tiles | 3.9 s sooner (-4.5 to -3.4) |
+  | Unexplored (1-4) | 216 | 0.24 -> 0.90, +0.66 (+0.55 to +0.77) | 2.91 -> 1.45, -1.45 (-1.74 to -1.19) | 2.7 -> 4.4 tiles | 6.6 s sooner (-8.3 to -5.1) |
+  | Explored, Fog of War (1) | 54 | 0.52 -> 0.94, +0.43 (+0.26 to +0.61) | 2.20 -> 1.41, -0.80 (-1.17 to -0.46) | 2.9 -> 4.4 tiles | 3.1 s sooner (-4.0 to -2.2) |
+
+  Raids with a kill, his options: 74 -> 124 of 216. By group: 1 Trooper 0 -> 0 kills, lost every time in both
+  arms; 3 Troopers 0.17 -> 0.72; 6 Troopers 1.24 -> 1.97 with losses 3.21 -> 1.36. `trooper_stance_probe`, all
+  Trooper cases together: Ornithopters shot down 27 -> 48, Troopers lost 69 -> 40; on Guard 2 -> 11 and 16 -> 4.
+  The sight fix alone (12d148f88, before the cadence and facing parts): unexplored 0.27 -> 0.49 (+0.16 to
+  +0.28), 324 pairs; explored without fog identical in all 54 pairs.
+- AI matches, off against on (AWS, `dunecity-audit.py --mode matrix --attack-events`, four QuantBot Brutal
+  houses' worth of formats 1v1, 2v2 and ffa4, 128 map, medium spice, tech 9, 60-minute cap, seeds 9101-9124:
+  72 pairs per setup, 4c49c15ff; `tests/ai/trooper-reach-report.py`; per game, paired by map, seed and sides):
+
+  | Options | Ornithopters killed by Troopers | Trooper rockets that hit | Troopers killed by Ornithopters | Time-outs |
+  |---|---|---|---|---|
+  | His (explored, no fog) | 4.43 -> 5.96, +1.53 (+0.29 to +2.94) | 34.1 -> 45.5, +11.4 (+3.3 to +20.7) | 11.92 -> 12.86, +0.94 (-2.68 to +5.26) | 13/72 both |
+  | Unexplored start | 4.85 -> 5.38, +0.53 (-0.22 to +1.32) | 35.3 -> 39.3, +4.0 (-0.3 to +8.9) | 10.49 -> 8.35, -2.14 (-4.12 to -0.11) | 12/72 both |
+
+  In his options Troopers' share of all Ornithopter losses rose from 7.6% (319 of 4220) to 10.2% (429 of 4206):
+  a real gain in kills. Trooper losses to Ornithopters did not fall there (the interval spans 0). With an
+  unexplored start the gain in kills is not significant and the losses fell. 9 and 7 of the 72 pairs ended in
+  the same state. Every house plays the same arm, so there is no placement score to compare. A match diverges
+  after the first changed shot, so the pairing removes map and start only. The sight-only fix at 12d148f88 was
+  piloted on one ffa4 match with an unexplored start: both arms ended in the same digest.
+- Tests and gates at 4c49c15ff: Mini `dunelegacy_tests` (new MOD15 Trooper byte case), `trooper_air_weapon_probe`,
+  `trooper_anti_air_probe`, `trooper_stance_probe`, `trooper_ornithopter_effect` and `perf_regression` (122.6 s)
+  passed; AWS job `20261122T232445-ctest-b4a228` passed `quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys` and the four
+  Trooper probes on Linux. Game jobs: `20261122T232457-trooper-reach-explored-off-e1f266`,
+  `20261122T232509-trooper-reach-explored-on-20d3e6`, `20261122T232513-trooper-reach-unexplored-off-10e748`,
+  `20261122T232517-trooper-reach-unexplored-on-3316be`; pilots `20261122T225949-trooper-reach-pilot-off-3ca06e`
+  and `20261122T225956-trooper-reach-pilot-on-d86f44`. Tables and CSVs:
+  `~/Documents/projects/outputs/trooper-reach-20261122/`.
+- Not measured or not done: which match Stefan's observation came from (no replay of it was used; the
+  reproduction is the mod's options on an open test map, not his 192x192 City map); a human watching the
+  fixed build; maps other than 128 and difficulties other than Brutal in the match tier; the nightly tier
+  beyond the tests named; Dune2R and vanilla, where the rule does not apply and Troopers' untracked rockets
+  still miss a close Ornithopter. Troopers on a plain move order still do not fire. Not pushed, no version bump.
+
+## 2026-11-22 - Troopers answer an Ornithopter anywhere in rocket range (unreleased, after 1.0.876)
+
+Stefan: "troopers should be shooting down ornithopters with their range missile weapon not close range weapon".
+
+- Before, measured on `build-int` at `eec4240d5` (unexplored 64x32 map, real Troopers on Guard, held
+  Ornithopter): the weapon was already right and the reach was wrong. `UnitBase::attack()` swaps a Trooper to
+  its gun (`Bullet_ShellSmall`, inside two tiles) only for a ground target (`!bAirBullet`, unchanged since the
+  initial commit); every shot at an aircraft was the full-damage air rocket, overhead and adjacent included.
+  But Troopers shot an Ornithopter only when it was overhead or one tile away and ignored it at 2, 3 and 5
+  tiles, although a player's attack order hit it at 5. Cause: the target search (`findTargetViaGrid`,
+  `findTargetLegacy`, `src/ObjectBase.cpp`) only takes what stands on ground the seeker's team has explored
+  and, with Fog of War, currently sees. A Trooper sees 1 tile and its rocket reaches 5, so Troopers away from
+  other sight answered aircraft only at gun distance. Troopers did pick Ornithopters; just never beyond their
+  own sight.
+- Now (`f3d496874`): under the existing **Trooper Anti-Air** match rule (default on, DuneCity content only) a
+  rocket Trooper takes an Ornithopter anywhere inside its weapon range without needing the ground below it
+  unveiled (`Trooper::targetsWithoutGroundSight`, a new `ObjectBase` hook both searches ask). The rocket
+  turret already has this exception (`RocketTurret::findTarget`). `Trooper::antiAirRuleActive()` is the one
+  place that states the rule; the rocket tracking in `Bullet.cpp` uses it too (same condition as before).
+- Decided: Ornithopters only. Carryalls and Frigates have the same sight limit (a Carryall is shot when
+  adjacent, ignored at 5 tiles) and keep it: the request names Ornithopters, the turret exception is
+  Ornithopter-only, and shooting transports more would change harvesting. Ground targets, flame Troopers and
+  out-of-range aircraft are unchanged. Vanilla, Dune2R and Tornie-family content keep the old behaviour, as
+  for the rest of the Trooper Anti-Air rule.
+- Switch: the workspace policy wants game behaviour changes behind an on/off switch so one build compares
+  both states. This one uses the existing Trooper Anti-Air rule instead of a new option: it is already
+  hashed, sent and saved, so no GameInitSettings field, save format or protocol number. Noted under the
+  unreleased protocol 133 (`NetworkPacketTypes.h`) because an older peer would desync.
+- Test: `trooper_air_weapon_probe` (`tests/units/run-trooper-air-weapon-probe.py`, headless nightly; dunecity,
+  vanilla, Dune2R; rule off and on): Ornithopter overhead, adjacent, 2 and 3 tiles, at the range edge and one
+  tile beyond; single Trooper and the three a Troopers order deploys; a real attack run; Carryall and Quad
+  controls. Rule on in DuneCity: the held Ornithopter is killed at every distance in range (5 rockets), not
+  touched one tile beyond; on the attack run the squad opens fire at tick 66 instead of 413 and kills the
+  Ornithopter (untouched in 2500 ticks with the rule off). Every shot at an aircraft is the air rocket; an
+  adjacent Quad still gets the gun and one at 4 tiles the reduced rocket; cases the rule does not cover, and
+  every case in vanilla and Dune2R, play both switch states identically.
+- Results at `ab50b8b03`: Mini `trooper_air_weapon_probe`, `trooper_anti_air_probe`, `dunelegacy_tests`,
+  `saboteur_target_probe` and `perf_regression` (106.0 s) passed; AWS job `20261122T221533-ctest-d0bfee`
+  passed `quantbot_all_against_atreides`, `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`,
+  `quantbot_ffa_army_deploys` and both Trooper probes on Linux.
+- Seen, not changed: with the rule off, and in vanilla and Dune2R, a Trooper's untracked rocket never hurt a
+  held Ornithopter overhead or adjacent (7 shots, 0 damage) while it killed one at 5 tiles. That is the old
+  delivery the Trooper Anti-Air rule exists to replace in DuneCity content.
+- Not verified: Fog of War on with explored ground (same code path, not a separate case); a real match with
+  QuantBot Ornithopter raids on a field army; the nightly tier beyond the tests named above. Not pushed, no
+  version bump.
+
+## 2026-11-23 - Saboteurs no longer seem to blow up by themselves (unreleased, after 1.0.876)
+
+Stefan, on the rule of the entry below: "there still seems to be something wrong with them, they often just
+blowup by themselves while finding a target". No Saboteur blows up without destroying its target: the charge
+only goes off in `Saboteur::update`, which destroys the target in the same step. Two things looked like it,
+both with the rule on:
+
+- A Saboteur that was shot blew up exactly like one that had set its charge off (`Saboteur::destroy` always
+  drew the explosion and played the large blast; infantry bodies and screams were suppressed for Saboteurs).
+  That is 20.1% of the Saboteurs released in those matches (218 of 1083; 47 of them killed by their own
+  house's Sonic Tank waves, 40 by enemy Sonic Tanks). With the rule on a Saboteur that is destroyed without
+  having sabotaged anything now falls like any foot soldier: body, scream, no blast
+  (`InfantryBase::fallsWhenDestroyed`, overridden by `Saboteur`). The random explosion kind is still drawn, so
+  the game's random stream does not depend on how a Saboteur ended. Rule off: unchanged.
+- A Saboteur sees one tile and goes off half a step before it stands next to its target. On ground its owner
+  had not explored the owner saw the target for 0.4 s before the blast (`saboteur_target_probe`, measured on
+  the build before this commit). With the rule on its owner is shown the target (two tiles around its nearest
+  tile) from four tiles out and again at the blast: 1.9 to 2.4 s before the blast in the probe
+  (`Saboteur::showTargetToOwner`). The reveal is for the owner's house only and changes nothing about who sees
+  the Saboteur.
+- Nothing else of the rule changed: target choice, the reach it goes off at, and the refusal of army orders are
+  as in the entry below. Not changed either: a Sonic Tank wave still kills its own house's Saboteur like any
+  other unit in its path.
+- Tests: `saboteur_target_probe` now 20 cases per mod; new are vehicle and building shown to the owner at
+  least 1 s before the blast, and a Saboteur shot on the way that leaves a body and no explosion, each for a
+  human and a QuantBot owner.
+- Verified for `ed37d29e3`: AWS job `20261123T160302-ctest-8c0a96` 9/9 (the four AI gates,
+  `quantbot_baseline_807_check`, `quantbot_custom_attack`, `dunelegacy_tests`, both Saboteur probes). On the
+  Mini, `build-int` at or after that commit: `saboteur_target_probe`, `saboteur_effect_probe`,
+  `dunelegacy_tests` and `perf_regression` passed. The effect probe's numbers are those of the entry below
+  (rule on: 94.8% destroy something for either owner, 326 credits per Saboteur).
+- Not measured: matches were not re-run for this commit (the reveal changes what the owner's house has
+  explored, so games differ from the entry below after the first approach); nothing was checked in a windowed
+  game.
+
+## 2026-11-23 - Saboteurs take the nearest building or vehicle; rule renamed Saboteur Hunt (unreleased, after 1.0.876)
+
+Stefan, on the vehicle-first rule of the entry below: "it should go for buildings or vehicles, whatever is
+close." Commit `da6feac43` (search), and this commit (rename, comments). Evidence:
+`~/Documents/projects/outputs/saboteur-effect-20261122/round4/`.
+
+- Rule now: a Saboteur's own search is the general one again - the nearest thing `canAttack()` accepts, enemy
+  building or vehicle alike, walls and parks last; no vehicle preference (`Saboteur::findTarget`). Everything
+  else of the entry below stays: release in Hunt for every owner, blow up as soon as in reach, a new target
+  at once when the old one vanishes, something nearer that turns up beside it taken instead (only its own
+  pick is replaced), AI army orders refused while it hunts, the ten-second re-hunt for an AI house.
+- The match rule is now `GameOptionsClass::saboteurHunt`, INI key `Saboteur Hunt`, option files
+  `tests/ai/game-options/saboteur-hunt-{off,on}.ini` (was `saboteurVehicleHunt` / `Saboteur Vehicle Hunt` /
+  `saboteur-vehicle-hunt-*` in the two entries below; nothing released carried the old name). Same MOD20 bit 7,
+  default on, no menu entry.
+- Off against on. Controlled (`saboteur_effect_probe`, 192 paired releases): AI owner destroys something 82.3%
+  -> 94.8%, a vehicle 37.5% -> 50.0% (+12.5, 95% interval +6.2 to +19.8), credits per Saboteur 291 -> 326,
+  died unused 17 -> 5 of 96; human owner 0% -> 94.8%, 326 credits, idle 96 -> 0; all releases anything +53.6
+  points (+46.4 to +60.9), credits +181 (+154 to +209). Matches (48 games per arm, same setup and seeds
+  9101-9124, AWS jobs `20261123T001124-sab4-off-030eec`, `20261123T001131-sab4-on-79584d`, none failed):
+  released 1099 / 1083; destroyed something 60.2% -> 74.5% (vehicles 575 -> 686, structures 87 -> 121); lost
+  unused 373 (33.9%) -> 218 (20.1%); credits per Saboteur 203.7 -> 243.3. Paired per game: credits per
+  Saboteur +44.2 (+21.4 to +68.1), lost per Saboteur -0.153 (-0.213 to -0.098), vehicles per Saboteur +0.146
+  (+0.089 to +0.209); placement score of Ordos and Mercenary -0.010 (-0.060 to +0.035) and time-outs 29.2% ->
+  31.2% (+0.021, -0.104 to +0.146): no difference shown. No army order reached a Saboteur in either arm.
+  Against the vehicle-first rule of the entry below (73.3% / 22.0% lost / 247.6 credits in matches) this is
+  level; in the controlled probe it destroys something more often (94.8% against 91.7%).
+- Tests: `saboteur_target_probe` 14 cases (nearest is a building; nearest is a vehicle; a Quad that turns up
+  beside it on the way is taken; explicit order kept past a nearer building; Area Guard takes what is in its
+  explored guard range). `saboteur_effect_probe` requires more Saboteurs to destroy something with the rule
+  on, per owner, and no fewer credits. Gates for `da6feac43`: AWS job `20261123T001136-ctest-d4687b` 9/9
+  passed; on the Mini at `2aee7c5ab` `perf_regression`, both probes and `dunelegacy_tests` passed.
+  For the rename commit `9b578cb01`: AWS job `20261123T002137-ctest-a67964` 9/9 passed, the Mini run passed at
+  `013546d0c`, and six games per arm with the renamed option files reproduce both arms of the vanilla-map
+  games exactly (the DuneCity-map games differ because the city-plane commits landed in between).
+- Engine rule worth knowing: outside Hunt every unit only auto-targets what stands on ground its team has
+  explored, so a human's Saboteur on Area Guard ignores what it has not seen.
+
+## 2026-11-22 - Saboteurs actually destroy something: own hunt, blow up on reach (unreleased, after 1.0.876)
+
+Stefan, after the off/on numbers of the entry below: "they can destroy anything but they need to actually do
+it. quantbot was interfering with them and moving them with other army orders", and "they can destroy buildings
+as well as units". Commits `b0845990c`, `b2065778e`. Evidence: `~/Documents/projects/outputs/saboteur-effect-20261122/round3/`
+(`round2/` is the same batch one commit earlier).
+
+- Interference, measured. Every AI unit order (`Player::do*`, formation orders) now carries its caller's name
+  (`__builtin_FUNCTION()` default argument) and one addressed to a Saboteur is counted and logged
+  (`SABOTEUR_ORDER`). In 48 QuantBot Brutal free-for-alls with the rule off, none of 1035 Saboteurs that
+  ended received a single army order; 6 dropped Hunt -> Guard and 2 waited for a carryall. A code audit
+  agrees: QuantBot's army code skips Saboteurs everywhere (1.0.690). What can reach one: plot and MCV
+  footprint clearing (`ConstructionYard::moveUnitsOffPlot`, `QuantBotColonisation.cpp` `clearMcvFootprint`),
+  the engine's automatic carryall request (failure leaves Guard), and unguarded wave/retaliation orders in
+  AI Player (`AIPlayer.cpp:141-144`), SmartBot (`:154-157`, `:834`, `:893`) and Campaign AI (`:399`, `:1072-1079`),
+  which these matches do not play.
+- What the lost ones died of (rule off, 373 of 1099 lost unused): shot by a vehicle 83.1%, a turret 7.5%,
+  infantry 4.8%, aircraft 3.8%. 27.6% were within two tiles of their target, 38.3% further away, 34.0% had
+  no target left. In the controlled probe most died one tile from the target, during the last step: the
+  unit only blew up after it had stopped.
+- Rule now (`GameOptionsClass::saboteurVehicleHunt` on, the default; off is still the unit up to 1.0.876):
+  nearest enemy vehicle first; once an enemy has seen it (any enemy object within two tiles, the unit's
+  existing visibility rule) it takes the nearest thing it can blow up, building or vehicle, if that is
+  nearer than its pick; it goes off as soon as it is in reach, moving or not; a target that vanishes is
+  replaced at once; while it hunts it refuses an AI player's army orders, and an AI house's released
+  Saboteur that dropped to Guard looks again every ten seconds. Only its own pick is replaced: a target or
+  forced move its owner gave stays (`ownPick`, not saved). Chosen from the controlled probe on one build,
+  share destroying anything / credits per Saboteur for an AI owner: old rule 79.2% / 285; vehicle only
+  52.1% / 180; nearest anything with blow-up on reach 93.8% / 323 (vehicles 50.0%); vehicle first, nearest
+  once seen, blow-up on reach 89.6% / 289 (vehicles 68.8%). The last keeps Stefan's first choice and beats the old rule.
+- Off against on, final commit. Controlled (`saboteur_effect_probe`, 192 paired releases): AI owner vehicle
+  37.5% -> 63.5% (+26.0, 95% interval +17.7 to +35.4), anything 82.3% -> 91.7% (+9.4, +2.1 to +17.7),
+  credits 291 -> 301 (+10, -20 to +43), died unused 17 -> 8 of 96. Human owner 0% -> 63.5% / 91.7% / 301,
+  idle 96 -> 0, died 8. Matches (48 games per arm, Brutal FFA, `rs160-dunecity` and `rs160-vanilla`, seeds
+  9101-9124, AWS jobs `20261122T234822-sab3-off-e0d7ee`, `20261122T234829-sab3-on-52fde2`, none failed):
+  released 1099 / 1068; destroyed something 60.2% -> 73.3%; vehicles 575 -> 710, structures 87 -> 73; lost
+  unused 373 (33.9%) -> 235 (22.0%); credits per Saboteur 203.7 -> 247.6. Paired per game: credits per
+  Saboteur +49.6 (+27.5 to +72.6), vehicles per Saboteur +0.166 (+0.107 to +0.233), lost per Saboteur -0.148
+  (-0.210 to -0.091); placement score of Ordos and Mercenary -0.025 (-0.077 to +0.021) and time-outs 29.2% ->
+  31.2% (+0.021, -0.083 to +0.125): no difference shown. No army order reached a Saboteur in either arm.
+- Still lost with the rule on (235): 81.3% shot by a vehicle, 8.5% by a turret; 37.0% had no target at the time.
+- Tests: `saboteur_target_probe` now has 12 cases (a building that sees it on the way is taken; an explicit
+  order is kept past such a building); `saboteur_effect_probe` also fails when the rule lowers the share
+  destroying anything or the credits, for either owner. Gates for `b2065778e`: AWS job
+  `20261122T234833-ctest-f236c2` 9/9 passed (four AI gates, both Saboteur probes, `dunelegacy_tests`,
+  `quantbot_custom_attack`, `quantbot_baseline_807_check`); on the Mini `perf_regression`, both probes and
+  `dunelegacy_tests` passed in `build-int`.
+- Not measured: AI Player, SmartBot or Campaign AI owners in matches; human-played games; a Saboteur's
+  order log after a save and load (its counters and `ownPick` are not saved); the nightly tier.
+  The lines `SABOTEUR_RELEASED/HIT/LOST/ORDER/MODE` stay in the engine log for `vanilla-match.py`.
+
+## 2026-11-22 - Saboteurs go for the nearest vehicle (unreleased, after 1.0.876)
+
+Stefan: "saboteurs seem to have been broken by the ai, they should be destorying nearest vehicle".
+
+- Cause, from the history: no commit changed the rule. `Saboteur::canAttack`, the Hunt search and
+  `Palace::spawnSaboteur` behave as in the initial commit `92785605c` (`git log -L` on both functions; the
+  later commits only add telemetry, achievements, unit limits and the default-off `PalaceValueTarget`
+  route). The rule itself was the fault: a Saboteur's search was the general one, "nearest thing it may
+  attack", and it may attack structures as well as vehicles, so a hunting Saboteur blew up whatever
+  building stood nearest and reached a vehicle only when one happened to be closer. A human's Palace
+  released its Saboteur in Guard with weapon range 0, so it never moved without an order. QuantBot does
+  not override Saboteur orders (1.0.690, still true: every army path skips `Unit_Saboteur`).
+- Measured on the pre-fix build (`build-int` at `eec4240d5`, open 64x64 map, real Palace weapon): the AI
+  Saboteur destroyed a Wind Trap 5 tiles off and left tanks at 13 and 22 tiles; the human one stood on
+  its release tile for 90 game seconds.
+- Now: `Saboteur::findTarget()` takes the nearest enemy vehicle inside the attack mode's search range
+  (whole map in Hunt, 10 tiles in Area Guard), lower object ID on a tie. Vehicle means what `canAttack`
+  always admitted: a ground unit that is neither infantry nor a sandworm, so harvesters and MCVs count
+  and aircraft do not. With no such vehicle it falls back to the old search, which leaves the nearest
+  structure (walls and parks last); with nothing to attack it returns to Guard like any hunter.
+  `Palace::spawnSaboteur` sets Hunt for every owner, as it always did for an AI house; an explicit order still
+  sends it at anything `canAttack` accepts. Applies to all content, Tornie-family mods included.
+- Switch (added after the first commit, when Stefan asked for the fix to be measured): match rule
+  `GameOptionsClass::saboteurVehicleHunt`, default on, INI key `Saboteur Vehicle Hunt` (no menu entry).
+  It covers both changes: off is the unit up to 1.0.876 (general search; only an AI house's Saboteur
+  is released hunting). Its off state is hashed and travels as bit 7 of the MOD20 tech-level byte, so a
+  default setup's stream and options hash are unchanged and no marker, protocol or save number was added.
+  A stream older than MOD20 plays the current rule: a 1.0.876 save gets the fix.
+- Wire: sim behaviour differs, so it is noted under the unreleased network protocol 133
+  (`NetworkPacketTypes.h`); no new number, no save format change.
+- Not handled: a Saboteur keeps the vehicle it picked (its attack is forced, as before) and does not
+  switch to a nearer one that appears later; a vehicle sealed inside walls is still picked.
+- Test: `saboteur_target_probe` (`tests/units/run-saboteur-target-probe.py`, headless nightly), vanilla and
+  dunecity, human and qBotHard owners: nearest of three vehicles with a nearer Wind Trap, Soldier and
+  Carryall ignored; Harvester before MCV and Tank; no vehicle -> nearest structure; nothing -> Guard;
+  explicit order onto a Refinery kept; Area Guard takes a Tank at 8 tiles before a Wind Trap at 3.
+  It fails on the pre-fix build ("the released Saboteur is not hunting").
+- Results for `2ddcdbab6`: AWS job `20261122T221324-ctest-a7215a` 8/8 passed (`quantbot_all_against_atreides`,
+  `quantbot_all_against_atreides_dune2r`, `quantbot_scenario_matrix`, `quantbot_ffa_army_deploys`,
+  `quantbot_custom_attack`, `quantbot_baseline_807_check`, `dunelegacy_tests`, `saboteur_target_probe`).
+  On the Mini in `build-int` at `f3d496874` (this commit plus the Trooper one): `saboteur_target_probe`,
+  `dunelegacy_tests` and `perf_regression` passed. The nightly tier was not run. Not pushed, no version bump.
+- Measured, rule off against on in one build (`7e3738dfe`; Stefan: "test that these fixes improve performance of
+  these units"). Evidence: `~/Documents/projects/outputs/saboteur-effect-20261122/`.
+  - Controlled releases (`saboteur_effect_probe`, `tests/units/run-saboteur-effect-probe.py`): 192 paired
+    releases (4 layouts x 12 seeds x human/qBotHard owner x vanilla/dunecity) against a turreted base, three
+    Troopers and five vehicles. Share destroying a vehicle 18.8% -> 57.3%, on - off +38.5 points (95% interval
+    +31.8 to +45.3); destroying anything 41.1% -> 57.3% (+16.1, +6.8 to +24.5); credits destroyed per Saboteur
+    145 -> 188 (+42, +6 to +76); died with nothing destroyed 17 -> 82, idle 96 -> 0.
+    Human owner: 0% -> 57.3% and 0 -> 188 credits (off, all 96 stand idle). QuantBot owner: vehicle 37.5% ->
+    57.3% (+19.8, +12.5 to +28.1), but anything 82.3% -> 57.3% (-25.0, -35.4 to -14.6) and credits 291 -> 188
+    (-103, -146 to -63), deaths 17 -> 41. The loss is the layout with the base in front of the vehicles:
+    42 of 48 die crossing it (12.5% succeed; off 47.9% took a building at its edge). Same numbers on AWS Linux.
+  - AI matches (`vanilla-match.py` `--ffa default --houses harkonnen atreides ordos mercenary`, Brutal, 45 min,
+    `rs160-dunecity` and `rs160-vanilla`, seeds 9101-9124, `tests/ai/game-options/saboteur-vehicle-hunt-{off,on}.ini`;
+    AWS jobs `20261122T224745-sab-off-40f7e5`, `20261122T224751-sab-on-c88359`; 48 games per arm, none failed;
+    `tests/ai/saboteur-effect-report.py`). Off: 1103 Saboteurs released, 588 vehicles and 111 structures
+    destroyed, 350 lost unused, 209.1 credits per Saboteur. On: 1207 released, 687 vehicles, 0 structures, 455
+    lost, 206.6 credits. Paired per game, on - off: vehicles per Saboteur +0.046 (+0.016 to +0.082); credits per
+    Saboteur +10.4 (-2.5 to +24.6); lost per Saboteur +0.023 (-0.001 to +0.048); placement score of Ordos and
+    Mercenary -0.005 (-0.044 to +0.030); time-outs 31.2% off, 37.5% on (+0.062, -0.021 to +0.146).
+  - Reading: the rule does what was asked (vehicles, and a human's Saboteur now acts at all). For an AI house it
+    does not raise the value a Saboteur destroys - level in matches, lower against a base that screens its
+    vehicles - and it does not move match results. Default stays on (the owner's rule; no match measure is worse).
+    Open improvement: a Saboteur walks the shortest path through turret cover; 38% are lost unused in matches.
+  - Gates for `7e3738dfe`: AWS job `20261122T224814-ctest-5330af` 9/9 passed (the four AI gates,
+    `saboteur_target_probe`, `saboteur_effect_probe`, `dunelegacy_tests`, `quantbot_custom_attack`,
+    `quantbot_baseline_807_check`). `perf_regression` was not re-run for the switch commit.
+
+## 2026-11-22 - Custom Game tech level selector (unreleased, after 1.0.876)
+
+Stefan: "i cant find the tech level selector in custom games" - there was none; only Random Skirmish had one,
+and a custom game took the map's `[BASIC] TechLevel` (else 8, 9 for Tornie content).
+
+- New match rule `GameOptionsClass::startTechLevel` (0 = the map's level, 1-9 replaces it). Chosen in the
+  Custom Game setup, at the right of the hint line under the Game Rules button (`CustomGamePlayers`; a row of
+  its own under the map properties did not fit the 640x480 Tornie-family lobby); a lobby client and
+  Civilization Wars see the level as text. `Game::initGame` sets `techLevel` before `INIMapLoader`, which only
+  reads the map's value while it is still 0. Campaign missions (mission != 0) ignore the rule.
+- Wire and save: GameInitSettings MOD20 (`MODK`) appends one byte; a level above 9 is refused. Network
+  protocol 133, save format 9889 (`SAVEGAMEVERSION_START_TECH_LEVEL`). The rule is in the options hash.
+- It is a per-match choice: `saveGameOptionsAsDefaults` strips it, it has no INI key, Random Skirmish and
+  Civilization Wars rules reset it to 0, and a mod switch in the setup keeps it.
+- Tests: `CoopGameSettingsTestCase` (MOD20 round trip, MOD19 stream reads 0, truncation, level 10 refused);
+  `menu_navigation_probe` (entries, pick rebuilds the setup, client view, wire, not a default; capture
+  `custom-tech-level`); `research_lab_probe` starts a level-1 map at a chosen level 6, with and
+  without research (`researchChosenStartLevel`), and its legacy fixtures strip the extra byte.
+
+## 2026-11-22 - 1.0.876 published
+
+`v1.0.876` is an annotated tag on `18efc0e8fe8800949e856f17b2f16189d86c55f8` (branch
+`integrate/feature-batch`), pushed 18:01 AEDT after the owner's "set easiest as the default ... then publish".
+Evidence: `~/Documents/projects/outputs/release-1.0.876/` (`gates.md`, `channels.md`). Notes:
+`releases/desktop/1.0.876.md`. Network protocol 132, save format 9888.
+
+- Content since 1.0.875: QuantBot Easiest (`qBotEasiest`, `EasiestPolicy.h`) and Easiest as the default enemy of
+  the campaign, Skirmish and Custom Game menus; Restart on New Difficulty in the in-game menu
+  (`EnemyDifficultyPolicy.h`, `docs/easier-enemy-restart.md`); campaign opponent tiers (Easy 1.5x army, Medium
+  air raids, Hard/Brutal silos, smaller Easiest waves; `docs/campaign-ai-difficulty-matrix.md`); Parks; the
+  residential-only Palace; the city economy package and PalaceDenseClearing on by default; the first-launch mod
+  tip; the anonymous installation id in match analytics.
+- Three things failed in staging before the candidate and were fixed first: twelve city-economy/defence
+  switches missing from `tests/ai/genome-registry.json` (seven integration tests; 7b951371a); and two nightly
+  probes broken by the economy defaults, `quantbot_growth_installments` (a growth-capped yard saved for a Palace
+  instead of buying the Stadium's prerequisite) and `quantbot_whole_army_dispatch` (stale for MassHold), fixed by
+  the owning session in 18efc0e8f. Lesson: a default flip needs the nightly tier, not only the four AI gates.
+- Tested at 18efc0e8f: AWS Linux headless nightly suite 240/240 (job 20261122T170551-release-1.0.876-4e4375);
+  the four AI gates and the two probes (job 20261122T170323-ctest-9815f8); Mini perf_regression (102.2 s; one
+  earlier run failed by 1-2% while another session was encoding video); integration CI run 44992221315; Mac
+  qualification run 44993182336 (reuse-qualification passed).
+- Tag build run 44996347179 passed every job on attempt 1; build.yml was unchanged since 1.0.875, so its hash
+  was already bound on the Mini. The Mini pointer was parked at the bottom screen edge (456,1079); centred before
+  the tag.
+- Verified live: GitHub release (Latest, 25 assets, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (1.0.876/18efc0e8f, hashes match; Chrome reached the main menu), website links and
+  What's New. TestFlight not part of this release; Android held. Both AWS workers stopped.
+- Website: the usage page has "How often players win" and counts `ai_difficulty` "easiest" as its own row
+  (VR48/dunelegacy.com PR 30). With Easiest the default, watch that row and the custom 1v1 win share.
+- Not measured: the effect of the tier changes and of the Easiest default on real players' win rates.
+
+## 2026-11-21 - Next batch: anonymous installation id in match analytics
+
+Stefan asked for daily player counts and unique players on the usage page. Browser ("Player") and
+iPhone/iPad ("Mobile") games nearly all share a default name, so counting by name fails there. The
+website side is live (VR48/dunelegacy.com PR 24; protocol: `metaserver/ANALYTICS.md`, "Installation id").
+
+- b70062e73: each installation keeps 128 random bits (`std::random_device`, 32 lowercase hex) in
+  `[General] Analytics Install ID` of the settings file, created at startup when missing or malformed
+  (`misc/AnalyticsInstallID`) and synced to IDBFS in the browser. The analytics report adds
+  `"install_id"` only to the reporting client's own human row (`pLocalPlayer`); never AI or remote rows,
+  the root, network packets or logs. `schema_version` stays 3.
+- Tested at b70062e73: Mini `dunelegacy_tests` (five new `[analytics]` cases); AWS `natives_probe` job
+  20261121T123801-ctest-f3b800 (real payload: played, spectated, lockstep host/guest/viewer); integration
+  CI 44851717053 (all platforms). Browser: staging run 44853189783, `/play-staging` 1.0.875dev+b70062e73970
+  wrote the id to IDBFS (`/home/web_user_staging`) and read the same one back after a reload.
+- After the first version with it ships: check on production that `analytics_players.install_key` fills and
+  the usage page shows its "players counted by anonymous installation ID" note, then name that version in
+  the website's `docs/usage-statistics.md`.
+
+## 2026-11-21 - 1.0.875 published
+
+`v1.0.875` is an annotated tag on `31135f315ba00de138ec6f40f69ee3cd6151a17f` (branch
+`integrate/feature-batch`), pushed 10:53 AEDT after the owner's "deploy" / "to production" (and "publish").
+Evidence: `~/Documents/projects/outputs/release-1.0.875/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below, plus 7cb425b3f (menu probe follows the DuneCity Campaign menu item) and
+  31135f315 (fix after the first candidate c9b6b16c6 failed 8 tests: FactoriesFirst/ProductionBeforeCityGrowth
+  campaign-ladder only; genome inventory reads the ladder's looped keys; four switches registered).
+- Tested at 31135f315: AWS Linux headless nightly suite 239/239 (job 20261121T100137-release-1.0.875-e12c51,
+  every per-test log checked, incl. the four AI gates, menu_navigation_probe and the shared-spending probe);
+  Mini perf_regression (97.9 s), unit tests and the nine previously failing tests; integration CI run 44833649801;
+  Mac qualification run 44835538345 (reuse-qualification passed).
+- Tag build run 44840078078: attempt 1 failed only at build-macos runner set-up, because the Mini gate refused
+  build.yml 96231d07... (changed since 1.0.874 by e63e52869, one Linux apt package). Reviewed and appended to
+  `allowed_workflow_sha256` in `~/.config/agent-workspace/github-runner.json`; attempt 2 (`resume build`) passed
+  every job. Lesson: a release whose build.yml differs from the last bound hash needs the rebind before the tag.
+- The Mini pointer was parked at the top screen edge (75,0); centred before the tag (packaged fullscreen pointer case).
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and defaults,
+  browser build (1.0.875/31135f315, hashes match; Chrome reached the main menu with DuneCity Campaign), website
+  links and What's New. TestFlight not part of this release; Android held. Both AWS workers stopped.
+
+## 2026-11-21 - 1.0.875 candidate: the DuneCity Campaign
+
+Stefan asked for a ten-mission DuneCity city campaign (2026-11-19), the same-tier rule (a helper loses
+at least 60% against enemies of its own tier), a skill ladder for the tiers ("Yes, build it"), then a
+DuneCity Campaign main-menu item in place of Continue with Mentat goals and the planet colouring after a
+win (2026-11-21), installed on his Air, then "deploy ... to production". Design and playtests:
+`docs/city-campaign.md`; notes `releases/desktop/1.0.875.md`.
+
+- Content since v1.0.874: mission objectives ([OBJECTIVES], objectives panel, save 9887), Shield Wall
+  breach events, ten DCITY_M missions (low spice, rock for cities, per-difficulty enemy strength),
+  QuantBot city-campaign planning and skill ladder (thinking speed 8/6/3/1 passes per decision on the
+  campaign only), DuneCity Campaign menu/briefing/planet screen (f34efa859, probe 7cb425b3f), test and
+  CI housekeeping from 19 Nov. Protocol 130, save format 9887.
+- QuantBot change outside the campaign (every DuneCity game, default on): Palace/Stadium siting and a
+  palace order for land value (CityLandValueSiting). ProductionBeforeCityGrowth (a funded production
+  backlog takes a yard before city growth) is campaign-only (FactoriesFirst, Hard and Brutal): in every
+  game it failed quantbot_shared-spending_dunecity at the first candidate c9b6b16c6, whose AWS suite also
+  caught the genome inventory missing the ladder's looped keys and four new switches.
+- Final city-campaign validation (val-final2 at 5d7ff1f84, 480 games, 8 fresh seeds): Medium v Easy 72%,
+  Hard v Medium 64%, Brutal v Hard 62%; Medium v Medium 22%, Hard v Hard 36%, Brutal v Brutal 30%.
+  Ash Quarter and Shield Wall Breach still do not separate Brutal from Hard helpers.
+- Gates at earlier commits: AWS AI gates and dunelegacy_tests at 26d1da4a8, Mini perf_regression at
+  cf2cb621b; release gates at the candidate: `~/Documents/projects/outputs/release-1.0.875/gates.md`.
+
+## 2026-11-17 - 1.0.874 published
+
+`v1.0.874` is an annotated tag on `3883134ec40e5fc0c78df43a3c7e7973594f12ac` (branch
+`integrate/feature-batch`), pushed 09:37 AEDT after the owner's "Publish. Also make sure the aws is turned off
+after". Evidence: `~/Documents/projects/outputs/release-1.0.874/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below (carryall drop fix cfbd38768, menu probe 67ba411ca, bump 3883134ec).
+- Tested at 3883134ec: integration CI run 43920821325; Mac qualification run 43923112822; AWS Linux headless
+  nightly suite 224/224 (job 20261117T044134-release-1.0.874-70c3d1, every per-test log checked, incl. the four
+  AI gates and menu_navigation_probe). Tag build: run 43971786960, all jobs passed.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and defaults,
+  browser build (1.0.874/3883134ec, hashes match; Chrome reached the main menu), website links and What's New.
+  TestFlight not part of this release; Android held. Both AWS workers stopped (EC2 describe-instances).
+
+## 2026-11-17 - 1.0.874 candidate: carryall drops keep a player's unit in its own mode
+
+Player report on 1.0.873: units sent to a factory's destination arrived in Area Guard ("Überwachen")
+and chased sandworms. Cause: `Carryall::deployUnit` set every non-harvester it dropped to Area Guard
+(legacy code; lifts are more frequent since the 1.0.812 stall rescue). The owner chose Guard, not Hold,
+as the mode a delivered unit gets ("ok send them in guard"). Notes `releases/desktop/1.0.874.md`.
+
+- Fix cfbd38768: `UnitMovementPolicy::attackModeAfterCarryallDrop`. A human house's unit keeps its own
+  mode (Carryall-requested becomes Guard); attack-move/patrol units still get Area Guard; AI houses,
+  saboteurs (Hunt) and harvesters (Harvest) unchanged. Protocol 129, save format 9886 unchanged.
+- Also in this candidate: 67ba411ca, menu_navigation_probe checks Linux updates as an AppImage and as a
+  package install (test only; removes the Linux known failure accepted for 1.0.873).
+- Gates at cfbd38768: Mini unit tests and perf_regression passed (128.9 s); AWS job
+  20261116T234653-ctest-c4e417 passed 8/8 (dunelegacy_tests, carryall_flight_probe,
+  quantbot_carryall_repair, stalled_carryall_probe with a new Guard check, scenario-matrix smoke, AAA
+  vanilla and Dune2R, FFA army deploys). menu_navigation_probe at 67ba411ca passed on AWS and the Mini.
+
+## 2026-11-16 - 1.0.873 published
+
+`v1.0.873` is an annotated tag on `af709a0fcf21eb72751fb9bc175038d4e4d212ce` (branch
+`integrate/feature-batch`), pushed 21:21 AEDT after the owner's "make sure its tested but get it into
+production". Evidence: `~/Documents/projects/outputs/release-1.0.873/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below (2d9dd9d6e) plus af709a0fc, which fixed a stale menu check: the
+  first qualification (run 43830538683) failed only in menu_navigation_probe, which still expected
+  Reworked to offer Atreides alone. Qualified: run 43840664794. Tag build: run 43848120690, all jobs passed.
+- Tested at af709a0fc/2d9dd9d6e: AWS Linux headless nightly suite incl. the four AI gates; Mac
+  qualification 221/221; menu_navigation_probe native on the Mini.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (1.0.873/af709a0fc, hashes match; Chrome reached the main menu and the
+  Campaign screen's Maps: Reworked with the REMASTERED badge), website links and What's New.
+  TestFlight not part of this release; Android held.
+- Correction to the candidate entry: menu_navigation_probe did not pass on AWS at d8b2255a9. The queue
+  report printed the fixture test's pass line for it (also at 2d9dd9d6e: "224/224" was 223). On Linux it
+  also fails at "Update confirmation did not appear on its own", already in v1.0.872 (AWS job
+  20261116T202013); a Linux-only known failure, not a 1.0.873 regression.
+
+## 2026-11-16 - 1.0.873 candidate: reworked (Remastered) campaign, spice bloom ghost fix
+
+Stefan asked for the bundled RWRK_ missions to be completed, offered on the Campaign screen as a
+reworked-maps option that plays like the campaign with a REMASTERED badge, then playtested at every
+difficulty, then "Prepare 1.0.873". Design and results: `docs/reworked-campaign.md` (including
+"Playtest, 2026-11-16"); notes `releases/desktop/1.0.873.md`.
+
+- Maps: Original/Reworked on the Campaign screen; complete for Atreides, Harkonnen and Ordos (Fatkin's
+  Atreides 1-11/21/22, Harkonnen 1-3, Ordos 1; the rest generated by
+  `tools/reworked-campaign/rework_missions.py`). Fatkin's Atreides 21/22 enemy waves were delayed to
+  the generated level 8 timing (header note; licence kept).
+- Spice bloom fix (bb85c4ba6): a unit a map starts with on a bloom no longer loads as an invisible,
+  untargetable unit. Protocol 128, save format 9886 unchanged.
+- Gates at bb85c4ba6 (all game code of this candidate; later commits are maps, docs, test harness):
+  AWS job 20261116T182657 dunelegacy_tests, bloom_placement_probe, scenario-matrix smoke, All against
+  Atreides vanilla and Dune2R, FFA army deploys 6/6; Mini perf_regression passed (PERF_BUDGET_OK,
+  build-int run 18:27 AEDT). At d8b2255a9: dunelegacy_tests, quantbot_campaign_matrix_coverage,
+  menu_probe_fixture, menu_navigation_probe 4/4 on AWS.
+- Playtest on AWS: 66 reworked missions v originals, same seeds, eight setups (QuantBot Easy to Brutal,
+  equal-tier helpers, Campaign AI), no crash. Like the originals except QuantBot Brutal (reworked
+  12/66 won v 27/66) and Easy helpers (more 80-minute time-outs).
+- Not tested: a human playing the reworked missions; Fremen/Mercenary/Sardaukar (no complete sets).
+
+## 2026-11-16 - 1.0.872 published
+
+`v1.0.872` is an annotated tag on `7ffa20b7cbb321781fd8fc1408972833bf6f5ddb` (branch
+`integrate/feature-batch`), pushed 13:58 AEDT after the owner's "release". Evidence:
+`~/Documents/projects/outputs/release-1.0.872/` (`gates.md`, `channels.md`).
+
+- Content: the candidate entry below. Game code is b2ed3f128; later commits fixed the Linux probe
+  fixture test (950e924b3) and taught the opening-economy probe the payback windtrap rule
+  (ee39df68c, c0b364700, 7ffa20b7c; owner: "Yes, update test").
+- Qualified: run 43790461353 (an earlier qualification failed only in
+  `quantbot_opening-economy_vanilla`, the stale probe). Tag build: run 43795350043, all jobs passed.
+- Verified live: GitHub release (Latest, hashes and updater signatures), SourceForge downloads and
+  defaults, browser build (build.json at 1.0.872/7ffa20b7c, hashes match, main menu reached in
+  Chrome), website links and What's New. TestFlight not part of this release; Android held.
+- Website: at the owner's request the What's new page shows 1.0.867 to 1.0.871 as one entry. The
+  website generator reads `changelog/groups.json` (dunelegacy.com ddda999), so release rebuilds keep it.
+
+## 2026-11-16 - 1.0.872 candidate: campaign helper unit-cap launch and yard upgrade, vanilla payback windtraps
+
+Stefan's save `doesntupgrade.dls` (Atreides, tech 4, Easy QuantBot on the player's house): the yard
+never upgraded and the helper never attacked. He asked for upgrade timings tested on the two retained
+AWS workers, then for power, concrete and yard rules assessed as general switches, then "release".
+Full results: `docs/campaign-support-research.md` (two 2026-11-16 sections); models and runs in
+`~/Documents/projects/outputs/yard-upgrade-timing-20261116/`.
+
+- New defaults: `CampaignHelperUnitCapLaunch=1`, `CampaignHelperYardUpgradeTiming=2`,
+  `VanillaPowerPayback=25`. Protocol 127, save format 9886 unchanged.
+- Off, kept as switches: `CampaignHelperAirUpgrade`, `CampaignHelperPowerPayback`,
+  `CampaignHelperLateConcrete`, `CampaignHelperTurretConcrete`, `VanillaYardUpgradeTiming`,
+  `VanillaOpeningBare`, `VanillaAirUpgrade`.
+- Gates at a212b0d0c (AI code identical to this candidate): AWS dunelegacy_tests, scenario-matrix
+  smoke, All against Atreides vanilla and Dune2R, FFA army deploys 5/5; Mini perf_regression at
+  eb9c4408b; controls same-source OFF overlay v candidate 9/9 native wins kept (PASS).
+- Not tested: campaign enemies with these switches (difficulty choice), DuneCity city mode (the
+  switches do not apply there).
+
+## 2026-11-16 - 1.0.871 published
+
+`v1.0.871` is an annotated tag on `76ca46d7eb2f22c07d0521a7ef525d07bd64fb41` (branch
+`integrate/feature-batch`), pushed 03:48 AEDT after the owner's "ok once done deploy buold to
+production". Evidence: `~/Documents/projects/outputs/release-1.0.871/` (`gates.md`, `channels.md`).
+
+- Content: the classic command keys as defaults, a key for every unit panel command, W/A/S/D
+  scrolling only with the WASD camera on (entry below). No AI behaviour change.
+- Qualified: run 43735354446. Tag build: run 43737586500, 23 minutes, all jobs passed.
+- Verified live: GitHub release (Latest, 25 assets, hashes and signatures), SourceForge downloads and
+  defaults, browser build (build.json at 1.0.871/76ca46d7e, hashes match, main menu reached in
+  headless Chrome on the Mini), website links and What's New.
+- Not done: TestFlight (latest is 1.0.870), Android (held on 0.2.33). No package was installed and
+  played on Windows or Linux. Pull request 127 into `main` is still open.
+- The first live verification ran before the website deploy finished and failed on the browser
+  build; wait for the `dunelegacy.com` "Deploy to Droplet" run before `verify --live`.
+- A fresh browser profile logged "INIFile: Syntax-Error in line 5:Version =" once while the menu
+  loaded normally. Not investigated and not compared with 1.0.870.
+- The hotkey session waited 8 hours on a Linux `dunelegacy_tests` queue job that never got a
+  machine. A session waiting on a queue job needs a time limit and a report, not an open wait.
+
+## 2026-11-16 - 1.0.871 candidate: classic command keys restored, keys for every panel command
+
+The owner played 1.0.870 and asked for the classic shortcuts back with the newer commands as
+extras, and for W/A/S/D scrolling only when switched on. Commits `79fe6f432` and `b471f0485` on
+`integrate/feature-batch`. Full description and key table:
+`docs/rts-controls.md`, "Configurable hotkeys".
+
+- Defaults are the pre-1.0.870 keys again, modifier chords included: A Attack Move, S Stop,
+  M Move, Q Patrol, H Hold, C Capture, D Carryall drop, R Repair, U Upgrade, P Place, G next
+  Construction Yard, F next factory, O ornithopters, T / Ctrl+T same type, Ctrl+A combat units,
+  Ctrl+F / Ctrl+Shift+F formations, Z zone tool, Shift+R / Shift+B / Shift+C / Shift+T.
+- Commands without a classic key: E Guard, X Area Guard, B Ambush, N Hunt, K Retreat, Y Deploy
+  MCV, V movement paths, Delete self-destruct, J Sabotage and L Heal (Tornie mods). 33 commands.
+- The WASD camera was already off by default and stays so. On, W/A/S/D scroll and a command on
+  one of them needs Shift (Shift+A, Shift+S, Shift+D by default); the Hotkeys tab, the checkbox
+  and the tooltips show the key in effect.
+- A profile holding an untouched copy of the 1.0.870 defaults (Apply writes all of them) loads as
+  the new defaults. Any other saved `[Hotkeys]` section is kept key for key; in such a 1.0.870
+  profile seven of the newer commands start unbound because their letters are in use.
+- Tested at `b471f0485`: Mini `dunelegacy_tests`, `rts_controls_tests`, `hotkeys_tests`,
+  `menu_navigation_probe`, `terrain_mix_menu_probe`, `ui_gallery_probe`, `formation_movement_probe`,
+  `rts_controls_probe`, `mouse_controls_probe`, `preplace_queue_probe`, both `sidebar_grid_probe`
+  sizes and the unregistered SourceForge regressions probe passed; `native_pointer_mapping_probe`
+  skipped itself. Linux (AWS): `rts_controls_tests` and `hotkeys_tests` passed; `dunelegacy_tests`
+  in queue job `20261115T190454-classic-hotkeys-5f41a3` was never given a machine in 8 hours and
+  was cancelled, so Linux unit tests rest on the branch CI.
+- AI is unchanged by these commits and by `f24981a0f` (default-off research switch
+  `CampaignHelperRepairFactoriesOnly`, rejected: 110 and 120 of 216 against 129, income down 11%).
+  At `b471f0485` on AWS: Brutal helper v Hard missions 20-22, 216 games, 129 won, all 216 final
+  digests identical to the 1.0.870 defaults; smoke tier 11 of 11; Dune2R 7 of 7; All against
+  Atreides 6 of 6 in 31.4 to 36.4 minutes. Evidence:
+  `~/Documents/projects/outputs/brutal-support-claude-20261115/round22/`.
+- Release 1.0.871 carries only this: protocol 126 and save format 9886 are unchanged.
+- Not verified: no person has played the build; the keys were not tried on a German or French
+  keyboard; Sabotage and Heal were only checked to be inert without Tornie content.
+
+Release notes as proposed by the hotkey session (final text: `releases/desktop/1.0.871.md`):
+
+> - The classic command keys are back: A Attack, S Stop, M Move, Q Patrol, H Hold, C Capture,
+>   D Carryall, R Repair, U Upgrade, P Place, G next Construction Yard and F next factory, with
+>   Ctrl+A, T and Ctrl+T for selections as before.
+> - Every unit command now has a key: E Guard, X Area Guard, B Ambush, N Hunt, K Retreat,
+>   Y Deploy MCV, V movement paths and Delete for a Devastator's self-destruct. The buttons'
+>   tooltips name them, and all 33 commands can be changed under Options > Hotkeys.
+> - W, A, S and D scroll the map only if you switch on "WASD camera" under Options > Controls.
+>   While it is on, the commands on those keys need Shift, for example Shift+A to attack.
+> - If you never changed a key in 1.0.870 you get these keys automatically. Keys you chose
+>   yourself are kept; Defaults then Apply switches such a profile to the keys above.
+
+## 2026-11-15 - 1.0.870 published
+
+`v1.0.870` is an annotated tag on `e0eaee02f1ea11a31c1469573d8994d02319624b` (branch
+`integrate/feature-batch`), pushed 16:24 AEDT after the owner's "Yes, publish it". Evidence:
+`~/Documents/projects/outputs/release-1.0.870/` (`gates.md`, `channels.md`).
+
+- First candidate `bf9bb5974` failed the headless qualification on `quantbot_custom_attack`
+  (1 of 144): the probe pinned the campaign helper reserve regrouping on the army centroid, which
+  `CampaignHelperDefenceLeash=14` changes on purpose. `e0eaee02f` updates the probe (centroid with
+  the leash off; within the leash of own buildings with the shipped leash) and makes the leash inert
+  for a house with no building left. No game outcome changed in 480 replayed games; the only final
+  digests that differ are games lost in both runs. `bf9bb5974` was never tagged.
+- Qualified: run 43679399472. Tag build: run 43680987264, 25 minutes, all jobs passed.
+- Verified live: GitHub release (Latest, 8 packages, feeds and appcasts, hashes and signatures),
+  SourceForge (7 packages, README, SHA256SUMS, three OS defaults), browser build (build.json at
+  1.0.870/e0eaee02f, hashes match, main menu reached in Chrome on the Mini), website pages and changelog.
+- Not done: TestFlight (still engine 1.0.857). Android held on 0.2.33 (engine 1.0.858); it cannot
+  play online with protocol 126. No package was installed and played on Windows or Linux.
+- Pull request 127 into `main` is still open: the account used has push but not admin rights and
+  `main` requires a review. As with 1.0.869, `main` does not contain the released tag.
+- Lesson: before pushing a candidate that changes an AI default, run the headless nightly AI probes
+  (`^quantbot_`), not only the four mandatory gates; the qualification is where this surfaced.
+
+## 2026-11-15 - 1.0.870 candidate: campaign helper holds its ground and follows a bigger build order
+
+Classic-campaign support QuantBots (campaignEconomySupport(): campaign policy, allied with the
+human, not builder-only, city sim off) get four default changes. Evidence root:
+`~/Documents/projects/outputs/brutal-support-claude-20261115/` (`results.md`, `round10`..`round19`).
+All games vanilla, Full campaign, idle human, saved options, AWS.
+
+- `afc42bfc0` `CampaignHelperFactoryLast` on: with a Starport the first Heavy Factory waits for the
+  Repair Yard and for the Starport to run out of heavy units at or below list price (or cash above
+  2,500). Brutal helper v Hard, missions 20-22, 216 games: 74 -> 105; second seed block 88 -> 115.
+- `0518ffedd` defaults: `CampaignHelperDefenceLeash=14` (home troops do not chase or answer a
+  ground contact more than 14 tiles from the nearest own building), `CampaignHelperNoConcrete` with
+  `CampaignHelperFactoryConcrete` (concrete only under production buildings),
+  `CampaignHelperOpeningRefineries=6`, `CampaignHelperRefineryGoal=8`, `CampaignHelperCarryallRatio=2`.
+- Leash alone: 105 -> 128, second seed block 115 -> 133, all 66 maps x 4 seeds 229 -> 243
+  (missions 1-19 211 -> 221 of 228). Leash 6 is ruinous (15 of 216); 10 did not hold on fresh seeds.
+- Build order alone: 105 -> 127 on the first seed block, 115 -> 116 on the second, 229 -> 231 on all
+  maps: not confirmed as a strength gain. It is on by the owner's choice, modelled on his recorded
+  build order. With the leash: 129, 129 and 240.
+- New defaults by helper level against Hard, missions 20-22, 216 games each, against the
+  `campaign-helper-release-870-off` style in the same build: Brutal 105 -> 129, Hard 101 -> 121,
+  Medium 55 -> 81, Easy 5 -> 15. The default arm matches the tested style on 216 of 216 final
+  digests, and the off style matches the previous default on 216 of 216.
+- Against the Campaign AI opponent, all 66 maps x 2 seeds, 132 games per helper level: Easy
+  119 -> 124, Medium 123 -> 125, Hard 122 -> 124, Brutal 124 -> 125; no engine errors in 1,056 games.
+- Rejected or unproven, left default off: rock hold, factory first, readiness cap, Starport army,
+  import cap, early unload, early Starport, protected Repair Yard site, front post, focus fire
+  (69 of 216 against 105), counter-attack, single target, beeline (77), second Construction Yard
+  (103), six-then-eight refineries with concrete kept (93).
+- Gates at `0518ffedd`: AWS scenario-matrix smoke 11 of 11, All against Atreides vanilla 6 of 6
+  (31.4-36.4 min) and Dune2R 7 of 7 (31.0-34.8 min); Mini `dunelegacy_tests`,
+  `quantbot_ffa_army_deploys` and `perf_regression` pass (house_max 5.7 against 10).
+- Still weak: Atreides mission 20 (4 of 24), Harkonnen mission 21 (6 of 24), and every late mission
+  against Brutal opponents (0 of 216).
+- The mandatory AI tests are registered `macos` in CTest; on AWS they run as
+  `dunecity-queue submit --purpose verification --machines aws` jobs with the scenario-matrix harness.
+- Also in this candidate: the Campaign AI corrections below and the configurable Hotkeys tab
+  (`a7b382da6`, `98ed3adbe`). Version 1.0.870, protocol 126, save format 9886. Nothing tagged.
+
+## 2026-11-15 - Campaign AI in 1.0.869 was unwinnable from level 6: woke at the first tick (fixed locally, unreleased)
+
+Player report: with Enemy AI "Campaign AI" the campaign became much harder than 1.0.867 and
+unsolvable from level 6. Confirmed on AWS (264 games per arm, all 22 missions, three houses,
+seeds 7101/7102, idle human plus QuantBot helper): levels 6-9 with a Hard helper were won 0 of 54
+times in 1.0.869 against 49 of 54 in 1.0.867, the base falling after a median 3.9 game minutes.
+
+- Cause: `UnitBase::updateVisibleUnits` activated every house on the object visibility flag,
+  which is set for every deployed unit, so the AI was awake from the first update. Dune II wakes
+  a computer house only when the player's sight uncovers one of its ground units. The pre-9886
+  controller hid this because its waves waited for damage; the original TEAM.EMC scripts
+  recruited the whole authored army at once and had about 16 units at the player's base by minute 2.
+- `172242e1d`: an original-rules Campaign AI house wakes only when the other side has had one of
+  its ground units in sight. Other controllers unchanged. **Protocol 126**, save format unchanged.
+  Levels 6-9: 0 of 54 to 36 of 54 won.
+- `6bcf2473c`: in authored missions such a house keeps its mission's `MaxUnit` (15-25, default 39)
+  unless the unit override is a number above 0; the shipped override 0 had made it unlimited.
+  Faithful to the original, no measurable effect in these games (31 of 54). Kept as its own commit
+  so it can be dropped; this is the owner's decision.
+- `8f229669b`: opt-in `partner-<tier>-v-campaign-ai-{original,legacy,release}` cells in
+  `tests/ai/scenario-matrix.py`. `refs/research/campaign-ai-fidelity-867` (`41ccd0a97`) is the
+  1.0.867 tag plus those cells, for the comparison only.
+- Unchanged elsewhere: 264 of 264 QuantBot Easy and 264 of 264 old-controller games keep their
+  final digest across both fixes; AWS smoke tier 11 of 11, All against Atreides 6 of 6 and Dune2R 7 of 7;
+  `original_campaign_*` 3 of 3.
+- `11c54828e` (later the same day, not yet pushed): no mission teams under original rules. A
+  windowless build of Dune Dynasty's game logic (levels 4-9, 180 runs) showed the original never
+  creates a campaign team: `Scenario_Load_Team` (scenario.c, same in OpenDUNE) returns unless a
+  comma follows the fifth value, and every campaign `[TEAMS]` line ends there. So TEAM.EMC never
+  runs; only built units and reinforcements attack, one or two at a time (about 5 at the player's
+  base in the first 10 minutes, where 1.0.869 had a median of 10 at once). The earlier claim that
+  the remaining difficulty was original behaviour was wrong. With all three fixes: levels 6-9
+  51 of 54 with both Hard and Medium helpers (1.0.867: 49 and 38), every mission won at least
+  once, parity and gates unchanged. The script machine stays in the code behind a test-only switch.
+  Driver and logs: `outputs/campaign-ai-fidelity-20261115/dune-dynasty-harness/`, `dune-dynasty/`.
+- Open: native Mac build, `quantbot_ffa_army_deploys` and `perf_regression` on the Mini; a human
+  play test; a Dune Dynasty run with an active player. Still different from the original and
+  left alone: shared 102-unit pool, 75% speed of built units, credits capped at storage, mission
+  Guard units switching to Hunt when hit.
+- Evidence and audit table: `outputs/campaign-ai-fidelity-20261115/results.md`; rules in
+  `docs/original-campaign-ai.md`.
+
+## 2026-11-15 - 1.0.869 published; 1.0.868 was tagged but never published
+
+- Tag `v1.0.869` → `a6e26c57e99bf67d507c515ce7ea252b52e1306c`; tag run 43597776305; integration CI 43594620864; Mini qualifier 43595737089 (receipt reused by the tag job, no test rerun). Tag `v1.0.868` stays on `e990124666feb61ac82073324c6e6d6fb1a93d48`, unpublished: its tag run 43590160430 failed the Mac lane three times. 1.0.869 is that game code with the version changed and the Mac packaging order fixed.
+- Published 00:25:30 AEDT 15 November (13:25:30Z 14 November) and verified live by 00:40: GitHub Latest with 25 assets; `release-automation.py verify v1.0.869 --live` rc 0 (package hashes, updater signatures, `/play` artifact hashes, SourceForge downloads and defaults, website links); `/play/build.json` 1.0.869 / `a6e26c57e`; SourceForge `dunecity/1.0.869/` present and no `1.0.868` folder; website repo `270df4f` (automated bump), `14e4b9d` (browser), `9b74aaf` (description), live pages byte-identical to `9b74aaf`. Codex's independent public verifier and 12-check browser test passed. The published macOS ZIP (sha256 `23b21e13…`) was downloaded, verified as notarised Developer ID, launched with an isolated profile and captured at the main menu showing "App v1.0.869" (`outputs/release-1.0.869/published-mac/packaged-app-main-menu.png`).
+- `main` was not moved (direct push is refused; a PR is required). Staging `integrate/feature-batch` carries the release at `a6e26c57e`.
+- Contents: Original Campaign AI (save format 9886, protocol 125); campaign QuantBot Repair Yard rule limited to Easy campaign enemies (Medium QuantBots in Custom games also lose the limit); campaign Construction Yard upgrade deferred until income, power and spare credits; campaign setup screen enemy descriptions corrected and no longer clipped; `CampaignHouseWaveExperiment` (arms 1 to 3, live base count) in the binary, default 0, keys absent from the default INI.
+- Strength of the two fixes, idle human, fixes off against on. Single mission (36 games each, in the notes): Medium helper v Hard 10 to 16; Hard v Medium 31 to 32. Full campaign (72 paired games each, seeds 9901 to 9908, measured after the notes were frozen): Medium v Hard 22 to 34 with no win turned into a loss; Hard v Medium 62 to 64; Brutal v Hard on missions 20 to 22: 23 to 34 (18 losses became wins, 7 wins became losses). Harkonnen mission 21 with a Brutal helper 0 of 8 both ways; Ordos missions 21 and 22 with a Brutal helper slightly worse (5 to 4, 7 to 5 of 8). Evidence `outputs/campaign-wave-search-20261114/full-fix-control-results.md`.
+- Not in it: any change to the Hard wave value. Flat 4000 was tested and withdrawn (Single mission, Brutal helper on Harkonnen 20+21: 7 of 20 down to 2 of 20) with its save-checksum migration. The cap study (6,352 games: 2,880 exploratory, 3,456 held out on seeds 9901 to 9908, 16 on the owner's seed) rejected 6500/2000/4000, 6500/4000/4000 and flat 4000: Brutal helper mission 22 fell from 13 of 24 to 9 with all three. Record: `docs/campaign-ai-difficulty-matrix.md` "Full campaign cap confirmation"; evidence `outputs/campaign-wave-search-20261114/decision.md`.
+- Known issues: late missions against Hard opponents still lost with a QuantBot helper and an idle human (held-out baseline, Full campaign: missions 20+21 Easy 3, Medium 11, Hard 16, Brutal 21 of 48; mission 22: 0, 3, 14, 13 of 24; Harkonnen mission 21: 0 of 32; removing `CampaignAllyStrengthFloor` lost 36 of 36 there). Cause not known. Ordos mission 4 seed 9602 stall carried from 1.0.867.
+- Held: Android, TestFlight, Windows real GPU, physical iPhone/iPad.
+- Follow-ups, not part of the release: (a) the pointer fixture should restore the pointer it displaces, or the lane should centre it (lesson 14); (b) `agent-workspace run` should treat `PermissionError` from its process-group probe (`workspace.py:247`): one run ended with `[Errno 1] Operation not permitted` and no receipt after the script had finished; (c) the `perf_regression` spike of attempt 1 is unexplained; (d) `dunecity-crash.log` is a tracked file in the repository root and any app started there rewrites it.
+
+### What cost time, and what changed
+
+1. **A default-on fix was pushed without the integration tier run on the final head.** The hosted Mac caught `repair_capacity_vanilla`. Rule now followed: before any candidate push, run `outputs/release-…/native-gates.sh` (integration tier, focused, GUI lane, saved-game continuations) on `build-int` at the exact head.
+2. **A test that guards a neighbouring behaviour is evidence of scope, not a stale assertion by default.** The Repair Yard fix lifted a Custom-game Medium limit; it shipped only after the owner's words were quoted and the notes said so.
+3. **The Mini's qualification receipt code had never run on the Mini.** `qualification_image_version` called `xcodebuild`, absent under Command Line Tools; the unit test mocked the call. Fixed in `6470b576c` (macOS build + developer directory + compiler). First complete Mini qualifier: run 43577738853, 140 tests, 19 min 11 s.
+4. **Any key in `config/QuantBot Config.ini.default` is part of every mod's checksum.** Changing a shipped value refuses older checksum-only campaign saves. Behaviour changes go in code defaults with the key kept out of the default INI, or come with a proven migration.
+5. **`gui nightly` tests run nowhere automatically.** `quantbot_campaign_pressure_*` and `perf_regression` are in neither hosted CI nor the Mini qualifier; the local gate script is their only execution.
+6. **Git on the staging project is refused while the Mini qualifier holds it** ("project:dunecity is in use"). Queue merges with `--wait` or do them before the qualifier starts.
+7. **Scope moved four times after the first candidate** (Custom Medium consequence, Hard 4000 in and out, Original Campaign AI in, wave experiment). Each source change costs one integration CI (about 12 min) and one Mini qualifier (about 20 min). Qualifying a likely-final head during an experiment is cheap insurance.
+8. **Save mode must be read from the save header, not recalled.** Both owner saves were Full campaign (`game_type` 1), first recorded as Single mission.
+9. **A fit score chosen before the data can still point the wrong way.** The frozen target-fit score favoured all three cap candidates on fresh seeds while the raw late-mission tables got worse; 73% of the baseline error came from two early-mission cells. Read the per-helper, per-mission tables before any composite.
+10. **Menu text is a claim about the code.** The setup screen said Easy and Medium attack one house at a time; `Profile::houses` now only feeds telemetry. When behaviour changes, grep the menus for the old description.
+11. **A two-line size-10 label needs 28 rows.** `createLabelSurface` clips at the widget height; a 12 November capture already shows the second line's descenders cut.
+12. **Cancel a superseded qualifier at once.** Run 43582944138 was cancelled before a lane step ran; GitHub showed `in_progress` for five more minutes (runner cancellation timeout) while the project was already free.
+13. **`gui nightly` tests do run in the tag run's Mac lane** (correcting point 5: not in integration CI or the Mini qualifier, but `perf_regression` and the packaged pointer gate gate publication). Attempt 1 of 1.0.868 failed `perf_regression` on one 122 ms update (`house_max` 18.9 against a budget of 10); six same-binary repeats gave 14.0 to 15.8 ms with identical digests and the retry passed at 2.5. Cause unresolved. Evidence `outputs/release-1.0.868/perf-diagnosis/`.
+14. **The pointer fixture leaves the Mini's real pointer on the left screen edge, and the next run then fails its first check.** Attempt 2 of 1.0.868 failed "Stationary fullscreen pointer lies outside the logical viewport" with the pointer at x 0, y 907. I first blamed a Screen Sharing session; that was not shown. In the 1.0.869 lane a read-only sampler had the pointer at the centre until the fixture ran (00:20:16), then at x 0, y 907 afterwards with no session connected (`outputs/release-1.0.869/pointer-samples-tag-run.tsv`). The viewport starts one pixel in from the left, so x 0 is outside it. `desktop-before.json` claims `pointerMoved: false`. Until the fixture restores the pointer or the lane centres it, centre it once before every pointer-gate run, then only sample (a corrective move during the fixture would hide a real escape).
+15. **A Mac lane rerun after Apple accepted the app failed at stapling (exit 73).** Packaging launched the signed app before stapling; on the rerun that was already notarised code (same code hash), the bundle came under App Management and the runner's `stapler` was denied the write (TCC `kTCCServiceSystemPolicyAppBundles`, responsible binary the runner's `node`, no prompt). Kernel and TCC log lines in `outputs/release-1.0.868/staple-diagnosis/`. Fixed in `a6e26c57e` by stapling before the first launch, validated on the runner by the 1.0.869 lane (staple 00:16:57, runtime check 00:17:00). It cost a new version, one integration CI and one Mini qualifier. `man stapler` gave the meaning of exit 73 in one line, and Codex found it; read the tool's manual before blaming the service. No privacy grant on the Mini was changed.
+16. **Failed Mac packages have no automated consumer.** `release` takes only `DuneCity-macOS-DMG` from a successful lane; a signed, notarised package from a lane that failed a later gate cannot be promoted by the workflow, and the pointer consumer needs a publication manifest an unpublished build does not have. 1.0.865 was published from unchanged packages after a harness failure, but by an owner-directed manual publication; that was not used here. A late host-state failure therefore costs a full re-sign unless the owner directs otherwise.
+17. **The production reservation needs 45 GB free on the Mini** (25 GB reserve plus the 20 GB budget). It was refused at 42.8 GB; freeing regenerable test output under `build-int` fixed it. Check free space before the reservation, not at it.
+
+## 2026-11-14 - Original Campaign AI restoration (next batch, not 1.0.868)
+
+Stefan requested the selectable Campaign AI use original Dune II behaviour;
+QuantBot remains separate. Implementation follows pinned Dune Dynasty original
+branches and executes the user's `DUNE.PAK/TEAM.EMC` team script. It restores
+production choice/order, individual produced-unit Hunt, authored mission teams,
+five-slot rebuilding, free factory upgrades and original base-attack behaviour.
+See `docs/original-campaign-ai.md` for references and explicit engine adaptations.
+No extracted commercial script is committed.
+
+New games use hashed `OriginalCampaignAI=true`; OFF and pre-9886 saves retain
+the previous controller. Save format 9886 and protocol 125 are reserved for this
+feature. Shipped default INI bytes stay unchanged for old-save content identity.
+Script-owned attack targets survive autonomous target refresh without taking
+authority over explicit player orders. Other controller target selection is inert.
+
+Source-only checkout: `/Users/stefan/Documents/projects/dunecity-original-campaign`
+(`task/original-campaign-ai`) on claw.local. The separately owned 1.0.868 candidate
+`8ecc2d433ab2e9f45978bceb01a4a46afa6fcdf2` was merged here; staging and its sole
+native `build-int` remain with the release coordinator until its handoff.
+Two bounded independent OMP reviews informed fixes; Codex owns integration.
+
+Combined-source checks at `54903ac01` (docs-only `6de739e46`): 5/5 AWS CTest
+gates, including 25 mission/mod/control cases, identical three-house QuantBot
+OFF/ON digests, original repeatability, legacy stream boundaries and real
+live/checkpoint/ordinary-save continuation. Full matrix: 1665 scenarios complete,
+zero engine errors. Fresh 350-case baseline on `8ecc2d433`: every shared outcome
+and final digest identical. This is not a claim every matchup won.
+
+Release infrastructure fix `6470b576c` merged into this source-only branch;
+only release automation and its unit tests differ from the validated game inputs.
+Native build, focused tests, both All-against-Atreides gates, FFA, smoke matrix
+and GUI performance remain pending. Their four AI CTests are macOS-only
+registrations; the cloud attempt matched no tests. The release coordinator
+declined a temporary native window at 19:41 AEDT to protect its new qualifier.
+Staging source/native integration waits for its explicit handoff after release
+Mini jobs. No feature publication requested or performed. Detailed evidence and
+continuation: `/Users/stefan/Documents/projects/outputs/campaign-original-ai/validation.md`.
+
+## 2026-11-14 - 1.0.867 published; 1.0.866 was tagged but never published
+
+Tag `v1.0.867` at `cd2c86f2c91c5be77e31d385e373c87394501a1d` is published
+(Latest, 25 assets, 2026-11-14T06:28:02Z). Protocol 123, save format 9885.
+Tag run `43558741009`: hosted Mac gate 138/138 in 2,831 s after a 16 min cold
+build; Mini lane 18.5 min (integration 38/38, `native_multiplayer_join_modes`
+passed for real in 112 s, `perf_regression` 96 s, Developer ID signed,
+notarized, stapled, packaged pointer gate passed). Live checks at 17:45 AEDT:
+`release-automation.py verify v1.0.867 --live` passed; `/play/build.json`
+reports 1.0.867 at `cd2c86f2c` and all eight served files match; a real browser
+reached the main menu showing `App v1.0.867`; SourceForge `dunecity/1.0.867`
+holds seven packages, README and checksums with all three platform defaults;
+both website download pages say 1.0.867. Browser publisher `43566515010`,
+SourceForge sync `43566515051`, website deploys `43566636146`/`43566673692`.
+
+Contents since 1.0.865: campaign opponent and helper levers by difficulty
+(Brutal opponents unchanged), helper quota saving, Single mission campaign
+policy, two AI performance fixes, software renderer fallback for headless
+runs, SimCity labels renamed to Classic, bundled city map renamed.
+
+What went wrong, in order:
+
+- Mini signing keychain no longer opened with the saved password; rebuilt from
+  the encrypted identity backup. Unlock state is per security session.
+- Apple notary service returned HTTP 403 until the account holder accepted a
+  new agreement (cleared 14:33).
+- `v1.0.866` (`4288daf6d`, run `43552104028`) failed its hosted Mac gate after
+  49 minutes with no test failure: `native_multiplayer_join_modes` skipped
+  because hosted macOS has no PHP, and the gate rejects any skip. Nothing was
+  published; the tag is left in place, unmoved. `cd2c86f2c` excludes the
+  `network` label from the hosted gate and runs that test in the stable Mini
+  lane, which fails on a skip or missing PHP.
+- Tag runs cannot read the staging branch's build cache, so the hosted Mac
+  build was cold (16 to 21 min) on both tags.
+- `sign-desktop-updates` attempt 1 failed: artifacts downloaded into the
+  runner's checkout made the workspace gate see uncommitted files. Mini-only
+  workaround: `/update-input/` and `/update-feeds/` in that clone's
+  `.git/info/exclude`; attempt 2 passed from the frozen artifacts. The lasting
+  fix (downloads under `RUNNER_TEMP`) is PR 126.
+- The release job's website rewrite updated links but not the visible version
+  text, because its patterns targeted wordings the pages no longer use.
+  Corrected by hand in `dunelegacy.com` `b528c2a2b`; helper in PR 126.
+
+Tests changed before tagging: three stale probe contracts (`c2209694c`), the
+starport probe isolates the Brutal helper army floor (`d0643ccd4`), and
+`quantbot_trooper_support` was removed on the owner's instruction
+(`4288daf6d`). Known issue carried: Ordos mission 4, seed 9602, Hard opponent
+with an idle human reaches the harness's 80-minute limit; it predates the
+campaign batch.
+
+Held: Android (signer on the offline PC, phone test, explicit publish);
+TestFlight (not attempted); Windows on a real GPU and physical iPhone/iPad
+(no hardware). Full record: `~/Documents/projects/outputs/release-1.0.866/gates.md`.
+
 ## 2026-11-12 - 1.0.865 published; Mac pointer gate recovered without changing packages
 
 PR #122 merged at `ad4d1a522814ceb4f4fd492c3cf674e1d36bfa56`; tag

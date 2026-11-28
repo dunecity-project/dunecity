@@ -18,6 +18,10 @@
 #include <Bullet.h>
 #include <DynastyProjectile.h>
 #include <units/UnitBase.h>
+#include <units/Trooper.h>
+#include <units/AmbientAirplane.h>
+#include <sand.h>
+#include <dunecity/CityAircraftPolicy.h>
 #include <Achievements/AchievementEvents.h>
 #include <mod/ModManager.h>
 
@@ -285,6 +289,26 @@ case Bullet_LargeRocket: {
             graphic = pGFXManager->getObjPic(ObjPic_Bullet_Medium, houseID);
         } break;
 
+        case Bullet_Bomb: {
+            // The city airplane's bomb (AmbientAirplane::dropBomb, dropStick), dropping back from
+            // the plane for CityAircraft::kBombFallCycles and only going off where it was aimed.
+            // The stick's heavy bomb is the Death Hand's rocket picture, pointing along the
+            // plane's course; the aimed rule keeps the large shell.
+            damageRadius = TILESIZE/2;
+            explodesAtGroundObjects = false;
+            speed = DuneCity::CityAircraft::bombSpeed();
+            detonationTimer = -1;
+            if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
+                // The heavy bomb's blast against ground units: a tile and a half (Map::damage).
+                damageRadius = DuneCity::CityAircraft::kStickUnitBlastTiles2 * TILESIZE / 2;
+                numFrames = 16;
+                graphic = pGFXManager->getObjPic(ObjPic_Bullet_LargeRocket, houseID);
+            } else {
+                numFrames = 1;
+                graphic = pGFXManager->getObjPic(ObjPic_Bullet_Large, houseID);
+            }
+        } break;
+
         case Bullet_SmallRocket: {
             numFrames = 16;
             graphic = pGFXManager->getObjPic(ObjPic_Bullet_SmallRocket, houseID);
@@ -429,9 +453,7 @@ void Bullet::updateDynastyProjectile()
 {
     const auto parameters = DynastyProjectile::parameters(bulletID);
     bool trooperAntiAir = false;
-    if(bulletID == Bullet_SmallRocket && airAttack
-       && currentGame->getGameInitSettings().getGameOptions().trooperAntiAir
-       && ModManager::instance().isDuneCityContentActive()) {
+    if(bulletID == Bullet_SmallRocket && airAttack && Trooper::antiAirRuleActive()) {
         // Firing-time attribution survives shooter death and ownership changes.
         // Older shots can still identify their source while that object is alive.
         Uint32 item = provenance.sourceItemID;
@@ -442,6 +464,13 @@ void Bullet::updateDynastyProjectile()
         trooperAntiAir = item == Unit_Trooper || item == Unit_Troopers
             || item == Unit_Troopers5 || item == Unit_FlameTrooper;
     }
+    // City Plane Defence: a turret's and a Launcher's rocket fly to where they meet a city
+    // airplane and go off on touching it. The Launcher's used to fly to where the plane had been
+    // and had no test against aircraft at all (Stefan, 2026-11-23: "rockets fired at them seem to
+    // go right through them").
+    const bool tracksCityPlane = (bulletID == Bullet_TurretRocket
+                                  || (bulletID == Bullet_Rocket && AmbientAirplane::rocketsHitPlanes()))
+        && currentGame->getGameInitSettings().getGameOptions().cityPlaneDefence;
     for(int elapsed=0; elapsed<48; ++elapsed) {
         if(projectileClock % 150 == 0) {
             const Coord previous(lround(realX*4), lround(realY*4));
@@ -449,7 +478,34 @@ void Bullet::updateDynastyProjectile()
             const bool tracksTrooperTarget = liveTarget
                 && liveTarget->getHealth() > 0 && liveTarget->isAFlyingUnit();
             if(tracksTrooperTarget) destination = liveTarget->getCenterPoint();
-            const Coord goal = destination*4;
+            // A rocket chasing a city airplane goes off once it is farther from where it was
+            // fired than a Rocket Turret reaches against aircraft; it used to follow a plane
+            // flying away across the whole map (CityAircraft::kRocketChaseRangeFactor).
+            const auto* chased = (tracksCityPlane || tracksTrooperTarget) ? target.getObjPointer() : nullptr;
+            const int chaseRange4 = (chased && chased->getItemID() == Unit_AmbientAirplane)
+                ? AmbientAirplane::rocketChaseRange4(owner->getHouseID()) : 0;
+            if(chaseRange4 > 0 && DynastyProjectile::distance(source*4, previous) > chaseRange4) {
+                destroy();
+                return;
+            }
+            // City Plane Defence: a turret rocket flies to where it and the city airplane meet,
+            // solved again at every movement step, and does not go off before it gets there,
+            // as long as that point is inside the chase range.
+            bool tracksPlane = false;
+            Coord meetingPoint;
+            if(tracksCityPlane) {
+                const auto* object = target.getObjPointer();
+                if(object && object->getItemID() == Unit_AmbientAirplane && object->getHealth() > 0) {
+                    const auto meet = static_cast<const AmbientAirplane*>(object)->rocketIntercept(previous, bulletID);
+                    if(meet.possible && DynastyProjectile::distance(source*4, meet.point) <= chaseRange4) {
+                        tracksPlane = true;
+                        meetingPoint = meet.point;
+                        destination = meet.point/4;
+                    }
+                }
+            }
+            const bool tracks = tracksTrooperTarget || tracksPlane;
+            const Coord goal = tracksPlane ? meetingPoint : destination*4;
             const auto step = std::min(parameters.step, DynastyProjectile::distance(previous, goal)+16);
             const auto position = DynastyProjectile::move(previous, projectileHeading, step);
             xSpeed = FixPoint(position.x-previous.x)*0.08_fix;
@@ -463,7 +519,32 @@ void Bullet::updateDynastyProjectile()
                 return;
             }
             if(!trooperAntiAir) liveTarget = target.getObjPointer();
-            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket || tracksTrooperTarget)
+            // A rocket fired at a city airplane also goes off on another enemy plane it touches on
+            // its way; with ten bombers a house they fly in streams and the rocket used to pass
+            // through every plane but its own. The lowest object ID wins a tie (the registry has
+            // no fixed order).
+            if(chaseRange4 > 0 && AmbientAirplane::rocketsHitPlanes()) {
+                const AmbientAirplane* touched = nullptr;
+                int touchedAt = 0;
+                for(const AmbientAirplane* plane : AmbientAirplane::all()) {
+                    if(plane == chased || plane->getHealth() <= 0 || !plane->isActive()
+                       || plane->getOwner()->getTeamID() == owner->getTeamID()
+                       || (touched != nullptr && plane->getObjectID() > touched->getObjectID())) continue;
+                    const int at = plane->touchedBy(previous, position);
+                    if(at < 0) continue;
+                    touched = plane;
+                    touchedAt = at;
+                }
+                if(touched != nullptr) {
+                    realX = FixPoint(previous.x+int((position.x-previous.x)*Sint64(touchedAt)/1024))/4;
+                    realY = FixPoint(previous.y+int((position.y-previous.y)*Sint64(touchedAt)/1024))/4;
+                    destroy(touched->getObjectID());
+                    return;
+                }
+            }
+            const bool launcherAtPlane = bulletID == Bullet_Rocket && tracksCityPlane && liveTarget
+                && liveTarget->getItemID() == Unit_AmbientAirplane;
+            if((bulletID == Bullet_TurretRocket || bulletID == Bullet_DRocket || tracksTrooperTarget || launcherAtPlane)
                && liveTarget && liveTarget->getHealth() > 0
                && liveTarget->isAFlyingUnit()) {
                 const Coord targetNow = liveTarget->getCenterPoint()*4;
@@ -490,7 +571,7 @@ void Bullet::updateDynastyProjectile()
                 }
             }
             const int distance = DynastyProjectile::distance(position, goal);
-            if(!tracksTrooperTarget && (distance < 16 || distance > projectileDistance)
+            if(!tracks && (distance < 16 || distance > projectileDistance)
                && (detonationTimer == 0 || bulletID == Bullet_TurretRocket)) {
                 if(bulletID == Bullet_TurretRocket && target.getObjPointer()
                    && isOrnithopterUnit(target.getObjPointer()->getItemID()))
@@ -502,10 +583,10 @@ void Bullet::updateDynastyProjectile()
             projectileDistance = distance;
             // Precise/armed trooper rockets must keep steering after the old
             // detonation counter reaches zero, rather than flying at a stale point.
-            if(detonationTimer > 0 || tracksTrooperTarget) {
+            if(detonationTimer > 0 || tracks) {
                 Coord aim = goal;
                 const auto* object = target.getObjPointer();
-                if(object && object->getHealth() > 0 && object->isAFlyingUnit())
+                if(!tracksPlane && object && object->getHealth() > 0 && object->isAFlyingUnit())
                     aim = object->getCenterPoint()*4;
                 projectileAim = DynastyProjectile::direction(position, aim) & 255;
                 // Signed orientation arithmetic matches Unit_SetOrientation,
@@ -808,6 +889,64 @@ case Bullet_LargeRocket: {
             currentGame->getExplosionList().push_back(new Explosion(Explosion_ShellMedium,position,houseID));
         } break;
 
+        case Bullet_Bomb: {
+            const ObjectBase* building = nullptr;
+            if(const Tile* tile = currentGameMap->tileExists(position.x/TILESIZE, position.y/TILESIZE)
+                   ? currentGameMap->getTile(position.x/TILESIZE, position.y/TILESIZE) : nullptr;
+               tile != nullptr && tile->hasAGroundObject() && tile->getGroundObject()->isAStructure()
+               && tile->getGroundObject()->getHealth() > 0) {
+                building = tile->getGroundObject();
+            }
+            if(building != nullptr && building->getOwner()->getTeamID() != owner->getTeamID()) {
+                // The bombed house notes where and when (House::noteBombHit); its QuantBot answers
+                // with Rocket Turrets spread through the city (AirRaidTurrets). Noted here, because
+                // the plane may be gone before its bomb lands and the damager cannot be asked then.
+                House* bombed = currentGame->getHouse(building->getOwner()->getHouseID());
+                // For the match tables: what the house had to shoot with when its first bomb landed.
+                if(bombed->getAirRaid().lastHitCycle == 0)
+                    SDL_Log("CITY_FIRST_BOMB: house=%d rocket_turrets=%d gun_turrets=%d cycle=%u", bombed->getHouseID(),
+                            bombed->getNumItems(Structure_RocketTurret), bombed->getNumItems(Structure_GunTurret),
+                            currentGame->getGameCycleCount());
+                bombed->noteBombHit(position.x/TILESIZE, position.y/TILESIZE, currentGame->getGameCycleCount());
+            }
+            // The buildings of other teams the blast can reach, a direct hit or the heavy bomb's
+            // splash: one line for each it destroys, for the match tables
+            // (tests/ai/city-plane-report.py).
+            struct InReach { Uint32 id; int house; int item; int price; };
+            std::vector<InReach> inReach;
+            for(const StructureBase* structure : structureList) {
+                if(structure->getHealth() <= 0 || structure->getOwner()->getTeamID() == owner->getTeamID()) continue;
+                const Coord topLeft = structure->getLocation() * TILESIZE;
+                const Coord bottomRight = topLeft + structure->getStructureSize() * TILESIZE;
+                if(position.x < topLeft.x - damageRadius || position.y < topLeft.y - damageRadius
+                   || position.x >= bottomRight.x + damageRadius || position.y >= bottomRight.y + damageRadius) continue;
+                inReach.push_back({structure->getObjectID(), structure->getOwner()->getHouseID(), static_cast<int>(structure->getItemID()),
+                                   currentGame->objectData.data[structure->getItemID()][structure->getOriginalHouseID()].price});
+            }
+            // The ground units the blast can reach, any team (CITY_PLANE_UNIT_KILL).
+            const auto units = watchGroundUnits(position, damageRadius + TILESIZE);
+            currentGameMap->damage(shooterID, owner, position, bulletID, damage, damageRadius, false, true, NONE_ID, provenance);
+            for(const InReach& before : inReach) {
+                const ObjectBase* hit = currentGame->getObjectManager().getObject(before.id);
+                if(hit != nullptr && hit->getHealth() > 0) continue;
+                std::string name = getItemNameByID(before.item);
+                std::replace(name.begin(), name.end(), ' ', '_');
+                SDL_Log("CITY_PLANE_KILL: house=%d object=%u target_house=%d target_item=%d target_name=%s price=%d cycle=%u",
+                        houseID, shooterID, before.house, before.item, name.c_str(), before.price,
+                        currentGame->getGameCycleCount());
+            }
+            logCityPlaneUnitKills(units, shooterID, houseID, owner->getTeamID(), "bomb");
+            if(currentGame->getGameInitSettings().getGameOptions().cityPlaneCarpetBombing) {
+                // The stick's heavy bomb: the large building explosion drawn four tiles wide.
+                soundPlayer->playSoundAt(Sound_ExplosionLarge, position/TILESIZE);
+                currentGame->getExplosionList().push_back(new Explosion(Explosion_Bomb,position,houseID));
+            } else {
+                soundPlayer->playSoundAt(Sound_ExplosionMedium, position/TILESIZE);
+                const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Medium1,Explosion_Medium2});
+                currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
+            }
+        } break;
+
         case Bullet_Sonic:
         case Bullet_SonicTrike:
         case Bullet_Sandworm:
@@ -820,8 +959,36 @@ case Bullet_LargeRocket: {
     delete this;
 }
 
+std::vector<Bullet::WatchedUnit> Bullet::watchGroundUnits(const Coord& at, int reach)
+{
+    std::vector<WatchedUnit> watched;
+    for(const UnitBase* unit : unitList) {
+        if(unit->getHealth() <= 0 || unit->isAFlyingUnit() || !unit->isActive()) continue;
+        const Coord centre = unit->getCenterPoint();
+        if(std::abs(centre.x - at.x) > reach || std::abs(centre.y - at.y) > reach) continue;
+        watched.push_back({unit->getObjectID(), unit->getOwner()->getHouseID(), unit->getOwner()->getTeamID(),
+                           static_cast<int>(unit->getItemID()),
+                           currentGame->objectData.data[unit->getItemID()][unit->getOriginalHouseID()].price});
+    }
+    return watched;
+}
+
+void Bullet::logCityPlaneUnitKills(const std::vector<WatchedUnit>& watched, Uint32 planeID, int planeHouse,
+                                   int planeTeam, const char* source)
+{
+    for(const WatchedUnit& before : watched) {
+        const ObjectBase* unit = currentGame->getObjectManager().getObject(before.id);
+        if(unit != nullptr && unit->getHealth() > 0) continue;
+        std::string name = getItemNameByID(before.item);
+        std::replace(name.begin(), name.end(), ' ', '_');
+        SDL_Log("CITY_PLANE_UNIT_KILL: house=%d object=%u target_house=%d target_item=%d target_name=%s price=%d "
+                "own=%d source=%s cycle=%u", planeHouse, planeID, before.house, before.item, name.c_str(), before.price,
+                before.team == planeTeam ? 1 : 0, source, currentGame->getGameCycleCount());
+    }
+}
+
 void Bullet::detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impact, int damage, bool air,
-                               const DeviationReward::Provenance& provenance)
+                               const DeviationReward::Provenance& provenance, bool shake)
 {
     soundPlayer->playSoundAt(Sound_ExplosionLarge, impact);
 
@@ -835,6 +1002,6 @@ void Bullet::detonateDeathHand(Uint32 shooterID, House* owner, const Coord& impa
                                air, true, NONE_ID, provenance);
         const auto explosionID = currentGame->randomGen.getRandOf({Explosion_Large1,Explosion_Large2});
         currentGame->getExplosionList().push_back(new Explosion(explosionID,position,houseID));
-        screenborder->shakeScreen(22);
+        if(shake) screenborder->shakeScreen(22);
     }
 }

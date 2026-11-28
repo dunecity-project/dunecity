@@ -312,6 +312,14 @@ parser.add_argument('--ffa-screenshot', type=Path,
                     help='With --elimination-match or --match-sides: save a rendered PNG of --house\'s army (centred '
                          'between its assembly point and its forward bundle) at the first sample, at --viewport')
 parser.add_argument('--ffa-screenshot-minute', type=int, help='--ffa-screenshot: at the first sample from this game minute')
+parser.add_argument('--scenario-screenshot', type=Path,
+                    help='--scenario: save the rendered game screen, centred on --house\'s Construction Yard, '
+                         'at --scenario-screenshot-minute (default 1), at --viewport (default 1440x900)')
+parser.add_argument('--scenario-screenshot-minute', type=int, help='--scenario-screenshot: the game minute')
+parser.add_argument('--scenario-watch-object', type=int,
+                    help='--scenario: log each change of this object\'s active/alive/visible state')
+parser.add_argument('--scenario-screenshot-focus', choices=house_names,
+                    help='--scenario-screenshot: centre on this house\'s first living unit and log all its units')
 parser.add_argument('--load-save', type=Path, help='Continue this savegame instead of starting a new match')
 parser.add_argument('--save-profile', type=Path,
                     help='With --load-save: a player profile whose workshop/ holds the revisions the save pins')
@@ -319,7 +327,7 @@ parser.add_argument('--partner-difficulty', choices=('easy','medium','hard','bru
 parser.add_argument('--enemy-ai', choices=('quantbot','ai-player','campaign'), default='quantbot',
                     help='Enemy controller family; AI Player has Easy/Medium/Hard; campaign = CampaignAIPlayer '
                          '(the campaign menu\'s "scenario settings" enemy, any --enemy-difficulty)')
-parser.add_argument('--enemy-difficulty', choices=('easy','medium','hard','brutal'), default='easy')
+parser.add_argument('--enemy-difficulty', choices=('easiest','easy','medium','hard','brutal'), default='easy')
 parser.add_argument('--civ-wars', type=int, choices=range(1, 4), metavar='TEAMSIZE',
                     help='Real generated Civilization Wars 1v1/2v2/3v3; needs --mod CivWars --local-spectator')
 parser.add_argument('--civ-size', type=int, choices=range(4), default=0, metavar='INDEX',
@@ -373,6 +381,12 @@ parser.add_argument('--civic-priority-probe', action='store_true',
                     help='Isolate required civic priority against active optional investment rules')
 parser.add_argument('--nuclear-probe', action='store_true')
 parser.add_argument('--reactor-safety-probe', action='store_true')
+parser.add_argument('--held-site-threat-probe', action='store_true',
+                    help='Verify that a finished building held a minute with no safe site goes to the '
+                         'least threatened legal site instead of blocking its yard')
+parser.add_argument('--enemy-border-site-probe', action='store_true',
+                    help='Verify that QuantBot may build right up to enemy buildings (protocol 141): an '
+                         'enemy building on the border costs nothing, light fire is a fallback site')
 parser.add_argument('--degradation-probe', action='store_true',
                     help='Verify Dynasty-aligned power damage, foundation decay and their save state')
 parser.add_argument('--radar-probe', action='store_true')
@@ -423,6 +437,10 @@ parser.add_argument('--blob-wave-probe', action='store_true',
                     help='Verify QuantBot hunt parties (WaveFormation Blob) gather, march, release, reform and fall back')
 parser.add_argument('--force-probe', action='store_true',
                     help='Verify the QuantBot force-concentration defaults: focus fire, converging on a fight, 60%% waves')
+parser.add_argument('--city-lessons-probe', action='store_true',
+                    help='Verify CityLauncherArmy and LowValuePalaces act when on, not when off, and reach their effect')
+parser.add_argument('--wind-trap-probe', action='store_true',
+                    help='Verify QuantBot retires Wind Traps for a reactor only when its base is low on building room')
 parser.add_argument('--spice-bloom-probe', action='store_true',
                     help='Verify SpiceBloomHarvest: the cheapest idle ranged unit bursts an open bloom, a wasteful one is skipped')
 parser.add_argument('--strategy-probe', action='store_true',
@@ -472,6 +490,9 @@ parser.add_argument('--strategic-site-probe', action='store_true',
 parser.add_argument('--pressure-probe', action='store_true', help='Verify campaign wave readiness, survivor independence and save state')
 parser.add_argument('--defence-probe', action='store_true', help='Verify retaliation and base/harvester reinforcements')
 parser.add_argument('--repair-probe', action='store_true', help='Verify experienced campaign bots replace missing repair yards')
+parser.add_argument('--original-campaign-probe', action='store_true', help='Verify original Campaign AI rules and saved state')
+parser.add_argument('--original-campaign-rules', choices=('on', 'off'),
+                    help='Capture original or legacy rules for newly created Campaign AI controllers')
 parser.add_argument('--repair-capacity-probe', action='store_true',
                     help='Verify demand-driven repair capacity, shared pending orders and saved pressure')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
@@ -480,6 +501,14 @@ parser.add_argument('--scenario', action='store_true',
                          'to its own end, or with --scenario-sides a match on --custom-map/--skirmish until one team is left')
 parser.add_argument('--campaign-mode', choices=('full', 'single'), default='full',
                     help='Authored campaign --scenario: Full campaign (default) or Single mission initialization')
+parser.add_argument('--reworked', action='store_true',
+                    help='Authored campaign --scenario: play the reworked RWRK_ map of the mission '
+                         '(the campaign menu\'s Maps: Reworked; docs/reworked-campaign.md)')
+parser.add_argument('--city-campaign', action='store_true',
+                    help='Authored campaign --scenario: play DuneCity campaign mission --mission (DCITY_M??, '
+                         'Atreides; the campaign menu\'s Maps: DuneCity; docs/city-campaign.md)')
+parser.add_argument('--city-campaign-map', type=Path,
+                    help='--city-campaign: play this generated variant of the mission map (scenario-matrix --city-strength)')
 parser.add_argument('--campaign-ai-only', action='store_true',
                     help='Authored campaign scenario: sole QuantBot on the player house, selected enemy controllers, '
                          'no registered human; retain native mission victory including quotas')
@@ -494,12 +523,17 @@ parser.add_argument('--scenario-style',
                     help='Scenario game, strategic-site probe, --load-save or --custom-map run: a play style '
                          '(tests/ai/play-styles/<style>.ini) every QuantBot plays by, '
                          'e.g. a candidate config switch (test-only: not saved or hashed)')
+parser.add_argument('--helper-style', help='Authored campaign only: apply this style to player-side QuantBot support only')
 parser.add_argument('--mission', type=int, choices=range(1, 23),
                     help='Campaign mission number instead of the --level\'s first (all real IDs 1–22)')
 parser.add_argument('--seed', type=int, default=486409243)
-parser.add_argument('--minutes', type=int, default=20)
+parser.add_argument('--minutes', type=int, default=20,
+                    help='Game minute the run ends at (absolute; a --load-save continues from its own minute)')
 parser.add_argument('--attack-percent', type=int, choices=range(101), default=25)
 args = parser.parse_args()
+if args.helper_style and (not args.scenario or args.scenario_sides or args.skirmish or args.custom_map
+                         or args.load_save or args.campaign_ai_only or args.scenario_style):
+    parser.error('--helper-style requires authored campaign human/support, without global style or alternate setup')
 if args.repair_capacity_probe and args.no_ai_telemetry:
     parser.error('--repair-capacity-probe requires structured production/placement receipts.')
 if args.army_deploys_regression_observer and args.scenario:
@@ -525,8 +559,10 @@ if args.civ_air_probe:
 if args.civ_ordinary_gate and (args.civ_wars or args.mod != 'dunecity' or not args.scenario
                               or not args.local_spectator or args.civ_strategy not in ('off', 'on')):
     parser.error('--civ-ordinary-gate needs an ordinary --mod dunecity --scenario observer and --civ-strategy off/on.')
-if not 1 <= args.minutes <= 120 or not 0 <= args.seed <= 0xffffffff:
-    parser.error('Use 1–120 minutes and a 32-bit unsigned seed.')
+# A long city game is still undecided at minute 120 (Stefan's no-spice lobby: minute 319 with three
+# houses alive), and a continued save ends at an absolute game minute beyond its own.
+if not 1 <= args.minutes <= (1440 if args.load_save else 480) or not 0 <= args.seed <= 0xffffffff:
+    parser.error('Use 1–480 minutes (1–1440 with --load-save) and a 32-bit unsigned seed.')
 if not 256 <= args.capture_mib <= 4096 or args.wall_timeout < 1:
     parser.error('Use 256–4096 MiB of capture space and a positive wall timeout.')
 if args.free_for_all and not args.custom_map:
@@ -595,6 +631,11 @@ authored_campaign = args.scenario and not (
     args.custom_map or args.skirmish or args.scenario_sides or args.load_save or args.civ_wars)
 if args.campaign_mode == 'single' and not authored_campaign:
     parser.error('--campaign-mode single needs an authored campaign --scenario, not custom maps, skirmishes, sides or loads.')
+if args.reworked and not authored_campaign:
+    parser.error('--reworked needs an authored campaign --scenario.')
+if args.city_campaign and (not authored_campaign or args.reworked or not args.mission or args.mission > 10
+                          or args.house != 'atreides'):
+    parser.error('--city-campaign needs an authored Atreides campaign --scenario with --mission 1-10, without --reworked.')
 if args.campaign_ai_only and (not authored_campaign or args.local_spectator):
     parser.error('--campaign-ai-only needs an authored campaign --scenario, without --local-spectator.')
 
@@ -887,9 +928,9 @@ else:
 # a null-texture test. The repair-capacity fixture checks simulation service,
 # not rendering; its headless CTest explicitly opts in to the existing mode.
 headless_assets = args.headless_assets and not (
-    args.real_video or args.ffa_screenshot
+    args.real_video or args.ffa_screenshot or args.scenario_screenshot
     or any(value is True for name, value in vars(args).items()
-           if name.endswith('_probe') and name != 'repair_capacity_probe'))
+           if name.endswith('_probe') and name not in ('repair_capacity_probe', 'original_campaign_probe')))
 if args.build_only and not headless_assets:
     print(binary)
     sys.exit(0)
@@ -970,10 +1011,22 @@ if args.ffa_screenshot:
         env['BALANCE_FFA_SCREENSHOT_MINUTE'] = str(args.ffa_screenshot_minute)
     env['BALANCE_FFA_SCREENSHOT_HOUSE'] = str(house_names.index(args.house))
     args.viewport = args.viewport or '1440x900'
+if args.scenario_watch_object is not None:
+    env['BALANCE_SCENARIO_WATCH_OBJECT'] = str(args.scenario_watch_object)
+if args.scenario_screenshot:
+    if not args.scenario:
+        parser.error('--scenario-screenshot needs --scenario.')
+    env['BALANCE_SCENARIO_SCREENSHOT'] = str(args.scenario_screenshot.resolve())
+    if args.scenario_screenshot_minute is not None:
+        env['BALANCE_SCENARIO_SCREENSHOT_MINUTE'] = str(args.scenario_screenshot_minute)
+    if args.scenario_screenshot_focus is not None:
+        env['BALANCE_SCENARIO_SCREENSHOT_FOCUS'] = str(house_names.index(args.scenario_screenshot_focus))
+    args.viewport = args.viewport or '1440x900'
 if args.real_video and not args.viewport:
     args.viewport = '1440x900'
 if (args.controls_probe or args.sourceforge_probe or args.stats_ui_probe or args.preplace_probe or args.sidebar_grid_probe
-        or args.achievements_probe or args.zone_power_probe or args.real_video or args.ffa_screenshot):
+        or args.achievements_probe or args.zone_power_probe or args.real_video or args.ffa_screenshot
+        or args.scenario_screenshot):
     if args.controls_probe: env['BALANCE_CONTROLS_PROBE'] = '1'
     if args.stats_ui_probe: env['BALANCE_STATS_UI_PROBE'] = '1'
     width, height = 640, 480
@@ -995,6 +1048,8 @@ if args.growth_installment_probe or args.civic_priority_probe:
 if args.civic_priority_probe: env['BALANCE_CIVIC_PRIORITY_ONLY'] = '1'
 if args.nuclear_probe or args.reactor_safety_probe: env['BALANCE_NUCLEAR_PROBE'] = '1'
 if args.reactor_safety_probe: env['BALANCE_REACTOR_SAFETY_PROBE'] = '1'
+if args.held_site_threat_probe: env['BALANCE_HELD_SITE_THREAT_PROBE'] = '1'
+if args.enemy_border_site_probe: env['BALANCE_ENEMY_BORDER_SITE_PROBE'] = '1'
 if args.degradation_probe: env['BALANCE_DEGRADATION_PROBE'] = '1'
 if args.radar_probe: env['BALANCE_RADAR_PROBE'] = '1'
 if args.army_probe: env['BALANCE_ARMY_PROBE'] = '1'
@@ -1020,6 +1075,8 @@ if args.wave_formation: env['BALANCE_WAVE_FORMATION'] = args.wave_formation
 if args.wave_formation_probe: env['BALANCE_WAVE_FORMATION_PROBE'] = '1'
 if args.blob_wave_probe: env['BALANCE_BLOB_WAVE_PROBE'] = '1'
 if args.force_probe: env['BALANCE_FORCE_PROBE'] = '1'
+if args.wind_trap_probe: env['BALANCE_WIND_TRAP_PROBE'] = '1'
+if args.city_lessons_probe: env['BALANCE_CITY_LESSONS_PROBE'] = '1'
 if args.spice_bloom_probe: env['BALANCE_SPICE_BLOOM_PROBE'] = '1'
 # Play styles (label suffix @style, docs/ai-play-styles.md) are read from here by the probe.
 env['BALANCE_STYLE_DIR'] = str(root / 'tests/ai/play-styles')
@@ -1052,6 +1109,9 @@ if args.pressure_probe: env['BALANCE_PRESSURE_PROBE'] = '1'
 if args.defence_probe: env['BALANCE_DEFENCE_PROBE'] = '1'
 if args.pacing_probe: env['BALANCE_PACING_PROBE'] = '1'
 if args.repair_probe: env['BALANCE_REPAIR_PROBE'] = '1'
+if args.original_campaign_probe: env['BALANCE_ORIGINAL_CAMPAIGN_PROBE'] = '1'
+env.pop('BALANCE_ORIGINAL_CAMPAIGN_RULES', None)
+if args.original_campaign_rules is not None: env['BALANCE_ORIGINAL_CAMPAIGN_RULES'] = args.original_campaign_rules
 if args.repair_capacity_probe: env['BALANCE_REPAIR_CAPACITY_PROBE'] = '1'
 if args.scenario:
     env['BALANCE_SCENARIO'] = '1'
@@ -1061,7 +1121,13 @@ if args.scenario:
     if args.skirmish: env['BALANCE_SKIRMISH'] = args.skirmish
     if args.mission: env['BALANCE_MISSION'] = str(args.mission)
     if args.campaign_ai_only: env['BALANCE_CAMPAIGN_AI_ONLY'] = '1'
+    if args.reworked: env['BALANCE_REWORKED'] = '1'
+    if args.city_campaign: env['BALANCE_CITY_CAMPAIGN'] = '1'
+    if args.city_campaign_map:
+        if not args.city_campaign: parser.error('--city-campaign-map needs --city-campaign.')
+        env['BALANCE_CITY_CAMPAIGN_MAP'] = str(args.city_campaign_map.resolve())
 if args.scenario_style: env['BALANCE_SCENARIO_STYLE'] = args.scenario_style
+if args.helper_style: env['BALANCE_HELPER_STYLE'] = args.helper_style
 # Explicit either way: the game's own default ([General] AI Decision Log) is off.
 env['DUNECITY_AI_TELEMETRY'] = '0' if args.no_ai_telemetry else '1'
 cache_reader = None
@@ -1109,9 +1175,18 @@ elif env.get('DUNECITY_SIM_MEASURE'):
                     output=Path(env['DUNECITY_SIM_MEASURE']),
                     sample_seconds=float(env.get('DUNECITY_SIM_SAMPLE_SECONDS', '0')), pass_fds=cache_fds)
 else:
-    with (out/'run.log').open('w') as log:
-        subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
-                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout,pass_fds=cache_fds)
+    try:
+        with (out/'run.log').open('w') as log:
+            subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
+                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout,pass_fds=cache_fds)
+    except subprocess.CalledProcessError:
+        # Put the probe's own reason where CTest captures it: the run directory stays on the worker.
+        failed = [line for line in (out/'run.log').read_text(errors='replace').splitlines()
+                  if '_FAIL' in line or 'FAIL:' in line or 'Assertion' in line]
+        if not failed:
+            failed = (out/'run.log').read_text(errors='replace').splitlines()[-15:]
+        print('PROBE FAILURE (from run.log):', *failed[-20:], sep='\n', file=sys.stderr)
+        raise
 if cache_reader is not None:
     cache_reader.close()
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()
@@ -1182,7 +1257,7 @@ summary = {'result':results[0],'sourceCommit':source_commit,
            'sourceFingerprintError':source_fingerprint_error,
            'metadata':metadata,'attacks':attacks,'final':final,'resolved_roster':roster,
            'enemy_controller':args.enemy_ai,'enemy_difficulty':args.enemy_difficulty,
-           'campaign_mode':args.campaign_mode,'harvester_limit':args.harvester_limit}
+           'campaign_mode':args.campaign_mode,'reworked':args.reworked,'city_campaign':args.city_campaign,'harvester_limit':args.harvester_limit}
 (out/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(results[0])
 print('Telemetry:',events or 'off (--no-ai-telemetry)')

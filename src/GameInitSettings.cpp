@@ -16,6 +16,8 @@
  */
 
 #include <GameInitSettings.h>
+#include <misc/ReworkedCampaign.h>
+#include <misc/DuneCityCampaign.h>
 #include <misc/CampaignControls.h>
 #include <FileClasses/INIFile.h>
 #include <FileClasses/FileManager.h>
@@ -57,6 +59,7 @@ constexpr Uint32 GAMEINIT_MOD16_MARKER = 0x4D4F4447; // MODG: Starport city popu
 constexpr Uint32 GAMEINIT_MOD17_MARKER = 0x4D4F4448; // MODH: research pace/map area and damage land value
 constexpr Uint32 GAMEINIT_MOD18_MARKER = 0x4D4F4449; // MODI: fixed research pace and mountain scenery
 constexpr Uint32 GAMEINIT_MOD19_MARKER = 0x4D4F444A; // MODJ: technology installments
+constexpr Uint32 GAMEINIT_MOD20_MARKER = 0x4D4F444B; // MODK: Custom Game starting tech level
 constexpr Uint32 GAMEINIT_MOD9_MARKER = 0x4D4F4439; // MOD9: continuous-ground-steps match rule
 
 /// Every marker this build can read. A newer marker is not in the list, so it is not parsed -
@@ -253,7 +256,14 @@ GameInitSettings::GameInitSettings(const GameInitSettings& prevGameInitInfoClass
     mission = nextMission;
     this->alreadyPlayedRegions = alreadyPlayedRegions;
     this->alreadyShownTutorialHints = alreadyShownTutorialHints;
-    filename = getScenarioFilename(houseID, mission);
+    if(prevGameInitInfoClass.isDuneCityCampaign()) {
+        // The DuneCity campaign is a fixed list: no region map, no house scenario letter.
+        filename = DuneCityCampaign::scenarioFilename(mission);
+    } else {
+        filename = getScenarioFilename(houseID, mission);
+        // A reworked campaign continues (or retries) with the reworked map of the next mission.
+        if(prevGameInitInfoClass.isReworkedCampaign()) filename = ReworkedCampaign::toReworked(filename);
+    }
     setScenarioData({});
     randomSeed = getRandomInt();
 }
@@ -337,6 +347,31 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     gameOptions.researchLab = false;
     gameOptions.researchPace = TechResearch::Pace::Normal;
     gameOptions.technologyInstallments = false;
+    gameOptions.startTechLevel = 0;
+    // Not a setup choice but the unit's rule: a stream without the bit plays the current one.
+    gameOptions.saboteurHunt = true;
+    gameOptions.saboteurSkipsCityZones = true;
+    gameOptions.aiInfantryTactics = true;
+    gameOptions.hospitalCare = true;
+    gameOptions.turretsFireOnBuildings = false;
+    // Likewise the Trooper Ornithopter reach: only an explicit off bit turns it off.
+    gameOptions.trooperOrnithopterReach = true;
+    // The city plane rules are the units' current rules too: a stream without their bits plays them.
+    gameOptions.cityPlaneDefence = true;
+    gameOptions.cityPlaneBombing = true;
+    gameOptions.airportOrnithopterPatrol = false;
+    gameOptions.cityPlaneCarpetBombing = true;
+    gameOptions.cityPlaneBombingRuns = true;
+    gameOptions.cityPlanePurchase = true;
+    gameOptions.cityPlaneBuildTime = true;
+    gameOptions.cityPlaneFreePerAirport = true;
+    gameOptions.cityPlaneCrashBombs = true;
+    // A Park counts as a road unless the stream carries the off bit (bit 6 of the city rules).
+    gameOptions.parksCountAsRoads = true;
+    // Zone Garrisons is on unless the stream carries the off bit (bit 5 of the city rules).
+    gameOptions.zoneGarrisons = true;
+    // The Fremen Palace calls its worm unless the stream carries the off bit (bit 7 of the city rules).
+    gameOptions.fremenPalaceWorm = true;
     gameOptions.damageLowersLandValue = false;
     gameOptions.mountainScenery = false;
     gameOptions.unpoweredZonesVacate = false;
@@ -348,13 +383,14 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
     Uint32 modMarker = 0;
     try {
         modMarker = stream.readUint32();
-        const bool hasTechnologyInstallments = modMarker == GAMEINIT_MOD19_MARKER;
+        const bool hasStartTechLevel = modMarker == GAMEINIT_MOD20_MARKER;
+        const bool hasTechnologyInstallments = modMarker == GAMEINIT_MOD19_MARKER || hasStartTechLevel;
         const bool hasMountainScenery = modMarker == GAMEINIT_MOD18_MARKER || hasTechnologyInstallments;
         const bool hasLegacyResearchArea = modMarker == GAMEINIT_MOD17_MARKER;
         const bool hasResearchPace = hasLegacyResearchArea || hasMountainScenery;
         const bool hasStarportPopulation = modMarker == GAMEINIT_MOD16_MARKER || hasResearchPace;
         const bool hasResearchOptions = modMarker == GAMEINIT_MOD15_MARKER || hasStarportPopulation;
-        // MOD15..19 share the complete MOD14 prefix.
+        // MOD15..20 share the complete MOD14 prefix.
         if(hasResearchOptions) modMarker = GAMEINIT_MOD14_MARKER;
         if (isKnownModMarker(modMarker)) {
             modName = stream.readString();
@@ -449,7 +485,19 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
             }
             if(hasResearchOptions) {
                 gameOptions.researchLab = stream.readBool();
-                gameOptions.trooperAntiAir = stream.readBool();
+                // MOD15 wrote a bool (0/1) here. Bit 1 is set when the Trooper Ornithopter
+                // reach is off, so a stream that plays the default rule is the byte it always was.
+                const Uint8 trooperRules = stream.readUint8();
+                // Bits 2-7 are the city plane rules, each set only in its non-default state.
+                // Every bit of the byte now has a meaning, so no value is invalid.
+                gameOptions.trooperAntiAir = (trooperRules & 1) != 0;
+                gameOptions.trooperOrnithopterReach = (trooperRules & 2) == 0;
+                gameOptions.cityPlaneDefence = (trooperRules & 4) == 0;
+                gameOptions.cityPlaneBombing = (trooperRules & 8) == 0;
+                gameOptions.airportOrnithopterPatrol = (trooperRules & 16) != 0;
+                gameOptions.cityPlaneCarpetBombing = (trooperRules & 32) == 0;
+                gameOptions.cityPlaneBombingRuns = (trooperRules & 64) == 0;
+                gameOptions.cityPlanePurchase = (trooperRules & 128) == 0;
             }
             if(hasStarportPopulation) {
                 gameOptions.starportPopulation = stream.readBool();
@@ -466,14 +514,46 @@ GameInitSettings::GameInitSettings(InputStream& stream) {
                     // vacancy without extending that unframed settings block:
                     // earlier MOD18 saves and protocol-112 packets read it off.
                     const Uint8 cityRules = stream.readUint8();
-                    if(cityRules & ~Uint8(3))
-                        throw std::runtime_error("Invalid city rules.");
+                    // Every bit of the byte is now a rule (bit 7, protocol 145: Fremen Palace Worm),
+                    // so no value is invalid.
                     gameOptions.mountainScenery = (cityRules & 1) != 0;
                     gameOptions.unpoweredZonesVacate = (cityRules & 2) != 0;
+                    // Protocol 137: bits 2-3 are set when City Plane Build Time or City Plane Free Per
+                    // Airport is off, so a stream that plays the default rules is the byte it was.
+                    gameOptions.cityPlaneBuildTime = (cityRules & 4) == 0;
+                    gameOptions.cityPlaneFreePerAirport = (cityRules & 8) == 0;
+                    // Protocol 139: bit 4 is set when City Plane Crash Bombs is off.
+                    gameOptions.cityPlaneCrashBombs = (cityRules & 16) == 0;
+                    // Bit 6 is set when Parks Count As Roads is off.
+                    gameOptions.parksCountAsRoads = (cityRules & 64) == 0;
+                    // Protocol 144: bit 5 is set when Zone Garrisons is off.
+                    gameOptions.zoneGarrisons = (cityRules & 32) == 0;
+                    // Protocol 145: bit 7 is set when Fremen Palace Worm is off.
+                    gameOptions.fremenPalaceWorm = (cityRules & 128) == 0;
                 }
             }
             if(hasTechnologyInstallments) {
-                gameOptions.technologyInstallments = stream.readBool();
+                // Protocol 152: bit 1 is AI Infantry Tactics off. Bit 0 remains installments.
+                const Uint8 cityAI = stream.readUint8();
+                gameOptions.technologyInstallments = (cityAI & 1) != 0;
+                gameOptions.aiInfantryTactics = (cityAI & 2) == 0;
+            }
+            if(hasStartTechLevel) {
+                // Refused, not clamped: both peers must play the level the host chose.
+                // Bit 7 of the same byte is set when the Saboteur hunt is off, so a
+                // stream that plays the default rule is the byte MOD20 always was.
+                const Uint8 packed = stream.readUint8();
+                // Bit 6 (protocol 146) is set when Hospital Care is off, bit 5 (protocol 147)
+                // when Turrets Can Fire On Buildings is on, bit 4 (protocol 151) when Saboteurs
+                // Skip City Zones is off. The level is the low four bits (at most 9).
+                const Uint8 level = packed & 0x0F;
+                if(level > 9)
+                    throw std::runtime_error("Invalid starting tech level.");
+                gameOptions.startTechLevel = level;
+                gameOptions.saboteurHunt = (packed & 0x80) == 0;
+                gameOptions.saboteurSkipsCityZones = (packed & 0x10) == 0;
+                gameOptions.hospitalCare = (packed & 0x40) == 0;
+                gameOptions.turretsFireOnBuildings = (packed & 0x20) != 0;
             }
         }
     } catch (InputStream::eof&) {
@@ -603,7 +683,7 @@ void GameInitSettings::save(OutputStream& stream) const {
     }
     
     // Write mod info with marker for forward compatibility
-    stream.writeUint32(GAMEINIT_MOD19_MARKER);
+    stream.writeUint32(GAMEINIT_MOD20_MARKER);
     stream.writeString(modName);
     stream.writeString(modChecksum);
 
@@ -659,16 +739,46 @@ void GameInitSettings::save(OutputStream& stream) const {
     stream.writeBool(gameOptions.micropolisLandValue);
     // MOD15: old saves keep both mechanics off.
     stream.writeBool(gameOptions.researchLab);
-    stream.writeBool(gameOptions.trooperAntiAir);
+    // Bit 1: the Trooper Ornithopter reach is off (the default, on, leaves the byte as it was).
+    stream.writeUint8(static_cast<Uint8>((gameOptions.trooperAntiAir ? 1 : 0)
+        | (gameOptions.trooperOrnithopterReach ? 0 : 2)
+        // Bits 2-4: City Plane Defence off, City Plane Bombing off, Airport Ornithopter Patrol on.
+        | (gameOptions.cityPlaneDefence ? 0 : 4) | (gameOptions.cityPlaneBombing ? 0 : 8)
+        | (gameOptions.airportOrnithopterPatrol ? 16 : 0)
+        // Bits 5-7: City Plane Carpet Bombing off, City Plane Bombing Runs off, City Plane Purchase off.
+        | (gameOptions.cityPlaneCarpetBombing ? 0 : 32) | (gameOptions.cityPlaneBombingRuns ? 0 : 64)
+        | (gameOptions.cityPlanePurchase ? 0 : 128)));
     // MOD16: older streams keep the Starport without a population requirement.
     stream.writeBool(gameOptions.starportPopulation);
     // MOD18: pace4 + damage1 + city rules1 (bit0 scenery, bit1 vacancy).
     stream.writeUint32(static_cast<Uint32>(gameOptions.researchPace));
     stream.writeBool(gameOptions.damageLowersLandValue);
     stream.writeUint8((gameOptions.mountainScenery ? 1 : 0)
-        | (gameOptions.unpoweredZonesVacate ? 2 : 0));
+        | (gameOptions.unpoweredZonesVacate ? 2 : 0)
+        // Bits 2-3 (protocol 137): City Plane Build Time off, City Plane Free Per Airport off.
+        | (gameOptions.cityPlaneBuildTime ? 0 : 4) | (gameOptions.cityPlaneFreePerAirport ? 0 : 8)
+        // Bit 4 (protocol 139): City Plane Crash Bombs off.
+        | (gameOptions.cityPlaneCrashBombs ? 0 : 16)
+        // Bit 5 (protocol 144): Zone Garrisons off.
+        | (gameOptions.zoneGarrisons ? 0 : 32)
+        // Bit 6: Parks Count As Roads off.
+        | (gameOptions.parksCountAsRoads ? 0 : 64)
+        // Bit 7 (protocol 145): Fremen Palace Worm off.
+        | (gameOptions.fremenPalaceWorm ? 0 : 128));
     // MOD19: older setups keep upfront research and full-cash upgrade acceptance.
-    stream.writeBool(gameOptions.technologyInstallments);
+    // Protocol 152: bit 1 is AI Infantry Tactics off; default on preserves the original byte.
+    stream.writeUint8((gameOptions.technologyInstallments ? 1 : 0)
+        | (gameOptions.aiInfantryTactics ? 0 : 2));
+    // MOD20: 0 keeps the map's tech level, which is what every older stream means.
+    // Bit 7: the Saboteur hunt is off (the default, on, leaves the byte as it was).
+    stream.writeUint8(static_cast<Uint8>(std::clamp(gameOptions.startTechLevel, 0, 9)
+        | (gameOptions.saboteurHunt ? 0 : 0x80)
+        // Bit 6: Hospital Care is off (the default, on, leaves the byte as it was).
+        | (gameOptions.hospitalCare ? 0 : 0x40)
+        // Bit 5 (protocol 147): Turrets Can Fire On Buildings is on.
+        | (gameOptions.turretsFireOnBuildings ? 0x20 : 0)
+        // Bit 4 (protocol 151): Saboteurs Skip City Zones is off.
+        | (gameOptions.saboteurSkipsCityZones ? 0 : 0x10)));
 }
 
 bool GameInitSettings::isTornieFamilyMatch() const {
@@ -874,6 +984,40 @@ void GameInitSettings::migrateLegacyHouseColorSlots() {
     for(HouseInfo& houseInfo : houseInfoList) {
         houseInfo.colorOfHouse = migrateLegacyHouseColorSlot(houseInfo.colorOfHouse);
     }
+}
+
+bool GameInitSettings::isReworkedCampaign() const {
+    return isScenarioGameType(gameType) && ReworkedCampaign::isReworkedFilename(filename);
+}
+
+bool GameInitSettings::isDuneCityCampaign() const {
+    return isScenarioGameType(gameType) && DuneCityCampaign::isCampaignFilename(filename);
+}
+
+void GameInitSettings::useDuneCityCampaign(int newMission) {
+    if(!isScenarioGameType(gameType) || newMission < 1 || newMission > DuneCityCampaign::kMissions) {
+        THROW(std::invalid_argument, "GameInitSettings::useDuneCityCampaign(): only campaign missions 1-%d.",
+              DuneCityCampaign::kMissions);
+    }
+    houseID = DuneCityCampaign::kHouse;
+    mission = newMission;
+    filename = DuneCityCampaign::scenarioFilename(newMission);
+}
+
+GameInitSettings GameInitSettings::duneCityCampaign(int mission, bool singleMission,
+                                                    const SettingsClass::GameOptionsClass& gameOptions) {
+    // Built on the first original mission, then switched: the mission number is the DuneCity one.
+    GameInitSettings init = singleMission ? GameInitSettings(DuneCityCampaign::kHouse, 1, gameOptions)
+                                          : GameInitSettings(DuneCityCampaign::kHouse, gameOptions, 1);
+    init.useDuneCityCampaign(mission);
+    return init;
+}
+
+void GameInitSettings::useReworkedMaps() {
+    if(!isScenarioGameType(gameType)) {
+        THROW(std::invalid_argument, "GameInitSettings::useReworkedMaps(): only campaign missions have reworked maps.");
+    }
+    filename = ReworkedCampaign::toReworked(filename);
 }
 
 std::string GameInitSettings::getScenarioFilename(HOUSETYPE newHouse, int mission) {

@@ -870,7 +870,17 @@ void Tile::update_impl()
 bool Tile::isRoadConnection() const {
     if (isRoad_) return true;
     const auto* object = hasANonInfantryGroundObject() ? getNonInfantryGroundObject() : nullptr;
-    return DuneCity::isTrafficConnector(false, object ? object->getItemID() : NONE_ID);
+    return DuneCity::isTrafficConnector(false, object ? object->getItemID() : NONE_ID, parksCountAsRoads());
+}
+
+bool Tile::isParkRoad() const {
+    if (!parksCountAsRoads() || !hasANonInfantryGroundObject()) return false;
+    const auto* object = getNonInfantryGroundObject();
+    return object && object->getItemID() == Structure_Park;
+}
+
+bool Tile::parksCountAsRoads() {
+    return currentGame && currentGame->getGameInitSettings().getGameOptions().parksCountAsRoads;
 }
 
 void Tile::clearTerrain() {

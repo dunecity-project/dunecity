@@ -242,6 +242,19 @@ public:
     inline Uint32 getAlreadyPlayedRegions() const { return alreadyPlayedRegions; };
     inline Uint32 getAlreadyShownTutorialHints() const { return alreadyShownTutorialHints; };
     inline const std::string& getFilename() const { return filename; };
+    /// Plays the reworked RWRK_ missions (misc/ReworkedCampaign.h); kept by the next mission and saves.
+    bool isReworkedCampaign() const;
+    /// Switches a campaign or single mission to its reworked map. Call before the game starts.
+    void useReworkedMaps();
+    /// Plays the DuneCity campaign's DCITY_M?? missions (misc/DuneCityCampaign.h).
+    bool isDuneCityCampaign() const;
+    /// Switches a campaign to DuneCity campaign mission `mission` (1..10) as Atreides.
+    void useDuneCityCampaign(int mission);
+    /// The DuneCity campaign from `mission` (1..10) as the DuneCity Campaign screen starts it: the whole
+    /// campaign, or that mission alone. Never maps the mission through an original campaign level, which
+    /// has no counterpart for Mission 10.
+    static GameInitSettings duneCityCampaign(int mission, bool singleMission,
+                                             const SettingsClass::GameOptionsClass& gameOptions);
     inline const std::string& getFiledata() const { return filedata; };
     inline const std::string& getServername() const { return servername; };
     GameInitSettings networkSnapshot(const std::string& data) const {

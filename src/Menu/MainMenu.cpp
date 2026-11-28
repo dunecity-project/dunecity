@@ -58,7 +58,7 @@
 
 namespace {
 // Marker file under the user config dir. Once written, the first-launch
-// "Enable city-sim mod?" prompt is suppressed forever.
+// mod tip ("how to choose Dune City and other mods") is suppressed forever.
 std::string firstLaunchMarkerPath() {
     char tmp[FILENAME_MAX];
     if (fnkdat("dunecity-first-launch.done", tmp, FILENAME_MAX,
@@ -162,21 +162,21 @@ MainMenu::MainMenu()
     setWindowWidget(&windowWidget);
     enlargedStartMenus = validatedStartMenuMode(settings.video.startMenuMode) == 1;
 
-    canContinue = hasRecentGame();
-    continueButton.setText(_("Continue"));
-    continueButton.setOnClick([this]() { continueRecentGame(); canContinue = hasRecentGame(); });
     customButton.setText(_("Custom Game"));
-    customButton.setOnClick([this]() { playCustomGame(settings.general.customGameOnline); canContinue = hasRecentGame(); });
+    customButton.setOnClick([]() { playCustomGame(settings.general.customGameOnline); });
     randomSkirmishButton.setText(_("Random Skirmish"));
-    randomSkirmishButton.setOnClick([this]() { RandomSkirmishMenu().showMenu(); canContinue = hasRecentGame(); });
+    randomSkirmishButton.setOnClick([]() { RandomSkirmishMenu().showMenu(); });
     civWarsButton.setText(_("Civilization Wars"));
-    civWarsButton.setOnClick([this]() { CivWarsMenu().showMenu(); canContinue = hasRecentGame(); });
+    civWarsButton.setOnClick([]() { CivWarsMenu().showMenu(); });
     onlineButton.setText(_("Play Online"));
     onlineButton.setOnClick([]() { CrossplayMenu().showMenu(); });
     loadButton.setText(_("Load Game"));
-    loadButton.setOnClick([this]() { showGameLibrary(); canContinue = hasRecentGame(); });
+    loadButton.setOnClick([]() { showGameLibrary(); });
     campaignButton.setText(_("Campaign"));
-    campaignButton.setOnClick([this]() { SinglePlayerMenu::playCampaign(); canContinue = hasRecentGame(); });
+    campaignButton.setOnClick([]() { SinglePlayerMenu::playCampaign(); });
+    // Stefan, 2026-11-21: the DuneCity campaign is its own menu item, in place of Continue.
+    duneCityCampaignButton.setText(_("DuneCity Campaign"));
+    duneCityCampaignButton.setOnClick([]() { SinglePlayerMenu::playDuneCityCampaign(); });
     editorsButton.setText(_("Editors"));
     editorsButton.setOnClick([]() { createExtrasMenu(true)->showMenu(); });
     modesButton.setText(_("Extras"));
@@ -226,7 +226,7 @@ MainMenu::MainMenu()
 
     }
     // Only visible destinations participate in keyboard navigation, in screen order.
-    TextButton* allButtons[] = {&continueButton, &onlineButton, &campaignButton, &customButton, &randomSkirmishButton,
+    TextButton* allButtons[] = {&onlineButton, &campaignButton, &duneCityCampaignButton, &customButton, &randomSkirmishButton,
                                 &civWarsButton, &loadButton, &optionsButton, &editorsButton, &modesButton, &quitButton};
     for(TextButton* button : allButtons) {
         button->setKeyboardFocusVisible(false);
@@ -263,8 +263,7 @@ MainMenu::MainMenu()
     windowWidget.setWidgetGeometry(&modVersionLabel, Point(versionX,getSize().y-38), Point(180,28));
     modVersionLabel.setAlignment(Alignment_Left);
 #endif
-    if(canContinue) continueButton.setActive();
-    else onlineButton.setActive();
+    onlineButton.setActive();
 }
 
 void MainMenu::handleInput(SDL_Event& event)
@@ -273,7 +272,7 @@ void MainMenu::handleInput(SDL_Event& event)
     if(!pChildWindow && (event.type == SDL_KEYDOWN || event.type == SDL_MOUSEMOTION
                        || event.type == SDL_MOUSEBUTTONDOWN)) {
         const bool keyboard = event.type == SDL_KEYDOWN;
-        for(auto* button : {&continueButton, &onlineButton, &campaignButton, &customButton, &randomSkirmishButton, &civWarsButton,
+        for(auto* button : {&onlineButton, &campaignButton, &duneCityCampaignButton, &customButton, &randomSkirmishButton, &civWarsButton,
                             &loadButton, &optionsButton, &editorsButton, &modesButton, &quitButton, &updateButton}) {
             button->setKeyboardFocusVisible(keyboard);
             if(keyboard) button->handleMouseMovement(-1,-1,false);
@@ -374,9 +373,9 @@ void MainMenu::update()
     updateButton.setEnabled(state != State::Checking && state != State::Installing);
     // Native updater dialogs run their own event loop. Keep all game-entry
     // actions disabled for that entire session, including keyboard activation.
-    for (auto* button : {&continueButton, &onlineButton, &campaignButton, &customButton, &randomSkirmishButton, &civWarsButton,
+    for (auto* button : {&onlineButton, &campaignButton, &duneCityCampaignButton, &customButton, &randomSkirmishButton, &civWarsButton,
                          &loadButton, &optionsButton, &editorsButton, &modesButton}) {
-        button->setEnabled(!updater.busy() && (button != &continueButton || canContinue));
+        button->setEnabled(!updater.busy());
     }
     if (state == State::Restart) { quit(); return; }
     if (installationRequested && state != State::Installing && !pChildWindow) {
@@ -392,31 +391,23 @@ void MainMenu::update()
     showUpdatePromptIfAvailable();
 #endif
 
-    // First-launch "Enable city-sim mod?" prompt. Runs after the update
-    // dialog so we don't stack two QstBoxes on top of each other.
+    // First-launch mod tip. Runs after the update dialog so we don't stack
+    // two dialogs on top of each other.
     showFirstLaunchCityPromptIfNeeded();
 }
 
 void MainMenu::onChildWindowClose(Window* pChildWindow)
 {
-    QstBox* pQstBox = dynamic_cast<QstBox*>(pChildWindow);
-    if (pQstBox == nullptr) return;
-
-    if (bFirstLaunchPromptOpen) {
-        // This QstBox was the first-launch "Enable city-sim mod?" prompt.
+    if (bFirstLaunchPromptOpen && dynamic_cast<MsgBox*>(pChildWindow) != nullptr) {
+        // The first-launch mod tip was closed: it only informs, so there is
+        // no choice to act on. Record that it was seen so it shows once.
         bFirstLaunchPromptOpen = false;
-        writeFirstLaunchMarker(); // record the user's decision either way
-
-        if (pQstBox->getPressedButtonID() == QSTBOX_BUTTON1) {
-            ModManager& mm = ModManager::instance();
-            if (mm.setActiveMod("dunecity")) {
-                // Reinitialize so all subsystems pick up the new mod's
-                // ObjectData.ini, QuantBot Config.ini, and game options.
-                quit(MENU_QUIT_REINITIALIZE);
-            }
-        }
+        writeFirstLaunchMarker();
         return;
     }
+
+    QstBox* pQstBox = dynamic_cast<QstBox*>(pChildWindow);
+    if (pQstBox == nullptr) return;
 
     if (updatePromptOpen) {
         updatePromptOpen = false;
@@ -491,11 +482,8 @@ void MainMenu::refreshContextButtons()
     howToPlayButton.setVisible(false);
     aboutButton.setVisible(false);
     displayButton.setVisible(false);
-    continueButton.setVisible(canContinue);
-    continueButton.setEnabled(canContinue);
-    std::vector<TextButton*> buttons;
-    if(canContinue) buttons.push_back(&continueButton);
-    for(auto* button : {&onlineButton,&campaignButton,&customButton,&randomSkirmishButton,&civWarsButton,&loadButton,&optionsButton,&editorsButton,&modesButton,&quitButton}) buttons.push_back(button);
+    const std::vector<TextButton*> buttons{&onlineButton,&campaignButton,&duneCityCampaignButton,&customButton,&randomSkirmishButton,
+                                           &civWarsButton,&loadButton,&optionsButton,&editorsButton,&modesButton,&quitButton};
     const int width = enlargedStartMenus ? 320 : 280;
     const int x = (getSize().x-width)/2;
     const int top = std::max(132, (getSize().y-340)/2);
@@ -576,14 +564,17 @@ void MainMenu::showFirstLaunchCityPromptIfNeeded()
 
     bFirstLaunchPromptOpen = true;
 
+    // Stefan, 2026-11-22: no Enable button. Say where mods are chosen instead:
+    // Campaign, Custom Game and Random Skirmish all list every installed mod.
     std::string message = _("Welcome to Dune City!");
     message += "\n\n";
-    message += _("Build a city on Arrakis with districts, roads,\npower and public services.");
+    message += _("The Dune City mod adds cities to Arrakis:\ndistricts, roads, power and public services.");
     message += "\n\n";
-    message += _("Enable Dune City now?\nYou can change this later in MODS.");
+    message += _("To play it, start a Campaign, Custom Game or\nRandom Skirmish and choose Dune City in the Mod list.");
+    message += "\n\n";
+    message += _("Other mods, such as Tornie and Dune2R,\nare chosen the same way.");
 
-    auto* prompt = QstBox::create(message, _("Enable now"), _("Later"), QSTBOX_BUTTON1);
-    openWindow(prompt);
+    openWindow(MsgBox::create(message));
 }
 
 

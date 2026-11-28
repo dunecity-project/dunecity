@@ -16,6 +16,23 @@ void runStrategicSiteProbe(Game& game) {
     require(house->getNumItems(Structure_HeavyFactory)>0 && house->getNumItems(Structure_LightFactory)>0,
         "Siting fixture lost the Palace prerequisites");
 
+    // The physical no-site condition set up below has to last the six minutes. City planes
+    // undo it: a plane's bombs, and in 1.0.877 its crash when it is shot down (a Death Hand
+    // blast; 16 to 22 crashes in this fixture's six minutes, up to five buildings each), destroy
+    // lots, and every destroyed lot is bare rock again. The legacy arm then found a Palace site
+    // in its second minute, placed two Palaces and never starved. This test is about siting, so
+    // both arms play without the two rules that make planes destroy buildings: nothing bombs,
+    // and nothing is shot down over the city.
+    {
+        auto rules=game.getGameInitSettings().getGameOptions();
+        rules.cityPlaneBombing=false;
+        rules.cityPlaneDefence=false;
+        game.gameInitSettings.setGameOptions(rules);
+        require(!game.getGameInitSettings().getGameOptions().cityPlaneBombing
+            && !game.getGameInitSettings().getGameOptions().cityPlaneDefence,
+            "Siting fixture could not switch the city plane rules off");
+    }
+
     std::vector<BuilderBase*> yards;
     for (auto* structure:structureList)
         if (structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard)

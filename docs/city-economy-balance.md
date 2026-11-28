@@ -7,15 +7,17 @@ The fixed tax/spice hedge gate and alternating investment windows are removed.
 ## Active tax formula
 
 Stefan authorized the Micropolis easy restructuring, with Palace as an explicit
-R+C exception to the government tax exemption. Only actual R/C/I zones and the
+exception to the government tax exemption (R+C until 2026-11-22, residential only since). Only actual R/C/I zones and the
 Palace generate direct city tax. Other government buildings retain their jobs,
 demand and pollution roles, but generate no tax.
 
-Annual gross tax = `[2*(zoneR/8 + zoneC + zoneI) + palaceR/8 + palaceC] * averageLandValue/120 * taxPercent * 1.4`.
-Use taxable populations only; Palace contributes both its R and C portions.
+Annual gross tax = `[2*(zoneR/8 + zoneC + zoneI) + palaceR/8] * averageLandValue/120 * taxPercent * 1.4`.
+Use taxable populations only. Since 2026-11-22 a Palace is one residential zone: Stefan, "nerf
+palaces slightly, make it only have 1 residential not residential and commercial". It lost its
+commercial population and commercial supply; its +40 land value within 8 tiles is unchanged.
 Stefan chose a 2x private-zone boost because tax is easier and less exposed
 than spice harvesting. Palace is excluded from this boost.
-The census stores weighted eighths (`2*(zoneR + 8*zoneC + 8*zoneI) + palaceR + 8*palaceC`) to retain partial residential houses.
+The census stores weighted eighths (`2*(zoneR + 8*zoneC + 8*zoneI) + palaceR`) to retain partial residential houses.
 Annual totals are rounded once per house and paid fractionally each simulation
 cycle. This follows Micropolis easy's weights/rate while avoiding its intermediate
 integer truncation of tiny cities. Explicit zero land value earns zero; AI
@@ -97,6 +99,44 @@ shared with fixed-price research, and can be set in Game Rules, defaults or mod 
 Frozen 9882/MOD17 carries no scenery byte; its retired research-area field is consumed
 and ignored rather than changing its layout in place.
 
+### Parks (structure `Park`, item 89; save 9888, protocol 131)
+
+The Micropolis park tool, built from the Construction Yard in city mode only: a 1x1 structure
+for **10 credits** (`gCostOf[TOOL_PARK]` in `tool.cpp`), no power, no prerequisite, build time
+8, 50 hit points. Its art is the original park tiles (`putDownPark`): one of the four woods
+tiles WOODS2-WOODS5 or, one park in five, the animated fountain, chosen from the site so the
+choice draws no random number and survives save/load (`CitySprites::parkFrame`).
+
+In Micropolis a wooded park tile lies below RUBBLE, so the land-value scan counts it as natural
+terrain (+15 before the one-pass terrain smooth) and does not count it as development: a block
+holding only park stays at zero and never enters the city's average. DuneCity does the same:
+a Park is one **+15 park-terrain source** on the grid walls, turrets and mountains already use
+(`usesParkTerrain`), worth about **+7 land value on every tile of its 3x3 terrain block and +1
+on the four neighbouring blocks**; parks in one block stack. A Park does not develop its own
+block, does not count in its owner's land-value average or environment samples, and does not
+move the city centre (`developsLandValueBlock`). Unlike the original's fountain variant (which
+counts as development and adds no terrain), every DuneCity park variant gives the same bonus.
+
+Like a wall it needs no concrete and does not decay, gets no auto-paved road ring, is targeted
+last and never keeps a house alive on its own. Older saves have no Park row in their object
+table; on load it takes the active mod's `ObjectData.ini` values, as a new game would. Mods
+with their own `ObjectData.ini` (Tornie, the community presets) have no `[Park]` section, so
+the Park stays disabled there until one is added. QuantBot builds parks only with the default-off
+`ParkDistricts` switch (docs/formations.md, "Parks in the districts").
+
+**Parks Count As Roads** (match rule, default on; bit 6 of the MOD18 city rules byte, set only
+when off; protocol 143; INI key `Parks Count As Roads`). Stefan, 2026-11-27: "count a park as a
+road (without the movement bonus) as a way to also increase value". A Park is a road connection
+for the city simulation (`Tile::isRoadConnection`, `DuneCity::isTrafficConnector`): a lot whose
+only frontage is a Park still finds its perimeter road, city trips may cross Parks, and road
+art joins onto them, as it already did for a Rocket Turret on a road. Units read the tile's own
+road flag, so a Park gives no road speed, and it still blocks them like any building. QuantBot's
+lot frontage check counts a Park road too. A Park still adds terrain, not development, so a
+spare road lane turned into a Park raises its neighbours' land value without losing the lots'
+road access. Tests: `ParkTestCase` (connector with and without the rule), `CoopGameSettingsTestCase`
+(protocol 143 bit and options hash), and the `city-park` skirmish probe, which gives a lot a
+Park on its last road tile and checks traffic access on (and none off) and no unit road flag.
+
 ### Unpowered zones (match rule `Unpowered Zones Vacate`, default on; MOD18, protocol 112)
 
 R/C/I lots use their owner's produced/required power, with positive generation required even
@@ -139,7 +179,7 @@ At 7% tax and house-average land value 128, gross credits per simulated minute:
 | Residential zone | 41.81 | 62.72 | 104.53 |
 | Commercial zone | 20.91 | 62.72 | 104.53 |
 | Industrial zone | 20.91 | 62.72 | 83.63 |
-| Palace (R+C) | 31.36 | 62.72 | 104.53 |
+| Palace (R only, since 2026-11-22; was R+C 31.36 / 62.72 / 104.53) | 20.91 | 31.36 | 52.27 |
 
 Approximate contributions before city-total rounding and upkeep. Empty zones
 pay zero. A single developed house within an R lot adds population 2, about 5.23
@@ -162,7 +202,7 @@ pay tax (rather than the old pre-634 mismatch between R-only payout and R+C UI).
 | Construction Yard | Existing high I | 0 |
 | Radar, Airport | Existing medium/high C respectively | 0 |
 | Barracks, WOR | Existing high R garrison | 0 |
-| Palace | R+C, up to high density | See income table |
+| Palace | R, up to high density (R+C until 2026-11-22) | See income table |
 
 All remaining non-zone structures also have zero direct tax. Silo, WindTrap,
 IX, Starport and Construction Yard stay clean. Light Factory emissions cap 10;

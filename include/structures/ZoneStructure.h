@@ -20,11 +20,16 @@
 
 #include <structures/StructureBase.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/ZoneGarrisonPolicy.h>
 #include <FileClasses/GFXManager.h>
+
+#include <array>
+#include <vector>
 
 // Forward declarations
 class House;
 class Game;
+class UnitBase;
 
 /// A base class for city zone structures (Residential, Commercial, Industrial)
 class ZoneStructure : public StructureBase {
@@ -76,7 +81,65 @@ public:
     /// sprite tracks growth and changes in neighbourhood quality.
     void updateStructureSpecificStuff() override;
 
+    // --- Zone Garrisons (docs/zone-garrisons.md; ZoneStructureGarrison.cpp) ---
+    /// The match rule is on for this game.
+    static bool garrisonsEnabled();
+    /// The Garrison command applies to UNIT: the rule is on in a city game and UNIT can capture.
+    static bool garrisonOrderAvailable(const ObjectBase* unit);
+    bool isGarrisoned() const { return !garrison_.empty(); }
+    int getGarrisonSize() const { return static_cast<int>(garrison_.size()); }
+    /// Occupants in entry order; each takes the same 10% damage share.
+    const std::vector<Uint32>& getGarrison() const { return garrison_; }
+    struct GarrisonHealthRemainders {
+        int64_t damage = 0;   ///< Building HP in 32.32 units, less than ten HP.
+        uint64_t healing = 0; ///< Remainder of the per-cycle healing division.
+    };
+    const std::array<GarrisonHealthRemainders, DuneCity::ZoneGarrison::kCapacity>&
+    getGarrisonHealthRemainders() const { return garrisonHealthRemainders_; }
+    /// The house whose soldiers are inside, or nullptr when empty.
+    const House* getGarrisonHouse() const;
+    /// May UNIT walk in now (own zone with room, or an enemy zone nobody holds)?
+    bool mayEnterGarrison(const UnitBase* unit) const;
+    /// Enemy soldiers hold this zone against UNIT: a capture order fires on it instead.
+    bool heldAgainst(const UnitBase* unit) const;
+    /// Puts UNIT inside; an enemy zone becomes UNIT's house's. False when refused.
+    bool enterGarrison(UnitBase* unit);
+    /// Deploys the occupants beside the zone. Returns how many came out. DESTROYING kills
+    /// those with no free tile around; otherwise they stay inside.
+    int evacuateGarrison(bool destroying = false);
+    /// Hands the zone, its tiles, power draw and counts to NEWOWNER; city state stays. CAPTURE
+    /// false is a captured zone going back to its original owner (no capture achievement).
+    void transferOwnership(House* newOwner, bool capture = true);
+    /// The house that owned this zone before its present garrison took it, or -1 when it is the
+    /// holder's own: once that garrison is gone, by order, at low health or killed, it goes back.
+    int getGarrisonOriginalOwner() const { return garrisonOriginalOwner_; }
+    /// The share of hit points below which the garrison leaves and nobody may enter (percent).
+    static int evacuateHealthPercent();
+    /// Too damaged to hold: below evacuateHealthPercent() of its hit points.
+    bool tooDamagedToHold() const;
+
+    void handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
+                      const DeviationReward::Provenance& provenance = DeviationReward::Provenance()) override;
+
 private:
+    void drawZoneImage();
+    void updateGarrison();
+    void dropDeadOccupants();
+    /// A captured zone whose garrison is gone returns to its original owner, if that house lives.
+    void returnCapturedZone();
+    const ObjectBase* findGarrisonTarget(int range) const;
+    void drawGarrisonSandbags() const;
+
+    std::vector<Uint32> garrison_;          ///< saved from SAVEGAMEVERSION_ZONE_GARRISON
+    std::array<GarrisonHealthRemainders, DuneCity::ZoneGarrison::kCapacity> garrisonHealthRemainders_{};
+    Uint32 garrisonTargetID_ = NONE_ID;     ///< saved
+    Sint32 garrisonSearchTimer_ = 0;        ///< saved
+    Sint32 garrisonOriginalOwner_ = -1;     ///< saved from SAVEGAMEVERSION_ZONE_GARRISON_RETURN
+    /// Shots the present garrison fired, and at aircraft: reported in the exit line of the match log
+    /// only (not saved, no effect on play).
+    int garrisonShots_ = 0;
+    int garrisonAirShots_ = 0;
+
     DuneCity::ZoneType zoneType_;  // The type of zone this structure represents
     uint8_t residentialPopulation_ = 0;
     int registeredZonePower_ = 0;  // Power last reported into the House pool.

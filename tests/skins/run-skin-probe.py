@@ -21,6 +21,7 @@ from probe_process import processes, run, check_output
 from probe_fixture import prepare_fixture
 sys.path.insert(0, str(root / 'tests/performance'))
 from probe_profile import scratch_dir, require_free_space, discard_profile_assets
+from probe_profile import NATIVE_TARGET, native_build_commands, native_build_data_dir, native_probe_binary, native_probe_data_dir, native_probe_includes, native_probe_relative  # noqa: E402
 processes.install_signal_handlers()
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--build-dir', type=Path, default=root / 'build')
@@ -31,8 +32,8 @@ out = args.output_dir.resolve() if args.output_dir else Path(tempfile.mkdtemp(pr
 out.mkdir(parents=True, exist_ok=True)
 require_free_space(sweep='if-low')
 run(['python3', str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
-target = 'bin/dunecity.app/Contents/MacOS/dunecity'
-lines = check_output(['ninja', '-C', str(build), '-t', 'commands', target], text=True).splitlines()
+target = NATIVE_TARGET
+lines = native_build_commands(build)
 production_link = shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
 production_link = production_link[production_link.index('&&') + 1:]
 production_link = production_link[:production_link.index('&&')]
@@ -46,7 +47,8 @@ def compile_fixture(work):
     main = main.replace('if(shouldPlayIntro && (bFirstInit==true))', 'if(false && shouldPlayIntro && (bFirstInit==true))')
     pos = main.index('int main(')
     include = root / 'tests/skins/skin-probe.inc'
-    main = main[:pos] + '#include "' + str(include) + '"\n' + main[pos:]
+    main = (main[:pos] + ''.join('#include "' + p.as_posix() + '"\n' for p in native_probe_includes(root))
+            + '#include "' + str(include) + '"\n' + main[pos:])
     source = work / 'skin-probe-main.cpp'
     source.write_text(main)
     cc = shlex.split(next(line for line in lines if ' -c ' in line and '/src/main.cpp' in line))
@@ -64,10 +66,7 @@ def compile_fixture(work):
     map_path = root / 'data/maps/multiplayer/2P - 51x31 - 1v1 - Habbanya-Autumn.ini'
     cc.append('-DPROBE_MAP_PATH="' + str(map_path) + '"')
     cc.append('-fno-access-control')  # Inspect real sidebar/modal state only in this diagnostic binary.
-    app = work / 'skin-probe.app/Contents'
-    (app / 'MacOS').mkdir(parents=True)
-    (app / 'Resources').symlink_to(build / 'bin/dunecity.app/Contents/Resources')
-    binary = app / 'MacOS/skin-probe'
+    binary = native_probe_binary(build, work, 'skin-probe')
     link = shlex.split(next(line for line in lines if ' -o ' + target + ' ' in line))
     link = link[link.index('&&')+1:]
     link = link[:link.index('&&')]
@@ -78,17 +77,16 @@ def compile_fixture(work):
         run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
 fixture_binary = prepare_fixture(root, build, out, build / 'skin-probe-fixture',
-                                 'skin-probe.app/Contents/MacOS/skin-probe', lines, production_link, compile_fixture)
+                                 native_probe_relative('skin-probe'), lines, production_link, compile_fixture)
 print('SKIN_RUNTIME_PHASE: begin', flush=True)
 with scratch_dir('skin-probe') as scratch:
-    app = scratch / 'skin-probe.app/Contents'
-    (app / 'MacOS').mkdir(parents=True)
-    binary = app / 'MacOS/skin-probe'
+    binary = scratch / native_probe_relative('skin-probe')
+    binary.parent.mkdir(parents=True)
     shutil.copy2(fixture_binary, binary)
-    resources = app / 'Resources'
-    resources.mkdir()
+    resources = native_probe_data_dir(scratch, 'skin-probe')
+    resources.mkdir(parents=True)
     # Cache-invalidating mutations belong to this run, never the sealed fixture.
-    original = build / 'bin/dunecity.app/Contents/Resources'
+    original = native_build_data_dir(build)
     for child in original.iterdir():
         destination = resources / child.name
         if child.name == 'mods':

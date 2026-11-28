@@ -21,6 +21,7 @@
 #include "QuantBotInternal.h"
 
 #include <FormationOrders.h>
+#include <units/SandWorm.h>
 
 #include <tuple>
 
@@ -51,6 +52,72 @@ int liveValue(const ObjectBase* object) {
     return std::max(1, (FixPoint(std::max(0, price)) * object->getHealth() / object->getMaxHealth()).lround());
 }
 } // namespace
+
+bool QuantBot::reconsiderRepairReturn(UnitBase* unit, Coord yard, bool carried) {
+    if (!botConfig().force.repairReturnCheck || !getHouse()->isAI() || switchedOff()
+        || !unit || unit->getOwner() != getHouse() || unit->getHealth() < unit->getMaxHealth()
+        || !unit->getGuardPoint().isValid()) return false;
+    constexpr int radius = 8;
+    const Coord previous = unit->getGuardPoint();
+    const int team = getHouse()->getTeamID();
+    const auto& data = currentGame->objectData.data;
+    auto power = [&](const ObjectBase* object) {
+        return CombatPowerPolicy::unitPower(data[object->getItemID()][object->getProductionHouseID()].price,
+            object->getHealth().lround(), object->getMaxHealth());
+    };
+    int64_t friendly = unit->canAttack() && mobileCombatItem(unit->getItemID()) ? power(unit) : 0;
+    int64_t hostile = 0;
+    for (const auto* other : getUnitList()) {
+        if (other == unit || !other->isActive() || other->getHealth() <= 0 || !other->getOwner()
+            || !other->canAttack() || !mobileCombatItem(other->getItemID())
+            || blockDistance(previous, other->getLocation()) > radius) continue;
+        if (other->getOwner()->getTeamID() == team) friendly += power(other);
+        else hostile += power(other);
+    }
+    for (const auto* turret : getStructureList()) {
+        if (!turret->isActive() || turret->getHealth() <= 0 || !turret->getOwner()
+            || (turret->getItemID() != Structure_GunTurret && turret->getItemID() != Structure_RocketTurret)
+            || blockDistance(previous, turret->getClosestPoint(previous)) > radius
+            || blockDistance(previous, turret->getClosestPoint(previous)) > turret->getWeaponRange()) continue;
+        const auto value = CombatPowerPolicy::turretPower(
+            data[turret->getItemID()][turret->getProductionHouseID()].price,
+            turret->getHealth().lround(), turret->getMaxHealth());
+        if (turret->getOwner()->getTeamID() == team) friendly += value;
+        else hostile += value;
+    }
+    ++repairReturnChecks;
+    const bool redirect = hostile > friendly;
+    Coord chosen = previous;
+    if (redirect) {
+        refreshTacticalDanger();
+        chosen = findProtectedRallyLocation();
+        if (!chosen.isValid()) chosen = yard;
+        unit->setGuardPoint(chosen);
+        ++repairReturnRedirects;
+        if (carried) repairReturnFlights[unit->getObjectID()] = {previous, chosen};
+        SDL_Log("REPAIR_RETURN: house=%d event=redirect unit=%u old_x=%d old_y=%d x=%d y=%d carried=%d",
+            getHouse()->getHouseID(), unit->getObjectID(), previous.x, previous.y, chosen.x, chosen.y, int(carried));
+    }
+    traceDecision("repair_return_check", AITelemetry::Record().set("unit", unit->getObjectID())
+        .set("redirect", redirect).set("friendly_power", friendly).set("enemy_power", hostile)
+        .set("radius", radius).set("old_x", previous.x).set("old_y", previous.y)
+        .set("x", chosen.x).set("y", chosen.y));
+    return redirect;
+}
+
+void QuantBot::noteRepairReturnLanding(const UnitBase* unit) {
+    if (!unit || unit->getOwner() != getHouse()) return;
+    const auto found = repairReturnFlights.find(unit->getObjectID());
+    if (found == repairReturnFlights.end()) return;
+    const auto [previous, chosen] = found->second;
+    const Coord landed = unit->getLocation();
+    const bool met = unit->isActive() && !unit->isPickedUp()
+        && blockDistance(landed, chosen) <= 3 && blockDistance(landed, previous) > 8;
+    if (met) ++repairReturnLandings;
+    SDL_Log("REPAIR_RETURN: house=%d event=landed unit=%u met=%d x=%d y=%d",
+        getHouse()->getHouseID(), unit->getObjectID(), int(met), landed.x, landed.y);
+    repairReturnFlights.erase(found);
+}
 
 QuantBot::CoreDefenceSurvey QuantBot::surveyVanillaCoreDefence() const {
     namespace Policy = QuantBotCoreDefencePolicy;
@@ -397,6 +464,13 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && (trueFieldThreat || structure->isVisible(getHouse()->getTeamID()))
             && blockDistance(contact,structure->getLocation())<=8) threatValue+=value(structure);
     }
+    // CampaignHelperDefenceLeash (default 14): a support house's home troops do not answer a
+    // ground contact standing beyond the leash; its wave (Hunt) troops still may.
+    // A house with no building left has nothing to measure the leash from (INT_MAX): no leash.
+    const int contactTiles = botConfig().force.campaignHelperDefenceLeash > 0 && campaignEconomySupport()
+        && !intruder->isAFlyingUnit() ? campaignHelperStructureDistance(contact) : 0;
+    const bool leashedContact = contactTiles > botConfig().force.campaignHelperDefenceLeash
+        && contactTiles != std::numeric_limits<int>::max();
     std::vector<SimpleArmyPolicy::Responder> candidates;
     for (const auto* unit : getUnitList()) {
         if (!unit->isActive() || !unit->canAttack()) continue;
@@ -407,11 +481,15 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         if (unit->getOwner()!=getHouse() || !unit->isRespondable()
             || !unit->canAttack(intruder) || unit->getAttackMode()==RETREAT
             || unit->getItemID()==Unit_Saboteur || QuantBotInternal::harvesterItem(unit->getItemID())
+            // The Fremen Palace worm takes orders only from managePalaceWorm: a defence assignment
+            // here re-targeted it every pass and cancelled its bloom trips (palace_worm_real_game A6).
+            || unit->getItemID()==Unit_Sandworm
             || QuantBotInternal::ornithopterItem(unit->getItemID())) continue; // Air planner owns aircraft.
         // A human order and a repair run outrank the scramble, and a worker raid
         // cannot cancel an ongoing whole-army base response.
         if (unitRole(unit, {UnitRole::Human, UnitRole::Repair, UnitRole::BaseDefence}) != UnitRole::Free) continue;
         if (clearingSpice && blockDistance(contact,unit->getLocation())>clearingRadius) continue;
+        if (leashedContact && unit->getAttackMode()!=HUNT) continue;
         const auto* target=unit->getTarget();
         const auto assignment=defenceAssignments.find(unit->getObjectID());
         if (assignment!=defenceAssignments.end()) {
@@ -437,6 +515,31 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
         if (!assetEmergency && hostileTarget
             && blockDistance(unit->getLocation(),target->getLocation())<=unit->getWeaponRange()) continue;
         candidates.push_back({unit->getObjectID(),value(unit),blockDistance(contact,unit->getLocation()).lround()});
+    }
+    // MassHold (default off): the emergency answer to an attack on something we own is held
+    // like the base scramble's - nobody goes when everything in reach, the troops already
+    // fighting it and our turrets beside it cannot match the threat.
+    if (massHoldActive() && assetEmergency && !sizedWorker && !clearingSpice
+        && !intruder->isAFlyingUnit() && campaignWorkerCoverage == 0) {
+        int64_t reachable=0;
+        for (const auto& candidate : candidates)
+            if (candidate.distance<=ForceConcentrationPolicy::kSizedBandTiles) reachable+=candidate.value;
+        const ObjectBase* asset=isProtectedAsset(protectedAsset) ? protectedAsset : victim;
+        const int64_t support=asset && asset->isAStructure() ? turretSupportNear(asset) : 0;
+        if (int64_t(committed)+support>=ForceConcentrationPolicy::sizedRequired(threatValue)) {
+            ++forceStats.massHolds;
+            traceDecision("defence_turret_covered",AITelemetry::Record().set("target",intruder->getObjectID())
+                .set("threat_value",threatValue).set("committed_value",committed).set("turret_support",support));
+            return;
+        }
+        if (!ForceConcentrationPolicy::answerable(threatValue,int64_t(committed)+support,reachable)) {
+            ++forceStats.massHolds;
+            traceDecision("defence_declined",AITelemetry::Record().set("target",intruder->getObjectID())
+                .set("x",contact.x).set("y",contact.y).set("threat_value",threatValue)
+                .set("committed_value",committed).set("reachable_value",reachable)
+                .set("turret_support",support).set("reason","mass_hold"));
+            return;
+        }
     }
     auto response=campaignWorkerCoverage > 0 ? std::vector<Uint32>{} : clearingSpice
         ? SimpleArmyPolicy::clearingForce(threatValue,committed,candidates,clearingRadius)
@@ -485,18 +588,41 @@ void QuantBot::scrambleUnitsAndDefend(const ObjectBase* intruder, bool clearingS
             && std::find(response.begin(),response.end(),candidate.id)==response.end())
             response.push_back(candidate.id);
     int dispatched=0;
+    // CampaignHelperFocusFire (default off): a support troop sent to this contact goes for a
+    // Deviator, Sonic Tank or Launcher near it first, when that outranks the contact itself.
+    const bool focusFire = botConfig().force.campaignHelperFocusFire && campaignEconomySupport()
+        && !intruder->isAFlyingUnit();
     // Defence is never slowed to a formation pace (docs/formations.md).
     for (const auto id:response) {
         const auto* unit=dynamic_cast<const UnitBase*>(getObject(id));
         if (!unit) continue;
+        // On a Carryall order already (a defender in flight): a new order would cancel it.
+        if (!airliftJobs.empty() && airliftJobs.count(id)) continue;
         groundSquad.erase(id);
         // Distant non-forced Area Guard targets are discarded by UnitBase.
         // Force transit, then release it inside guard range in checkAllUnits.
         // Persist assignments in the former escort-map save slot (same layout).
         const_cast<UnitBase*>(unit)->setGuardPoint(contact);
         doSetAttackMode(unit,AREAGUARD);
-        doAttackObject(unit,intruder,!unit->isInAttackRange(intruder));
-        defenceAssignments[id] = intruder->getObjectID();
+        const ObjectBase* aim = intruder;
+        if (focusFire && unit->isAGroundUnit())
+            if (const auto* victim = campaignHelperPriorityTarget(unit, campaignHelperPriorityRank(intruder->getItemID()))) {
+                aim = victim;
+                traceDecision("helper_focus_fire",AITelemetry::Record().set("unit",id)
+                    .set("target",victim->getObjectID()).set("target_item",victim->getItemID())
+                    .set("replaced",intruder->getObjectID()).set("reason","defence_dispatch"));
+            }
+        // AirliftBaseDefence / AirliftHarvesterDefence (default off): a distant defender of an
+        // attacked building or harvester is flown to the attacker; its booking starts on landing.
+        const bool defendingWorker = clearingSpice || (protectedAsset && !protectedAsset->isAStructure());
+        const bool defendingBase = !defendingWorker
+            && (baseAttack || assetEmergency || (protectedAsset && protectedAsset->isAStructure()));
+        if ((defendingWorker || defendingBase) && airliftDefender(unit, aim, defendingWorker)) {
+            ++dispatched;
+            continue;
+        }
+        doAttackObject(unit,aim,!unit->isInAttackRange(aim));
+        defenceAssignments[id] = aim->getObjectID();
         ++dispatched;
     }
     if (dispatched) traceDecision("defence_response",AITelemetry::Record().set("target",intruder->getObjectID())
@@ -742,6 +868,43 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
         }
         candidates.push_back({id,value(unit),distanceToBuilding(unit->getLocation())});
     }
+    // MassHold (default off, docs/formations.md "Turret clusters and the held mass"): a defence
+    // that the troops already there, our turrets beside the building and every free troop in
+    // reach together cannot match is not fed one unit at a time. Nobody new goes; the free
+    // troops in reach gather at the home rally instead, in Area Guard, so the army builds up
+    // until a defence can be answered or the next wave can leave.
+    // Our turrets beside the building also fight it: with MassHold they count towards the
+    // answer, and when they and the troops already there cover the sized answer nobody new goes.
+    int64_t turretSupport=0;
+    if (massHoldActive()) {
+        int64_t reachable=0;
+        std::vector<Uint32> inReach;
+        for (const auto& candidate : candidates)
+            if (candidate.distance<=ForceConcentrationPolicy::kSizedBandTiles) {
+                reachable+=candidate.value;
+                inReach.push_back(candidate.id);
+            }
+        const int64_t support=turretSupport=turretSupportNear(building);
+        if (int64_t(committed)+support>=ForceConcentrationPolicy::sizedRequired(threat)) {
+            ++forceStats.massHolds;
+            traceDecision("defence_turret_covered",AITelemetry::Record()
+                .set("target",intruder->getObjectID()).set("building",building->getObjectID())
+                .set("threat_value",threat).set("committed_value",committed)
+                .set("turret_support",support).set("candidates",int(candidates.size())));
+            return;
+        }
+        if (!ForceConcentrationPolicy::answerable(threat,int64_t(committed)+support,reachable)) {
+            const int gathered=gatherHeldMass(inReach);
+            ++forceStats.massHolds;
+            traceDecision("defence_mass_hold",AITelemetry::Record()
+                .set("target",intruder->getObjectID()).set("building",building->getObjectID())
+                .set("threat_value",threat).set("committed_value",committed)
+                .set("turret_support",support).set("reachable_value",reachable)
+                .set("candidates",int(candidates.size())).set("gathered",gathered)
+                .set("already_scrambled",alreadyScrambled));
+            return;
+        }
+    }
     // "Closest" is bounded: the same threat-scaled band (12-40 tiles) that
     // limits every other emergency response, so one raid cannot pull troops
     // from the far side of the map.
@@ -754,14 +917,14 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
             const auto* unit=static_cast<const UnitBase*>(getObject(candidate.id));
             responders.push_back({candidate.id,candidate.value,candidate.distance,standsInBundle(unit)});
         }
-        response=ForceConcentrationPolicy::sizedPool(ForceConcentrationPolicy::sizedRequired(threat),committed,
+        response=ForceConcentrationPolicy::sizedPool(ForceConcentrationPolicy::sizedRequired(threat),committed+turretSupport,
             responders,ForceConcentrationPolicy::kSizedBandTiles);
         forceStats.sizedResponses+=int(response.size());
     } else if (pool || recall || muster) {
         std::vector<ForceConcentrationPolicy::Responder> responders;
         for (const auto& candidate : candidates) responders.push_back({candidate.id,candidate.value,candidate.distance});
         const int64_t required=pool ? ForceConcentrationPolicy::poolRequired(threat) : SimpleArmyPolicy::responseValue(threat);
-        response=ForceConcentrationPolicy::pool(required,committed,responders,band,recall);
+        response=ForceConcentrationPolicy::pool(required,committed+turretSupport,responders,band,recall);
         for (const auto& candidate : candidates)
             if (candidate.distance>band && std::find(response.begin(),response.end(),candidate.id)!=response.end()) ++recalled;
         forceStats.pooled+=int(response.size());
@@ -772,7 +935,7 @@ void QuantBot::scrambleWholeArmyToDefend(const ObjectBase* intruder, const Objec
             candidates.end());
         // The nearest troops, until together with those already in the fight they
         // outweigh the threat at the building.
-        response=SimpleArmyPolicy::reinforcements(threat,committed,candidates);
+        response=SimpleArmyPolicy::reinforcements(threat,int(committed+turretSupport),candidates);
     }
     std::vector<Uint32> musterIds;
     // Defence is never slowed to a formation pace (docs/formations.md): each troop walks
@@ -971,13 +1134,21 @@ int QuantBot::campaignRequiredArmy(int configuredThreshold) const {
     // Delay this fallback beyond the initial spice scan and opening phase.
     if (getGameCycleCount() >= MILLI2CYCLES(15 * 60000) && lastCalculatedSpice == 0)
         required = 0;
+    // CampaignHelperReadinessCap (default 0 = off): a support house stops waiting once its
+    // army reaches this value, whatever the enemy alliance holds.
+    if (const int cap = botConfig().force.campaignHelperReadinessCap; cap > 0 && campaignEconomySupport())
+        required = std::min(required, cap);
+    // QuantBot Easiest: its lower army ceiling must still be able to launch a wave.
+    if (easiestCampaign()) required = EasiestPolicy::readiness(required, easiestArmyCeiling());
     return required;
 }
 
 int QuantBot::houseAttackThreshold() const {
     // Campaign mode: the difficulty's threshold; Custom: the global one, except Brutal's own.
     const QuantBotConfig& config = botConfig();
-    const float percent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
+    const int cityPercent = cityCampaignBrutalAttackPercent();
+    const float percent = cityPercent > 0 ? cityPercent / 100.0f
+        : (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
         ? config.getSettings(static_cast<int>(difficulty)).attackThresholdPercent : config.attackThresholdPercent;
     const FixPoint threshold = FixPoint(static_cast<int>(percent * 100)) / 100;
     const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
@@ -985,8 +1156,10 @@ int QuantBot::houseAttackThreshold() const {
         ? DuneCity::vanillaAttackThreshold((militaryValueLimit * threshold).lround(), static_cast<int>(difficulty))
         : (militaryValueLimit * threshold).lround());
     const auto boom = cityBoomSpiceKind();
-    return lastCalculatedSpice > 0 && customWave.launched == 0 && boom != CityBoomKind::Native && boom != CityBoomKind::ShortTax
+    const int waiting = lastCalculatedSpice > 0 && customWave.launched == 0 && boom != CityBoomKind::Native && boom != CityBoomKind::ShortTax
         ? std::max(12000, required) : required;
+    // QuantBot Easiest: its lower army ceiling must still be able to launch a wave.
+    return easiestCustom() ? EasiestPolicy::readiness(waiting, easiestArmyCeiling()) : waiting;
 }
 
 namespace {
@@ -1041,6 +1214,14 @@ void QuantBot::attack(int militaryValue) {
 		return;
 	}
     if (isCampaignEnemy() && !campaignCanLaunch()) return;
+    // QuantBot Easiest: no attack leaves its custom-game base in the first minutes. Base defence
+    // is a separate path and is not held.
+    if (easiestCustom() && EasiestPolicy::attackHeld(getGameCycleCount(),
+            MILLI2CYCLES(EasiestPolicy::kCustomFirstAttackMin * 60000))) {
+        attackTimer = MILLI2CYCLES(15000);
+        traceDecision("attack_deferred", AITelemetry::Record().set("reason", "easiest_opening"));
+        return;
+    }
 
     // Get config for this difficulty
     const QuantBotConfig& config = botConfig();
@@ -1070,8 +1251,9 @@ void QuantBot::attack(int militaryValue) {
 	// Main attack loop - check military strength threshold
 	// Campaign mode: Use difficulty-specific threshold from config
 	// Custom mode: global threshold, except Brutal uses its 25% difficulty threshold.
-	float attackThresholdPercent = (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
-		? diffSettings.attackThresholdPercent 
+	float attackThresholdPercent = cityCampaignBrutalAttackPercent() > 0 ? cityCampaignBrutalAttackPercent() / 100.0f
+		: (gameMode == GameMode::Campaign || difficulty == Difficulty::Brutal)
+		? diffSettings.attackThresholdPercent
 		: config.attackThresholdPercent;
 	const bool vanillaCustom = gameMode == GameMode::Custom && !getHouse()->isPowerRequired();
 	int requiredMilitary = houseAttackThreshold();
@@ -1082,9 +1264,36 @@ void QuantBot::attack(int militaryValue) {
     // raises it to 100% while the house is outnumbered).
     if (const int percent=launchReadinessPercent(); percent!=100)
         requiredMilitary=int(ForceConcentrationPolicy::scaledReadiness(requiredMilitary,percent));
+    // CampaignHelperUnitCapLaunch (default off): a support house at the ground unit limit
+    // cannot grow its army any further, so it goes with what it has.
+    if (botConfig().force.campaignHelperUnitCapLaunch && campaign && campaignEconomySupport()
+        && militaryValue < requiredMilitary && militaryValue > 0 && getHouse()->isGroundUnitLimitReached()) {
+        traceDecision("helper_unit_cap_launch", AITelemetry::Record().set("military", militaryValue)
+            .set("required_military", requiredMilitary).set("max_units", getHouse()->getMaxUnits()));
+        requiredMilitary = militaryValue;
+    }
+    // CampaignHelperCounterAttack (default 0): a support house that has just beaten a wave at
+    // home follows it out with this percent of its readiness. Only this readiness test is
+    // relaxed; the gates below and launchGroundHunt() decide the rest as usual.
+    const bool counterAttack = botConfig().force.campaignHelperCounterAttack > 0 && campaign && !exhausted
+        && militaryValue < requiredMilitary && campaignEconomySupport()
+        && campaignHelperCounterAttackReady(militaryValue, requiredMilitary);
+    if (counterAttack) {
+        customWave.lastActive = getGameCycleCount();
+        traceDecision("helper_counter_attack", AITelemetry::Record().set("military", militaryValue)
+            .set("required_military", requiredMilitary)
+            .set("percent", botConfig().force.campaignHelperCounterAttack));
+    }
+    // Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off): a counter-punch or a
+    // raid on the leader leaves with whatever viable wave there is, past the army threshold and the
+    // outnumbered gate; while such a window may open the next check comes in 15 s.
+    pendingDirected = directedWave();
+    pendingDirectedCycle = getGameCycleCount();
+    if (pendingDirected.watch) attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
     // JoinAllyWaves (team play): an allied QuantBot's wave that has just left is joined by
     // whatever viable wave we have, whatever our own readiness.
-    if (!exhausted && militaryValue < requiredMilitary && !allyWaveObjective()) {
+    if (!exhausted && militaryValue < requiredMilitary && !allyWaveObjective() && !counterAttack
+        && !pendingDirected.bypass) {
         // Recheck readiness promptly; do not miss a short-lived strength window.
         if (campaign || (vanillaCustom && difficulty == Difficulty::Brutal))
             attackTimer = std::min(attackTimer, static_cast<int>(MILLI2CYCLES(15000)));
@@ -1133,7 +1342,7 @@ void QuantBot::attack(int militaryValue) {
         const ArmySurvey& survey = lastSurvey;
         const auto gate = offensiveDispatchGate(survey);
         const auto thresholds = postureThresholds();
-        if (gate.defer) {
+        if (gate.defer && !pendingDirected.bypass) {
             attackTimer = std::min(attackTimer, static_cast<Sint32>(MILLI2CYCLES(15000)));
             traceDecision("attack_deferred", AITelemetry::Record().set("reason", "outnumbered_front")
                 .set("gate_reason", gate.reason)
@@ -1350,6 +1559,9 @@ void QuantBot::launchGroundHunt() {
     const bool ffaSingleFront = botConfig().force.vanillaFfaSingleFront && recoveryActive()
         && vanillaMultiEnemyGame() && lastCalculatedSpice > 0;
     bool ffaDirected = ffaTargeting || ffaSingleFront;
+    // Directed waves (default off): attack() decided this cycle; nothing carries over.
+    const DirectedWave directed = pendingDirectedCycle == getGameCycleCount() ? pendingDirected : DirectedWave{};
+    if (directed.team >= 0) ffaDirected = true;
     // JoinAllyWaves: the objective of an allied wave that has just left; ours joins it.
     const bool synchronisedTeam = wholeArmy && teamAttackCoordinator();
     const ObjectBase* allyFront = synchronisedTeam ? teamAttackObjective()
@@ -1517,7 +1729,8 @@ void QuantBot::launchGroundHunt() {
             // units and three thousand credits of value (a test-only play style may change it).
             const bool viable = exhausted ? availableUnits > 0
                 : availableUnits >= minWaveUnits() && availableValue >= minWaveValue();
-            if ((!exhausted && availableValue<requiredReady && (!allyFront || synchronisedTeam)) || !viable) {
+            if ((!exhausted && !directed.bypass && availableValue<requiredReady && (!allyFront || synchronisedTeam))
+                || !viable) {
                 // A wave that is no longer ready stops waiting for the bundle: its next
                 // readiness starts a fresh 60 s wait rather than inheriting an old one.
                 bundleGateSince=0;
@@ -1595,7 +1808,7 @@ void QuantBot::launchGroundHunt() {
             }
             // Launch from the bundle (W, on by default): a ready wave leaves once most of it
             // stands in the bundle - only while there is one and bundling owns the reserve.
-            if (!exhausted && (!allyFront || synchronisedTeam) && forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
+            if (!exhausted && !directed.bypass && (!allyFront || synchronisedTeam) && forceVariant(kForceBundle) && forceVariant(kForceBundleGate) && !reserveHeldHome()
                 && (bundlePoint.isValid() || bundleCentre.isValid())) {
                 std::vector<Uint32> ids;
                 ids.reserve(candidates.size());
@@ -1715,13 +1928,14 @@ void QuantBot::launchGroundHunt() {
                     || (forceVariant(kForceFinishLeading) && finishLeading())))
                 observedFront = finishObjective(lead, finishTargetTeam(lead));
         }
+        if (!observedFront && !allyFront && directed.team >= 0) observedFront=finishObjective(lead,directed.team);
         if (!observedFront)
             observedFront=allyFront ? allyFront : ffaTargeting ? finishObjective(lead,finishTargetTeam(lead))
                                                             : customWaveObjective(lead);
         if (ffaTargeting && !observedFront) observedFront=customWaveObjective(lead);
         const ArmySurvey planned=surveyArmy(observedFront);
         const auto gate=offensiveDispatchGate(planned);
-        if (recoveryActive() && !exhausted && gate.defer) {
+        if (recoveryActive() && !exhausted && gate.defer && !directed.bypass) {
             attackTimer=std::min(attackTimer,static_cast<Sint32>(MILLI2CYCLES(15000)));
             traceDecision("attack_deferred",AITelemetry::Record().set("reason","outnumbered_planned_front")
                 .set("own_effective_power",planned.allied.offensive())
@@ -1741,6 +1955,11 @@ void QuantBot::launchGroundHunt() {
         // one army rather than a dispatched wave plus untracked stragglers.
         customWave.members.insert(existingHunters.begin(),existingHunters.end());
         customWave.front=observedFront ? observedFront->getObjectID() : NONE_ID;
+        if (*directed.kind) traceDecision("directed_wave",AITelemetry::Record().set("kind",directed.kind)
+            .set("team",directed.team).set("bypass",directed.bypass).set("members",int(selected.size()))
+            .set("own",directed.own).set("leader",directed.leader).set("others",directed.others)
+            .set("guard",directed.guard).set("away",directed.away)
+            .set("front",observedFront ? int(observedFront->getObjectID()) : -1));
     }
     // Wave formations (docs/formations.md, QuantBot waves): who goes, when and against
     // what is decided exactly as without them; only how the ground members travel
@@ -2487,6 +2706,8 @@ void QuantBot::updateArmyPosture() {
     }
     const bool wasLocalWithdraw = localSquadWithdraw;
     localSquadWithdraw = localWithdrawSince != std::numeric_limits<Uint32>::max();
+    // AirliftRetreatLift reads the verdict itself, before the withdrawal switch below masks it.
+    airliftLocalDefeat = localSquadWithdraw;
 
     // Withdrawals are off by default (QuantBotConfig::RecoverySettings::withdrawalsEnabled):
     // measured on six all-against-Atreides seeds, every withdrawal trigger together cost a
@@ -2497,8 +2718,11 @@ void QuantBot::updateArmyPosture() {
         situation.severeLocalDefeat = retreatPreserveActive() && situation.severeLocalDefeat;
         situation.coreUnderAttack = false;
         situation.windowCovered = false;
-        localSquadWithdraw = localSquadWithdraw && (retreatPreserveActive() || forceVariant(kForceFallBack));
+        // SquadRetreat (default off) is that same local withdrawal as a config switch.
+        localSquadWithdraw = localSquadWithdraw
+            && (retreatPreserveActive() || forceVariant(kForceFallBack) || squadRetreatActive());
     }
+    if (localSquadWithdraw && !wasLocalWithdraw && squadRetreatActive()) ++airliftStats.squadRetreats;
     if (localSquadWithdraw && !wasLocalWithdraw && forceVariant(kForceFallBack)) ++forceStats.fallBacks;
     const auto previous = armyPosture;
     const auto decision = ArmyPosturePolicy::evaluate(armyPosture, postureSince, situation, thresholds);
@@ -2705,9 +2929,14 @@ const ObjectBase* QuantBot::customWaveObjective(const UnitBase* unit) const {
     // This intelligence never becomes a unit movement or target order.
     const ObjectBase* chosen = nullptr;
     int best = std::numeric_limits<int>::max();
+    // CampaignHelperSingleTarget (default off): a support house's wave finishes one enemy house
+    // first; -1 keeps every hostile building in play.
+    const int onlyHouse = botConfig().force.campaignHelperSingleTarget && campaignEconomySupport()
+        ? campaignHelperTargetHouse(unit) : -1;
     for (const auto* building : getStructureList()) {
         if (!building->getOwner() || building->getOwner()->getTeamID() == getHouse()->getTeamID()
             || building->getHealth() <= 0 || !building->isVisible(getHouse()->getTeamID())) continue;
+        if (onlyHouse >= 0 && building->getOwner()->getHouseID() != onlyHouse) continue;
         int score = unit ? blockDistance(unit->getLocation(), building->getLocation()).lround()
                          : int(building->getObjectID());
         // Prefer the production and economy that rebuilds the army, as the
@@ -3170,6 +3399,8 @@ std::vector<Coord> QuantBot::assemblySlots(Coord anchor, int radius) const {
 bool QuantBot::withdrawUnit(const UnitBase* unit, Coord anchor, int radius,
                             const std::vector<Coord>* slots, std::set<int64_t>* reserved) {
     if (!unit || anchor.isInvalid()) return false;
+    // On a Carryall order already: a second order would cancel the pickup.
+    if (!airliftJobs.empty() && airliftJobs.count(unit->getObjectID())) return false;
     const int arrival = std::max(1, radius);
     // Already home, or already walking to somewhere inside the assembly area.
     if (blockDistance(unit->getLocation(), anchor).lround() <= arrival) {
@@ -3228,6 +3459,11 @@ bool QuantBot::withdrawUnit(const UnitBase* unit, Coord anchor, int radius,
     // the rally. RETREAT is never used: it returns false from
     // isInGuardRange/isInAttackRange (UnitBase.cpp:1446,1492), so a retreating
     // army cannot shoot back at all.
+    // SquadRetreatAirlift (default off): far from the rally, a free Carryall takes it there.
+    if (airliftRetreatByAir(unit, destination)) {
+        if (reserved) reserved->insert(key(destination));
+        return true;
+    }
     doSetAttackMode(unit, AREAGUARD);
     doMove2Pos(unit, destination.x, destination.y, true);
     if (reserved) reserved->insert(key(destination));
@@ -4095,6 +4331,275 @@ void QuantBot::kiteAwayFromThreat(const UnitBase* pUnit, const ObjectBase* pThre
  * @param pUnit The unit to potentially move
  * @param squadRadius The acceptable radius around either position (unit won't move if within this radius)
  */
+bool QuantBot::campaignRockHoldApplies(const UnitBase* unit, bool recall) const {
+    const int level = botConfig().force.campaignHelperRockHold;
+    return (recall ? level >= 2 : level == 1 || level == 2) && campaignEconomySupport()
+        && unit && unit->isAGroundUnit() && unit->getAttackMode()!=RETREAT && unit->getAttackMode()!=HUNT;
+}
+
+bool QuantBot::holdOnCampaignRock(const UnitBase* unit, Coord anchor, int radius, int* orderBudget, bool forced) {
+    const int reach = std::max(radius, kRockHoldReach);
+    const auto holds = [&](Coord p) {
+        return getMap().tileExists(p) && getMap().getTile(p)->isRock() && !getMap().getTile(p)->isMountain()
+            && std::max(std::abs(p.x-anchor.x), std::abs(p.y-anchor.y)) <= reach;
+    };
+    if (!forced) {
+        if (holds(unit->getLocation())) return false;
+        // A queued path can exist before isMoving becomes true: leave a rock destination alone.
+        const Coord destination = unit->getDestination();
+        if (destination.isValid() && destination!=unit->getLocation() && holds(destination)) return false;
+    }
+    if ((orderBudget && *orderBudget<=0) || currentGame->getPathRequestQueueSize()>150) return false;
+    Coord best = Coord::Invalid();
+    int bestScore = std::numeric_limits<int>::max();
+    for (int dy=-reach; dy<=reach; ++dy) for (int dx=-reach; dx<=reach; ++dx) {
+        const Coord p = anchor+Coord(dx,dy);
+        if (!holds(p) || p==unit->getLocation() || !unit->canPass(p.x,p.y) || dangerAt(p)!=0 || onPlannedSite(p)) continue;
+        // Nearest free rock first; the object ID spreads troops ordered in the same pass.
+        const int score = blockDistance(unit->getLocation(),p).lround()*4 + std::max(std::abs(dx),std::abs(dy))
+            + static_cast<int>((static_cast<Uint32>(p.x*31+p.y*17)+unit->getObjectID())%4);
+        if (score<bestScore) { bestScore=score; best=p; }
+    }
+    if (best.isInvalid()) return false;
+    doMove2Pos(unit,best.x,best.y,forced);
+    if (orderBudget) --*orderBudget;
+    return true;
+}
+
+namespace {
+// checkAllUnits() runs once per AI pass: AIUPDATEINTERVAL (QuantBot.cpp) game cycles.
+constexpr Uint32 kHelperPassCycles = 50;
+} // namespace
+
+int QuantBot::campaignHelperStructureDistance(Coord at) const {
+    int nearest = std::numeric_limits<int>::max();
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0)
+            nearest = std::min(nearest, int(blockDistance(at, structure->getClosestPoint(at)).lround()));
+    return nearest;
+}
+
+Coord QuantBot::campaignHelperLeashAnchor() const {
+    // The place the idle troops regroup on: the front post when that switch holds one, else the
+    // assembly anchor (the harvest rally for a support house) unless that lies beyond the leash
+    // itself, where a withdrawn troop would only be leashed again.
+    if (botConfig().force.campaignHelperFrontPost > 0)
+        if (const Coord post = campaignHelperFrontPost(); post.isValid()) return post;
+    const Coord anchor = armyAssemblyAnchor();
+    if (anchor.isValid() && campaignHelperStructureDistance(anchor) <= botConfig().force.campaignHelperDefenceLeash)
+        return anchor;
+    return findBaseCentre(getHouse()->getHouseID());
+}
+
+bool QuantBot::campaignHelperLeash(const UnitBase* unit, int radius, int& orderBudget) {
+    // The caller has tested CampaignHelperDefenceLeash and campaignEconomySupport().
+    if (unit->getOwner()!=getHouse() || !unit->isAGroundUnit() || !unit->isActive() || !unit->isRespondable()
+        || !campaignCombatUnit(unit) || !mobileCombatItem(unit->getItemID())
+        || unit->getAttackMode()==HUNT || unit->getAttackMode()==RETREAT
+        || customWave.members.count(unit->getObjectID())
+        || unitRole(unit, {UnitRole::Human, UnitRole::Repair}) != UnitRole::Free) return false;
+    const int leash = botConfig().force.campaignHelperDefenceLeash;
+    const int unitDistance = campaignHelperStructureDistance(unit->getLocation());
+    // No building left to hold: the leash has nothing to measure from and must not pin the troops.
+    if (unitDistance == std::numeric_limits<int>::max()) return false;
+    const bool unitOut = unitDistance > leash;
+    const auto* target = unit->getTarget();
+    const bool hostile = target && target->getHealth()>0 && target->getOwner()
+        && target->getOwner()->getTeamID()!=getHouse()->getTeamID();
+    const bool worm = hostile && target->getItemID()==Unit_Sandworm;
+    // Whatever stands inside weapon range may be shot without moving.
+    const bool targetOut = hostile && !worm && !unit->isInWeaponRange(target)
+        && campaignHelperStructureDistance(target->getLocation()) > leash;
+    if (!unitOut && !worm && !targetOut) return false;
+    const Coord anchor = campaignHelperLeashAnchor();
+    // Already walking home: no new order.
+    if (!worm && !targetOut && anchor.isValid() && unit->wasForced() && unit->getDestination().isValid()
+        && blockDistance(unit->getDestination(), anchor).lround() <= std::max(1, radius)) return false;
+    if (orderBudget<=0 || currentGame->getPathRequestQueueSize()>150) return false;
+    defenceAssignments.erase(unit->getObjectID());
+    bool ordered = false;
+    if (anchor.isValid()) {
+        const_cast<UnitBase*>(unit)->setGuardPoint(anchor);
+        ordered = withdrawUnit(unit, anchor, radius);
+    }
+    if (!ordered) {
+        // No free slot at home (or home already): a forced move still drops the chase.
+        const Coord goal = unitOut && anchor.isValid() ? anchor : unit->getLocation();
+        doSetAttackMode(unit, AREAGUARD);
+        doMove2Pos(unit, goal.x, goal.y, true);
+        ordered = true;
+    }
+    --orderBudget;
+    traceDecision("helper_leash", AITelemetry::Record().set("unit", unit->getObjectID())
+        .set("target", hostile ? target->getObjectID() : NONE_ID)
+        .set("worm", worm).set("unit_tiles", unitDistance).set("leash", leash)
+        .set("anchor_x", anchor.isValid() ? anchor.x : -1).set("anchor_y", anchor.isValid() ? anchor.y : -1));
+    return ordered;
+}
+
+Coord QuantBot::campaignHelperFrontPost() const {
+    const int reach = botConfig().force.campaignHelperFrontPost;
+    if (reach <= 0 || !campaignEconomySupport()) return Coord::Invalid();
+    const Uint32 now = getGameCycleCount();
+    if (helperFrontPostCycle == now) return helperFrontPost;
+    helperFrontPostCycle = now;
+    helperFrontPost = Coord::Invalid();
+    const StructureBase* yard = nullptr;
+    for (const auto* structure : getStructureList())
+        if (structure->getOwner()==getHouse() && structure->getHealth()>0
+            && structure->getItemID()==Structure_RepairYard
+            && (!yard || structure->getObjectID()<yard->getObjectID())) yard = structure;
+    if (!yard) return helperFrontPost;
+    const Coord centre = yard->getLocation() + Coord(yard->getStructureSizeX()/2, yard->getStructureSizeY()/2);
+    const int team = getHouse()->getTeamID();
+    // Where the enemy comes from: the observed front, else the nearest visible hostile ground
+    // fighter or building, else the nearest enemy building, else the map centre.
+    Coord towards = observedFrontDirection(centre);
+    if (towards.x==0 && towards.y==0) {
+        Coord nearest = Coord::Invalid();
+        int best = std::numeric_limits<int>::max();
+        const auto consider = [&](Coord at) {
+            const int d = blockDistance(centre, at).lround();
+            if (d < best) { best = d; nearest = at; }
+        };
+        for (const auto* enemy : getUnitList())
+            if (enemy->getOwner() && enemy->getOwner()->getTeamID()!=team && !enemy->getOwner()->isNatives()
+                && enemy->getHealth()>0 && enemy->isActive() && enemy->isAGroundUnit() && enemy->canAttack()
+                && enemy->isVisible(team)) consider(enemy->getLocation());
+        for (const auto* building : getStructureList())
+            if (building->getOwner() && building->getOwner()->getTeamID()!=team && !building->getOwner()->isNatives()
+                && building->getHealth()>0 && building->isVisible(team)) consider(building->getClosestPoint(centre));
+        if (nearest.isInvalid())
+            for (const auto* building : getStructureList())
+                if (building->getOwner() && building->getOwner()->getTeamID()!=team && !building->getOwner()->isNatives()
+                    && building->getHealth()>0) consider(building->getClosestPoint(centre));
+        if (nearest.isInvalid()) nearest = Coord(getMap().getSizeX()/2, getMap().getSizeY()/2);
+        towards = nearest - centre;
+    }
+    const int scale = std::max(1, std::max(std::abs(towards.x), std::abs(towards.y)));
+    const Coord goal = centre + Coord(towards.x*reach/scale, towards.y*reach/scale);
+    // The nearest standable rock or concrete to that point, never sand, never under a building,
+    // and no farther than reach + 3 from the Repair Yard.
+    const int bound = reach + 3;
+    int bestScore = std::numeric_limits<int>::max();
+    for (int dy=-bound; dy<=bound; ++dy) for (int dx=-bound; dx<=bound; ++dx) {
+        const Coord p = centre + Coord(dx, dy);
+        if (!getMap().tileExists(p) || blockDistance(centre, p).lround() > bound) continue;
+        const auto* tile = getMap().getTile(p);
+        if (!tile->isRock() || tile->isMountain() || tile->hasAStructure()) continue;
+        const int score = (p.x-goal.x)*(p.x-goal.x) + (p.y-goal.y)*(p.y-goal.y);
+        if (score < bestScore) { bestScore = score; helperFrontPost = p; }
+    }
+    return helperFrontPost;
+}
+
+int QuantBot::campaignHelperPriorityRank(Uint32 itemID) {
+    switch (itemID) {
+        case Unit_Deviator: return 3;
+        case Unit_SonicTank: return 2;
+        case Unit_Launcher: case Unit_EliteLauncher: return 1;
+        default: return 0;
+    }
+}
+
+const UnitBase* QuantBot::campaignHelperPriorityTarget(const UnitBase* unit, int aboveRank) const {
+    const int team = getHouse()->getTeamID();
+    const int reach = unit->getWeaponRange() + 4;
+    const UnitBase* best = nullptr;
+    int bestRank = 0;
+    for (const auto* enemy : getUnitList()) {
+        const int rank = campaignHelperPriorityRank(enemy->getItemID());
+        if (rank <= aboveRank || rank < bestRank) continue;
+        if (!enemy->getOwner() || enemy->getOwner()->getTeamID()==team || enemy->getHealth()<=0
+            || !enemy->isActive() || !enemy->isVisible(team)
+            || blockDistance(unit->getLocation(), enemy->getLocation()).lround() > reach
+            || !unit->canAttack(enemy)) continue;
+        // Lowest health, then lowest object ID: units choosing together pick the same victim.
+        if (best && rank==bestRank && (enemy->getHealth()>best->getHealth()
+            || (enemy->getHealth()==best->getHealth() && enemy->getObjectID()>best->getObjectID()))) continue;
+        best = enemy;
+        bestRank = rank;
+    }
+    return best;
+}
+
+bool QuantBot::campaignHelperOrderSlot(const UnitBase* unit, int periodMs) const {
+    // Whole AI passes, so exactly one pass per period falls in the unit's window.
+    const Uint32 passes = std::max<Uint32>(1,
+        (static_cast<Uint32>(MILLI2CYCLES(periodMs)) + kHelperPassCycles - 1) / kHelperPassCycles);
+    const Uint32 period = passes * kHelperPassCycles;
+    return (getGameCycleCount() + unit->getObjectID() * kHelperPassCycles) % period < kHelperPassCycles;
+}
+
+bool QuantBot::campaignHelperCounterAttackReady(int militaryValue, int requiredMilitary) const {
+    const Uint32 now = getGameCycleCount();
+    // One counter-attack per three game minutes. A support house never tracks a Custom wave
+    // (recoveryActive() is false), so customWave.lastActive is otherwise never written for it.
+    if (customWave.lastActive != 0
+        && ArmyPosturePolicy::elapsed(now, customWave.lastActive) < Uint32(MILLI2CYCLES(180000))) return false;
+    if (int64_t(militaryValue) * 100 < int64_t(requiredMilitary) * botConfig().force.campaignHelperCounterAttack)
+        return false;
+    if (!customWave.members.empty()) return false;
+    bool recentDefence = false;
+    for (const auto& [key, cycle] : defenceResponseCycles)
+        if (key % 2 == 0 && ArmyPosturePolicy::elapsed(now, cycle) <= Uint32(MILLI2CYCLES(90000))) {
+            recentDefence = true;
+            break;
+        }
+    if (!recentDefence) return false;
+    const int team = getHouse()->getTeamID();
+    for (const auto* unit : getUnitList()) {
+        if (!unit->getOwner() || unit->getHealth()<=0 || !unit->isActive() || !unit->isAGroundUnit()) continue;
+        // A ground wave of ours is already out: its troops hunt.
+        if (unit->getOwner()==getHouse()) {
+            if (unit->getAttackMode()==HUNT && campaignCombatUnit(unit)) return false;
+            continue;
+        }
+        if (unit->getOwner()->getTeamID()==team || unit->getItemID()==Unit_Sandworm
+            || !unit->canAttack() || !unit->isVisible(team)) continue;
+        for (const auto* structure : getStructureList())
+            if (structure->getOwner()==getHouse() && structure->getHealth()>0
+                && blockDistance(unit->getLocation(), structure->getClosestPoint(unit->getLocation())).lround() <= 14)
+                return false;
+    }
+    return true;
+}
+
+int QuantBot::campaignHelperTargetHouse(const UnitBase* unit) const {
+    const int team = getHouse()->getTeamID();
+    std::array<int64_t, NUM_HOUSES> value{};
+    std::array<bool, NUM_HOUSES> reachable{};
+    for (const auto* building : getStructureList()) {
+        const House* owner = building->getOwner();
+        if (!owner || owner->getTeamID()==team || owner->isNatives() || building->getHealth()<=0
+            || !building->isVisible(team)) continue;
+        const int house = owner->getHouseID();
+        if (house < 0 || house >= NUM_HOUSES) continue;
+        const int price = currentGame->objectData.data[building->getItemID()][building->getProductionHouseID()].price;
+        value[house] += (FixPoint(price)*building->getHealth()/building->getMaxHealth()).lround();
+        if (!reachable[house] && (!unit || groundAttackReachable(unit, building))) reachable[house] = true;
+    }
+    int chosen = -1;
+    for (int house = 0; house < NUM_HOUSES; ++house)
+        if (reachable[house] && (chosen < 0 || value[house] < value[chosen])) chosen = house;
+    return chosen;
+}
+
+const StructureBase* QuantBot::campaignHelperTargetStructure(const UnitBase* unit, int house) const {
+    const StructureBase* chosen = nullptr;
+    int best = std::numeric_limits<int>::max();
+    for (const auto* building : getStructureList()) {
+        if (!building->getOwner() || building->getOwner()->getHouseID()!=house || building->getHealth()<=0
+            || !building->isVisible(getHouse()->getTeamID())) continue;
+        const int d = blockDistance(unit->getLocation(), building->getClosestPoint(unit->getLocation())).lround();
+        if (d > best || (d == best && chosen && building->getObjectID() > chosen->getObjectID())) continue;
+        if (!groundAttackReachable(unit, building)) continue;
+        best = d;
+        chosen = building;
+    }
+    return chosen;
+}
+
 void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius, int* orderBudget) {
     if (!unit || unit->getItemID()==Unit_Saboteur || !unit->isRespondable() || unit->hasATarget()
         || unitRole(unit, {UnitRole::Human, UnitRole::Defence}) != UnitRole::Free
@@ -4132,24 +4637,55 @@ void QuantBot::moveToOptimalSquadPosition(const UnitBase* unit, FixPoint radius,
         ? home : findSquadCenter(getHouse()->getHouseID());
     if (regroup.isInvalid()) regroup = homeAnchored
         ? findSquadCenter(getHouse()->getHouseID(),false) : home;
+    // CampaignHelperFrontPost (default 0): with a Repair Yard, idle support troops wait on rock
+    // between it and the side the enemy comes from instead of on their own centroid.
+    const Coord frontPost = botConfig().force.campaignHelperFrontPost > 0 && unit->getAttackMode()!=RETREAT
+        ? campaignHelperFrontPost() : Coord::Invalid();
+    if (frontPost.isValid()) regroup = frontPost;
+    // CampaignHelperDefenceLeash (default 14): a centroid beyond the leash (troops out with a
+    // wave pull it into the field) is no regroup point; the leash would only send them back.
+    else if (botConfig().force.campaignHelperDefenceLeash > 0 && campaignEconomySupport()
+        && unit->getAttackMode()!=RETREAT && regroup.isValid()) {
+        // With no building left (INT_MAX), or no anchor to offer, the centroid stays.
+        const int regroupTiles = campaignHelperStructureDistance(regroup);
+        if (regroupTiles > botConfig().force.campaignHelperDefenceLeash
+            && regroupTiles != std::numeric_limits<int>::max())
+            if (const Coord anchor = campaignHelperLeashAnchor(); anchor.isValid()) regroup = anchor;
+    }
+    // CampaignHelperRockHold (default 0, docs/campaign-support-research.md): idle campaign
+    // support troops hold the rock around their own base. Their centroid can lie on open
+    // sand, and Area Guard follows a sandworm out there; a unit on rock cannot be eaten.
+    // The front post is rock already and takes precedence.
+    if (!frontPost.isValid() && campaignRockHoldApplies(unit, false)) {
+        const Coord anchor = findBaseCentre(getHouse()->getHouseID());
+        if (anchor.isValid()) {
+            const_cast<UnitBase*>(unit)->setGuardPoint(anchor);
+            if (unit->getAttackMode()!=AREAGUARD) doSetAttackMode(unit,AREAGUARD);
+            holdOnCampaignRock(unit, anchor, radius.lround(), orderBudget, false);
+            return;
+        }
+    }
     if (regroup.isInvalid()) return;
     const_cast<UnitBase*>(unit)->setGuardPoint(regroup);
     if (unit->getAttackMode()!=RETREAT && unit->getAttackMode()!=AREAGUARD) doSetAttackMode(unit,AREAGUARD);
     if (blockDistance(unit->getLocation(),regroup)<=radius
-        && (!recoveryHold || offensiveAssemblySlot(unit->getLocation()))) return;
+        && (!recoveryHold || offensiveAssemblySlot(unit->getLocation()))
+        && (!frontPost.isValid() || getMap().getTile(unit->getLocation())->isRock())) return;
     // A queued path can exist before isMoving becomes true. Leave its destination
     // alone as well, instead of submitting a different slot on the next AI tick.
     const Coord destination=unit->getDestination();
     if (destination.isValid() && destination!=unit->getLocation()
         && blockDistance(destination,regroup)<=radius*2
-        && (!recoveryHold || offensiveAssemblySlot(destination))) return;
+        && (!recoveryHold || offensiveAssemblySlot(destination))
+        && (!frontPost.isValid() || (getMap().tileExists(destination) && getMap().getTile(destination)->isRock()))) return;
     int reactiveBudget=1;
     if (!orderBudget) orderBudget=&reactiveBudget;
     if (*orderBudget<=0 || currentGame->getPathRequestQueueSize()>150) return;
     const auto offset=SimpleArmyPolicy::rallyOffset(unit->getObjectID(),radius.lround(),[&](int x,int y) {
         const Coord p=regroup+Coord(x,y);
         return getMap().tileExists(p) && unit->canPass(p.x,p.y) && dangerAt(p)==0 && !onPlannedSite(p)
-            && (!recoveryHold || offensiveAssemblySlot(p));
+            && (!recoveryHold || offensiveAssemblySlot(p))
+            && (!frontPost.isValid() || getMap().getTile(p)->isRock());
     });
     if (!offset) return;
     const Coord p=regroup+Coord(offset->first,offset->second);
@@ -4384,6 +4920,8 @@ void QuantBot::retreatAllUnits() {
         updateHuntParties();
         // Force concentration (test-only candidates, docs/formations.md "Concentrating force").
         concentrateForces();
+        // Mass Carryall manoeuvres (default off; docs/formations.md, "Mass Carryall manoeuvres").
+        updateAirlift();
         // Test-only harvester raids (docs/ai-play-styles.md; none in a real game).
         updateStyleRaiders();
         const bool preserving = retreatPreserveActive();
@@ -4393,6 +4931,11 @@ void QuantBot::retreatAllUnits() {
         // most one idle ranged unit sent to burst a useful bloom, before the rally claims it.
         updateSpiceBloomHarvest(harvesterRaid);
         int rallyOrdersRemaining=4;
+        // Campaign helper tactics (default off, QuantBotConfig.h): each pass flag tests its
+        // switch first, so with the switch off none of their functions runs.
+        const bool helperLeash = config.force.campaignHelperDefenceLeash > 0 && campaignEconomySupport();
+        const bool helperFocusFire = config.force.campaignHelperFocusFire && campaignEconomySupport();
+        const bool helperSingleTarget = config.force.campaignHelperSingleTarget && campaignEconomySupport();
         int combatCount=0;
         for (const auto* unit:getUnitList()) if (unit->getOwner()==getHouse() && unit->isActive()
             && unit->isAGroundUnit() && unit->canAttack()) ++combatCount;
@@ -4400,7 +4943,8 @@ void QuantBot::retreatAllUnits() {
         if (recoveryActive()) rallyRadius=armyAssemblyRadius();
         else while (rallyRadius*rallyRadius*2<std::max(1,combatCount)) ++rallyRadius;
         for (auto it=defenceResponseCycles.begin();it!=defenceResponseCycles.end();)
-            if (getGameCycleCount()-it->second>MILLI2CYCLES(30000)) it=defenceResponseCycles.erase(it); else ++it;
+            if (getGameCycleCount()-it->second>MILLI2CYCLES(config.force.campaignHelperCounterAttack > 0
+                && campaignEconomySupport() ? 90000 : 30000)) it=defenceResponseCycles.erase(it); else ++it;
         // Use rally location instead of squad center to avoid constant destination changes
         Coord squadCenterLocation = squadRallyLocation;
         if(!builderOnly()) {
@@ -4438,6 +4982,11 @@ void QuantBot::retreatAllUnits() {
             if (pUnit->getItemID()==Unit_Saboteur) continue;
             if (ModManager::instance().isTornieFamilyContentActive() && pUnit->getAttackMode() == SABOTAGE) continue;
             if (pUnit->getOwner()==getHouse() && unitRole(pUnit, {UnitRole::Human}) != UnitRole::Free) continue;
+            // The Fremen Palace worm has a controller of its own; a wild worm has none here.
+            if (pUnit->getItemID()==Unit_Sandworm) {
+                if (pUnit->getOwner()==getHouse()) managePalaceWorm(static_cast<const Sandworm*>(pUnit));
+                continue;
+            }
             // A captured Devastator is worth exactly one thing, so arm it at the first scan
             // that sees it - ahead of kiting, campaign holds, rally, escort and every other
             // role early return that would otherwise keep deferring the order. Support mode
@@ -4492,6 +5041,66 @@ void QuantBot::retreatAllUnits() {
                     }
                 }
                 continue;
+            }
+            // CampaignHelperDefenceLeash: a home troop does not chase beyond the leash.
+            if (helperLeash && campaignHelperLeash(pUnit, rallyRadius, rallyOrdersRemaining)) continue;
+            // CampaignHelperFocusFire: a troop shooting at a hostile unit switches to a Deviator,
+            // Sonic Tank or Launcher close by, at most once per 2 game seconds.
+            if (helperFocusFire && pUnit->getOwner()==getHouse() && pUnit->isAGroundUnit() && pUnit->isActive()
+                && pUnit->isRespondable() && rallyOrdersRemaining>0 && campaignCombatUnit(pUnit)
+                && campaignHelperOrderSlot(pUnit, 2000)
+                && unitRole(pUnit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free) {
+                const auto* target = pUnit->getTarget();
+                if (target && target->isAUnit() && !target->isAFlyingUnit() && target->getHealth()>0
+                    && target->getOwner() && target->getOwner()->getTeamID()!=getHouse()->getTeamID())
+                    if (const auto* victim = campaignHelperPriorityTarget(pUnit,
+                            campaignHelperPriorityRank(target->getItemID()))) {
+                        doAttackObject(pUnit, victim, !pUnit->isInWeaponRange(victim));
+                        // A defender keeps the contact it was sent to; the new victim becomes it.
+                        if (const auto assigned = defenceAssignments.find(pUnit->getObjectID());
+                            assigned != defenceAssignments.end())
+                            if (const auto* contact = getObject(assigned->second); contact && contact->isAUnit())
+                                assigned->second = victim->getObjectID();
+                        --rallyOrdersRemaining;
+                        traceDecision("helper_focus_fire", AITelemetry::Record().set("unit", pUnit->getObjectID())
+                            .set("target", victim->getObjectID()).set("target_item", victim->getItemID())
+                            .set("replaced", target->getObjectID()).set("reason", "upkeep")
+                            .set("hunting", pUnit->getAttackMode()==HUNT));
+                        continue;
+                    }
+            }
+            // CampaignHelperSingleTarget: a wave troop on another enemy house's building hunts its
+            // way to the chosen house's nearest building, at most once per 5 game seconds, and
+            // never while a hostile unit is in its weapon range or shooting at it.
+            if (helperSingleTarget && pUnit->getOwner()==getHouse() && pUnit->getAttackMode()==HUNT
+                && pUnit->isAGroundUnit() && pUnit->isActive() && pUnit->isRespondable() && rallyOrdersRemaining>0
+                && campaignCombatUnit(pUnit) && campaignHelperOrderSlot(pUnit, 5000)
+                && unitRole(pUnit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free) {
+                const auto* target = pUnit->getTarget();
+                const int team = getHouse()->getTeamID();
+                const int house = target && target->isAStructure() && target->getOwner()
+                    && target->getOwner()->getTeamID()!=team ? campaignHelperTargetHouse(pUnit) : -1;
+                if (house >= 0 && target->getOwner()->getHouseID()!=house) {
+                    bool engaged = false;
+                    for (const auto* enemy : getUnitList()) {
+                        if (!enemy->getOwner() || enemy->getOwner()->getTeamID()==team || enemy->getHealth()<=0
+                            || !enemy->isActive()) continue;
+                        if ((enemy->isVisible(team) && pUnit->isInWeaponRange(enemy)) || enemy->getTarget()==pUnit) {
+                            engaged = true;
+                            break;
+                        }
+                    }
+                    if (!engaged)
+                        if (const auto* goal = campaignHelperTargetStructure(pUnit, house)) {
+                            const Coord at = goal->getClosestPoint(pUnit->getLocation());
+                            traceDecision("helper_single_target", AITelemetry::Record().set("unit", pUnit->getObjectID())
+                                .set("from_house", target->getOwner()->getHouseID()).set("to_house", house)
+                                .set("goal", goal->getObjectID()));
+                            doHuntToward(pUnit, at.x, at.y);
+                            --rallyOrdersRemaining;
+                            continue;
+                        }
+                }
             }
             // Dispatched Custom attackers belong to engine Hunt. Ordinary
             // scans cannot kite them, assign prey, crush targets or regroup them.
@@ -4560,6 +5169,21 @@ void QuantBot::retreatAllUnits() {
                 }
             }
 
+            // CampaignHelperRockHold 2 and 3: a support troop whose Area Guard target is a sandworm
+            // is called back to the rock instead of following the worm onto the sand.
+            // The switch is tested first: getTarget() resolves the unit's target pointer and
+            // clears one whose object is gone, which must not happen while the switch is off.
+            if (pUnit->getOwner() == getHouse() && campaignRockHoldApplies(pUnit, true) && pUnit->getTarget()
+                && pUnit->getTarget()->getItemID() == Unit_Sandworm
+                && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
+                && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur
+                && unitRole(pUnit, {UnitRole::Human, UnitRole::Repair}) == UnitRole::Free) {
+                const Coord anchor = findBaseCentre(getHouse()->getHouseID());
+                if (anchor.isValid()) {
+                    holdOnCampaignRock(pUnit, anchor, rallyRadius, nullptr, true);
+                    continue;
+                }
+            }
             if (bundling && pUnit->getOwner() == getHouse() && pUnit->isAGroundUnit()
                 && pUnit->isRespondable() && pUnit->isActive() && pUnit->canAttack()
                 && !QuantBotInternal::harvesterItem(pUnit->getItemID()) && pUnit->getItemID() != Unit_Saboteur
@@ -4607,6 +5231,23 @@ void QuantBot::retreatAllUnits() {
 						if(getAIRefineryBays() < 4
 							&& getHouse()->getCredits() < 1000
                             && pHarvester->getAmountOfSpice() >= pHarvester->getSpiceCapacity()/2) {
+                            doReturn(pHarvester);
+                        }
+                        // CampaignHelperEarlyUnload (default off): until its fourth refinery is
+                        // built, the support house banks partial loads so the next refinery is
+                        // funded sooner. Only a worker harvesting or standing idle in the field;
+                        // returning, carried, awaiting pickup and human-ordered ones keep their
+                        // orders. The switch is tested first, before any call.
+                        if (botConfig().force.campaignHelperEarlyUnload > 0 && campaignEconomySupport()
+                            && getHouse()->getNumItems(Structure_Refinery) > 0
+                            && getHouse()->getNumItems(Structure_Refinery) < 4
+                            && !pHarvester->isReturning() && !pHarvester->isPickedUp()
+                            && !pHarvester->isAwaitingPickup() && !pHarvester->wasForced()
+                            && (pHarvester->isHarvesting() || !pHarvester->isMoving())
+                            && pHarvester->getAmountOfSpice() > 0
+                            && pHarvester->getAmountOfSpice() * 100
+                                >= pHarvester->getSpiceCapacity() * botConfig().force.campaignHelperEarlyUnload
+                            && unitRole(pHarvester, {UnitRole::Human}) == UnitRole::Free) {
                             doReturn(pHarvester);
                         }
 

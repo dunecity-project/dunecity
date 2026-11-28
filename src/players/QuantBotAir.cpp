@@ -455,7 +455,9 @@ bool QuantBot::tryLaunchOrnithopterStrike(const QuantBotConfig::DifficultySettin
         // over it at all, and no wing size buys passage into that cover.
         bool strictCover=false;
         if(offensiveRaids) {
-            if (rank==AirStrikePolicy::RaidRank && !diffSettings.ornithopterAttackEnabled) return;
+            // A Medium campaign opponent raids whatever its saved Medium_OrnithopterAttackEnabled says.
+            if (rank==AirStrikePolicy::RaidRank && !diffSettings.ornithopterAttackEnabled
+                && difficulty!=Difficulty::Medium) return;
         } else if(rank==AirStrikePolicy::RaidRank) {
             if(!object->isAStructure() || !diffSettings.attackEnabled
                 || !AirStrikePolicy::opportunisticBaseStructure(object->getItemID())) return;
@@ -668,10 +670,12 @@ bool QuantBot::managesAutonomousOrnithopter(const UnitBase* unit) const {
 
 bool QuantBot::autonomousAircraftRaids() const {
     // Offensive air hunts are a Hard and Brutal behaviour, by decision of the
-    // project owner. The difficulty decides, not the configured flag: a copied
-    // settings block must not be able to re-open unit raids on Easy or Medium.
-    return !builderOnly()
-        && (difficulty==Difficulty::Hard || difficulty==Difficulty::Brutal);
+    // project owner; since 2026-11-22 a Medium campaign opponent raids too
+    // (CampaignMediumAirRaids). The difficulty decides, not the configured flag: a
+    // copied settings block must not be able to re-open unit raids on Easy, or on
+    // Medium outside a campaign opponent.
+    return !builderOnly() && CampaignDifficultyPolicy::raidsWithAircraft(static_cast<int>(difficulty),
+        isCampaignEnemy(), botConfig().force.campaignMediumAirRaids);
 }
 
 bool QuantBot::aircraftDefenceTarget(const ObjectBase* candidate) const {

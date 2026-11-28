@@ -3,6 +3,8 @@
 #include <Menu/RandomSkirmishMenu.h>
 #include <Menu/CivWarsMenu.h>
 #include <units/Carryall.h>
+#include <units/AmbientAirplane.h>
+#include <dunecity/CityAircraftPolicy.h>
 #include "../units/civ-wars-worm-respawn.inc"
 #include <Menu/CustomGameMenu.h>
 #include <Menu/PlaySetup.h>
@@ -27,10 +29,18 @@
 #include <units/UnitBase.h>
 #include <units/InfantryBase.h>
 #include <dunecity/CitySimulation.h>
+#include <dunecity/TrafficSimulation.h>
 #include <GameInterface.h>
 #include <GUI/ObjectInterfaces/ResearchLabInterface.h>
 #include <dunecity/CityConstants.h>
 #include <dunecity/CityEffects.h>
+#include <dunecity/CitySpritePolicy.h>
+#include <structures/ConstructionYard.h>
+#include <players/ParkDistrictPolicy.h>
+#include <players/CityPlacementPolicy.h>
+#include <players/RedevelopmentPolicy.h>
+#include <players/QuantBotConfig.h>
+#include <Command.h>
 #include <mod/ModManager.h>
 #include <misc/FileSystem.h>
 #include <misc/IMemoryStream.h>
@@ -40,10 +50,14 @@
 #include <misc/string_util.h>
 #include <sand.h>
 
+#include <algorithm>
 #include <cstdlib>
+#include <cstring>
+#include <cmath>
 #include <deque>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 
 void startCivWarsProbeGame(const GameInitSettings& init);
@@ -117,6 +131,16 @@ Params caseParams(const std::string& name) {
         p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "vanilla"; p.mode = Mode::Vanilla;
         p.playerSide = Side{"qBotFighterMedium", BaseSize::Medium, 3, 0};
         p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 0};
+    } else if(name == "city-redevelop") {
+        // The city-park match: one QuantBot with a Medium base and city (redevelop-probe.inc).
+        p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "dunecity"; p.mode = Mode::DuneCity;
+        p.playerSide = Side{"", BaseSize::Medium, 3, 2};
+        p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 3};
+    } else if(name == "city-park") {
+        // The player's own Medium base and 5,000-people city beside one QuantBot (park-probe.inc).
+        p.mapSize = 96; p.allies = 0; p.enemies = 1; p.mod = "dunecity"; p.mode = Mode::DuneCity;
+        p.playerSide = Side{"", BaseSize::Medium, 3, 2};
+        p.enemySide = Side{"qBotMedium", BaseSize::Medium, 3, 3};
     } else {
         skirmishRequire(false, "Unknown probe case " + name);
     }
@@ -667,6 +691,124 @@ void runSpectate() {
 }
 
 /**
+    Stefan's spectated Random Skirmish on 2026-11-24 ("planes now appear to be invisible. can't
+    see it on screen during testing on mba"), started from his own saved settings, which the
+    runner writes into the profile: Spectate, 192x192, four qBotBrutal houses with Fortress bases
+    and cities, seed 262441038, Game Speed 2, the 2x zoom, a 960x600 window. The match plays to
+    its first City Airplane, which must fly within the five-minute opening and one Airport tick
+    (CityAircraft::kFreePlaneMs), and follows it until it cruises. The game's own renderer then
+    draws the view centred on it twice, once with the plane moved off the map: the plane must
+    change pixels where it flies and its white cross must change the radar (spectate-plane.png,
+    spectate-plane-crop.png, spectate-plane-radar.png). The log gives how long the plane takes
+    to cross the view at his speed and at the default speed.
+*/
+void runSpectatePlanes() {
+    namespace CA = DuneCity::CityAircraft;
+    GameInitSettings watched;
+    {
+        RandomSkirmishMenu menu;
+        skirmishRequire(menu.spectateBox.isChecked() && menu.seedBox.getText() == "262441038",
+                        "Stefan's saved Random Skirmish settings were not loaded");
+        skirmishRequire(menu.prepareStart(watched), "Start could not prepare Stefan's spectated match");
+    }
+    skirmishRequire(watched.isLocalSpectator(), "Stefan's start is not a local-spectator start");
+    auto game = startMatch(watched);
+    skirmishRequire(game->isObserving(), "Stefan's match is not observed");
+    const int speed = game->getGameSpeed();
+    SDL_Log("SKIRMISH_PROBE: spectated plane match map=%dx%d game_speed=%d zoom=%d view=%dx%d", currentGameMap->getSizeX(),
+            currentGameMap->getSizeY(), speed, currentZoomlevel, screenborder->getRight() - screenborder->getLeft(),
+            screenborder->getBottom() - screenborder->getTop());
+
+    // The first plane, then a second and a half of flight: past the take-off frames, cruising.
+    const Uint32 deadline = MILLI2CYCLES(CA::kFreePlaneMs + 5000);
+    Uint32 launched = 0;
+    while(!game->finished && launched == 0 && game->getGameCycleCount() <= deadline) {
+        game->updateGameState();
+        if(!AmbientAirplane::all().empty()) launched = game->getGameCycleCount();
+    }
+    skirmishRequire(launched > 0, "No City Airplane flew in the first five minutes and one Airport tick");
+    SDL_Log("SKIRMISH_PROBE: first city plane launched at cycle %u (%.2f game minutes), %zu in the air", launched,
+            launched * GAMESPEED_DEFAULT / 60000.0, AmbientAirplane::all().size());
+    AmbientAirplane* plane = nullptr;
+    for(Uint32 until = launched + MILLI2CYCLES(30000); plane == nullptr && game->getGameCycleCount() < until;) {
+        game->updateGameState();
+        if(game->getGameCycleCount() < launched + MILLI2CYCLES(1500)) continue;
+        for(AmbientAirplane* p : AmbientAirplane::all())
+            if(p->getTakeoffFrame() == 0 && currentGameMap->tileExists(p->getLocation())) { plane = p; break; }
+    }
+    skirmishRequire(plane != nullptr, "No City Airplane cruised over the map after the first launch");
+
+    // Speed over the ground, for the time a plane spends in Stefan's view.
+    const FixPoint x0 = plane->getRealX(), y0 = plane->getRealY();
+    const Uint32 id = plane->getObjectID();
+    for(int i = 0; i < 10; ++i) game->updateGameState();
+    plane = dynamic_cast<AmbientAirplane*>(game->getObjectManager().getObject(id));
+    skirmishRequire(plane != nullptr, "The followed plane was gone ten cycles later");
+    const double perCycle = std::hypot((plane->getRealX() - x0).toDouble(), (plane->getRealY() - y0).toDouble()) / 10.0;
+    const int viewWidth = screenborder->getRight() - screenborder->getLeft();
+    const double crossCycles = perCycle > 0 ? viewWidth / perCycle : 0;
+    SDL_Log("SKIRMISH_PROBE: plane %u house=%d speed=%.2f world units a cycle; it crosses the %d-unit view in %.0f cycles: "
+            "%.0f ms of real time at Game Speed %d, %.0f ms at the default %d", id, plane->getOwner()->getHouseID(), perCycle,
+            viewWidth, crossCycles, crossCycles * speed, speed, crossCycles * GAMESPEED_DEFAULT, GAMESPEED_DEFAULT);
+
+    // Draw the view on the plane, then the same view with the plane far off the screen.
+    screenborder->setNewScreenCenter(Coord(lround(plane->getRealX()), lround(plane->getRealY())));
+    const auto draw = [&game]() {
+        SDL_SetRenderTarget(renderer, screenTexture);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        game->drawScreen();
+        auto image = renderReadSurface(renderer);
+        SDL_SetRenderTarget(renderer, nullptr);
+        skirmishRequire(image != nullptr, "Could not read back the game view");
+        return image;
+    };
+    const int screenX = screenborder->world2screenX(plane->getRealX());
+    const int screenY = screenborder->world2screenY(plane->getRealY());
+    auto shown = draw();
+    const FixPoint realX = plane->realX;
+    plane->realX = FixPoint(-100 * TILESIZE);    // off the view and off the radar
+    auto hidden = draw();
+    plane->realX = realX;
+    skirmishRequire(shown->w == hidden->w && shown->h == hidden->h && shown->format->format == hidden->format->format,
+                    "The two views were read back differently");
+    const int bytes = shown->format->BytesPerPixel;
+    // Right of the map view is the sidebar with the radar: there the plane is its white cross.
+    const int boardRight = screenborder->screenRect.x + screenborder->screenRect.w;
+    int changed = 0, nearPlane = 0, onRadar = 0, left = shown->w, right = -1, top = shown->h, bottom = -1;
+    for(int y = 0; y < shown->h; ++y) {
+        const auto* a = static_cast<const Uint8*>(shown->pixels) + y * shown->pitch;
+        const auto* b = static_cast<const Uint8*>(hidden->pixels) + y * hidden->pitch;
+        for(int x = 0; x < shown->w; ++x) {
+            if(std::memcmp(a + x * bytes, b + x * bytes, bytes) == 0) continue;
+            ++changed;
+            if(x >= boardRight) { ++onRadar; continue; }
+            left = std::min(left, x); right = std::max(right, x); top = std::min(top, y); bottom = std::max(bottom, y);
+            if(std::abs(x - screenX) <= 64 && std::abs(y - screenY) <= 64) ++nearPlane;
+        }
+    }
+    const std::string path = probeOut("spectate-plane.png");
+    skirmishRequire(SavePNG(shown.get(), path.c_str()) == 0, "Could not write " + path);
+    {
+        SDL_Rect crop{std::clamp(screenX - 80, 0, std::max(0, shown->w - 160)), std::clamp(screenY - 80, 0, std::max(0, shown->h - 160)),
+                      std::min(160, shown->w), std::min(160, shown->h)};
+        sdl2::surface_ptr part{SDL_CreateRGBSurfaceWithFormat(0, crop.w * 3, crop.h * 3, 32, SDL_PIXELFORMAT_RGBA32)};
+        skirmishRequire(part != nullptr && SDL_BlitScaled(shown.get(), &crop, part.get(), nullptr) == 0, "Could not crop the plane");
+        skirmishRequire(SavePNG(part.get(), probeOut("spectate-plane-crop.png").c_str()) == 0, "Could not write the crop");
+        SDL_Rect radar{boardRight, 0, shown->w - boardRight, std::min(150, shown->h)};
+        sdl2::surface_ptr side{SDL_CreateRGBSurfaceWithFormat(0, radar.w * 3, radar.h * 3, 32, SDL_PIXELFORMAT_RGBA32)};
+        skirmishRequire(side != nullptr && SDL_BlitScaled(shown.get(), &radar, side.get(), nullptr) == 0, "Could not crop the radar");
+        skirmishRequire(SavePNG(side.get(), probeOut("spectate-plane-radar.png").c_str()) == 0, "Could not write the radar crop");
+    }
+    SDL_Log("SKIRMISH_PROBE: plane drawn at screen %d,%d: %d pixels changed, %d within 64 of it, box %d,%d-%d,%d, "
+            "%d on the radar; screenshot %s", screenX, screenY, changed, nearPlane, left, top, right, bottom, onRadar, path.c_str());
+    skirmishRequire(nearPlane >= 150, "The cruising City Airplane is not visible in the rendered view");
+    // The cross is nine pixels; terrain under it may already be white in a few.
+    skirmishRequire(onRadar >= 5, "The cruising City Airplane is not marked on the radar");
+    endMatch(game);
+}
+
+/**
     Multiplayer Random map, host side and a second peer, against the real menus and engine:
     Custom Game (LAN host) offers Random map...; its screen has no allies/enemies/AI rows and
     mirrors starts by default; Next saves an open-start map to MP User Maps; the host's map
@@ -869,6 +1011,8 @@ void runMultiplayerLobby() {
 }
 
 #include "civ-wars-probe.inc"
+#include "park-probe.inc"
+#include "redevelop-probe.inc"
 
 }
 
@@ -884,10 +1028,13 @@ int runSkirmishProbe() {
     else if(kind == "mp-lobby") runMultiplayerLobby();
     else if(kind == "legacy-map") runLegacyMap();
     else if(kind == "spectate") runSpectate();
+    else if(kind == "spectate-planes") runSpectatePlanes();
     else if(kind == "render") runRender();
     else if(kind == "civ-menu") runCivMenu();
     else if(kind == "civ-research") runCivResearch();
     else if(kind == "civ-1v1" || kind == "civ-2v2" || kind == "civ-3v3") runCivMatch(kind);
+    else if(kind == "city-park") ParkProbe::runParkProbe();
+    else if(kind == "city-redevelop") RedevelopProbe::runRedevelopProbe();
     else runMatch(kind, std::getenv("SKIRMISH_PROBE_SMOKE") != nullptr);
     SDL_Log("SKIRMISH_PROBE_PASS: %s", kind.c_str());
     return MENU_QUIT_DEFAULT;

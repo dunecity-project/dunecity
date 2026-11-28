@@ -53,10 +53,11 @@ private:
     void onHowToPlay() const;
     void onQuit();
 
-    /// Show the one-time "Enable Dune City mod?" prompt the first time
-    /// the user lands on the main menu and the city-sim mod isn't
-    /// already active. Tracked via a marker file in the user config
-    /// directory so it only appears once per install.
+    /// Show the one-time mod tip (an OK-only message saying how to choose
+    /// Dune City, Tornie, Dune2R and other mods) the first time the user
+    /// lands on the main menu and the city-sim mod isn't already active.
+    /// Tracked via a marker file in the user config directory so it only
+    /// appears once per install.
     void showFirstLaunchCityPromptIfNeeded();
 
     /// Refresh the footer mod/version label from the current
@@ -69,9 +70,9 @@ private:
     PictureLabel logoPicture;
     PictureLabel buttonBorder;
 
-    TextButton      continueButton, customButton, randomSkirmishButton, civWarsButton, onlineButton, loadButton;
-    bool canContinue = false;
+    TextButton      customButton, randomSkirmishButton, civWarsButton, onlineButton, loadButton;
     TextButton      campaignButton;
+    TextButton      duneCityCampaignButton; ///< The ten-mission DuneCity campaign (misc/DuneCityCampaign.h).
     TextButton      modesButton;
     TextButton      editorsButton;
     TextButton      dune2rEditorButton;
@@ -103,9 +104,9 @@ private:
     /// outlives the individual MainMenu instance.
     static bool updatePromptOfferedThisLaunch;
 
-    // First-launch "Enable city-sim mod?" prompt state.
-    bool bFirstLaunchPromptChecked = false; ///< Have we evaluated whether to show the prompt this session?
-    bool bFirstLaunchPromptOpen    = false; ///< Is the prompt QstBox currently open (so we can route its result)?
+    // First-launch mod tip state.
+    bool bFirstLaunchPromptChecked = false; ///< Have we evaluated whether to show the tip this session?
+    bool bFirstLaunchPromptOpen    = false; ///< Is the tip MsgBox open (so closing it writes the marker)?
 };
 
 #endif // MAINMENU_H

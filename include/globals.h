@@ -179,6 +179,14 @@ std::string userGameOptionsSection();
 void writeGameOptionsToConfig(INIFile& config, const std::string& section, const SettingsClass::GameOptionsClass& options);
 /// Overlays the keys present in the given config section onto options.
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options);
+/// The player's saved Dune City rule choices and the key that says its Manual Carryall Drops
+/// value was saved after "on" became what a Dune City profile gets (revision 1).
+extern const char* const kDuneCityGameOptionsSection;
+extern const char* const kCarryallDropDefaultKey;
+/// Once per profile: drops a Manual Carryall Drops "off" stored in the Dune City section before
+/// revision 1, so the mod's default (on) reaches that player, and records the revision. Returns
+/// true when the configuration changed and must be saved. Later choices are never touched.
+bool adoptCarryallDropDefault(INIFile& config);
 /// Makes options the new defaults: updates settings, the config file (base
 /// section and the per-mod override) and the effective options.
 void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options);

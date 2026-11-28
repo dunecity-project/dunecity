@@ -89,6 +89,9 @@ private:
     void refreshTable();
     /// Shortens \a text with an ellipsis until it fits \a width at \a fontSize.
     static std::string fitText(const std::string& text, int width, int fontSize);
+    /// The name a unit type is listed under in this window: the game's item name, except the
+    /// City Airplane, whose item name is still "Ambient Airplane" in the unit data files.
+    static std::string unitName(int itemID);
 
     struct LedgerEntry {
         Uint32 itemID = 0;
@@ -120,7 +123,12 @@ private:
     Label allocationStateLabel;
     HBox allocationHeader;
     Label allocationNameHeader, allocationPerformanceHeader, allocationGoalHeader;
-    std::array<AllocationRow, UnitMixPolicy::kSlots> allocationRows;
+    /// The ten unit-mix slots, then two types the mix does not allocate but the house still
+    /// spends on: the Trooper (the infantry lane, under its own cap) and the City Airplane
+    /// (bought on its score). Stefan, 2026-11-23: "i can't see the % for troopers or airplanes".
+    static constexpr size_t kTrooperRow = UnitMixPolicy::kSlots;
+    static constexpr size_t kPlaneRow = UnitMixPolicy::kSlots + 1;
+    std::array<AllocationRow, UnitMixPolicy::kSlots + 2> allocationRows;
     Label allocationNoteLabel;
 
     Label tableHeadingLabel;

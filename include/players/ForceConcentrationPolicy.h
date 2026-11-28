@@ -299,6 +299,131 @@ inline int perimeterTurretGoal(int64_t own, int64_t enemy) {
     return int(std::min<int64_t>(kPerimeterTurretsMax, (enemy - std::max<int64_t>(0, own)) / kPerimeterCreditsPerTurret));
 }
 
+// ---- Turret clusters and the held mass (TurretClusters / MassHold, default off) -------------
+//
+// Stefan, 2026-11-21 (save nobuildup): a house that is losing should defend with rocket turret
+// clusters and build its army up, not feed one unit at a time into a defence it cannot win.
+
+/// TurretClusters: while outnumbered, every core building (yard, factories, refinery, port,
+/// repair yard) is filled up to kClusterPerCore rocket turrets within kClusterReachTiles, at most
+/// kClusterTurretsMax in all, funded ahead of units (Stefan, 2026-11-21: "for defence the AI
+/// should just build more rocket turret clusters and then build up").
+/// v1 (one per 1,000 credits of the enemy lead, 4 per core within 4 tiles, max 16) and v2 (one
+/// per 1,000 credits of the enemy estimate, 8 per core within 5 tiles, max 40) never placed a
+/// turret in 24 games of Stefan's lobby: a Fortress start already rings every core with more
+/// turrets than either goal (docs/formations.md, "Turret clusters and the held mass").
+constexpr int kClusterTurretsMax = 40;
+constexpr int kClusterPerCore = 8;
+constexpr int kClusterReachTiles = 5;
+inline int clusterTurretGoal(int64_t own, int64_t enemy) {
+    return outnumbered(own, enemy) ? kClusterTurretsMax : 0;
+}
+/// PalaceTurrets (default off; Stefan, 2026-11-22: "the ai isn't defending palaces with rocket
+/// turrets", save notdefendpalace; then "you want to protect from ornithopts, so one or more is
+/// fine"): every own Palace keeps kPalaceGuardTurrets Rocket Turrets within kClusterReachTiles -
+/// anti-air, so Gun Turrets neither count nor stand in - bought whenever cash covers the price plus
+/// the city working reserve and any Palace or reactor savings, never saved for (the TurretClusters
+/// lesson: turrets funded ahead of units lose games; a guard bought from Palace savings cost 0.4
+/// Palaces a game in the 2026-11-22 screen). Spare cash only (2,000 above the price) bought 2
+/// turrets in 36 minutes of notdefendpalace: the houses hold ~400 credits, a Rocket Turret costs 250.
+constexpr int kPalaceGuardTurrets = 1;
+// ---- Directed waves (CounterPunch / LeaderRaid / GangUpLeader, default off) ---------------------
+//
+// Stefan, 2026-11-21: the held mass should hit back with momentum. A weak house cannot beat the
+// leader's army head-on, so these pick the moment (a broken attack, the leader's army away) or the
+// target (a runaway leader) instead.
+
+/// CounterPunch: a ground defence at home within kCounterWindowMs, nothing hostile within
+/// kCounterClearTiles of our buildings, then the house that has the most visible ground value
+/// within kCounterAttackerTiles of our base centre is the target.
+constexpr int kCounterWindowMs = 90000;
+constexpr int kCounterClearTiles = 14;
+constexpr int kCounterAttackerTiles = 48;
+/// At most one directed launch per this long after the last wave left, and none while it hunts.
+constexpr int kDirectedRepeatMs = 180000;
+/// LeaderRaid: at least kRaidAwayBps of the leader's visible ground value stands beyond
+/// kRaidAwayTiles of its base centre, and our ground army is kRaidStrengthBps of its guard (ground
+/// units and turrets within kRaidHomeTiles of that centre).
+constexpr int kRaidAwayTiles = 32;
+constexpr int kRaidAwayBps = 6000;
+constexpr int kRaidHomeTiles = 24;
+constexpr int kRaidStrengthBps = 15000;
+/// GangUpLeader: a runaway leader has at least every other enemy's visible ground value combined
+/// and kGangUpOwnBps of ours.
+constexpr int kGangUpOwnBps = 15000;
+
+// ---- City economy (NuclearConsolidation / PalaceDistricts, default off) -------------------------
+//
+// Stefan, 2026-11-21: "palaces are an effective way to boost value. you can delete buildings to make
+// room to add them into residential / commercial areas. furthermore you can delete windtraps and have
+// nuclear to free up space." A Nuclear Plant (3x3, 2,000 power) replaces 20 Wind Traps (2x2 each);
+// a Palace pays R+C tax and adds +40 land value within 8 tiles (tax scales with land value).
+
+/// NuclearConsolidation: from this many Wind Traps a Nuclear Plant is funded ahead of units while
+/// the Wind Traps cannot yet be retired, and Wind Traps are demolished (nearest the city first)
+/// while produced power minus their output still covers demand plus the city power reserve.
+constexpr int kConsolidateWindTraps = 10;   // 3 (tried 2026-11-21): -1.03 in Brutal v Hard duels, an early 2,000-credit reactor before any army
+/// ... and always keeps this many: a Wind Trap is the prerequisite of the Nuclear Plant (and of the
+/// refinery, radar and factories), so retiring the last one makes the next reactor unbuildable.
+constexpr int kKeepWindTraps = 2;
+/// ... and only when the base is low on building room (Stefan, 2026-11-27: "windtraps being destroyed
+/// should only be when the ai is low on free building space. if it has space it should keep the
+/// windtraps, not blow them up"). Low on room is what the rock survey already measures: the base is
+/// built out (fewer than QuantBotColonisationPolicy::kCrampedFootprints free 2x2 footprints, or no
+/// site for a production building), or fewer than this many free rock tiles in its build range.
+constexpr int kWindTrapRetireFreeRock = 48;
+inline bool windTrapRetirementRoomLow(bool builtOut, int freeRock) {
+    return builtOut || freeRock < kWindTrapRetireFreeRock;
+}
+/// PalaceDistricts: every R+C district gets a Palace (R+C tax and +40 land value within
+/// kPalaceReachTiles) where one can be built; a house that cannot build one yet gets one Stadium
+/// (the same +40, tech 4; only one: "palaces are more efficient otherwise") -
+/// wherever at least kPalaceDistrictMinLots R+C lots that no Palace or Stadium reaches yet stand
+/// within kPalaceReachTiles of its centre; no other cap (Stefan, 2026-11-21: "we want the ai to
+/// increase its land value to get more tax. why would we limit"). Own lots of at most
+/// kPalaceClearDensity in its footprint are demolished (at most 4), nothing else.
+/// v1 (Palaces only, one per 30 R+C lots, at most 4, 12 lots per site) is recorded in
+/// docs/formations.md, "Economy: nuclear consolidation and palace districts".
+constexpr int kPalaceDistrictMinLots = 8;
+/// v5: core projects - a reactor from kConsolidateWindTraps Wind Traps and one Palace per
+/// kPalaceLotsPerPalace R+C lots (at most kPalaceOutnumberedMax, kPalaceOutnumberedMinLots lots per
+/// site, the v1 limits) - are funded ahead of units. Everything beyond them (more Palaces down to
+/// kPalaceDistrictMinLots lots, Stadiums, a reactor from kKeepWindTraps + 1 Wind Traps) is bought only
+/// from cash kSpareCashReserve above its price, never saved for (v2-v4 spent ahead of units and cost a
+/// weaker house its opening).
+constexpr int kSpareCashReserve = 2000;
+/// LandmarkAnchoring (default off; a human builder's 1v1, 2026-11-21: a Stadium went down at minute 6
+/// before any lot near it, 37 R/C lots then filled its reach, no industry within 8 tiles of any
+/// landmark, 72% of all lots in reach): a new R/C lot in reach of an own Palace or Stadium scores
+/// kLandmarkLotBonus more, an industrial lot that much less; a landmark site counts free buildable
+/// tiles in its reach as room, one lot per kLandmarkRoomTilesPerLot tiles (a lot plus its road), and
+/// the first landmark is planned once the house has kLandmarkFirstLots R+C lots.
+constexpr int kLandmarkLotBonus = 60;
+constexpr int kLandmarkRoomTilesPerLot = 6;
+constexpr int kLandmarkFirstLots = 4;
+constexpr int kPalaceLotsPerPalace = 30;
+constexpr int kPalaceOutnumberedMax = 4;
+constexpr int kPalaceOutnumberedMinLots = 12;
+inline int outnumberedPalaceCap(int residentialAndCommercialLots) {
+    return std::clamp(residentialAndCommercialLots / kPalaceLotsPerPalace, 1, kPalaceOutnumberedMax);
+}
+constexpr int kPalaceReachTiles = 8;
+constexpr int kPalaceClearDensity = 1;
+/// A landmark site scores 10 per R+C lot it reaches (a lot gaining the landmark's +40 land value)
+/// and pays kPalaceClearLotCost per own lot it demolishes. PalaceDenseClearing (on since 2026-11-22; Stefan,
+/// 2026-11-22, a mature city in his nobuildup save had no lot at density 1 or below, so no Palace
+/// site): denser lots may go too, each costing its whole tax in the same unit - density times land
+/// value over the landmark's +40 - and a site that clears one must still net kPalaceDistrictMinLots.
+constexpr int kPalaceClearLotCost = 30;
+constexpr int kLandmarkLandValueBonus = 40;
+inline int landmarkClearCost(int density, int landValue) {
+    if (density <= kPalaceClearDensity) return kPalaceClearLotCost;
+    return kPalaceClearLotCost + 10 * density * std::max(0, landValue) / kLandmarkLandValueBonus;
+}
+
+/// MassHold: our live turrets within this many tiles of an attacked building fight for it.
+constexpr int kMassTurretSupportTiles = 10;
+
 /// Is an offset (\a along, \a across: tiles along and across the front from the base centre) on
 /// the perimeter band of a base \a depth tiles deep?
 inline bool onPerimeterBand(int along, int across, int depth) {

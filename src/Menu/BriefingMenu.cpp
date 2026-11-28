@@ -16,6 +16,9 @@
  */
 
 #include <Menu/BriefingMenu.h>
+#include <misc/DuneCityCampaign.h>
+#include <FileClasses/FileManager.h>
+#include <FileClasses/INIFile.h>
 
 #include <globals.h>
 
@@ -25,10 +28,11 @@
 #include <FileClasses/TextManager.h>
 #include <FileClasses/music/MusicPlayer.h>
 #include <misc/draw_util.h>
+#include <misc/format.h>
 #include <mod/ModManager.h>
 
 
-BriefingMenu::BriefingMenu(int newHouse,int mission,int type) : MentatMenu(newHouse) {
+BriefingMenu::BriefingMenu(int newHouse,int mission,int type,const std::string& scenarioFilename) : MentatMenu(newHouse) {
     this->mission = mission;
     this->type = type;
 
@@ -74,12 +78,34 @@ BriefingMenu::BriefingMenu(int newHouse,int mission,int type) : MentatMenu(newHo
     }
 
 
+    if(DuneCityCampaign::isCampaignFilename(scenarioFilename)) {
+        // DuneCity campaign: the mission's own words, written into the map ([BRIEFING]).
+        try {
+            auto file = pFileManager->openCampaignFile(scenarioFilename);
+            INIFile ini(file.get());
+            const char* key = type == DEBRIEFING_WIN ? "Win" : type == DEBRIEFING_LOST ? "Lose" : "Text";
+            const std::string authored = ini.getStringValue("BRIEFING", key, "");
+            if(!authored.empty()) text = authored;
+            missionName = ini.getStringValue("BRIEFING", "Name", "");
+        } catch(const std::exception& e) {
+            SDL_Log("BriefingMenu: no briefing for '%s': %s", scenarioFilename.c_str(), e.what());
+        }
+    }
+
     setText(text);
     animation.setAnimation(anim);
     windowWidget.addWidget(&animation,Point(256,96),animation.getMinimumSize());
 }
 
 BriefingMenu::~BriefingMenu() = default;
+
+void BriefingMenu::setObjectives(const MissionObjectivePolicy::Briefing& briefing) {
+    if(type != BRIEFING) return;
+    std::string overview = missionName.empty() ? fmt::sprintf(_("Mission %d"), mission)
+                                               : fmt::sprintf(_("Mission %d: %s"), mission, missionName);
+    for(const std::string& line : MissionObjectivePolicy::briefingLines(briefing)) overview += "\n" + line;
+    setFinalText(overview);
+}
 
 void BriefingMenu::onMentatTextFinished() {
     proccedButton.setEnabled(true);

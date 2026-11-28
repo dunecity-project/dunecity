@@ -146,6 +146,8 @@ public:
     }
 
     /// The difficulty labels of one family in registration order; a single "" if it has none.
+    /// "Easiest" was registered last (its lobby index is appended) and is listed last, so the
+    /// first entry - what a menu selects by default - stays Easy.
     static std::vector<std::string> getDifficulties(const std::string& family) {
         std::vector<std::string> difficulties;
         for(const auto& data : getList()) {

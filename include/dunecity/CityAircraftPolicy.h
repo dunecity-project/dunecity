@@ -86,6 +86,7 @@
  * both the simulation and the tests stay bit-identical across platforms.
  */
 
+#include <cstdlib>
 #include <DataTypes.h>
 #include <Definitions.h>
 #include <fixmath/FixPoint.h>
@@ -429,6 +430,373 @@ inline FixPoint airplaneHeadingSpeed(FixPoint axisSpeed, int headingFrame) {
         case 2:  return diagonal;
         default: return (axisSpeed + diagonal) / 2;
     }
+}
+
+// ---------------------------------------------------------------------------
+// DuneCity airplane bombing (Stefan, 2026-11-22: "make planes drop bombs as they
+// fly over enemy buildings strong enough bombs to destroy some buildings").
+// Match rule GameOptionsClass::cityPlaneBombing. Not Micropolis behaviour.
+//
+// The plane keeps its course: it bombs only what lies under it. Its bomb sight is
+// the point kBombSightDistance ahead; each time that point enters a tile on which
+// an enemy building stands, and a bomb is on board, it drops one (none for a
+// building the bombs already falling will destroy). So a building gets one bomb
+// per tile of it that the course crosses.
+// The numbers come from the Dune City mod's ObjectData.ini:
+// a bomb does kBombDamage = 100, so two bombs take a Wind Trap, a zone, a turret
+// or a Heavy Factory (200) and a Spice Silo (150), while a Construction Yard (400)
+// needs four, a Refinery (450) or Radar (500) five and a Palace (1000) ten. A full
+// load of kBombLoad = 6 is 600 damage: a run can take up to three 200-point
+// buildings and never a Construction Yard or anything stronger on its own. The
+// load comes back one bomb per kBombRearmTicks (8 s), a full load in 48 s, so a
+// five-minute flight carries at most 6 + 37 bombs.
+// ---------------------------------------------------------------------------
+
+/// Bombs a plane carries; it launches with a full load.
+inline constexpr int kBombLoad = 6;
+/// Damage of one bomb to the building it lands on (units next to it take splash).
+inline constexpr int kBombDamage = 100;
+/// Sprite ticks to regain one bomb (8 s of game time at 50 ms a tick).
+inline constexpr int kBombRearmTicks = 160;
+// The fall (Stefan, 2026-11-23: "the planes own bombs shouldn't hurt it, and they should
+// take a while to drop ... so that the plane has already passed the bombs"). A bomb is
+// released towards the bomb sight, kBombSightDistance = 3 tiles ahead of the plane, and
+// takes kBombFallCycles = 75 game cycles (1.2 s) to get there: 2.56 world units a cycle,
+// a quarter of the plane's 10.24, so it is seen dropping back from the plane. In those
+// 75 cycles the plane flies 12 tiles: when the bomb goes off the plane is 9 tiles past
+// it, against a blast that reaches units one tile from the impact. The bomb lands on
+// the tile that was under the sight when it was released, 0.3 s before the plane itself
+// passed over it. Whatever the geometry, a bomb never damages an aircraft (Map::damage).
+
+/// How far ahead of the plane the bomb lands, in Micropolis units (3 tiles).
+inline constexpr int kBombSightDistance = 48;
+/// Game cycles a bomb takes from release to impact (1.2 s).
+inline constexpr int kBombFallCycles = 75;
+/// Bomb speed in world units per game cycle at TILESIZE 64: the sight distance over the
+/// fall time.
+inline FixPoint bombSpeed() {
+    return FixPoint(kBombSightDistance * 64 / kMicropolisUnitsPerTile) / kBombFallCycles;
+}
+
+/// One sprite tick of the bomb rack: returns the load after rearming. `timer`
+/// counts ticks towards the next bomb and rests at 0 while the rack is full.
+inline int rearmBombs(int bombs, int& timer, int load, int rearmTicks) {
+    if(bombs >= load) { timer = 0; return load; }
+    if(++timer < rearmTicks) return bombs;
+    timer = 0;
+    return bombs + 1;
+}
+inline int rearmBombs(int bombs, int& timer) { return rearmBombs(bombs, timer, kBombLoad, kBombRearmTicks); }
+
+// ---------------------------------------------------------------------------
+// The stick (Stefan, 2026-11-23: "they should drop bombs like a b-52 does as they fly
+// over"). Match rule GameOptionsClass::cityPlaneCarpetBombing, with cityPlaneBombing.
+//
+// The bomb (Stefan, 2026-11-23, after playing the first stick of 60-point bombs two a
+// tile with the Ornithopter rocket's explosion: "make a new bomb. the current
+// ornithopter one is too small - i want a big explosion. drop less frequently them but
+// they should do more damage. a direct hit in the middle of a residential for example
+// should destroy it and 2 hits should be taking out other buildings"):
+// - kStickDamage = 250 to the building the bomb lands on. One hit destroys every
+//   200-point building (zones, Wind Trap, turrets, Heavy Factory, Repair Yard, Silo,
+//   Wall); two destroy everything up to 500 (Barracks, Light Factory, Construction
+//   Yard, High-Tech Factory, House IX, Police Station, WOR, Refinery, Airport, Radar,
+//   Research Lab, Stadium, Starport); a Nuclear Plant (750) takes three and a Palace
+//   (1000) four.
+// - One bomb every 12.5 game cycles (kStickPhasePeriod / kStickPhaseStep): two tiles of
+//   flight on an axis heading, a quarter of the first stick's rate.
+// - A stick starts with a bomb as soon as the next bomb would splash an enemy building or
+//   unit (kStickStartDamage, below). It carries on for kStickTailBombs more bombs after the last
+//   building (so it runs on across roads and gaps of up to two tiles in step); it never
+//   falls on a tile that holds a building of the plane's own team.
+// - Its impact is Explosion_Bomb: the large building explosion drawn four tiles wide,
+//   with the large explosion sound; the falling bomb is the Death Hand's rocket picture.
+// The rack does not empty (Stefan, 2026-11-23: "planes racks don't empty"): there is
+// no load and no rearm time under the stick rule. With a load, six bombs or twenty-four,
+// a plane in his games had nothing left for 85 to 89% of the time it was over an enemy
+// building (HANDOVER.md, 2026-11-23).
+// ---------------------------------------------------------------------------
+
+/// Damage of one stick bomb to the building it lands on.
+inline constexpr int kStickDamage = 250;
+/// Bombs the stick still releases after the last enemy building under the sight.
+inline constexpr int kStickTailBombs = 1;
+/// The stick's clock: kStickPhaseStep is added every game cycle and a bomb is due each
+/// time kStickPhasePeriod is reached: one bomb per 12.5 cycles, 128 world units (two
+/// tiles) of an axis heading's 10.24 a cycle.
+inline constexpr int kStickPhaseStep = 2;
+inline constexpr int kStickPhasePeriod = 25;
+/// The crash (match rule GameOptionsClass::cityPlaneCrashBombs; Stefan, 2026-11-26: "make planes
+/// blow up as 3 of their bombs when they die, current explosion too small"): a plane that is shot
+/// down explodes as kCrashBombs of its own bombs, the middle one where it was hit and the others
+/// kCrashBombSpacingTiles before and after it along its heading, a stick's spacing (AmbientAirplane::crash).
+inline constexpr int kCrashBombs = 3;
+inline constexpr int kCrashBombSpacingTiles = 2;
+/// Where crash bomb `index` (0 .. kCrashBombs-1) bursts: `at` moved along the unit heading (dx, dy),
+/// given in parts of `scale`, by its place in the stick times `spacing` world units.
+inline constexpr int crashBombOffset(int index, int unit, int scale, int spacing) {
+    return (index - (kCrashBombs - 1) / 2) * spacing * unit / scale;
+}
+/// Enemy ground units start and carry a stick as buildings do (Stefan, 2026-11-23: "also get
+/// planes to drop bombs on enemy units as well"). Against units the heavy bomb's blast reaches
+/// kStickUnitBlastRadius, a tile and a half, the size its explosion is drawn: the full
+/// kStickDamage within half a tile of the impact, half of it to a tile, a quarter to a tile and
+/// a half (stickUnitDamage). A unit keeps moving for the 1.2 seconds the bomb falls, so a
+/// blast of half a tile, the aimed bomb's, would nearly always miss it. Buildings still take
+/// damage only when the bomb lands on them.
+inline constexpr int kStickUnitBlastTiles2 = 3;   // in half tiles
+inline constexpr int stickUnitDamage(int damage, int distance, int tileSize) {
+    return damage >> (distance / (tileSize / 2));
+}
+/// Splash and the start of a stick (Stefan, 2026-11-23: "the plane should drop bombs when it will
+/// splash enemy units or buildings with them, also it starts dropping bombs slighly too last when
+/// aproaching a building"). A bomb that misses a building of another team by up to a tile and a
+/// half now splashes it with kStickBuildingSplashPercent of what a unit there would take: 125
+/// within half a tile of its footprint, 62 to a tile, 31 beyond (a direct hit is still 250). The
+/// bomber's own side's buildings take no splash, as they take no bomb. A stick starts with a bomb
+/// the cycle the next bomb would do at least kStickStartDamage to an enemy building or ground
+/// unit, which is half a tile before the bomb sight reaches a building, and carries on while a
+/// bomb would do at least kStickCarryDamage. (It used to wait three cycles after the sight had
+/// entered the first building, so the first bomb fell half a tile inside it.)
+inline constexpr int kStickBuildingSplashPercent = 50;
+inline constexpr int kStickStartDamage = 125;
+inline constexpr int kStickCarryDamage = 62;
+/// What a heavy bomb of `damage` does to a building whose footprint is `distance` world units
+/// from the impact (0: the bomb landed on it).
+inline constexpr int stickBuildingDamage(int damage, int distance, int tileSize, int splashPercent) {
+    return distance <= 0 ? damage : stickUnitDamage(damage, distance, tileSize) * splashPercent / 100;
+}
+/// kStickBuildingSplashPercent, or the experiment-only DUNECITY_TEST_BOMB_BUILDING_SPLASH_PCT
+/// (0 to 100, read once per process, never a match rule).
+inline int stickBuildingSplashPercent() {
+    static const int percent = [] {
+        const char* text = std::getenv("DUNECITY_TEST_BOMB_BUILDING_SPLASH_PCT");
+        const int value = text != nullptr ? std::atoi(text) : -1;
+        return value >= 0 && value <= 100 ? value : kStickBuildingSplashPercent;
+    }();
+    return percent;
+}
+
+// ---------------------------------------------------------------------------
+// Bombing runs (match rule GameOptionsClass::cityPlaneBombingRuns). Each leg of the
+// flight is aimed at a living building of another team, drawn evenly from all of
+// them, and ends kRunOvershootTiles beyond it on the same line, so the plane crosses
+// the building and whatever stands around it before it turns for the next one.
+// ---------------------------------------------------------------------------
+
+inline constexpr int kRunOvershootTiles = 12;
+
+// ---------------------------------------------------------------------------
+// Buying a plane (Stefan, 2026-11-23: "allow the ai to spawn planes for 1500
+// credits"). Match rule GameOptionsClass::cityPlanePurchase. A powered Airport
+// launches a plane at once for kPlanePrice while its house has fewer than
+// kMaxPlanesPerHouse in the air (Stefan, 2026-11-23: "i should be able to buy more
+// planes, up to 10"). There is no wait between purchases for a player: the first
+// version sold one plane a minute per Airport, and with flights of half a minute that
+// held him to one plane in the air. Nothing waits on kPurchaseCooldownMs any more: an
+// Airport still starts that clock at each purchase and keeps it in the save, and the
+// probes read it to see a purchase.
+// The Airport's free roll is unchanged: it still only launches for a house with no free plane.
+//
+// A computer player (Stefan, 2026-11-23: "AI buys freely too", then "ai should figure out
+// when it makes sense to buy") buys on its own planes' record, purchasePays(): the credit
+// value its planes' bombs have destroyed so far (the house's combat record of the type:
+// price x share of hit points removed, buildings and units) against the price of every
+// flight that has ended (shot down or flown off the map). The free plane flies first and
+// gives the evidence: no purchase before one flight has ended (kPurchaseEvidenceFlights; the
+// free plane now comes only every five minutes, so three would mean a quarter of an hour), and
+// then only while the average flight has destroyed at least what a plane costs. Against a
+// city whose turrets bring planes down early the record stays under the price and it stops
+// buying; against an open city it buys up to the ten-plane limit. QuantBot's reserves and
+// cash floor still apply (QuantBot::buyCityAirplanes).
+// ---------------------------------------------------------------------------
+
+inline constexpr int kPlanePrice = 1500;
+/// The price an Airport charges: kPlanePrice, or the experiment-only DUNECITY_TEST_PLANE_PRICE
+/// (100 to 100,000; read once per process and never a match rule) for balance arms in one build.
+inline int planePrice() {
+    static const int price = [] {
+        const char* text = std::getenv("DUNECITY_TEST_PLANE_PRICE");
+        const int value = text != nullptr ? std::atoi(text) : 0;
+        return value >= 100 && value <= 100000 ? value : kPlanePrice;
+    }();
+    return price;
+}
+inline constexpr int kMaxPlanesPerHouse = 10;
+inline constexpr int kPurchaseCooldownMs = 60000;
+/// The free plane's clock: five minutes (Stefan, 2026-11-24, after playing the two-minute clock:
+/// "the planes seem overpowered ... so early game balance. maybe you get one free plane every 5
+/// mins"). With two minutes, bombs and crashes took 179 buildings a game in the first ten minutes
+/// of 48 fully built four-house matches. It was two minutes for one day (2026-11-23), the Ordos
+/// Palace's five before that (the time to make a Saboteur), and first a one-in-six roll every
+/// five seconds, about half a minute.
+/// An Airport that stands when the game begins charges for kFreePlaneMs first; one built during
+/// the game, in the first kFreePlaneMs too, has its plane ready at once (Airport::init; Stefan,
+/// 2026-11-23: "when you build an airport you should get one"; 2026-11-26: "make a plane spawn
+/// when an airport is built, not the first one after 5 mins").
+inline constexpr int kFreePlaneMs = 300000;
+/// Flights of its own that must have ended before a computer player judges whether planes pay.
+inline constexpr int kPurchaseEvidenceFlights = 1;
+/// True when a house's planes have so far destroyed at least their price per ended flight.
+inline constexpr bool purchasePays(int64_t destroyedCredits, int flightsEnded, int price = kPlanePrice) {
+    return flightsEnded >= kPurchaseEvidenceFlights && destroyedCredits >= int64_t(price) * flightsEnded;
+}
+
+// The plane's performance score (Stefan, 2026-11-23: "also include planes in the performance
+// scores so we know how cost effective it is compared to other units. think about how we could
+// include it in the ratio for when to buy them as well"). It is scored as the army's unit types
+// are (UnitMixPolicy::performanceScore): the credit value its bombs and its crash have destroyed
+// (the house's combat record of the type, in milli credits) over the price of every flight that
+// has ended plus one price of prior, times a million. x1.0 is a plane that destroys what it
+// costs. A computer player buys while the plane's score is at least its army's own (all its
+// unit types' value destroyed per credit of units lost), held between kPlaneBuyScoreFloor (x0.5)
+// and kPlaneBuyScoreCeiling (x1.0): a credit goes to planes when it does at least what it does
+// in the army, never asking more of a plane than paying for itself and never accepting less
+// than half. The Stats window shows both numbers.
+inline constexpr int64_t kPlaneBuyScoreFloor = 500000;
+inline constexpr int64_t kPlaneBuyScoreCeiling = 1000000;
+inline constexpr int64_t planePerformanceScore(int64_t rewardMilli, int flightsEnded, int price = kPlanePrice) {
+    return (rewardMilli < 0 ? 0 : rewardMilli) * 1000000
+        / ((int64_t(flightsEnded < 0 ? 0 : flightsEnded) + 1) * price * 1000);
+}
+inline constexpr int64_t planeBuyScore(int64_t armyScore) {
+    return armyScore <= 0 || armyScore > kPlaneBuyScoreCeiling ? kPlaneBuyScoreCeiling
+         : armyScore < kPlaneBuyScoreFloor ? kPlaneBuyScoreFloor : armyScore;
+}
+inline constexpr bool planeWorthBuying(int64_t rewardMilli, int flightsEnded, int64_t armyScore,
+                                       int price = kPlanePrice) {
+    return flightsEnded >= kPurchaseEvidenceFlights
+        && planePerformanceScore(rewardMilli, flightsEnded, price) >= planeBuyScore(armyScore);
+}
+
+// Heaps of money (Stefan, 2026-11-23: "if the ai has heaps and heaps of money then spawning 10
+// could be useful to break up the enemy base"; "no don't cap the planes. I want planes to act as
+// a counter to a massively built city where the game becomes a stalemate"). Against turrets that
+// fire, single planes stop paying and purchasePays() ends the buying. A computer player with
+// kRichSurplus credits beyond its reserves and cash floor buys all the same, one plane per
+// Airport and build pass, for as long as it stays that rich; the ten planes in the air are its
+// only limit. On Metropolis, a million credits a house and 928 Rocket Turrets, that was 819
+// planes and 455 buildings in six minutes: slow, costly, and the thing that moves a stalemate.
+inline constexpr int kRichSurplus = 2 * kMaxPlanesPerHouse * kPlanePrice;   // 30,000
+inline constexpr bool richBuys(int64_t surplus) { return surplus >= kRichSurplus; }
+
+// Another Airport (Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to
+// determine if it makes sense to buy more airports. more airports means more planes bombing so could
+// be useful. one off 5k which gets paid back in 16.5 minutes i believe"; then "you get a free plane per
+// airport. you need to think that the free plane alone gets you free damage"). QuantBot switch
+// ExtraAirports, default on (protocol 137). The city counts one Airport (hasAirport), but under the
+// match rules City Plane Free Per Airport (Airport::freePlanePerAirport) and City Plane Build Time
+// (Airport::planeBuildTime) each Airport adds a free plane every kFreePlaneMs and builds one bought
+// plane at a time, so an extra Airport is worth what its free planes destroy and, while every Airport
+// is building, a production line worth what a bought plane destroys beyond its price for every plane it
+// can build. QuantBot builds one when its own planes' record says that pays back the Airport's price
+// within kAirportPaybackMinutes: value per ended flight v (the house's combat record of the plane: price
+// x share of hit points removed, buildings and units, bombs and crashes) times the free flights in that
+// time, plus (v - plane price) times the planes built in that time. 5,000 over 20 minutes and a free
+// plane every five is 1,250 a flight; a line alone
+// (57.6 s a plane) needs v of 1,740 at a 1,500 price.
+inline constexpr int kAirportPaybackMinutes = 20;
+/// Flights of its own that must have ended before a computer player judges another Airport.
+inline constexpr int kAirportEvidenceFlights = 3;
+/// Airports a computer player builds at most under ExtraAirports on their payback, the first included.
+inline constexpr int kMaxAirportsPerHouse = 4;
+/// A rich house (richBuys) whose Airports are all building planes builds more whatever their payback,
+/// up to this many (Stefan, 2026-11-26: "if an ai has a lot of money planes win games. they abliterate
+/// the enemy"): in planeswin.dls the rich Harkonnen turned its surplus into 882 planes from one Airport
+/// and they finished the last rival. With build time each Airport is one production line.
+inline constexpr int kMaxAirportsPerRichHouse = 8;
+/// `freePlaneMs`: an extra Airport's free plane every that many ms (0: it adds none). `buildMs`: the
+/// time it takes to build a bought plane of `planePrice` (0: planes are not built, they launch at once).
+inline constexpr bool extraAirportPays(int64_t valuePerFlight, int flightsEnded, int64_t airportPrice,
+                                       int64_t freePlaneMs = kFreePlaneMs, int64_t planePrice = kPlanePrice,
+                                       int64_t buildMs = 0) {
+    const int64_t horizon = int64_t(kAirportPaybackMinutes) * 60000;
+    const int64_t margin = valuePerFlight > planePrice ? valuePerFlight - planePrice : 0;
+    const bool free = freePlaneMs > 0, built = buildMs > 0;
+    const int64_t gain = free && built ? horizon * (valuePerFlight * buildMs + margin * freePlaneMs)
+                       : free ? horizon * valuePerFlight : built ? horizon * margin : 0;
+    const int64_t cost = airportPrice * (free ? freePlaneMs : 1) * (built ? buildMs : 1);
+    return flightsEnded >= kAirportEvidenceFlights && (free || built) && gain >= cost;
+}
+
+// ---------------------------------------------------------------------------
+// Anti-air against the airplane (match rule GameOptionsClass::cityPlaneDefence).
+//
+// A turret rocket flies 11.52 world units a cycle, the plane 10.24. Aimed at where
+// the plane is, as up to 1.0.876, the rocket arrives where the plane was: over 480
+// measured passes no plane was shot down (HANDOVER.md, 2026-11-23). With the rule
+// the rocket flies to the point where the two meet, solved here in integers so
+// every peer gets the same point. Positions are quarter world units, speeds are
+// quarter world units per game cycle times 16.
+// ---------------------------------------------------------------------------
+
+inline int64_t integerSqrt(int64_t value) {
+    if(value <= 0) return 0;
+    int64_t root = 0;
+    for(int64_t bit = int64_t(1) << 62; bit != 0; bit >>= 2) {
+        if(value >= root + bit) { value -= root + bit; root = (root >> 1) + bit; }
+        else root >>= 1;
+    }
+    return root;
+}
+
+/// A rocket chasing a city airplane goes off once it is this many times the Rocket Turret's
+/// WeaponRange from where it was fired: the turret's own reach against aircraft, 3 x 8 = 24
+/// tiles (Stefan, 2026-11-23: "missiles chasing a plane just keep going forever. there needs to
+/// be a distance cutoff"). A turret rocket is 1.13 times as fast as the plane, so one fired
+/// after a plane flying away followed it for nine times the gap between them. A Rocket Turret
+/// now only fires at a plane its rocket can meet inside this distance (RocketTurret::canAttack).
+inline constexpr int kRocketChaseRangeFactor = 3;
+
+// Balance of 2026-11-23, set from measurements (HANDOVER.md, "City planes: balance"). Stefan:
+// "why are turrets reaching 24 tiles?? thatv sounds insane", "we need a balance with these
+// planes, don't nerf them too much", "it should be able to deal some real damage to enemy bases
+// to break up a stalemate".
+// - A Rocket Turret reaches a city airplane, and its rocket chases one, kTurretPlaneReachFactor
+//   = 2 times its WeaponRange: 16 tiles. It was the Ornithopter's 3 (24 tiles), under which 92%
+//   of flights in ordinary AI games were shot down, half within ten seconds of take-off.
+//   Ornithopters keep 3.
+// - The plane has kPlaneHitPoints = 150, five turret rockets instead of four. The unit data of
+//   every mod was seeded with 100, so a new game that reads exactly 100 gets 150
+//   (AmbientAirplane::applyBalance); another value is a mod's own choice and stays.
+// - Its speed stays. A turret rocket is 12% faster than the plane; 15% more speed outran the
+//   rockets and took 87% of Metropolis in six minutes, 10% with 125 hit points 77%.
+inline constexpr int kTurretPlaneReachFactor = 2;
+inline constexpr int kPlaneHitPoints = 150;
+inline constexpr int kPlaneHitPointsSeeded = 100;
+
+// Airport cover, diagnostics only (match logs CITY_AIRPORT_COVER and CITY_PLANE_NEAR_AIRPORT; Stefan,
+// 2026-11-26: "also airports need decent rocket turret defenses"). Chebyshev tiles from the
+// Airport's footprint. Nothing in the simulation reads these.
+/// A Rocket Turret this close to an Airport stands in its ring (QuantBot's AirportTurrets fills it).
+inline constexpr int kAirportRingTiles = 5;
+/// A plane this close to an enemy Airport is over it.
+inline constexpr int kAirportOverTiles = 1;
+/// A plane this close to an enemy Airport approaches it: a Rocket Turret's reach on a plane
+/// (WeaponRange 8 times kTurretPlaneReachFactor).
+inline constexpr int kAirportApproachTiles = 16;
+
+struct Intercept {
+    bool possible = false;  ///< false when the target is as fast as the missile
+    int cycles16 = 0;       ///< flight time in sixteenths of a game cycle
+    Coord point;            ///< meeting point, quarter world units
+};
+
+/// Solve |target + v t - missile| = s t for the smallest t > 0.
+inline Intercept intercept(const Coord& missile, const Coord& target, int targetVX16, int targetVY16, int missileSpeed16) {
+    Intercept result;
+    const int64_t rx = int64_t(target.x) - missile.x, ry = int64_t(target.y) - missile.y;
+    const int64_t a = int64_t(targetVX16) * targetVX16 + int64_t(targetVY16) * targetVY16
+                    - int64_t(missileSpeed16) * missileSpeed16;
+    if(a >= 0) return result;
+    const int64_t b = 16 * (rx * targetVX16 + ry * targetVY16);
+    const int64_t c = 256 * (rx * rx + ry * ry);
+    const int64_t time16 = (16 * (-b - integerSqrt(b * b - a * c))) / a;
+    result.possible = true;
+    result.cycles16 = static_cast<int>(std::min<int64_t>(time16, 1 << 24));
+    result.point = Coord(static_cast<int>(target.x + targetVX16 * int64_t(result.cycles16) / 256),
+                         static_cast<int>(target.y + targetVY16 * int64_t(result.cycles16) / 256));
+    return result;
 }
 
 } // namespace DuneCity::CityAircraft

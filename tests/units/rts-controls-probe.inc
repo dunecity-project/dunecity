@@ -14,6 +14,8 @@
 //   7. a rendered frame shows the queued waypoint lines and a hotkey tooltip (smoke screenshot);
 //   8. the Attack button and the A key on a spice bloom fire at it from weapon range, for every
 //      firing unit type alone and as one group (formation moves off and on): nobody drives onto it.
+//   9. Guard (E), Area Guard (X) and Stop (S, Shift+S with WASD) key presses reach the
+//      units; a rebound or unbound key stops answering; both unit panels' tooltips agree.
 #include <Game.h>
 #include <House.h>
 #include <Map.h>
@@ -25,6 +27,7 @@
 #include <GUI/ObjectInterfaces/UnitInterface.h>
 #include <mod/ModManager.h>
 #include <structures/BuilderBase.h>
+#include <units/Devastator.h>
 #include <units/UnitBase.h>
 #include <units/UnitOrderQueue.h>
 #include <FormationOrders.h>
@@ -498,6 +501,193 @@ int runRtsControlsProbe() {
         game->gameInitSettings.setGameOptions(rules);
         SDL_Log("RTS_CONTROLS_REPEAT_PASS: item %u built %d times unattended in %d cycles, paused at the unit limit, resumed after %d cycles",
                 repeated, atLimit - before, cycles, resume);
+    }
+
+    // ---- 9. Guard, Area Guard and Stop keys, rebinding and the panel tooltips ----------------
+    // Real key events through Game::handleKeyInput, the command stream and game cycles.
+    {
+        const Uint32 tank = spawn(owner, Unit_Tank, Coord(4, 18));
+        const Uint32 quad = spawn(owner, Unit_Quad, Coord(6, 18));
+        const auto savedHotkeys = settings.hotkeys;
+        const bool savedWasd = settings.general.wasdCamera;
+        settings.hotkeys = Hotkeys::Bindings::defaults();
+        settings.general.wasdCamera = false;
+        auto select = [&](const std::vector<Uint32>& ids) {
+            game->unselectAll(game->selectedList);
+            game->selectedList.clear();
+            for(Uint32 id : ids) { game->selectedList.insert(id); unitOf(id)->setSelected(true); }
+            game->selectionChanged();
+            game->pInterface->updateObjectInterface();
+        };
+        auto press = [&](SDL_Keycode sym, Uint16 mod) {
+            SDL_KeyboardEvent key{};
+            key.type = SDL_KEYDOWN;
+            key.keysym.sym = sym;
+            key.keysym.mod = mod;
+            game->handleKeyInput(key);
+            step(4);
+        };
+        auto inMode = [&](ATTACKMODE mode) {
+            return unitOf(tank)->getAttackMode() == mode && unitOf(quad)->getAttackMode() == mode;
+        };
+        auto startsWith = [](const std::string& text, const std::string& prefix) { return text.rfind(prefix, 0) == 0; };
+
+        // Whether held W/A/S/D scroll the map: the rule Game::doInput applies to the key state.
+        auto scrolls = [&](Uint16 mod) { return Hotkeys::wasdScrolls(settings.general.wasdCamera, mod); };
+
+        // WASD camera off (the default): the classic keys, with Guard on E and Area Guard on X.
+        select({tank, quad});
+        rtsRequire(!scrolls(KMOD_NONE), "W/A/S/D would scroll the map although the WASD camera is off");
+        press(SDLK_e, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "E did not put the selection in Guard");
+        press(SDLK_x, KMOD_NONE);
+        rtsRequire(inMode(AREAGUARD), "X did not put the selection in Area Guard");
+        press(SDLK_s, KMOD_NONE);
+        rtsRequire(inMode(STOP), "S did not stop the selection");
+        press(SDLK_e, KMOD_LCTRL);
+        rtsRequire(inMode(STOP), "Ctrl+E ran Guard");
+        press(SDLK_a, KMOD_NONE);
+        rtsRequire(game->currentCursorMode == Game::CursorMode_Attack, "A did not open the Attack cursor");
+        game->setCursorMode(Game::CursorMode_Normal);
+        press(SDLK_m, KMOD_NONE);
+        rtsRequire(game->currentCursorMode == Game::CursorMode_Move, "M did not open the Move cursor");
+        game->setCursorMode(Game::CursorMode_Normal);
+        press(SDLK_q, KMOD_NONE);
+        rtsRequire(game->currentCursorMode == Game::CursorMode_Patrol, "Q did not open the Patrol cursor");
+        game->setCursorMode(Game::CursorMode_Normal);
+        press(SDLK_h, KMOD_NONE);
+        rtsRequire(inMode(HOLD), "H did not put the selection on Hold");
+        press(SDLK_e, KMOD_NONE);
+
+        // WASD camera on: W, A, S and D scroll and issue no order; their commands take Shift.
+        settings.general.wasdCamera = true;
+        rtsRequire(scrolls(KMOD_NONE) && !scrolls(KMOD_LSHIFT) && !scrolls(KMOD_LCTRL),
+                   "With the WASD camera on, plain W/A/S/D do not scroll or a Shift/Ctrl chord does");
+        press(SDLK_x, KMOD_NONE);
+        rtsRequire(inMode(AREAGUARD), "With WASD, X did not run Area Guard");
+        press(SDLK_e, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "With WASD, E did not run Guard");
+        for(const SDL_Keycode cameraKey : {SDLK_w, SDLK_a, SDLK_s, SDLK_d}) {
+            press(cameraKey, KMOD_NONE);
+            rtsRequire(inMode(GUARD) && game->currentCursorMode == Game::CursorMode_Normal,
+                       "With the WASD camera, a plain W, A, S or D issued a command");
+        }
+        press(SDLK_a, KMOD_LSHIFT);
+        rtsRequire(game->currentCursorMode == Game::CursorMode_Attack, "With the WASD camera, Shift+A did not open the Attack cursor");
+        game->setCursorMode(Game::CursorMode_Normal);
+        press(SDLK_q, KMOD_NONE);
+        rtsRequire(game->currentCursorMode == Game::CursorMode_Patrol, "With the WASD camera, plain Q did not open the Patrol cursor");
+        game->setCursorMode(Game::CursorMode_Normal);
+        press(SDLK_s, KMOD_LSHIFT);
+        rtsRequire(inMode(STOP), "With the WASD camera, Shift+S did not stop the selection");
+        select({tank});         // a single unit first, so the group panel below is built anew
+        select({tank, quad});
+        auto* many = dynamic_cast<MultiUnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(many && startsWith(many->stopButton.getTooltipText(), "Stop (Shift+S)")
+                   && startsWith(many->attackButton.getTooltipText(), "Attack Move (Shift+A)")
+                   && startsWith(many->guardButton.getTooltipText(), "Guard (E)"),
+                   "The group tooltips do not show Shift+S, Shift+A and plain E with the WASD camera");
+        settings.general.wasdCamera = false;
+
+        // Both panels name the keys the handler uses.
+        select({tank});
+        auto* one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(one && startsWith(one->guardButton.getTooltipText(), "Guard (E)")
+                   && startsWith(one->areaGuardButton.getTooltipText(), "Area Guard (X)")
+                   && startsWith(one->stopButton.getTooltipText(), "Stop (S)")
+                   && startsWith(one->attackButton.getTooltipText(), "Attack Move (A)")
+                   && startsWith(one->moveButton.getTooltipText(), "Move (M)"),
+                   "The unit panel tooltips do not name Guard E, Area Guard X, Stop S, Attack Move A and Move M");
+        select({tank, quad});
+        many = dynamic_cast<MultiUnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(many && startsWith(many->guardButton.getTooltipText(), "Guard (E)")
+                   && startsWith(many->areaGuardButton.getTooltipText(), "Area Guard (X)")
+                   && startsWith(many->stopButton.getTooltipText(), "Stop (S)"),
+                   "The group panel tooltips do not name Guard E, Area Guard X and Stop S");
+
+        // The other mode buttons and the panel commands have keys too, on the letters the
+        // classic shortcuts leave free, and their tooltips name them.
+        press(SDLK_b, KMOD_NONE);
+        rtsRequire(inMode(AMBUSH), "B did not put the selection in Ambush");
+        press(SDLK_n, KMOD_NONE);
+        rtsRequire(inMode(HUNT), "N did not put the selection in Hunt");
+        press(SDLK_k, KMOD_NONE);
+        rtsRequire(inMode(RETREAT), "K did not put the selection in Retreat");
+        if(!ModManager::instance().isTornieFamilyContentActive()) {
+            press(SDLK_j, KMOD_NONE);
+            rtsRequire(inMode(RETREAT), "J ran the Tornie-only Sabotage mode in the base game");
+        }
+        press(SDLK_l, KMOD_NONE);
+        rtsRequire(game->currentCursorMode != Game::CursorMode_Heal, "L opened the Heal cursor for units that cannot heal");
+        press(SDLK_y, KMOD_NONE);
+        press(SDLK_DELETE, KMOD_NONE);
+        rtsRequire(unitOf(tank) && unitOf(quad) && inMode(RETREAT), "Deploy or Self-destruct keys acted on a tank and a quad");
+        const bool savedPaths = settings.general.showMovementPaths;
+        press(SDLK_v, KMOD_NONE);
+        rtsRequire(settings.general.showMovementPaths != savedPaths, "V did not toggle the movement paths");
+        press(SDLK_v, KMOD_NONE);
+        rtsRequire(settings.general.showMovementPaths == savedPaths, "A second V did not restore the movement paths");
+        rtsRequire(startsWith(many->ambushButton.getTooltipText(), "Ambush (B)")
+                   && startsWith(many->huntButton.getTooltipText(), "Hunt (N)")
+                   && startsWith(many->retreatButton.getTooltipText(), "Retreat (K)")
+                   && many->deployButton.getTooltipText().find("(Y)") != std::string::npos
+                   && many->destructButton.getTooltipText().find("(Delete)") != std::string::npos
+                   && many->movementPathsButton.getTooltipText().find("(V)") != std::string::npos,
+                   "The group panel tooltips do not name the Ambush, Hunt, Retreat, Deploy, Self-destruct and Paths keys");
+        select({tank});
+        one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(one && startsWith(one->ambushButton.getTooltipText(), "Ambush (B)")
+                   && startsWith(one->huntButton.getTooltipText(), "Hunt (N)")
+                   && startsWith(one->retreatButton.getTooltipText(), "Retreat (K)"),
+                   "The unit panel tooltips do not name the Ambush, Hunt and Retreat keys");
+        select({tank, quad});
+        press(SDLK_s, KMOD_NONE);
+        rtsRequire(inMode(STOP), "S did not stop the selection after the mode keys");
+
+        // Self-destruct: Delete starts the fuse of a selected Devastator, exactly once.
+        {
+            const Uint32 devastator = spawn(owner, Unit_Devastator, Coord(11, 18));
+            select({devastator});
+            auto* fused = dynamic_cast<Devastator*>(unitOf(devastator));
+            rtsRequire(fused && fused->devastateTimer == 0, "The fixture Devastator already has a fuse");
+            press(SDLK_DELETE, KMOD_LSHIFT);
+            rtsRequire(fused->devastateTimer == 0, "Shift+Delete started the self-destruct");
+            press(SDLK_DELETE, KMOD_NONE);
+            rtsRequire(fused->devastateTimer > 0, "Delete did not start the Devastator's self-destruct");
+            // Out of the way of the units above before it goes off.
+            select({tank, quad});
+            fused->devastateTimer = 0;
+            retire(devastator);
+            rtsRequire(unitOf(tank) && unitOf(quad), "The fixture Devastator took the tank or the quad with it");
+        }
+
+        // Rebound Guard answers only to its new key; an unbound Stop answers to nothing.
+        rtsRequire(Hotkeys::assign(settings.hotkeys, Hotkeys::Action::Guard, Hotkeys::Binding{SDLK_i, 0}).outcome
+                   == Hotkeys::AssignOutcome::Assigned, "Guard could not move to I");
+        press(SDLK_e, KMOD_NONE);
+        rtsRequire(inMode(STOP) && game->selectedList.size() == 2, "E still acted after Guard moved to I");
+        press(SDLK_i, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "I did not run the rebound Guard");
+        Hotkeys::assign(settings.hotkeys, Hotkeys::Action::Stop, Hotkeys::Binding{});
+        press(SDLK_s, KMOD_NONE);
+        rtsRequire(inMode(GUARD), "S still stopped units after Stop was unbound");
+        select({tank});
+        one = dynamic_cast<UnitInterface*>(game->pInterface->pObjectContainer);
+        rtsRequire(one && startsWith(one->guardButton.getTooltipText(), "Guard (I)")
+                   && startsWith(one->stopButton.getTooltipText(), "Stop (unbound)"),
+                   "Tooltips do not follow the rebound and unbound keys");
+
+        settings.hotkeys = savedHotkeys;
+        settings.general.wasdCamera = savedWasd;
+        game->unselectAll(game->selectedList);
+        game->selectedList.clear();
+        game->selectionChanged();
+        retire(tank);
+        retire(quad);
+        SDL_Log("RTS_CONTROLS_HOTKEYS_PASS: classic A Attack, S Stop, M Move, Q Patrol, H Hold with E Guard and X Area Guard"
+                " through the key handler; with the WASD camera W/A/S/D scroll, issue nothing and Shift+A/Shift+S command;"
+                " B Ambush, N Hunt, K Retreat, V paths, Delete self-destruct; Sabotage and Heal inert without their content;"
+                " rebound Guard ignores E; unbound Stop ignores S; unit and group tooltips agree");
     }
 
     // ---- 5. Save round trip: queue, patrol, HOLD and repeat flags --------------------------

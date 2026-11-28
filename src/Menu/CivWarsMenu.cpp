@@ -22,6 +22,7 @@ SettingsClass::GameOptionsClass matchRules(SettingsClass::GameOptionsClass rules
     rules.trooperAntiAir = true;
     rules.cityEffects = true;
     rules.originalUnitDamage = true;
+    rules.startTechLevel = 0;   // always its generated level 1, raised by research
     return rules;
 }
 

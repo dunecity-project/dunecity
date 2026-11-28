@@ -41,43 +41,106 @@ Observer-only samples can omit role measurements (roles_measured=0 or negative f
 These fail the reserve measurement prerequisite, not the game-behavior check; historical measured
 samples without roles_measured retain their original interpretation.
 
-  run-ffa-army-deploys.py --build-dir build --output-dir build/ffa-army-deploys
+It is a batch harness (schedule/build_probe/play/report), so the cluster queue can play the seeds
+on the Linux workers, one unit per seed, and check the collected results once:
+
+  run-ffa-army-deploys.py --build-dir build --results build/ffa-army-deploys --fresh
+  dunecity-queue submit --tag ffa --cwd . --rev SHA --machines aws -- \\
+      python3 tests/ai/run-ffa-army-deploys.py --results ~/Documents/projects/dunecity-results/ffa
+
+Each seed's games.csv row says whether the match ran; ffa-<seed>.log keeps the wave, army-sample
+and elimination lines the checks read. --output-dir is the old name of --results.
 """
 import argparse
+import csv
+import shutil
 import subprocess
 import sys
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(root / 'tests/performance'))
+from probe_profile import finish_game, probe_binary, remove_tree, require_free_space, scratch_dir  # noqa: E402
+
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar')
 CYCLES_PER_MINUTE = 3750
+MARKERS = ('FORMATION_WAVE:', 'FFA_ARMY_SAMPLE:', 'VANILLA_MATCH_ELIMINATED:')
+FIELDS = ('id', 'seed', 'wall_s', 'error')
 
 
 def parse(line, marker):
     return dict(part.split('=', 1) for part in line.split(marker, 1)[1].split() if '=' in part)
 
 
-def play(args, seed):
-    """One match; returns its run.log lines, or None when it did not run."""
-    out = args.output_dir / f'seed-{seed}'
+def read(path):
+    path = Path(path)
+    if not path.exists():
+        return []
+    with path.open(newline='') as handle:
+        return list(csv.DictReader(handle))
+
+
+def seeds(args):
+    return [int(s) for s in args.seeds.split(',') if s.strip()]
+
+
+def schedule(args):
+    return [{'id': f'ffa-{seed}', 'seed': seed} for seed in seeds(args)]
+
+
+def match_command(args, out, seed):
     minutes = int(args.eliminated_minutes) + 1
-    command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
-               '--output-dir', str(out), '--repeatable', '--skirmish-ffa-size', str(args.size),
-               '--skirmish-map-seed', str(seed), '--seed', str(seed), '--mod', 'dunecity',
-               '--game-options', str(root / 'tests/performance/data/stefan-game-options.ini'),
-               '--house', HOUSES[0], '--match-sides', ','.join(f'{h}:default' for h in HOUSES),
-               '--local-spectator', '--enemy-difficulty', 'brutal', '--partner-difficulty', 'brutal',
-               '--minutes', str(minutes), '--capture-mib', '256', '--wall-timeout', str(args.wall_timeout),
-               '--path-workers', '1', '--no-ai-telemetry', '--army-deploys-regression-observer']
-    outcome = subprocess.run(command, cwd=root, capture_output=True, text=True)
-    runs = sorted(out.glob('run-*'), key=lambda p: p.stat().st_mtime)
-    log = runs[-1] / 'run.log' if runs else None
-    if outcome.returncode != 0 or not log or not log.exists():
+    return [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', str(args.build_dir),
+            '--output-dir', str(out), '--skirmish-ffa-size', str(args.size),
+            '--skirmish-map-seed', str(seed), '--seed', str(seed), '--mod', 'dunecity',
+            '--game-options', str(root / 'tests/performance/data/stefan-game-options.ini'),
+            '--house', HOUSES[0], '--match-sides', ','.join(f'{h}:default' for h in HOUSES),
+            '--local-spectator', '--enemy-difficulty', 'brutal', '--partner-difficulty', 'brutal',
+            '--minutes', str(minutes), '--capture-mib', '256', '--wall-timeout', str(args.wall_timeout),
+            '--path-workers', '1', '--no-ai-telemetry', '--army-deploys-regression-observer']
+
+
+def build_probe(args, scratch):
+    """The balance probe every seed reuses: the first seed's own command, prepared only."""
+    out = Path(scratch) / 'probe'
+    remove_tree(out)
+    subprocess.run(match_command(args, out, seeds(args)[0]) + ['--build-only'], cwd=root, check=True,
+                   capture_output=True, text=True)
+    remove_tree(out / 'profile')
+    return probe_binary(out)
+
+
+def play(args, scratch, binary, game):
+    """One match; appends its games.csv row and writes ffa-<seed>.log (the lines the checks read)."""
+    seed = game['seed']
+    out = Path(scratch) / game['id']
+    remove_tree(out)
+    started = time.time()
+    outcome = subprocess.run(match_command(args, out, seed) + ['--prebuilt-probe', str(binary)],
+                             cwd=root, capture_output=True, text=True)
+    log = out / 'run.log'
+    error = ''
+    if outcome.returncode != 0 or not log.exists():
+        error = f'match did not run (rc={outcome.returncode})'
         print(f'seed {seed}:', outcome.stdout[-3000:], outcome.stderr[-3000:])
-        return None
-    return log.read_text(errors='replace').splitlines()
+    results = Path(args.results)
+    results.mkdir(parents=True, exist_ok=True)
+    lines = log.read_text(errors='replace').splitlines() if log.exists() else []
+    kept = [line[line.index(marker):] for line in lines for marker in MARKERS if marker in line]
+    (results / f'{game["id"]}.log').write_text(''.join(line + '\n' for line in kept))
+    row = {'id': game['id'], 'seed': seed, 'wall_s': round(time.time() - started), 'error': error}
+    path = results / 'games.csv'
+    exists = path.exists()
+    with path.open('a', newline='') as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        if not exists:
+            writer.writeheader()
+        writer.writerow(row)
+    finish_game(scratch, out, bool(error))
+    return row
 
 
 def deploy_failures(args, lines):
@@ -131,40 +194,28 @@ def first_elimination(lines):
     return min((float(e['end_s']) / 60 for e in eliminated), default=None)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--build-dir', type=Path, default=root / 'build')
-    parser.add_argument('--output-dir', type=Path, required=True)
-    parser.add_argument('--size', type=int, default=160)
-    parser.add_argument('--seeds', default='9101,9103,9105',
-                        help='Map and match seeds; the first also gets the deploy checks')
-    parser.add_argument('--jobs', type=int, default=3)
-    parser.add_argument('--wave-minutes', type=float, default=8.0)
-    parser.add_argument('--wave-members', type=int, default=30)
-    parser.add_argument('--reserve-value', type=int, default=5000)
-    parser.add_argument('--inside-minutes', type=int, default=6)
-    parser.add_argument('--eliminated-minutes', type=float, default=35.0)
-    parser.add_argument('--wall-timeout', type=int, default=1500)
-    args = parser.parse_args()
-    seeds = [int(s) for s in args.seeds.split(',') if s.strip()]
+def report(args):
+    """Check the collected seeds; returns the failures (empty when the gate passes)."""
+    results = Path(args.results)
+    latest = {row['id']: row for row in read(results / 'games.csv')}
+    games = schedule(args)
+    missing = [g['seed'] for g in games if g['id'] not in latest or latest[g['id']]['error']]
+    if missing:
+        print('FAIL: a match did not run (seeds ' + ', '.join(map(str, missing)) + ')')
+        return [f'seeds {missing} did not run']
+    logs = [(results / f'{g["id"]}.log').read_text(errors='replace').splitlines() for g in games]
 
-    with ThreadPoolExecutor(max(1, args.jobs)) as pool:
-        logs = list(pool.map(lambda seed: play(args, seed), seeds))
-    if any(lines is None for lines in logs):
-        print('FAIL: a match did not run (seeds ' + ', '.join(str(s) for s, l in zip(seeds, logs) if l is None) + ')')
-        return 1
-
-    print(f'seed {seeds[0]} (deploy checks):')
+    print(f'seed {games[0]["seed"]} (deploy checks):')
     failures = deploy_failures(args, logs[0])
 
     finished = []
-    for seed, lines in zip(seeds, logs):
-        print(f'seed {seed}:')
+    for game, lines in zip(games, logs):
+        print(f'seed {game["seed"]}:')
         first = first_elimination(lines)
         if first is not None and first <= args.eliminated_minutes:
-            finished.append(seed)
+            finished.append(game['seed'])
     print(f'seeds with a house eliminated by minute {args.eliminated_minutes:g}: '
-          f'{", ".join(map(str, finished)) or "none"} of {", ".join(map(str, seeds))}')
+          f'{", ".join(map(str, finished)) or "none"} of {", ".join(str(g["seed"]) for g in games)}')
     if not finished:
         failures.append(f'nobody eliminated by minute {args.eliminated_minutes:g} on any seed')
 
@@ -172,8 +223,42 @@ def main():
         print('FAIL: ' + failure)
     if not failures:
         print('PASS: the FFA armies deployed, launched waves and eliminated a house')
-    return 1 if failures else 0
+    return failures
 
 
+def run(args):
+    results = Path(args.results)
+    if args.fresh:
+        shutil.rmtree(results, ignore_errors=True)
+    results.mkdir(parents=True, exist_ok=True)
+    done = {row['id'] for row in read(results / 'games.csv') if not row['error']}
+    todo = [game for game in schedule(args) if game['id'] not in done]
+    if todo:
+        require_free_space()
+        with scratch_dir('ffa-army-deploys', args.scratch) as scratch:
+            binary = build_probe(args, scratch)
+            with ThreadPoolExecutor(max(1, args.jobs)) as pool:
+                list(pool.map(lambda game: play(args, scratch, binary, game), todo))
+    return 1 if report(args) else 0
+
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('--build-dir', type=Path, default=root / 'build')
+parser.add_argument('--results', '--output-dir', dest='results', type=Path, required=True,
+                    help='games.csv and ffa-<seed>.log; seeds already in games.csv are not replayed')
+parser.add_argument('--fresh', action='store_true', help='Delete --results first')
+parser.add_argument('--scratch', type=Path)
+parser.add_argument('--size', type=int, default=160)
+parser.add_argument('--seeds', default='9101,9103,9105',
+                    help='Map and match seeds; the first also gets the deploy checks')
+parser.add_argument('--jobs', type=int, default=3)
+parser.add_argument('--wave-minutes', type=float, default=8.0)
+parser.add_argument('--wave-members', type=int, default=30)
+parser.add_argument('--reserve-value', type=int, default=5000)
+parser.add_argument('--inside-minutes', type=int, default=6)
+parser.add_argument('--eliminated-minutes', type=float, default=35.0)
+parser.add_argument('--wall-timeout', type=int, default=1500)
+parser.add_argument('--report', action='store_true', help='Only check the games already in --results')
+args = parser.parse_args()
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit((1 if report(args) else 0) if args.report else run(args))

@@ -20,6 +20,7 @@
 
 #include <players/CombatReward.h>
 #include <players/DeviationReward.h>
+#include <players/QuantBotAirDefencePolicy.h>
 namespace AITelemetry { class Record; }
 class ObjectData;
 
@@ -88,6 +89,19 @@ public:
     void restoreObserverAI(bool enabled) { ai = enabled; }
     bool isAutoRepairEnabled() const { return autoRepairEnabled; }
     void setAutoRepairEnabled(bool enabled) { autoRepairEnabled = enabled; }
+    /// The Repair Yard side panel's "Return units" switch (CMD_HOUSE_REPAIR_RETURN). On: a free
+    /// Carryall flies a repaired unit back to where it was picked up (a unit that drove in goes
+    /// back to the spot it guarded). Off: the yard releases it beside itself. One switch for the
+    /// whole house, because a unit takes whichever yard is free, not one the player chose. It
+    /// only matters where the match rule Manual Carryall Drops allows the flight at all.
+    bool isRepairReturnEnabled() const { return repairReturnEnabled; }
+    void setRepairReturnEnabled(bool enabled) { repairReturnEnabled = enabled; }
+    /// Bombs of enemy city airplanes on this house's buildings, and the Rocket Turrets its
+    /// QuantBot ordered in answer (AirRaidTurrets, QuantBotAirDefencePolicy.h). Deterministic
+    /// simulation state: the bomb's impact writes the hits (Bullet.cpp), QuantBot the orders.
+    const QuantBotAirDefencePolicy::RaidRecord& getAirRaid() const { return airRaid; }
+    void noteBombHit(int x, int y, Uint32 cycle) { airRaid.noteHit(x, y, cycle); }
+    void noteAirRaidTurretOrdered(Uint32 cycle) { airRaid.noteTurretOrdered(cycle); }
     /// Team 0 (anonymous houses) and the Natives house never die: neither is a side of the match.
     bool isAlive() const;
 
@@ -143,6 +157,10 @@ public:
     inline Sint32 getNumItemDamageInflicted(int itemID) const { return numItemDamageInflicted[itemID]; }
     const CombatReward::Totals& getCombatReward(int itemID) const { return combatRewards[itemID]; }
     void addCombatReward(Uint32 itemID, const CombatReward::Totals& reward);
+    /// Match log only: one UNIT_ECONOMY line per unit or structure type this house has built,
+    /// lost or scored with (built, lost, price, the combat record's damage value and kills), to
+    /// set what each type destroyed beside what it cost (tests/ai/unit-economy-report.py).
+    void logUnitEconomy(const char* phase) const;
     /// Scale of the learning bonus for destroying one of this house's units of \a itemID,
     /// read from this house's own measured record with that type. O(1), no scan.
     int killBonusPermilleForOwnType(int itemID, int price) const;
@@ -308,9 +326,13 @@ public:
     int getRadarResearchRemaining() const { return radarResearch.remaining; }
     void saveRadarResearch(OutputStream& stream) const;
     void loadRadarResearch(InputStream& stream);
+    void saveAirRaid(OutputStream& stream) const;
+    void loadAirRaid(InputStream& stream);
 
     void incrementUnits(int itemID, bool addMilitaryValue = true);
-    void decrementUnits(int itemID);
+    /// A unit of this type is gone. LOST counts it in getNumLostItems(); a spent unit (a
+    /// Saboteur that blew up its target) leaves the house without being a loss.
+    void decrementUnits(int itemID, bool lost = true);
     void cancelCreatedUnit(int itemID);
     void incrementStructures(int itemID);
     void decrementStructures(int itemID, const Coord& location, bool recordLoss = true);
@@ -350,6 +372,8 @@ public:
 
 protected:
     bool autoRepairEnabled = false;
+    bool repairReturnEnabled = true;   ///< saved from SAVEGAMEVERSION_REPAIR_RETURN; on is the behaviour before it
+    QuantBotAirDefencePolicy::RaidRecord airRaid;   ///< saved from SAVEGAMEVERSION_AIR_RAID_RECORD; an older save has none
     void decrementHarvesters(int itemID);
 
     /**

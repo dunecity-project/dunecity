@@ -122,12 +122,23 @@ def write_json(path, data):
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
 
 
+def composition_name(cell):
+    """Generated cells carry a label; explicit schema-v1 cells may give only rock/mountain (default 30/5)."""
+    if 'composition' in cell:
+        return str(cell['composition'])
+    rock, mountain = int(cell.get('rock', 30)), int(cell.get('mountain', 5))
+    for comp in COMPOSITIONS:
+        if (comp['rock'], comp['mountain']) == (rock, mountain):
+            return comp['name']
+    return f'rock{rock}-mountain{mountain}'
+
+
 def coverage(rows):
     result = {}
     for factor in ('format', 'size', 'spice_level', 'initial_tech', 'composition'):
         counts = {}
         for row in rows:
-            key = str(row[factor])
+            key = composition_name(row) if factor == 'composition' else str(row[factor])
             counts[key] = counts.get(key, 0) + 1
         result[factor] = counts
     result['joint_format_size_spice'] = [dict(format=f, size=s, spice_level=p,

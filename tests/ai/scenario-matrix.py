@@ -74,19 +74,22 @@ HOUSE_NUMBERS = {'harkonnen': 0, 'atreides': 1, 'ordos': 2, 'fremen': 3, 'sardau
                  'neutral': 6, 'rebels': 7}
 # Houses for N players, in this order (the 7th and 8th custom-game houses last).
 HOUSES = ('harkonnen', 'atreides', 'ordos', 'sardaukar', 'fremen', 'mercenary', 'rebels', 'neutral')
-CLASSES = {'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBrutal',
-           'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard'}
+CLASSES = {'QX': 'qBotEasiest', 'QE': 'qBotEasy', 'QM': 'qBotMedium', 'QH': 'qBotHard', 'QB': 'qBotBrutal',
+           'AE': 'AIPlayerEasy', 'AM': 'AIPlayerMedium', 'AH': 'AIPlayerHard',
+           'CA': 'CampaignAIPlayer'}
 QUANTBOT_ORDER = ('QB', 'QH', 'QM', 'QE')
-DIFFICULTY = {'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
-CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'ladder', 'mp', 'team', 'controls')
+DIFFICULTY = {'QX': 'easiest', 'QE': 'easy', 'QM': 'medium', 'QH': 'hard', 'QB': 'brutal'}
+QUANTBOT_CODE = {name: code for code, name in DIFFICULTY.items()}
+CATEGORIES = ('skirmish', 'cy', 'aaa', 'campaign', 'citycampaign', 'ladder', 'mp', 'team', 'controls')
 GAME_FIELDS = ('id', 'category', 'cell', 'seed', 'mod', 'map', 'sides', 'expect', 'outcome', 'winner_team',
                'winner', 'end_s', 'minutes', 'limit', 'eliminations', 'triggers', 'fired', 'win_flags', 'quota',
                'city_pop', 'win_type', 'digest', 'wall_s', 'error', 'endgame_audit', 'source_commit', 'source_fingerprint',
                'style_seats', 'control_diagnostics', 'campaign_mode', 'partner', 'enemy_ai',
-               'enemy_difficulty') + genome_qualification.FIELDS
+               'enemy_difficulty', 'helper_style', 'ai_configs', 'setup_identity', 'objectives') + genome_qualification.FIELDS
 HOUSE_FIELDS = ('id', 'category', 'cell', 'house', 'team', 'code', 'players', 'alive', 'eliminated_s',
                 'kill_value', 'loss_value', 'structures', 'army_value', 'army_units', 'away_peak',
-                'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills')
+                'sortie_minutes', 'place', 'score', 'drawn', 'start', 'crush_kills', 'credits', 'population',
+                'land_value', 'switch_activity')
 SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', 'team', 'alive', 'credits',
                  'army_value', 'army_units', 'harvesters', 'structures', 'factories', 'kill_value', 'loss_value',
                  'power', 'need', 'population', 'tax', 'demand', 'built', 'structures_lost', 'base_hp', 'yards',
@@ -95,7 +98,9 @@ SAMPLE_FIELDS = ('id', 'category', 'cell', 'seed', 'minute', 'cycle', 'house', '
                  'spice', 'spice_gross', 'tax_gross', 'starting_cash', 'spice_cash', 'city_cash', 'capacity',
                  'police_funding', 'army_target', 'spent_total', 'power_spent', 'police_charged', 'storage_lost',
                  'ledger_enabled', 'refineries', 'power_required', 'storage_full_cycles', 'storage_overflow_cycles',
-                 'storage_income_lost', 'power_deficit_cycles', 'required_power_deficit_cycles') + FLEET_VALUES
+                 'storage_income_lost', 'power_deficit_cycles', 'required_power_deficit_cycles',
+                 'palace', 'palace_built', 'stadium', 'stadium_built', 'nuclear', 'nuclear_built', 'windtrap',
+                 'windtrap_built') + FLEET_VALUES
 REFINERY_FIELDS = ('id', 'category', 'cell', 'seed') + REFINERY_VALUES
 WAVE_FIELDS = ('id', 'category', 'cell', 'seed', 'house', 'event', 'cycle', 'members', 'value')
 # The engine's CAMPAIGN_AI game-log lines (trigger, openings, waves with caps, deferrals), verbatim.
@@ -209,6 +214,68 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
       skirmish_spec(192, 'medium', 2), minutes=80)
     s('4v4-fortress-largearmy', 'dunecity', team_slots(['QH'] * 4, ['QM'] * 4), skirmish_spec(192, 'fortress', 5),
       expect=('wins', 1), minutes=80)
+    # Stefan's no-spice city lobby (save nobuildup, 2026-11-21): four QuantBot Brutal, free-for-all
+    # on a symmetric 128x128 map, Fortress bases, no army, city 40,000, no spice, sand/rock/mountain
+    # 30/40/30, tech 5, 20,000 credits. Only with --cells; for seat-only screens (--seat-style).
+    cells.append(dict(match('skirmish', '4p-ffa-fortress-nospice-city40k', 'dunecity', ffa('QB', 'QB', 'QB', 'QB'),
+                            skirmish=skirmish_spec(128, 'fortress', 0, city=4, spice=0, sand=30, rock=40,
+                                                   mountain=30, tech=5, credits=20000, symmetric=1),
+                            minutes=120, full=24), opt_in=True, measured=True))
+    # Weak seat (directed waves, 2026-11-21): the candidate first seat is the weaker QuantBot - Hard
+    # against Brutal 1v1 from both starts, and one Hard house in a free-for-all of three Brutal.
+    # Only with --cells; for seat-only screens (--seat-style).
+    for mod in ('vanilla', 'dunecity'):
+        cells.append(dict(match('skirmish', 'weak-1v1-qh-v-qb-rs128', mod, ffa('QH', 'QB'),
+                                skirmish=skirmish_spec(128, 'medium', 0), minutes=75, full=48, both_sides=True),
+                          opt_in=True, measured=True))
+        cells.append(dict(match('skirmish', 'weak-4p-ffa-qh-v-3qb', mod, ffa('QH', 'QB', 'QB', 'QB'),
+                                skirmish=skirmish_spec(128, 'medium', 2), minutes=90, full=48),
+                          opt_in=True, measured=True))
+    # The weak seat at tech 5 (no Palace until research reaches tech 8; Stefan's lobby is tech 5).
+    # 48 seeds since 2026-11-22 (the first 16 are the economy screen's; --seeds-per-cell 16 replays it).
+    cells.append(dict(match('skirmish', 'weak-1v1-qh-v-qb-rs128-tech5', 'dunecity', ffa('QH', 'QB'),
+                            skirmish=skirmish_spec(128, 'medium', 0, tech=5), minutes=90, full=48, both_sides=True),
+                      opt_in=True, measured=True))
+    cells.append(dict(match('skirmish', 'weak-4p-ffa-qh-v-3qb-tech5', 'dunecity', ffa('QH', 'QB', 'QB', 'QB'),
+                            skirmish=skirmish_spec(128, 'medium', 2, tech=5), minutes=105, full=48),
+                      opt_in=True, measured=True))
+    # The same weak seat on larger generated DuneCity maps (economy confirmation, 2026-11-21).
+    cells.append(dict(match('skirmish', 'weak-1v1-qh-v-qb-rs160', 'dunecity', ffa('QH', 'QB'),
+                            skirmish=skirmish_spec(160, 'medium', 0), minutes=90, full=24, both_sides=True),
+                      opt_in=True, measured=True))
+    cells.append(dict(match('skirmish', 'weak-4p-ffa-qh-v-3qb-rs160', 'dunecity', ffa('QH', 'QB', 'QB', 'QB'),
+                            skirmish=skirmish_spec(160, 'medium', 2), minutes=105, full=24),
+                      opt_in=True, measured=True))
+    # The same lobby played to 240 minutes (its 120-minute games nearly all time out with every
+    # house alive, so placement cannot separate a candidate from the control).
+    cells.append(dict(match('skirmish', '4p-ffa-fortress-nospice-city40k-long', 'dunecity', ffa('QB', 'QB', 'QB', 'QB'),
+                            skirmish=skirmish_spec(128, 'fortress', 0, city=4, spice=0, sand=30, rock=40,
+                                                   mountain=30, tech=5, credits=20000, symmetric=1),
+                            minutes=240, full=48), opt_in=True, measured=True))
+    # Fortress 1v1 mirror (default-change check, 2026-11-22): the Fortress duel of formation-duel.py
+    # (Random Skirmish 1v1, Fortress bases, 20,000-credit armies) as a scenario cell, so a play style
+    # can go on the first seat (--seat-style). Hard and Brutal mirrors, both starts. Only with --cells.
+    for mod in ('vanilla', 'dunecity'):
+        for code in ('QH', 'QB'):
+            for size in (128, 160, 192):
+                cells.append(dict(match('skirmish', f'fortress-1v1-{code.lower()}-mirror-rs{size}', mod, ffa(code, code),
+                                        skirmish=skirmish_spec(size, 'fortress', 5), minutes=45, full=8,
+                                        both_sides=True), opt_in=True, measured=True))
+    # QuantBot Easiest (2026-11-22; docs/campaign-ai-difficulty-matrix.md): the weakest opponents
+    # we have as player proxies - the AI Player at each difficulty - against QuantBot Easy and
+    # against QuantBot Easiest from even starts, on the most-played 1v1 map and a generated one,
+    # both starts; and Easy against Easiest. Only with --cells.
+    for proxy in ('AE', 'AM', 'AH', 'QE'):
+        for enemy in ('QE', 'QX'):
+            if proxy == enemy:
+                continue
+            label = f'{proxy.lower()}-v-{enemy.lower()}'
+            cells.append(dict(match('skirmish', f'easy-1v1-{label}-habbanya-penny', 'vanilla', ffa(proxy, enemy),
+                                    path=mp_map('2P - 128x128 - 1v1 - Habbanya-Penny'), minutes=60, full=12,
+                                    both_sides=True), opt_in=True, measured=True))
+            cells.append(dict(match('skirmish', f'easy-1v1-{label}-rs128', 'vanilla', ffa(proxy, enemy),
+                                    skirmish=skirmish_spec(128, 'medium', 0), minutes=60, full=12, both_sides=True),
+                              opt_in=True, measured=True))
     # 2. Construction Yard only, default credits.
     c = lambda name, mod, slots, size, **kw: cells.append(
         match('cy', name, mod, slots, skirmish=skirmish_spec(size, 'cy', 0), **kw))
@@ -250,6 +317,33 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                           kind='campaign', mod='vanilla', partner=partner, enemy_ai='quantbot',
                           enemy_difficulty=enemy_difficulty, minutes=80, full=1, smoke=0,
                           opt_in=True, measured=True))
+        # Diagnostic (docs/original-campaign-ai.md), only with --cells: the campaign menu's
+        # "Campaign AI" enemy (CampaignAIPlayer) against the same idle human with QuantBot support.
+        # -original and -legacy force OriginalCampaignAI on and off; -release plays whatever the
+        # build defaults to, the only form a release older than the switch can play.
+        for rules, flag in (('original', 'on'), ('legacy', 'off'), ('release', None)):
+            cells.append(dict(category='campaign', name=f'partner-{partner}-v-campaign-ai-{rules}',
+                              kind='campaign', mod='vanilla', partner=partner, enemy_ai='campaign',
+                              enemy_difficulty=enemy_difficulty, original_rules=flag, minutes=80,
+                              full=1, smoke=0, opt_in=True, measured=True))
+    # DuneCity campaign (docs/city-campaign.md), only with --categories citycampaign: the ten
+    # DCITY missions as Atreides, an idle human with a QuantBot helper one tier above the enemy
+    # QuantBots. The missions' native objectives (city goals, deadlines, conquest) end the game;
+    # 120 minutes, because a Medium helper clearing four Easy houses (mission 10) can take 90+.
+    # Two gradients (Stefan, 2026-11-19): one tier above the enemies the helper must win, and against
+    # its own tier it must lose at least 60% of games (helper-X-v-X).
+    for partner, enemy in (('brutal', 'hard'), ('hard', 'medium'), ('medium', 'easy'),
+                           ('brutal', 'brutal'), ('hard', 'hard'), ('medium', 'medium')):
+        cells.append(dict(category='citycampaign', name=f'helper-{partner}-v-{enemy}', kind='campaign',
+                          mod='dunecity', partner=partner, enemy_ai='quantbot', enemy_difficulty=enemy,
+                          minutes=120, full=4, smoke=0, city=True, measured=True))
+    # Reworked campaign (docs/reworked-campaign.md), only with --cells: a reworked- twin of every vanilla
+    # campaign cell above plays the 22 RWRK_ missions of every house with a complete reworked set on the
+    # same seeds, reported against the originals
+    # (--cells '^campaign/(reworked-)?player-brutal-v-quantbot-easy/vanilla$' --cases 'harkonnen|ordos').
+    cells.extend(dict(cell, name=f'reworked-{cell["name"]}', reworked=True,
+                      houses=('atreides', 'harkonnen', 'ordos'), opt_in=True, measured=True)
+                 for cell in [c for c in cells if c['category'] == 'campaign' and c['mod'] == 'vanilla'])
     # 5. Difficulty ladder: the stronger QuantBot must win. Every adjacent pair, plus Brutal v Medium and
     # Hard v Easy; in the full tier both houses of every seed (each side keeps its start).
     # Long maps (the decision, Stefan 2026-10-20: "don't test on such short timelines"): Random
@@ -268,6 +362,15 @@ def matrix(ladder_seeds=LADDER_SEEDS, team_seeds=TEAM_SEEDS, enemy_difficulty='e
                 smoke = 2 if (strong, weak, map_name) == ('QH', 'QE', 'rs-vanilla') else 0
                 cells.append(match('ladder', f'{strong}-v-{weak}-{map_name}', mod, ffa(strong, weak),
                                    expect=('wins', 1), smoke=smoke, full=seeds, both_sides=True, **where))
+    # Opt-in (--cells): compact DuneCity maps, where the difficulties' map-size limits (64x64: army
+    # Easy 8,000 / Medium 12,000 / Hard 20,000, Brutal rolling; city Easy 10,000 ... Hard 40,000)
+    # bind inside the first 15 minutes (docs/city-campaign.md, "Map size and the ladder").
+    for strong, weak in (('QB', 'QH'), ('QH', 'QM'), ('QM', 'QE')):
+        for size, minutes in ((64, 45), (80, 45)):
+            cells.append(dict(match('ladder', f'{strong}-v-{weak}-compact-rs{size}-dunecity', 'dunecity',
+                                    ffa(strong, weak), expect=('wins', 1), smoke=0, full=ladder_seeds // 2,
+                                    both_sides=True, skirmish=skirmish_spec(size, 'small', 0), minutes=minutes),
+                              opt_in=True, measured=True))
     # 6. Most-played bundled multiplayer maps (dunelegacy.com/usage.html, all time, 2026-10-18).
     for name, players in (('2P - 128x128 - 1v1 - Habbanya-Penny', 1), ('2P - 128x128 - 1v1 - Tuono-Orac', 1),
                           ('2P - 128x128 - 1v1 - Sihaya-Chvrches', 1), ('4P - 128x64 - 2v2 - Sihaya-Toto', 2),
@@ -313,7 +416,8 @@ def campaign_missions():
 
 
 def seeds_for(category, cell_name, count):
-    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517}[category]
+    base = {'skirmish': 5101, 'cy': 6203, 'ladder': 7307, 'mp': 8411, 'campaign': 42, 'team': 9513, 'aaa': 9517,
+            'citycampaign': 20261119}[category]
     offset = sum(ord(ch) for ch in cell_name) % 97
     return [base + 1009 * (i + offset) for i in range(count)]
 
@@ -324,6 +428,17 @@ def aaa_seeds(count):
 
 
 def schedule(args):
+    if getattr(args, 'seat_style', None) and (getattr(args, 'style', None) or getattr(args, 'helper_style', None) or getattr(args, 'genome', None)):
+        raise ValueError('Seat-only treatment cannot combine with another style or genome')
+    if getattr(args, 'case_manifest', None):
+        import campaign_research
+        if getattr(args, 'style', None) or getattr(args, 'seat_style', None) or getattr(args, 'genome', None) or getattr(args, 'campaign_ai_only', False):
+            raise ValueError('Campaign research deck cannot change all controllers or remove the human')
+        games = campaign_research.schedule(args.case_manifest, campaign_game)
+        if getattr(args, 'shard', None):
+            k, n = args.shard
+            games = games[k - 1::n]
+        return games
     diagnostic = getattr(args, 'control_diagnostics', False)
     if diagnostic and (args.tier != 'controls' or getattr(args, 'check', False)):
         raise SystemExit('--control-diagnostics requires --tier controls and cannot be a --check gate')
@@ -352,6 +467,12 @@ def schedule(args):
             continue
         if cell.get('opt_in') and not getattr(args, 'cells', None):
             continue
+        if cell.get('city') and 'citycampaign' not in (args.categories or ()):
+            continue
+        # A reworked- twin only when --cells asks for reworked missions: an unanchored pattern for an
+        # original cell ('player-brutal-v-quantbot-easy/vanilla') must not also schedule its twin.
+        if cell.get('reworked') and 'reworked' not in args.cells:
+            continue
         count = cell['smoke'] if args.tier == 'smoke' else cell['full']
         if args.seeds_per_cell is not None and args.tier == 'full':
             count = min(count, args.seeds_per_cell)
@@ -359,8 +480,24 @@ def schedule(args):
             count = args.aaa_seeds
         if count <= 0:
             continue
+        if cell['kind'] == 'campaign' and cell.get('city'):
+            specs = [f's{s:g}' for s in (getattr(args, 'city_strength', None) or [])]
+            specs += getattr(args, 'city_variant', None) or []
+            for spec in (specs or [None]):
+                variant = dict(cell, name=f'{cell["name"]}-{spec}') if spec else cell
+                for mission in (getattr(args, 'city_missions', None) or range(1, 11)):
+                    seeds = getattr(args, 'campaign_seeds', None)
+                    if seeds is None:
+                        seeds = seeds_for('citycampaign', f'm{mission}', count)
+                    for seed in dict.fromkeys(seeds):
+                        # The probe's --level is a 1-9 campaign level; the mission picks the map.
+                        game = campaign_game(variant, 'atreides', min(mission, 9), mission, seed, 'full')
+                        if spec:
+                            game['city_variant'] = spec
+                        games.append(game)
+            continue
         if cell['kind'] == 'campaign':
-            for house in ('atreides', 'harkonnen', 'ordos'):
+            for house in cell.get('houses', ('atreides', 'harkonnen', 'ordos')):
                 for level, mission in campaign_missions():
                     seeds = getattr(args, 'campaign_seeds', None)
                     if seeds is None:
@@ -434,9 +571,16 @@ def match_game(cell, index, seed, suffix=''):
 
 
 def campaign_game(cell, house, level, mission, seed, campaign_mode='full'):
-    enemy = 'Q' + cell['enemy_difficulty'][0].upper()
+    enemy = 'CA' if cell['enemy_ai'] == 'campaign' else QUANTBOT_CODE[cell['enemy_difficulty']]
     mode = '#single-mission' if campaign_mode == 'single' else '#full-campaign'
-    return dict(id=f'campaign/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category='campaign',
+    rules = {'original_rules': cell['original_rules']} if cell.get('original_rules') else {}
+    if cell.get('reworked'):
+        rules['reworked'] = True
+    if cell.get('city'):
+        rules['city_campaign'] = True
+    # Campaign research decks (campaign_research.schedule) build cells without a category.
+    category = cell.get('category', 'campaign')
+    return dict(**rules, id=f'{category}/{cell["name"]}/{cell["mod"]}/{house}-m{mission}/{seed}{mode}', category=category,
                 cell=f'{cell["name"]}{mode}/{cell["mod"]}', kind='campaign', seed=seed, mod=cell['mod'],
                 map=f'{house} level {level} mission {mission}', house=house, level=level, mission=mission,
                 partner=cell['partner'], enemy_ai=cell['enemy_ai'], enemy_difficulty=cell['enemy_difficulty'],
@@ -490,6 +634,10 @@ def command(args, binary, game, out):
         cmd += ['--no-ai-telemetry']
     if getattr(args, 'style', None) and args.tier != 'controls':
         cmd += ['--scenario-style', args.style]
+    if getattr(args, 'helper_style', None):
+        if game['kind'] != 'campaign' or game.get('ai_only') or getattr(args, 'style', None):
+            raise ValueError('Helper treatment requires an authored human/support campaign')
+        cmd += ['--helper-style', args.helper_style]
     options_path = game.get('options')
     if getattr(args, 'genome', None):
         options_path = out.with_suffix('.candidate') / 'game-options.ini'
@@ -512,6 +660,14 @@ def command(args, binary, game, out):
                 '--enemy-difficulty', game['enemy_difficulty'], '--campaign-mode', game['campaign_mode']]
         if game.get('ai_only'):
             cmd += ['--campaign-ai-only']
+        if game.get('original_rules'):
+            cmd += ['--original-campaign-rules', game['original_rules']]
+        if game.get('reworked'):
+            cmd += ['--reworked']
+        if game.get('city_campaign'):
+            cmd += ['--city-campaign']
+        if game.get('city_variant'):
+            cmd += ['--city-campaign-map', str(out.with_suffix('.city.ini'))]
         return cmd
     sides = ','.join(f'{house}:{team}:{CLASSES[code]}' for house, team, code in game['sides'])
     cmd += ['--house', game['sides'][0][0], '--scenario-sides', sides, '--local-spectator']
@@ -527,9 +683,11 @@ def control_style_inputs(args, game, out):
     """Controls: --style overlays only the candidate seat (slot 0, the Brutal QuantBot) through the
     per-house genome-phase transport of dunecity-audit.py --candidate-style. Every other seat,
     including a QuantBot ally, keeps the native config."""
-    if args.tier != 'controls' or not getattr(args, 'style', None):
+    style = getattr(args, 'seat_style', None) or (getattr(args, 'style', None) if args.tier == 'controls' else None)
+    if not style:
         return None
-    style = args.style
+    if getattr(args, 'seat_style', None) and (getattr(args, 'style', None) or getattr(args, 'genome', None) or game['kind'] == 'campaign'):
+        raise ValueError('Seat-only controls require a non-campaign game without another treatment')
     source = root / 'tests/ai/play-styles' / f'{style}.ini'
     if Path(style).name != style or not source.is_file():
         raise SystemExit(f'Unknown play style: {style}')
@@ -537,8 +695,8 @@ def control_style_inputs(args, game, out):
     if re.search(rb'^\s*\[\s*Play Style\s*\]', payload, re.IGNORECASE | re.MULTILINE):
         raise SystemExit('Candidate-only control styles must be config overlays (no [Play Style] section)')
     house, _, code = game['sides'][0]
-    if code != 'QB':
-        raise SystemExit(f'Control candidate seat is {code}, not QB: {game["id"]}')
+    if code not in DIFFICULTY:
+        raise SystemExit(f'Control candidate seat is not QuantBot: {game["id"]}')
     directory = out.with_suffix('.candidate')
     remove_tree(directory)
     directory.mkdir(parents=True)
@@ -569,9 +727,10 @@ def style_seats(lines):
 
 
 def expected_style_seats(args, game):
-    if not getattr(args, 'style', None):
+    style = getattr(args, 'seat_style', None) or getattr(args, 'style', None)
+    if not style:
         return 'none'
-    return f'{HOUSE_NUMBERS[game["sides"][0][0]]}=candidate-{args.style}'
+    return f'{HOUSE_NUMBERS[game["sides"][0][0]]}=candidate-{style}'
 
 
 def campaign_roster_error(game, houses):
@@ -582,33 +741,54 @@ def campaign_roster_error(game, houses):
         expected_player.add('HumanPlayer')
     if player is None or set(player['players'].split('+')) != expected_player:
         return 'campaign player roster does not match the requested human/support setup'
-    expected_enemy = CLASSES['Q' + game['enemy_difficulty'][0].upper()]
+    expected_enemy = CLASSES['CA' if game['enemy_ai'] == 'campaign' else QUANTBOT_CODE[game['enemy_difficulty']]]
     enemies = [row for row in houses if row['team'] != player['team']]
     if not enemies or any(row['players'] != expected_enemy for row in enemies):
         return f'campaign enemies are not all {expected_enemy}'
     return ''
 
 
-def win_type(result, houses, campaign):
+def win_type(result, houses, campaign, lines=()):
     if not result or result.get('outcome') != 'won' or not campaign:
         return ''
+    if any('MISSION_OBJECTIVES met' in line for line in lines):
+        return 'objectives'
+    if int(result.get('win_flags') or 0) & 8 and any(h['alive'] == '1' for h in houses if h['team'] != '1'):
+        return 'survival'
     if int(result.get('quota') or 0) > 0 and int(result.get('win_flags') or 0) & 4 and \
             any(h['alive'] == '1' for h in houses if h['team'] != '1'):
         return 'quota'
     return 'conquest'
 
 
+CITY_VARIANT_KEYS = {'s': '--strength', 'g': '--goals', 'w': '--grace', 'c': '--compact'}
+
+
+def city_variant_args(spec):
+    """'s1.5g2w1.5' -> ['--strength', '1.5', '--goals', '2', '--grace', '1.5'] (scripts/gen_city_campaign.py)."""
+    parts = re.findall(r'([sgwc])([0-9.]+)', spec)
+    if not parts or ''.join(k + v for k, v in parts) != spec:
+        raise SystemExit(f'Bad --city-variant {spec!r}: letters s (strength), g (goals), w (grace), c (compact 1) and numbers')
+    return [arg for key, value in parts for arg in (CITY_VARIANT_KEYS[key], value)]
+
+
 def play(args, scratch, binary, game):
     out = scratch / f'g{abs(hash(game["id"])) % 10**10}'
     remove_tree(out)
+    variant = out.with_suffix('.city.ini')
+    if game.get('city_variant'):
+        # A variant of the shipped mission, generated from the committed generator.
+        subprocess.run([sys.executable, str(root / 'scripts/gen_city_campaign.py'), '--mission', str(game['mission']),
+                        *city_variant_args(game['city_variant']), '--out', str(variant)],
+                       cwd=root, check=True, capture_output=True, text=True)
     started = time.time()
     env = dict(os.environ)
     env.pop('BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER', None)
     env.pop('BALANCE_DUNECITY_AUDIT', None)
     env.pop('DUNECITY_TECH_SAVINGS_AUDIT', None)
-    if args.tier == 'controls':
+    if args.tier == 'controls' or getattr(args, 'seat_style', None) or getattr(args, 'helper_style', None):
         # Native means no inherited experiment; a --style reaches the candidate seat only.
-        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
+        for key in ('BALANCE_SCENARIO_STYLE', 'BALANCE_HELPER_STYLE', 'BALANCE_GENOME_PHASE_DIR', 'DUNECITY_QUANTBOT_OVERLAY'):
             env.pop(key, None)
     candidate_dir = out.with_suffix('.candidate')
     if getattr(args, 'genome', None):
@@ -625,11 +805,18 @@ def play(args, scratch, binary, game):
     assert '--army-deploys-regression-observer' not in cmd
     assert 'BALANCE_ARMY_DEPLOYS_REGRESSION_OBSERVER' not in env
     outcome = subprocess.run(cmd, cwd=root, capture_output=True, text=True, env=env)
+    variant.unlink(missing_ok=True)
     wall = round(time.time() - started)
     log = out / 'run.log'
     lines = log.read_text(errors='replace').splitlines() if log.exists() else []
     result = next((parse(l, 'SCENARIO_RESULT:') for l in lines if 'SCENARIO_RESULT:' in l), {})
     houses = [parse(l, 'SCENARIO_HOUSE:') for l in lines if 'SCENARIO_HOUSE:' in l]
+    # Per-house redevelopment switch counters (QuantBotRedevelop.cpp), kept as 'key=value;...'.
+    activity = {}
+    for l in lines:
+        if 'SCENARIO_SWITCH_ACTIVITY:' in l:
+            fields = parse(l, 'SCENARIO_SWITCH_ACTIVITY:')
+            activity[fields.pop('house', '')] = ';'.join(f'{k}={v}' for k, v in fields.items())
     digest = next((parse(l, 'PROBE_DIGEST:').get('digest', '') for l in lines if 'PROBE_DIGEST:' in l and 'final=1' in l), '')
     endgame_audit = {row['house']: row for line in lines if 'CAMPAIGN_ENDGAME_AUDIT:' in line
                      for row in [parse(line, 'CAMPAIGN_ENDGAME_AUDIT:')]}
@@ -647,17 +834,32 @@ def play(args, scratch, binary, game):
            'triggers': result.get('triggers', ''), 'fired': result.get('fired', ''),
            'win_flags': result.get('win_flags', ''), 'quota': result.get('quota', ''),
            'city_pop': result.get('city_pop', ''),
-           'win_type': win_type(result, houses, campaign), 'digest': digest, 'wall_s': wall,
+           'win_type': win_type(result, houses, campaign, lines), 'digest': digest, 'wall_s': wall,
            'error': '' if outcome.returncode == 0 and result else f'rc={outcome.returncode}',
            'endgame_audit': json.dumps(endgame_audit, sort_keys=True, separators=(',', ':')),
            'source_commit': summary.get('sourceCommit', ''),
            'source_fingerprint': summary.get('sourceFingerprint', ''),
            'style_seats': style_seats(lines),
+           'helper_style': next((parse(l, 'SCENARIO_HELPER_STYLE:').get('style', '') for l in lines if 'SCENARIO_HELPER_STYLE:' in l), ''),
+           'ai_configs': json.dumps({r['house']: r.get('config_hash', '') for l in lines if 'SCENARIO_AI_CONFIG:' in l for r in [parse(l, 'SCENARIO_AI_CONFIG:')]}, sort_keys=True),
+           'setup_identity': json.dumps(next((parse(l, 'SCENARIO_SETUP:') for l in lines if 'SCENARIO_SETUP:' in l), {}), sort_keys=True),
            'control_diagnostics': int(getattr(args, 'control_diagnostics', False)),
+           # DuneCity campaign goals: minute -> [population, credits, crime, land value, enemies left].
+           'objectives': json.dumps({r['minute']: [int(r['population']), int(r['credits']), int(r['crime']), int(r['land']),
+                                                    int(r['enemies'])]
+                                     for l in lines if 'MISSION_OBJECTIVES_SAMPLE:' in l
+                                     for r in [parse(l, 'MISSION_OBJECTIVES_SAMPLE:')]}, separators=(',', ':')),
            **{key: game.get(key, '') for key in ('campaign_mode', 'partner', 'enemy_ai', 'enemy_difficulty')}}
     if campaign and not row['error']:
         row['error'] = campaign_roster_error(game, houses)
-    if args.tier == 'controls':
+    if getattr(args, 'helper_style', None) and not row['error']:
+        configs = json.loads(row['ai_configs'])
+        native = json.loads(row['setup_identity']).get('config_hash')
+        helper = str(HOUSE_NUMBERS[game['house']])
+        if (row['helper_style'] != args.helper_style or not native or helper not in configs or len(configs) < 2
+                or any(value != native for house, value in configs.items() if house != helper)):
+            row['error'] = 'Helper treatment missing or enemy configuration changed'
+    if args.tier == 'controls' or getattr(args, 'seat_style', None):
         remove_tree(candidate_dir)
         if not row['error'] and row['style_seats'] != expected_style_seats(args, game):
             row['error'] = f'style seats {row["style_seats"] or "unrecorded"} != {expected_style_seats(args, game)}'
@@ -701,10 +903,12 @@ def play(args, scratch, binary, game):
                            'sortie_minutes': h['sortie_minutes'],
                            'place': p.place if p else '', 'score': round(p.score, 4) if p else '',
                            'drawn': int(p.drawn) if p else '', 'start': h.get('start', ''),
-                           'crush_kills': h.get('crush_kills', '')})
+                           'crush_kills': h.get('crush_kills', ''), 'credits': h.get('credits', ''),
+                           'population': h.get('population', ''), 'land_value': h.get('land_value', ''),
+                           'switch_activity': activity.get(h['house'], '')})
     samples = {}
     for line in lines:
-        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:'):
+        for marker in ('ELIMINATION_SAMPLE:', 'DUNECITY_AUDIT:', 'DUNECITY_ECONOMY:', 'DUNECITY_LANDMARKS:'):
             if marker in line:
                 sample = parse(line, marker)
                 sample.update(json.loads(sample.pop('economy', '{}')))
@@ -880,6 +1084,21 @@ def load(dirs):
     return games, houses
 
 
+def replay_problem(original, replay):
+    """Why a '#replay' game fails to prove determinism, or None when both final digests match.
+
+    A game that never printed its final digest records an empty one, and two empty digests
+    must not pass as a reproduced game."""
+    if original is None:
+        return 'replay has no original game'
+    if not original['digest'] or not replay['digest']:
+        return (f'replay check has no final digest (original {original["digest"] or "missing"}, '
+                f'replay {replay["digest"] or "missing"})')
+    if original['digest'] != replay['digest']:
+        return f'replay diverged: final digest {replay["digest"]} != {original["digest"]}'
+    return None
+
+
 def smoke_checks(args, results):
     games, houses = load([results])
     ok = True
@@ -905,9 +1124,9 @@ def smoke_checks(args, results):
                 if sortied < 2:
                     problems.append(f'only {sortied} house(s) left base or killed anything')
         if gid.endswith('#replay'):
-            original = games.get(gid[:-len('#replay')])
-            if original and original['digest'] != game['digest']:
-                problems.append(f'replay diverged: final digest {game["digest"]} != {original["digest"]}')
+            problem = replay_problem(games.get(gid[:-len('#replay')]), game)
+            if problem:
+                problems.append(problem)
         ok &= not problems
         print(f'  {"PASS" if not problems else "FAIL"} {gid}: {outcome_label(game)} {game["winner"]} '
               f'{game["minutes"]} min{"; " + "; ".join(problems) if problems else ""}')
@@ -1162,7 +1381,9 @@ def campaign_report(rows, houses, problems):
         partner = CLASSES.get(sides[0], sides[0])
         enemy = CLASSES.get(sides[-1], sides[-1])
         if enemy == 'CampaignAIPlayer':
-            enemy += ' (legacy; not QuantBot)'
+            enemy += {'on': ' (original rules', 'off': ' (legacy controller'}.get(
+                'on' if '-campaign-ai-original' in cell else 'off' if '-campaign-ai-legacy' in cell else '',
+                ' (build default') + '; not QuantBot)'
         mode = gs[0].get('campaign_mode') or 'full (historical)'
         ok = [g for g in gs if not g['error']]
         won = [g for g in ok if g['outcome'] == 'won']
@@ -1218,6 +1439,14 @@ parser.add_argument('--scratch', help='Directory for the probe binary and the (d
                                       '(default: leased agent scratch, removed after a successful batch)')
 parser.add_argument('--categories', nargs='+', choices=CATEGORIES, help='Only these categories')
 parser.add_argument('--seeds-per-cell', type=int, help='Full tier: at most this many seeds per cell')
+parser.add_argument('--city-strength', nargs='+', type=float,
+                    help='citycampaign: also play each mission at these enemy-strength multipliers (generated '
+                         'variants of the shipped map: enemy credits x S, grace period / S); cells gain -sS')
+parser.add_argument('--city-variant', nargs='+',
+                    help='citycampaign: also play each mission as these generated variants, e.g. s1.5g2w1.5: enemy '
+                         'strength x1.5, population/treasury goals x2, grace period x1.5; cells gain -SPEC')
+parser.add_argument('--city-missions', nargs='+', type=int, choices=range(1, 11),
+                    help='citycampaign: only these DuneCity campaign missions (default all ten)')
 parser.add_argument('--campaign-seeds', nargs='+', type=int,
                     help='Explicit fresh campaign seeds, shared across selected missions; default retains '
                          'the fixed campaign gate seeds. Does not alter non-campaign games.')
@@ -1225,10 +1454,13 @@ parser.add_argument('--enemy-difficulty', choices=tuple(DIFFICULTY.values()), de
                     help='Campaign enemy QuantBot difficulty, explicit in commands, rosters and result IDs')
 parser.add_argument('--campaign-mode', choices=('full', 'single'), default='full',
                     help='Authored missions through the Full campaign or Single mission setup; objectives stay native')
-parser.add_argument('--minutes', type=int, choices=range(1, 121),
+parser.add_argument('--minutes', type=int, choices=range(1, 481),
                     help='Diagnostic duration override for selected games; normal cell limits stay unchanged')
 parser.add_argument('--cells', help='Only cells whose category/name/mod matches this regular expression')
 parser.add_argument('--cases', help='Only scheduled game IDs matching this regular expression (diagnostic subset)')
+parser.add_argument('--case-manifest', type=Path, help='Frozen authored campaign research cases (no schedule expansion)')
+parser.add_argument('--helper-style', help='Apply a treatment only to the human house QuantBot helper')
+parser.add_argument('--seat-style', help='Non-campaign control experiment: config overlay on the first QuantBot seat only')
 parser.add_argument('--control-diagnostics', action='store_true',
                     help='Observed handmade-map study, never a controls gate; every comparison arm must use it')
 parser.add_argument('--control-seeds', type=int, nargs='+',

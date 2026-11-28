@@ -152,6 +152,46 @@ void runCampaignPressureProbe(Game& game) {
     unitList.clear();for(auto* unit:assaultArmy)unitList.push_back(unit);
     try {
         game.techLevel=9;
+        // Exercise counting and real dispatches with empty/wall-only slots,
+        // then one, two and three enemy bases. Helpers and city games stay unchanged.
+        std::vector<std::pair<House*,int>> baseHouses;
+        for(int h=0;h<NUM_HOUSES;++h) if(auto* house=game.getHouse(h))
+            if(!house->isNatives() && house->getTeamID()==enemies[0]->getHouse()->getTeamID())
+                baseHouses.emplace_back(house,house->numStructures);
+        require(baseHouses.size()>=3,"House-wave fixture needs three enemy house slots");
+        const int savedExperiment=getQuantBotConfig().force.campaignHouseWaveExperiment;
+        const int savedOne=getQuantBotConfig().force.campaignHouseWaveOneValue;
+        const int savedTwo=getQuantBotConfig().force.campaignHouseWaveTwoValue;
+        const int savedThree=getQuantBotConfig().force.campaignHouseWaveThreeValue;
+        getQuantBotConfig().force.campaignHouseWaveOneValue=5000;
+        getQuantBotConfig().force.campaignHouseWaveTwoValue=2500;
+        getQuantBotConfig().force.campaignHouseWaveThreeValue=2000;
+        const auto partnerDifficulty=partner->difficulty;
+        partner->difficulty=QuantBot::Difficulty::Hard;
+        for(int arm:{0,1,2,3}) for(int bases:{1,2,3}) {
+            getQuantBotConfig().force.campaignHouseWaveExperiment=arm;
+            for(size_t i=0;i<baseHouses.size();++i)
+                baseHouses[i].first->numStructures=baseHouses[i].first->getNumItems(Structure_Wall)+(int(i)<bases);
+            reset(QuantBot::Difficulty::Hard);
+            auto* bot=enemies[0];bot->militaryValueLimit=12000;bot->launchGroundHunt();
+            const int expected=game.isCitySimEnabled() ? 3500
+                : CampaignDifficultyPolicy::hardWaveValue(3500,bases,arm,5000,2500,2000);
+            const int price=game.objectData.data[Unit_Tank][bot->getHouse()->getHouseID()].price;
+            require(bot->campaignProfile().value==expected,"Wrong enemy base count or scope");
+            require(bot->campaignWave.members.size()==size_t(expected/price),"House budget did not bound actual dispatch");
+            require(partner->campaignProfile().value==3500,"Helper inherited enemy base scaling");
+            game.gameType=GameType::CustomGame;
+            require(bot->campaignProfile().value==3500,"Custom game inherited campaign scaling");
+            game.gameType=originalGameType;
+            SDL_Log("CAMPAIGN_HOUSE_WAVE_PASS: arm=%d bases=%d cap=%d sent=%zu city=%d",arm,bases,expected,
+                bot->campaignWave.members.size(),int(game.isCitySimEnabled()));
+        }
+        for(auto [house,count]:baseHouses) house->numStructures=count;
+        partner->difficulty=partnerDifficulty;
+        getQuantBotConfig().force.campaignHouseWaveExperiment=savedExperiment;
+        getQuantBotConfig().force.campaignHouseWaveOneValue=savedOne;
+        getQuantBotConfig().force.campaignHouseWaveTwoValue=savedTwo;
+        getQuantBotConfig().force.campaignHouseWaveThreeValue=savedThree;
         for(auto tier:{QuantBot::Difficulty::Easy,QuantBot::Difficulty::Medium,QuantBot::Difficulty::Hard}) {
             reset(tier);
             auto* bot=enemies[0];

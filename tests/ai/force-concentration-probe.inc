@@ -722,7 +722,12 @@ void runForceConcentrationProbe(Game& game) {
                 constexpr size_t kStrategyBytes=3+20; // 9865: picked flag, mix, tempo; 9868: 10 x Uint16 ratios
                 constexpr size_t kFamilyBytes = sizeof(Uint32) * (Unit_TameSandworm - Structure_LastID);
                 constexpr size_t kRepairPressureBytes = 2 * sizeof(Uint32); // 9885: yard and start cycle
-                constexpr size_t kLaterTails = kStrategyBytes + kFamilyBytes + kRepairPressureBytes;
+                // 9894/9896: the Carryall manoeuvre state ends the block. Its length varies with the
+                // lifts under way, so it is measured from this bot rather than assumed.
+                OMemoryStream airlift; airlift.open();
+                bot->saveAirlift(airlift);
+                constexpr size_t kFixedTails = kStrategyBytes + kFamilyBytes + kRepairPressureBytes;
+                const size_t kLaterTails = kFixedTails + airlift.getDataLength();
                 require(trailer.getDataLength()+kLaterTails<bytes.size(),"The 9864 trailer is not part of the save");
                 const std::string bytes9863=bytes.substr(0,bytes.size()-trailer.getDataLength()-kLaterTails);
                 currentGame->loadedSavegameVersion=9863;
@@ -737,8 +742,13 @@ void runForceConcentrationProbe(Game& game) {
                 currentGame->loadedSavegameVersion=SAVEGAMEVERSION;
                 IMemoryStream upgradedIn(upgraded.getData(),upgraded.getDataLength());
                 QuantBot reloaded(upgradedIn,owner);
+                // The loaded 9863 bot has no lift under way: its own (empty) Carryall tail.
+                OMemoryStream oldAirlift; oldAirlift.open();
+                old.saveAirlift(oldAirlift);
+                require(old.airliftJobs.empty() && !old.airliftDrop.point.isValid() && !old.airliftRaid.point.isValid(),
+                    "A 9863 save invented a Carryall manoeuvre");
                 require(reloaded.enemySightings.empty() && reloaded.musters.empty() && reloaded.bundlePoint==bot->bundlePoint
-                    && upgraded.getDataLength()==bytes9863.size()+8+kLaterTails,
+                    && upgraded.getDataLength()==bytes9863.size()+8+kFixedTails+oldAirlift.getDataLength(),
                     "A loaded 9863 save did not re-save as a current save with an empty memory");
                 currentGame->loadedSavegameVersion=9862;
                 OMemoryStream forceTrailer; forceTrailer.open();

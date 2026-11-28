@@ -131,6 +131,9 @@ const std::array<SDL_Color, 8> nativesRamp{{
 
 }
 
+const char* const kDuneCityGameOptionsSection = "Game Options dunecity";
+const char* const kCarryallDropDefaultKey = "Carryall Drop Default";
+
 std::string userGameOptionsSection() {
     const ModManager& mods = ModManager::instance();
     if(!mods.isInitialized() || mods.getActiveModName() == "vanilla") {
@@ -151,6 +154,8 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Sandworms Respawn", options.sandwormsRespawn);
     config.setBoolValue(section, "Killed Sandworms Drop Spice", options.killedSandwormsDropSpice);
     config.setBoolValue(section, "Manual Carryall Drops", options.manualCarryallDrops);
+    // From here on the value above is the player's own (see adoptCarryallDropDefault).
+    if(section == kDuneCityGameOptionsSection) config.setIntValue(section, kCarryallDropDefaultKey, 1);
     config.setIntValue(section, "Maximum Number of Units Override", options.maximumNumberOfUnitsOverride);
     config.setIntValue(section, "Maximum Number of Harvesters Override", options.maximumNumberOfHarvestersOverride);
     config.setIntValue(section, "Maximum Number of Construction Yards Override", options.maximumNumberOfConstructionYardsOverride);
@@ -171,12 +176,47 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setIntValue(section, "Research Pace", static_cast<int>(options.researchPace));
     config.setBoolValue(section, "Technology Installments", options.technologyInstallments);
     config.setBoolValue(section, "Trooper Anti-Air", options.trooperAntiAir);
+    config.setBoolValue(section, "Trooper Ornithopter Reach", options.trooperOrnithopterReach);
+    config.setBoolValue(section, "City Plane Defence", options.cityPlaneDefence);
+    config.setBoolValue(section, "City Plane Bombing", options.cityPlaneBombing);
+    config.setBoolValue(section, "Airport Ornithopter Patrol", options.airportOrnithopterPatrol);
+    config.setBoolValue(section, "City Plane Carpet Bombing", options.cityPlaneCarpetBombing);
+    config.setBoolValue(section, "City Plane Bombing Runs", options.cityPlaneBombingRuns);
+    config.setBoolValue(section, "City Plane Purchase", options.cityPlanePurchase);
+    config.setBoolValue(section, "City Plane Build Time", options.cityPlaneBuildTime);
+    config.setBoolValue(section, "City Plane Free Per Airport", options.cityPlaneFreePerAirport);
+    config.setBoolValue(section, "City Plane Crash Bombs", options.cityPlaneCrashBombs);
+    config.setBoolValue(section, "Zone Garrisons", options.zoneGarrisons);
+    config.setBoolValue(section, "Fremen Palace Worm", options.fremenPalaceWorm);
+    config.setBoolValue(section, "Parks Count As Roads", options.parksCountAsRoads);
+    config.setBoolValue(section, "Saboteur Hunt", options.saboteurHunt);
+    config.setBoolValue(section, "Saboteurs Skip City Zones", options.saboteurSkipsCityZones);
+    config.setBoolValue(section, "AI Infantry Tactics", options.aiInfantryTactics);
+    config.setBoolValue(section, "Hospital Care", options.hospitalCare);
+    config.setBoolValue(section, "Turrets Can Fire On Buildings", options.turretsFireOnBuildings);
     config.setBoolValue(section, "Starport Population", options.starportPopulation);
     config.setBoolValue(section, "Allied Control", options.alliedControl);
     config.setBoolValue(section, "Allied Building", options.alliedBuilding);
     config.setBoolValue(section, "Easy Mode", options.easyMode);
     config.setBoolValue(section, "Chaos Mode", options.chaosMode);
     config.setBoolValue(section, "Selling Buildings", options.sellingBuildings);
+}
+
+bool adoptCarryallDropDefault(INIFile& config) {
+    if(!config.hasSection(kDuneCityGameOptionsSection)
+       || config.getIntValue(kDuneCityGameOptionsSection, kCarryallDropDefaultKey, 0) >= 1) {
+        return false;
+    }
+    // A section written before this revision holds every option of the day it was saved, so an
+    // "off" in it does not say the player chose off: it is there for anyone who ever kept a
+    // change to any other option. It is dropped once and the mod's default (on) takes over. The
+    // revision stays in the section, so an "off" saved from now on is the player's and is kept.
+    if(config.hasKey(kDuneCityGameOptionsSection, "Manual Carryall Drops")
+       && !config.getBoolValue(kDuneCityGameOptionsSection, "Manual Carryall Drops", true)) {
+        config.removeKey(kDuneCityGameOptionsSection, "Manual Carryall Drops");
+    }
+    config.setIntValue(kDuneCityGameOptionsSection, kCarryallDropDefaultKey, 1);
+    return true;
 }
 
 void applyGameOptionsFromConfig(const INIFile& config, const std::string& section, SettingsClass::GameOptionsClass& options) {
@@ -220,6 +260,29 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
         options.researchPace = TechResearch::sanitize(config.getIntValue(section, "Research Pace", static_cast<int>(options.researchPace)));
     readBool("Technology Installments", options.technologyInstallments);
     readBool("Trooper Anti-Air", options.trooperAntiAir);
+    readBool("Trooper Ornithopter Reach", options.trooperOrnithopterReach);
+    readBool("City Plane Defence", options.cityPlaneDefence);
+    readBool("City Plane Bombing", options.cityPlaneBombing);
+    readBool("Airport Ornithopter Patrol", options.airportOrnithopterPatrol);
+    readBool("City Plane Carpet Bombing", options.cityPlaneCarpetBombing);
+    readBool("City Plane Bombing Runs", options.cityPlaneBombingRuns);
+    readBool("City Plane Purchase", options.cityPlanePurchase);
+    readBool("City Plane Build Time", options.cityPlaneBuildTime);
+    readBool("City Plane Free Per Airport", options.cityPlaneFreePerAirport);
+    readBool("City Plane Crash Bombs", options.cityPlaneCrashBombs);
+    readBool("Zone Garrisons", options.zoneGarrisons);
+    readBool("Fremen Palace Worm", options.fremenPalaceWorm);
+    readBool("Parks Count As Roads", options.parksCountAsRoads);
+    readBool("Saboteur Hunt", options.saboteurHunt);
+    readBool("Saboteurs Skip City Zones", options.saboteurSkipsCityZones);
+    readBool("AI Infantry Tactics", options.aiInfantryTactics);
+    readBool("Hospital Care", options.hospitalCare);
+    // The rule's first key, "Turrets Target Units Only" (its inverse), still counts when the
+    // current key is absent.
+    if(config.hasKey(section, "Turrets Can Fire On Buildings"))
+        readBool("Turrets Can Fire On Buildings", options.turretsFireOnBuildings);
+    else if(config.hasKey(section, "Turrets Target Units Only"))
+        options.turretsFireOnBuildings = !config.getBoolValue(section, "Turrets Target Units Only", true);
     readBool("Starport Population", options.starportPopulation);
     readBool("Allied Control", options.alliedControl);
     readBool("Allied Building", options.alliedBuilding);
@@ -228,7 +291,11 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Selling Buildings", options.sellingBuildings);
 }
 
-void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& options) {
+void saveGameOptionsAsDefaults(const SettingsClass::GameOptionsClass& chosen) {
+    // The Custom Game tech level belongs to one match setup. As a default it would also replace
+    // the level a Random Skirmish map is generated for.
+    auto options = chosen;
+    options.startTechLevel = 0;
     INIFile config(getConfigFilepath());
     const std::string section = userGameOptionsSection();
     if(section.empty()) {

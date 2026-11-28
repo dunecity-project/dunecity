@@ -36,11 +36,23 @@
 #define MAPCHOICESTATE_BLENDING     5
 #define MAPCHOICESTATE_ARROWS       6
 #define MAPCHOICESTATE_BLINKING     7
+#define MAPCHOICESTATE_CONQUERED    8
 
 class MapChoice : public MenuBase
 {
 public:
     MapChoice(int newHouse, unsigned int lastMission, Uint32 alreadyPlayedRegions);
+
+    /// A won DuneCity campaign mission (Stefan, 2026-11-21: "when you win you get the dune planet
+    /// turning colour thing", with no map screen): the planet fades in and turns into the region
+    /// map, the regions of the missions before stand in the house's colour, this mission's regions
+    /// blend in, and a click or a few seconds continue. There is no region to choose.
+    struct DuneCityConquest {
+        int missionWon = 1;
+        std::string missionName;  ///< the mission just won ([BRIEFING] Name)
+        std::string nextName;     ///< the next mission, empty after the last
+    };
+    MapChoice(int newHouse, const DuneCityConquest& conquest);
     virtual ~MapChoice();
 
     int showMenu() override;
@@ -70,8 +82,12 @@ public:
     bool doInput(SDL_Event &event) override;
 
 private:
+    void setUp(int newHouse);
     void createMapSurfaceWithPieces(unsigned int scenario);
     void loadINI();
+    /// Every region in the order the DuneCity campaign takes them: each original Atreides
+    /// conquest group in turn, the house's own new regions before the rivals'.
+    std::vector<int> conquestOrder() const;
 
 private:
     struct TGroup {
@@ -113,6 +129,15 @@ private:
     MessageTicker  msgticker;
 
     SDL_Rect centerAreaRect;
+
+    bool conquest = false;          ///< DuneCity campaign conquest screen
+    std::vector<int> conqueredRegions; ///< coloured before this win
+    std::vector<int> newRegions;    ///< blended in by this win
+    size_t nextNewRegion = 0;
+    std::string conquestClosing;    ///< the ticker's last message
+    sdl2::texture_ptr conquestTitle; ///< replaces the art's "Select your next conquest"
+    sdl2::texture_ptr conquestTitleShadow;
+    void drawConquestTitle();
 };
 
 #endif //MAPCHOICE_H

@@ -1,4 +1,5 @@
-"""Campaign fixture scheduling, command and captured-roster checks; no builds or games."""
+"""Campaign fixture scheduling, command and captured-roster checks, and the smoke replay
+check; no builds or games."""
 import ast
 from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
@@ -43,6 +44,39 @@ def balance_arguments(options):
 
 
 class CampaignCoverageTests(unittest.TestCase):
+    def test_helper_style_cannot_leak_into_global_or_ai_only_setup(self):
+        args = balance_arguments(['--scenario', '--helper-style', 'campaign-power-surplus'])
+        self.assertEqual(args.helper_style, 'campaign-power-surplus')
+        for extra in (['--scenario-style', 'campaign-power-one'], ['--campaign-ai-only'], ['--scenario-sides', 'harkonnen:1:qBotHard']):
+            with self.assertRaises(SystemExit):
+                balance_arguments(['--scenario', '--helper-style', 'campaign-power-surplus', *extra])
+
+    def test_campaign_deck_preserves_explicit_cases_and_shards(self):
+        import tempfile, json
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'deck.json'
+            path.write_text(json.dumps({'schema': 'campaign-research-cases/1', 'cases': [
+                dict(house='harkonnen', mission=n, seed=9901, helper='brutal', enemy='hard', mode='full', mod='vanilla', minutes=80)
+                for n in (20, 21)]}))
+            args = SimpleNamespace(case_manifest=path, shard=None)
+            games = matrix['schedule'](args)
+            self.assertEqual([g['mission'] for g in games], [20, 21])
+            self.assertTrue(all(g['ai_only'] is False and g['enemy_ai'] == 'quantbot' for g in games))
+            args.shard=(2, 2)
+            self.assertEqual(matrix['schedule'](args), [games[1]])
+
+    def test_noncampaign_seat_style_uses_only_first_quantbot(self):
+        import tempfile
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            args=SimpleNamespace(tier='full',seat_style='campaign-power-surplus',style=None)
+            game=dict(kind='skirmish',sides=[('harkonnen',1,'QH'),('atreides',2,'QB')],id='test')
+            path=matrix['control_style_inputs'](args,game,Path(directory)/'game')
+            self.assertTrue((path/'0-opening.ini').is_file())
+            self.assertFalse((path/'1-opening.ini').exists())
+            self.assertEqual(matrix['expected_style_seats'](args,game),'0=candidate-campaign-power-surplus')
+
     def test_balance_cli_accepts_quantbot_tiers_and_ai_only_in_both_modes(self):
         for mode in ('full', 'single'):
             for tier in ('easy', 'medium', 'hard', 'brutal'):
@@ -165,6 +199,20 @@ class CampaignCoverageTests(unittest.TestCase):
             '--campaign-mode', 'single', '--cells', 'qb-v-4ah/vanilla']))
         self.assertEqual([game for game in native if game['kind'] != 'campaign'], changed)
 
+    def test_reworked_twins_need_a_cells_pattern_that_names_them(self):
+        schedule = lambda cells: matrix['schedule'](matrix['parser'].parse_args(
+            ['--tier', 'full', '--categories', 'campaign', '--cells', cells]))
+        original = schedule('player-brutal-v-quantbot-easy/vanilla')
+        self.assertEqual(len(original), 66)
+        self.assertFalse(any(game.get('reworked') for game in original))
+        paired = schedule('^campaign/(reworked-)?partner-hard-v-quantbot-easy/vanilla$')
+        reworked = {(game['house'], game['mission'], game['seed']) for game in paired if game.get('reworked')}
+        plain = {(game['house'], game['mission'], game['seed']) for game in paired if not game.get('reworked')}
+        self.assertEqual(len(reworked), 66)
+        self.assertEqual(reworked, plain)
+        self.assertTrue(all(game['id'].startswith('campaign/reworked-partner-hard-v-quantbot-easy/')
+                            for game in paired if game.get('reworked')))
+
     def test_ai_only_diagnostic_drops_the_human_seat_not_the_quantbot_enemy(self):
         args = matrix['parser'].parse_args([
             '--tier', 'full', '--categories', 'campaign', '--campaign-ai-only',
@@ -252,6 +300,20 @@ class CampaignCoverageTests(unittest.TestCase):
         games = namespace['schedule'](matrix['argparse'].Namespace(cases='campaign', rounds=1))
         self.assertEqual(games[0]['case'], 'campaign')
         self.assertEqual(games[0]['id'], 'campaign-quantbot-easy-full/0')
+
+
+class SmokeReplayCheckTests(unittest.TestCase):
+    # The smoke tier replays the Construction Yard duel to prove determinism. A game that
+    # never printed its final digest records '', and '' == '' must not count as reproduced.
+    def test_replay_needs_both_final_digests_and_a_match(self):
+        replay_problem = matrix['replay_problem']
+        game = lambda digest: {'digest': digest}
+        self.assertIsNone(replay_problem(game('838d4011501c1cd2'), game('838d4011501c1cd2')))
+        self.assertIn('diverged', replay_problem(game('838d4011501c1cd2'), game('9a39d8e612300c36')))
+        for original, replay in (('', ''), ('838d4011501c1cd2', ''), ('', '838d4011501c1cd2')):
+            with self.subTest(original=original, replay=replay):
+                self.assertIn('no final digest', replay_problem(game(original), game(replay)) or '')
+        self.assertIn('no original game', replay_problem(None, game('838d4011501c1cd2')))
 
 
 if __name__ == '__main__':

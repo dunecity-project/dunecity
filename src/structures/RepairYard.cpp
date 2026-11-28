@@ -18,6 +18,7 @@
 #include <structures/RepairYard.h>
 #include <structures/RepairYardJob.h>
 #include <players/AIDecisionLog.h>
+#include <players/QuantBot.h>
 
 #include <globals.h>
 
@@ -143,6 +144,16 @@ void RepairYard::deployRepairUnit(Carryall* pCarryall) {
         if (pCarryall) pCarryall->setTarget(nullptr);
         return;
     }
+    bool redirected = false;
+    if (owner->isAI()) {
+        for (const auto& player : owner->getPlayerList()) {
+            auto* bot = dynamic_cast<QuantBot*>(player.get());
+            if (bot && bot->reconsiderRepairReturn(pRepairUnit, location, pCarryall != nullptr)) {
+                redirected = true;
+                break;
+            }
+        }
+    }
     if(metrics) AITelemetry::log().repairPrepareReturn(*metrics, currentGame->getGameCycleCount(),
         pRepairUnit->getObjectID(), pCarryall != nullptr, pRepairUnit->getHealth().getRawValue(),
         FixPoint(pRepairUnit->getMaxHealth()).getRawValue());
@@ -159,7 +170,7 @@ void RepairYard::deployRepairUnit(Carryall* pCarryall) {
         pRepairUnit->doSetAttackMode(isHarvesterLikeUnit(pRepairUnit->getItemID()) ? HARVEST : GUARD);
         pRepairUnit->deploy(deployPos);
         pRepairUnit->setTarget(nullptr);
-        pRepairUnit->setDestination(pRepairUnit->getLocation());
+        pRepairUnit->setDestination(redirected ? pRepairUnit->getGuardPoint() : pRepairUnit->getLocation());
     }
 
     if(getOwner() == pLocalHouse) {
@@ -213,8 +224,13 @@ void RepairYard::updateStructureSpecificStuff() {
             }
         } else {
             // Unit is fully repaired - handle deployment
-            bool needsCarryall = blockDistance(location, pRepairUnit->getGuardPoint()) >= MIN_CARRYALL_LIFT_DISTANCE 
-                               && currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops;
+            // The flight back to where the unit was picked up (its guard point: Carryall::
+            // pickupTarget sets it at the pickup; a unit that drove in still has the spot it
+            // guarded). The house's "Return units" switch turns it off: the unit is then
+            // released beside the yard below.
+            bool needsCarryall = blockDistance(location, pRepairUnit->getGuardPoint()) >= MIN_CARRYALL_LIFT_DISTANCE
+                               && currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops
+                               && owner->isRepairReturnEnabled();
             
             if (pRepairUnit->hasBookedCarrier()) {
                 // Already has a carryall coming - wait for it
@@ -228,7 +244,13 @@ void RepairYard::updateStructureSpecificStuff() {
                     for(UnitBase* pUnit : unitList) {
                         if ((pUnit->getOwner() == owner) && (pUnit->getItemID() == Unit_Carryall)) {
                             Carryall* pTmpCarryall = static_cast<Carryall*>(pUnit);
-                            if (!pTmpCarryall->isBooked()) {
+                            // AirliftReserve (QuantBot, default 0): not one of the army's own.
+                            const bool reserved = std::any_of(owner->getPlayerList().begin(), owner->getPlayerList().end(),
+                                [&](const auto& player) {
+                                    const auto* bot = dynamic_cast<const QuantBot*>(player.get());
+                                    return bot && bot->airliftReserves(pTmpCarryall, pRepairUnit);
+                                });
+                            if (!pTmpCarryall->isBooked() && !reserved) {
                                 pCarryall = pTmpCarryall;
                                 break;
                             }

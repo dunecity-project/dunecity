@@ -148,6 +148,13 @@ void CitySimulation::load(InputStream& stream) {
         milestones_[i] = stream.readBool();
     }
     if (loadedVersion >= 9825) loadCrimeUnrest(stream,crimeUnrestProgress_,loadedVersion);
+    // Hospitals heal infantry: trips and census overlays. An older save has none; its first
+    // census designates the Hospitals again.
+    hospitalCare_.clear();
+    if (loadedVersion >= SAVEGAMEVERSION_HOSPITAL_CARE) hospitalCare_.load(stream);
+    // Civic overlay pacing; an older save's overlays count their age from the day it loads.
+    if (loadedVersion >= SAVEGAMEVERSION_CIVIC_PACING) hospitalCare_.loadPacing(stream);
+    hospitalOverlaysPending_ = true;
 }
 
 void CitySimulation::save(OutputStream& stream) const {
@@ -170,6 +177,8 @@ void CitySimulation::save(OutputStream& stream) const {
         stream.writeBool(milestones_[i]);
     }
     saveCrimeUnrest(stream,crimeUnrestProgress_);
+    hospitalCare_.save(stream);
+    hospitalCare_.savePacing(stream);
 }
 
 void CitySimulation::saveObserverRuntime(OutputStream& stream) const {
@@ -301,6 +310,8 @@ void HouseCityState::load(InputStream& stream) {
 
 void CitySimulation::advancePhase(uint32_t gameCycleCount) {
     if (!effectsEnabled_ || !initialized_) return;
+
+    runHospitalCare();
 
     // City clock — SimCity Classic-style. A year is 48 day-ticks; each
     // day ticks at gameCycleCount / cyclesPerCityDay(). Day ticks drive
@@ -483,10 +494,6 @@ void CitySimulation::executeCityCommand(int playerID, int commandID,
             break;
     }
 }
-
-// spendCityFunds is implemented in CityEffectsRuntime.cpp so it can
-// access pLocalHouse directly. The test build provides its own stub
-// in CityEffectsRuntime_test_stub.cpp that operates on totalFunds_.
 
 void DuneCity::CitySimulation::checkAndTriggerMilestones(int32_t totalPop, int32_t totalFunds,
                                                          int32_t resPop, int32_t comPop, int32_t indPop,

@@ -325,11 +325,19 @@ class FixtureIdentityTests(unittest.TestCase):
             subprocess.run(['git', 'init', '-q', str(source)], check=True)
             (source / 'main.cpp').write_text('source input\n')
             build = source / 'build'
-            app = build / 'bin/dunecity.app/Contents'
-            (app / 'MacOS').mkdir(parents=True)
-            shutil.copy2(sys.executable, app / 'MacOS/dunecity')
-            (app / 'Resources').mkdir()
-            (app / 'Resources/asset').write_bytes(b'first')
+            # The native fixture seals the bundle's Resources on macOS and the data beside
+            # bin/dunecity on Linux (probe_fixture.NATIVE_TARGET).
+            if sys.platform == 'darwin':
+                app = build / 'bin/dunecity.app/Contents'
+                (app / 'MacOS').mkdir(parents=True)
+                shutil.copy2(sys.executable, app / 'MacOS/dunecity')
+                assets = app / 'Resources'
+            else:
+                (build / 'bin').mkdir(parents=True)
+                shutil.copy2(sys.executable, build / 'bin/dunecity')
+                assets = build / 'bin/data'
+            assets.mkdir()
+            (assets / 'asset').write_bytes(b'first')
             (build / 'CMakeCache.txt').write_text('configured toolchain\n')
             (build / 'build.ninja').write_text('configured commands\n')
             commands = [str(sys.executable) + ' -c main.cpp']
@@ -347,7 +355,7 @@ class FixtureIdentityTests(unittest.TestCase):
             binary = prepare()
             self.assertEqual(prepare(True), binary)
             self.assertEqual(len(publications), 1)
-            asset = app / 'Resources/asset'
+            asset = assets / 'asset'
             info = asset.stat()
             asset.write_bytes(b'other')
             os.utime(asset, ns=(info.st_atime_ns, info.st_mtime_ns))
@@ -356,7 +364,7 @@ class FixtureIdentityTests(unittest.TestCase):
             changed = prepare()
             self.assertNotEqual(changed, binary)
             self.assertEqual(len(publications), 2)
-            (app / 'Resources/new-asset').write_bytes(b'new membership')
+            (assets / 'new-asset').write_bytes(b'new membership')
             with self.assertRaisesRegex(RuntimeError, 'Missing current fixture'):
                 prepare(True)
             current = prepare()

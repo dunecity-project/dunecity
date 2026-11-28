@@ -50,7 +50,7 @@ const ItemSpec kItems[] = {
     {Structure_ZoneCommercial, "Commercial Zone", "Commercial Zone", {2,2}},
     {Structure_ZoneIndustrial, "Industrial Zone", "Industrial Zone", {2,2}}, {Structure_Road, "Road", "Road", {1,1}},
     {Structure_PoliceStation, "Police Station", "Police Station", {2,2}}, {Structure_Stadium, "Stadium", "Stadium", {3,3}},
-    {Structure_Airport, "Airport", "Airport", {3,3}}, {Structure_NuclearPlant, "Nuclear Plant", "Nuclear", {3,3}},
+    {Structure_Airport, "Airport", "Airport", {4,4}}, {Structure_NuclearPlant, "Nuclear Plant", "Nuclear", {3,3}},
     {Structure_ResearchLab, "Research Lab", "Research Lab", {3,2}},
     {Unit_Soldier, "Soldier", "Soldier", {1,1}}, {Unit_Trooper, "Trooper", "Trooper", {1,1}}, {Unit_Trike, "Trike", "Trike", {1,1}},
     {Unit_RaiderTrike, "Raider Trike", "Raider Trike", {1,1}}, {Unit_Quad, "Quad", "Quad", {1,1}}, {Unit_Tank, "Tank", "Tank", {1,1}},

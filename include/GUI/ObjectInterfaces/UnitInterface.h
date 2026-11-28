@@ -29,7 +29,9 @@
 #include <GUI/SymbolButton.h>
 #include <misc/CursorAppearance.h>
 #include <GUI/ObjectInterfaces/UnitActionBar.h>
+#include <structures/ZoneStructure.h>
 #include <GUI/ObjectInterfaces/UnitCommandTooltips.h>
+#include <dunecity/HospitalCare.h>
 #include <GUI/HBox.h>
 #include <GUI/VBox.h>
 
@@ -38,6 +40,7 @@
 #include <units/Harvester.h>
 #include <units/HarvesterHelpers.h>
 #include <units/Devastator.h>
+#include <units/SandWorm.h>
 #include <mod/ModManager.h>
 
 class UnitInterface : public DefaultObjectInterface {
@@ -85,7 +88,7 @@ protected:
         carryallDropButton.setOnClick(std::bind(&UnitInterface::onCarryallDrop, this));
 
         captureButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Capture)});
-        captureButton.setTooltipText(UnitCommandTooltips::capture());
+        captureButton.setTooltipText(UnitCommandTooltips::capture(ZoneStructure::garrisonsEnabled() && currentGame->isCitySimEnabled()));
         captureButton.setVisible(itemID == Unit_Soldier || itemID == Unit_Trooper
             || (ModManager::instance().isTornieFamilyContentActive() && itemID == Unit_FlameTrooper));
         captureButton.setToggleButton(true);
@@ -97,20 +100,27 @@ protected:
         returnButton.setOnClick(std::bind(&UnitInterface::onReturn, this));
 
         deployButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Deploy)});
-        deployButton.setTooltipText(_("Build a new construction yard"));
+        deployButton.setTooltipText(UnitCommandTooltips::deploy());
         deployButton.setVisible( (itemID == Unit_MCV) );
         deployButton.setOnClick(std::bind(&UnitInterface::onDeploy, this));
 
         destructButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Destruct)});
-        destructButton.setTooltipText(_("Self-destruct this unit"));
+        destructButton.setTooltipText(UnitCommandTooltips::destruct());
         destructButton.setVisible( (itemID == Unit_Devastator) );
         destructButton.setOnClick(std::bind(&UnitInterface::onDestruct, this));
+
+        // The Fremen Palace worm's Spice Bloom (Sandworm::doSpiceBloom): pick a spot, it bursts there.
+        spiceBloomButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Deploy)});
+        spiceBloomButton.setTooltipText(_("Spice Bloom: the worm goes to a spot on the sand and bursts into a spice field"));
+        spiceBloomButton.setToggleButton(true);
+        spiceBloomButton.setVisible(isPalaceWormObject(objectID));
+        spiceBloomButton.setOnClick([]() { currentGame->setCursorMode(Game::CursorMode_SpiceBloom); });
 
         healButton.setVisible(false);
         if(ModManager::instance().isTornieFamilyContentActive()) {
 
             healButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Heal)});
-            healButton.setTooltipText(_("Heal an allied unit"));
+            healButton.setTooltipText(UnitCommandTooltips::heal());
             healButton.setToggleButton(true);
             healButton.setOnClick(std::bind(&UnitInterface::onHeal, this));
 
@@ -122,18 +132,18 @@ protected:
 
         movementPathsButton.setSymbol(sdl2::surface_ptr{CursorAppearance::createIcon(CursorAppearance::Action::Paths)});
         movementPathsButton.setToggleButton(true);
-        movementPathsButton.setTooltipText(_("Show or hide movement paths for selected units"));
+        movementPathsButton.setTooltipText(UnitCommandTooltips::movementPaths());
         movementPathsButton.setOnClick([]() { currentGame->toggleMovementPaths(); });
         actionBar.setButtons({&moveButton, &attackButton, &patrolButton, &movementPathsButton,
             &carryallDropButton, &captureButton, &returnButton, &deployButton,
-            &destructButton, &healButton, &sendToRepairButton});
+            &destructButton, &spiceBloomButton, &healButton, &sendToRepairButton});
         buttonVBox.addWidget(&actionBar);
 
         buttonVBox.addWidget(VSpacer::create(buttonGap));
 
         guardButton.setText(_("Guard"));
         guardButton.setTextColor(color);
-        guardButton.setTooltipText(_("Unit will not move from location"));
+        guardButton.setTooltipText(UnitCommandTooltips::guard());
         guardButton.setToggleButton(true);
         guardButton.setOnClick(std::bind(&UnitInterface::onGuard, this));
         buttonVBox.addWidget(&guardButton, 26);
@@ -142,7 +152,7 @@ protected:
 
         areaGuardButton.setText(_("Area Guard"));
         areaGuardButton.setTextColor(color);
-        areaGuardButton.setTooltipText(_("Unit will engage any unit within guard range"));
+        areaGuardButton.setTooltipText(UnitCommandTooltips::areaGuard());
         areaGuardButton.setToggleButton(true);
         areaGuardButton.setOnClick(std::bind(&UnitInterface::onAreaGuard, this));
         buttonVBox.addWidget(&areaGuardButton, 26);
@@ -169,7 +179,7 @@ protected:
 
         ambushButton.setText(_("Ambush"));
         ambushButton.setTextColor(color);
-        ambushButton.setTooltipText(_("Unit will not move until enemy unit spotted"));
+        ambushButton.setTooltipText(UnitCommandTooltips::ambush());
         ambushButton.setToggleButton(true);
         ambushButton.setOnClick(std::bind(&UnitInterface::onAmbush, this));
         buttonVBox.addWidget(&ambushButton, 26);
@@ -178,7 +188,7 @@ protected:
 
         huntButton.setText(_("Hunt"));
         huntButton.setTextColor(color);
-        huntButton.setTooltipText(_("Unit will immediately start to engage an enemy unit"));
+        huntButton.setTooltipText(UnitCommandTooltips::hunt());
         huntButton.setToggleButton(true);
         huntButton.setOnClick(std::bind(&UnitInterface::onHunt, this));
         buttonVBox.addWidget(&huntButton, 26);
@@ -187,7 +197,7 @@ protected:
 
         retreatButton.setText(_("Retreat"));
         retreatButton.setTextColor(color);
-        retreatButton.setTooltipText(_("Unit will retreat back to base"));
+        retreatButton.setTooltipText(UnitCommandTooltips::retreat());
         retreatButton.setToggleButton(true);
         retreatButton.setOnClick(std::bind(&UnitInterface::onRetreat, this));
         buttonVBox.addWidget(&retreatButton,26);
@@ -197,7 +207,7 @@ protected:
             buttonVBox.addWidget(VSpacer::create(buttonGap));
             sabotageButton.setText(_("Sabotage"));
             sabotageButton.setTextColor(color);
-            sabotageButton.setTooltipText(_("Unit will hunt enemy buildings to capture them"));
+            sabotageButton.setTooltipText(UnitCommandTooltips::sabotage(_("Unit will hunt enemy buildings to capture them")));
             sabotageButton.setToggleButton(true);
             sabotageButton.setOnClick(std::bind(&UnitInterface::onSabotage, this));
             buttonVBox.addWidget(&sabotageButton, 26);
@@ -241,7 +251,8 @@ protected:
     void OnSendToRepair() {
         ObjectBase* pObject = currentGame->getObjectManager().getObject(objectID);
         GroundUnit* pGroundUnit = dynamic_cast<GroundUnit*>(pObject);
-        if((pGroundUnit != nullptr) && (pGroundUnit->getHealth() < pGroundUnit->getMaxHealth())) {
+        if((pGroundUnit != nullptr) && (pGroundUnit->getHealth() < pGroundUnit->getMaxHealth())
+           && sendToRepairButton.isEnabled()) {
             pGroundUnit->handleSendToRepairClick();
         }
     }
@@ -334,8 +345,20 @@ protected:
         healButton.setVisible(pObject->canHeal());
         captureButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_Capture);
         carryallDropButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_CarryallDrop);
+        spiceBloomButton.setToggleState(currentGame->currentCursorMode == Game::CursorMode_SpiceBloom);
         carryallDropButton.setVisible(currentGame->getGameInitSettings().getGameOptions().manualCarryallDrops && pObject->getOwner()->hasCarryalls());
         sendToRepairButton.setVisible(pObject->getHealth() < pObject->getMaxHealth());
+        {
+            // Infantry under Hospital Care heal only at a Hospital: no Hospital, no order.
+            using DuneCity::HospitalCare::RepairButton;
+            const RepairButton repair = DuneCity::HospitalCare::repairButtonFor(dynamic_cast<const UnitBase*>(pObject));
+            sendToRepairButton.setEnabled(repair == RepairButton::RepairYard || repair == RepairButton::Hospital);
+            const std::string tip = repair == RepairButton::RepairYard ? UnitCommandTooltips::repairUnit()
+                : repair == RepairButton::Hospital ? UnitCommandTooltips::healAtHospital()
+                : repair == RepairButton::NeedsHospital ? UnitCommandTooltips::needsHospital()
+                : UnitCommandTooltips::saboteurCannotHeal();
+            if(sendToRepairButton.getTooltipText() != tip) sendToRepairButton.setTooltipText(tip);
+        }
         actionBar.refresh();
 
         UnitBase* pUnit = dynamic_cast<UnitBase*>(pObject);
@@ -370,6 +393,12 @@ protected:
     SymbolButton    healButton;
     SymbolButton    sendToRepairButton;
     SymbolButton    carryallDropButton;
+    SymbolButton    spiceBloomButton;
+
+    static bool isPalaceWormObject(Uint32 objectID) {
+        const auto* worm = dynamic_cast<const Sandworm*>(currentGame->getObjectManager().getObject(objectID));
+        return worm != nullptr && worm->isPalaceWorm();
+    }
 
     TextButton      guardButton;
     TextButton      areaGuardButton;

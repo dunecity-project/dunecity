@@ -204,6 +204,17 @@ void TurretBase::doAttackObject(const ObjectBase* pObject) {
     setForced(true);
 }
 
+bool TurretBase::targetAllowed(const ObjectBase* object) {
+    return object == nullptr || !object->isAStructure()
+        || currentGame->getGameInitSettings().getGameOptions().turretsFireOnBuildings;
+}
+
+bool TurretBase::canAttack(const ObjectBase* object) const {
+    // Rocket and Gun Turrets only: Tornie-family posts keep their own targeting.
+    const bool turret = itemID == Structure_GunTurret || itemID == Structure_RocketTurret;
+    return (!turret || targetAllowed(object)) && ObjectBase::canAttack(object);
+}
+
 void TurretBase::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                                  const DeviationReward::Provenance& provenance) {
     // Call base class damage handling

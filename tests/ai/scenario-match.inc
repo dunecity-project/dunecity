@@ -19,6 +19,9 @@
 #include <Menu/RandomSkirmishMenu.h>
 #include <players/PlayerFactory.h>
 #include <units/MCV.h>
+#include <FileClasses/LoadSavePNG.h>
+#include <ScreenBorder.h>
+#include <misc/draw_util.h>
 
 #include <map>
 #include <set>
@@ -206,6 +209,70 @@ inline std::string classesOf(const House* house) {
 /// Plays the game to its end (see the file comment). Returns "won"/"lost" for @a trackedHouse's
 /// team (the campaign's own result in a campaign), "decided" when a local observer watches a
 /// match (it plays no house), or "time_limit".
+/// BALANCE_SCENARIO_SCREENSHOT=<png> (BALANCE_SCENARIO_SCREENSHOT_MINUTE, default 1): the real game
+/// screen, centred on the tracked house's Construction Yard, once at that game minute.
+/// BALANCE_SCENARIO_SCREENSHOT_FOCUS=<house> centres it on that house's first living unit instead
+/// and logs every unit of that house (diagnosing a mission that does not end).
+inline void screenshot(Game& game, int trackedHouse, int minute) {
+    static bool taken = false;
+    const char* path = std::getenv("BALANCE_SCENARIO_SCREENSHOT");
+    const char* at = std::getenv("BALANCE_SCENARIO_SCREENSHOT_MINUTE");
+    if (taken || !path || minute < (at ? std::atoi(at) : 1)) return;
+    taken = true;
+    bool centred = false;
+    if (const char* focus = std::getenv("BALANCE_SCENARIO_SCREENSHOT_FOCUS")) {
+        for (const auto* unit : unitList) {
+            if (unit->getOwner()->getHouseID() != std::atoi(focus) || unit->getHealth() <= 0) continue;
+            const Coord where = unit->getLocation();
+            SDL_Log("SCENARIO_FOCUS_UNIT: house=%d object=%u item=%u x=%d y=%d health=%d active=%d visible_to_tracked=%d",
+                    std::atoi(focus), unit->getObjectID(), unit->getItemID(), where.x, where.y,
+                    unit->getHealth().lround(), int(unit->isActive()), int(unit->isVisible(game.getHouse(trackedHouse)->getTeamID())));
+            if (!centred) {
+                screenborder->setNewScreenCenter(Coord(where.x * TILESIZE + TILESIZE / 2, where.y * TILESIZE + TILESIZE / 2));
+                centred = true;
+            }
+        }
+    }
+    for (const auto* structure : structureList)
+        if (!centred && structure->getOwner()->getHouseID() == trackedHouse && structure->getItemID() == Structure_ConstructionYard) {
+            const Coord yard = structure->getLocation();
+            screenborder->setNewScreenCenter(Coord((yard.x + 1) * TILESIZE, (yard.y + 1) * TILESIZE));
+            break;
+        }
+    SDL_SetRenderTarget(renderer, nullptr);
+    game.drawScreen();
+    auto image = renderReadSurface(renderer);
+    const bool saved = image != nullptr && SavePNG(image.get(), path) == 0;
+    SDL_Log("SCENARIO_SCREENSHOT: minute=%d file=%s saved=%d", minute, path, int(saved));
+}
+
+/// BALANCE_SCENARIO_WATCH_OBJECT=<object id>: log each change of that object's active, alive and
+/// visible-to-the-tracked-team state, with its tile (diagnosing a unit nobody can target).
+inline void watchObject(Game& game, int trackedHouse) {
+    static const char* watch = std::getenv("BALANCE_SCENARIO_WATCH_OBJECT");
+    static int last = -2;
+    if (!watch) return;
+    if (game.getGameCycleCount() == 1) {
+        const int team = game.getHouse(trackedHouse)->getTeamID();
+        for (const auto* unit : unitList)
+            if (unit->getOwner()->getTeamID() != team)
+                SDL_Log("SCENARIO_WATCH_START: house=%d object=%u item=%d x=%d y=%d active=%d visible=%d mode=%d",
+                        unit->getOwner()->getHouseID(), unit->getObjectID(), unit->getItemID(), unit->getLocation().x,
+                        unit->getLocation().y, int(unit->isActive()), int(unit->isVisible(team)), int(unit->getAttackMode()));
+    }
+    const auto* object = game.getObjectManager().getObject(static_cast<Uint32>(std::atoi(watch)));
+    const int team = game.getHouse(trackedHouse)->getTeamID();
+    const int state = object ? int(object->isActive()) * 4 + int(object->isVisible(team)) * 2 + int(object->getHealth() > 0) : -1;
+    if (state == last) return;
+    last = state;
+    const Coord where = object ? object->getLocation() : Coord::Invalid();
+    const auto* tile = object && currentGameMap->tileExists(where) ? currentGameMap->getTile(where) : nullptr;
+    SDL_Log("SCENARIO_WATCH: cycle=%u object=%s active=%d visible=%d alive=%d health=%d x=%d y=%d sand=%d worm_here=%d",
+            game.getGameCycleCount(), watch, object ? int(object->isActive()) : -1, object ? int(object->isVisible(team)) : -1,
+            object ? int(object->getHealth() > 0) : -1, object ? object->getHealth().lround() : -1, where.x, where.y,
+            tile ? int(tile->isSand()) : -1, tile ? int(tile->hasAnUndergroundUnit()) : -1);
+}
+
 inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, bool constructionYardOnly) {
     if (constructionYardOnly) deployMcvs(game);
     const auto& init = game.getGameInitSettings();
@@ -213,6 +280,8 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
     for (const unsigned char byte : init.getFiledata()) mapHash.mixUint8(byte);
     const auto checksums = ModManager::instance().getEffectiveChecksums();
     const char* style = std::getenv("BALANCE_SCENARIO_STYLE");
+    if (const char* helperStyle = std::getenv("BALANCE_HELPER_STYLE"))
+        SDL_Log("SCENARIO_HELPER_STYLE: house=%d style=%s", trackedHouse, helperStyle);
     SDL_Log("SCENARIO_SETUP: seed=%u cycle=%u config_hash=%s options_hash=%s map_hash=%016llx "
             "map_hash_algorithm=fnv1a64 content_hash=%s object_data_hash=%s city_sim=%d observing=%d research_enabled=%d style=%s "
             "initial_spice_tile_permille=%d",
@@ -264,12 +333,14 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         const auto& triggers = game.getTriggerManager().getTriggers();
         for (auto it = triggers.begin(); it != triggers.end() && (*it)->getCycleNumber() == now; ++it) ++fired;
         game.updateGameState();
+        watchObject(game, trackedHouse);
         EliminationMatch::crushCount.observe();
         DuneCityAudit::observe(game);
         const Uint32 cycle = game.getGameCycleCount();
         if (cycle % minute == 0) {
             EliminationMatch::sample(game);
             measureSorties(houses, tracks);
+            screenshot(game, trackedHouse, static_cast<int>(cycle / minute));
         }
         for (const House* house : houses) {
             HouseTrack& track = tracks[house->getHouseID()];
@@ -295,14 +366,24 @@ inline std::string run(Game& game, Uint32 end, bool campaign, int trackedHouse, 
         const HouseTrack& track = tracks[house->getHouseID()];
         const int population = city && game.isCitySimEnabled() && city->isInitialized()
             ? city->getHouseState(house->getHouseID()).getTotalPop() * DuneCity::CitySimulation::kPopDisplayMultiplier : -1;
+        // Average land value of the house's developed property (-1 outside a city game).
+        const int landValue = city && game.isCitySimEnabled() && city->isInitialized()
+            ? city->getHouseState(house->getHouseID()).avgLandValue : -1;
         SDL_Log("SCENARIO_HOUSE: house=%d team=%d players=%s alive=%d eliminated_s=%.1f credits=%d kill_value=%d "
                 "loss_value=%d structures_destroyed=%d units_destroyed=%d structures=%d army_value=%d army_units=%d "
-                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d population=%d",
+                "away_peak=%d sortie_minutes=%d start=%d:%d crush_kills=%d population=%d land_value=%d",
                 house->getHouseID(), house->getTeamID(), classesOf(house).c_str(), int(house->isAlive()),
                 track.eliminated ? FormationWaveMeasure::seconds(track.eliminated) : -1.0, house->getCredits(),
                 house->getKillValue(), house->getLossValue(), house->getNumDestroyedStructures(),
                 house->getNumDestroyedUnits(), structures, armyValue, armyUnits, track.awayPeak, track.sortieMinutes,
-                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()), population);
+                track.start.x, track.start.y, EliminationMatch::crushCount.of(house->getHouseID()), population, landValue);
+        // What the house's QuantBot redevelopment switches did (houses.csv switch_activity).
+        for (const auto& player : house->getPlayerList())
+            if (const auto* bot = dynamic_cast<const QuantBot*>(player.get())) {
+                SDL_Log("SCENARIO_SWITCH_ACTIVITY: house=%d %s", house->getHouseID(),
+                        bot->getRedevelopmentActivity().format().c_str());
+                break;
+            }
     }
     std::string outcome;
     int winnerTeam = winner;

@@ -7,6 +7,253 @@ sonic-lane rule, hunting in formation and the panel buttons described first belo
 `feat/formation-form-up` (save 9861, protocol 75) makes those buttons form the selection up
 where it stands.
 
+## Carryall manoeuvres, second set: more Carryalls, squad retreat, raids, defence (2026-11-23; the harvester raid is a default in vanilla Construction Yard starts)
+
+Stefan: "try building more carryalls, try defining when a squad is outnumbers and should retreat and retreat
+them, they can either retreat using their own movement or get a carryall if available. also try doing targetted
+carryall drops onto enemy harvesters or to undefended parts of the base permimeter of an enemy. also use them to
+rush to the defence of a base under attack or to the defence of harvesters under attack", then "also try different
+maps. try vanilla maps as well, custom games, etc." **Result: one behaviour earned a default, the Carryall
+harvester raid, in the games it won in (vanilla Custom games from a Construction Yard start, Hard and Brutal).
+Everything else stays off.** The section below this one is the first set (rear and flank drops, retreat lift,
+rescue, ferry); its vanilla results are in the tables here.
+
+### The switches (`[Force Concentration]`, `src/players/QuantBotAirlift.cpp`, state saved from 9896)
+
+| Key | Default | What it does |
+|---|---|---|
+| `AirliftHarvesterDrop` | **on**, scoped | Every minute at most, two to `AirliftRaidGroup` (4) free, whole vehicles standing within 30 tiles of the base centre are flown beside the nearest enemy harvester that no observed enemy weapon covers (the tactical danger map is 0 on it) and attack it. A raider whose target is gone takes the next uncovered harvester within 20 tiles; after three minutes, or below 40% health, or with nothing left, it goes home, by Carryall when one is free. Scope of the default (`QuantBot::airliftHarvesterDropActive`): Custom game, Hard or Brutal, no city simulation, the house started without a Refinery (a Construction Yard or MCV start), not allied with a human. |
+| `AirliftHarvesterDropEverywhere` | off | Test-only: the raid in every Custom game, as rounds 4 to 9 measured it. |
+| `AirliftPerimeterDrop` | off | The same raid onto the dearest enemy building that no enemy weapon covers. |
+| `SquadRetreat` | off | The posture machine's local withdrawal as a config switch (the test-only fall-back `Y`): a wave outmatched where it stands, 1.3x for 9 s or 2.0x at once (`[Army Recovery] LocalWithdrawBps`, `LocalSevereBps`, `LocalPersistMs`), goes back to the protected rally and relaunches when ready. |
+| `SquadRetreatAirlift` | off | Any withdrawing unit 20 tiles or more from its rally takes a free Carryall instead of driving (`withdrawUnit`). |
+| `AirliftBaseDefence`, `AirliftHarvesterDefence` | off | A whole defender the scramble picks, 20 tiles or more from the attacker of a building or harvester, is flown to four tiles short of the attacker and gets its ordinary defence order on landing. |
+| `AirliftReserve` | 0 | The newest N Carryalls are the army's: the engine's harvester, repair and stall lifts skip them (`GroundUnit::findFreeCarrier`, `RepairYard`), two always stay with the economy. |
+| `AirliftCarryalls` | 0 | Up to 12 Carryalls beyond the transport target, bought at the High-Tech Factory from leftover cash after Ornithopters and upgrades. Until 9e03f4262 it raised the transport target itself; see "More Carryalls" below. |
+
+### Settings (all on AWS, `tests/ai/vanilla-match.py`, candidate against `default` in the same games)
+
+| Name | Games played as |
+|---|---|
+| `dcffa` | His game: 4-player DuneCity free-for-all, generated 160x160 map, Fortress starts, his options, Brutal, 45 min; two candidate and two control houses, all six assignments per seed |
+| `vanfort` | The same in the vanilla mod (`rs160-vanilla`) |
+| `sizes` | The same on `rs128-dunecity`, `rs192-dunecity` and `rs160-dune2r` |
+| `v1v1`, `v1v1b` | Vanilla 1v1 from Construction Yard starts as the Custom Game lobby starts them: Habbanya-Penny, Ergun-Sahij, Sihaya-Chvrches, Tuono-Orac; Hard (`v1v1`) and Brutal (`v1v1b`); 60 min; every seed with the two labels swapped |
+| `vffa` | Vanilla 4-player free-for-all from Construction Yard starts: Ergsun-Odenkirk, Sihaya-Bowie; Hard; 60 min |
+
+Score is placement (`tests/ai/match_score.py`); a cell is the candidate's paired score difference with its 95%
+bootstrap interval; bold is an interval that excludes 0. A 1v1 difference runs from -2 to +2.
+
+### Round 4 (source 167f740d1): the second set as first built
+
+The arms with "air", the raids and the defence arms also set `AirliftCarryalls=4` and `AirliftReserve=4`;
+`fleet6` and `fleet10` are extra Carryalls alone; `reserve` is 4 + 4 with no manoeuvre.
+
+| Arm | dcffa (96) | vanfort (48) | sizes (72) | v1v1 (48) | vffa (48) |
+|---|---|---|---|---|---|
+| fleet6 | -0.141 (-0.30..+0.03) | -0.014 (-0.25..+0.21) | -0.059 (-0.24..+0.13) | **-1.333 (-1.71..-0.92)** | **-0.366 (-0.58..-0.14)** |
+| fleet10 | -0.142 (-0.29..+0.01) | -0.042 (-0.26..+0.18) | -0.028 (-0.21..+0.15) | **-1.750 (-2.00..-1.50)** | **-0.417 (-0.66..-0.19)** |
+| reserve | -0.086 (-0.24..+0.07) | -0.097 (-0.33..+0.15) | -0.010 (-0.19..+0.18) | **-1.375 (-1.71..-0.96)** | **-0.396 (-0.60..-0.18)** |
+| squad-retreat (ground, 1.3x) | +0.007 (-0.15..+0.17) | +0.104 (-0.15..+0.35) | +0.009 (-0.18..+0.20) | +0.125 (-0.42..+0.71) | -0.006 (-0.26..+0.23) |
+| squad-retreat-200 (ground, 2.0x) | +0.058 (-0.09..+0.22) | +0.056 (-0.19..+0.29) | +0.008 (-0.17..+0.20) | +0.167 (-0.38..+0.75) | +0.096 (-0.15..+0.34) |
+| squad-retreat-air | -0.075 (-0.24..+0.09) | -0.069 (-0.31..+0.18) | -0.029 (-0.19..+0.14) | **-1.417 (-1.75..-1.00)** | **-0.374 (-0.59..-0.18)** |
+| squad-retreat-200-air | -0.080 (-0.24..+0.08) | -0.069 (-0.32..+0.18) | -0.015 (-0.19..+0.18) | **-1.333 (-1.71..-0.92)** | **-0.332 (-0.57..-0.09)** |
+| harvester raid | -0.066 (-0.23..+0.09) | **-0.266 (-0.49..-0.02)** | -0.085 (-0.27..+0.10) | +0.083 (-0.50..+0.62) | -0.118 (-0.37..+0.15) |
+| perimeter raid | **-0.234 (-0.39..-0.08)** | **-0.403 (-0.61..-0.18)** | **-0.250 (-0.42..-0.08)** | -0.208 (-0.75..+0.33) | **-0.570 (-0.78..-0.35)** |
+| base defence | -0.141 (-0.29..+0.01) | -0.056 (-0.29..+0.18) | -0.054 (-0.24..+0.13) | **-1.208 (-1.62..-0.75)** | **-0.541 (-0.73..-0.36)** |
+| harvester defence | -0.073 (-0.24..+0.09) | -0.083 (-0.32..+0.14) | -0.109 (-0.29..+0.08) | **-1.542 (-1.83..-1.21)** | **-0.460 (-0.67..-0.27)** |
+| both defences | -0.138 (-0.29..+0.02) | -0.056 (-0.29..+0.18) | -0.073 (-0.24..+0.10) | **-1.333 (-1.71..-0.92)** | **-0.477 (-0.66..-0.28)** |
+
+The first set on the vanilla settings (round 5, same source; these arms set `AirliftCarryalls=3`):
+
+| Arm | v1v1 (48) | vffa (48) | vanfort (48) |
+|---|---|---|---|
+| rear drop | **-0.583 (-1.08..-0.04)** | -0.076 (-0.30..+0.15) | -0.035 (-0.27..+0.20) |
+| flank drop | **-1.083 (-1.50..-0.58)** | **-0.271 (-0.50..-0.04)** | -0.125 (-0.38..+0.11) |
+| retreat lift | -0.375 (-0.88..+0.17) | -0.233 (-0.48..+0.00) | +0.007 (-0.24..+0.26) |
+| rescue below 25% | **-0.667 (-1.17..-0.12)** | -0.085 (-0.31..+0.14) | -0.031 (-0.28..+0.21) |
+| ferry | -0.375 (-0.92..+0.17) | -0.168 (-0.41..+0.08) | -0.056 (-0.31..+0.21) |
+| three more Carryalls alone | -0.542 (-1.04..+0.00) | -0.049 (-0.30..+0.22) | -0.032 (-0.28..+0.21) |
+
+**More Carryalls, as first built, were the largest effect in the whole study, and it was a loss.** In vanilla 1v1
+from a Construction Yard, 3, 6 and 10 extra Carryalls scored -0.54, -1.33 and -1.75. `AirliftCarryalls` was added
+to the transport target, and that target is a capacity requirement that outranks army and economy spending
+(`QuantBotBuild.cpp`, the "transport" capital candidate). Every arm that carried the setting inherited the loss,
+which is why the round-5 numbers of the first set on `v1v1` say little about the manoeuvres themselves. From
+Fortress starts, where the house is rich from the first minute, the same setting cost -0.01 to -0.14. Fixed in
+9e03f4262: the extra aircraft are a leftover purchase at the High-Tech Factory only.
+
+### Round 7 (source 9e03f4262): the fix, and the raid and defence without extra fleet or reserve
+
+`plain` arms set only the manoeuvre's own switch. `fleet6` is the fixed leftover purchase. The other arms still
+reserve four Carryalls.
+
+| Arm | v1v1 (96) | v1v1b (48) | vffa (96) | dcffa (96) | vanfort (48) |
+|---|---|---|---|---|---|
+| fleet6, leftover purchase | +0.125 (-0.27..+0.50) | +0.042 (-0.54..+0.58) | +0.048 (-0.12..+0.21) | -0.032 (-0.19..+0.13) | -0.028 (-0.26..+0.22) |
+| harvester raid, plain | +0.208 (-0.17..+0.62) | **+0.667 (+0.17..+1.17)** | +0.006 (-0.17..+0.18) | -0.063 (-0.22..+0.10) | -0.076 (-0.31..+0.17) |
+| harvester raid, 4 + reserve 4 | +0.062 (-0.33..+0.46) | +0.000 (-0.58..+0.58) | **-0.201 (-0.36..-0.02)** | -0.115 (-0.26..+0.03) | -0.069 (-0.32..+0.17) |
+| squad-retreat (ground, 1.3x) | +0.083 (-0.29..+0.46) | -0.167 (-0.71..+0.38) | +0.153 (-0.02..+0.32) | +0.065 (-0.10..+0.23) | -0.011 (-0.26..+0.23) |
+| squad-retreat-200 (ground) | -0.042 (-0.44..+0.33) | -0.250 (-0.79..+0.29) | +0.039 (-0.13..+0.21) | +0.021 (-0.13..+0.18) | -0.042 (-0.28..+0.21) |
+| squad-retreat-air, reserve 4 | **-0.521 (-0.88..-0.15)** | **-1.083 (-1.50..-0.58)** | **-0.379 (-0.53..-0.22)** | -0.077 (-0.21..+0.06) | -0.069 (-0.31..+0.18) |
+| both defences, plain | -0.104 (-0.48..+0.27) | -0.333 (-0.83..+0.25) | **-0.276 (-0.43..-0.12)** | -0.037 (-0.18..+0.10) | -0.050 (-0.29..+0.19) |
+| both defences, reserve 4 | **-0.812 (-1.17..-0.44)** | **-1.000 (-1.42..-0.50)** | **-0.460 (-0.60..-0.29)** | **-0.180 (-0.32..-0.03)** | -0.049 (-0.29..+0.19) |
+
+### Rounds 8 and 9: the harvester raid replicated, and the rest of the default rule
+
+Round 7 was 40 comparisons, so its one win could be chance. Round 8 replayed that comparison alone on fresh seeds
+(8301 to 8324), 192 games each:
+
+| Arm | v1v1b Brutal | v1v1 Hard | vffa Hard |
+|---|---|---|---|
+| harvester raid, plain | **+0.458 (+0.19..+0.73)** | **+0.542 (+0.27..+0.81)** | +0.035 (-0.08..+0.16) |
+| squad-retreat (ground, 1.3x) | +0.115 (-0.17..+0.40) | +0.042 (-0.24..+0.29) | +0.091 (-0.04..+0.21) |
+
+Round 9, Fortress 1v1 duels (`tests/ai/formation-duel.py`, sizes 128, 160, 192, all three house pairs):
+
+| Check | Games | Difference (95%) | Verdict |
+|---|---|---|---|
+| raid v default, Hard | 144 | -0.194 (-0.47..+0.10) | level |
+| raid v default, Brutal | 144 | -0.181 (-0.50..+0.12) | level |
+| raid `/weak` v none, paired with default `/weak` v none | 108 | +0.312 (+0.19..+0.44) | beats |
+
+In the winning games a raiding house flew 18 to 19 raids and 64 to 67 units a game, lost 0.5 to 0.6 of them in
+the air and about 10 waiting for a Carryall, and built about 4 more Carryalls than its opponent (21.7 v 17.1 on
+Brutal, 16.5 v 12.8 on Hard) with no setting asking for them; probably the raids keep its Carryalls busy and the
+transport target's queue rule orders more, which was not checked.
+
+### Decisions
+
+- **Harvester raid: default on, in the scope it won in.** The rule is met: the interval is above 0 (Hard and
+  Brutal, replicated), it is not worse on Brutal, on Fortress (level) or `/weak` (better). Its Fortress estimates
+  are all negative, though (-0.19, -0.18 in duels, -0.08 and -0.06 in the vanilla and DuneCity free-for-alls), so
+  the default does not reach Fortress starts: it needs a house that started without a Refinery. City games from a
+  Construction Yard start were not played (the harness plays bundled maps in the vanilla mod only), so city games
+  do not get it either. Easy and Medium were not played and do not get it.
+- **Squad retreat on the ground: off.** Seventeen of its twenty-three estimates are positive and none is conclusive
+  (best: +0.153 (-0.02..+0.32) and +0.091 (-0.04..+0.21) on `vffa`). If there is an effect it is below +0.1.
+- **Retreat by Carryall, defenders flown in: off.** Without the reserve they are level to negative (defence
+  plain loses on `vffa`); with it they lose.
+- **Carryall reserve: off.** It takes transport from the harvesters: every reserve arm loses on the vanilla
+  Construction Yard maps.
+- **More Carryalls: off.** Bought from leftover cash they change nothing measurable (+0.13, +0.04, +0.05, -0.03,
+  -0.03).
+- **Perimeter raid: off.** It loses in four of five settings, and the candidate house kills less (68,003 v
+  83,179 on `dcffa`).
+- **First set on vanilla maps: off**, as in the DuneCity free-for-all; flank and rear drops lose there too.
+
+Limits: bot against bot only. The scoped default was confirmed against an explicit off in round 10 (below in
+`HANDOVER.md`). The manoeuvres still have no fixture probe; their evidence is the per-house counts in the match
+tables (`tests/ai/airlift-report.py`), the config unit test and the gates. Evidence:
+`~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`r4` to `r10`; `tables-*.md` and `matrix-*.md` are
+the tables above with every count; `make-tables.py`, `make-matrix.py` and `submit-r*.sh` regenerate them). The
+first `r4`/`r5` submissions of `van1v1` and `vanffa` named two maps by file name instead of the harness's short
+name and were refused for those maps; `v1v1` and `vffa` are the complete reruns and the only ones quoted.
+
+## Mass Carryall manoeuvres (2026-11-23; five switches, all default off; save 9894)
+
+Stefan: "get the ai to test different mass carry all drop movements - to retreat or to attack. could be behind
+enemy or to the side flanking or a rescue etc. also would make carryalls more valuable to have". **Result: none of
+them beats the control in his game, three variants of the drops lose, so every switch stays off.** QuantBot's
+Carryalls do what they did before: harvesters, repair trips, stalled units.
+
+### What QuantBot did with Carryalls before
+
+It never ordered one. Every combat lift came from the engine: a unit sent to a Repair Yard asks for a Carryall
+(`GroundUnit::doRepair`), a unit that fails three paths or stands still for 30 s asks for one (`UnitBase::
+finishPathRequest`, `tryLongStallCarryallRescue`), and a repaired unit is flown back (`RepairYard`). The fleet target
+is sized for harvesters and Repair Yards (`QuantBotBuildPolicy::carryallTarget`). In the games below a control house
+that survives 45 minutes builds 16 to 21 Carryalls and loses 11 to 13 of them.
+
+### The switches (`[Force Concentration]`, Custom games only, `src/players/QuantBotAirlift.cpp`)
+
+A Carryall carries one unit, so everything is flown in sorties: each pass orders one unit per free Carryall, and a
+unit is only ordered while a Carryall is free to book (one without a booking would drive to the drop point alone).
+A lift is the engine's own Carryall request, the code a player's drop order runs. Units under a lift order are held
+like a split group (`forceHeld`): no rally or regroup orders. The state is saved (`QuantBot::saveAirlift`, 9894) and
+each switch is in the multiplayer config hash when on.
+
+| Key | What it does |
+|---|---|
+| `AirliftRearDrop` | Within 90 s of a wave's launch, the dearest whole vehicles of the wave (at most half, at most `AirliftGroup`, default 6) are flown to the nearest standable ground out of observed enemy reach on the far side of the enemy base centre, 8 to 32 tiles out. They wait there until all are down (or 45 s after the first) and the ground wave is within 18 tiles of the base (at most 150 s), then hunt towards the base centre. |
+| `AirliftFlankDrop` | The same, square to the approach, on whichever side has ground nearer the base. Both on: they take turns. |
+| `AirliftRetreatLift` | While the wave is outmatched where it stands (the posture machine's sustained local verdict, read before the default-off withdrawal switch masks it), wave members under enemy fire are flown to the protected rally, dearest first, and leave the wave. |
+| `AirliftRescue` | A vehicle under enemy fire, 15 tiles or more from home, is flown to the rally when it is below `AirliftRescueHealth` percent (default 50) without a repair trip, or (`AirliftRescueCutOff`, default on) has no friendly fighter within 6 tiles. Two orders a pass. |
+| `AirliftFerry` | A whole wave member 25 tiles or more farther from the enemy base than the wave's nearest third, and not under fire, is flown to safe ground beside that third and hunts on. |
+| `AirliftCarryalls` | 0 to 6 Carryalls on top of the transport target (default 0). |
+
+Only whole units are flown to attack: a Carryall that picks up a damaged unit without a target takes it to a Repair
+Yard instead (`Carryall::pickupTarget`). For a retreat or rescue that is the wanted result.
+
+### Measurement
+
+`tests/ai/vanilla-match.py --ffa default@airlift-<arm>,default --control default`: Stefan's 4-player DuneCity
+free-for-all (generated 160x160 map, Fortress starts with 20,000-credit armies and 40,000-credit cities, his game
+options, four QuantBot Brutal, 45 game minutes), two houses with the manoeuvre and two control houses in every game,
+all six assignments of 16 seeds (9101 to 9116): 96 games an arm, 1,440 games, on AWS. Score is placement
+(`tests/ai/match_score.py`); the difference is the candidate houses' mean score minus the control houses' in the
+same game, with its 95% bootstrap interval. Overlays are `tests/ai/play-styles/airlift-*.ini`; the arms without
+"no fleet" also set `AirliftCarryalls=3` (`-big`: 6, and `AirliftGroup=12`). Round 1 is source 64104487a (a drop
+needed two free Carryalls and took at most a third of the wave), round 2 is 485291f04 (one free Carryall, at most
+half), round 3 is aa0dd1b7e. "Fired" is the share of candidate house-games in which it happened at least once; the
+counts are per candidate house-game. "Lost in the air" died with their Carryall; "lost waiting" died after the order
+and before the Carryall came. Carryalls built and lost are candidate / control and include the fleet of a house
+that was eliminated.
+
+| Round | Arm | Games | Fired | Times | Units lifted | Lost in the air | Lost waiting | Carryalls built | Carryalls lost | Score difference (95%) | Games timed out | Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | rear | 96 | 39% | 0.9 | 5.0 | 0.02 | 0.0 | 8.6 / 7.8 | 7.9 / 7.8 | -0.037 (-0.20..+0.14) | 22% | level |
+| 1 | flank | 96 | 41% | 1.3 | 7.2 | 0.03 | 0.0 | 8.7 / 8.0 | 8.2 / 7.8 | -0.017 (-0.20..+0.16) | 15% | level |
+| 1 | retreat | 96 | 19% | 0.2 | 0.8 | 0.00 | 0.0 | 9.0 / 8.1 | 8.4 / 7.8 | -0.020 (-0.20..+0.16) | 14% | level |
+| 1 | retreat, no fleet | 96 | 18% | 0.2 | 0.9 | 0.00 | 0.0 | 7.4 / 7.6 | 7.3 / 7.7 | +0.014 (-0.15..+0.17) | 4% | level |
+| 1 | rescue | 96 | 94% | 172.1 | 119.7 | 0.26 | 43.7 | 9.6 / 8.7 | 9.4 / 7.9 | -0.150 (-0.31..+0.01) | 17% | level |
+| 1 | rescue, no fleet | 96 | 96% | 157.6 | 106.5 | 0.20 | 41.8 | 8.3 / 9.0 | 8.9 / 8.3 | -0.135 (-0.29..+0.01) | 20% | level |
+| 1 | three more Carryalls, no manoeuvre | 96 | - | - | - | - | - | 8.8 / 8.0 | 8.1 / 7.8 | +0.002 (-0.17..+0.18) | 12% | level |
+| 2 | rear | 96 | 64% | 1.4 | 7.9 | 0.03 | 0.0 | 11.2 / 11.0 | 10.6 / 9.5 | -0.072 (-0.23..+0.09) | 32% | level |
+| 2 | flank | 96 | 71% | 1.8 | 9.9 | 0.03 | 0.0 | 10.5 / 11.5 | 10.5 / 10.2 | -0.211 (-0.36..-0.06) | 34% | **loses** |
+| 2 | rear, 12 units | 96 | 64% | 1.4 | 13.2 | 0.01 | 0.0 | 11.6 / 10.5 | 10.6 / 9.8 | -0.174 (-0.34..-0.01) | 25% | **loses** |
+| 2 | flank, 12 units | 96 | 69% | 1.6 | 15.9 | 0.06 | 0.0 | 11.9 / 11.7 | 10.8 / 10.4 | -0.220 (-0.36..-0.07) | 30% | **loses** |
+| 2 | rescue below 25% health only | 96 | 97% | 109.3 | 39.5 | 0.05 | 69.5 | 11.7 / 10.2 | 10.7 / 10.1 | -0.013 (-0.15..+0.14) | 16% | level |
+| 2 | rescue of cut-off units only | 96 | 97% | 106.7 | 79.9 | 0.33 | 11.4 | 12.6 / 10.2 | 11.8 / 9.7 | -0.083 (-0.24..+0.08) | 25% | level |
+| 3 | ferry | 96 | 47% | 31.2 | 31.0 | 0.01 | 0.0 | 12.8 / 10.8 | 10.7 / 10.3 | -0.057 (-0.23..+0.11) | 26% | level |
+| 3 | ferry, no fleet | 96 | 48% | 23.0 | 22.8 | 0.03 | 0.0 | 10.3 / 9.8 | 9.9 / 9.4 | +0.013 (-0.14..+0.18) | 20% | level |
+
+Houses alive at a time-out, candidate / control, were within four points of each other in every arm (`report.txt`
+in each round's folder has the column).
+
+### Why each stays off
+
+- **Rear and flank drops lose, and lose more the more they carry.** Flying is safe (0.01 to 0.06 units lost in the
+  air per house-game) and the group lands where it is sent. But the units it takes are the dearest of the wave, and
+  they fight apart from it: in round 2 a candidate house killed 9,000 to 16,000 credits less than a control house
+  (flank 73,946 v 87,004). In round 1 a drop fired in 40% of house-games with 5 to 7 units and was level; the
+  round 2 rear drop with 8 units is still level (-0.07); with 10 to 16 units in 64 to 71% of house-games it loses. This agrees with the split and flank waves S and T
+  ("Concentrating force", above): one concentrated wave is better.
+- **A rear drop often has nowhere to land.** These bases sit on the map's rim. In round 2, where one free
+  Carryall was enough, "no ground" was the commonest refusal of a rear drop (41 to 58 attempts a house-game); in
+  round 1 it was "no two free Carryalls" (47).
+- **The retreat lift hardly happens.** The local-defeat verdict held for 9 passes a house-game and in 7 of them no
+  Carryall was free; 0.8 units a house-game were flown out. Its score is the control's.
+- **The rescue fires constantly and does not pay.** 107 to 172 lifts a house-game. With the 50% threshold the
+  house fights less (kill value 56,699 v 62,922, loss value 54,782 v 63,634) and scores -0.15, its interval
+  touching 0. Below 25% health most die before the Carryall comes (69.5 of 109). Neither narrower variant is
+  better than the control.
+- **The ferry is safe and makes no difference.** 23 to 31 units a house-game flown up to the wave's front, 0.01
+  to 0.03 of them lost in the air, score level.
+- **More Carryalls do not pay.** `AirliftCarryalls=3` alone built 0.8 more Carryalls a house-game (2.3 more for a
+  house that survives), scored +0.002 (-0.17..+0.18), and in the manoeuvre arms the extra aircraft were lost at
+  about the rate they were built.
+
+Limits: one setting (his 4-player DuneCity free-for-all, Fortress, Brutal). Vanilla Construction Yard starts, 1v1
+and Hard were not played in these three rounds (they were later: round 5 in the section above), and since nothing passed the first half of the default rule the Fortress, Brutal and
+`/weak` "not worse" runs were not needed. With 96 games an interval is about +-0.17 wide, so an effect smaller than
+that would not show. The manoeuvres have no fixture probe of their own; the evidence that they do what the table
+says is the per-house counts above (`tests/ai/airlift-report.py`), the config unit test (`[ai][config][airlift]`)
+and the gates. Evidence: `~/Documents/projects/outputs/carryall-manoeuvres-20261123/` (`dc-ffa`, `dc-ffa-r2`,
+`dc-ffa-r3`: per-arm `games.csv`, `houses.csv`, `summary.txt`; `report.txt` and `airlift-report.txt` per round;
+`smoke1` to `smoke3` are the local four- and eight-game batches that showed the first version of the drops almost
+never found two free Carryalls).
+
 ## Scenario tests: vanilla Construction Yard starts and troop-formation benchmarks (branch `test/formation-scenarios`)
 
 Stefan: "think of some more tests we can do on troop formations and run them. also make sure you are
@@ -1360,6 +1607,780 @@ The combined current game source subsequently passed 118/118 CTests at `e286003d
 including the permanent positive/negative siting regression. Keep the site guards as a
 construction-correctness fix, **not a claimed FFA draw-rate cure**. `FinishWhenLeading`
 stays on; the unaccepted zone experiments remain excluded.
+
+### Turret clusters and the held mass (`TurretClusters`, `MassHold`, 2026-11-21, default off)
+
+**Trigger.** Stefan's MacBook Air save `nobuildup` (1.0.874, game minute 319, a 4P no-spice city
+free-for-all on a symmetric 128x128 Random Skirmish map, Fortress bases, City 40,000, all four
+houses QuantBot Brutal; his own house was already out). "The two weaker AIs are sending one unit in
+at a time and killing them instead of building a big mass for a counter offensive with momentum."
+Then: "for defence the AI should just build more rocket turret clusters and then build up, test it out."
+
+**What the save shows (10-minute headless continuation, AI decision log).** Sardaukar has a 38,000
+army and sends waves of 44-124 units. Harkonnen (2,800 army, ~270 credits) and Neutral (1,500,
+~400 credits) launch no wave at all (`attack_deferred: outnumbered_front`, correctly), but every
+Trooper they can afford goes straight into the base defence: `base_scramble` sends exactly one unit
+60 (Harkonnen) and 47 (Neutral) times in ten minutes, against threats of 1,000-5,000 credits;
+1-member musters are released after their 15 s timeout 30 and 31 times; an emergency response sent
+one unit against a 6,529-credit threat. The sized defence (X) refuses an unwinnable answer for a
+worker raid, not for an attacked building, and `SimpleArmyPolicy::reinforcements` / `sizedPool` send
+whatever is in reach when it falls short. Turrets are not what is missing: at minute 349 Harkonnen
+owns 313 rocket turrets, Sardaukar 211, Neutral 70 (city protection builds them; Harkonnen builds
+~30 and loses 22-33 every 30 minutes). The perimeter-turret rule (U) never fired: it needs the
+turret's price plus 750 credits, and every credit became a Trooper first.
+
+**The switches** (`[Force Concentration]`, hashed only when on; code in `QuantBotForce.cpp`,
+`QuantBotPlacement.cpp::findClusterTurretLocation`, `QuantBotBuildYard.cpp::chooseYardTurretCluster`,
+the two defence paths in `QuantBotArmy.cpp`; constants in `ForceConcentrationPolicy.h`):
+
+- `TurretClusters`: while outnumbered by the enemy estimate (125%), every core building (yard,
+  heavy/light factory, barracks/WOR, refinery, port, high-tech, repair yard, in that order) is filled
+  up to 8 turrets within 5 tiles, at most 40 in all. Each pass with a turret wanted and a legal site,
+  every non-yard producer protects the turret's price (units wait) and the yard saves for it ahead
+  of optional growth (`save_turret_cluster`, `turret_cluster`; power first for a Rocket Turret).
+  Rocket Turrets when a yard can build them; while none can, the yard upgrade that unlocks them if
+  the yard is allowed it now, else Gun Turrets. Sites: next to the cluster's turrets first, then
+  facing the observed front, then close to the core. `turret_cluster_plan` traces the goal, the
+  count and why nothing was ordered. History: v1 (one turret per 1,000 credits of the enemy lead,
+  4 per core within 4 tiles, max 16) and v2 (per 1,000 credits of the whole estimate, 8 per core,
+  max 40) never placed a turret in fresh games - a Fortress start rings each core with 12 Gun
+  Turrets, and Rocket Turrets need a level-2 yard that the tech level does not allow in the first
+  hour of this lobby (in a 60-minute trace the weak seat built no rocket turret by any rule).
+- `MassHold`: our live turrets within 10 tiles of an attacked building (Rocket Turrets while powered)
+  count towards its defence. When they and the troops already fighting cover the sized answer
+  (1.5x the threat) nobody new goes (`defence_turret_covered`); when they plus every free troop
+  within 40 tiles cannot even match the threat, nobody new goes either, and those troops gather at
+  the home rally in Area Guard (`defence_mass_hold`; hunters are never recalled). Otherwise the
+  sized answer is sent with the turrets counted. The emergency response path (assets not handled
+  by the base scramble) applies the same two tests. Since 2026-11-22 only in city skirmish games
+  (city simulation on, custom game); see "Default-change checks" below for why.
+
+**Save continuation (30 game minutes, minute 319-349, every QuantBot on the arm's style; source
+`82572fa41`, TurretClusters v1).** One
+deterministic replay per arm, so a demonstration, not a statistic:
+
+| Arm | Single-unit sends Harkonnen / Neutral | Harkonnen army 349 (units) / killed / lost | Neutral army 349 | Sardaukar army 349 / killed | Harkonnen waves |
+|---|---|---|---|---|---|
+| off | 139 / 144 | 2,500 (12) / 150,810 / 59,810 | 1,900 | 32,650 / 87,250 | none |
+| TurretClusters (v1) | 118 / 155 | 2,350 (12) / 170,120 / 57,540 | 1,550 | 28,800 / 87,220 | none |
+| MassHold | 1 / 29 | 3,650 (24) / 191,750 / 50,790 | 6,600 (33) | 32,950 / 56,660 | 9 (16-39 units) |
+| both (v1 clusters) | 7 / 30 | 2,550 (18) / 209,200 / 53,280 | 690 | 28,150 / 50,410 | 5 (22-38 units) |
+
+MassHold ends the trickle; the held Troopers become waves of 16-39 units (Harkonnen) and Neutral
+ends with 33 units instead of 8. TurretClusters v1 found Harkonnen's cores already covered (313
+turrets) and Neutral's core built up too densely for a legal site most of the time (770 of 903
+searches found none); it ordered one turret.
+
+**Fresh games: seat-only screen** (`tests/ai/scenario-matrix.py --cells 4p-ffa-fortress-nospice-city40k
+--seat-style STYLE`, Stefan's lobby, 24 seeds, 120 minutes, AWS, source `14096ba62`; the candidate
+is the first seat, rotated over Harkonnen/Atreides/Ordos/Sardaukar; results and `analyse.py` in
+`~/Documents/projects/outputs/ai-nobuildup-20261121/v3/{control,turret-clusters,mass-hold,turret-mass}`).
+Control replays to the same 24 digests at `82572fa41`, `c56b636f8` and `14096ba62` (the switches
+are inert when off). 23 of 24 games time out at 120 minutes, so placement barely moves (seat score
++0.03 [+0.00, +0.09] for every arm: the one game in which the seat was eliminated in control); the
+comparison is on the seat's own state, paired by game (95% bootstrap; bold = interval excludes 0):
+
+| Metric (candidate seat) | control | TurretClusters | MassHold | both |
+|---|---|---|---|---|
+| mean army over the game | 9.8k | **-2.7k [-3.8, -1.7]** | -0.0k [-0.8, +0.7] | **-3.0k [-4.0, -2.0]** |
+| share of all armies at 120 | 24.7% | -4.9 [-9.5, +0.3] | +1.9 [-2.6, +6.5] | **-7.0 [-10.2, -3.5]** |
+| structures at the end | 270 | **+89.5 [+63.6, +120.8]** | **-8.4 [-16.5, -0.7]** | **+85.5 [+61.0, +117.5]** |
+| enemy value killed | 212k | **-39.7k [-55.7, -24.4]** | -2.4k [-8.5, +3.3] | **-39.8k [-55.4, -25.4]** |
+| own value lost | 212k | **-43.0k [-56.1, -29.1]** | -1.4k [-8.0, +4.1] | **-42.7k [-55.8, -28.8]** |
+| kill - loss | +0.1k | +3.3k [-5.6, +12.6] | -1.0k [-8.0, +5.6] | +2.9k [-5.7, +11.6] |
+| seat eliminated (of 24) | 1 | 0 | 1 | 0 |
+| seat weakest in control (6 games): army share at 120 | 15.3% | +3.2 [-4.9, +13.4] | +5.5 [-1.1, +13.4] | +1.2 [-3.7, +7.5] |
+| seat weakest in control: structures at the end | 224 | **+121 [+52, +215]** | -15.5 [-38.0, +5.8] | **+122 [+52, +217]** |
+
+TurretClusters turns the seat into a turtle: about 90 more structures (the turrets), never
+eliminated, a 28% smaller army and much less fighting either way - it does not build the army up.
+MassHold keeps the army (a weak seat ends with a larger share, its sorties are slightly larger,
++1.6 [-0.2, +3.5] units at the peak away from base) but loses 8 more buildings a game: the
+buildings its units no longer feed piecemeal are left to the turrets.
+
+**Save continuation with the final code** (`14096ba62`, both switches): Harkonnen launches 7 waves of
+29-51 units, Neutral kills 93k (off 76k) and keeps 312 buildings (off 286), Sardaukar kills 51k
+(off 87k); Harkonnen keeps 551 buildings (off 594). TurretClusters placed 10-11 Rocket Turrets for
+Neutral; Harkonnen's cores were already full (`goal_met`).
+
+**240 minutes** (opt-in cell `4p-ffa-fortress-nospice-city40k-long`, 48 seeds, source `02841808d`,
+results `~/Documents/projects/outputs/ai-nobuildup-20261121/long/`, `END_MINUTE=240 python3 long/analyse.py`).
+These games do not finish either: 1 of 192 decided, 6 of 192 houses eliminated in control (3 of them
+the seat), 5 / 2 / 1 with MassHold / TurretClusters / both.
+
+| Metric (candidate seat, 48 games) | control | MassHold | TurretClusters | both |
+|---|---|---|---|---|
+| placement score | -0.28 | +0.02 [-0.03, +0.08] | +0.01 [-0.03, +0.06] | +0.01 [-0.03, +0.06] |
+| seat eliminated | 3 | 2 | 1 | 1 |
+| mean army | 9.8k | **-0.7k [-1.2, -0.2]** | **-2.7k [-3.6, -1.8]** | **-2.9k [-3.7, -2.0]** |
+| share of all armies at 240 | 25.3% | -1.2 [-3.3, +0.9] | **-4.0 [-6.5, -0.9]** | **-4.4 [-6.5, -2.0]** |
+| structures at the end | 262 | +2.2 [-6.4, +14.7] | **+85.5 [+71.2, +102.5]** | **+85.9 [+70.0, +105.0]** |
+| kill - loss | -4.6k | -0.4k [-11.1, +10.0] | +12.8k [-0.8, +25.9] | **+15.8k [+4.4, +26.9]** |
+| seat weakest in control (9 games): placement score | -0.50 | +0.19 [+0.00, +0.46] | +0.17 [+0.00, +0.42] | +0.17 [+0.00, +0.42] |
+| seat weakest: kill - loss | -13.3k | -1.3k [-17.3, +14.4] | **+27.7k [+1.7, +54.0]** | **+23.3k [+5.8, +41.6]** |
+
+**A range of maps** (Stefan: "try different maps, try a range of maps"; source `b5ab5a018`, 704 games
+on AWS, results and `analyse.py` in `~/Documents/projects/outputs/ai-nobuildup-20261121/maps/`). The
+candidate is the Brutal first seat with the switch; control plays the same game ids natively.
+- `cv`: the 13 handmade control maps (Bottle Neck, Sihaya-Pip, Kleiner Lvl, Tuono-Blake, Mountain
+  Pass, Wormhole, Habbanya-Froiud, Fortress, Fertile Basin, Enclaves, Alkozeltser 4, 4P DuneCity,
+  Sardaukar Outpost), QB against QH/QM/QE/AH/AM, `--tier controls --control-diagnostics
+  --control-seeds 10801 11810 12819 13828`.
+- `cd`: the same maps in the DuneCity mod (`--control-mod dunecity`; the 4P DuneCity map plays the
+  same four games in both sets).
+- `mx`: Brutal v Hard on the four long ladder maps (128/160, vanilla/DuneCity, both starts) and the
+  Random Skirmish 2/4/5/6/8-player and CY cells with a Brutal first seat (`--seeds-per-cell 6`).
+
+Most of these games are decided (136 of 176 in control), so placement now separates the arms
+(paired by game, 95% bootstrap):
+
+| Set (games) | control seat score | MassHold | TurretClusters | both |
+|---|---|---|---|---|
+| `cv` handmade, vanilla (52) | +0.199 | -0.032 [-0.121, +0.055] | -0.057 [-0.298, +0.183] | -0.041 [-0.290, +0.209] |
+| `cd` handmade, DuneCity (52) | +0.259 | +0.051 [-0.046, +0.159] | **-0.311 [-0.503, -0.124]** | **-0.372 [-0.579, -0.178]** |
+| `mx` ladder, skirmish, CY (72) | +0.391 | +0.059 [-0.044, +0.178] | **-0.175 [-0.346, -0.014]** | **-0.174 [-0.350, -0.011]** |
+| all (176) | +0.295 | +0.030 [-0.029, +0.093] | **-0.180 [-0.295, -0.067]** | **-0.193 [-0.313, -0.077]** |
+| seat won / eliminated / time-outs | 81 / 60 / 40 | 87 / 57 / 38 | 61 / 76 / 46 | 61 / 77 / 51 |
+
+**MassHold, four times the games** (same source `b5ab5a018` and result folders; 20 control seeds
+`10801 + 1009 i` on each handmade set and 18 ladder seeds per cell, the games already played
+skipped): 688 games per arm, 509 decided in control.
+
+| Set (games) | control seat score | MassHold |
+|---|---|---|
+| `cv` handmade, vanilla (260) | +0.139 | -0.014 [-0.051, +0.023] |
+| `cd` handmade, DuneCity (260) | +0.273 | +0.014 [-0.034, +0.062] |
+| `mx` ladder, skirmish, CY (168) | +0.493 | +0.049 [-0.027, +0.127] |
+| all (688) | +0.276 | +0.012 [-0.017, +0.042] |
+| all without the 4P DuneCity map's duplicate games (668) | | +0.009 [-0.021, +0.040]; 2,000 resamples [-0.023, +0.041] |
+
+Seat won / eliminated / time-outs: control 315 / 225 / 179, MassHold 323 / 224 / 168. 552 of the 668
+games end with the same place, 58 better and 58 worse.
+
+**Decision.** TurretClusters is rejected: where games are decided it loses (-0.18 placement over 176
+games, 20 fewer wins, 16 more eliminations; worst in the DuneCity mod and on the long ladder maps).
+Turtling keeps a house alive in a game nobody finishes, and costs it the games that do finish. It
+stays a default-off switch, kept as negative evidence. MassHold is level (section 7.2): it removes
+the trickle seen in the save and does not change how often the AI wins or loses, on any of the three
+map sets. It stays default off; a default change for the behaviour alone would be a choice the
+placement rule does not make, and would still need the Fortress/Brutal/`/weak` checks and the four
+mandatory AI gates.
+
+### Counter-punch, leader raids and ganging up (`CounterPunch`, `LeaderRaid`, `GangUpLeader`, 2026-11-21, default off)
+
+Stefan: the held mass should become "a counter offensive with momentum"; "try different maps, not
+just that map". A weak house cannot beat the leader's army head-on, so these three choose the
+moment or the target (code: `QuantBot::directedWave()` in `QuantBotForce.cpp`, hooks in `attack()` and
+`launchGroundHunt()`; constants in `ForceConcentrationPolicy.h`; derived each attack check from live
+state and the saved wave/defence state, nothing new saved; `directed_wave` trace):
+
+- `CounterPunch`: a ground defence at home in the last 90 s, no visible hostile ground fighter within
+  14 tiles of our buildings, no tracked wave still hunting and none launched in the last 3 minutes:
+  the available army leaves at once (army threshold, wave readiness, bundle and outnumbered gates
+  skipped) for the house with the most visible ground value within 48 tiles of our base.
+- `LeaderRaid`: 60% of the largest enemy army stands beyond 32 tiles of its base and our ground army
+  is 1.5x its guard (its ground units and turrets within 24 tiles of its base centre): the army goes
+  for the leader's production and economy, past the same gates.
+- `GangUpLeader`: free-for-all, one enemy house has at least every other enemy's visible ground value
+  combined and 1.5x ours: ordinary waves target it (no gate skipped).
+
+A local check (8 games each, one Hard house against three Brutal) fired the counter-punch in 4 games,
+the raid in 5 and the gang-up in 2, always for the candidate seat only.
+
+**Screen** (source `98600ecb8`, AWS, seat-only, results and `analyse.py` / `confirm.py` in
+`~/Documents/projects/outputs/ai-nobuildup-20261121/momentum/`): the `cv`/`cd`/`mx` sets above plus
+new opt-in weak-seat cells (`skirmish/weak-1v1-qh-v-qb-rs128`, both starts, and
+`skirmish/weak-4p-ffa-qh-v-3qb`, vanilla and DuneCity; the candidate is the Hard seat). Control and
+MassHold reproduce the earlier `b5ab5a018` screen exactly. 224 games per arm, 181 decided in control:
+
+| Set (games) | MassHold | CounterPunch | LeaderRaid | GangUpLeader | all four |
+|---|---|---|---|---|---|
+| `cv` handmade, vanilla (52) | -0.032 | +0.043 | -0.013 | -0.034 | -0.059 |
+| `cd` handmade, DuneCity (52) | +0.051 | +0.045 | -0.040 | -0.040 | -0.025 |
+| `mx` ladder, skirmish, CY (72) | +0.059 | **+0.142 [+0.031, +0.270]** | +0.047 | +0.002 | +0.019 |
+| weak seat (48) | +0.040 | -0.017 | +0.010 | +0.007 | -0.092 |
+| all (224) | +0.032 [-0.016, +0.084] | **+0.062 [+0.004, +0.122]** | +0.005 [-0.063, +0.074] | -0.015 [-0.044, +0.015] | -0.033 [-0.107, +0.040] |
+| seat won / eliminated (control 86 / 100) | 93 / 97 | 95 / 97 | 88 / 100 | 86 / 103 | 86 / 103 |
+
+**CounterPunch confirmation** on fresh games (16 new control seeds per handmade set, 12 more per
+ladder cell; ids of the screen excluded; the 4P DuneCity map's `cd` duplicates dropped):
+
+| Set | fresh games | CounterPunch | pooled with the screen |
+|---|---|---|---|
+| `cv` | 208 | -0.024 [-0.088, +0.040] | -0.010 [-0.070, +0.050] (260) |
+| `cd` | 192 | -0.011 [-0.061, +0.038] | -0.006 [-0.051, +0.038] (240) |
+| `mx` | 96 | +0.062 [-0.047, +0.180] | +0.096 [+0.016, +0.182] (168) |
+| all | 496 | **-0.002 [-0.041, +0.037]**; 54 better / 55 worse / 387 same | +0.018 [-0.017, +0.053] (668) |
+
+**Decision.** All three stay default off. CounterPunch's screen result (one of five arms clearing 0)
+did not replicate on fresh games; overall it is level, with only a hint on the Brutal v Hard ladder
+and skirmish set (pooled +0.096 includes the selecting games). LeaderRaid, GangUpLeader and the
+combination are level; nothing helps the weak seat (a Hard house against Brutal ones loses about as
+often). Across MassHold, TurretClusters and these three, changing when and where an outmatched
+army fights does not change who wins; the gap is the army and economy itself.
+
+### Economy: nuclear consolidation and palace districts (`NuclearConsolidation`, `PalaceDistricts`, 2026-11-21, default off)
+
+Stefan: "needs to be economy and turtly and holding back forces ... palaces are an effective way to
+boost value. you can delete buildings to make room to add them into residential / commercial areas.
+furthermore you can delete windtraps and have nuclear to free up space." City simulation only.
+
+Facts behind it (`config/ObjectData`, `CityEffects.h`, `docs/city-economy-balance.md`): a Wind Trap is
+2x2, 300 credits, 100 power; a Nuclear Plant 3x3, 2,000 credits, 2,000 power (tech 6); a Palace 3x3,
+2,000 credits (tech 8), pays R+C tax like a high zone and adds +40 land value within 8 tiles, and city
+tax scales with the house's average land value. In the `nobuildup` save the weak houses own 38 and 25
+Wind Traps, 4 and 2 reactors and no Palace (the leader 124 Wind Traps, 2 Palaces).
+
+- `NuclearConsolidation`: from 10 Wind Traps a Nuclear Plant is the house's economy project (funded
+  ahead of units) while the Wind Traps cannot be retired; once a reactor stands, all new city power
+  capacity is a reactor (a yard that cannot build one defers to one that can unless power is short);
+  Wind Traps are demolished, most lots around them first, while the rest covers demand, the city power
+  reserve, the turret power buffer, the committed demand and one more Wind Trap - always keeping 2: a
+  Wind Trap is the prerequisite of the reactor and of almost every other building (factories,
+  refinery, radar, turrets, Police Station, Stadium, Airport). Since protocol 142 (Stefan,
+  2026-11-27: "if it has space it should keep the windtraps, not blow them up") a Wind Trap is
+  retired only while the base is low on building room: built out (fewer than 4 free 2x2 footprints,
+  or no site for a production building) or fewer than 48 free rock tiles in build range
+  (`ForceConcentrationPolicy::windTrapRetirementRoomLow`). Before it, a Construction Yard start on
+  the 4P 160x160 DuneCity map retired 30 a game, every one with at least 202 free rock tiles; HANDOVER
+  2026-11-27 has the measurement.
+- `PalaceDistricts`: one Palace per 30 R+C lots (1-4; 1 with Only One Palace) is the project,
+  funded ahead of units, sited where most R+C lots no palace reaches yet stand within 8 tiles (at least
+  12); own lots of density at most 1 in its footprint are demolished through redevelopment.
+
+Bugs found by the check games before the screen (all fixed, `333f5b420`..`1afd9ca57`): the city
+generator choice turned the reactor order into a Wind Trap; yard selection dropped every chosen site
+except Rocket Turrets and Police Stations (so Palace district sites, and the Gun Turret cluster sites
+of `TurretClusters`, were re-sited by the ordinary search - the earlier TurretClusters screens placed
+Gun Turrets by the city turret search, Rocket Turrets in clusters); retiring the last Wind Traps made
+reactors unbuildable, so 33-53 new Wind Traps a game were built and retired again.
+
+**Screen** (source `1afd9ca57`, AWS, seat-only; DuneCity maps: the 13 handmade maps in the DuneCity
+mod, the DuneCity Brutal v Hard ladder maps, 2P and 6P Random Skirmish and the CY duel, the DuneCity
+weak-seat cells, and Stefan's lobby at 120 minutes; results `~/Documents/projects/outputs/
+ai-nobuildup-20261121/economy/`, `analyse.py`, `econ_metrics.py`, `confirm.py`), 136 games per arm:
+
+| Set (games) | Nuclear | Palace | both | both + MassHold | both + MassHold + TurretClusters |
+|---|---|---|---|---|---|
+| handmade, DuneCity (52) | -0.006 | +0.017 | +0.036 | -0.039 | **-0.296** |
+| DuneCity ladder, skirmish, CY (36) | **+0.212** | **+0.106** | **+0.281** | **+0.281** | +0.022 |
+| weak seat (24) | **+0.264** | +0.014 | **+0.233** | **+0.299** | -0.031 |
+| Stefan's lobby (24; tech 5, no reactor or palace in 120 min) | 0 | 0 | 0 | +0.028 | +0.056 |
+| all (136) | **+0.100 [+0.018, +0.191]** | +0.037 | **+0.129 [+0.043, +0.223]** | **+0.117 [+0.024, +0.216]** | -0.103 |
+| seat won / eliminated (control 45 / 43) | 54 / 34 | 48 / 39 | 58 / 34 | 58 / 36 | 38 / 52 |
+
+**Confirmation** on fresh games (16 new handmade seeds, 12 more per DuneCity ladder map, the weak-seat
+cells raised to 16 seeds; source `59a11e2a1`; screen ids excluded), 280 games per arm:
+
+| Set | both | both + MassHold |
+|---|---|---|
+| handmade, DuneCity (208) | -0.003 [-0.067, +0.060] | +0.021 [-0.056, +0.098] |
+| DuneCity ladder, skirmish (48) | +0.042 [-0.083, +0.172] | +0.099 [-0.078, +0.281] |
+| weak seat (24) | +0.170 [-0.170, +0.524] | +0.201 [-0.087, +0.531] |
+| all fresh (280) | +0.020 [-0.041, +0.080] | +0.050 [-0.021, +0.120] |
+| seat won / eliminated (control 126 / 79) | 128 / 77 | 139 / 71 |
+| pooled with the screen (392) | +0.059 [+0.006, +0.113] | +0.075 [+0.016, +0.135] |
+
+The economy itself grows on fresh games (handmade DuneCity maps, 208 games, both / both + MassHold):
+population at minute 60 **+4,174 / +6,171** (+8% / +12%), tax at minute 60 **+1,664 / +2,080**
+(+14% / +18%), mean army **+1.6k / +2.0k** (+9% / +11%), all intervals above 0.
+
+**Targeted confirmation** (pre-registered: economy + MassHold against control, fresh games only, on
+the weak seat and generated DuneCity maps where the effect showed; source `c80e83a01`; the weak-seat
+cells raised to 48 seeds, new 160x160 DuneCity weak-seat cells, 30 more seeds per DuneCity ladder map;
+`economy/target.py`), 288 games per arm:
+
+| Set | fresh games | economy + MassHold | better / worse / same | seat won / eliminated (control) |
+|---|---|---|---|---|
+| weak seat, 128x128 (1v1 both starts, 4P FFA) | 96 | +0.104 [-0.018, +0.234] | 12 / 6 / 78 | 29 / 61 (23 / 67) |
+| weak seat, 160x160 | 72 | +0.132 [-0.002, +0.271] | 11 / 5 / 56 | 25 / 43 (21 / 45) |
+| Brutal v Hard ladder, DuneCity 128/160 | 120 | +0.044 [-0.023, +0.117] | 5 / 2 / 113 | 94 / 25 (91 / 27) |
+| all | 288 | **+0.086 [+0.025, +0.148]** (2,000 resamples [+0.027, +0.150]) | 28 / 13 / 247 | 148 / 129 (135 / 139) |
+
+The confirmation holds: on generated DuneCity maps, and above all for the weaker house, economy +
+MassHold places better than the native AI. On the handmade DuneCity maps it stays level.
+
+**Decision.** Both stay default off for now. The economy package is the first change in this series
+that measurably strengthens the AI: a larger city, more tax and a larger army, replicated on fresh
+games; better placement where the AI is the weaker side or on generated DuneCity maps (positive in the
+screen and in the confirmation), level on the handmade DuneCity maps. MassHold on top is slightly
+better in every set. Turret clusters undo it. The fresh-game interval alone still includes 0 (the
+pooled one, which includes the selecting screen, does not); the targeted confirmation above then
+cleared 0 where the effect lives. A default still needs the Fortress/Brutal/`/weak` checks and the
+four mandatory AI gates (MassHold also acts outside the city simulation).
+
+### Land value, used liberally (economy v2-v4, 2026-11-21, default off)
+
+Stefan: "we should use it more liberally - we want the ai to increase its land value to get more tax.
+why would we limit when it is executed on"; then "we only need one stadium, palaces are more efficient
+otherwise" and "if we don't have tech 8 then yes you could look at stadiums". All screens seat-only on
+the same game ids as the economy controls (AWS; `economy/v2.py`, `stadiums.py`, `vN.py`); a control
+re-run on the new source matched all 72 digests.
+
+| Version (economy + MassHold) | Rule changes | all vs control | Brutal v Hard DuneCity (204) | weak seat 128 (144) | Stefan's lobby 120 / 240 min |
+|---|---|---|---|---|---|
+| v1 (`1afd9ca57`) | reactor from 10 Wind Traps; 1 Palace per 30 lots, max 4, 12 lots | screen +0.117, targeted fresh +0.086 | +0.177 | +0.250 | +0.028 / - |
+| v2 (`c4d1eddfa`) | reactor from 3 Wind Traps; Palace in every 8-lot district, no cap; one Stadium | **-0.445** (704) | **-1.005** | **-0.394** | +0.045 / - |
+| v3 (`ef6f3e84b`) | reactor from 10 again; Stadium districts before Palaces unless outnumbered | +0.030 (800) | +0.058 | -0.035 | +0.149 / **+0.189** |
+| v4 (`56324d70`) | while outnumbered the v1 Palace limits and no Stadium project | +0.041 [-0.001, +0.083] (800) | +0.085 | +0.034 | +0.149 / **+0.189** |
+
+- The v2 loss was all the reactor threshold: NuclearConsolidation from 3 Wind Traps alone lost -1.031
+  in the Brutal v Hard duels (49 wins against 154); the liberal Palace districts alone were level
+  (-0.041 [-0.139, +0.056]). A 2,000-credit reactor before any army loses the opening.
+- Stadium districts before tech 8 (StadiumDistricts) are what wins Stefan's tech-5 lobby: +0.240 at
+  120 minutes and +0.240 [+0.094, +0.405] at 240 minutes on their own; the seat won 8 of 48 240-minute
+  games where control won none (every control game a time-out). The same Stadiums cost a weak house at
+  tech 5 -0.208 [-0.389, -0.056].
+- Against v1, v4 is +0.122 in the lobby and level on handmade and duel maps, but -0.119 [-0.233, -0.010]
+  for the weak seat: a house that will fall behind spends on Palaces before it is outnumbered.
+
+**Decision.** All default off. Liberal land-value spending pays where a house is not pressed (Stefan's
+long no-spice lobby: the first change that wins games there) and costs a weaker house in fast games;
+v1's limits remain the best for the weak seat. The open design question is when to spend liberally
+(e.g. only from cash above a reserve, not ahead of units).
+
+### Spare cash and landmark anchoring (economy v5, `LandmarkAnchoring`, 2026-11-21, default off)
+
+**v5** (`fa2793f30`) answers the open question above. The core projects keep v1's priority, funded
+ahead of units: a reactor from 10 Wind Traps, and one Palace per 30 R+C lots (at most 4, 12 lots per
+site). Everything beyond them is bought only from cash `kSpareCashReserve` (2,000) above its price, and
+never saved for. That covers more Palaces (8-lot districts), the one Stadium, Stadium districts before
+Palaces, and a reactor below 10 Wind Traps.
+
+**LandmarkAnchoring** comes from a human builder's game on the MacBook Air (1v1, 160x160 DuneCity,
+tech 9, against QuantBot Brutal). It was decoded from `replay/auto.rpl`; the recipe is in
+`outputs/ai-nobuildup-20261121/builder-game/`. The first Stadium went down at minute 6 with no lot near
+it, and 37 R/C lots then filled its 8-tile reach. The second landmark had 16 lots before it and 28
+after, the Palace 31 and 13. No industrial lot was within 8 tiles of a landmark, and 72% of all 149
+lots ended in a landmark's reach. Power was nuclear only from minute 3. At city year 10 the human's land
+value was 116 against the AI's 67, and its tax was four times the AI's. With the switch on:
+
+- an R/C lot inside an own (or reserved) Palace or Stadium's reach scores `kLandmarkLotBonus` (+60),
+  and an industrial lot -60;
+- a landmark site counts free buildable tiles in its reach (inside build range, outside other
+  landmarks) as room, one lot per 6 tiles, alongside the lots already there;
+- the first landmark is planned once the house has 4 R+C lots.
+
+Local check games (Brutal v Hard and weak seat, 60 min, 4 seats per arm): every anchored site counted
+room (up to 17 lots), and 48% of R/C lots ended in reach against 44% without anchoring.
+
+Screen: seat-only on the same game ids as v1-v4 (`economy/v5cmp.py`, `v5econ.md`), 800 games per arm.
+
+| Set (games) | v5 vs control | v5 + anchoring vs control | anchoring vs v5 | v5 + anchoring vs v4 | v5 + anchoring vs v1 |
+|---|---|---|---|---|---|
+| handmade DuneCity (260) | +0.040 | **+0.083** | +0.042 | **+0.064** | **+0.073** |
+| Brutal v Hard mix (204) | **+0.073** | **+0.081** | +0.008 | -0.004 | -0.018 |
+| weak seat 128 (144) | +0.063 | +0.056 | -0.007 | +0.023 | -0.097 [-0.201, +0.004] |
+| weak seat 160 (72) | +0.082 | **+0.160** | +0.078 | +0.122 | +0.028 |
+| weak seat tech 5 (48) | -0.083 | -0.083 [-0.264, +0.083] | 0 | +0.125 | - |
+| Stefan's lobby 120 / 240 min (24 / 48) | +0.083 / **+0.109** | +0.149 / **+0.137** | +0.066 / +0.028 | 0 / -0.052 | +0.122 / - |
+| all | **+0.054 [+0.018, +0.091]** | **+0.080 [+0.041, +0.119]** | +0.025 [-0.005, +0.056] | **+0.039 [+0.002, +0.076]** | +0.009 [-0.029, +0.047] (704) |
+
+For reference on the same 800 ids, v4 against control is +0.041 [-0.001, +0.083]. On the 704 ids
+without tech 5 and the 240-minute lobby, v1 against control is +0.078 [+0.036, +0.120].
+
+The economy (difference from control, all six sets; bold = interval excludes 0):
+
+| | control | v1 | v4 | v5 | v5 + anchoring |
+|---|---|---|---|---|---|
+| tax at minute 60 | 11,125 | **+2,380** | **+2,387** | **+3,029** | **+3,249** |
+| tax at the end | 12,108 | **+2,365** | **+2,659** | **+3,359** | **+3,724** (+31%) |
+| population at minute 60 | 47,736 | **+7,324** | **+5,009** | **+8,945** | **+8,687** |
+| mean army | 12.5k | **+1.6k** | **+1.4k** | **+1.4k** | **+1.6k** |
+| enemy value killed, lobby 120 | 211.7k | -2.4k | **+79.3k** | **+38.7k** | **+60.0k** |
+
+**Reading.** Spare-cash extras keep most of v4's lobby gain and none of its weak-seat cost against
+control. Anchoring adds tax on top, and v5 + anchoring is the best version against control on these
+800 games. It is level with v1 overall; the one soft spot is the weak seat at 128x128 against v1
+(-0.097, interval just reaching 0). In the 240-minute lobby v4 still wins most often.
+
+**Confirmation** (pre-registered before any fresh result: v5 + anchoring against control, and against
+v1; fresh games only; all arms on source `95b6752d2`; `economy/confirm5.py`, `confirm5.md`), 452 games
+per arm: handmade DuneCity on 20 new seeds (40801 + 1009i) and the Brutal v Hard DuneCity ladder on
+seeds 49-96.
+
+| Set (games) | v5 + anchoring vs control | v5 + anchoring vs v1 | v1 vs control |
+|---|---|---|---|
+| handmade DuneCity (260) | **+0.131 [+0.062, +0.202]** | +0.007 | **+0.124** |
+| Brutal v Hard ladder 128/160 (192) | +0.059 [-0.018, +0.138] | +0.018 | +0.040 |
+| all (452) | **+0.100 [+0.049, +0.154]** | +0.012 [-0.030, +0.054] | **+0.088 [+0.040, +0.139]** |
+| seat won / eliminated (control 242 / 109) | 277 / 97 | (v1 273 / 101) | 273 / 101 |
+
+On the same fresh games, v5 + anchoring adds **+2,829 tax at the end** (+22%), **+6,768 population at
+minute 60** and **+1.8k mean army** over control; v1 adds +2,448, +5,710 and +1.7k. The differences
+from v1 (+381 tax, +1,058 population) are not significant.
+
+**Decision.** v5 + anchoring is confirmed on fresh games as the strongest economy package so far: as
+strong as v1 where v1 is strongest, with the most tax, and the only version that also wins Stefan's
+lobby against control (+0.137 at 240 minutes). It stays default off. A default needs the
+Fortress/Brutal/`/weak` checks (tech-5 weak seat -0.083 [-0.264, +0.083] in the screen) and the four
+mandatory AI gates; MassHold, part of the package, also acts outside the city simulation.
+
+### Default-change checks (economy v5 + anchoring, 2026-11-22)
+
+Stefan: "yes run them". Results and scripts: `~/Documents/projects/outputs/ai-nobuildup-20261121/default-checks/`
+(`defchk.py`, `defchk.md`).
+
+**Fortress, Brutal and the weaker house** (staging `203b693d5`, AWS, 1,152 games; the candidate is the
+first QuantBot seat with `--seat-style economy-anchor`, control plays the same game ids natively;
+paired placement difference, 95% bootstrap). The Fortress duels are new opt-in scenario cells
+(`skirmish/fortress-1v1-{qh,qb}-mirror-rs{128,160,192}`, vanilla and DuneCity, both starts: the
+`formation-duel.py` Fortress duel, which cannot take a seat style). The tech-5 weak-seat cells now
+have 48 seeds; the screen's first 16 replay unchanged.
+
+| Check | games | control seat score | difference [95% CI] | better / worse / same | time-outs cand (control) |
+|---|---|---|---|---|---|
+| Fortress 1v1, Hard mirror, vanilla / DuneCity | 48 / 48 | -0.125 / +0.021 | +0.016 [+0.000, +0.047] / +0.052 [-0.104, +0.219] | 1/0/47, 6/4/38 | 1 (0), 10 (4) |
+| Fortress 1v1, Brutal mirror, vanilla / DuneCity | 48 / 48 | -0.167 / -0.078 | +0.042 [+0.000, +0.125] / -0.016 [-0.125, +0.078] | 1/0/47, 1/1/46 | 0 (0), 2 (3) |
+| **Fortress, all** | 192 | -0.087 | +0.023 [-0.026, +0.076] | 9 / 5 / 178 | 13 (7) |
+| Brutal seat v Hard, vanilla long ladder 128/160 | 96 | +0.542 | +0.042 [+0.000, +0.104] | 2 / 0 / 94 | 0 (0) |
+| **Brutal, all** (Brutal mirrors + vanilla ladder) | 192 | +0.210 | +0.027 [-0.010, +0.073] | 4 / 1 / 187 | 2 (3) |
+| weak seat, vanilla: 1v1 Hard v Brutal / Hard v three Brutal | 96 / 48 | -0.583 / -0.000 | +0.000 / -0.028 [-0.111, +0.056] | 0/0/96, 2/5/41 | 0 (0), 0 (1) |
+| weak seat tech 5, DuneCity: screen seeds / 32 fresh seeds | 48 / 96 | -0.083 / -0.229 | -0.083 [-0.264, +0.083] / +0.076 [-0.014, +0.174] | 4/6/38, 9/3/84 | 0 (0) |
+| **weak seat, all** | 288 | -0.285 | +0.007 [-0.037, +0.053] | 15 / 14 / 259 | 0 (1) |
+
+Not worse anywhere; the tech-5 dip does not replicate on fresh seeds. DuneCity screen and
+confirmation games (the strength evidence) are above.
+
+**Mandatory gates, defaults on** (gate-only commit `709a3e8ef` on branch
+`candidate/economy-anchor-default`: the five switches default to true; staging unchanged).
+`quantbot_all_against_atreides` 6/6 (29.6-35.0 min), `quantbot_all_against_atreides_dune2r` 7/7,
+`quantbot_ffa_army_deploys` PASS (seed 9105 eliminates at 26.6 min), `dunelegacy_tests` PASS;
+**`quantbot_scenario_matrix` FAIL** on both AWS workers: `ladder/QH-v-QE-rs-vanilla/vanilla/29505`,
+Easy won at 42.77 min. The same smoke test passes at staging `203b693d5` (defaults off).
+
+**Cause: MassHold in vanilla.** The failing game with `--style mass-hold` alone is identical to the
+whole package (Easy at 42.77 min); without it Hard wins at 22.4 min. The city switches never run in
+vanilla. Decision log (`--keep-traces`, Hard house): without MassHold, attacks on its buildings bring
+the whole army 67 times (`base_scramble`), 12 worker defences are declined, and it attacks at 16.9
+min (24 units) and 20.7 min (40); with it, `base_scramble` 14, `defence_mass_hold` 124 (troops in
+reach plus turrets below the threat while its army is busy elsewhere), `defence_turret_covered` 66,
+227 sized worker defences declined, and no wave after 5.7 min (army threshold 7,000, it peaks at
+6,500). Easy raids it 20 times with 2-8 units, its harvesters fall from 25 (minute 24) to 1 (36),
+and it never rebuilds. One seed, not a ladder shift: Hard v Easy on the 90 vanilla ladder games
+with every QuantBot on the package wins 89 (88 without, 2 time-outs).
+
+**MassHold is now scoped to city skirmish games** (`QuantBot::massHoldActive()`: switch on, city
+simulation on, custom game - the economy package's scope). Vanilla, Dune2R and campaign games no
+longer hold. Evidence for the scope: in vanilla MassHold measured -0.014 [-0.051, +0.023] (260
+handmade games, above) and changed 1-7 of 48 games per vanilla set here, while Stefan's trickle
+complaint and the package's gains are all in DuneCity city games; there it behaves exactly as
+screened (city mode follows the mod). The vanilla MassHold rows above were measured before the scope.
+
+**After the scope (staging `a1627066a`, candidate `2382b8620`).** All five gates pass:
+`quantbot_all_against_atreides` 6/6 (29.6-35.0 min), `quantbot_all_against_atreides_dune2r` 7/7
+(30.95-34.81 min), `quantbot_ffa_army_deploys` PASS (seed 9105: eliminations at 26.6, 28.3 and 33.6
+min), `quantbot_scenario_matrix` PASS (29505: Hard wins at 22.38 min), `dunelegacy_tests` PASS. Checks
+that the scope changed only vanilla: the smoke game pair with `--style economy-anchor` replays the
+baseline exactly (QH at 1342.8 s and 1431.8 s); the 96 DuneCity Fortress candidate games are
+identical to the pre-scope run; the 48 vanilla weak-seat FFA candidate games are identical to
+control. So the vanilla rows of the table above are now exactly 0 and its DuneCity rows stand.
+
+**Decision: on by default** (Stefan, "yes run them" to the default-change checks; MassHold,
+NuclearConsolidation, PalaceDistricts, StadiumDistricts and LandmarkAnchoring default to true in
+`QuantBotConfig.cpp`; the code tree is the gated candidate's). It beats control on fresh games
+(+0.100 [+0.049, +0.154], 452 games), is not worse on Fortress, Brutal or the weak seat, passes the
+four mandatory AI gates and the unit tests, and acts only in city skirmish games. The play style
+`economy-anchor` now equals the default; an off arm needs those five set to false.
+`perf_regression` passes on the Mini at `7db8baf56` (budget used: CPU mean 0.033/0.250, house p99
+0.044/1.000, house max 2.678/10.000, eight-house CPU p99 1.182/1.600, frame CPU p99 4.100/5.500,
+main-loop frame p99 4.815/8.000, menu other 0.001/0.300).
+
+### Palaces in mature cities, Palace guards and the residential-only Palace (2026-11-22)
+
+Stefan, testing the default on his MacBook Air with the `nobuildup` save: "i can see the ai destroying
+windtraps but not residential to place palaces"; then "i think the reason the palace district change
+didn't have much impact is because it isn't actually being done", "the ai isn't defending palaces wit
+rocket turrets" (save `notdefendpalace`, a 4P 160x160 DuneCity 1v3 FFA at tech 9, minute 4), "you
+want to protect from ornithopts, so one or more is fine", and "nerf palaces slightly make it only have
+1 redisential not residential and commercial". Results and scripts:
+`~/Documents/projects/outputs/ai-nobuildup-20261121/palaces/` (`screen.py`, `screen.md`, `replay.py`).
+
+- **Why no Palace in a mature city.** A Palace or Stadium site may only demolish own R/C lots of
+  density 0-1 (`kPalaceClearDensity`), at most 4, no civic overlay; a city at minute 300+ has no such
+  footprint, so no site is legal.
+- **`PalaceDenseClearing`** (hashed, **on by default since `ea8d768e0`**): denser own lots may go too.
+  Each demolished lot costs its whole tax in the site score's unit (10 per reached lot gaining the
+  landmark's +40): `landmarkClearCost` = 30 at density 0-1 as before, else 30 + 10 x density x land
+  value / 40; a site that clears a dense lot must still net the district minimum.
+- **`PalaceTurrets`** (hashed, default off): every own Palace keeps `kPalaceGuardTurrets` = 1 Rocket
+  Turret (anti-air; Gun Turrets neither count nor stand in) within 5 tiles, planned after the economy
+  projects and bought only from cash above the city working reserve and any Palace or reactor savings,
+  never saved for.
+- **Residential-only Palace** (city rule, `53829fe83`, docs/city-economy-balance.md): one residential
+  zone's population and supply, no commercial half; its own tax halves at top density (it never had
+  the 2x zone boost); its +40 land value is unchanged. The next release bumps the network protocol.
+- **Measurement:** `DUNECITY_LANDMARKS` per sample minute (Palaces, Stadiums, Nuclear Plants, Wind
+  Traps standing and built) as scenario-matrix `samples.csv` columns. The probe emits these samples only
+  in `--control-diagnostics` games (the handmade maps), not in ladder, weak-seat or lobby cells.
+
+**Save replays** (Mini; one deterministic run per arm, a demonstration): `nobuildup` minute 319-349 -
+off, the leader checks Palace sites 909 times and finds none; with dense clearing all 364 checks find
+a site and it builds 2 Palaces (first at minute 328). `notdefendpalace` minute 4-40 - dense clearing
+changes nothing (young cities have legal sites); the first PalaceTurrets (4 turrets, from cash 2,000
+above the price) ordered 2 turrets in 36 minutes (the houses hold ~400 credits; a Rocket Turret costs
+250) and a house still lost its Palace; bought when cash covers it (4, then 1 Rocket Turret) the house
+that lost its Palace kept it.
+
+**Screen** (staging `67225b6bc` for control and dense, `ee021b131` for turrets and both - the
+control's 72 weak-seat-160 games replayed there with identical digests; seat-only against the
+economy-package default, 716 games per arm, AWS, paired placement, 95% bootstrap):
+
+| Set (games) | control seat score | dense | turrets (1 Rocket Turret) | both |
+|---|---|---|---|---|
+| handmade DuneCity (260) | +0.241 | -0.007 [-0.016, +0.000] | -0.006 [-0.025, +0.013] | -0.008 [-0.027, +0.012] |
+| Brutal v Hard ladder 128/160 (192) | +0.467 | +0.003 [-0.012, +0.020] | -0.005 [-0.036, +0.022] | -0.001 [-0.031, +0.026] |
+| weak seat 128 (144) | -0.419 | +0.005 [+0.000, +0.014] | +0.005 [+0.000, +0.014] | +0.013 [+0.000, +0.035] |
+| weak seat 160 (72) | -0.378 | +0.003 [-0.003, +0.014] | **+0.051 [+0.001, +0.125]** | +0.050 [+0.000, +0.125] |
+| Stefan's lobby 240 min (48) | -0.266 | +0.023 [+0.000, +0.068] | +0.000 | +0.023 [+0.000, +0.068] |
+| all (716) | | +0.001 [-0.005, +0.007] | +0.002 [-0.010, +0.015] | +0.006 [-0.007, +0.019] |
+
+**Are Palaces built?** On the handmade DuneCity maps the seat house (control) builds at least one
+Palace in 58% of games (about 7 per such game), a Stadium in 62%, a reactor in 70%; it loses 6% of
+the Palaces it builds. So Palace districts do happen on generated cities of these lengths; they fail in
+mature cities. Paired against control on those maps: dense +0.2 Palaces built [-0.0, +0.4], tax +125
+[-37, +305]; turrets -0.4 Palaces built [-0.8, -0.1], Palaces lost -0.05 [-0.12, +0.02], tax -151
+[-672, +393] - the guard was paid from Palace savings.
+
+**Decision.** `PalaceDenseClearing` goes on by default: level everywhere and never worse, slightly
+positive on Palaces and tax, and it is the behaviour fix for the mature-city failure Stefan saw (the
+FinishWhenLeading precedent: a level behaviour fix, not a looser threshold). `perf_regression` passes
+on the Mini at `ea8d768e0` (CPU mean 0.032/0.250, house p99 0.044/1.000, house max 2.264/10.000,
+eight-house CPU p99 1.235/1.600, frame CPU p99 4.070/5.500, main-loop frame p99 4.710/8.000).
+The five gates pass at `ea8d768e0` (`quantbot_all_against_atreides` 6/6,
+`quantbot_all_against_atreides_dune2r`, `quantbot_ffa_army_deploys`, `quantbot_scenario_matrix`,
+`dunelegacy_tests`), as they did at `67225b6bc` with the residential-only Palace.
+
+**PalaceTurrets re-screen** (waiting for Palace and reactor savings; `ea8d768e0`, against the new
+default with dense clearing on, 668 games per arm): placement +0.003 [-0.008, +0.013] (handmade
++0.003, Brutal v Hard -0.004, weak seat 128 +0.009, 160 +0.006, all level). On the handmade maps it
+still builds 0.63 fewer Palaces [-1.18, -0.15] (control 4.47 a game), 0.61 fewer standing at the end
+[-1.16, -0.13], loses 0.02 fewer [-0.10, +0.05] (control 0.22), tax -494 [-1,155, +114]. The guard
+does not pay for itself where Palaces are rarely lost (in these games 5% of them, from any cause);
+the turrets also take tiles in the districts that lots and the next Palace's footprint would use.
+**`PalaceTurrets` stays off**, kept as the switch for games where ornithopters do hunt Palaces
+(Stefan's `notdefendpalace`, where it kept a Palace alive).
+
+**Release 1.0.876 probes (2026-11-22).** Two nightly probes failed once the package went on by
+default. `quantbot_growth_installments` case 0: a city over the Stadium threshold with the Stadium's
+prerequisite (a Radar) missing saved for its first Palace (`save_palace_district`, LandmarkAnchoring)
+instead of ordering the Radar, so its residential valve stayed pinned at 0. The economy project now
+gives up the yard whenever a required civic (the Stadium or Airport, its prerequisite or the yard
+upgrade that unlocks it) or urgent protection claims it, the same rank the civic already had over
+planned reactor capacity. `quantbot_whole_army_dispatch` built a raid (14 Siege Tanks on a Wind
+Trap) that the 13 troops in reach cannot match, which MassHold holds by design (nobody new goes,
+hunters keep hunting); the probe now checks that hold with MassHold on and the sized answer with
+MassHold switched off for the bot.
+
+### Parks in the districts (`ParkDistricts`, 2026-11-21, default off)
+
+Stefan suggested introducing parks from the original Micropolis. The Park structure (item 89, save 9888,
+protocol 131; docs/city-economy-balance.md, "Parks") is the Micropolis park tool: 1x1, 10 credits, one
++15 park-terrain source, about +7 land value on its 3x3 terrain block and +1 next door, never developing
+its own block. `[Force Concentration] ParkDistricts` (default off, hashed when on; `QuantBotParks.cpp`,
+`ParkDistrictPolicy.h`) lets QuantBot plant them in city Custom games: after the economy project, one
+park at a time (none queued or unplaced), at most one per two own R+C lots (from 4 lots), never during
+an air, ground or economy defence. The site is the legal tile in the 3x3 terrain block that adds the
+most land value to our R/C land-value blocks (at least 4 summed, capped at 250 per block): open ground
+first, then a road tile whose removal keeps every road connection and every neighbouring lot a side for
+its road. The `city-park` skirmish probe has a qBotMedium plant three parks beside its lots in about
+four minutes of a generated DuneCity match.
+
+**Screen** (commit `4e3969db6`, AWS, seat-only `park-districts` overlay; results
+`~/Documents/projects/outputs/ai-nobuildup-20261121/economy/parks/`, `analyse.py`, `summary.md`), paired by
+game against the economy screens' controls. A re-run of 36 of those control games on the park commit
+matched every digest, outcome, place and minute, so the item-89 change leaves the native game as it was.
+
+| Set (games) | ParkDistricts v control | seat won / eliminated (control, parks) | time-outs (control, parks) | structures at end | army at end (k) | enemy value killed (k) |
+|---|---|---|---|---|---|---|
+| Stefan's lobby, tech 5, no spice, 120 min (24) | +0.045 [+0.000, +0.122] | 0/1, 0/0 | 24, 24 | **+58.8** | **+2.4 [+0.4, +4.4]** | **+11.1 [+2.2, +20.4]** |
+| weak seat 128, Hard v Brutal (144) | +0.032 [-0.091, +0.154] | 29/102, 33/103 | 17, 10 | +15.1 | +1.3 | -2.1 |
+| DuneCity ladder + skirmish + CY (204) | -0.005 [-0.100, +0.090] | 154/45, 154/46 | 5, 4 | +14.8 | +0.3 | **-13.4 [-24.8, -2.6]** |
+| all (372) | +0.013 [-0.059, +0.083] | | | | | |
+
+These full-tier sets record no tax or population samples; the extra structures are the parks (about 59
+per seat in the lobby's 40k cities). In the lobby the parks seat ends with a larger army and kills more,
+which fits more tax in the long no-spice game; it is never eliminated there, but every lobby game still
+times out. Elsewhere placement is level; on the generated ladder maps the seat kills less.
+
+**Decision.** Default off. Parks are cheap and harmless to placement here (no set worse; the lobby's
+interval touches 0 from above), but the screen does not clear the default rule. A next step would be the
+lobby at 240 minutes and parks combined with the economy package, where land value already pays.
+
+### Redevelopment for land value (`RoadLaneParks`, `LotParks`, `PollutionRelocation`, `IndustrySeparation`, 2026-11-27, default off)
+
+Stefan, from the Spectator view of a Brutal AI city (the Air's `low.dls`): "there's still lots of low
+value ... the AI could benefit from demolishing and rebuilding to either remove pollution from an area
+... or by adding in more palaces or parks ... it has lots of 2 lane roads which is a waste".
+
+**What holds the value down** (`tests/ai/land-value-audit.inc`, `land-value-continuation.py`; the
+save at minute 17 of its clock, three city houses). A lot's land value is the Micropolis sum: a
+distance term `(34 - d/2) * 4` to its cluster's zone centre, park terrain and sand, minus pollution
+and 20 for crime over 190, plus the Palace/Stadium stamp. The audit recomputes the distance term and
+reads the rest from the live maps.
+
+| House | R/C lots | lot land value | lots <= 80 | their mean pollution | of them polluted >= 20 | mean distance term | distance term <= 40 | outside every Palace/Stadium reach | crime > 190 | road tiles in a 2x2 road square |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 386 | 110 | 159 | 147 | 146 | 58 | 42 | 138 | 0 | 479 of 1,505 |
+| 4 | 755 | 84 | 444 | 87 | 277 | 28 | 324 | 388 | 0 | 702 of 2,595 |
+| 6 | 821 | 84 | 493 | 70 | 258 | 24 | 388 | 432 | 0 | 619 of 2,485 |
+
+The low lots are polluted, far from their city's centre and outside every landmark's reach, all at
+once; parks add about 7 to each. The polluters are Industrial zones (about 300 a house, no
+factories), mixed through about 800 R/C lots. Crime plays no part. A quarter of the road tiles are a
+second lane: every building paves a one-tile ring, so two lots two tiles apart leave a two-lane strip.
+
+**Rule: Parks Count As Roads** (default on, protocol 143; docs/city-economy-balance.md, "Parks").
+A Park is a road connection for the city (zone access and traffic) but gives units no road speed.
+
+**Switches** (`QuantBotRedevelop.cpp`, `RedevelopmentPolicy.h`; play styles `road-lane-parks`,
+`lot-parks`, `pollution-relocation`, `industry-separation`, `redevelop-all`). A search is due once its
+period has passed (8 s for parks, 30 s for relocation) and runs on the next idle yard pass, not during an
+air raid or a ground threat to an asset; border fighting does not stop it.
+- `RoadLaneParks`: a Park on a road tile of a 2x2 square of our road where it adds at least 4 land
+  value to our R/C blocks, if the tile's open and road side neighbours still reach one another inside
+  the 9x9 window without it (`RedevelopmentPolicy::sidesStayConnected`), plus the city road and landlock
+  checks.
+- `LotParks`: an own R/C lot of land value <= 64 and density <= 1 whose four Parks would add at least 24
+  land value to the house's other lots; the yard's redevelopment route clears it once the Park order is
+  accepted, and the next Parks fill it.
+- `PollutionRelocation`: the Industrial zone whose pollution costs our R/C lots the most (at least 40) is
+  rebuilt at an Industrial site clear of our homes; the old zone is demolished only once the new one
+  stands.
+- `IndustrySeparation`: no new Industrial zone within 5 tiles (footprint to footprint) of an own R/C lot.
+  A `HomeSeparation` switch (no new R/C lot within 5 tiles of an own polluter) was tried the same day and
+  removed: the probe's homes beside polluters had pollution 35 and land value 79 against the city's
+  average home at 72 and 64, so refusing them lowers the average.
+
+**Proof the switches act** (CLAUDE.md "AI behaviours: prove the switch actually does its job"). Each order
+is followed (`updateRedevelopmentOrders`): placed at its chosen site, or lost after 3 minutes (cancelled,
+released or re-sited), and 30 s after it stands the land value of the lots it was for is read against its
+value at the order. Per house the counters, with why-counters for every gate and site rejection, are
+logged as `SCENARIO_SWITCH_ACTIVITY` (houses.csv `switch_activity`); per event as `REDEVELOP:`,
+`INDUSTRY_PLACED:` and `HOME_PLACED:` lines (`tests/ai/activation-events.json`). The headless probe
+`skirmish_generator_probe_city-redevelop_1024x768` (`tests/skirmish/redevelop-probe.inc`) replays one
+saved DuneCity start per arm:
+
+| Switch | ON acted | its lots, ON vs OFF |
+|---|---|---|
+| RoadLaneParks | 4 orders, 3 standing at their tiles, 3 of 3 effect reads raised, every road neighbour still connected | land value 131 vs 129 |
+| LotParks | 1 lot cleared and 3 fills, all standing | 82.1 vs 81.7 |
+| PollutionRelocation (a polluter planted among the homes) | 5 of 5 relocations standing 6 to 8 tiles from homes, 4 of 4 raised | land value 151 vs 92, pollution 8 vs 80 |
+| IndustrySeparation (only ground near homes left) | 0 of 8 sites near homes, against 8 of 8 OFF | the homes beside OFF's sites: land value 23 vs 7, pollution 155 vs 186 |
+
+With every switch off nothing fires. What the probe found on the way, all fixed: `placeYardChoice`
+dropped the chosen site of every rule outside an allowlist, so every lane, lot and relocation order was
+re-sited by the ordinary search (LotParks built 5 Parks, none at a chosen site); the first passage test
+looked only at the eight neighbours and refused 11 of 11 lane candidates; the fixed 2-in-120-second search
+window missed the idle yard (PollutionRelocation fired once in 30 minutes); and a lot cleared at the order
+was lost when the order was released. On open ground the ordinary Industrial siting already kept 40 of 40
+new zones 6 to 9 tiles from the homes, ON and OFF alike.
+
+**Screens v5** (seat-only `--seat-style`, paired by game against a control at `e940e96c5`, AWS, 276
+games an arm; `~/Documents/projects/outputs/redevelop-20261127/`, `analyse_v5.py`, `screen-v5.md`). Score
+is the placement difference, 95% bootstrap; land value where both seats survive.
+
+| Arm | lobby (24) land value / population | weak seat (144) score | ladder + skirmish + CY (108) score / land value | all (276) score |
+|---|---|---|---|---|
+| RoadLaneParks | **+1.5 [+0.3, +2.8]** / +0.3k | +0.002 [-0.121, +0.126] | -0.056 / +0.5 | -0.021 [-0.104, +0.062] |
+| LotParks | **+1.2 [+0.1, +2.7]** / -0.8k | +0.003 [-0.044, +0.048] | +0.062 [-0.019, +0.148] / +0.6 | +0.026 [-0.013, +0.067] |
+| PollutionRelocation | **-2.0 [-3.1, -0.8]** / **+3.7k** | +0.010 [-0.007, +0.028] | -0.004 / +0.1 | +0.004 [-0.006, +0.013] |
+| IndustrySeparation | 0 / 0 (not tested) | -0.041 [-0.089, +0.002] | **+0.039 [+0.002, +0.090]** / **+2.1 [+0.6, +3.6]** | -0.006 [-0.036, +0.024] |
+| all four | -0.1 / +0.3k | -0.046 [-0.168, +0.074] | -0.019 / **+4.7 [+1.8, +7.4]** | -0.032 [-0.109, +0.047] |
+
+Every lobby game times out with all four houses alive, so its score is 0. Fire counts in the seat's
+house-games (orders / standing at their site / lost; effect reads that raised the lots' land value):
+
+| Arm | lobby | weak seat | ladder + skirmish + CY |
+|---|---|---|---|
+| RoadLaneParks | 24/24 games; 828 / 578 / 231; 466 of 578 | 140/144; 2,925 / 2,906 / 10; 1,673 of 2,853 | 107/108; 2,513 / 2,473 / 14; 1,431 of 2,369 |
+| LotParks | 24/24; 684 / 682 / 2; 468 of 682 | 91/144; 556 / 550 / 6; 261 of 538 | 67/108; 542 / 528 / 7; 286 of 498 |
+| PollutionRelocation | 24/24; 265 / 264 / 1; 254 of 264 | **37/144, not tested**; 86 / 54 / 18 | **31/108, not tested**; 89 / 78 / 5 |
+| IndustrySeparation (Industrial zones near homes) | **not tested**: the seat built no Industrial zone | 140/144; 16 of 2,973 near homes (control 909 of 3,355) | 108/108; 6 of 3,317 (control 820 of 3,613) |
+
+PollutionRelocation searched in every one of its non-firing house-games on the weak-seat and ladder
+maps; in 89 of 107 and 65 of 77 every search found no zone costing its homes 40 land value (or no money):
+those cities had nothing to relocate. IndustrySeparation builds about 10% fewer Industrial zones.
+
+**Acceptance test on Stefan's save** (`quantbot_redevelop_low_save`, nightly; CLAUDE.md "Asked-for behaviour"):
+`tests/saves/data/low-dunecity.dls.gz` continued 20 minutes in five arms, one assert per line of the request,
+table in HANDOVER (2026-11-27). At `0c14b4a0d` every implemented line passes:
+- 182 lane Parks and 89 lot Parks standing at their chosen sites, raising their lots in 118 of 178 and 52 of 88
+  reads;
+- 252 of 252 Parks are road connections without unit speed;
+- second-lane road tiles 1,578 against 2,357;
+- 6 Industrial zones moved, each halving the harm, with the homes round them cleaner in 6 of 6 reads;
+- 14 of 14 Construction Yards keep their path out;
+- the searches take 0.9 s of a 210 s arm.
+
+Fixes it forced:
+- the ordinary Industrial site as relocation fallback when no clear ground is in reach;
+- vacated sites kept free of Industrial zones for 10 minutes;
+- a Park that became the only unit link is removed and its road restored;
+- `ParkDistrictPolicy::blockGain` counts nothing for blocks at the land-value floor.
+
+Not done: moving factories (none in that save); Palaces are LowValuePalaces (`quantbot_city_lessons`, passed at `86dcb77ea`).
+
+**Decision.** All four stay off: no arm's all-games interval is above 0. They now demonstrably act, so
+these are measurements of the ideas: the park switches lift Stefan's lobby land value by about 1.5 without
+changing a result; PollutionRelocation, where it has work, trades 2 land value for 3,700 residents;
+IndustrySeparation is the only arm with a positive interval on a set (ladder + skirmish + CY, +0.039, land
+value +2.1) and the weak seat leans the other way (-0.041), so it is the candidate for a longer screen.
+
+
+### What Stefan did on Metropolis (`LowValuePalaces`, `FrontPalaces`, `CityLauncherArmy`, 2026-11-28, default off)
+
+Stefan's save seewhatidid (Metropolis, brutal) beat its opponents with three things the AI did not do: more
+Palaces for land value (19 he added by minute 72), Palaces on the enemy side behind his Rocket Turret clumps, and
+an army of Launchers (83% of his combat vehicles at minute 72). Launchers return the most damage per credit of any
+unit in every house of that save and in 24 AI-vs-AI Metropolis games: 2.5 credits of damage per credit, against
+Siege Tank 1.5, Tank 0.8, Ornithopter 0.4. Code: `src/players/QuantBotCityLessons.cpp`,
+`include/players/CityLessonsPolicy.h`; test `quantbot_city_lessons` (nightly, headless).
+
+- **LowValuePalaces** picks the site with the most R/C lots at land value 80 or less in a Palace's reach (6 or
+  more), whether or not another Palace reaches them, saves for it and clears the zones under it. One plan at a
+  time; a plan that does not stand within 5 minutes expires and its site is skipped for 10 minutes. The lesson
+  site search judges ground access with the cleared zones removed and keeps out of reactor blast areas (the yard
+  refuses those sites; that was 143 of 207 expired plans before `e603c584f`).
+- **FrontPalaces** puts one 10-31 tiles from the nearest enemy building, with 3+ own Rocket Turrets nearer the
+  enemy within 10 tiles, at most every 2 minutes.
+- **CityLauncherArmy** moves the Ornithopter share of the vehicle mix into Launchers and keeps them at 70% or more.
+
+Measured at `e603c584f` (Metropolis, 120 min, 24 house-games per arm): LowValuePalaces places 18.6 Palaces a game
+(17.5 by minute 72, his 19), each lifting its lots by about 60, and cuts the low-value lot share at minute 72 from
+35% to 23% (his 9%); FrontPalaces places 18 by minute 72, 90% standing five minutes later; CityLauncherArmy fields
+70% Launchers and loses 1,000 of them a game. Scores are level for both Palace switches and the combined arm;
+CityLauncherArmy alone loses on Metropolis (-0.397 [-0.689, -0.113]). FrontPalaces is not tested on rs192: the
+AI's turrets rarely stand in the band. HANDOVER 2026-11-28 has the acceptance table.
+
+
+### Economy first on low / no spice maps (`EconomyFirst`, 2026-11-28, ON by default)
+
+Stefan's last Air game (Random Skirmish 4P 192x192 1v3, no spice, 20,000 credits, a 92-zone prebuilt city): he
+built, a Fighter AI fought, and the three Brutal AIs fell into a poverty trap. Each put about 18,600 of its 20,000
+into units within two minutes, then sat below 1,000 credits with one Construction Yard: a city MCV is only bought
+when `canFundCapacityMcv`'s opening-capital test passes, a Nuclear Plant only with its price in hand, and the one
+yard spent half its orders on turrets and Police. Stefan: "the ai needs to escape the poverty trap on low / no
+spice maps".
+
+`EconomyFirst` (`CityLessonsPolicy.h`, `QuantBotCityLessons.cpp`) acts in a city game while the spice left on the
+map is below 20,000 per living house (`lowSpiceMap`, read every build pass; 80,000 with four houses) and until
+the house has 6,734 people (his minute-31 population):
+- the city yard target follows his schedule, 4 yards, 6 from minute 15, 9 from minute 20, and the Heavy Factory
+  orders the MCV itself (upgrading first if it must); the MCV deploys at home, a colony trip only when home has
+  no footprint;
+- unit producers keep 10,000 credits for the yards, released for the factories while an enemy unit is within 12
+  tiles of a yard, factory, Starport, Nuclear Plant or Palace; the Starport buys nothing;
+- an idle yard orders a zone in his R/C/I mix (134/93/101) whatever the demand valves say, while zones are under
+  70% of the yard's orders.
+On a spice-rich map it logs `spice_rich` once and does nothing until the spice runs below the line.
+
+Measured (Brutal, 24 house-games per arm against the same games' control houses; `economy-first-report.py` for
+his footprint, `city-lessons-report.py` for scores and the in-game assertion): his map +0.852 [+0.444, +1.222],
+effect in 22/24; BigCityLife +0.492 [+0.169, +0.833], 19/24; pooled +0.672 [+0.409, +0.926]; Metropolis and rs192
+level and not acted on early; Fortress and `/weak` identical. On BigCityLife it reaches his minute-31 yards,
+zones and population; on his own map yards by minute 3 and 92% of his population, with tax at 48% and Palaces
+at 2 of his 15. Activation test: `economy_first`. HANDOVER 2026-11-28 has the acceptance table.
 
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 

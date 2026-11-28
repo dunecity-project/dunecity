@@ -18,6 +18,7 @@
  */
 
 #include <structures/BuilderBase.h>
+#include <dunecity/InfantrySquadPolicy.h>
 #include <structures/PlacementReservationPolicy.h>
 #include <structures/FactoryQueuePolicy.h>
 
@@ -36,13 +37,14 @@
 #include <structures/Worfinery.h>
 
 #include <players/HumanPlayer.h>
+#include <players/CampaignAIPlayer.h>
 
 #include <GUI/ObjectInterfaces/BuilderInterface.h>
 
 #include <algorithm>
 
 const int BuilderBase::itemOrder[] = {    Unit_Troopers5, Unit_Infantry5, Unit_ChemicalCarryall,
-                                           Structure_Slab4, Structure_Slab1, Structure_Road, Structure_IX, Structure_StarPort,
+                                           Structure_Slab4, Structure_Slab1, Structure_Road, Structure_Park, Structure_IX, Structure_StarPort,
                                            Structure_HighTechFactory, Structure_HeavyFactory, Structure_RocketTurret,
                                            Structure_Scoutpost, Structure_Flamepost, Structure_Chemipost, Structure_LoveFactory, Structure_ChaosFactory,
                                            Structure_RepairYard, Structure_GunTurret, Structure_TechCenter, Structure_WOR,
@@ -571,9 +573,31 @@ int BuilderBase::getMaxUpgradeLevel() const {
     return upgradeLevel;
 }
 
+bool BuilderBase::hasOriginalCampaignController() const
+{
+    for(const auto& player : owner->getPlayerList()) {
+        const auto* campaign = dynamic_cast<const CampaignAIPlayer*>(player.get());
+        if(campaign && campaign->usesOriginalRules()) return true;
+    }
+    return false;
+}
+
+void BuilderBase::grantOriginalCampaignUpgrades()
+{
+    if(!hasOriginalCampaignController()) return;
+    const int maximum = getMaxUpgradeLevel();
+    if(curUpgradeLev >= maximum) return;
+    curUpgradeLev = maximum;
+    upgrading = false;
+    upgradeProgress = 0;
+    upgradeProgressFromStartingCredits = 0;
+    updateBuildList();
+}
+
 void BuilderBase::updateBuildList()
 {
     std::list<BuildItem>::iterator iter = buildList.begin();
+    const bool originalCampaignYard = itemID == Structure_ConstructionYard && hasOriginalCampaignController();
     const bool tornieFamily = ModManager::instance().isTornieFamilyContentActive();
     const int technology = tornieFamily ? getTechnologyHouseID() : originalHouseID;
     const auto contentBase = tornieFamily
@@ -706,9 +730,9 @@ void BuilderBase::updateBuildList()
 
             // check if prerequisites are met. Worfinery direct products bypass
             // all prerequisite structures by design.
-            bool bPrerequisitesMet = directWorfineryProduct;
+            bool bPrerequisitesMet = directWorfineryProduct || originalCampaignYard;
             int missingPrerequisite = ItemID_Invalid;
-            if(!directWorfineryProduct) {
+            if(!directWorfineryProduct && !originalCampaignYard) {
                 bPrerequisitesMet = true;
                 const int prerequisiteLimit = std::min<int>(Num_ItemID, static_cast<int>(objData.prerequisiteStructuresSet.size()));
                 for(int itemID2Test = ItemID_FirstID; itemID2Test < prerequisiteLimit; itemID2Test++) {
@@ -891,6 +915,7 @@ bool BuilderBase::update() {
         if(deployTimer == 0) {
             int finishedItemID = currentProducedItem;
             const Uint32 builtItemID = currentProducedItem;
+            const int builtPrice = int(getCurrentProductionPrice());
             removeBuiltItemFromProductionQueue();
 
             int num2Place = 1;
@@ -912,6 +937,7 @@ bool BuilderBase::update() {
             }
 
             Coord groupDeploySpot = Coord::Invalid();
+            int placed = 0;
             for(int i = 0; i < num2Place; i++) {
                 UnitBase* newUnit = getOwner()->createUnit(finishedItemID, false,
                     ModManager::instance().isTornieFamilyContentActive() ? getTechnologyHouseID() : HOUSE_INVALID);
@@ -959,10 +985,23 @@ bool BuilderBase::update() {
 
                     // inform owner of its new unit
                     newUnit->getOwner()->informWasBuilt(newUnit);
+                    ++placed;
                     AITelemetry::log().write(currentGame->getGameCycleCount(), owner->getHouseID(), -1, "unit_produced",
                         AITelemetry::Record().set("builder", getObjectID()).set("item", finishedItemID)
                             .set("object", newUnit->getObjectID()).set("x", spot.x).set("y", spot.y));
                 }
+            }
+            if(DuneCity::InfantrySquad::orderSize(builtItemID) > 0) {
+                // Actual factory output only: soldiers escaping destroyed buildings never reach this path.
+                SDL_Log("INFANTRY_DELIVERY: house=%d builder=%u item=%u price=%d men=%d expected=%d cycle=%u",
+                    owner->getHouseID(), getObjectID(), builtItemID, builtPrice, placed, num2Place,
+                    currentGame->getGameCycleCount());
+            }
+            if(DuneCity::InfantrySquad::threeManSquad(builtItemID)) {
+                // docs/infantry-squads.md: every squad puts its three men on the map.
+                SDL_Log("INFANTRY_SQUAD: event=delivered house=%d builder=%u builder_item=%u item=%u men=%d expected=%d cycle=%u",
+                    owner->getHouseID(), getObjectID(), getItemID(), builtItemID, placed, num2Place,
+                    currentGame->getGameCycleCount());
             }
 
             // Repeat production: one more copy joins the back of the queue. It waits for
@@ -1109,6 +1148,17 @@ void BuilderBase::doProduceItem(Uint32 itemID, bool multipleMode) {
 
                 buildItem.num++;
                 currentProductionQueue.emplace_back(itemID, buildItem.price );
+                if(const int men = DuneCity::InfantrySquad::orderSize(itemID); men > 0) {
+                    // docs/infantry-squads.md: every foot-soldier order, the price paid and whether this
+                    // builder offered the three-man squad at the time (the SquadOrders assertions read it).
+                    const Uint32 squad = DuneCity::InfantrySquad::squadOf(itemID);
+                    const Uint32 squadOffer = squad != ItemID_Invalid ? squad
+                        : (DuneCity::InfantrySquad::threeManSquad(itemID) ? itemID : ItemID_Invalid);
+                    const bool squadOffered = squadOffer != ItemID_Invalid && isAvailableToBuild(squadOffer);
+                    SDL_Log("INFANTRY_ORDER: house=%d builder=%u builder_item=%u item=%u men=%d price=%d squad_offered=%d ai=%d cycle=%u",
+                        owner->getHouseID(), getObjectID(), getItemID(), itemID, men, int(buildItem.price),
+                        squadOffered ? 1 : 0, owner->isAI() ? 1 : 0, currentGame->getGameCycleCount());
+                }
                 if(currentProducedItem == ItemID_Invalid) {
                     clearProductionProgress();
                     currentProducedItem = itemID;
