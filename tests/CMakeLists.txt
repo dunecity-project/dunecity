@@ -1176,8 +1176,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         # shoot down more Ornithopters with it (95% interval above 0) and lose no more Troopers.
         dunecity_add_test(headless nightly NAME trooper_ornithopter_effect COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-ornithopter-effect.py
-            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-ornithopter-effect)
-        set_tests_properties(trooper_ornithopter_effect PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-ornithopter-effect --jobs 4)
+        set_tests_properties(trooper_ornithopter_effect PROPERTIES TIMEOUT 1800 PROCESSORS 8)
+        dunecity_add_test(headless nightly NAME trooper_ornithopter_parallel_equivalence COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/units/run-trooper-ornithopter-effect.py
+            --seeds 1 --fog-seeds 1 --explored-seeds 1 --jobs 4 --verify-parallel --wall-timeout 240
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/trooper-ornithopter-equivalence)
+        set_tests_properties(trooper_ornithopter_parallel_equivalence PROPERTIES TIMEOUT 600 PROCESSORS 8)
         # The Dune City mod's own options (explored map, no fog): Troopers in every stance against an
         # Ornithopter that attacks them, attacks nearby or flies past, reach off and on, with a
         # Launcher and a Rocket Turret as yardsticks. No gun shots at aircraft; Guard must gain.

@@ -19,10 +19,16 @@ unexplored ground the test requires more Ornithopters shot down, the whole inter
 and Trooper losses not higher (interval not wholly above 0); under fog Ornithopters shot down
 must not be lower.
 
-Outputs: encounters.csv, pairs.csv, summary.md, run.log.
+Outputs: encounters.csv, pairs.csv, summary.md, run.log, and private worker logs/rows.
+Native workers keep both arms of each encounter together; all statistics use the merged
+full cohort. --jobs defaults to 1 (serial). --verify-parallel --jobs 4 instead compares
+serial/parallel measurements on 12 deterministic original encounter pairs, without
+running statistical assertions on that reduced sample.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import csv
+from itertools import product
 import os
 from pathlib import Path
 import shlex
@@ -41,6 +47,8 @@ NATIVE_INCLUDES = ''.join('#include "' + p.as_posix() + '"\n' for p in native_pr
 CYCLE_SECONDS = 0.016
 MEASURES = ('ornithopters_down', 'troopers_lost', 'ornithopter_damage', 'shots')
 KEY = ('terrain', 'troopers', 'ornithopters', 'approach', 'distance', 'seed')
+ROW_FIELDS = KEY + ('reach', 'ornithopters_down', 'troopers_lost', 'first_kill_tick',
+                    'first_shot_tick', 'first_shot_distance', 'shots', 'ornithopter_damage', 'ticks')
 
 
 def seed_list(text):
@@ -114,6 +122,93 @@ def describe(pairs, label):
     return lines, result
 
 
+def encounter_keys(args):
+    return [
+        (terrain, str(troopers), str(ornithopters), approach, str(distance), str(seed))
+        for terrain, seeds in (('unexplored', args.seeds), ('fogged', args.fog_seeds),
+                               ('explored', args.explored_seeds))
+        for seed in seeds
+        for troopers, ornithopters, approach, distance in product(
+            (1, 3, 6), (1, 2, 3), ('side', 'diagonal', 'split'), (8, 14))
+    ]
+
+
+def run_workers(binary, out, args, keys, indices, jobs):
+    out.mkdir(parents=True, exist_ok=True)
+    jobs = min(jobs, len(indices))
+    worker_dirs = [out / 'workers' / ('%03d' % index) for index in range(jobs)]
+    with scratch_dir('trooper-ornithopter-effect') as scratch:
+        def worker(index):
+            selected = indices[index::jobs]
+            worker_out = worker_dirs[index]
+            worker_out.mkdir(parents=True, exist_ok=True)
+            profile = scratch / ('worker-%03d' % index) / 'profile'
+            profile.mkdir(parents=True)
+            (profile / 'Dune City.ini').write_text(
+                '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
+                'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = AA tester\n',
+                encoding='utf-8')
+            env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy',
+                       SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1',
+                       TROOPER_ORNITHOPTER_EFFECT_OUT=str(worker_out),
+                       TROOPER_ORNITHOPTER_EFFECT_SEEDS=','.join(str(seed) for seed in args.seeds),
+                       TROOPER_ORNITHOPTER_EFFECT_FOG_SEEDS=','.join(str(seed) for seed in args.fog_seeds),
+                       TROOPER_ORNITHOPTER_EFFECT_EXPLORED_SEEDS=','.join(str(seed) for seed in args.explored_seeds),
+                       TROOPER_ORNITHOPTER_EFFECT_CASES=','.join(str(case) for case in selected))
+            logfile = worker_out / 'run.log'
+            with logfile.open('w') as log:
+                subprocess.run([str(binary), '--window', '--showlog'], cwd=worker_out, env=env,
+                               stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.wall_timeout)
+            text = logfile.read_text(errors='replace')
+            if text.count('TROOPER_ORNITHOPTER_EFFECT_PASS:') != 1 or 'TROOPER_ORNITHOPTER_EFFECT_FAIL:' in text:
+                raise RuntimeError('Missing or failed Trooper Ornithopter effect run; see ' + str(logfile))
+            rows = {}
+            with (worker_out / 'encounters.csv').open(newline='') as handle:
+                reader = csv.DictReader(handle)
+                if reader.fieldnames != list(ROW_FIELDS):
+                    raise RuntimeError('Unexpected encounter columns in ' + str(worker_out))
+                for row in reader:
+                    if None in row or any(value is None for value in row.values()):
+                        raise RuntimeError('Incomplete encounter row in ' + str(worker_out))
+                    key = tuple(row[field] for field in KEY) + (row['reach'],)
+                    if key in rows:
+                        raise RuntimeError('Duplicate encounter arm: ' + repr(key))
+                    rows[key] = row
+            expected = {keys[case] + (reach,) for case in selected for reach in ('0', '1')}
+            if set(rows) != expected:
+                raise RuntimeError('Encounter coverage mismatch in %s: %d missing, %d unexpected' % (
+                    worker_out, len(expected - rows.keys()), len(rows.keys() - expected)))
+            discard_profile_assets(profile)
+            return rows
+
+        failures, results = [], []
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            futures = [pool.submit(worker, index) for index in range(jobs)]
+            for index, future in enumerate(futures):
+                try:
+                    results.append(future.result())
+                except Exception as error:
+                    failures.append('worker %d: %s' % (index, error))
+        with (out / 'run.log').open('w') as log:
+            for index, directory in enumerate(worker_dirs):
+                log.write('=== worker %d ===\n' % index)
+                logfile = directory / 'run.log'
+                if logfile.exists():
+                    log.write(logfile.read_text(errors='replace'))
+                else:
+                    log.write('Worker did not create run.log\n')
+        if failures:
+            raise RuntimeError('Trooper Ornithopter workers failed: ' + '; '.join(failures))
+        # Verified workers own disjoint slices; restore the original native loop order.
+        rows = {key: row for result in results for key, row in result.items()}
+        ordered = [rows[keys[case] + (reach,)] for case in indices for reach in ('0', '1')]
+        with (out / 'encounters.csv').open('w', newline='') as handle:
+            writer = csv.DictWriter(handle, fieldnames=ROW_FIELDS, lineterminator='\n')
+            writer.writeheader()
+            writer.writerows(ordered)
+        return ordered
+
+
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('--build-dir', type=Path, default=default_build_dir(root))
 parser.add_argument('--output-dir', type=Path, required=True)
@@ -123,10 +218,18 @@ parser.add_argument('--fog-seeds', type=seed_list, default=seed_list('1'),
                     help='Seeds for explored ground under Fog of War')
 parser.add_argument('--explored-seeds', type=seed_list, default=seed_list('1-4'),
                     help='Seeds for explored ground without fog, the Dune City mod\'s own options')
+parser.add_argument('--jobs', type=int, default=1,
+                    help='Maximum independent native workers; both arms stay together (default: 1)')
+parser.add_argument('--verify-parallel', action='store_true',
+                    help='Compare serial/parallel rows on 12 original encounter pairs; no statistical report')
 parser.add_argument('--report', action='store_true',
                     help='Only recompute the report from an existing encounters.csv in --output-dir')
 parser.add_argument('--wall-timeout', type=int, default=3000)
 args = parser.parse_args()
+if args.jobs < 1:
+    parser.error('--jobs must be positive')
+if args.verify_parallel and (args.report or args.jobs == 1):
+    parser.error('--verify-parallel requires --jobs greater than 1 and cannot be used with --report')
 build, out = args.build_dir.resolve(), args.output_dir.resolve()
 out.mkdir(parents=True, exist_ok=True)
 
@@ -167,28 +270,26 @@ if not args.report:
         subprocess.run(compile_command, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
         subprocess.run(link, cwd=build, stdout=log, stderr=subprocess.STDOUT, check=True)
 
-    with scratch_dir('trooper-ornithopter-effect') as scratch:
-        profile = scratch / 'profile'
-        profile.mkdir()
-        (profile / 'Dune City.ini').write_text(
-            '[Video]\nPhysical Width = 640\nPhysical Height = 480\nWidth = 640\nHeight = 480\n'
-            'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\nPlayer Name = AA tester\n',
-            encoding='utf-8')
-        env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy',
-                   SDL_AUDIODRIVER='dummy', SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1',
-                   TROOPER_ORNITHOPTER_EFFECT_OUT=str(out),
-                   TROOPER_ORNITHOPTER_EFFECT_SEEDS=','.join(str(seed) for seed in args.seeds),
-                   TROOPER_ORNITHOPTER_EFFECT_FOG_SEEDS=','.join(str(seed) for seed in args.fog_seeds),
-                   TROOPER_ORNITHOPTER_EFFECT_EXPLORED_SEEDS=','.join(str(seed) for seed in args.explored_seeds))
-        logfile = out / 'run.log'
-        with logfile.open('w') as log:
-            subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,
-                           stdout=log, stderr=subprocess.STDOUT, check=True, timeout=args.wall_timeout)
-        text = logfile.read_text(errors='replace')
-        if text.count('TROOPER_ORNITHOPTER_EFFECT_PASS:') != 1 or 'TROOPER_ORNITHOPTER_EFFECT_FAIL:' in text:
-            raise RuntimeError('Missing or failed Trooper Ornithopter effect run; see ' + str(logfile))
-        discard_profile_assets(profile)
+    keys = encounter_keys(args)
+    if args.verify_parallel:
+        shapes = {('1', '1', 'side', '8'), ('3', '2', 'diagonal', '14'),
+                  ('6', '1', 'side', '14'), ('6', '3', 'split', '8')}
+        first_seeds, indices = {}, []
+        for index, key in enumerate(keys):
+            first_seeds.setdefault(key[0], key[-1])
+            if key[-1] == first_seeds[key[0]] and key[1:5] in shapes:
+                indices.append(index)
+        serial = run_workers(binary, out / 'serial', args, keys, indices, 1)
+        parallel = run_workers(binary, out / 'parallel', args, keys, indices, args.jobs)
+        if serial != parallel:
+            raise RuntimeError('Serial/parallel encounter rows differ; see ' + str(out))
+        print('Trooper Ornithopter serial/parallel rows match: %d pairs, %d rows; jobs 1 vs %d' % (
+            len(indices), len(serial), min(args.jobs, len(indices))))
+    else:
+        run_workers(binary, out, args, keys, list(range(len(keys))), args.jobs)
     subprocess.run([sys.executable, str(root / 'scripts/check-build-deps.py'), str(build)], check=True, cwd=root)
+    if args.verify_parallel:
+        sys.exit(0)
 
 with (out / 'encounters.csv').open(newline='') as handle:
     rows = list(csv.DictReader(handle))

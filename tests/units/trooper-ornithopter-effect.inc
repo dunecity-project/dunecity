@@ -235,7 +235,11 @@ int runTrooperOrnithopterEffect() {
     const char* seedEnv = std::getenv("TROOPER_ORNITHOPTER_EFFECT_SEEDS");
     const char* fogSeedEnv = std::getenv("TROOPER_ORNITHOPTER_EFFECT_FOG_SEEDS");
     const char* exploredSeedEnv = std::getenv("TROOPER_ORNITHOPTER_EFFECT_EXPLORED_SEEDS");
+    const char* casesEnv = std::getenv("TROOPER_ORNITHOPTER_EFFECT_CASES");
     require(outEnv && seedEnv && fogSeedEnv && exploredSeedEnv, "Missing Trooper Ornithopter effect runner environment");
+    const std::vector<int> cases = casesEnv ? numbers(casesEnv) : std::vector<int>{};
+    require(!casesEnv || (!cases.empty() && cases.front() >= 0 && std::is_sorted(cases.begin(), cases.end())),
+            "Encounter indices must be nonnegative and sorted");
     require(ModManager::instance().setActiveMod("dunecity"), "Missing the dunecity mod");
     require(ModManager::instance().isDuneCityContentActive(), "The reach rule only exists in DuneCity content");
     settings.general.playerName = "AA tester";
@@ -245,12 +249,15 @@ int runTrooperOrnithopterEffect() {
     csv << "terrain,troopers,ornithopters,approach,distance,seed,reach,ornithopters_down,troopers_lost,"
            "first_kill_tick,first_shot_tick,first_shot_distance,shots,ornithopter_damage,ticks\n";
     int encounters = 0;
+    int caseIndex = 0;
     for(const int terrain : {kUnexplored, kFogged, kExplored})
     for(const int seed : numbers(terrain == kUnexplored ? seedEnv : terrain == kFogged ? fogSeedEnv : exploredSeedEnv))
     for(const int troopers : {1, 3, 6})
     for(const int ornithopters : {1, 2, 3})
     for(const int approach : {0, 1, 2})
     for(const int distance : {8, 14}) {
+        const int index = caseIndex++;
+        if(casesEnv && !std::binary_search(cases.begin(), cases.end(), index)) continue;
         const Spec spec{terrain, troopers, ornithopters, approach, distance, seed};
         for(const bool reach : {false, true}) {
             const auto outcome = play(mapData, spec, reach);
