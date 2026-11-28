@@ -88,3 +88,184 @@ A corrected-source Air arm was attempted after the rs160 result, but **not admit
 - **InfantryLanes: recommend OFF / NOT TESTED.** The cheap demand-clock correction does not invent a backlog; no qualifying backlog or added lane occurred in the real-game cases, so output improvement is unproven. This is not a negative score verdict on the idea.
 
 Nothing was pushed or directly committed to the integration branch by this worker. Exact green source and follow-up were handed to Integrator; report updates are supplied as a separate patch because its first-build freeze includes documentation bytes and claims. Native GUI input, final combined feature batch, performance regression and final controller Air-map coverage remain outside the verified evidence here.
+
+## Completed corrected Air arm and real capacity causality
+
+This section supersedes the earlier Air-admission limitation and the earlier
+"extra-lane output unproven" statement. It does not rewrite historical failed experiments.
+
+| Corrected InfantryInMix source | Map | Paired games | Paired score difference (95% CI) | Fired and fully delivered |
+|---|---|---:|---:|---:|
+| `9896a2ca0ffd5f27b06cce8d71c6fe6210e85f56` | rs160 | 144 | -0.003 (-0.11..+0.10) | 186/288 (65%) |
+| same | Air-1v3 | 144 | -0.058 (-0.14..+0.03) | 288/288 (100%) |
+
+The corrected Air job was `20261128T162021-infantry-controller-air-6d84e4`;
+all 144 games were error-free and OFF controls had zero measured-share purchases
+or matched delivery events. Unlike the inherited adverse Air arm, this measures
+actual output from the requested build-mix orders, not building survivors.
+The stronger S4 half-share-delivered-by-minute-20 requirement remains **3/12,
+NOT MET**; majority activation is not presented as satisfying S4.
+
+Natural rs160 diagnostics (`20261128T163619-infantry-lanes-diagnostics-560423`)
+found no qualifying backlog in 3 games / 12 house-games. Of 430 demand samples,
+320 were below the demand threshold, 99 had no producer, 9 lacked reserved cash,
+1 had an idle producer, and 1 was sustaining demand. Existing producers were
+busy in only 36/331 applicable samples; median deficit was zero for every faction.
+The longest sampled demand run was 1,300 cycles (20.8 seconds), below the
+required two minutes. The trigger is reachable; ordinary demand does not keep
+one lane saturated long enough. No demand or threshold was fabricated in production.
+
+The forced, funded capacity fixture starts with exactly one producer and a real
+35% Infantry strategy, 48 initial Tanks and a one-time 100,000-credit scenario grant.
+Its initial infantry deficit is 41,156. Full AI planning, normal orders, placement,
+production and simulation ticks run without further cash grants.
+
+| Producer | OFF added | ON added | Matched post-placement OFF men | ON men | First order / standing samples |
+|---|---:|---:|---:|---:|---|
+| Barracks | 0 | 1 | 36 | 72 | 137 / 155 |
+| WOR | 0 | 2 | 22 | 47 | 138 / 164 |
+
+Samples are 62 cycles / 0.992 seconds. Both arms use the ON arm's same output
+window through sample 480; at most one extra producer is pending. Original
+causal source `8c34e6d52a757f1264481160ebb9a39aad8159d4`, job
+`20261128T163618-infantry-lanes-causality-3c0f38`, passed. The same physical
+capacity assertions passed again on the unified-permission/native strict source
+in `20261128T174357-strict-squads-cutover-v6-b89537`.
+The original causal source used raw Config gates; the current permission cutover
+also keeps all three infantry switches raw and independent. Its common fixture
+pins the separate capture/garrison permission OFF, so the capacity OFF arm is isolated.
+
+## Stefan's mandatory-squad follow-up
+
+> "so ai should always buy the squads over singles. its simple economics"
+
+Additional acceptance: with raw SquadOrders ON, zero ordinary Soldier/Trooper
+single purchases when that producer offers its squad; full quote saved rather
+than falling back to a single; no separate squad-value admission or per-man-price
+comparison; delivered men/minute does not fall. An exceptional single requires
+an actual nearby air engagement, an affordable Trooper, and a squad not fundable
+within three seconds from spendable cash plus the existing net-income forecast.
+Spendable cash retains the existing city working reserve. Every such exception
+is counted with its threat, cash, quote, forecast and cycle evidence.
+
+The authoritative QuantBot order boundary rejects ordinary available-squad singles;
+normal selectors, support, capital choices and capture recruitment use the same
+available squad. A single remains legal when its producer genuinely lacks squad
+technology. One single-only producer cannot release another producer's saved squad cash.
+Human purchases retain their existing singles/squads behavior. No raw defaults changed.
+
+Native strict source: `0ebd5ffe9fef9644a7931288e4c08bb9ad6e64dc`, based on the
+green unified-permission cutover `414d3c73c512b96dd76ed8f3b0a1268d2430edf8`.
+Its strict, capacity, human-squad and garrison-settings checks all passed in
+`20261128T174357-strict-squads-cutover-v6-b89537`. That job was **4/5, not green**:
+the unrelated selected-zone source-text assertion was stale after the roster UI change.
+Main authorized replacing that brittle scan with actual selected-widget behavior.
+Standalone Catch does not link the full Game/GUI engine, so the regression moved
+into the existing real panel fixture: selected empty Dune2 zone shows its actual
+house portrait, five real occupants replace icon/preview, and Evacuate restores
+the same portrait. Nothing is skipped or replaced with a no-op; no production UI logic changed.
+
+Final test source `c4e0a092021db9a2e57293c6041b14d67ad25ea9` changes only those two
+test files relative to the native strict source. Unit and actual panel checks passed
+**2/2** in `20261128T175413-strict-squads-widget-v7-1c72bd` (4.0 / 17.1 seconds),
+durably collected **2026-11-28T17:55:13.533675+11:00**. The four unchanged gameplay
+checks were not redundantly repeated, per Integrator's instruction. The original
+five requested checks are therefore satisfied across the native run and its
+test-only follow-up, with additional actual-widget coverage; this is not a claim
+that one five-test job passed on the final hash.
+
+Strict probe: 9 real scenarios, **53 squad orders, zero ordinary available-squad
+singles, one counted real-air emergency**. The genuine single-only-tech boundary
+also produces exactly one legal single plus one available squad, four men total.
+Full quote minus one waits; the fully saved quote buys three with only one-single
+value room. Deliberately premium squads (120 vs single 30; 400 vs single 100)
+still buy three, proving neither per-man comparison nor separate squad admission
+allows a fallback. Each cash/premium case physically delivers six men.
+
+| Equal 1.984-minute production window | OFF delivered | ON delivered | OFF men/min | ON men/min |
+|---|---:|---:|---:|---:|
+| Soldier | 26 | 78 | 13.105 | 39.315 |
+| Trooper | 16 | 48 | 8.065 | 24.194 |
+
+These rates are independently checked from actual factory-delivery events, not
+house counts or free building survivors. The permission-enabled capture case
+delivers six men as squads; all six zone tactics are enabled there, so it is **not**
+an isolated raw-levy A/B claim.
+
+Earlier strict probe failures were repaired, not hidden: v1 exposed the generic
+military-emergency bypass of saving; v2 used an incomplete white-box capital plan
+and crashed; v3's deliberate price edit failed to refresh the real cached catalogue.
+The final fixture uses the complete production planning pipeline and actual rebuilt offers.
+The v5 pre-cutover source also passed unit, human-squad and strict probes 3/3 in
+`20261128T173544-strict-squads-own-v5-4fd5cd` before the permission-native migration.
+
+Integration receives only the own delta `strict-squads-feature-v6-cutover.patch`
+and `zone-portrait-behavior-followup.patch`, under the evidence directory above.
+Off-branch snapshots contain older-tree reversions and must never be whole-picked.
+Staging source was not edited during the freeze. Installation, protocol bump,
+combined-stack qualification and performance regression remain Integrator's responsibility.
+
+
+### Mandatory-squad Air-1v3 ON/OFF result
+
+Job **`20261128T175531-strict-squads-air-e454d0`**, final source
+`c4e0a092021db9a2e57293c6041b14d67ad25ea9`, completed
+**2026-11-28T18:06:53.521180+11:00**. AWS/aws-mel2, priority 10, Brutal,
+24 explicit seeds 9101–9124, six assignments each, **144 error-free paired games**,
+60-minute limit, Neutral/Atreides/Ordos/Mercenary. Only raw SquadOrders changes;
+InfantryInMix and InfantryLanes are OFF. The historical Air rule snapshot lacks
+the new global permission, so the harness explicitly keeps capture/garrison
+permission OFF in both arms. This is not a score qualification of the all-six
+permission-enabled combined stack; that path has the separate physical probe above.
+
+| Air arm | House-games | Mean placement score | Sole wins | Eliminated | Alive at timeout | Paired difference (95% CI) |
+|---|---:|---:|---:|---:|---:|---:|
+| OFF default | 288 | -0.151 | 5 | 80 | 203 | control |
+| ON mandatory squads | 288 | -0.197 | 5 | 85 | 198 | **-0.047 (-0.13..+0.05)** |
+
+The existing report verdict is **level with default**, not a demonstrated score
+improvement: its interval includes zero. There were 134 multi-survivor timeouts
+and 10 completed victories. Activation and actual full-squad output both occurred
+in **216/288 (75%)** treatment house-games: Neutral, Ordos and Mercenary each
+72/72. Atreides had no ordinary infantry purchase demand in this isolated arm;
+its Soldier purchase path is exercised by the controlled production probe.
+
+| Actual purchase/output evidence | OFF | ON |
+|---|---:|---:|
+| Accepted squad orders | 0 | 2,587 |
+| Accepted single orders | 4,206 | 2 |
+| Ordinary singles with a squad offered | 4,206 | **0** |
+| Counted, exactly matched real-air exceptions | 0 | **2** |
+| Actual delivered men | 4,191 | **7,718** |
+| Observed house-minutes through elimination/end | 15,592.820 | 15,403.112 |
+| Actual delivered men per house-minute | 0.268778 | **0.501068** |
+
+ON delivery rate is **1.864x (+86.4%)** OFF. Every counted exception exactly
+matches one accepted Single order's game/house/builder/item/cycle. Both have
+actual engaged aircraft, Trooper price 100, squad quote 200 and a three-second
+forecast; source CSV evidence is:
+
+| Seed / Mercenary | Spendable credits | Forecast receipts in 3 sec | Sum | Hostile aircraft / engaged |
+|---|---:|---:|---:|---|
+| 9103 | 114 | 84 | 198 < 200 | 5 / true |
+| 9118 | 101 | 85 | 186 < 200 | 3 / true |
+
+No unmatched single, multiply-counted exception or short actual delivery passed
+the acceptance assertions. Ordered but unfinished/cancelled production is not
+counted as delivered men. Collected CSVs and the acceptance summary are under
+`/Users/stefan/Documents/projects/outputs/infantry-squads-20261128/strict-squads-air`.
+
+### Final default recommendations — no code defaults changed
+
+| Switch | Recommendation | Basis and remaining limitation |
+|---|---|---|
+| SquadOrders | **ON** under the requested rule | Strict purchase/forecast/technology assertions pass; new Air score is not clearly worse; actual men/minute rises. Historical rs160 score is +0.027 (-0.08..+0.13), but the new mandatory policy was not newly A/B tested on rs160. |
+| InfantryInMix | **ON for the requested majority-activation/not-clearly-worse criterion** | Corrected rs160 65% and Air 100% actual purchase success, both paired intervals include zero. Stronger S4 half-share-by-20 remains 3/12 and is not waived or claimed met. |
+| InfantryLanes | **OFF as a general default / natural score benefit untested** | Forced real backlog proves added capacity and higher output; ordinary diagnostics have zero backlog activation, so no natural paired-score promotion is supported. |
+
+Keeping all three raw switches ON for Stefan's authorized Air playtest is a
+separate Integrator/owner decision, not a statistical promotion claim for lanes.
+This worker did not change defaults, push, edit frozen staging source, or claim
+an Air installation. The only added scope was Main's explicitly authorized
+replacement of the stale UI source assertion with stronger real-widget behavior.
+
