@@ -48,6 +48,40 @@ Safety invariant: each living occupant is either hidden in one registered garris
 - Independent muzzle/statistics `ad8beab4c57a58743e609b8ba2fabaa578137b97`, AWS `20261128T175506-garrison-stats-current-e0a409`: 2/2 passed before integration as protocol 159.
 - Private Air save inspection `df50be0f065c54e6b199af7d26752c97242d8fd4`, AWS `20261128T165347-private-air-garrison-save-inspection-5c8f80`: passed in 37 seconds. **It contains personal saves and must not be landed or pushed.** Exact pinned Workshop assets matched the committed compatibility fixtures.
 
+## Extended nightly coverage
+
+AWS `20261128T184442-garrison-shelter-nightly-fc4f88` ran the requested **`-L nightly -LE gui`** at the qualified D9 source: **276/291 passed**, 15 failed. This is standalone D9 evidence, **not qualification of the later combined d6/B build**.
+
+All nine garrison/capture/Saboteur registrations passed: the 52-case probe, occupant panel, live statistics, settings, master-option probe, natural real-game acceptance, and Saboteur zone/target/effect probes. Natural real-game acceptance passed in 406.1 seconds; the three Saboteur probes passed in 18.5/33.1/213.7 seconds. The original strict assertions remain.
+
+The initial 15 failures were triaged without changing thresholds:
+
+| Family | Count | Cause / owner |
+| --- | ---: | --- |
+| Formation, deviation and two Civ Wars layouts | 4 | Synthetic older records retained the 9907 four-byte relocation tail. Fix `21363e185290e00725c2f016ddfaf855c7dc63c0`, AWS `20261128T191154-garrison-9907-legacy-fixtures-3ee7ee`: **4/4 passed**, with exact-EOF/state assertions unchanged |
+| Cross-platform city golden | 1 | All three native platforms agree below. Main-approved pin `2db18612e286b0dd75c842e84a8eb1c640a1ad45`, AWS `20261128T192111-garrison-native-digest-pin-f7051a`: **1/1 passed** |
+| QuantBot force/strategy historical records | 2 | Synthetic 9863/9893 records retained EconomyFirst's 9906 tail; QualTriage's `be6a02dc0f729a48554d9dd4de86782988ed390f` qualifies 2/2 separately |
+| Game Rules overflow | 2 | Earlier fixed-height layout defect, independently bounded before the occupied-lot guard; GarrisonPanel owns scrolling and unchanged bounds assertions |
+| City-redevelopment lane Parks | 1 | Independently fails before the occupied-lot guard; QualTriage owns the earlier regression |
+| Pollution relocation | 1 | Lower pollution was accepted despite clamped, unchanged land value; QualTriage owns clamp-aware selection |
+| Strategic-site negative control | 1 | Positive guarded arm passes; legacy arm reaches a credits-cap failure instead of the exact idle-yard failure required by the control; QualTriage owns it |
+| Economy variants B/C/E | 3 | Experimental economy variants; EconomyFirst owns their analysis |
+
+The complete `research_lab_probe` also passes after historical full-save projection is corrected: `fc2c613af67021a5c0d2a328155f1bcf063fc33e`, AWS `20261128T193047-garrison-research-legacy-layout-ff1ab0`, **1/1 passed**, 57.9 seconds. The synthetic 9882/9883 copies remove the current ObjectData healing/collapse suffix, UnitBase relocation field and newer Palace-worm suffix before the unchanged historical assertions run. This qualification includes GarrisonPanel's approved minimal scrolling prerequisite; the IO-only delta is kept separate from its UI ownership. No narrowed probe mode, production rule or save-version change is introduced by these fixture repairs.
+
+
+## Native cross-platform digest
+
+Main approved a golden update only after every covered platform agrees. The exact D9 source, seed 9101, 25-minute city case finishes at cycle **93750** with digest **`3b3265b11dc676e5`** on all three native platforms:
+
+| Platform | Measurement job | Final digest |
+| --- | --- | --- |
+| Linux / AWS | `20261128T184442-garrison-shelter-nightly-fc4f88` | `3b3265b11dc676e5` |
+| macOS / Mini | `20261128T190739-garrison-city-digest-mac-68c91e` | `3b3265b11dc676e5` |
+| Native Windows / PC | `20261128T190739-garrison-city-digest-windows-07c4df` | `3b3265b11dc676e5` |
+
+Those measurement CTests correctly failed the obsolete **`070bbafc6799818b`** golden; they are not reported as passing tests. No cross-platform divergence was observed. The replacement pin explicitly cites the occupied-zone/shelter rule source `d9f3544aa9792b9da5723c4b1ec18318c692c108`.
+
 ## Read-only Air inspection and limits
 
 No game was launched, stopped, or changed on the Air. Copied log SHA-256: `4a3432cc8077ee46c500ca9197eb259c29067ed18c48cb399428cd125647fb46`.
