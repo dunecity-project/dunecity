@@ -2353,6 +2353,35 @@ Measured at `e603c584f` (Metropolis, 120 min, 24 house-games per arm): LowValueP
 CityLauncherArmy alone loses on Metropolis (-0.397 [-0.689, -0.113]). FrontPalaces is not tested on rs192: the
 AI's turrets rarely stand in the band. HANDOVER 2026-11-28 has the acceptance table.
 
+
+### Economy first on low / no spice maps (`EconomyFirst`, 2026-11-28, ON by default)
+
+Stefan's last Air game (Random Skirmish 4P 192x192 1v3, no spice, 20,000 credits, a 92-zone prebuilt city): he
+built, a Fighter AI fought, and the three Brutal AIs fell into a poverty trap. Each put about 18,600 of its 20,000
+into units within two minutes, then sat below 1,000 credits with one Construction Yard: a city MCV is only bought
+when `canFundCapacityMcv`'s opening-capital test passes, a Nuclear Plant only with its price in hand, and the one
+yard spent half its orders on turrets and Police. Stefan: "the ai needs to escape the poverty trap on low / no
+spice maps".
+
+`EconomyFirst` (`CityLessonsPolicy.h`, `QuantBotCityLessons.cpp`) acts in a city game while the spice left on the
+map is below 20,000 per living house (`lowSpiceMap`, read every build pass; 80,000 with four houses) and until
+the house has 6,734 people (his minute-31 population):
+- the city yard target follows his schedule, 4 yards, 6 from minute 15, 9 from minute 20, and the Heavy Factory
+  orders the MCV itself (upgrading first if it must); the MCV deploys at home, a colony trip only when home has
+  no footprint;
+- unit producers keep 10,000 credits for the yards, released for the factories while an enemy unit is within 12
+  tiles of a yard, factory, Starport, Nuclear Plant or Palace; the Starport buys nothing;
+- an idle yard orders a zone in his R/C/I mix (134/93/101) whatever the demand valves say, while zones are under
+  70% of the yard's orders.
+On a spice-rich map it logs `spice_rich` once and does nothing until the spice runs below the line.
+
+Measured (Brutal, 24 house-games per arm against the same games' control houses; `economy-first-report.py` for
+his footprint, `city-lessons-report.py` for scores and the in-game assertion): his map +0.852 [+0.444, +1.222],
+effect in 22/24; BigCityLife +0.492 [+0.169, +0.833], 19/24; pooled +0.672 [+0.409, +0.926]; Metropolis and rs192
+level and not acted on early; Fortress and `/weak` identical. On BigCityLife it reaches his minute-31 yards,
+zones and population; on his own map yards by minute 3 and 92% of his population, with tax at 48% and Palaces
+at 2 of his 15. Activation test: `economy_first`. HANDOVER 2026-11-28 has the acceptance table.
+
 ## Blob waves: gather, march together, unblob on contact, reform, tactical retreat (branch `feat/ai-blob-waves`, save 9862 / protocol 76)
 
 Stefan: "i would at least thing having a big blob that moves together towards the enemy after first

@@ -1,3 +1,111 @@
+## 2026-11-28 - EconomyFirst: the AI out of the poverty trap on low / no spice maps (Stefan's last Air game); ON by default
+
+Stefan, 2026-11-28, about his last game on the Air: "i did the building for the ai and we obliterated the enemy
+opponents"; then "yes the ai needs to escape the poverty trap on low / no spice maps". His map: Random Skirmish 4P
+192x192 1v3 FFA DuneCity T9, seed 817478863, no spice, 20,000 credits each, a prebuilt city of 92 zones, 1 yard,
+2 Nuclear Plants and 8 Rocket Turrets per house; he and a Brutal QuantBot Fighter shared Neutral against three
+Brutal QuantBots. Commits `6a5bf7339` to `a88f19825`; default on in the commit titled "EconomyFirst on by default". Evidence: `~/Documents/projects/outputs/air-game-20261128/`
+(`measure/report-*.md`, `measure/scores-*.md`). His map and his game options are test data in `tests/ai/maps/`
+(kept out of the game's map list).
+
+**Measured cause on his map** (control houses, 72 house-games, `ECONOMY_STATE` / `BUILD_ORDER` lines):
+- Where the 20,000 goes: 18,650 on units in the first two minutes (median), 4,725 on buildings; credits then sit
+  at 400-700 for the whole game. The Starport's bargains and the Heavy Factory's "largest affordable deficit" take
+  most of it.
+- Why one yard: the city yard target rises with demand, but a city MCV is only bought when `canFundCapacityMcv`
+  passes its opening-capital test; with the money gone it never does (0 MCVs in 72 house-games by minute 10).
+- What holds the yard: in the first ten minutes its orders were 316 city-protection turrets, 284 rocket-defence
+  turrets, 184 Police Stations and 118 Palaces against 844 zone orders, all through one yard.
+- Why Nuclear is "not available": the power rule needs the Nuclear Plant's price in hand; below 1,000 credits it
+  builds a Wind Trap ("CITY-POWER: Building Windtrap (no Nuclear available ...)").
+
+**The switch** (`EconomyFirst`, default off, play style `economy-first`; `CityLessonsPolicy.h`,
+`QuantBotCityLessons.cpp`): only while the map's spice is below 20,000 per living house, and until the house has
+his minute-31 population (6,734):
+- the city yard target follows his schedule: 4 yards, 6 from minute 15, 9 from minute 20;
+- unit producers keep 10,000 credits for the yards, released for the factories while an enemy unit is within 12
+  tiles of a yard, factory, Starport, Nuclear Plant or Palace; the Starport buys nothing;
+- a Heavy Factory short of the yard target orders the MCV itself from that cash (upgrading first if it must);
+- an idle yard orders a zone in his R/C/I mix (134/93/101) whatever the demand valves say, while zones are under
+  70% of the yard's orders (his first ten minutes: 76 of 113).
+
+**Activation test** `economy_first` (headless, nightly; its own small fixed numbers, not the acceptance test):
+passed on AWS at `6c2363a6a` (20261128T101603-ctest-c952cf), 8/8: ON fired, ordered 4 MCVs and stood 3 yards by
+minute 5, bought 5,300 of units in the first two minutes against 16,200 off, ordered 16 economy-first zones and
+added 22 zones by minute 10 against -2 off; off it never acted; on a spice-rich map it logged spice_rich and did
+not act.
+
+**Acceptance: his footprint on his map** (at `a88f19825`, 90-minute games, 24 house-games with the switch, 72
+control; median; share of his number; his zones, Nuclear Plants and Palaces are orders, the AI's are standing,
+zones net of losses):
+
+| Minute | Measure | Stefan | EconomyFirst | Control |
+|---:|---|---:|---|---|
+| 3 | yards | 4 | 4, reached his footprint | 1 (25%) |
+| 23 | yards | 9 | 5, not reached, 56% | 1 (11%) |
+| 10 / 20 / 31 | zones added | 76 / 201 / 328 | 38 / 90 / 212, not reached, 51% / 45% / 65% | -1 / 12 / 29 (-1% / 6% / 9%) |
+| 10 / 20 / 31 | Nuclear Plants | 3 / 7 / 12 | 2 / 3 / 5, not reached, 67% / 43% / 42% | 2 / 2 / 2 |
+| 10 / 20 / 31 | Palaces | 6 / 8 / 15 | 1 / 2 / 2, not reached, 17% / 25% / 17% | 2 / 2 / 2 |
+| 10 / 20 / 31 | population | 3,130 / 4,918 / 6,734 | 2,490 / 3,653 / 6,220, not reached, 80% / 74% / 92% | 1,835 / 2,120 / 2,509 (59% / 43% / 37%) |
+| 31 | tax a second | 247 | 118, not reached, 48% | 48 (19%) |
+
+One line reaches his footprint (yards by minute 3); population at minute 31 is at 92%. Measured at `6c2363a6a`,
+before its MCVs stayed at home, the same arm had 21% of his zones and 50% of his population at minute 31 and
+scored +0.341 level: about 24 of 81 MCVs were lost on colony trips before deploying.
+
+**Activation per arm** (in-game assertion per house-game: a second yard deployed, and by minute 10 an MCV ordered
+and 10 zones added):
+
+| Map | Spice | Fired | Effect reached | Score, all games | Score, games where it reached its effect |
+|---|---|---:|---:|---|---|
+| His map (air-1v3), `a88f19825` | none | 24/24 | 22/24 | **+0.852 [+0.444, +1.222] beats** | +1.051 [+0.727, +1.333] (22 games) |
+| His map, `6c2363a6a` (MCVs on colony trips) | none | 24/24 | 17/24 | +0.341 [-0.066, +0.762] level | +0.709 [+0.248, +1.098] (17 games) |
+| BigCityLife (2,000 credits, 16 bloom tiles), `a88f19825` | low | 24/24 | 19/24 | **+0.492 [+0.169, +0.833] beats** | +0.481 [+0.107, +0.865] (19 games) |
+| Both low-spice maps pooled, `a88f19825` | | 48/48 | 41/48 | **+0.672 [+0.409, +0.926] beats** | +0.787 [+0.501, +1.025] (41 games) |
+| Fortress / `/weak` (Brutal formation duels, 18 games each, `47dfee5c1`) | (no city) | 0 | - | identical to default: +1.333 / -1.889 both | - |
+| 3waysplit | none | 8/24 | 0/24, **NOT TESTED** | +0.026 [+0.000, +0.078] | - |
+| Metropolis | rich | 0/24 early | 0/24, **NOT TESTED** (did not act: spice-rich) | -0.086 [-0.431, +0.281] | - |
+| rs192-dunecity 4P | rich (about 780,000) | 21/24 after minute 31 | 0/24 by minute 10 | -0.086 [-0.487, +0.322] | - |
+
+3waysplit has no spice but starts every house with about 20,000 people and 408 tax a second: no poverty trap,
+and the switch stands down at once (his minute-31 population). On Metropolis it logged spice_rich and did nothing.
+On rs192 it began only once the harvesters had taken the map's spice below the line (after minute 31). Neither
+spice-rich map shows harm. The "effect reached" score picks games after the fact and is not evidence for a
+default: the default rule reads the all-games interval, which includes 0.
+
+**BigCityLife** (4P 192x192, 2,000 credits, a 49-zone city, no spice but 16 bloom tiles; Stefan's options; 120
+minutes, 24 house-games, 72 control): with the switch the house reaches his minute-31 footprint on three lines,
+9 yards (his 9), 338 zones added (his 328) and 8,288 population (his 6,734), and 237 tax a second (his 247, 96%;
+control 78). Nuclear Plants 7 (his 12, 58%), Palaces 6 (his 15, 40%). Units in the first ten minutes 0 against
+the control's 11,650; 20 of 24 houses stood down at his population.
+
+**Decision: ON by default** (Stefan, 2026-11-28, "Yes, turn on", asked with this table). Its 95% interval is
+above 0 on the low-spice maps (pooled +0.672), it is identical on Fortress and `/weak`, and it does not act on
+spice-rich maps. "Low / no spice" in code (`CityLessonsPolicy::lowSpiceMap`, read every build pass): the spice
+left on the whole map (`QuantBot::lastCalculatedSpice`, rescanned every 500 cycles) below 20,000 times the
+living houses (80,000 with four houses, 60,000 with three). Above it the switch logs `spice_rich` once and does
+nothing; a rich map harvested down below the line turns it on then (rs192 after minute 31). It stands down for
+good once the house has 6,734 people. The switch stays: `EconomyFirst=0` (play style `economy-first-off`)
+measures the old behaviour; match controls labelled `default` now have it on.
+
+**Not done / deviations:**
+- His footprint is not reached on his map: yards 5 of 9 by minute 23, tax 48%, Nuclear Plants 5 of 12, Palaces 2
+  of 15. The MCV losses (about 24 of 81 before deploying, on colony trips) are fixed in `a88f19825`; the engine
+  counts a deploy as a lost MCV too, so mcvs_lost overstates losses.
+- The 7 house-games that missed the effect at `6c2363a6a` were the houses attacked first (an enemy at the core in
+  63% of passes against 39%); 6 of the 7 were eliminated. The hold is already released under that threat.
+- He had a Fighter partner: his own orders were all building while the AI fought for him. With the cash hold a
+  house builds about 7,600 of units in ten minutes against the control's 25,075, and 7 of 24 houses missed the
+  effect because their new zones were destroyed early. The hold releases while an enemy is near the core (12
+  tiles), a stand-off he did not have.
+- Palaces: the switch does not order them; the house stays at the map's 2 (his 15 by minute 31). Next arm:
+  LowValuePalaces with EconomyFirst on (proposed, not on).
+- Scope: low / no spice maps only (his words); spice-rich maps are measured only for harm.
+- Not run: one Brutal AI with a Builder-role partner on his map (the harness plays one QuantBot per house).
+
+**Gates with the default on:** the four AI gates, the nightly tier, `perf_regression`, `economy_first` and
+`quantbot_city_lessons` run at the default-on commit; results are added here when they finish.
+
 ## 2026-11-28 - Lessons from Stefan's Metropolis save (seewhatidid): LowValuePalaces, FrontPalaces, CityLauncherArmy proven and measured; all stay OFF
 
 Stefan, 2026-11-27: "i saved a game seewhatidid on the mba for metropolis where i added more palaces to improve
