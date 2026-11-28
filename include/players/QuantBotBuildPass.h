@@ -241,6 +241,8 @@ struct QuantBot::BuildPass {
     int trooperTarget{};
     int trooperCount{};
     int trooperReserveValue{};
+    int infantrySquadCashReserve{}; ///< Full quote held for one genuinely wanted, available squad.
+    Uint32 infantrySquadSavingsItem = NONE_ID;
     int hostileAircraft{};
     FixPoint tankPercent{};
     FixPoint siegePercent{};

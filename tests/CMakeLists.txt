@@ -760,6 +760,12 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             --mod dunecity --level 9 --partner-difficulty brutal --minutes 1
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/infantry-lanes-backlog-probe)
         set_tests_properties(infantry_lanes_backlog_probe PROPERTIES TIMEOUT 600 PROCESSORS 2)
+        # Stefan: always buy available squads, with counted real air emergencies only.
+        dunecity_add_test(headless integration NAME strict_squad_orders_probe COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --strict-squads-probe --repeatable --headless-assets
+            --mod dunecity --level 9 --partner-difficulty brutal --minutes 1
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/strict-squad-orders-probe)
+        set_tests_properties(strict_squad_orders_probe PROPERTIES TIMEOUT 600 PROCESSORS 2)
         # Headless AI probes in every skirmish engine; the stats-panel probe is GUI and stays macOS-only.
         foreach(ai_mod IN ITEMS vanilla dunecity Dune2R)
             foreach(ai_probe IN ITEMS air-defense shared-spending harvester-safety)

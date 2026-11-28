@@ -107,20 +107,17 @@ accept('S1 a squad order costs 200 (Troopers) / 50 (Infantry) and puts exactly t
        f'squads delivered per game {per_game(delivered)}, {len(short)} short of three; '
        f'{len(squad_orders)} squad orders, prices {sorted(set((r["item"], r["price"]) for r in squad_orders))}')
 
-# S2: of the men QuantBot buys from a builder that offers the squad, >= 90% come as squads, in every
-# house-game that buys any there.
+# S2: zero ordinary singles when the squad is offered; accepted air exceptions are counted by exact order.
 ai_offered = [r for r in kind['INFANTRY_ORDER'] if r['ai'] == '1' and r['squad_offered'] == '1']
-men = defaultdict(lambda: [0, 0])   # (seed, house) -> [men as squads, all men]
-for r in ai_offered:
-    entry = men[(r['seed'], r['house'])]
-    entry[1] += int(r['men'])
-    if r['item'] in SQUADS:
-        entry[0] += int(r['men'])
-low = {k: v for k, v in men.items() if v[0] < 0.9 * v[1]}
-accept('S2 the AI buys its men as squads when a squad is cheaper per man (>= 90% of the men, every house-game)',
-       len(men) >= len(seeds) and not low,
-       f'{len(men)} house-games bought men where a squad was offered; squad share of men '
-       f'{sorted(round(v[0] / v[1], 2) for v in men.values() if v[1])}; below 90%: {low}')
+order_key = lambda r: tuple(r[k] for k in ('seed', 'house', 'builder', 'item', 'cycle'))
+exceptions = {order_key(r) for r in kind['INFANTRY_SQUAD_POLICY'] if r['event'] == 'emergency_single'}
+singles = [r for r in ai_offered if r['item'] in SINGLE]
+ordinary = [r for r in singles if order_key(r) not in exceptions]
+men = Counter((r['seed'], r['house']) for r in ai_offered)
+accept('S2 the AI always buys available squads, except counted genuine air emergencies',
+       len(men) >= len(seeds) and not ordinary and exceptions <= {order_key(r) for r in singles},
+       f'{len(men)} buying house-games; ordinary singles {len(ordinary)}; counted emergency singles {len(exceptions)}; '
+       f'squad orders {sum(r["item"] in SQUADS for r in ai_offered)}')
 
 # S3: each infantry backlog leads to another Barracks/WOR ordered within a minute (>= 90% of backlogs that
 # are not already answered), and >= 2 of the producer stand in at least half of the house-games.

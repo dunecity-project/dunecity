@@ -265,7 +265,7 @@ public:
     /// city maps: QuantBot's Custom-only policy scopes apply to both.
     bool customRulesGame() const;
     int campaignHarvesterCeiling() const; // -1 outside policy; zero forbids new workers
-    void doProduceItem(const BuilderBase* builder, Uint32 itemID) const;
+    void doProduceItem(const BuilderBase* builder, Uint32 itemID, bool allowEmergencySingle = false) const;
 
     void onObjectWasBuilt(const ObjectBase* pObject) override;
     void onDecrementStructures(int itemID, const Coord& location) override;
@@ -2262,11 +2262,12 @@ private:
     /// saved: after a load every peer restarts the clocks the same way.
     std::map<Uint32, std::pair<Uint32, int>> zoneGarrisonProgress_;
     bool zoneGarrisonRulesLogged_ = false; ///< Diagnostic only; restart after loading a save.
-    /// Infantry squads (docs/infantry-squads.md; QuantBotInfantry.cpp). SquadOrders: why QuantBot must not
-    /// order the three-man squad \a item at \a builder (nullptr: it may).
-    const char* squadOrderRefusal(const BuilderBase* builder, Uint32 item) const;
-    /// SquadOrders: the squad in place of \a single when \a builder offers it, cheaper per man, within \a money.
-    Uint32 infantryOrderFor(const BuilderBase* builder, Uint32 single, int64_t money) const;
+    /// Strict SquadOrders: reject an ordinary single whenever its squad is available; count only genuine
+    /// observed-aircraft exceptions whose three-second income forecast cannot fund a squad.
+    const char* squadOrderRefusal(const BuildPass& pass, const BuilderBase* builder, Uint32 item) const;
+    Uint32 infantryOrderFor(const BuilderBase* builder, Uint32 single) const;
+    bool infantrySingleEmergency(const BuildPass& pass, const BuilderBase* builder, Uint32 single) const;
+    void planInfantrySquadSavings(BuildPass& pass);
     /// INFANTRY_MIX, once a game minute: the measured infantry share and its score (planUnitMix).
     void logInfantryMix(const BuildPass& pass, int bps, bool learning, int64_t reward, int64_t loss, int64_t score,
                         bool troopers);
@@ -2277,12 +2278,9 @@ private:
     void noteInfantryLaneOrdered(Uint32 producer);
     /// InfantryInMix is on and this is not Tornie content (its own infantry rules).
     bool cityInfantryShare() const;
-    /// SquadOrders rounds up: the value a three-man squad claims against the infantry share and budget is one
-    /// man's, so a squad is admitted wherever a single man is. Every other item claims its full \a value.
-    int infantryQuotaValue(Uint32 item, int value) const;
-    /// The cash an infantry order needs at \a builder now: with SquadOrders a squad's single's price, since a
-    /// builder pays as it builds; otherwise the item's own price.
-    int infantryOrderCash(const BuilderBase* builder, Uint32 item) const;
+    /// Preserve the original single's demand/admission when replacing it with a squad. Cash/accounting
+    /// still charge the entire actual squad; this never permits falling back to an ordinary single.
+    int infantryDemandValue(Uint32 item, int value) const;
     /// InfantryInMix: the first Barracks or WOR \a yard should build for a city house with a measured infantry
     /// share of 2% or more and neither; NONE_ID otherwise.
     Uint32 infantryFirstProducer(BuildPass& pass, const BuilderBase* yard) const;

@@ -601,6 +601,7 @@ void QuantBot::build(int militaryValue) {
     traceBuildState(pass);
     planUnitMix(pass);
     planCapitalForecast(pass);
+    planInfantrySquadSavings(pass);
     planCityBootstrap(pass);
     planOpeningProduction(pass);
     planDefenceCoverage(pass);
@@ -3484,13 +3485,15 @@ bool QuantBot::troopContentExists(BuildPass& pass, const BuilderBase* builder) {
 }
 
 bool QuantBot::trooperOrderAdmitted(BuildPass& pass, Uint32 item, int value) {
-    // SquadOrders rounds up: a squad is admitted wherever one more man is (docs/infantry-squads.md).
-    const bool roundUp = infantryQuotaValue(item, value) != value;
-    const int troops = roundUp ? 1 : QuantBotBuildPolicy::rocketInfantrySize(item);
-    value = infantryQuotaValue(item, value);
-    const bool supportFloor = pass.trooperCount + troops
-        <= QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft);
-    return troops > 0 && pass.trooperCount + troops <= pass.trooperTarget
+    const bool squad = botConfig().force.squadOrders
+        && DuneCity::InfantrySquad::threeManSquad(item);
+    const int people = QuantBotBuildPolicy::rocketInfantrySize(item);
+    const bool wanted = squad ? pass.trooperCount < pass.trooperTarget
+        : pass.trooperCount + people <= pass.trooperTarget;
+    const bool supportFloor = squad ? pass.trooperCount < QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft)
+        : pass.trooperCount + people <= QuantBotBuildPolicy::trooperSupportFloor(pass.hostileAircraft);
+    value = infantryDemandValue(item, value);
+    return people > 0 && wanted
         && ((supportFloor && (!pass.techSavings || pass.hostileAircraft > 0)) || infantryQuotaAdmits(pass, value))
         && int64_t(pass.militaryValue) + value <= pass.lightBudget;
 }
@@ -4581,7 +4584,7 @@ bool QuantBot::compositionAdmits(BuildPass& pass, Uint32 item) {
             || QuantBotBuildPolicy::rocketInfantry(item)))) return false;
     if (isInfantryUnit(item))
         return (pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item) && pass.hostileAircraft > 0)
-            || infantryQuotaAdmits(pass, currentGame->objectData.data[item][getHouse()->getHouseID()].price);
+            || infantryQuotaAdmits(pass, infantryDemandValue(item, currentGame->objectData.data[item][getHouse()->getHouseID()].price));
     const size_t slot = compositionSlot(item);
     return slot == UnitMixPolicy::kSlots
         || slot == UnitMixPolicy::nextExistingSlot(pass.unitMix, pass.compositionValue,
@@ -4637,6 +4640,18 @@ bool QuantBot::spendingAdmits(BuildPass& pass, Uint32 item, int cost, bool upgra
         if (item == Unit_Harvester && pass.itemCount[Unit_Harvester] >= pass.cityBoomWorkerCap) return false;
         if (item == Structure_Refinery && (pass.itemCount[Structure_Refinery] >= pass.cityBoomBayCap
             || pass.itemCount[Unit_Harvester] >= pass.cityBoomWorkerCap)) return false;
+    }
+    // Save a complete wanted squad, not enough for a single. Existing essential/emergency spending
+    // remains authoritative; optional purchases cannot consume the last credits on the way there.
+    if (cost > 0 && pass.infantrySquadCashReserve > 0 && item != pass.infantrySquadSavingsItem
+        && int64_t(pass.money) < int64_t(cost) + pass.infantrySquadCashReserve
+            + (pass.citySimEnabled ? pass.cityWorkingReserve : 0)) {
+        // Ready-army counters can be unset outside TechSavings. A wanted squad itself provides
+        // defence; optional vehicles are not emergencies merely because those counters are zero.
+        const bool essential = !upgrade && spendingEmergency(pass, item)
+            && (!QuantBotBuildPolicy::militaryItem(item) || pass.militaryEmergency || pass.airEngaged
+                || pass.defendingEconomy || pass.groundThreatAsset.isValid());
+        if (!essential) return false;
     }
     if (!incomeTechAdmits(pass, item, cost, upgrade)) {
         if (pass.emitStatsLog && AITelemetry::log().enabled())
@@ -5586,11 +5601,12 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
         CapitalCandidate soldier;
         soldier.builder=builder->getObjectID();soldier.kind="military";
         int64_t bestDeficit=-1;
-        std::map<Uint32, CapitalCandidate> eligibleSquads;
         AITelemetry::Record unitOptions;
         for (const auto& offer:builder->getBuildList()) {
             const Uint32 item=offer.itemID;
             if (!QuantBotBuildPolicy::militaryItem(item)) continue;
+            const Uint32 orderItem = infantrySingleEmergency(pass, builder, item)
+                ? item : infantryOrderFor(builder, item);
             const int value=data[item][houseID].price;
             const int price=int(offer.price);
             int bps=0;
@@ -5605,7 +5621,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
             int score=QuantBotSpendingPolicy::militaryScore(price,value,pass.militaryValue,pass.militaryBudget,pass.defendingEconomy);
             const char* reason="eligible";
             if (!campaignAvailableToBuild(builder,item)) reason="unavailable";
-            else if (const char* squad = squadOrderRefusal(builder, item)) reason=squad;
+            else if (const char* squad = squadOrderRefusal(pass, builder, orderItem)) reason=squad;
             else if (getHouse()->isUnitLimitReached(item)) reason="unit_limit";
             else if (port && getHouse()->getChoam().getNumAvailable(item)<=0) reason="sold_out";
             else if (port && price >= value) reason="not_discounted";
@@ -5618,7 +5634,7 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 && !trooperOrderAdmitted(pass, item, value)) reason="trooper_support_satisfied";
             else if (cityInfantryItem(pass, item) && !pass.cityAntiAirInfantryDemand && !botConfig().force.infantryInMix
                 && !(pass.trooperSupport && QuantBotBuildPolicy::rocketInfantry(item))) reason="no_observed_air";
-            else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, infantryQuotaValue(item, value))) reason="infantry_quota_satisfied";
+            else if (cityInfantryItem(pass, item) && !infantryQuotaAdmits(pass, infantryDemandValue(item, value))) reason="infantry_quota_satisfied";
             else if (item==Unit_Ornithopter && pass.citySimEnabled && cityLauncherArmyEnabled()) reason="city_launcher_army";
             else if (item==Unit_Ornithopter && int64_t(pass.itemCount[item]+1)*value*10000
                 > int64_t(pass.militaryValue+value)*2000) reason="air_composition_cap";
@@ -5628,23 +5644,11 @@ void QuantBot::planCapitalCandidates(BuildPass& pass) {
                 .set("price",price).set("military_value",value).set("committed",pass.itemCount[item])
                 .set("target_bps",bps).set("deficit_scaled",deficit).set("score",score).set("reason",reason));
             if (score>soldier.score || (score>0 && score==soldier.score && deficit>bestDeficit)) {
-                soldier.item=item;soldier.price=price;soldier.cost=price;soldier.score=score;
-                soldier.proceeds=value;soldier.delay=port ? MILLI2CYCLES(30000) : data[item][houseID].buildtime*15;
+                soldier.item=orderItem;soldier.price=purchasePrice(builder, orderItem);soldier.cost=soldier.price;soldier.score=score;
+                soldier.proceeds=data[orderItem][houseID].price;
+                soldier.delay=port ? MILLI2CYCLES(30000) : data[orderItem][houseID].buildtime*15;
                 soldier.reason=pass.defendingEconomy ? "active_defence" : "military_shortfall";bestDeficit=deficit;
             }
-            if (botConfig().force.squadOrders && DuneCity::InfantrySquad::threeManSquad(item) && score>0) {
-                CapitalCandidate& squad = eligibleSquads[item];
-                squad = soldier; squad.item=item;squad.price=price;squad.cost=price;squad.score=score;squad.proceeds=value;
-                squad.delay=port ? MILLI2CYCLES(30000) : data[item][houseID].buildtime*15;
-                squad.reason=pass.defendingEconomy ? "active_defence" : "military_shortfall";
-            }
-        }
-        // SquadOrders: when the chosen single's squad is also admitted and cheaper per man, order the squad.
-        if (botConfig().force.squadOrders && soldier.item!=NONE_ID) {
-            const Uint32 squadItem = DuneCity::InfantrySquad::squadOf(soldier.item);
-            const auto it = eligibleSquads.find(squadItem);
-            if (it != eligibleSquads.end() && DuneCity::InfantrySquad::cheaperPerMan(it->second.price, 3, soldier.price, 1))
-                soldier = it->second;
         }
         if (soldier.item!=NONE_ID) pass.capitalCandidates.push_back(soldier);
         if (AITelemetry::log().enabled()) pass.capitalUnitOptions.set(std::to_string(builder->getObjectID()),unitOptions);

@@ -4,7 +4,7 @@
 // ai should use it if it wants to build these men. also additional infantry and wor should be built if the ai
 // needs more capacity similar to factories. also include infantry in the calculation for what to build (same
 // performance algorithm)". Three switches, each default off until measured:
-//  - SquadOrders: an infantry order takes the offer cheapest per man; off, QuantBot never orders a squad.
+//  - SquadOrders: always take an available squad, save its full quote; count genuine air-emergency singles.
 //  - InfantryLanes: another Barracks or WOR by the Light/Heavy Factory lane rule
 //    (QuantBotBuildPolicy::needsProductionLane).
 //  - InfantryInMix: in a city game the Barracks and WOR build to the measured infantry share, not only
@@ -33,26 +33,67 @@ constexpr int kLaneDeficitOrders = 3;
 size_t laneIndex(Uint32 producer) { return producer == Structure_WOR ? 1 : 0; }
 }
 
-const char* QuantBot::squadOrderRefusal(const BuilderBase* builder, Uint32 item) const {
-    // Tornie content keeps its own order rules (its five-man orders, its own tables).
-    if (!DuneCity::InfantrySquad::threeManSquad(item) || ModManager::instance().isTornieFamilyContentActive())
-        return nullptr;
-    if (!botConfig().force.squadOrders) return "squad_orders_off";
-    const Uint32 single = item == Unit_Infantry ? Unit_Soldier : Unit_Trooper;
-    const int singlePrice = purchasePrice(builder, single);
-    if (singlePrice > 0 && !DuneCity::InfantrySquad::cheaperPerMan(purchasePrice(builder, item), 3, singlePrice, 1))
-        return "single_cheaper_per_man";
+const char* QuantBot::squadOrderRefusal(const BuildPass& pass, const BuilderBase* builder, Uint32 item) const {
+    const bool squad = DuneCity::InfantrySquad::threeManSquad(item);
+    const bool single = item == Unit_Soldier || item == Unit_Trooper;
+    if (!squad && !single) return nullptr;
+    if (!botConfig().force.squadOrders)
+        return squad && !ModManager::instance().isTornieFamilyContentActive() ? "squad_orders_off" : nullptr;
+    if (single && infantryOrderFor(builder, item) != item && !infantrySingleEmergency(pass, builder, item))
+        return "save_for_available_squad";
     return nullptr;
 }
 
-Uint32 QuantBot::infantryOrderFor(const BuilderBase* builder, Uint32 single, int64_t money) const {
-    if (!botConfig().force.squadOrders || ModManager::instance().isTornieFamilyContentActive()) return single;
+Uint32 QuantBot::infantryOrderFor(const BuilderBase* builder, Uint32 single) const {
+    if (single != Unit_Soldier && single != Unit_Trooper) return single;
+    if (!botConfig().force.squadOrders) return single;
     const Uint32 squad = DuneCity::InfantrySquad::squadOf(single);
-    if (squad == ItemID_Invalid || !campaignAvailableToBuild(builder, squad) || squadOrderRefusal(builder, squad))
-        return single;
-    // A builder pays as it builds (BuilderBase::update), so the squad needs only what the single would.
-    if (purchasePrice(builder, single) > money) return single;
-    return squad;
+    return squad != ItemID_Invalid && campaignAvailableToBuild(builder, squad) ? squad : single;
+}
+
+bool QuantBot::infantrySingleEmergency(const BuildPass& pass, const BuilderBase* builder, Uint32 single) const {
+    if (single != Unit_Trooper || !botConfig().force.squadOrders
+        || pass.hostileAircraft <= 0 || !pass.airEngaged) return false;
+    const Uint32 squad = infantryOrderFor(builder, single);
+    if (squad == single) return false;
+    const int64_t money = int64_t(pass.money) - (pass.citySimEnabled ? pass.cityWorkingReserve : 0);
+    const int singlePrice = purchasePrice(builder, single);
+    const int squadPrice = purchasePrice(builder, squad);
+    if (money < singlePrice || money >= squadPrice) return false;
+    // The planner's income is a whole horizon, not credits per minute. An observed wing may use a
+    // single only while aircraft are over our territory and that forecast cannot fund the squad in three seconds.
+    const int64_t incoming = int64_t(std::max(0, pass.forecastNetIncome)) * 3
+        / (60 * QuantBotSpendingPolicy::horizonMinutes);
+    return money + incoming < squadPrice;
+}
+
+void QuantBot::planInfantrySquadSavings(BuildPass& pass) {
+    pass.infantrySquadCashReserve = 0;
+    pass.infantrySquadSavingsItem = NONE_ID;
+    if (!botConfig().force.squadOrders || getHouse()->isGroundUnitLimitReached()) return;
+    const int houseID = getHouse()->getHouseID();
+    for (const auto* structure : getStructureList()) {
+        if (structure->getOwner() != getHouse() || !structure->isActive() || structure->getHealth() <= 0) continue;
+        const Uint32 type = structure->getItemID();
+        if (type != Structure_Barracks && type != Structure_WOR && type != Structure_Worfinery) continue;
+        const auto* builder = static_cast<const BuilderBase*>(structure);
+        if (builder->isUpgrading() || builder->getProductionQueueSize() > 0) continue;
+        const Uint32 single = type == Structure_Barracks ? Unit_Soldier : Unit_Trooper;
+        const Uint32 squad = infantryOrderFor(builder, single);
+        if (squad == single || !campaignAvailableToBuild(builder, single)) continue;
+        const int value = currentGame->objectData.data[single][houseID].price;
+        const bool share = (!pass.citySimEnabled || cityInfantryShare() || pass.cityAntiAirInfantryDemand)
+            && ((!pass.citySimEnabled && pass.infantryCount < 3) || infantryQuotaAdmits(pass, value));
+        const bool support = single == Unit_Trooper && pass.trooperSupport && pass.trooperCount < pass.trooperTarget;
+        if ((!share && !support) || int64_t(pass.militaryValue) + value > pass.lightBudget
+            || (openingWorkersNeeded(pass) && pass.hostileAircraft == 0)
+            || infantrySingleEmergency(pass, builder, single)) continue;
+        const int price = purchasePrice(builder, squad);
+        if (price > 0 && (pass.infantrySquadCashReserve == 0 || price < pass.infantrySquadCashReserve)) {
+            pass.infantrySquadCashReserve = price;
+            pass.infantrySquadSavingsItem = squad;
+        }
+    }
 }
 
 void QuantBot::logInfantryMix(const BuildPass& pass, int bps, bool learning, int64_t reward, int64_t loss,
@@ -158,18 +199,13 @@ bool QuantBot::cityInfantryShare() const {
     return botConfig().force.infantryInMix && !ModManager::instance().isTornieFamilyContentActive();
 }
 
-int QuantBot::infantryOrderCash(const BuilderBase* builder, Uint32 item) const {
-    // SquadOrders: a builder pays as it builds, so a squad is affordable wherever its single is.
-    if (botConfig().force.squadOrders && !ModManager::instance().isTornieFamilyContentActive()
-        && DuneCity::InfantrySquad::threeManSquad(item))
-        return purchasePrice(builder, item == Unit_Infantry ? Unit_Soldier : Unit_Trooper);
-    return purchasePrice(builder, item);
-}
-
-int QuantBot::infantryQuotaValue(Uint32 item, int value) const {
-    if (!botConfig().force.squadOrders || ModManager::instance().isTornieFamilyContentActive()
+int QuantBot::infantryDemandValue(Uint32 item, int value) const {
+    // The choice is unconditional. Test demand as the single the AI wanted, but reserve/pay the
+    // entire squad quote; a quota or value ceiling may not turn that purchase back into a single.
+    if (!botConfig().force.squadOrders
         || !DuneCity::InfantrySquad::threeManSquad(item)) return value;
-    return std::max(1, value / 3);
+    const Uint32 single = item == Unit_Infantry ? Unit_Soldier : Unit_Trooper;
+    return currentGame->objectData.data[single][getHouse()->getHouseID()].price;
 }
 
 Uint32 QuantBot::infantryFirstProducer(BuildPass& pass, const BuilderBase* yard) const {

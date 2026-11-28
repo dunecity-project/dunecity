@@ -157,12 +157,13 @@ GARRISON_ROW_FIELDS = KEY + ('event',) + GARRISON_FIELDS
 # QuantBot's infantry purchases with their reason (INFANTRY_BUY) and the Barracks/WOR tax census
 # (CITY_INFANTRY_HOUSING).
 INFANTRY_KINDS = ('INFANTRY_ORDER', 'INFANTRY_SQUAD', 'INFANTRY_MIX', 'INFANTRY_LANE', 'INFANTRY_BUY',
-                  'INFANTRY_DELIVERY', 'INFANTRY_MIX_DELIVERED', 'CITY_INFANTRY_HOUSING')
+                  'INFANTRY_DELIVERY', 'INFANTRY_MIX_DELIVERED', 'INFANTRY_SQUAD_POLICY', 'CITY_INFANTRY_HOUSING')
 INFANTRY_FIELDS = ('house', 'event', 'builder', 'builder_item', 'item', 'men', 'expected', 'price', 'squad_offered',
                    'ai', 'share_bps', 'opening_bps', 'learning', 'reward_milli', 'loss_milli', 'score', 'type',
                    'infantry_value', 'military_value', 'on_share', 'producer', 'have', 'busy', 'deficit', 'credits',
                    'count', 'reason', 'year', 'buildings', 'housed', 'population', 'tax_eighths',
-                   'reserve', 'required_deficit', 'sustain_cycles', 'cycle')
+                   'reserve', 'required_deficit', 'sustain_cycles',
+                   'squad_item', 'squad_price', 'forecast_credits', 'wait_seconds', 'hostile_aircraft', 'air_engaged', 'cycle')
 INFANTRY_ROW_FIELDS = KEY + ('kind',) + INFANTRY_FIELDS
 # One row per city house a city year (CITY_ZONE_CHURN, CityEffectsRuntime.cpp): its zone counts and
 # how often its zones changed density, population and Hospital/Church overlay that year.

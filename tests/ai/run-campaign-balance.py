@@ -497,6 +497,8 @@ parser.add_argument('--repair-capacity-probe', action='store_true',
                     help='Verify demand-driven repair capacity, shared pending orders and saved pressure')
 parser.add_argument('--infantry-lanes-probe', action='store_true',
                     help='Verify real infantry backlog, added Barracks/WOR and higher delivered output in ON/OFF controls')
+parser.add_argument('--strict-squads-probe', action='store_true',
+                    help='Assert zero ordinary singles, counted air exceptions, full-quote savings and squad throughput')
 parser.add_argument('--pacing-probe', action='store_true', help='Verify enemy worker caps and small-wave readiness')
 parser.add_argument('--scenario', action='store_true',
                     help='AI scenario matrix game (tests/ai/scenario-matrix.py, scenario-match.inc): a campaign mission '
@@ -1116,6 +1118,7 @@ env.pop('BALANCE_ORIGINAL_CAMPAIGN_RULES', None)
 if args.original_campaign_rules is not None: env['BALANCE_ORIGINAL_CAMPAIGN_RULES'] = args.original_campaign_rules
 if args.repair_capacity_probe: env['BALANCE_REPAIR_CAPACITY_PROBE'] = '1'
 if args.infantry_lanes_probe: env['BALANCE_INFANTRY_LANES_PROBE'] = '1'
+if args.strict_squads_probe: env['BALANCE_STRICT_SQUADS_PROBE'] = '1'
 if args.scenario:
     env['BALANCE_SCENARIO'] = '1'
     if scenario_sides:
@@ -1198,6 +1201,73 @@ if len(results) != 1: raise RuntimeError('Missing campaign result.')
 if args.infantry_lanes_probe:
     print(*[line for line in run_lines if any(marker in line for marker in
            ('INFANTRY_LANES_FIXTURE:', 'INFANTRY_LANES_ARM:', 'INFANTRY_LANES_CASE:'))], sep='\n')
+if args.strict_squads_probe:
+    def squad_fields(line, marker):
+        return dict(part.split('=', 1) for part in line.split(marker, 1)[1].split() if '=' in part)
+    active = None
+    cases = {}
+    singles = []
+    exceptions = []
+    squad_orders = 0
+    deliveries = {}
+    rate_cycles = {}
+    for line in run_lines:
+        if 'STRICT_SQUADS_BEGIN:' in line:
+            active = squad_fields(line, 'STRICT_SQUADS_BEGIN:')
+            if active['case'] in cases:
+                raise RuntimeError('Repeated strict-squad case')
+            cases[active['case']] = active
+        elif 'STRICT_SQUADS_END:' in line:
+            active = None
+        elif 'INFANTRY_DELIVERY:' in line and active is not None:
+            fields = squad_fields(line, 'INFANTRY_DELIVERY:')
+            if fields.get('house') == active['house']:
+                if int(fields['men']) <= 0 or fields['men'] != fields['expected']:
+                    raise RuntimeError('Strict squad output contains a short actual factory delivery')
+                name = active['case']
+                deliveries[name] = deliveries.get(name, 0) + int(fields['men'])
+        elif 'STRICT_SQUADS_RATE:' in line:
+            fields = squad_fields(line, 'STRICT_SQUADS_RATE:')
+            rate_cycles[fields['case']] = int(fields['cycles'])
+        elif 'INFANTRY_ORDER:' in line and active is not None and active['strict'] == '1':
+            fields = squad_fields(line, 'INFANTRY_ORDER:')
+            if fields.get('ai') == '1' and fields.get('squad_offered') == '1':
+                key = (active['case'], *(fields[k] for k in ('house', 'builder', 'item', 'cycle')))
+                if fields['item'] in ('32', '44'):
+                    singles.append(key)
+                elif fields['item'] in ('46', '47'):
+                    squad_orders += 1
+        elif 'INFANTRY_SQUAD_POLICY:' in line:
+            fields = squad_fields(line, 'INFANTRY_SQUAD_POLICY:')
+            if fields.get('event') != 'emergency_single':
+                continue
+            if active is None or active['case'] != 'real_air_emergency' or fields.get('item') != '44':
+                raise RuntimeError('A non-emergency strict-squad case used a single exception')
+            if (int(fields['hostile_aircraft']) <= 0 or fields.get('air_engaged') != '1' or fields['wait_seconds'] != '3'
+                    or int(fields['credits']) < int(fields['price'])
+                    or int(fields['credits']) + int(fields['forecast_credits']) >= int(fields['squad_price'])):
+                raise RuntimeError('Single exception has no genuine air/cash/three-second forecast evidence')
+            exceptions.append((active['case'], *(fields[k] for k in ('house', 'builder', 'item', 'cycle'))))
+    violations = [key for key in singles if key not in exceptions]
+    if len(cases) != 9 or not squad_orders or violations or len(exceptions) != 1 or any(key not in singles for key in exceptions):
+        raise RuntimeError(f'Strict squad assertions failed: cases={len(cases)}, squads={squad_orders}, '
+                           f'ordinary singles={violations}, exceptions={exceptions}')
+    for family in ('soldier', 'trooper'):
+        off, on = family + '_rate_off', family + '_rate_on'
+        if (rate_cycles.get(off, 0) <= 0 or rate_cycles.get(on) != rate_cycles[off]
+                or deliveries.get(off, 0) <= 0 or deliveries.get(on, 0) < deliveries[off]):
+            raise RuntimeError(f'{family} actual delivered men/minute fell: OFF={deliveries.get(off)}, ON={deliveries.get(on)}')
+        minutes = rate_cycles[off] * 0.016 / 60
+        print(f'STRICT_SQUADS_DELIVERED_RATE: family={family} off_men={deliveries[off]} on_men={deliveries[on]} '
+              f'minutes={minutes:.3f} off_per_min={deliveries[off]/minutes:.3f} on_per_min={deliveries[on]/minutes:.3f}')
+    if (deliveries.get('soldier_save_and_premium') != 6 or deliveries.get('trooper_save_and_premium') != 6
+            or deliveries.get('real_air_emergency') != 1 or deliveries.get('permitted_capture_squads', 0) < 3
+            or deliveries.get('producer_tech_boundary') != 4):
+        raise RuntimeError(f'Strict squad boundary cases did not deliver their real purchased men: {deliveries}')
+    print(*[line for line in run_lines if any(marker in line for marker in
+           ('STRICT_SQUADS_RATE:', 'STRICT_SQUADS_CASE:'))], sep='\n')
+    print(f'STRICT_SQUADS_ASSERT: cases={len(cases)} squad_orders={squad_orders} ordinary_singles=0 '
+          f'counted_emergency_singles={len(exceptions)} passed=1')
 if args.repair_capacity_probe:
     placements = [dict(part.split('=', 1) for part in line.split('REPAIR_CAPACITY_PLACEMENT:', 1)[1].split()
                        if '=' in part)

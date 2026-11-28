@@ -444,19 +444,15 @@ void QuantBot::updateZoneGarrisons() {
         for (const UnitBase* unit : getUnitList()) {
             if (unit->getOwner() == house && unit->getItemID() == Unit_Soldier && unit->getHealth() > 0) ++levy;
         }
-        const auto& data = currentGame->objectData.data;
         for (const StructureBase* structure : getStructureList()) {
             if (levy >= kLevySoldiers) break;
             if (structure->getOwner() != house || structure->getItemID() != Structure_Barracks) continue;
             const auto* barracks = static_cast<const BuilderBase*>(structure);
             if (barracks->getProductionQueueSize() > 0 || barracks->isUpgrading()
                 || !barracks->isAvailableToBuild(Unit_Soldier)) continue;
-            // SquadOrders: the three-man Infantry squad when it is cheaper per man than a single Soldier.
-            Uint32 item = Unit_Soldier;
-            if (force.squadOrders && barracks->isAvailableToBuild(Unit_Infantry)
-                && DuneCity::InfantrySquad::cheaperPerMan(data[Unit_Infantry][houseID].price, 3,
-                                                      data[Unit_Soldier][houseID].price, 1)) item = Unit_Infantry;
-            const int price = data[item][houseID].price;
+            // The same strict policy includes the effective city option, even when the Config bit is off.
+            const Uint32 item = infantryOrderFor(barracks, Unit_Soldier);
+            const int price = purchasePrice(barracks, item);
             if (house->getCredits() < price + kLevyCashReserve) continue;
             doProduceItem(barracks, item);
             const int men = DuneCity::InfantrySquad::orderSize(item);

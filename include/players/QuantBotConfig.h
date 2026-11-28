@@ -888,8 +888,8 @@ struct QuantBotConfig {
         /// zone across the street, block by block. Off unless measured.
         bool zoneCaptureChain;
         /// Infantry squads (Stefan, 2026-11-28: "the ai should use it if it wants to build these men"):
-        /// every infantry order takes the offer cheapest per man, the three-man Infantry/Troopers squad
-        /// when it is. Off: QuantBot never orders a squad. Off unless measured.
+        /// always buy an available three-man squad and save its full quote. Only a counted real air
+        /// emergency whose forecast cannot fund the squad within three seconds may use a single.
         bool squadOrders;
         /// "additional infantry and wor should be built if the ai needs more capacity similar to
         /// factories": another Barracks or WOR by the Light/Heavy Factory lane rule

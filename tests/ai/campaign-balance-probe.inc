@@ -85,6 +85,7 @@
 #include "tech-production-probe.inc"
 #include "repair-capacity-probe.inc"
 #include "infantry-lanes-probe.inc"
+#include "strict-squads-probe.inc"
 #include "research-lab-continuation-probe.inc"
 #include "research-lab-ai-probe.inc"
 #include "factory-continuation-probe.inc"
@@ -167,6 +168,10 @@ int runCampaignBalanceProbe() {
     }
     if (std::getenv("BALANCE_INFANTRY_LANES_PROBE")) {
         runInfantryLanesProbe();
+        return MENU_QUIT_DEFAULT;
+    }
+    if (std::getenv("BALANCE_STRICT_SQUADS_PROBE")) {
+        runStrictSquadsProbe();
         return MENU_QUIT_DEFAULT;
     }
     if (std::getenv("BALANCE_REPAIR_CAPACITY_PROBE")) {

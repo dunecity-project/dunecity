@@ -44,15 +44,18 @@ barracks count as a high density residential and is taxable".
 
 ## QuantBot (each switch default off until measured)
 
-- **SquadOrders.** Every QuantBot infantry order takes the offer that is cheapest per man, which at these
-  prices is the squad. That covers the Barracks and WOR passes, the Trooper support path
-  (`supportTrooperOrder`), the capital-candidate loop, and the Zone Garrisons levy.
-  - It rounds up: a squad is admitted wherever one more man is, against the Trooper target, the infantry share
-    and the light-unit budget. The first real games showed why: refused because three men overshot a target by
-    one or two, the support path bought 85 single Troopers and only 46 squads.
-  - With the switch off, QuantBot never orders Infantry or Troopers, so enabling the items left the default AI
-    unchanged.
-  - The AI Player and the campaign AI do buy them, from their existing priority tables.
+- **SquadOrders.** Stefan: "so ai should always buy the squads over singles. its simple economics".
+  An available Infantry/Troopers squad always replaces a wanted Soldier/Trooper. Availability is tech and
+  producer legality, not a price-per-man comparison or separate squad admission. Demand uses the original
+  single; cash/accounting use the full actual squad. The bot saves that full quote rather than buying an
+  ordinary single. Optional competing purchases leave the wanted quote and city working cash intact.
+  - The only single exception is an aircraft already engaging our territory whose three-second income forecast cannot
+    fund the squad. Each accepted exception is `INFANTRY_SQUAD_POLICY event=emergency_single`, correlated to
+    its actual engine order and including cash, full squad quote, forecast and threat count.
+  - A missed selector cannot bypass the QuantBot order-boundary guard. The garrison levy uses the same
+    raw SquadOrders gate; the separate capture/garrison permission does not enable the infantry switches.
+    Humans may still buy singles.
+  - OFF retains legacy selection; defaults/bundle membership are not changed by this policy patch.
 - **InfantryLanes.** Another Barracks or WOR, by the rule that adds Light and Heavy Factories
   (`QuantBotBuildPolicy::needsProductionLane`):
   - every lane built and at least 75% of them busy;

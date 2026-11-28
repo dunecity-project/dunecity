@@ -210,8 +210,14 @@ bool QuantBot::campaignAvailableToBuild(const BuilderBase* builder, Uint32 item)
     return true;
 }
 
-void QuantBot::doProduceItem(const BuilderBase* builder, Uint32 item) const {
+void QuantBot::doProduceItem(const BuilderBase* builder, Uint32 item, bool allowEmergencySingle) const {
     if (!campaignAvailableToBuild(builder,item)) return;
+    // Authoritative order boundary: a missed selector cannot leak an ordinary single. Only the
+    // validated build-pass air response can grant the counted Trooper exception.
+    if ((item == Unit_Soldier || item == Unit_Trooper) && infantryOrderFor(builder, item) != item
+        && !(allowEmergencySingle && item == Unit_Trooper)) return;
+    if ((item == Unit_Infantry || item == Unit_Troopers) && botConfig().force.squadOrders
+        && getHouse()->getCredits() < purchasePrice(builder, item)) return;
     if (campaignCityEconomy() && (item==Unit_Harvester || item==Unit_RebelHarvester)) {
         const int ceiling=campaignHarvesterCeiling();
         if (ceiling>=0 && campaignCommittedCount(Unit_Harvester)+campaignCommittedCount(Unit_RebelHarvester)>=ceiling) return;
