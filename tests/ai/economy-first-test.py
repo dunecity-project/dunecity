@@ -99,7 +99,7 @@ def main():
     others = [('atreides', 'default'), ('ordos', 'default'), ('mercenary', 'default')]
     air = ['--custom-map', str(MAP), '--mod', 'dunecity', '--game-options', str(OPTIONS)]
     on = summary(play(args, 'on', [('neutral', 'default@economy-first')] + others, MINUTES, air))
-    off = summary(play(args, 'off', [('neutral', 'default')] + others, MINUTES, air))
+    off = summary(play(args, 'off', [('neutral', 'default@economy-first-off')] + others, MINUTES, air))
     rich = summary(play(args, 'rich', [('neutral', 'default@economy-first'), ('atreides', 'default'),
                                        ('ordos', 'default'), ('mercenary', 'default')], 2,
                         ['--skirmish-ffa-size', '192', '--skirmish-map-seed', str(SEED), '--mod', 'dunecity',

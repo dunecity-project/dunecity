@@ -87,3 +87,47 @@ TEST_CASE("City lessons: the switches default off, round trip and hash only when
         std::filesystem::remove(path);
     }
 }
+
+TEST_CASE("EconomyFirst: low / no spice maps only, his yard schedule, core assets", "[ai][city-lessons][policy]") {
+    // Below 20,000 spice per living house the switch acts (his map had none).
+    REQUIRE(L::lowSpiceMap(0, 4));
+    REQUIRE(L::lowSpiceMap(79999, 4));
+    REQUIRE_FALSE(L::lowSpiceMap(80000, 4));
+    REQUIRE_FALSE(L::lowSpiceMap(780000, 4));
+    REQUIRE(L::lowSpiceMap(59999, 3));
+    REQUIRE(L::lowSpiceMap(19999, 0));
+    // His yards: 4 by minute 2.2, 6 by 17.4, 9 by 22.7.
+    REQUIRE(L::economyFirstYards(0) == 4);
+    REQUIRE(L::economyFirstYards(14) == 4);
+    REQUIRE(L::economyFirstYards(15) == 6);
+    REQUIRE(L::economyFirstYards(20) == 9);
+    REQUIRE(L::economyFirstYards(90) == 9);
+    // His zone mix and share.
+    REQUIRE(L::kEconomyFirstZoneMix[0] + L::kEconomyFirstZoneMix[1] + L::kEconomyFirstZoneMix[2] == 328);
+    REQUIRE(L::kEconomyFirstZoneShareBps == 7000);
+    // A threat releases the hold only near these.
+    REQUIRE(L::economyFirstCoreAsset(Structure_ConstructionYard));
+    REQUIRE(L::economyFirstCoreAsset(Structure_NuclearPlant));
+    REQUIRE_FALSE(L::economyFirstCoreAsset(Structure_ZoneResidential));
+    REQUIRE_FALSE(L::economyFirstCoreAsset(Structure_RocketTurret));
+}
+
+TEST_CASE("EconomyFirst: config key reads, writes and changes the hash", "[ai][city-lessons][config]") {
+    const QuantBotConfig defaults;
+    for (const bool value : {true, false}) {
+        const auto path = std::filesystem::temp_directory_path() / "quantbot-economy-first.ini";
+        {
+            std::ofstream file(path);
+            file << "[Force Concentration]\nEconomyFirst=" << (value ? "true" : "false") << "\n";
+        }
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        REQUIRE(loaded.force.economyFirst == value);
+        REQUIRE((loaded.getConfigHash() == defaults.getConfigHash()) == (value == defaults.force.economyFirst));
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.economyFirst == value);
+        std::filesystem::remove(path);
+    }
+}

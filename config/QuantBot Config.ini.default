@@ -713,6 +713,11 @@ RearTurretRetire=0
 # for as long as cash beyond the economy's reserve lasts (no count cap). Stefan, 2026-11-27: "i just
 # build turrets into their base as a mass and they carved a hole in the ebemy base" (TurretFrontPolicy.h).
 TurretDrill=0
+# EconomyFirst: on a low or no spice map (below 20,000 spice per living house) a city house builds its economy
+# first, as Stefan did on his Air map: Construction Yards on his schedule (4, 6 from minute 15, 9 from 20),
+# factories leave 10,000 credits for the yards unless an enemy is at the base, the Starport buys nothing, and an
+# idle yard zones in his R/C/I mix, until the city has 6,734 people (CityLessonsPolicy.h).
+EconomyFirst=0
 # Stefan, 2026-11-26: "the airport economic value should be factored in by the ai to determine if
 # it makes sense to buy more airports". Another Airport (up to 4) when this house's planes have
 # destroyed enough per flight for that Airport's free planes to repay its price within 20 minutes
