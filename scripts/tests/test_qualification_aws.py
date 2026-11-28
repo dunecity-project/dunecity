@@ -132,6 +132,8 @@ class SubmitAndFinishTests(unittest.TestCase):
         self.assertEqual(aws.regex(sorted(GAMES)), command[command.index('-R') + 1])
         self.assertEqual('github:77:1:qualify', command[command.index('--owner') + 1])
         self.assertEqual(('nightly', 'network'), (command[command.index('-L') + 1], command[command.index('-LE') + 1]))
+        self.assertEqual('110', command[command.index('--priority') + 1])
+        self.assertIn('--no-diagnostic-retry', command)
         with self.assertRaisesRegex(ValueError, 'already submitted'):
             aws.submit(state, run=run, env=self.env)
 
