@@ -4,9 +4,17 @@ void checkGarrisonPanel() {
     Fixture f("garrison panel");
     require(DuneCity::ZoneGarrison::kCapacity == 5, "panel: the five-occupant core change is missing");
     auto* zone = f.zone(f.own, Structure_ZoneResidential, 24, 24);
+    const auto house = static_cast<HOUSETYPE>(f.own->getHouseID());
+    pGFXManager->setDuneCityHouseGraphicsSkin(house, true);
+    require(pGFXManager->isDuneCityHouseUsingDune2(house), "panel: Dune2 house skin was not selected");
     auto* panel = selectZone(f, zone);
     require(panel->garrisonRoster.count == 0 && !panel->garrisonRoster.isVisible(),
             "panel: an empty zone displays occupied slots");
+    require(panel->update() && panel->objPicture.isVisible() && !panel->zonePreview.isVisible(),
+            "panel: selected empty Dune2 zone does not show its house icon instead of the lot preview");
+    require(panel->objPicture.pTexture.get() != nullptr
+                && panel->objPicture.pTexture.get() == resolveItemPicture(zone->getItemID(), house),
+            "panel: selected Dune2 zone does not use its actual house portrait");
     std::vector<UnitBase*> occupants;
     for(int i = 0; i < 5; ++i)
         occupants.push_back(f.unit(f.own, i % 2 ? Unit_Trooper : Unit_Soldier, 20, 22 + i));
@@ -132,7 +140,10 @@ void checkGarrisonPanel() {
     require(f.runUntil(5, [&] { return !zone->isGarrisoned(); }), "panel: Evacuate did not remove the roster");
     require(panel->update() && panel->garrisonRoster.count == 0 && !panel->garrisonRoster.isVisible(),
             "panel: stale slots remain after Evacuate");
-    require(panel->zonePreview.isVisible() || panel->objPicture.isVisible(), "panel: empty-zone portrait did not return");
-    record("panel", "five real Capture occupants; live per-unit damage/heal HP; 640x480/1024x768 offscreen icons and bars; "
-           "enemy inspection private; Evacuate clears roster");
+    require(panel->objPicture.isVisible() && !panel->zonePreview.isVisible()
+                && panel->objPicture.pTexture.get() == resolveItemPicture(zone->getItemID(), house),
+            "panel: Evacuate did not restore the selected Dune2 zone's actual house icon");
+    record("panel", "selected empty Dune2 zone shows actual house icon; five real Capture occupants replace it; "
+           "live per-unit damage/heal HP; 640x480/1024x768 offscreen icons and bars; enemy inspection private; "
+           "Evacuate clears roster and restores house icon");
 }

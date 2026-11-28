@@ -335,16 +335,9 @@ TEST_CASE("ZoneStructure: ObjPic_Zone enums exist in GFXManager.h",
 }
 
 
-TEST_CASE("ZoneStructure: selected Dune2 zones use the house icon",
-          "[zone][graphics][regression]") {
-    const std::string src = readSourceFile("include/GUI/ObjectInterfaces/ZoneStructureInterface.h");
-    REQUIRE_FALSE(src.empty());
-    REQUIRE(src.find("isDuneCityHouseUsingDune2(pZone->getOwner()->getHouseID())") != std::string::npos);
-    REQUIRE(src.find("objPicture.setVisible(showSkinIcon)") != std::string::npos);
-    REQUIRE(src.find("zonePreview.setVisible(!showSkinIcon)") != std::string::npos);
-    // Civic overlays now have authored portraits too. Their actual rendered
-    // pixels and live overlay/skin transitions are checked by skin-probe.inc.
-}
+// Selected Dune2 portrait visibility is checked on actual widgets by checkGarrisonPanel()
+// (tests/units/zone-garrison-panel-probe.inc), including occupied and evacuated transitions.
+// skin-probe.inc also checks real house textures, civic portraits and live skin switches.
 
 TEST_CASE("ZoneStructure: GFXManager creates zone placeholder graphics",
           "[zone][graphics][regression]") {
