@@ -2257,6 +2257,7 @@ private:
     /// distance then (tenths of a tile). An order with no progress for kNoProgressSeconds ends. Not
     /// saved: after a load every peer restarts the clocks the same way.
     std::map<Uint32, std::pair<Uint32, int>> zoneGarrisonProgress_;
+    bool zoneGarrisonRulesLogged_ = false; ///< Diagnostic only; restart after loading a save.
     /// Infantry squads (docs/infantry-squads.md; QuantBotInfantry.cpp). SquadOrders: why QuantBot must not
     /// order the three-man squad \a item at \a builder (nullptr: it may).
     const char* squadOrderRefusal(const BuilderBase* builder, Uint32 item) const;

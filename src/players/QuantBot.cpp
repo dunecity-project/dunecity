@@ -312,6 +312,31 @@ void QuantBot::update() {
 		return;
 	}
 
+    // Once the house and its match rules exist, report the actual per-player config, not the
+    // menu's active mod or the on-disk defaults (a custom-game mod can differ from both).
+    if (!zoneGarrisonRulesLogged_) {
+        zoneGarrisonRulesLogged_ = true;
+        const auto& force = botConfig().force;
+        const auto& rules = currentGame->getGameInitSettings().getGameOptions();
+        SDL_Log("ZONE_GARRISON_RULES: house=%d city=%d option=%d rule=%d role=%d"
+                " configured_garrison=%d configured_front=%d configured_reinforce=%d"
+                " configured_raid=%d configured_levy=%d configured_chain=%d"
+                " garrison=%d front=%d reinforce=%d raid=%d levy=%d chain=%d"
+                " squads=%d infantry_mix=%d infantry_lanes=%d cycle=%u",
+            getHouse()->getHouseID(), int(currentGame->isCitySimEnabled()), int(rules.aiInfantryTactics),
+            int(rules.zoneGarrisons), int(role), int(force.zoneGarrison), int(force.zoneFrontGarrison),
+            int(force.zoneGarrisonReinforce), int(force.zoneCaptureRaid), int(force.zoneCaptureLevy),
+            int(force.zoneCaptureChain), int(aiInfantryTacticsEnabled(force.zoneGarrison)),
+            int(aiInfantryTacticsEnabled(force.zoneFrontGarrison)),
+            int(aiInfantryTacticsEnabled(force.zoneGarrisonReinforce)),
+            int(aiInfantryTacticsEnabled(force.zoneCaptureRaid)),
+            int(aiInfantryTacticsEnabled(force.zoneCaptureLevy)),
+            int(aiInfantryTacticsEnabled(force.zoneCaptureChain)),
+            int(aiInfantryTacticsEnabled(force.squadOrders)),
+            int(aiInfantryTacticsEnabled(force.infantryInMix)),
+            int(aiInfantryTacticsEnabled(force.infantryLanes)), getGameCycleCount());
+    }
+
 	// Switched off by its human partner: no orders, no building, no planning.
 	if (switchedOff()) return;
 
