@@ -1096,6 +1096,7 @@ SettingsClass::GameOptionsClass ModManager::loadEffectiveGameOptions(
             else if (key == "Fremen Palace Worm") result.fremenPalaceWorm = parseBool(value);
             else if (key == "Parks Count As Roads") result.parksCountAsRoads = parseBool(value);
             else if (key == "Saboteur Hunt") result.saboteurHunt = parseBool(value);
+            else if (key == "Saboteurs Skip Empty Zones") result.saboteurSkipsEmptyZones = parseBool(value);
             else if (key == "Hospital Care") result.hospitalCare = parseBool(value);
             else if (key == "Turrets Can Fire On Buildings") {
                 result.turretsFireOnBuildings = parseBool(value);

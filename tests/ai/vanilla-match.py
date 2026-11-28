@@ -117,11 +117,17 @@ ARMY_ROW_FIELDS = KEY + ('house', 'label') + ARMY_FIELDS
 # 'order' rows are an AI player's army orders addressed to a Saboteur (the first six of each, with
 # the function that gave them; refused=1 when the Saboteur kept its own hunt) and 'mode' rows its
 # attack-mode changes. hit and lost rows carry its totals (orders, overwrites, refused).
+# 'target' rows are each new target (the first eight a Saboteur), with garrison (soldiers inside a target
+# zone, -1 for anything else) and own (1: its own choice, 0: an order); zone_skip / zone_drop /
+# zone_violation are the match rule Saboteurs Skip Empty Zones acting, giving up an evacuated zone, and
+# the in-game check's failure (tests/units/saboteur-zone-report.py reads them).
 SABOTEUR_EVENTS = (('SABOTEUR_RELEASED:', 'released'), ('SABOTEUR_HIT:', 'hit'), ('SABOTEUR_LOST:', 'lost'),
-                   ('SABOTEUR_ORDER:', 'order'), ('SABOTEUR_MODE:', 'mode'))
+                   ('SABOTEUR_ORDER:', 'order'), ('SABOTEUR_MODE:', 'mode'), ('SABOTEUR_TARGET:', 'target'),
+                   ('SABOTEUR_ZONE_SKIP:', 'zone_skip'), ('SABOTEUR_ZONE_DROP:', 'zone_drop'),
+                   ('SABOTEUR_ZONE_RULE:', 'zone_violation'))
 SABOTEUR_FIELDS = ('house', 'object', 'ai', 'target_house', 'target_item', 'vehicle', 'price', 'cycle', 'age_s',
                    'orders', 'overwrites', 'refused', 'killer', 'killer_item', 'killer_house', 'target_dist', 'mode',
-                   'order', 'caller', 'busy', 'from', 'to')
+                   'order', 'caller', 'busy', 'from', 'to', 'garrison', 'own', 'zone_item', 'picked_item', 'next_item')
 SABOTEUR_ROW_FIELDS = KEY + ('event',) + SABOTEUR_FIELDS
 # One row per Fremen Palace worm event the engine logs (match rule Fremen Palace Worm): summoned,
 # bloom_order, hunt (QuantBot's order to eat PREY), ate (one per meal, with the victim's item and

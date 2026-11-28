@@ -1871,6 +1871,52 @@ TEST_CASE("Turrets Can Fire On Buildings defaults off and its on state is hashed
     }
 }
 
+TEST_CASE("Saboteurs Skip Empty Zones defaults on and its off state is hashed and carried in bit 4 of the MOD20 byte",
+          "[saboteur][network][save]") {
+    SettingsClass::GameOptionsClass defaults;
+    REQUIRE(defaults.saboteurSkipsEmptyZones);
+    auto off = defaults;
+    off.saboteurSkipsEmptyZones = false;
+    REQUIRE(off != defaults);
+    REQUIRE(off.getHash() != defaults.getHash());
+
+    auto original = makeCoop(false, true);
+    auto options = original.getGameOptions();
+    options.startTechLevel = GENERATE(0, 5, 9);
+    options.saboteurHunt = GENERATE(true, false);
+    options.saboteurSkipsEmptyZones = GENERATE(true, false);
+    original.setGameOptions(options);
+    OMemoryStream saved; saved.open(); original.save(saved);
+    const std::string encoded(saved.getData(), saved.getDataLength());
+    // The default rule leaves the byte as protocol 149 wrote it.
+    REQUIRE(static_cast<Uint8>(encoded.back())
+            == static_cast<Uint8>(options.startTechLevel | (options.saboteurHunt ? 0 : 0x80)
+                                  | (options.saboteurSkipsEmptyZones ? 0 : 0x10)));
+
+    SECTION("every state round-trips with every tech level") {
+        saved.writeUint32(0xabcdef01u);
+        IMemoryStream input(saved.getData(), saved.getDataLength());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions() == options);
+        REQUIRE(restored.getGameOptions().getHash() == options.getHash());
+        REQUIRE(input.readUint32() == 0xabcdef01u);
+    }
+    SECTION("a stream older than MOD20 plays the current rule") {
+        auto bytes = encoded;
+        bytes[encoded.rfind("KDOM")] = 'J';
+        bytes.resize(bytes.size() - Mod20Bytes);
+        IMemoryStream input(bytes.data(), bytes.size());
+        GameInitSettings restored(input);
+        REQUIRE(restored.getGameOptions().saboteurSkipsEmptyZones);
+    }
+    SECTION("the off bit does not admit a tech level above 9") {
+        auto bytes = encoded;
+        bytes.back() = static_cast<char>(0x10 | 10);
+        IMemoryStream input(bytes.data(), bytes.size());
+        REQUIRE_THROWS(GameInitSettings(input));
+    }
+}
+
 TEST_CASE("Turrets Can Fire On Buildings: the options hash names the rule only when it is on",
           "[turret][settings]") {
     // getHash() spells out only the non-default state, so the default hash (and every saved or

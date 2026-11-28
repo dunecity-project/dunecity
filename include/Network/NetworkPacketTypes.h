@@ -518,7 +518,12 @@
 //      Residential zone (40 residents, taxed), stamps +13 land value over 6 tiles and polices at half a
 //      Police Station's strength. QuantBot switches SquadOrders, InfantryLanes and InfantryInMix
 //      (default off). A 149 peer would desync. Save format unchanged.
-#define NETWORK_PROTOCOL_VERSION            150
+// 151: match rule Saboteurs Skip Empty Zones (default on, bit 4 of the MOD20 starting tech level byte,
+//      set only when off; the level is the low four bits): a Saboteur choosing its own target passes
+//      over Residential, Commercial and Industrial zones nobody garrisons and gives up one whose
+//      garrison has gone; an order its owner gives is kept (Saboteur::passesOver). Targets differ, so a
+//      149 peer would desync. Save format unchanged.
+#define NETWORK_PROTOCOL_VERSION            151
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

@@ -66,6 +66,16 @@ public:
     /// The match rule that gives Saboteurs their own hunt (GameOptionsClass::saboteurHunt).
     static bool keepsOwnHunt();
 
+    /// The match rule Saboteurs Skip Empty Zones (GameOptionsClass::saboteurSkipsEmptyZones).
+    static bool skipsEmptyZones();
+
+    /**
+        True for a Residential, Commercial or Industrial zone that nobody garrisons while the rule
+        Saboteurs Skip Empty Zones is on: a Saboteur choosing its own target passes over it (Stefan,
+        2026-11-28: "not valuable enough"). A garrisoned zone stays a target.
+    */
+    static bool passesOver(const ObjectBase* object);
+
     /**
         An AI player's army order addressed to this Saboteur (Player::do*; a human's orders are
         commands and never come this way). With the match rule on, a Saboteur that is hunting
@@ -91,12 +101,21 @@ protected:
 
 private:
     void takeNearerTargetWhenSeen();
+    /// The general nearest-target search with the empty zones left out (passesOver) when the rule
+    /// is on. Every automatic choice goes through here; an order its owner gives does not.
+    const ObjectBase* searchOwn() const;
+    /// With the rule on, a zone it chose itself that has lost its garrison is given up for the next
+    /// target (or Guard when nothing else is left). True if it gave it up.
+    bool dropEmptyZone();
     void showTargetToOwner(const Coord& targetTile);
 
     bool detonated = false;     ///< Set as it blows up its target; never saved, it is gone that cycle.
     /// The target its own search last chose; a different target is its owner's order. Never
     /// saved: after a load the target it holds counts as an order until it picks again.
     mutable Uint32 ownPick = NONE_ID;
+    /// Set while its own search runs, so that canAttack() leaves out the zones it passes over.
+    mutable bool ownSearch = false;
+    mutable Uint16 zoneSkips = 0;   ///< SABOTEUR_ZONE_SKIP lines written (the first four)
 
     // Match-log bookkeeping (SABOTEUR_* lines). Never saved: a loaded Saboteur counts from zero.
     Uint32 releasedCycle = 0;

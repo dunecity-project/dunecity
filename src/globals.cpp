@@ -190,6 +190,7 @@ void writeGameOptionsToConfig(INIFile& config, const std::string& section, const
     config.setBoolValue(section, "Fremen Palace Worm", options.fremenPalaceWorm);
     config.setBoolValue(section, "Parks Count As Roads", options.parksCountAsRoads);
     config.setBoolValue(section, "Saboteur Hunt", options.saboteurHunt);
+    config.setBoolValue(section, "Saboteurs Skip Empty Zones", options.saboteurSkipsEmptyZones);
     config.setBoolValue(section, "Hospital Care", options.hospitalCare);
     config.setBoolValue(section, "Turrets Can Fire On Buildings", options.turretsFireOnBuildings);
     config.setBoolValue(section, "Starport Population", options.starportPopulation);
@@ -272,6 +273,7 @@ void applyGameOptionsFromConfig(const INIFile& config, const std::string& sectio
     readBool("Fremen Palace Worm", options.fremenPalaceWorm);
     readBool("Parks Count As Roads", options.parksCountAsRoads);
     readBool("Saboteur Hunt", options.saboteurHunt);
+    readBool("Saboteurs Skip Empty Zones", options.saboteurSkipsEmptyZones);
     readBool("Hospital Care", options.hospitalCare);
     // The rule's first key, "Turrets Target Units Only" (its inverse), still counts when the
     // current key is absent.

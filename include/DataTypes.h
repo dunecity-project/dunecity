@@ -335,6 +335,7 @@ public:
                     && (technologyInstallments == goc.technologyInstallments)
                     && (startTechLevel == goc.startTechLevel)
                     && (saboteurHunt == goc.saboteurHunt)
+                    && (saboteurSkipsEmptyZones == goc.saboteurSkipsEmptyZones)
                     && (hospitalCare == goc.hospitalCare)
                     && (turretsFireOnBuildings == goc.turretsFireOnBuildings)
                     && (trooperAntiAir == goc.trooperAntiAir)
@@ -423,6 +424,7 @@ public:
             optStr += "/sellingBuildings=" + std::to_string(sellingBuildings);
             // Only the off state is spelled out, so every setup that plays the default rule keeps its hash.
             if(!saboteurHunt) optStr += "/saboteurHunt=0";
+            if(!saboteurSkipsEmptyZones) optStr += "/saboteurSkipsEmptyZones=0";
             if(!hospitalCare) optStr += "/hospitalCare=0";
             if(turretsFireOnBuildings) optStr += "/turretsFireOnBuildings=1";
             // Note: immortalHumanPlayer is intentionally excluded as it's a per-player setting
@@ -509,6 +511,14 @@ public:
         /// army orders applied), kept so the two can be compared in one build
         /// (tests/units/run-saboteur-effect-probe.py). INI key "Saboteur Hunt" only.
         bool        saboteurHunt = true;
+        /// Saboteurs Skip Empty Zones (Stefan, 2026-11-28: "make sabateurs not target r/i/c (not
+        /// valuable enough) unless it is garissoned"): a Saboteur choosing its own target passes over
+        /// Residential, Commercial and Industrial zones nobody garrisons (docs/zone-garrisons.md), and
+        /// drops one it picked once its garrison has gone. A target its owner ordered is kept. Off
+        /// is the rule up to protocol 149 (any zone the nearest target), kept so both can be
+        /// compared in one build. INI key "Saboteurs Skip Empty Zones"; bit 4 of the MOD20 byte, set
+        /// when off.
+        bool        saboteurSkipsEmptyZones = true;
         /// City games: Hospitals heal infantry (Stefan, 2026-11-27; dunecity/HospitalCare.h). A wounded
         /// soldier sent for repair walks or is flown beside an own Hospital and heals there, five at a time;
         /// a Hospital with a patient keeps its type. Off, infantry are sent to Repair Yards as up to

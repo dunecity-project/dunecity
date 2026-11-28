@@ -29,6 +29,7 @@
 #include <Explosion.h>
 #include <SoundPlayer.h>
 #include <misc/draw_util.h>
+#include <structures/ZoneStructure.h>
 #include <mmath.h>
 #include <sand.h>
 
@@ -75,6 +76,28 @@ int ageSeconds(Uint32 releasedCycle) {
 
 bool Saboteur::keepsOwnHunt() {
     return currentGame->getGameInitSettings().getGameOptions().saboteurHunt;
+}
+
+bool Saboteur::skipsEmptyZones() {
+    return currentGame->getGameInitSettings().getGameOptions().saboteurSkipsEmptyZones;
+}
+
+namespace {
+bool isZone(const ObjectBase* object) {
+    const int item = object->getItemID();
+    return item == Structure_ZoneResidential || item == Structure_ZoneCommercial || item == Structure_ZoneIndustrial;
+}
+
+/// Soldiers inside a zone, or -1 for anything that is not a zone (for the match log).
+int garrisonOf(const ObjectBase* object) {
+    if(object == nullptr || !isZone(object)) return -1;
+    const auto* zone = dynamic_cast<const ZoneStructure*>(object);
+    return zone != nullptr ? zone->getGarrisonSize() : 0;
+}
+} // namespace
+
+bool Saboteur::passesOver(const ObjectBase* object) {
+    return object != nullptr && skipsEmptyZones() && garrisonOf(object) == 0;
 }
 
 void Saboteur::markReleased() {
@@ -164,13 +187,22 @@ bool Saboteur::update() {
         if(targetChanges++ < 8) {
             const ObjectBase* pTarget = target.getObjPointer();
             SDL_Log("SABOTEUR_TARGET: house=%d object=%u at=%d,%d target_house=%d target_item=%d target_at=%d,%d "
-                    "dist=%d own=%d age_s=%d cycle=%u", getOwner()->getHouseID(), getObjectID(), location.x, location.y,
+                    "dist=%d own=%d age_s=%d cycle=%u garrison=%d", getOwner()->getHouseID(), getObjectID(), location.x, location.y,
                     pTarget != nullptr ? pTarget->getOwner()->getHouseID() : -1,
                     pTarget != nullptr ? pTarget->getItemID() : -1,
                     pTarget != nullptr ? pTarget->getLocation().x : -1, pTarget != nullptr ? pTarget->getLocation().y : -1,
                     pTarget != nullptr ? blockDistance(location, pTarget->getClosestPoint(location)).lround() : -1,
                     pTarget != nullptr && pTarget->getObjectID() == ownPick ? 1 : 0,
-                    ageSeconds(releasedCycle), currentGame->getGameCycleCount());
+                    ageSeconds(releasedCycle), currentGame->getGameCycleCount(), garrisonOf(pTarget));
+        }
+        // The in-game check of Saboteurs Skip Empty Zones (every Saboteur, every new target): one
+        // it chose itself is never a zone nobody garrisons. tests/units/saboteur-zone-report.py
+        // fails a game with any such line.
+        const ObjectBase* pChosen = target.getObjPointer();
+        if(pChosen != nullptr && pChosen->getObjectID() == ownPick && passesOver(pChosen)) {
+            SDL_Log("SABOTEUR_ZONE_RULE: event=violation house=%d object=%u zone_item=%d zone_at=%d,%d cycle=%u",
+                    getOwner()->getHouseID(), getObjectID(), pChosen->getItemID(), pChosen->getLocation().x,
+                    pChosen->getLocation().y, currentGame->getGameCycleCount());
         }
     }
 
@@ -209,12 +241,13 @@ bool Saboteur::update() {
                     }
                     // One line per Saboteur for the match harnesses (tests/ai/vanilla-match.py).
                     SDL_Log("SABOTEUR_HIT: house=%d object=%u target_house=%d target_item=%d vehicle=%d price=%d cycle=%u "
-                            "age_s=%d orders=%d overwrites=%d refused=%d",
+                            "age_s=%d orders=%d overwrites=%d refused=%d garrison=%d own=%d",
                             getOwner()->getHouseID(), getObjectID(), pObject->getOwner()->getHouseID(),
                             pObject->getItemID(), pObject->isAUnit() ? 1 : 0,
                             currentGame->objectData.data[pObject->getItemID()][pObject->getProductionHouseID()].price,
                             currentGame->getGameCycleCount(), ageSeconds(releasedCycle),
-                            armyOrders, armyOverwrites, armyRefused);
+                            armyOrders, armyOverwrites, armyRefused, garrisonOf(pObject),
+                            pObject->getObjectID() == ownPick ? 1 : 0);
                     detonated = true;
                     if (AITelemetry::log().enabled()) {
                         const int price = currentGame->objectData.data[pObject->getItemID()][pObject->getProductionHouseID()].price;
@@ -281,7 +314,8 @@ bool Saboteur::canAttack(const ObjectBase* object) const {
     if(object != nullptr){
         if((object->isAStructure() || (object->isAGroundUnit() && !object->isInfantry() && object->getItemID() != Unit_Sandworm)) /* allow attack tanks*/
             && (object->getOwner()->getTeamID() != owner->getTeamID())
-            && object->isVisible(getOwner()->getTeamID())){
+            && object->isVisible(getOwner()->getTeamID())
+            && !(ownSearch && passesOver(object))){
 
             return true;
         }
@@ -295,11 +329,59 @@ bool Saboteur::canAttack(const ObjectBase* object) const {
 
 const ObjectBase* Saboteur::findTarget() const {
     // Buildings and vehicles alike, whichever is nearest (walls and parks last): the general
-    // search over what canAttack() accepts. The pick is remembered so that only it, never a
-    // target the owner ordered, is replaced on the way (takeNearerTargetWhenSeen).
-    const ObjectBase* pick = InfantryBase::findTarget();
+    // search over what canAttack() accepts, without the zones nobody garrisons (searchOwn). The
+    // pick is remembered so that only it, never a target the owner ordered, is replaced on the
+    // way (takeNearerTargetWhenSeen).
+    const ObjectBase* pick = searchOwn();
     ownPick = pick != nullptr ? pick->getObjectID() : NONE_ID;
     return pick;
+}
+
+const ObjectBase* Saboteur::searchOwn() const {
+    if(!skipsEmptyZones()) {
+        return InfantryBase::findTarget();
+    }
+    ownSearch = true;
+    const ObjectBase* pick = InfantryBase::findTarget();
+    ownSearch = false;
+    if(zoneSkips < 4 && (pick == nullptr || pick->getObjectID() != ownPick)) {
+        // For the match log (the rule's activation): once per new choice, what the rule up to
+        // protocol 149 would have gone for. Reads only; the random stream is not touched.
+        const ObjectBase* before = InfantryBase::findTarget();
+        if(before != nullptr && before != pick && passesOver(before)) {
+            ++zoneSkips;
+            SDL_Log("SABOTEUR_ZONE_SKIP: house=%d object=%u at=%d,%d zone_house=%d zone_item=%d zone_at=%d,%d "
+                    "zone_dist=%d picked_item=%d picked_dist=%d cycle=%u", getOwner()->getHouseID(), getObjectID(),
+                    location.x, location.y, before->getOwner()->getHouseID(), before->getItemID(),
+                    before->getLocation().x, before->getLocation().y,
+                    blockDistance(location, before->getClosestPoint(location)).lround(),
+                    pick != nullptr ? pick->getItemID() : -1,
+                    pick != nullptr ? blockDistance(location, pick->getClosestPoint(location)).lround() : -1,
+                    currentGame->getGameCycleCount());
+        }
+    }
+    return pick;
+}
+
+bool Saboteur::dropEmptyZone() {
+    const ObjectBase* current = target.getObjPointer();
+    // Its own pick, or (after a load, which forgets the pick) an AI house's hunting Saboteur,
+    // which no order reaches. A zone its owner ordered it onto is kept.
+    const bool own = current != nullptr && (current->getObjectID() == ownPick
+                                            || (getOwner()->isAI() && attackMode == HUNT && !forced));
+    if(!own || !passesOver(current)) {
+        return false;
+    }
+    const ObjectBase* next = findTarget();
+    SDL_Log("SABOTEUR_ZONE_DROP: house=%d object=%u zone_item=%d zone_at=%d,%d next_item=%d cycle=%u",
+            getOwner()->getHouseID(), getObjectID(), current->getItemID(), current->getLocation().x,
+            current->getLocation().y, next != nullptr ? next->getItemID() : -1, currentGame->getGameCycleCount());
+    if(next != nullptr) {
+        doAttackObject(next, true);
+    } else {
+        doSetAttackMode(GUARD);    // nothing worth it left; an AI house's Saboteur looks again (update)
+    }
+    return true;
 }
 
 void Saboteur::showTargetToOwner(const Coord& targetTile) {
@@ -334,7 +416,7 @@ void Saboteur::takeNearerTargetWhenSeen() {
         }
         return;
     }
-    if(target.getObjectID() != ownPick) {
+    if(dropEmptyZone() || target.getObjectID() != ownPick) {
         return;
     }
     bool seen = false;
@@ -344,7 +426,9 @@ void Saboteur::takeNearerTargetWhenSeen() {
     if(!seen) {
         return;
     }
+    ownSearch = skipsEmptyZones();
     const ObjectBase* nearest = InfantryBase::findTarget();    // the nearest structure or vehicle
+    ownSearch = false;
     if(nearest != nullptr && nearest != current
        && blockDistance(location, nearest->getClosestPoint(location))
           < blockDistance(location, current->getClosestPoint(location))) {
