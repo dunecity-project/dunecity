@@ -1083,11 +1083,11 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         # (Launchers half the vehicle value built, no Ornithopter; the Palace on its planned site and
         # its low lots' land value up 10 or more). tests/ai/city-lessons-probe.inc.
         dunecity_add_test(headless nightly NAME quantbot_city_lessons COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --city-lessons-probe --repeatable
-            --level 9 --mod dunecity --local-spectator --partner-difficulty brutal --enemy-difficulty brutal
+            ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --city-lessons-probe --repeatable --headless-assets
+            --level 9 --mod dunecity --local-spectator --partner-difficulty brutal --enemy-difficulty brutal --path-workers 4
             --custom-map "${CMAKE_SOURCE_DIR}/data/maps/multiplayer/4P - 192x192 - Metropolis.ini"
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/city-lessons-probe)
-        set_tests_properties(quantbot_city_lessons PROPERTIES TIMEOUT 1500 PROCESSORS 2)
+        set_tests_properties(quantbot_city_lessons PROPERTIES TIMEOUT 1500 PROCESSORS 5)
         # Stefan's redevelopment request on his own save (tests/saves/data/low-dunecity.dls.gz, "see mba
         # save low"): five arms continue it 20 minutes and one assert per line of the request is checked
         # (Industrial zones moved and demolished, Parks built and lifting land value, Parks as roads with

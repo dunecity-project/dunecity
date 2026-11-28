@@ -929,12 +929,13 @@ else:
         shutil.copy2(entry/'balance-probe', binary)
     (out/'balance-main.cpp').write_text(main, encoding='utf-8')
 # A batch's inherited asset mode must never turn a renderer/UI assertion into
-# a null-texture test. The repair-capacity fixture checks simulation service,
-# not rendering; its headless CTest explicitly opts in to the existing mode.
+# a null-texture test. The repair-capacity and city-lessons fixtures check
+# simulation, not rendering; their headless CTests explicitly opt in to this mode.
 headless_assets = args.headless_assets and not (
     args.real_video or args.ffa_screenshot or args.scenario_screenshot
     or any(value is True for name, value in vars(args).items()
-           if name.endswith('_probe') and name not in ('repair_capacity_probe', 'original_campaign_probe')))
+           if name.endswith('_probe') and name not in (
+               'repair_capacity_probe', 'original_campaign_probe', 'city_lessons_probe')))
 if args.build_only and not headless_assets:
     print(binary)
     sys.exit(0)
@@ -1196,6 +1197,11 @@ else:
 if cache_reader is not None:
     cache_reader.close()
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()
+if args.city_lessons_probe:
+    for line in run_lines:
+        marker = line.find('CITY_LESSONS_PROBE:')
+        if marker >= 0:
+            print(line[marker:])
 results = [line for line in run_lines if 'CAMPAIGN_BALANCE_RESULT:' in line]
 if len(results) != 1: raise RuntimeError('Missing campaign result.')
 if args.infantry_lanes_probe:
