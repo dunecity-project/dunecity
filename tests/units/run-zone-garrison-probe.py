@@ -105,7 +105,8 @@ with scratch_dir('zone-garrison-probe') as scratch:
         'Fullscreen = false\nPreferred Renderer = software\n[General]\nPlay Intro = false\n'
         'Player Name = Garrison tester\n', encoding='utf-8')
     env = dict(os.environ, DUNECITY_USERDIR=str(profile), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
-               SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1', ZONE_GARRISON_OUT=str(out))
+               SDL_RENDER_DRIVER='software', DUNECITY_PATH_WORKERS='1', ZONE_GARRISON_OUT=str(out),
+               ZONE_GARRISON_METROPOLIS=str(root / 'data/maps/multiplayer/4P - 192x192 - Metropolis.ini'))
     logfile = out / 'run.log'
     with logfile.open('w') as log:
         done = subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env,

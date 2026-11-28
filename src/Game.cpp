@@ -8499,6 +8499,15 @@ GameStateDigest::Digest Game::computeStateDigest() const {
         objects.mixInt64(static_cast<std::int64_t>(pObject->getHealth().getRawValue()));
         objects.mixInt32(pObject->getLocation().x);
         objects.mixInt32(pObject->getLocation().y);
+        if(const auto* zone = dynamic_cast<const ZoneStructure*>(pObject); zone && zone->isGarrisoned()) {
+            objects.mixInt32(zone->getGarrisonSize());
+            const auto& remainders = zone->getGarrisonHealthRemainders();
+            for(size_t i = 0; i < zone->getGarrison().size(); ++i) {
+                objects.mixUint32(zone->getGarrison()[i]);
+                objects.mixInt64(remainders[i].damage);
+                objects.mixInt64(static_cast<int64_t>(remainders[i].healing));
+            }
+        }
         if(installments && pObject->isABuilder()) {
             const auto* pBuilder = static_cast<const BuilderBase*>(pObject);
             objects.mixUint8(pBuilder->isUpgrading() ? 1 : 0);

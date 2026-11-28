@@ -527,7 +527,11 @@
 //      is set when off). QuantBot's nine infantry/garrison config switches are ORed with this
 //      city-only rule; vanilla is unaffected. AI decisions differ, so 151 peers are refused.
 //      Save layout unchanged; the default leaves the settings byte as before.
-#define NETWORK_PROTOCOL_VERSION            152
+// 153: Five infantry fit in a zone. Occupied zones cannot redevelop or change civic type. Each takes
+//      10% of actual building HP lost and regenerates while inside (ObjectData
+//      GarrisonHealTime, default 60 seconds for a full heal). Old peers desync.
+//      Save 9905 preserves fractional damage and regeneration remainders.
+#define NETWORK_PROTOCOL_VERSION            153
 
 // Mod transfer limits
 #define MAX_MOD_TRANSFER_SIZE   (12 * 1024 * 1024)  // Complete 546 payload (~10.3 MiB) plus framing/margin

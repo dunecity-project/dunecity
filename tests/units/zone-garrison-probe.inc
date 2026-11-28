@@ -2,7 +2,7 @@
 // Residential, Commercial and Industrial zones. Each case below runs the real capture command and
 // Game::updateGameState on a 64x64 Dune City map and checks what changed:
 //
-// own zone      an own Soldier walks in; the zone keeps its owner; four fit and a fifth is refused
+// own zone      the real Capture button puts five soldiers inside; a sixth is refused; owner kept
 // take          an own Trooper walks into an empty enemy zone: the zone, its tiles, its density and
 //               its power draw become ours, the enemy's count drops
 // fire out      a garrison shoots an enemy Soldier standing in its range, crediting the Trooper
@@ -58,6 +58,13 @@
 #include <units/InfantryBase.h>
 #include <units/UnitBase.h>
 #include <dunecity/ZoneGarrisonPolicy.h>
+#include <GUI/dune/InGameMenu.h>
+#include <GUI/dune/LoadSaveWindow.h>
+#include <sstream>
+#include <fstream>
+#include <dunecity/CitySimulation.h>
+#include <dunecity/CityStructurePopulation.h>
+#include <misc/FileSystem.h>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -102,11 +109,14 @@ struct Fixture {
     House* ally = nullptr;
     std::string label;
 
-    Fixture(const std::string& name, bool rule = true) : label(name) {
+    Fixture(const std::string& name, bool rule = true, bool bundled = false) : label(name) {
         auto options = gModOptions;
         options.zoneGarrisons = rule;
         options.immortalHumanPlayer = false;
-        GameInitSettings init("zone-garrison.ini", fixtureMap(), "Zone garrison", true, options);
+        const char* bundledPath = std::getenv("ZONE_GARRISON_METROPOLIS");
+        require(!bundled || bundledPath, label + ": missing bundled Metropolis map");
+        GameInitSettings init("zone-garrison.ini", bundled ? readCompleteFile(bundledPath) : fixtureMap(),
+                              "Zone garrison", true, options);
         init.randomSeed = 17;
         GameInitSettings::HouseInfo a(HOUSE_ATREIDES, 1);
         a.addPlayerInfo({"Garrison tester", "HumanPlayer"});
@@ -117,6 +127,11 @@ struct Fixture {
         GameInitSettings::HouseInfo o(HOUSE_ORDOS, 1);
         o.addPlayerInfo({"Ally", "HumanPlayer"});
         init.addHouseInfo(o);
+        if(bundled) {
+            GameInitSettings::HouseInfo fourth(HOUSE_FREMEN, 2);
+            fourth.addPlayerInfo({"Other", "HumanPlayer"});
+            init.addHouseInfo(fourth);
+        }
         game = std::make_unique<Game>();
         currentGame = game.get();
         game->bReplay = true;   // Private fixture, never a public match-analytics sample.
@@ -195,24 +210,31 @@ bool onMapBeside(const UnitBase* u, const ZoneStructure* z, int reach) {
         && blockDistance(at, z->getClosestPoint(at)) <= reach;
 }
 
+int captureByPlayer(Fixture& f, const std::vector<UnitBase*>& units, const ZoneStructure* zone,
+                    bool key, bool accepted);
+
 void checkOwnZone() {
     Fixture f("own zone");
     auto* z = f.zone(f.own, Structure_ZoneResidential, 20, 20);
     std::vector<UnitBase*> soldiers;
-    for(int i = 0; i < 5; ++i) soldiers.push_back(f.unit(f.own, i % 2 ? Unit_Trooper : Unit_Soldier, 14, 18 + i));
-    f.capture(soldiers[0], z);
-    require(soldiers[0]->getAttackMode() == CAPTURE, "own zone: the capture order did not take");
+    for(int i = 0; i <= DuneCity::ZoneGarrison::kCapacity; ++i)
+        soldiers.push_back(f.unit(f.own, i % 2 ? Unit_Trooper : Unit_Soldier, 14, 18 + i));
+    f.run(1);
+    require(captureByPlayer(f, {soldiers[0]}, z, false, true) == 1,
+            "own zone: Capture did not queue the first soldier's order");
     require(f.runUntil(30, [&] { return z->getGarrisonSize() == 1; }), "own zone: the Soldier never entered");
     require(hidden(soldiers[0]), "own zone: the Soldier inside is still on the map");
     require(z->getOwner() == f.own && z->getGarrisonHouse() == f.own, "own zone: the zone changed hands");
-    for(int i = 1; i < 4; ++i) f.capture(soldiers[i], z);
-    require(f.runUntil(40, [&] { return z->getGarrisonSize() == 4; }), "own zone: four soldiers did not fit");
-    f.capture(soldiers[4], z);
-    require(soldiers[4]->getAttackMode() != CAPTURE, "own zone: a capture order on a full zone was taken");
+    const std::vector<UnitBase*> rest(soldiers.begin() + 1, soldiers.begin() + DuneCity::ZoneGarrison::kCapacity);
+    require(captureByPlayer(f, rest, z, false, true) == DuneCity::ZoneGarrison::kCapacity - 1,
+            "own zone: Capture did not order the remaining four soldiers");
+    require(f.runUntil(40, [&] { return z->getGarrisonSize() == 5; }), "own zone: five soldiers did not fit");
+    require(captureByPlayer(f, {soldiers.back()}, z, false, true) == 1,
+            "own zone: the sixth soldier's attempted order was not queued");
     f.run(10);
-    require(z->getGarrisonSize() == DuneCity::ZoneGarrison::kCapacity && soldiers[4]->isActive(),
-            "own zone: a fifth soldier entered");
-    record("own_zone", "4 entered, the 5th refused, owner kept");
+    require(z->getGarrisonSize() == 5 && soldiers.back()->isActive()
+                && soldiers.back()->getAttackMode() != CAPTURE, "own zone: a sixth soldier entered");
+    record("own_zone", "Capture buttons: 5 entered, 6th refused, owner kept");
 }
 
 void checkTake() {
@@ -288,15 +310,37 @@ void checkAssault() {
     // While the zone is held nobody may walk in.
     f.run(2);
     require(z->getOwner() == f.enemy, "assault: the zone changed hands while held");
-    require(f.runUntil(120, [&] { return z->getOwner() == f.own; }), "assault: the attackers never took the held zone");
-    require(!f.alive(defenderID), "assault: the defender survived the assault");
+    require(f.runUntil(120, [&] { return !z->isGarrisoned(); }),
+            "assault: the attackers never cleared the held zone");
+    require(z->getOwner() == f.enemy && z->tooDamagedToHold(),
+            "assault: the low-health evacuation did not preserve the damaged lot's owner");
+    for(const auto id : attackerIDs) if(f.alive(id)) {
+        Command(f.playerOf(f.own), CMD_UNIT_SETMODE, id, GUARD).executeCommand();
+        Command(f.playerOf(f.own), CMD_UNIT_ATTACKOBJECT, id, defenderID).executeCommand();
+    }
+    require(f.runUntil(10, [&] { return !f.alive(defenderID); }),
+            "assault: the evacuated defender was not killed");
+    for(const auto id : attackerIDs)
+        if(f.alive(id)) Command(f.playerOf(f.own), CMD_UNIT_SETMODE, id, STOP).executeCommand();
+    const FixPoint damaged = z->getHealth();
+    f.enemy->producedPower = 10000;
+    Command(f.playerOf(f.enemy), CMD_STRUCTURE_REPAIR, z->getObjectID()).executeCommand();
+    require(z->repairing && f.runUntil(30, [&] { return !z->tooDamagedToHold(); })
+                && z->getHealth() > damaged,
+            "assault: the owner could not repair the evacuated lot through its real repair command");
+    for(const auto id : attackerIDs)
+        if(auto* attacker = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(id)))
+            f.capture(attacker, z);
+    require(f.runUntil(30, [&] { return z->getOwner() == f.own; }),
+            "assault: the attackers never took the repaired, cleared zone");
     require(z->getGarrisonHouse() == f.own, "assault: the zone is not held by the attackers");
     int inside = 0;
     for(const Uint32 id : attackerIDs) {
         const auto* a = dynamic_cast<const UnitBase*>(f.game->getObjectManager().getObject(id));
         if(a != nullptr && hidden(a)) ++inside;
     }
-    record("assault", "zone taken, defender dead, " + std::to_string(inside) + " of 3 Troopers inside, zone health "
+    record("assault", "zone cleared, evacuated defender dead, owner repaired, zone taken, "
+           + std::to_string(inside) + " of " + std::to_string(attackers.size()) + " Troopers inside, zone health "
            + std::to_string(z->getHealth().lround()) + "/" + std::to_string(z->getMaxHealth()));
 }
 
@@ -325,7 +369,7 @@ void checkDestroyed() {
     auto* z = f.zone(f.own, Structure_ZoneCommercial, 30, 40);
     std::vector<UnitBase*> soldiers;
     for(int i = 0; i < 2; ++i) {
-        soldiers.push_back(f.unit(f.own, Unit_Soldier, 29 + i, 39));
+        soldiers.push_back(f.unit(f.own, Unit_Trooper, 29 + i, 39));
         f.capture(soldiers.back(), z);
     }
     require(f.runUntil(20, [&] { return z->getGarrisonSize() == 2; }), "destroyed: the soldiers did not enter");
@@ -336,21 +380,23 @@ void checkDestroyed() {
         ids.push_back(s->getObjectID());
         before.push_back(s->getHealth().lround());
     }
-    // The building's own damage path, without the garrison's cover split: a hit this large would
-    // also kill the soldier at the front (cover, not immunity), and this case is about coming out.
-    z->StructureBase::handleDamage(100000, NONE_ID, f.enemy);
+    // A huge hit shares only the building's actual 200 HP loss (20 HP each),
+    // not the charge's overkill. Both Troopers survive to be ejected, hurt.
+    const int buildingHealth = z->getHealth().lround();
+    z->handleDamage(100000, NONE_ID, f.enemy);
     require(f.runUntil(5, [&] { return !f.alive(zoneID); }), "destroyed: the zone did not go");
     std::string hurt;
     for(size_t i = 0; i < ids.size(); ++i) {
         auto* s = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(ids[i]));
         require(s != nullptr && s->isActive() && !s->isPickedUp() && currentGameMap->tileExists(s->getLocation()),
                 "destroyed: a soldier did not come out of the ruin");
-        require(s->getHealth().lround() == DuneCity::ZoneGarrison::healthAfterEjection(before[i], s->getMaxHealth())
+        require(s->isVisible() && s->getHealth().lround() == DuneCity::ZoneGarrison::healthAfterEjection(
+                    before[i] - buildingHealth / 10, s->getMaxHealth())
                     && s->getHealth() > 0 && s->getHealth().lround() < before[i],
                 "destroyed: a soldier thrown out of the ruin did not lose half its hit points");
         hurt += " " + std::to_string(before[i]) + "->" + std::to_string(s->getHealth().lround());
     }
-    record("destroyed", "both soldiers out of the ruin, hurt:" + hurt);
+    record("destroyed", "both Troopers out of the ruin, visible, actual-loss share then ejection damage:" + hurt);
 }
 
 /// A captured zone goes back to the house it was taken from once its garrison is gone: by the
@@ -685,9 +731,9 @@ void checkPlayerOwnZone() {
     require(f.runUntil(30, [&] { return z->getGarrisonSize() == 1; }), "player own zone: the Soldier never went inside");
     require(hidden(soldier) && z->getOwner() == f.own, "player own zone: the Soldier is not hidden inside an own zone");
     auto* panel = selectZone(f, z);
-    require(panel->garrisonLabel.isVisible() && panel->garrisonLabel.getText().find("1/4") != std::string::npos
+    require(panel->garrisonLabel.isVisible() && panel->garrisonLabel.getText().find("1/5") != std::string::npos
                 && panel->garrisonLabel.getText().find(_("(captured)")) == std::string::npos,
-            "player own zone: the zone panel does not show Garrison 1/4: " + panel->garrisonLabel.getText());
+            "player own zone: the zone panel does not show Garrison 1/5: " + panel->garrisonLabel.getText());
     require(panel->evacuateButton.isVisible() && panel->evacuateButton.isEnabled(),
             "player own zone: the Evacuate button is not shown and enabled");
     const int before = queued(*f.game, CMD_ZONE_EVACUATE);
@@ -698,7 +744,7 @@ void checkPlayerOwnZone() {
             "player own zone: the Soldier did not come out beside its own zone");
     panel->update();
     require(!panel->evacuateButton.isVisible(), "player own zone: Evacuate is still shown on an empty zone");
-    record("player_own_zone", "Capture button, map click, inside, panel 1/4, Evacuate button, out; zone kept");
+    record("player_own_zone", "Capture button, map click, inside, panel 1/5, Evacuate button, out; zone kept");
 }
 
 void checkPlayerTake() {
@@ -737,12 +783,12 @@ void checkPlayerRefused() {
     }
     require(f.runUntil(40, [&] { return full->getGarrisonSize() == DuneCity::ZoneGarrison::kCapacity; }),
             "player refused: the zone did not fill");
-    auto* fifth = f.unit(f.own, Unit_Soldier, 16, 20);
+    auto* extra = f.unit(f.own, Unit_Soldier, 16, 20);
     f.run(1);
-    captureByPlayer(f, {fifth}, full);
+    captureByPlayer(f, {extra}, full);
     f.run(10);
-    require(fifth->isActive() && !hidden(fifth) && full->getGarrisonSize() == DuneCity::ZoneGarrison::kCapacity,
-            "player refused: a fifth soldier went into a full zone");
+    require(extra->isActive() && !hidden(extra) && full->getGarrisonSize() == DuneCity::ZoneGarrison::kCapacity,
+            "player refused: a sixth soldier went into a full zone");
     // An ally's zone.
     auto* allied = f.zone(f.ally, Structure_ZoneResidential, 50, 12);
     auto* visitor = f.unit(f.own, Unit_Soldier, 46, 12);
@@ -982,6 +1028,9 @@ void checkPrice() {
     record("price", "Soldier 30 credits in the Barracks build list");
 }
 
+#include "zone-garrison-redevelopment-probe.inc"
+#include "zone-garrison-health-probe.inc"
+
 } // namespace ZoneGarrisonProbe
 
 int runZoneGarrisonProbe() {
@@ -999,7 +1048,9 @@ int runZoneGarrisonProbe() {
                       checkReturn, checkLowHealth, checkAlly, checkContainment, checkSave, checkRuleOff,
                       checkPlayerOwnZone, checkPlayerTake, checkPlayerRefused, checkGarrisonButton,
                       checkGarrisonButtonRuleOff, checkReinforce, checkTrooperAir, checkTrooperTank, checkNoPull,
-                      checkPrice, checkPicture}) {
+                      checkPrice, checkPicture, checkGrowthHeld, checkDemandDeclineHeld, checkPowerDeclineHeld,
+                      checkCivicHeld, checkDemolitionEjects, checkBundledHeld, checkOccupantDamageShare,
+                      checkGarrisonRegeneration, checkChipDamageSurvival, checkGarrisonCivicSave}) {
         try {
             check();
         } catch(const std::exception&) {
@@ -1007,7 +1058,7 @@ int runZoneGarrisonProbe() {
             currentGame = nullptr;
         }
     }
-    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 23 cases");
-    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 23 cases failed", failed);
+    if(failed == 0) SDL_Log("ZONE_GARRISON_PROBE_PASS: 33 cases");
+    else SDL_Log("ZONE_GARRISON_PROBE_SUMMARY: %d of 33 cases failed", failed);
     return -1;
 }

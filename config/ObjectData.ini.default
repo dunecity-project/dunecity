@@ -116,6 +116,9 @@ UnitLimitMediumMap = 100        # Maps 64x64 or smaller (4096 tiles)
 UnitLimitLargeMap = 250         # Maps between 64x64 and 128x128 (4096-16384 tiles)
 UnitLimitHugeMap = 300          # Maps 128x128 or larger (16384+ tiles)
 
+# Full regeneration from zero HP while infantry are inside a zone (seconds of game time).
+GarrisonHealTime = 60
+
 ### default structure ###
 
 [default structure]

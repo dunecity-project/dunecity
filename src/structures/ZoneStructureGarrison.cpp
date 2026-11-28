@@ -22,6 +22,7 @@
 #include <ScreenBorder.h>
 #include <Achievements/AchievementEvents.h>
 #include <dunecity/ZoneGarrisonPolicy.h>
+#include <FileClasses/TextManager.h>
 #include <players/AIDecisionLog.h>
 #include <units/UnitBase.h>
 
@@ -107,6 +108,7 @@ bool ZoneStructure::enterGarrison(UnitBase* unit) {
         transferOwnership(house);
     }
     unit->enterGarrison();
+    garrisonHealthRemainders_[garrison_.size()] = {};
     garrison_.push_back(unit->getObjectID());
     garrisonSearchTimer_ = 0;
     SDL_Log("ZONE_GARRISON: event=entered house=%d unit=%u item=%d zone=%u taken=%d previous_house=%d occupants=%d cycle=%u",
@@ -132,7 +134,8 @@ int ZoneStructure::evacuateGarrison(bool destroying) {
     const auto occupants = garrison_;
     garrison_.clear();
     garrisonTargetID_ = NONE_ID;
-    for(const Uint32 id : occupants) {
+    for(size_t i = 0; i < occupants.size(); ++i) {
+        const Uint32 id = occupants[i];
         UnitBase* unit = occupantUnit(id);
         if(unit == nullptr || unit->getHealth() <= 0) continue;
         Coord spot = Coord::Invalid();
@@ -154,10 +157,13 @@ int ZoneStructure::evacuateGarrison(bool destroying) {
         } else if(destroying) {
             unit->setHealth(0);    // Buried in the ruin; removed on its next update.
         } else {
+            garrisonHealthRemainders_[remaining.size()] = garrisonHealthRemainders_[i];
             remaining.push_back(id);
         }
     }
     garrison_ = std::move(remaining);
+    std::fill(garrisonHealthRemainders_.begin() + garrison_.size(), garrisonHealthRemainders_.end(),
+              GarrisonHealthRemainders{});
     if(owner != nullptr) {
         SDL_Log("ZONE_GARRISON: event=exit house=%d zone=%u deployed=%d remaining=%d destroyed=%d low_health=%d hurt=%d health=%d max_health=%d shots=%d air_shots=%d cycle=%u",
                 getGarrisonHouseID(occupants), objectID, deployed, getGarrisonSize(), destroying ? 1 : 0, lowHealth ? 1 : 0,
@@ -222,23 +228,42 @@ void ZoneStructure::transferOwnership(House* newOwner, bool capture) {
 
 void ZoneStructure::handleDamage(int damage, Uint32 damagerID, House* damagerOwner,
                                  const DeviationReward::Provenance& provenance) {
-    // Cover, not immunity: the soldier at the front takes half of every hit on a held zone.
-    if(damage > 0 && getHealth() > 0 && !garrison_.empty()) {
-        if(UnitBase* front = occupantUnit(garrison_.front()); front != nullptr && front->getHealth() > 0) {
-            front->ObjectBase::handleDamage(DuneCity::ZoneGarrison::occupantDamage(damage),
-                                            damagerID, damagerOwner, provenance);
-        }
-        dropDeadOccupants();
-    }
+    const FixPoint before = getHealth();
     StructureBase::handleDamage(damage, damagerID, damagerOwner, provenance);
+    const FixPoint lost = before - getHealth();
+    if(lost <= 0 || garrison_.empty()) return;
+    // Each occupant shares only the HP the building actually lost. The normal
+    // integer damage path retains kill attribution, rewards and unit destruction.
+    for(size_t i = 0; i < garrison_.size(); ++i) {
+        if(UnitBase* unit = occupantUnit(garrison_[i]); unit && unit->getHealth() > 0) {
+            const int share = DuneCity::ZoneGarrison::occupantDamage(lost, garrisonHealthRemainders_[i].damage);
+            if(share > 0) unit->ObjectBase::handleDamage(share, damagerID, damagerOwner, provenance);
+        }
+    }
+    dropDeadOccupants();
 }
 
 void ZoneStructure::dropDeadOccupants() {
     if(garrison_.empty()) return;
-    garrison_.erase(std::remove_if(garrison_.begin(), garrison_.end(), [](Uint32 id) {
+    size_t live = 0;
+    int killed = 0;
+    for(size_t i = 0; i < garrison_.size(); ++i) {
+        const Uint32 id = garrison_[i];
         const UnitBase* unit = occupantUnit(id);
-        return unit == nullptr || unit->getHealth() <= 0;
-    }), garrison_.end());
+        if(unit && unit->getHealth() > 0) {
+            garrison_[live] = id;
+            garrisonHealthRemainders_[live++] = garrisonHealthRemainders_[i];
+        } else {
+            ++killed;
+            SDL_Log("ZONE_GARRISON: event=casualty house=%d unit=%u item=%d zone=%u health=%d max_health=%d missing=%d cycle=%u",
+                    owner ? owner->getHouseID() : -1, id, unit ? unit->getItemID() : -1, objectID,
+                    getHealth().lround(), getMaxHealth(), unit ? 0 : 1, currentGame->getGameCycleCount());
+        }
+    }
+    garrison_.resize(live);
+    std::fill(garrisonHealthRemainders_.begin() + live, garrisonHealthRemainders_.end(), GarrisonHealthRemainders{});
+    if(killed > 0 && owner == pLocalHouse)
+        currentGame->addUrgentMessageToNewsTicker(_("Garrison casualties") + ": " + std::to_string(killed));
     if(garrison_.empty()) {
         garrisonTargetID_ = NONE_ID;
         SDL_Log("ZONE_GARRISON: event=killed_out house=%d zone=%u health=%d max_health=%d shots=%d air_shots=%d cycle=%u",
@@ -314,8 +339,15 @@ void ZoneStructure::updateGarrison() {
 
     bool anyReady = false;
     int range = 0;
-    for(const Uint32 id : garrison_) {
-        UnitBase* unit = occupantUnit(id);
+    const uint64_t healCycles = static_cast<uint64_t>(currentGame->objectData.garrisonHealTime) * 1000 / GAMESPEED_DEFAULT;
+    for(size_t i = 0; i < garrison_.size(); ++i) {
+        UnitBase* unit = occupantUnit(garrison_[i]);
+        if(unit->getHealth() < unit->getMaxHealth()) {
+            const FixPoint step = DuneCity::ZoneGarrison::healingStep(
+                unit->getMaxHealth(), healCycles, garrisonHealthRemainders_[i].healing);
+            unit->setHealth(std::min(FixPoint(unit->getMaxHealth()), unit->getHealth() + step));
+        }
+        if(unit->getHealth() >= unit->getMaxHealth()) garrisonHealthRemainders_[i].healing = 0;
         unit->tickGarrisonWeapon();
         anyReady = anyReady || unit->garrisonWeaponReady();
         range = std::max(range, unit->getWeaponRange());
@@ -424,9 +456,10 @@ void ZoneStructure::drawGarrisonSandbags() const {
     fill(x0 + bagL, y0 + h - 2 * bagS, w - 2 * bagL, std::max(2, bagS / 2), seam.r, seam.g, seam.b);
 
     // An olive helmet per soldier inside, along the top wall: how full it is at a glance.
-    const int helmet = std::max(3, bagS + 1);
+    const int helmet = std::max(1, std::min(bagS + 1, (w - 4) / DuneCity::ZoneGarrison::kCapacity - 2));
+    const int firstHelmet = x0 + (w - getGarrisonSize() * (helmet + 2) + 2) / 2;
     for(int i = 0; i < getGarrisonSize(); ++i) {
-        const int hx = x0 + 2 * bagS + 1 + i * (helmet + 2);
+        const int hx = firstHelmet + i * (helmet + 2);
         const int hy = y0 + 2 * bagS;
         fill(hx, hy, helmet, helmet, 20, 20, 14);                       // outline
         fill(hx + 1, hy + 1, helmet - 2, helmet - 2, 92, 104, 52);      // olive drab

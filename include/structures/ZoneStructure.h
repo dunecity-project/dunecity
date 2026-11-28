@@ -20,8 +20,10 @@
 
 #include <structures/StructureBase.h>
 #include <dunecity/CityConstants.h>
+#include <dunecity/ZoneGarrisonPolicy.h>
 #include <FileClasses/GFXManager.h>
 
+#include <array>
 #include <vector>
 
 // Forward declarations
@@ -86,8 +88,14 @@ public:
     static bool garrisonOrderAvailable(const ObjectBase* unit);
     bool isGarrisoned() const { return !garrison_.empty(); }
     int getGarrisonSize() const { return static_cast<int>(garrison_.size()); }
-    /// Occupants in the order they entered; the first takes the cover damage.
+    /// Occupants in entry order; each takes the same 10% damage share.
     const std::vector<Uint32>& getGarrison() const { return garrison_; }
+    struct GarrisonHealthRemainders {
+        int64_t damage = 0;   ///< Building HP in 32.32 units, less than ten HP.
+        uint64_t healing = 0; ///< Remainder of the per-cycle healing division.
+    };
+    const std::array<GarrisonHealthRemainders, DuneCity::ZoneGarrison::kCapacity>&
+    getGarrisonHealthRemainders() const { return garrisonHealthRemainders_; }
     /// The house whose soldiers are inside, or nullptr when empty.
     const House* getGarrisonHouse() const;
     /// May UNIT walk in now (own zone with room, or an enemy zone nobody holds)?
@@ -123,6 +131,7 @@ private:
     void drawGarrisonSandbags() const;
 
     std::vector<Uint32> garrison_;          ///< saved from SAVEGAMEVERSION_ZONE_GARRISON
+    std::array<GarrisonHealthRemainders, DuneCity::ZoneGarrison::kCapacity> garrisonHealthRemainders_{};
     Uint32 garrisonTargetID_ = NONE_ID;     ///< saved
     Sint32 garrisonSearchTimer_ = 0;        ///< saved
     Sint32 garrisonOriginalOwner_ = -1;     ///< saved from SAVEGAMEVERSION_ZONE_GARRISON_RETURN

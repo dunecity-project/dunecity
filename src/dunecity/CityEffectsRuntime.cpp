@@ -969,6 +969,12 @@ void CitySimulation::reconcileLoadedMapState(uint32_t gameCycleCount) {
         hs.indValve = indValve;
     }
 
+    // Restore the saved building types before the census can replace its overlay
+    // roster. In particular, a garrison is not a Hospital patient claim.
+    if(hospitalOverlaysPending_) {
+        HospitalCare::applyLoadedOverlays();
+        hospitalOverlaysPending_ = false;
+    }
     runEffectsScans();
     runZoneGrowth();
 
@@ -1300,8 +1306,12 @@ void CitySimulation::runZoneGrowth() {
         const bool growthRolled = (n.level == 0)
             || (roll == 0 && (!pollutionSlowed || (lastProcessedDay_ % 2u == 0)));
 
+        // A held lot is a fighting position, not a redevelopment candidate. Keep
+        // its population, density and power draw together at their current values;
+        // census supply, demand and traffic still include it while it is held.
+        const bool redevelopmentAllowed = !n.pZone || !n.pZone->isGarrisoned();
         // --- Growth attempt: requires zscore above threshold ---
-        if (zscore > kZscoreGrowthGate && (residentialLot ? nextResidentialPopulation > initialPopulation : n.level < n.maxLevel)
+        if (redevelopmentAllowed && zscore > kZscoreGrowthGate && (residentialLot ? nextResidentialPopulation > initialPopulation : n.level < n.maxLevel)
             && growthRolled && !pollutionBlocked && withinCityLimit) {
             const int lvFloor = getDemandLandValueFloor(std::max(1,targetLevel));
             if (landValue >= lvFloor) {
@@ -1378,7 +1388,7 @@ void CitySimulation::runZoneGrowth() {
         // --- Demand-based decline ---
         // Non-zone Dune structures (Refinery, Silo, etc.) decline in
         // occupancy but are never destroyed. Zones can go to L0 (vacant).
-        if (!grew && initialPopulation > 0) {
+        if (redevelopmentAllowed && !grew && initialPopulation > 0) {
             const uint32_t declineRoll = (static_cast<uint32_t>(pos.x) * 97u
                                         + static_cast<uint32_t>(pos.y) * 173u
                                         + lastProcessedDay_) % 16u;
@@ -1431,7 +1441,7 @@ void CitySimulation::runZoneGrowth() {
         // final apartment and individual houses. Dune buildings retain L1.
         const bool vacate = n.pZone
             && currentGame->getGameInitSettings().getGameOptions().unpoweredZonesVacate;
-        if (!grew && !declined && !powered && (vacate ? initialPopulation > 0 : n.level > 1)) {
+        if (redevelopmentAllowed && !grew && !declined && !powered && (vacate ? initialPopulation > 0 : n.level > 1)) {
             const int floorLevel = vacate ? 0 : 1;
             const int nextPopulation = residentialLot ? ResidentialPopulation::decline(initialPopulation) : 0;
             const int newLevel = residentialLot ? ResidentialPopulation::density(nextPopulation)
@@ -1655,7 +1665,15 @@ void CitySimulation::runZoneGrowth() {
             if (!zone) continue;
             const int h = ownerSlot(n.pStruct);
             before[i] = zone->getCivicOverlay();
-            if (n.role == CityRole::Residential && h >= 0 && HospitalCare::keepsHospital(zone)) {
+            if (zone->isGarrisoned()) {
+                // Preserve both civic and ordinary buildings. Existing civics
+                // count toward the quota but cannot be removed; ordinary held
+                // lots cannot become a Hospital or Church until evacuated.
+                if (h >= 0 && zone->getCivicOverlay() == ZoneStructure::CivicOverlay::Hospital)
+                    hospitals[h].push_back({zone, sinceOf(zone), true});
+                else if (h >= 0 && zone->getCivicOverlay() == ZoneStructure::CivicOverlay::Church)
+                    churches[h].push_back({zone, sinceOf(zone), true});
+            } else if (n.role == CityRole::Residential && h >= 0 && HospitalCare::keepsHospital(zone)) {
                 zone->setCivicOverlay(ZoneStructure::CivicOverlay::Hospital);
                 hospitals[h].push_back({zone, sinceOf(zone), true});
             } else if (h < 0 || n.role != CityRole::Residential || n.level <= 0) {

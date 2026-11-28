@@ -6,7 +6,7 @@ garissoned"; "saboteurs should skip r/i/c". In a Dune City game a Palace-release
 or QuantBot owned, goes past Residential, Commercial and Industrial zones nobody garrisons to the
 building beyond; with the rule off it blows up the nearest zone. Only the garrison decides: a fully
 built, populated zone without one is passed over, an unbuilt zone with one is taken. A garrisoned
-zone is blown up (the front Soldier dies, the other is thrown out with half its hit points); a zone
+zone is blown up (both 20-HP Soldiers take 20 HP: 10% of the building's actual 200-HP loss); a zone
 whose garrison leaves while the Saboteur walks to it is given up; with only ungarrisoned zones about
 it takes no target; the player's own right-click on an ungarrisoned zone is obeyed
 (tests/units/saboteur-zone-probe.inc).

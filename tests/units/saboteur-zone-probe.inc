@@ -11,8 +11,8 @@
 // rule off               the same position with the rule off: the nearest zone is blown up (the rule up
 //                        to protocol 149), so the switch is what makes the difference
 // garrisoned zone        the nearest zone holds two enemy Soldiers: it is the target and is blown up;
-//                        the charge kills the Soldier at the front (cover, not immunity) and throws
-//                        the other out beside the ruin with half its hit points; the Wind Trap stands
+//                        each Soldier takes 10% of the building's actual 200 HP loss (20 HP), so
+//                        both die through the ordinary damage path, not silently on replacement
 // garrison leaves        the garrisoned zone it is walking to is evacuated: it gives the zone up and
 //                        blows up the Wind Trap instead; the zone stands
 // garrison decides      a fully built, populated Residential zone without a garrison stands nearest and
@@ -229,16 +229,14 @@ void cityZonesSkipped(const std::string& ownerClass, bool rule) {
 }
 
 /// A garrisoned zone is a target like any building: the nearest, garrisoned, is blown up before a
-/// farther Wind Trap. Its garrison: the Soldier at the front takes half the charge (cover, not
-/// immunity) and dies; the other is thrown out beside the ruin with half its hit points.
+/// farther Wind Trap. Each 20-HP Soldier takes 10% of the actual 200-HP loss:
+/// both die, independently of the charge's overkill.
 void garrisonedZoneTaken(const std::string& ownerClass) {
     Fixture f(ownerClass, "garrisoned-zone");
     auto* z = f.zone("garrisoned Commercial zone 4 tiles east", Structure_ZoneCommercial, 35, 30);
+    z->foundationDegrades = false;
     f.building("Wind Trap 13 tiles north", Structure_WindTrap, 30, 15);
     const auto soldiers = f.garrison(z, 2);
-    std::vector<int> before;
-    for(Uint32 id : soldiers)
-        before.push_back(static_cast<UnitBase*>(f.game->getObjectManager().getObject(id))->getHealth().lround());
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
     const Uint32 zoneID = z->getObjectID();
@@ -248,30 +246,14 @@ void garrisonedZoneTaken(const std::string& ownerClass) {
     f.runUntilGone(saboteurID, 120);
     f.runUntil(1, [] { return false; });    // objects destroyed in the blast are removed next cycle
     f.requireOnlyVictim(saboteurID, zoneID);
-    int killed = 0, ejected = 0;
-    std::string fate;
-    for(size_t i = 0; i < soldiers.size(); ++i) {
-        auto* s = dynamic_cast<UnitBase*>(f.game->getObjectManager().getObject(soldiers[i]));
-        if(s == nullptr) {
-            ++killed;
-            fate += " dead";
-            continue;
-        }
-        require(s->isActive() && !s->isPickedUp() && currentGameMap->tileExists(s->getLocation()),
-                f.label + ": a garrison Soldier is neither dead nor out of the ruin (active "
-                + std::to_string(s->isActive()) + " picked up " + std::to_string(s->isPickedUp()) + " health "
-                + std::to_string(s->getHealth().lround()) + " at " + std::to_string(s->getLocation().x) + ","
-                + std::to_string(s->getLocation().y) + ")");
-        require(s->getHealth().lround() == DuneCity::ZoneGarrison::healthAfterEjection(before[i], s->getMaxHealth())
-                    && s->getHealth().lround() < before[i],
-                f.label + ": a Soldier thrown out of the ruin did not lose half its hit points ("
-                + std::to_string(before[i]) + " -> " + std::to_string(s->getHealth().lround()) + ")");
-        ++ejected;
-        fate += " out " + std::to_string(before[i]) + "->" + std::to_string(s->getHealth().lround());
+    int killed = 0;
+    for(const Uint32 id : soldiers) {
+        const auto* soldier = f.game->getObjectManager().getObject(id);
+        require(soldier == nullptr, f.label + ": a 20-HP Soldier survived its actual-loss 20-HP damage share");
+        ++killed;
     }
-    require(killed == 1 && ejected == 1,
-            f.label + ": the garrison's fate is not the front Soldier dead and the other thrown out:" + fate);
-    record(f.label, "picked the garrisoned zone and blew it up; garrison:" + fate + "; the Wind Trap stands");
+    require(killed == 2, f.label + ": the destroyed zone did not account for both occupants");
+    record(f.label, "picked the garrisoned zone and blew it up; both Soldiers killed by 20-HP actual-loss shares; Wind Trap stands");
 }
 
 /// Only the garrison decides, not how built up the zone is: a dense, populated Residential zone with

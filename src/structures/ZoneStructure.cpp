@@ -36,8 +36,9 @@ void ZoneStructure::setLocation(int xPos, int yPos) {
 
     if (getLocation().isInvalid()) return;
 
-    auto* citySim = currentGame ? currentGame->getCitySimulation() : nullptr;
-    if (citySim && currentGameMap) {
+    // Scenario lots are placed before the city simulation is initialized.
+    // Their tile state must already agree with the structure's footprint.
+    if (currentGameMap) {
         Coord pos = getLocation();
         for (int dy = 0; dy < structureSize.y; dy++) {
             for (int dx = 0; dx < structureSize.x; dx++) {
@@ -218,11 +219,25 @@ ZoneStructure::ZoneStructure(InputStream& stream)
     residentialPopulation_ = DuneCity::ResidentialPopulation::read(stream, savegameVersion);
     if (savegameVersion >= SAVEGAMEVERSION_ZONE_GARRISON) {
         const auto occupants = stream.readUint32Vector();
+        if(occupants.size() > DuneCity::ZoneGarrison::kCapacity)
+            throw InputStream::error("Too many zone garrison occupants");
         garrison_.assign(occupants.begin(), occupants.end());
         garrisonTargetID_ = stream.readUint32();
         garrisonSearchTimer_ = stream.readSint32();
     }
     if (savegameVersion >= SAVEGAMEVERSION_ZONE_GARRISON_RETURN) garrisonOriginalOwner_ = stream.readSint32();
+    if(savegameVersion >= SAVEGAMEVERSION_ZONE_GARRISON_HEALTH) {
+        const int healTime = currentGame ? currentGame->objectData.garrisonHealTime : 60;
+        const uint64_t healCycles = static_cast<uint64_t>(healTime) * 1000 / GAMESPEED_DEFAULT;
+        for(size_t i = 0; i < garrison_.size(); ++i) {
+            auto& remainder = garrisonHealthRemainders_[i];
+            remainder.damage = stream.readSint64();
+            remainder.healing = stream.readUint64();
+            if(remainder.damage < 0 || remainder.damage >= DuneCity::ZoneGarrison::kDamagePoint
+               || remainder.healing >= healCycles)
+                throw InputStream::error("Invalid zone garrison health remainder");
+        }
+    }
 }
 
 int ZoneStructure::getResidentialPopulation() const {
@@ -277,6 +292,10 @@ void ZoneStructure::save(OutputStream& stream) const {
     stream.writeUint32(garrisonTargetID_);
     stream.writeSint32(garrisonSearchTimer_);
     stream.writeSint32(garrisonOriginalOwner_);
+    for(size_t i = 0; i < garrison_.size(); ++i) {
+        stream.writeSint64(garrisonHealthRemainders_[i].damage);
+        stream.writeUint64(garrisonHealthRemainders_[i].healing);
+    }
 }
 
 bool ZoneStructure::canBePlacedAt(int x, int y, bool torch) const {

@@ -18,7 +18,7 @@ lot, whatever its density or civic overlay.
 
 | Situation | What a capture order does |
 |---|---|
-| Own zone with room (fewer than 4 inside) | The soldier walks to it and enters from any tile touching it (`kEntryDistance` 1.5, diagonals included). Owner unchanged. |
+| Own zone with room (fewer than 5 inside) | The soldier walks to it and enters from any tile touching it (`kEntryDistance` 1.5, diagonals included). Owner unchanged. |
 | Own zone, full | Refused: the order is not taken. |
 | Ally's zone | Refused. Allies' zones are never taken or shared (one house a garrison). |
 | Enemy zone nobody holds | The soldier walks in and the zone becomes its house's: owner, tiles, power draw and building counts move; density, residents, civic overlay and health stay (`ZoneStructure::transferOwnership`). Counted as a loss for the old owner (its AI hears of it). |
@@ -34,9 +34,19 @@ reaches it fires its own weapon from that tile (`UnitBase::fireFromGarrison`: th
 rocket further out, Trooper anti-air at aircraft, the Soldier only at ground targets). Kills and damage are
 credited to the soldier's type, as in the open. Garrisons shoot units, not buildings.
 
-**Cover, not immunity.** Every hit on a held zone also takes half of it (rounded up) off the soldier at the front
-of the garrison, the first to have entered (`occupantDamage`). The building takes the hit in full as before. So
-attackers empty a garrison by shooting the zone; a soldier killed inside is credited to whoever fired.
+**Cover, not immunity.** Every occupant takes **10% of the HP the building actually loses**,
+not 10% of a projectile's raw or overkill damage. Each occupant keeps an exact fractional remainder;
+small hits do not each round up to one HP. Damage uses the ordinary attribution and death path.
+Deaths inside produce an owner-local **Garrison casualties** ticker message and a per-soldier log event.
+
+**Regeneration.** Living occupants heal continuously while inside, independently of building repairs.
+`[Map Settings] GarrisonHealTime = 60` in `ObjectData.ini` means a full heal from zero in 60 seconds
+of game time. Fractional health and the per-cycle division remainder are saved, deterministic, and
+clamped at maximum health. Leaving the building stops this regeneration.
+
+**Stable fighting positions.** While occupied, a lot keeps its population, density and civic type.
+Growth, decline, power-loss vacancy and Hospital/Church designation resume after the garrison leaves.
+The lock is derived from the existing occupant list; no additional option is required.
 
 **Coming out.**
 - The owner's **Evacuate** button on the zone panel (`CMD_ZONE_EVACUATE`, only the owner's command is obeyed)
@@ -176,7 +186,7 @@ Every order has a logged outcome:
 
 Stefan, 2026-11-27: "we want to be fighting house to house basically".
 - **ZoneGarrisonReinforce:** Troopers within 16 tiles fill a threatened garrison of ours (own or captured) up to
-  four.
+  five.
 - **ZoneFrontGarrison:** our 4 zones nearest a visible enemy building (the front, however far) each get two
   soldiers from within 20 tiles. Front garrisons are not released when the area is quiet.
 - **ZoneCaptureChain:** the 2 empty enemy zones nearest any zone we hold (own or captured), however far, each get a
@@ -215,8 +225,8 @@ All level: no switch becomes a default. Raid and levy on `rs192-dunecity` (start
 
 ## Tests
 
-- `zone_garrison_probe` (headless nightly; `tests/units/zone-garrison-probe.inc`), 16 cases: own zone (four
-  enter, a fifth refused, owner kept), take (zone, tiles, density and power draw move), fire out (kill credited
+- `zone_garrison_probe` (headless nightly; `tests/units/zone-garrison-probe.inc`), 33 cases: own zone (five
+  enter via the player's Capture button, a sixth refused, owner kept), take (zone, tiles, density and power draw move), fire out (kill credited
   to the Trooper), assault (three Troopers shoot one held soldier out and take the zone), evacuate (owner's
   command, an enemy's refused), destroyed (soldiers out of the ruin, each down half its hit points), return
   (evacuated and killed garrisons hand captured zones back; an own zone stays), low health (held at the line,

@@ -21,8 +21,8 @@
 /// docs/zone-garrisons.md describes the whole feature.
 namespace DuneCity::ZoneGarrison {
 
-/// Soldiers a 2x2 Residential, Commercial or Industrial zone holds: one a tile.
-inline constexpr int kCapacity = 4;
+/// Infantry a 2x2 R/C/I zone holds (Stefan, 2026-11-28: "allow up to 5 units to garrison").
+inline constexpr int kCapacity = 5;
 
 /// A capture-ordered soldier enters from any tile touching the zone (diagonals included:
 /// blockDistance of a diagonal neighbour is 1.41), so it never has to stand on the building.
@@ -31,11 +31,28 @@ inline const FixPoint kEntryDistance = 1.5_fix;
 /// Game cycles between target searches of a garrison whose last search found nothing.
 inline constexpr int kIdleSearchCycles = 8;
 
-/// What a garrisoned zone does with a hit of DAMAGE: the building takes all of it, and the soldier
-/// at the front of the garrison (the first to enter) half of it, rounded up. Sandbags and walls are
-/// cover, not immunity, so shooting a garrisoned zone is how attackers empty it.
-inline constexpr int occupantDamage(int damage) {
-    return damage <= 0 ? 0 : (damage + 1) / 2;
+/// Every occupant takes 10% of actual building HP lost, not raw/overkill damage.
+/// Carry sub-point damage exactly; never round each small hit up to one HP.
+inline constexpr int64_t kDamagePoint = int64_t{10} << 32;
+inline int occupantDamage(FixPoint buildingLoss, int64_t& remainder) {
+    const int64_t raw = std::max<int64_t>(0, buildingLoss.getRawValue());
+    const int64_t fraction = remainder + raw % kDamagePoint;
+    const int damage = static_cast<int>(raw / kDamagePoint + fraction / kDamagePoint);
+    remainder = fraction % kDamagePoint;
+    return damage;
+}
+
+/// Unit health already carries fractional HP. Preserve the division remainder too,
+/// so a full heal takes exactly CYCLES game cycles, independent of frame rate.
+inline FixPoint healingStep(int maxHealth, uint64_t cycles, uint64_t& remainder) {
+    const uint64_t fullHealth = static_cast<uint64_t>(FixPoint(maxHealth).getRawValue());
+    uint64_t step = fullHealth / cycles;
+    remainder += fullHealth - step * cycles;
+    if(remainder >= cycles) {
+        ++step;
+        remainder -= cycles;
+    }
+    return FixPoint::FromRawValue(static_cast<int64_t>(step));
 }
 
 /// Stefan, 2026-11-27: "make troopers and infantry evacuate buildings with an evacuate when it gets

@@ -263,7 +263,11 @@
 // 9904: Civic overlay pacing: after the hospital state, the city day each Hospital and Church
 //       overlay was put on its zone and each house's last Hospital and Church change
 //       (HospitalCareState::savePacing). An older save's overlays count from the day it loads.
-#define SAVEGAMEVERSION     9904
+// 9905: Garrison health: ObjectData adds GarrisonHealTime; each zone saves the
+//       damage and regeneration remainders of its occupants, in entry order.
+#define SAVEGAMEVERSION     9905
+/// First save with exact garrison damage/healing remainders and the healing rate.
+#define SAVEGAMEVERSION_ZONE_GARRISON_HEALTH 9905
 /// First save with the civic overlay pacing record (Hospitals and Churches stay on their zones).
 #define SAVEGAMEVERSION_CIVIC_PACING 9904
 /// First save with a captured zone's original owner (Zone Garrisons: an emptied captured zone returns).

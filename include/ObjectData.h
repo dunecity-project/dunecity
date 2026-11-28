@@ -145,6 +145,7 @@ public:
     int unitLimitMediumMap;          ///< Max units per house for medium maps (64x64 or smaller)
     int unitLimitLargeMap;           ///< Max units per house for large maps (between 64x64 and 128x128)
     int unitLimitHugeMap;            ///< Max units per house for huge maps (128x128 or larger)
+    int garrisonHealTime = 60;       ///< Seconds for a full heal while garrisoned; Map Settings/GarrisonHealTime.
 
 private:
     int loadedItemCount = Num_ItemID; ///< runtime only, never saved
