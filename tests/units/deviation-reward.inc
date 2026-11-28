@@ -960,6 +960,7 @@ void DeviationProbe::legacyLedger() {
     require(unitBytes.second == 17, "The control-interval record is not the expected 17 bytes");
     constexpr size_t kEmptyOrderQueueBlock = 1 + 1 + 1 + 4 + 4;
     constexpr size_t kTornieUnitFields = 4 + 4 + 8; // production house, slow timer and step offset (9878)
+    constexpr size_t kGarrisonRelocationFields = 4; // automatic shelter destination (9907)
     // 9854 appended the hunt-toward goal and retry count after the 9844 Dynasty fields,
     // which follow the control interval. A pre-9849 record has neither, so drop them too.
     {
@@ -982,8 +983,8 @@ void DeviationProbe::legacyLedger() {
         require(tank->getOrderQueue().empty(), "The legacy fixture unit carries queued orders");
         unitBytes.first.erase(first - unitBytes.second, (last - first) + kEmptyOrderQueueBlock);
     }
-    // 9857 appended formation membership, 9859 hunt/facing, 9860 form-up state and 9878
-    // production technology/slow state. A pre-9849 record has none of these.
+    // 9857 appended formation membership, 9859 hunt/facing, 9860 form-up state, 9878
+    // production technology/slow state and 9907 relocation intent. A pre-9849 record has none.
     // The control interval, hunt-toward bytes and empty order queue are already gone.
     {
         tank->leaveFormation();
@@ -1005,9 +1006,10 @@ void DeviationProbe::legacyLedger() {
         size_t last = before.size();
         while(last > first && before[last-1] == after[last-1]) --last;
         require(last - first == 35, "The formation record is not the expected 35 bytes");
-        require(last + kTornieUnitFields <= before.size(), "The Tornie unit tail is not where expected");
+        const size_t laterFields = kTornieUnitFields + kGarrisonRelocationFields;
+        require(last + laterFields <= before.size(), "The post-formation unit tail is not where expected");
         unitBytes.first.erase(first - unitBytes.second - 9 - kEmptyOrderQueueBlock,
-                              (last - first) + kTornieUnitFields);
+                              (last - first) + laterFields);
     }
 
     game->loadedSavegameVersion = 9848;

@@ -130,17 +130,26 @@ void runCivWarsWormRespawnProbe(std::unique_ptr<Game>& game, const std::string& 
     blockedWake(left, leftAt);
     surfaceBlocker->cancelDeployment();
 
-    // A pre-9881 object record has no origin bytes: do not consume the next record. The record
-    // ends with the origin (two Sint32, 9881) and, from 9901, the Palace worm state (a bool and
-    // three Sint32, SAVEGAMEVERSION_PALACE_WORM), so an older record lacks both.
+    // Historical records omit the 9907 UnitBase relocation target before the derived fields.
+    // The worm tail ends with the origin (9881) and the Palace worm state (9901).
+    constexpr size_t kGarrisonRelocationBytes = 4;
     constexpr size_t kPalaceWormBytes = 1 + 3 * sizeof(Sint32);
     OMemoryStream record;
     record.open();
     left->save(record);
-    civWormRequire(record.getDataLength() >= 8 + kPalaceWormBytes, "Worm record omitted its two origin coordinates");
+    OMemoryStream baseRecord;
+    baseRecord.open();
+    left->UnitBase::save(baseRecord);
+    civWormRequire(left->getGarrisonRelocationTarget() == NONE_ID
+                       && baseRecord.getDataLength() >= kGarrisonRelocationBytes
+                       && baseRecord.getDataLength() <= record.getDataLength()
+                       && record.getDataLength() >= 8 + kPalaceWormBytes + kGarrisonRelocationBytes,
+                   "Worm fixture omitted its UnitBase relocation field or origin coordinates");
+    std::string withoutRelocation(record.getData(), record.getDataLength());
+    withoutRelocation.erase(baseRecord.getDataLength() - kGarrisonRelocationBytes, kGarrisonRelocationBytes);
     {
         // A 9881-9900 record has the origin but no Palace worm state.
-        std::string bytes(record.getData(), record.getDataLength() - kPalaceWormBytes);
+        std::string bytes(withoutRelocation.data(), withoutRelocation.size() - kPalaceWormBytes);
         bytes += "slot-tail";
         const auto saved = game->loadedSavegameVersion;
         game->loadedSavegameVersion = SAVEGAMEVERSION_PALACE_WORM - 1;
@@ -153,7 +162,7 @@ void runCivWarsWormRespawnProbe(std::unique_ptr<Game>& game, const std::string& 
                        "Pre-9901 worm load consumed following bytes or lost its origin");
         older->cancelDeployment();
     }
-    std::string legacyBytes(record.getData(), record.getDataLength() - 8 - kPalaceWormBytes);
+    std::string legacyBytes(withoutRelocation.data(), withoutRelocation.size() - 8 - kPalaceWormBytes);
     const std::string tail = "slot-tail";
     legacyBytes += tail;
     const auto loadedVersion = game->loadedSavegameVersion;
