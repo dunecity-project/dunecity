@@ -243,6 +243,7 @@ void garrisonedZoneTaken(const std::string& ownerClass) {
     require(saboteur->getTarget() == z, f.label + ": the released Saboteur did not pick the garrisoned zone (target item "
             + std::to_string(targetItem(saboteur)) + ")");
     f.runUntilGone(saboteurID, 120);
+    f.runUntil(1, [] { return false; });    // objects destroyed in the blast are removed next cycle
     f.requireOnlyVictim(saboteurID, zoneID);
     int killed = 0, ejected = 0;
     std::string fate;
@@ -254,7 +255,10 @@ void garrisonedZoneTaken(const std::string& ownerClass) {
             continue;
         }
         require(s->isActive() && !s->isPickedUp() && currentGameMap->tileExists(s->getLocation()),
-                f.label + ": a garrison Soldier is neither dead nor out of the ruin");
+                f.label + ": a garrison Soldier is neither dead nor out of the ruin (active "
+                + std::to_string(s->isActive()) + " picked up " + std::to_string(s->isPickedUp()) + " health "
+                + std::to_string(s->getHealth().lround()) + " at " + std::to_string(s->getLocation().x) + ","
+                + std::to_string(s->getLocation().y) + ")");
         require(s->getHealth().lround() == DuneCity::ZoneGarrison::healthAfterEjection(before[i], s->getMaxHealth())
                     && s->getHealth().lround() < before[i],
                 f.label + ": a Soldier thrown out of the ruin did not lose half its hit points ("
@@ -273,6 +277,7 @@ void garrisonLeaves(const std::string& ownerClass) {
     Fixture f(ownerClass, "garrison-leaves");
     auto* z = f.zone("garrisoned Residential zone 8 tiles east", Structure_ZoneResidential, 39, 30);
     const auto* trap = f.building("Wind Trap 13 tiles north", Structure_WindTrap, 30, 15);
+    const Uint32 trapID = trap->getObjectID();
     f.garrison(z, 1);
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
@@ -287,7 +292,7 @@ void garrisonLeaves(const std::string& ownerClass) {
             f.label + ": the Saboteur kept going for the zone after its garrison left (target item "
             + std::to_string(targetItem(saboteur)) + ")");
     f.runUntilGone(saboteurID, 120);
-    f.requireOnlyVictim(saboteurID, trap->getObjectID());
+    f.requireOnlyVictim(saboteurID, trapID);
     record(f.label, "gave up the zone when its garrison left and blew up the Wind Trap; the zone stands");
 }
 
@@ -333,6 +338,7 @@ void clickMap(Fixture& f, Coord tile, Uint8 button) {
 void playerOrderKept() {
     Fixture f("HumanPlayer", "player-order");
     const auto* z = f.zone("empty Industrial zone 8 tiles east", Structure_ZoneIndustrial, 39, 30);
+    const Uint32 zoneID = z->getObjectID();
     f.building("Wind Trap 6 tiles north", Structure_WindTrap, 30, 22);
     auto* saboteur = f.release();
     const Uint32 saboteurID = saboteur->getObjectID();
@@ -350,7 +356,7 @@ void playerOrderKept() {
             f.label + ": the right click on the empty enemy zone did not send the Saboteur at it (target item "
             + std::to_string(targetItem(saboteur)) + ")");
     f.runUntilGone(saboteurID, 120);
-    f.requireOnlyVictim(saboteurID, z->getObjectID());
+    f.requireOnlyVictim(saboteurID, zoneID);
     record(f.label, "right-clicked onto an empty enemy zone: the order was kept and the zone blown up");
 }
 
