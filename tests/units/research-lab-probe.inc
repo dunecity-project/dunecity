@@ -11,6 +11,7 @@
 #include <players/QuantBotBuildPass.h>
 #include <structures/BuilderBase.h>
 #include <structures/ResearchLab.h>
+#include <units/UnitBase.h>
 #include <Network/GameStateDigest.h>
 #include <Network/WorkshopGameContent.h>
 #include <misc/IMemoryStream.h>
@@ -488,9 +489,43 @@ void researchInstallmentContinuation(const std::string& out, std::ostream& resul
 
 void researchWriteLegacyLayout(Game& game, Uint32 version, const std::string& filename) {
     // These are explicitly synthetic old-layout saves, not archived player saves.
-    // Keep the complete real save, changing only the frozen setup/House suffixes.
+    // Project current ObjectData, unit, House and setup records into their historical layouts.
     OMemoryStream saved; saved.open(); game.saveGame(saved);
     std::string bytes(saved.getData(), saved.getDataLength());
+    {
+        OMemoryStream data;
+        data.open();
+        game.objectData.save(data);
+        const std::string encoded(data.getData(), data.getDataLength());
+        constexpr size_t garrisonSettingsBytes = 2 * sizeof(Sint32); // healing (9905), collapse (9907)
+        const auto offset = bytes.find(encoded);
+        researchRequire(encoded.size() >= garrisonSettingsBytes && offset != std::string::npos
+                            && bytes.find(encoded, offset + 1) == std::string::npos,
+                        "Synthetic legacy fixture could not identify exactly one saved ObjectData record");
+        bytes.erase(offset + encoded.size() - garrisonSettingsBytes, garrisonSettingsBytes);
+    }
+    for(const UnitBase* unit : unitList) {
+        OMemoryStream record;
+        record.open();
+        unit->save(record);
+        OMemoryStream base;
+        base.open();
+        unit->UnitBase::save(base);
+        const std::string encoded(record.getData(), record.getDataLength());
+        const auto offset = bytes.find(encoded);
+        constexpr size_t relocationBytes = sizeof(Uint32); // 9907, at the end of UnitBase
+        researchRequire(unit->getGarrisonRelocationTarget() == NONE_ID
+                            && base.getDataLength() >= relocationBytes && base.getDataLength() <= encoded.size()
+                            && offset != std::string::npos && bytes.find(encoded, offset + 1) == std::string::npos,
+                        "Synthetic legacy fixture could not identify a plain serialized unit record");
+        if(unit->getItemID() == Unit_Sandworm && version < SAVEGAMEVERSION_PALACE_WORM) {
+            constexpr size_t palaceWormBytes = 1 + 3 * sizeof(Sint32);
+            researchRequire(base.getDataLength() + palaceWormBytes <= encoded.size(),
+                            "Synthetic legacy fixture could not identify the Palace worm suffix");
+            bytes.erase(offset + encoded.size() - palaceWormBytes, palaceWormBytes);
+        }
+        bytes.erase(offset + base.getDataLength() - relocationBytes, relocationBytes);
+    }
     for(int id = 0; id < NUM_HOUSES; ++id) if(const auto* owner = game.getHouse(id)) {
         OMemoryStream house; house.open(); owner->save(house);
         const std::string encoded(house.getData(), house.getDataLength());
