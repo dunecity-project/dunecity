@@ -50,6 +50,18 @@ class StagedSwapTests(unittest.TestCase):
     def source(self, name='dunecity.app'):
         return (self.apps / name / 'Contents/Resources/air-dev-source.txt').read_text().strip()
 
+    def test_default_profile_selects_canonical_economy_a(self):
+        declaration = next(line for line in SCRIPT.read_text().splitlines()
+                           if line.startswith('DEV_SWITCHES='))
+        result = subprocess.run(
+            ['bash', '-c', declaration + '\nprintf "%s\\n" "${DEV_SWITCHES[@]}"'],
+            check=True, text=True, capture_output=True)
+        switches = result.stdout.splitlines()
+        self.assertIn('EconomyFirst', switches)
+        self.assertIn('RepairReturnCheck', switches)
+        self.assertNotIn('EconomyFirstUnitPacing', switches)
+        self.assertNotIn('EconomyFirstTurrets', switches)
+
     def test_running_game_stages_without_replacing_running_app(self):
         self.pending()
         result = self.invoke(running=True)
