@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 # Independent single-game balance probes use PROCESSORS 2 instead of RUN_SERIAL.
 # Their profiles/output paths are private and their shared probe cache is locked.
-# The qualifier gives the Mini four slots (two games), hosted Macs two (one game).
+# General gameplay is qualified once on AWS; native CI retains local platform checks.
 # GUI and internally parallel multi-game fixtures retain exclusive scheduling.
 
 # Capability is an admission requirement, independent of tier membership. Nightly
@@ -31,6 +31,12 @@ endfunction()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    if(APPLE)
+        dunecity_add_test(headless integration LABELS infrastructure NAME qualification_registry_contract
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/qualification-aws.py
+                check-ci-plan --build ${CMAKE_BINARY_DIR})
+        set_tests_properties(qualification_registry_contract PROPERTIES TIMEOUT 30)
+    endif()
     dunecity_add_test(headless integration NAME probe_wrapper_lifecycle COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/menu/test_probe_process.py)
     set_tests_properties(probe_wrapper_lifecycle PROPERTIES TIMEOUT 60)
