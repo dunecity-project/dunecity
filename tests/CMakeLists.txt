@@ -663,7 +663,7 @@ if(DUNECITY_DIRECT_P2P AND NOT EMSCRIPTEN)
     target_compile_features(dunecity_p2p_interop PRIVATE cxx_std_17)
 endif()
 
-# The same measured 25-minute city simulations pin both native lockstep platforms.
+# The same measured 25-minute city simulations pin native Linux, macOS and Windows.
 # Keep these outside the macOS-only UI/probe group so MSVC and the Linux workers exercise the
 # same inputs.
 if((APPLE OR WIN32 OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
@@ -673,11 +673,13 @@ if((APPLE OR WIN32 OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja
             ${CMAKE_SOURCE_DIR}/tests/ai/test_genome_qualification.py
             SourceIdentityTests.test_source_identity_matches_committed_blobs_not_modified_worktree)
         set_tests_properties(source_identity_regression PROPERTIES TIMEOUT 60)
+        # Occupied-zone/shelter rules at d9f3544aa9792b9da5723c4b1ec18318c692c108:
+        # Linux, macOS and Windows all measured this digest at cycle 93750.
         dunecity_add_test(headless nightly NAME cross_platform_city_medium COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repeatable
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/cross-platform-city-medium
             --scenario --mod dunecity --house harkonnen --local-spectator --seed 9101 --minutes 25
-            --capture-mib 256 --path-workers 1 --expect-digest 070bbafc6799818b
+            --capture-mib 256 --path-workers 1 --expect-digest 3b3265b11dc676e5
             --scenario-sides harkonnen:1:qBotMedium,atreides:2:qBotMedium
             --scenario-style city-construction-capital-off
             --skirmish size=160,base=cy,army=0,city=0,spice=0,sand=65,rock=30,mountain=5,tech=9,credits=3000,seed=9101)
