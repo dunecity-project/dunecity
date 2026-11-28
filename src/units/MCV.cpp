@@ -29,6 +29,14 @@
 #include <sand.h>
 
 #include <players/HumanPlayer.h>
+#include <cstdlib>
+
+namespace {
+bool mcvLifecycleTrace() {
+    static const bool enabled=[] { const char* p=std::getenv("DUNECITY_TEST_ECONOMY_LOG");return p && p[0]=='1'; }();
+    return enabled;
+}
+}
 
 MCV::MCV(House* newOwner) : GroundUnit(newOwner)
 {
@@ -77,6 +85,8 @@ bool MCV::doDeploy() {
             // we hide the MVC so we don't get a soldier on destroy
             setVisible(VIS_ALL, false);
 
+            if (mcvLifecycleTrace()) SDL_Log("MCV_LIFECYCLE: house=%d event=deployed mcv=%u x=%d y=%d cycle=%u",
+                pOwner->getHouseID(),objectID,newLocation.x,newLocation.y,currentGame->getGameCycleCount());
             // destroy MCV but with base class method since we want no explosion
             GroundUnit::destroy();
 
@@ -101,6 +111,8 @@ bool MCV::canAttack(const ObjectBase* object) const {
 }
 
 void MCV::destroy() {
+    if (mcvLifecycleTrace()) SDL_Log("MCV_LIFECYCLE: house=%d event=lost mcv=%u air=%d x=%d y=%d cycle=%u",
+        getOwner()->getHouseID(),objectID,int(isPickedUp()),location.x,location.y,currentGame->getGameCycleCount());
     if(currentGameMap->tileExists(location) && isVisible()) {
         Coord realPos(lround(realX), lround(realY));
         currentGame->getExplosionList().push_back(new Explosion(Explosion_SmallUnit, realPos, owner->getHouseID()));

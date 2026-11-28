@@ -47,3 +47,9 @@ Integrator allocated save 9906 / protocol 155 after the 9905 / 153 garrison core
 ## Immediate base-A playtest correction
 
 The canonical `economy_first` entry tests A (EconomyFirst on, both optional opening variants off). Rocket infantry responding to observed air is not blocked by unit pacing; ordinary units retain their cap. Unfinished opening-zone work retains the next plot price rather than expiring at minute three. The experimental single-qualified-yard upgrade heuristic is absent: its C fixture lost nine yards and it is not recommended. C/E growth shortfalls remain recorded game results; no probe expectation is lowered. Coordinator directs the Air DEV_SWITCHES copy from C to A while the five-arm FFA experiment proceeds.
+
+## Literal turret arm
+
+B/D now pace all accepted Rocket Turret orders, including native selectors: zero before minute3,29 by10,50 by20,77 by31; the cap releases after31. Rejected native choices yield the yard to its next legal purpose. The curve continues if the base economy has stood down after reaching its income goal. Emergency rocket infantry remains exempt from unit pacing. Paid managed material, not unrelated Rocket placements, is counted as the effect. A real-engine fixture exercises77 accepted orders, six boundary rejections and one paid, legal standing turret. No original probe expectation is changed; optional game-growth shortfalls remain experimental results.
+
+Matched research additionally records MCV lifecycle events at the actual engine constructor, destruction and successful deployment boundaries, gated by the existing economy-log environment flag. Deployment uses GroundUnit::destroy directly, so actual pre-deployment deaths are distinct without inferring them from yard counts or delayed AI sampling. Birth IDs define the produced cohort and live end-of-game MCVs are reported as censored.

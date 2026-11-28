@@ -304,6 +304,18 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
             .set("item", itemID).set("builder", turn.pBuilder->getObjectID()).set("reason", refusal));
         return false;
     }
+    const bool pacedTurret = (pass.economyFirstActive || (cityLessons.economyFirstStoodDown
+        && economyFirstEnabled() && pass.citySimEnabled && gameMode==GameMode::Custom))
+        && getGameCycleCount()<MILLI2CYCLES(31*60000) && economyFirstTurretsEnabled()
+        && itemID == Structure_RocketTurret;
+    const int turretAllowance = pacedTurret ? CityLessonsPolicy::economyFirstTurretTarget(
+        getGameCycleCount(), MILLI2CYCLES(60000)) : std::numeric_limits<int>::max();
+    if (pacedTurret && cityLessons.economyFirstTurretOrders >= turretAllowance) {
+        if (pass.emitStatsLog)
+            SDL_Log("ECONOMY_FIRST: house=%d event=turret_paced spent=%d allowance=%d cycle=%u", houseID,
+                cityLessons.economyFirstTurretOrders, turretAllowance, getGameCycleCount());
+        return false;
+    }
     const bool economyUnit = pass.economyFirstActive && isUnit(itemID) && itemID != Unit_MCV;
     const bool economyPort = turn.pBuilder->getItemID() == Structure_StarPort;
     const int pacing = economyFirstUnitPacing();
@@ -480,11 +492,17 @@ bool QuantBot::produceItemWithLogging(BuildPass& pass, BuilderTurn& turn, Uint32
                         : cityLessons.economyFirstUnitSpend, allowance,
                     int(!paced || int64_t(spent) + data[itemID][houseID].price <= allowance), getGameCycleCount());
         }
-        if (pass.economyFirstActive && itemID == Structure_RocketTurret) {
+        if (turn.pBuilder->getItemID()==Structure_ConstructionYard && itemID!=Structure_Slab1
+            && itemID!=Structure_Slab4 && itemID!=Structure_Road)
+            cityLessons.economyFirstTurretBuilders.erase(turn.pBuilder->getObjectID());
+        if ((pass.economyFirstActive || pacedTurret) && itemID == Structure_RocketTurret) {
             ++cityLessons.economyFirstTurretOrders;
-            if (rule && std::string_view(rule) == "economy_first_turret")
-                SDL_Log("ECONOMY_FIRST: house=%d event=turret_order orders=%d cycle=%u", houseID,
-                    cityLessons.economyFirstTurretOrders, getGameCycleCount());
+            if (pacedTurret) {
+                cityLessons.economyFirstTurretBuilders.insert(turn.pBuilder->getObjectID());
+                SDL_Log("ECONOMY_FIRST: house=%d event=turret_order spent=%d allowance=%d met=%d cycle=%u", houseID,
+                    cityLessons.economyFirstTurretOrders, turretAllowance,
+                    int(cityLessons.economyFirstTurretOrders<=turretAllowance), getGameCycleCount());
+            }
         }
         // BUILD_ORDER (EconomyFirst evidence; switch on, or DUNECITY_TEST_ECONOMY_LOG=1): what each producer
         // bought, by which rule, from how much cash. Slabs and roads are left out.

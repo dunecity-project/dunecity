@@ -6,6 +6,7 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <numeric>
@@ -128,6 +129,53 @@ TEST_CASE("EconomyFirst: config key reads, writes and changes the hash", "[ai][c
         QuantBotConfig restored;
         REQUIRE(restored.applyOverrides(path.string()));
         REQUIRE(restored.force.economyFirst == value);
+        std::filesystem::remove(path);
+    }
+}
+
+TEST_CASE("EconomyFirst: room, working cash and integral opening schedule boundaries", "[ai][city-lessons][policy]") {
+    constexpr std::uint32_t minute=3750;
+    REQUIRE(L::economyFirstYardsForRoom(0)==1);
+    REQUIRE(L::economyFirstYardsForRoom(9)==1);
+    REQUIRE(L::economyFirstYardsForRoom(10)==2);
+    REQUIRE(L::economyFirstYardsForRoom(400)==9);
+    REQUIRE(L::economyFirstHold(0)==0);
+    REQUIRE(L::economyFirstHold(2000)==0);
+    REQUIRE(L::economyFirstHold(4000)==1000);
+    REQUIRE(L::economyFirstHold(22000)==10000);
+    REQUIRE(L::economyFirstUnitAllowance(0,minute)==0);
+    REQUIRE(L::economyFirstUnitAllowance(3*minute,minute)==3850);
+    REQUIRE(L::economyFirstUnitAllowance(10*minute-1,minute)==8049);
+    REQUIRE(L::economyFirstUnitAllowance(10*minute,minute)==std::numeric_limits<int>::max());
+    REQUIRE(L::economyFirstTurretTarget(3*minute-1,minute)==0);
+    REQUIRE(L::economyFirstTurretTarget(3*minute,minute)==0);
+    REQUIRE(L::economyFirstTurretTarget(3*minute+1,minute)==1);
+    REQUIRE(L::economyFirstTurretTarget(10*minute-1,minute)==29);
+    REQUIRE(L::economyFirstTurretTarget(10*minute,minute)==29);
+    REQUIRE(L::economyFirstTurretTarget(20*minute-1,minute)==50);
+    REQUIRE(L::economyFirstTurretTarget(31*minute-1,minute)==77);
+}
+
+TEST_CASE("EconomyFirst: each opening variant key is independently hashed and round-trips", "[ai][city-lessons][config]") {
+    const QuantBotConfig defaults;
+    REQUIRE_FALSE(defaults.force.economyFirst);
+    REQUIRE(defaults.force.economyFirstUnitPacing==0);
+    REQUIRE_FALSE(defaults.force.economyFirstTurrets);
+    std::vector<std::string> hashes{defaults.getConfigHash()};
+    for (const char* body : {"EconomyFirstUnitPacing=1\n", "EconomyFirstUnitPacing=2\n", "EconomyFirstTurrets=true\n"}) {
+        const auto path=std::filesystem::temp_directory_path()/(
+            "quantbot-opening-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".ini");
+        {std::ofstream file(path);file<<"[Force Concentration]\n"<<body;}
+        QuantBotConfig loaded;
+        REQUIRE(loaded.applyOverrides(path.string()));
+        for (const auto& hash:hashes) REQUIRE(loaded.getConfigHash()!=hash);
+        hashes.push_back(loaded.getConfigHash());
+        REQUIRE(loaded.save(path.string()));
+        QuantBotConfig restored;
+        REQUIRE(restored.applyOverrides(path.string()));
+        REQUIRE(restored.force.economyFirstUnitPacing==loaded.force.economyFirstUnitPacing);
+        REQUIRE(restored.force.economyFirstTurrets==loaded.force.economyFirstTurrets);
+        REQUIRE(restored.getConfigHash()==loaded.getConfigHash());
         std::filesystem::remove(path);
     }
 }

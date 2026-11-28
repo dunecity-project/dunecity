@@ -1,3 +1,4 @@
+#include <players/QuantBotBuildPass.h>
 // Real-engine MCV deployment fixture. Every decision here comes from
 // QuantBot::manageMcv and every yard from the production MCV::doDeploy path;
 // nothing reimplements the rules. The fixture isolates its own region: the
@@ -1397,6 +1398,77 @@ void runMcvDeploymentProbe(Game& game) {
                 "A unit was lost making way for the yard");
         SDL_Log("MCV_DEPLOYMENT_NOTE: boxed-in MCV deployed at %d,%d after %u cycles; %zu units made way",
             standing.x,standing.y,game.getGameCycleCount()-start,army.size());
+    }
+
+    // An explicitly OFF arm must stay OFF; the unforced/default probe exercises the positive curve.
+    const char* requestedTurretCurve=std::getenv("DUNECITY_TEST_ECONOMY_TURRETS");
+    // Literal turret curve: use the real producer boundary, paid completion and legal placement.
+    if (!requestedTurretCurve || requestedTurretCurve[0]!='0') {
+        struct RestoreCurve {
+            QuantBot* bot; decltype(bot->configOverride) config; QuantBot::CityLessonsState state;
+            ~RestoreCurve() {bot->configOverride=config;bot->cityLessons=std::move(state);}
+        } restoreCurve{bot,bot->configOverride,std::move(bot->cityLessons)};
+        bot->cityLessons={};
+        auto curveConfig=std::make_shared<QuantBotConfig>(bot->botConfig());
+        curveConfig->force.economyFirst=true;curveConfig->force.economyFirstUnitPacing=0;
+        curveConfig->force.economyFirstTurrets=true;bot->configOverride=curveConfig;
+        Coord corner=Coord::Invalid();
+        for (int y=1;y+10<currentGameMap->getSizeY() && corner.isInvalid();++y)
+            for (int x=1;x+10<currentGameMap->getSizeX() && corner.isInvalid();++x) {
+                bool clear=true;
+                for (int dy=0;dy<10 && clear;++dy) for (int dx=0;dx<10 && clear;++dx) {
+                    const auto* tile=currentGameMap->getTile(x+dx,y+dy);
+                    if (tile->hasAGroundObject() || tile->hasCityZone()) clear=false;
+                }
+                if(clear) corner=Coord(x,y);
+            }
+        require(corner.isValid(),"Turret curve fixture needs an empty real-map region");
+        for(int y=0;y<10;++y) for(int x=0;x<10;++x) currentGameMap->getTile(corner+Coord(x,y))->setType(Terrain_Rock);
+        auto* curveYard=dynamic_cast<ConstructionYard*>(house->placeStructure(NONE_ID,Structure_ConstructionYard,
+            corner.x+1,corner.y+1,true,true));
+        require(curveYard!=nullptr,"Turret curve fixture yard placement failed");
+        house->placeStructure(NONE_ID,Structure_WindTrap,corner.x+1,corner.y+5,true,true);
+        house->placeStructure(NONE_ID,Structure_Radar,corner.x+5,corner.y+1,true,true);
+        curveYard->curUpgradeLev=curveYard->getMaxUpgradeLevel();curveYard->updateBuildList();
+        require(curveYard->isAvailableToBuild(Structure_RocketTurret),"Turret curve fixture must unlock real Rocket Turrets");
+        house->storedCredits=0;house->cityCredits=0;house->startingCredits=100000;house->producedPower=10000;
+        auto order=[&]() {
+            QuantBot::BuildPass pass(0);pass.capitalChoice=-1;pass.money=house->getCredits();pass.citySimEnabled=true;
+            pass.economyFirstActive=true;pass.emitStatsLog=true;
+            for(int item=0;item<Num_ItemID;++item) pass.itemCount[item]=house->getNumItems(item);
+            QuantBot::BuilderTurn turn(pass.money);turn.pStructure=curveYard;turn.pBuilder=curveYard;
+            bot->beginBuilderTurn(pass,turn);
+            return bot->produceItemWithLogging(pass,turn,Structure_RocketTurret,__LINE__,"economy_first_turret");
+        };
+        const Uint32 minute=MILLI2CYCLES(60000);int accepted=0,rejected=0;
+        game.gameCycleCount=3*minute-1;
+        require(!order() && curveYard->getProductionQueueSize()==0,"A turret order escaped before minute three");++rejected;
+        game.gameCycleCount=3*minute;
+        require(!order(),"The turret curve spent at minute three before its first allowance");++rejected;
+        game.gameCycleCount=3*minute+1;
+        require(order(),"The first funded turret was refused by the literal curve");++accepted;
+        require(!order(),"Two turrets consumed the first one-order allowance");++rejected;
+        const Uint32 finishBy=game.gameCycleCount+MILLI2CYCLES(120000);
+        while(!curveYard->isWaitingToPlace() && game.gameCycleCount<finishBy) tick(10);
+        require(curveYard->isWaitingToPlace(),"The literal curve never finished its paid turret");
+        const Coord turretAt=corner+Coord(3,1);
+        require(bot->doPlaceStructure(curveYard,turretAt.x,turretAt.y),"The curve's paid turret could not be legally placed");
+        bool stands=false;
+        for(const auto* structure:structureList)
+            if(structure->getOwner()==house && structure->getItemID()==Structure_RocketTurret
+                && structure->getLocation()==turretAt) stands=true;
+        require(stands,"The curve reported a placement without a physical Rocket Turret");
+        for(const auto milestone:std::array<std::pair<int,int>,3>{{{10,29},{20,50},{31,77}}}) {
+            game.gameCycleCount=milestone.first*minute-1;
+            while(accepted<milestone.second) {
+                require(order(),"The literal curve refused a funded milestone order");++accepted;
+                bot->doCancelItem(curveYard,Structure_RocketTurret);
+                require(curveYard->getProductionQueueSize()==0,"The bounded curve fixture failed to clear its paid order");
+            }
+            require(!order(),"The literal curve admitted an order above its milestone");++rejected;
+        }
+        require(accepted==77 && rejected==6,"The turret curve did not exercise every allowance boundary");
+        SDL_Log("ECONOMY_FIRST_TURRET_ASSERT: accepted=77 placed=1 rejected=6 met=1");
     }
 
     // Save 9906: resource reservations and pacing survive disk saves and checkpoints.

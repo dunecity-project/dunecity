@@ -110,9 +110,9 @@ inline int economyFirstUnitAllowance(std::uint32_t cycle, std::uint32_t perMinut
 /// New Rocket Turret orders on his schedule, interpolated between his measured marks.
 inline int economyFirstTurretTarget(std::uint32_t cycle, std::uint32_t perMinute) {
     if (cycle < 3 * perMinute) return 0;
-    if (cycle < 10 * perMinute) return int(int64_t(29) * (cycle - 3 * perMinute) / (7 * perMinute));
-    if (cycle < 20 * perMinute) return 29 + int(int64_t(21) * (cycle - 10 * perMinute) / (10 * perMinute));
-    if (cycle < 31 * perMinute) return 50 + int(int64_t(27) * (cycle - 20 * perMinute) / (11 * perMinute));
+    if (cycle < 10 * perMinute) return int((int64_t(29) * (cycle - 3 * perMinute) + 7 * perMinute - 1) / (7 * perMinute));
+    if (cycle < 20 * perMinute) return 29 + int((int64_t(21) * (cycle - 10 * perMinute) + 10 * perMinute - 1) / (10 * perMinute));
+    if (cycle < 31 * perMinute) return 50 + int((int64_t(27) * (cycle - 20 * perMinute) + 11 * perMinute - 1) / (11 * perMinute));
     return 77;
 }
 inline int economyFirstYardsForRoom(int freeFootprints) {

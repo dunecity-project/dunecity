@@ -308,6 +308,22 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
     Uint32 admittedItem = NONE_ID;
     auto releaseUnfundedChoice = [&]() {
         const Uint32 item = yardTurn.itemID;
+        // The turret arm replaces native early buying too, not merely an extra minimum.
+        // A refused turret yields the slot to power/civics/zoning rather than pinning the yard.
+        if ((pass.economyFirstActive || (cityLessons.economyFirstStoodDown
+            && economyFirstEnabled() && pass.citySimEnabled && gameMode==GameMode::Custom))
+            && getGameCycleCount()<MILLI2CYCLES(31*60000) && economyFirstTurretsEnabled() && item==Structure_RocketTurret
+            && cityLessons.economyFirstTurretOrders >= CityLessonsPolicy::economyFirstTurretTarget(
+                getGameCycleCount(), MILLI2CYCLES(60000))) {
+            if (pass.emitStatsLog)
+                SDL_Log("ECONOMY_FIRST: house=%d event=turret_paced spent=%d allowance=%d cycle=%u",
+                    getHouse()->getHouseID(), cityLessons.economyFirstTurretOrders,
+                    CityLessonsPolicy::economyFirstTurretTarget(getGameCycleCount(), MILLI2CYCLES(60000)), getGameCycleCount());
+            yardTurn.itemID=NONE_ID;yardTurn.crimeServiceSite=Coord::Invalid();
+            yardTurn.skipRemainingStructureLogic=yardTurn.serviceSavingHold=false;
+            turn.installmentProject=NONE_ID;turn.installmentProjectStartBudget=0;
+            return;
+        }
         const bool incomeGate = pass.techIncomeLevel > 0 || pass.cityTechRefineries > 0;
         if ((!pass.techSavings && !incomeGate && pass.vanillaPlan == QuantBotVanillaPolicy::Plan::None)
             || item == NONE_ID || item == admittedItem
@@ -380,13 +396,17 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardAirRaidDefence(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
-    if (pass.economyFirstActive && economyFirstTurretsEnabled() && yardTurn.itemID == NONE_ID
-        && !yardTurn.skipRemainingStructureLogic && !yardTurn.civicClaimsYard
+    if ((pass.economyFirstActive || (cityLessons.economyFirstStoodDown
+            && economyFirstEnabled() && pass.citySimEnabled && gameMode==GameMode::Custom))
+            && getGameCycleCount()<MILLI2CYCLES(31*60000) && economyFirstTurretsEnabled()
+        && (yardTurn.itemID==NONE_ID || (pass.itemCount[Structure_ConstructionYard]>1 && DuneCity::isCityZoneStructure(yardTurn.itemID)))
+        && !yardTurn.skipRemainingStructureLogic
         && cityLessons.economyFirstTurretOrders < CityLessonsPolicy::economyFirstTurretTarget(
             getGameCycleCount(), MILLI2CYCLES(60000))
         && campaignAvailableToBuild(turn.pBuilder, Structure_RocketTurret)
         && hasPowerBufferForTurret(pass)) {
         yardTurn.itemID = Structure_RocketTurret;
+        yardTurn.crimeServiceSite = Coord::Invalid();
         yardTurn.structureRule = "economy_first_turret";
         releaseUnfundedChoice();
     }
@@ -4321,7 +4341,7 @@ bool QuantBot::placeYardStructure(BuildPass& pass, BuilderTurn& turn, YardTurn& 
                 .set("item", itemToBePlaced).set("x", location.x).set("y", location.y).set("success", placed));
             if (placed && pass.economyFirstActive) {
                 if (DuneCity::isCityZoneStructure(itemToBePlaced)) ++cityLessons.economyFirstZonesPlaced;
-                if (itemToBePlaced == Structure_RocketTurret && economyFirstTurretsEnabled())
+                if (itemToBePlaced == Structure_RocketTurret && cityLessons.economyFirstTurretBuilders.erase(yardID)>0)
                     SDL_Log("ECONOMY_FIRST: house=%d event=turret_placed x=%d y=%d cycle=%u", houseID,
                         location.x, location.y, getGameCycleCount());
             }

@@ -22,6 +22,7 @@
 #include <DynastyProjectile.h>
 
 #include <globals.h>
+#include <cstdlib>
 
 #include <FileClasses/GFXManager.h>
 #include <FileClasses/music/MusicPlayer.h>
@@ -472,6 +473,15 @@ void ObjectBase::setLocation(int xPos, int yPos) {
 void ObjectBase::setObjectID(int newObjectID) {
     if(newObjectID >= 0) {
         objectID = newObjectID;
+        if (itemID == Unit_MCV) {
+            static const bool trace = [] {
+                const char* value=std::getenv("DUNECITY_TEST_ECONOMY_LOG");
+                return value && value[0]=='1';
+            }();
+            if (trace && currentGame && owner)
+                SDL_Log("MCV_LIFECYCLE: house=%d event=born mcv=%u cycle=%u",
+                    owner->getHouseID(),objectID,currentGame->getGameCycleCount());
+        }
     }
 }
 
