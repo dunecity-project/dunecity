@@ -725,6 +725,14 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/mods/check-community-mods.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/community-mods-startup)
         set_tests_properties(community_mods_startup PROPERTIES TIMEOUT 1800 PROCESSORS 2)
+        # A build of the same version that ships other rules: the installed Dune City follows a
+        # QuantBot-only change, a profile left on the automatic snapshot of an older shipped
+        # Dune City plays the current Soldier price and QuantBot settings in new games, and the
+        # old build's save still loads its pinned revision.
+        dunecity_add_test(headless integration NAME shipped_mod_update COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/mods/run-shipped-mod-update-probe.py
+            --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/shipped-mod-update-probe)
+        set_tests_properties(shipped_mod_update PROPERTIES TIMEOUT 600 PROCESSORS 2)
         # Sihaya-Phonics stacks two scenario sandworms on tile 790. The second
         # cannot be placed and is destroyed while an observed game's map loads,
         # before any local player exists; that crashed 1.0.830 at startup.
