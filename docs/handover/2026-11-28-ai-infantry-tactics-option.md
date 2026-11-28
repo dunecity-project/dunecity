@@ -27,9 +27,34 @@ Protocol 152 already shipped on the Air. The corrected rule therefore uses a new
 
 The new INI key is **Garrisoning and Capturing**. A one-time profile migration preserves old Zone Garrisons permission where the new key is absent, removes both obsolete keys, and thereafter reads only the new key.
 
+## Test design and expectation changes
+
+- The real Options → Advanced → Default Game Rules path opens, renders, toggles, applies, persists and reopens the rule. Its saved/multiplayer settings feed the actual game.
+- AI ON uses all six raw zone flags OFF; AI OFF deliberately uses all six ON. Real AI orders and completed entries are counted only inside the corresponding arm. This is a permission-wide comparison, not an isolated effectiveness claim for each of the six tactics.
+- A real shared-house human uses Capture and map clicks on both friendly and enemy zones. OFF checks the single/multi controls and C shortcut; the unit probe additionally attacks direct/network/queued/old CAPTURE and damaged-zone arrival bypasses.
+- Vanilla runs an actual human capture of a damaged ordinary building with the stored city preference both OFF and ON; neither value may remove vanilla's Capture command.
+- Four real-startup profiles cover legacy OFF, legacy ON with AI-only OFF, conflicting new-key precedence, and AI-only OFF without an old zone permission. They also check inactive mixed-case mod sections, key retirement and preservation of unrelated sections.
+- Synthetic unit-only garrison fixtures switch actual QuantBot controllers to `AIRole::Off`, not the global permission: human ON cases and core unit/weapon simulation must still run. The separate shared-house safety arms retain an active fighter QuantBot and prove both human roster orders keep two occupants while AI-only releases them.
+- Existing `garrison_button_rule_off` now requires Capture hidden **and disabled**, rather than visible with a non-garrison tooltip. Baseline/control harnesses pin the unified permission OFF; garrisoned Saboteur cases explicitly pin it ON. No existing threshold or positive-path assertion is loosened.
+
+
 ## Corrected-rule results
 
-The corrected human-and-AI permission has not yet been qualified. The historical measurements below only cover the superseded AI-only option and its shared-human safety fix.
+**Qualified source:** `414d3c73c512b96dd76ed8f3b0a1268d2430edf8`, AWS-mel2 job `20261128T173406-garrison-capture-cutover-v1-2b9cb2`: **6/6 passed**, 2m02s submission-to-result. The last test ended at 2026-11-28 17:36:07 AEDT and its successful receipt was collected at 17:36:08.
+
+| Check | Observed result |
+|---|---|
+| `garrison_capture_settings` | 7,899 assertions in 2 cases; settings/hash/following-record round trips, permission bit5, legacy MOD19 bytes0/1/2/3 with both old extensions |
+| Real AI, raw zone flags opposed to permission | ON (all raw0): 3 orders, 3 completed entries, enemy zone taken (`captured=1`); OFF (all raw1): 0 orders, 0 entries, 0 captures. Each arm ran3,750 cycles |
+| Real human Capture | ON: 2 infantry in the friendly zone, 2 in the enemy zone and ownership changed to the human; OFF: 0 in either and enemy owner retained, after actual single/multi widget and C/map paths |
+| Shared-house safety | Active AI-only2→0; active Human-first2→2 and Human-last2→2, both shared houses reporting engine_ai=1 over3,751 cycles |
+| Vanilla | Actual damaged-building Capture succeeded with each stored city preference0/1 (320 cycles each); city control hidden, zone authority false |
+| Startup migration | All4 real-startup profiles passed new-key precedence, old-zone permission retention, AI-only retirement, mixed-case inactive mod and unrelated-section checks |
+| Existing positive/negative paths | `zone_garrison_probe`: all33 cases, including health/regeneration/redevelopment/save coverage; `zone_garrison_panel_probe`, `saboteur_zone_probe` and `infantry_squad_probe` all passed |
+
+No corrected-rule targeted failure occurred. The green source was handed to the Integrator immediately for the Air playtest-first landing; its final monotonic protocol, actual installation, four AI gates and broad `-L nightly -LE gui` qualification belong to that integration lane and are **not claimed passed here**.
+
+**Unverified manually:** the menu's appearance on a real screen and a live old-save playthrough. The headless probe did render and bound-check the real640×480 menu and wrapped explanation; legacy settings bytes were tested, not a human's whole saved session.
 
 
 ## Superseded AI-only implementation evidence
