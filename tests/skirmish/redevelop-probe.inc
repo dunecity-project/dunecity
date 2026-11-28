@@ -372,9 +372,10 @@ void runRedevelopProbe() {
     const Params params = caseParams("city-redevelop");
     skirmishRequire(RandomSkirmish::activateMod(params.mod), "Case mod did not activate");
     const Result result = SkirmishGenerator::generate(params, RandomSkirmish::loadCatalogue(params.mode));
-    // This four-switch fixture predates default-on garrisons. Captures and levies change
-    // the city census and construction timing, so matched arms would no longer isolate
-    // park/relocation effects. Occupied-zone type locking has its own real-engine probe.
+    // This four-switch fixture predates default-on garrisons. Their levies/captures
+    // change High-Tech Factory placement, shifting the cluster centre during the
+    // Park's 30-second effect window. Keep that confounder off; occupied-zone type
+    // locking has its own real-engine probe.
     auto rules = effectiveGameOptions;
     rules.garrisoningAndCapturing = false;
     GameInitSettings init = RandomSkirmish::makeInit(result, rules, params);
