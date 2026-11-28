@@ -19,6 +19,7 @@
 # --wait      if the game is running on the Air, wait for it to close, then swap
 #             (default: leave the new app staged and swap at the next run)
 # --switch    QuantBot switch to turn on; repeatable. Default: every switch in DEV_SWITCHES.
+# DUNECITY_AIR_BUILD_SOURCE pins an existing artifact when staging HEAD has advanced.
 # The previous app is kept in /tmp/dunecity-dev-<sha> on the Air.
 set -euo pipefail
 
@@ -42,11 +43,12 @@ if ((build)); then
     : "${AGENT_OWNER:?set AGENT_OWNER=FRAMEWORK:SESSION:AGENT for the build mutex}"
     agent-workspace stage --project dunecity --owner "$AGENT_OWNER" --wait build
 fi
-sha=$(git -C "$REPO" rev-parse --short=9 HEAD)
+sha=${DUNECITY_AIR_BUILD_SOURCE:-$(git -C "$REPO" rev-parse HEAD)}
+sha=${sha:0:9}
 built=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M' "$BIN/dunecity.app/Contents/MacOS/dunecity")
 codesign --verify --deep --strict "$BIN/dunecity.app"
 dest=/tmp/dunecity-dev-$sha
-echo "staging HEAD $sha, build-int app built $built -> $HOST:$dest"
+echo "artifact source $sha, build-int app built $built -> $HOST:$dest"
 
 # Turn the switches on in a copy's shipped defaults; build-int itself stays the tested default.
 work=$(mktemp -d /private/tmp/dunecity-air-dev.XXXXXX)
@@ -57,6 +59,7 @@ for key in "${switches[@]+"${switches[@]}"}"; do
     grep -q "^$key=" "$defaults" || { echo "unknown switch $key" >&2; exit 1; }
     sed -i '' -E "s/^$key=.*/$key=1/" "$defaults"
 done
+echo "LOCAL_COPY_READY $sha"
 codesign --force --deep --sign - "$work/dunecity.app" 2>/dev/null
 codesign --verify --deep --strict "$work/dunecity.app"
 
