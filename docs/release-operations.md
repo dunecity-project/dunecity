@@ -224,10 +224,11 @@ must remain explicit; do not invent a new tag merely to prove automation.
 - Reuse one sealed fixture per source/toolchain/runtime identity, not per test
   case. Cancellation/timeout terminates and reaps the complete owned process
   group. Preserve the failed case's concise evidence, not endless raw traces.
-- Green integration batches produce immutable staging packages after the two-hour
-  debounce, with a daily safety-net and full-SHA manual dispatch. Unchanged input
-  does not create another package. Development stays `DUNECITY_RELEASE_BUILD=OFF`,
-  prerelease and never Latest. Routine Mac packages use hosted ARM64, not Mini.
+- Green integration batches immediately produce immutable staging packages, with
+  a daily safety-net and full-SHA manual dispatch. There is no fixed cooldown
+  between different source SHAs; unchanged inputs and existing drafts are reused,
+  never rebuilt. Development stays `DUNECITY_RELEASE_BUILD=OFF`, prerelease and
+  never Latest. Routine Mac packages use hosted ARM64, not Mini.
 - Browser staging commits only tiny `deploy/staging-browser.json` metadata to
   the website repository; verified immutable archives download into temporary
   storage. Never commit WASM/data snapshots into its Git history. `/play-staging`
@@ -241,6 +242,17 @@ must remain explicit; do not invent a new tag merely to prove automation.
   Mini retains bounded native integration, calibrated GUI/performance/skin and
   packaged-pointer verification. Qualification metadata, plan and JUnit digests
   must agree before Latest.
+  Public staging also requires a genuinely green frozen headless-nightly plan:
+  authenticated exact-SHA AWS game results plus its legitimate Mini quick checks.
+  Accepted failures, incomplete execution and Mac-only receipts cannot publish it.
+  `staging-nightly`
+  restores/authenticates that receipt in parallel with package assets, without the
+  staging-lifecycle or Mini build mutex. Only publication takes the lifecycle lock.
+  Its original qualifier run/attempt and all three evidence digests are frozen in
+  the publication manifest and reauthenticated by consumers. Previously published
+  snapshots remain immutable; they are not restamped as qualified under this rule.
+  Report platform CI-ready and qualified-publication times separately. Air dev
+  delivery is independent of public package qualification.
 - Freeze one candidate artifact set and required gates before production.
   Record scoped accepted known failures separately from genuinely blocking
   defects. Do not silently waive a gate or rebuild a successful artifact because
@@ -269,10 +281,18 @@ gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref main 
 python3 scripts/release-automation.py reuse-qualification --sha "$FULL_SHA" --directory "$EVIDENCE_DIR/qualification"
 ```
 
+Dispatch from `main` (`--ref main`): the host gate refuses a qualification workflow run from
+any other ref with "platform job ID is not approved", and the refused run then queues a
+hosted fallback.
+
 The Mini is optional capacity. The host gate admits only the separately hash-approved
 qualification workflow on `main`, with a successful candidate
 selection and no production reservation. The workspace and queue atomically admit
-one verification lane without waiting; a refusal triggers a hosted run. An offline
+one verification lane. With the workflow from PR #128 on `main`, while another agent holds
+the workspace gate the qualifier retries every 30 seconds for up to 30 minutes (19 November 2026: both automatic Mini
+attempts that day met a held gate, and their hosted fallbacks took about two hours); a
+refusal that outlasts that window triggers a hosted run. A lane that started is never
+retried. An offline
 or occupied runner gets a two-minute queue window, then a hosted dispatch and
 cancellation of the queued attempt. A runner assignment racing cancellation may
 briefly start the old lane; its queue wrapper terminates only that owned child.
@@ -305,7 +325,26 @@ package ABI compatibility, and compiler caches validate each compiler invocation
 and its source inputs. Mini qualification never falls back to signing caches.
 A new key initially needs warming in
 the default-branch scope; a cache written only by integration/PR CI is not a
-default-branch cache for a later tag. Its job limit is 60 minutes, versus 120 on hosted Mac.
+default-branch cache for a later tag. Its job limit is 90 minutes (up to 30 waiting for the
+gate, the rest for the Mini lane and the AWS games), versus 120 on hosted Mac.
+
+**Test games run on AWS** once `main`'s `qualify-release.yml` sets
+`DUNECITY_QUALIFY_GAMES_ON_AWS: '1'` on the qualify step (PR #128); staging keeps a
+byte-identical copy of `main`'s workflow, and without the flag the Mini plays every game as
+before. Install the new workflow hash in the Mini gate (`~/.config/agent-workspace/github-runner.json`,
+`qualification.allowed_workflow_sha256`) before the merge. On the Mini, `scripts/qualification-aws.py`
+splits the frozen plan right after configuration: every test that plays a game (`PROCESSORS`
+2 or more, `RUN_SERIAL`, or a probe fixture; 164 of 236 tests, about 3,000 of 3,100 test
+seconds) goes to the AWS workers as one `dunecity-queue` job pinned to the candidate SHA, at
+priority 10, ahead of research. The Mini compiles and runs the 72 quick tests that start no
+game, then releases its gate; the workflow follows the AWS job outside it (at most 40
+minutes, then the job is cancelled and qualification fails), writes it as JUnit with
+`dunecity-queue report JOB --junit`, merges it into `macos-headless-results.xml` and runs the
+same receipt check. A pass that needed the queue's retry on another worker counts as a
+failure, because the Mac run has no retries. The receipt's `qualification.linux` names the
+queue job, its source commit (which must equal the candidate) and the tests it ran; Mac game
+coverage of the candidate comes from integration CI's macOS job, not this qualifier. The
+hosted fallback cannot reach the queue and still plays every game itself.
 Any production reservation refuses new Mini verification admissions, including
 the same source SHA. Admission is not preemption: a production request arriving
 after qualification starts waits for that admitted job to finish or time out.
@@ -313,10 +352,14 @@ Do not terminate accepted jobs or bypass the shared gate to claim immediate
 production priority. A timeout/cancellation terminates the owned queue child and
 preserves failed evidence; it is not permission to relabel the result as a pass.
 
-Independent single-game probes use CTest `PROCESSORS 2`: the Mini qualifier has
-four slots (up to two games), the smaller hosted Mac has two. GUI, network and
-internally parallel multi-game tests retain serial scheduling. Profiles and output
-paths stay separate; no timeouts or assertions are relaxed. The PHP-backed network
+Every test that plays one game at a time uses CTest `PROCESSORS 2`: the hosted Mac has two
+slots (one game at a time), and the AWS queue weights tests by its own table. Only
+the tests listed in `scripts/tests/test_headless_parallel.py` (`EXCLUSIVE`, each
+with its reason) keep `RUN_SERIAL`: real-window/GPU and calibrated performance
+tests, the AI gates and other tests that run several games or path workers at
+once, and the PHP-backed network tests. CI fails if any other test adds
+`RUN_SERIAL`. Profiles and output paths stay separate; no timeouts or assertions
+are relaxed. The PHP-backed network
 test runs in the stable Mini lane, with missing PHP or a skipped case fatal; both
 qualification backends exclude that separately required network scope.
 
@@ -441,7 +484,7 @@ held or untested. Never claim one channel from another channel's evidence.
 | 6 | Website pages | The release job updates links, labels and `changelog.html`. The "New in X.Y.Z" prose on `website/index.html` and `website/dune-city.html` is manual | Live pages show the new prose; Android and TestFlight labels match what is actually published |
 | 7 | iPhone/iPad (TestFlight) | `scripts/build-ios.sh --testflight` on the mini, then App Store Connect steps (below) | Build `VALID`, in the Public group, Beta App Review submitted |
 | 8 | Android | Independent version line; signed with the existing upgrade key; needs Stefan's phone (below) | Published only after a phone test and Stefan's explicit "publish" |
-| 9 | Records | `HANDOVER.md` entry (docs-only PR, `[skip ci]`); Hindsight memory | Machines per check and untested platforms are listed |
+| 9 | Records | `docs/handover/YYYY-MM-DD-release-X.Y.Z.md` (docs-only, `[skip ci]`); Hindsight memory | Machines per check and untested platforms are listed |
 
 Order: 1 → 2 → merge + tag (3) → 4 and 5 start automatically. Do 6 after the release job's
 website commit. 7 can run while 3 builds; 8 has its own gates. Cancel main's duplicate
@@ -532,6 +575,23 @@ SourceForge backfills never advance current download defaults or source branches
 Documentation-only pushes may use `[skip ci]`; game changes may not skip their
 required CI.
 
+`resume build` reruns a failed Mac lane from the same source, which signs and
+notarizes again. Before it, centre the Mini's pointer and do not move it during
+the lane: the packaged pointer gate reads the real pointer where it rests (see
+the consumer notes below). A rerun after Apple has accepted the app can also
+fail at stapling under the runner's App Management restriction. Observed once,
+in the third attempt of `v1.0.868`: packaging launched the signed app before
+stapling, that launch was of already notarized code, and `stapler staple`
+exited 73 (kernel `System Policy: stapler deny file-write-create
+…/Contents/CodeResources`; TCC `kTCCServiceSystemPolicyAppBundles`, responsible
+binary the runner's `node`, no prompt). The same two steps passed from a
+terminal session, whose host app holds that permission. From 1.0.869 the launch
+follows the staple; runner validation of that order is the 1.0.869 release.
+Never change the Mini's privacy grants to work around this; that decision is
+Stefan's. The `release` job accepts only the `DuneCity-macOS-DMG` artifact of a
+successful Mac lane; `DuneCity-macOS-failed-packages-N` is evidence and has no
+consumer.
+
 ## SourceForge presentation and web hosting
 
 See [sourceforge-releases.md](sourceforge-releases.md) for credential **names**,
@@ -552,7 +612,7 @@ Keep old manuals/maps and other files. No PHP upgrade is needed for static HTML.
 ## Knowledge maintenance
 
 Keep this runbook and SourceForge guide authoritative in Git; entry links exist
-in both `AGENTS.md` and `CLAUDE.md`. Put dated outcomes in `HANDOVER.md`, correcting
+in both `AGENTS.md` and `CLAUDE.md`. Put dated outcomes in `docs/handover/` (one file each; `HANDOVER.md` is frozen history), correcting
 stale current-state claims. When available, retain verified outcomes in Codex
 context-memory and deliberately promote shared engineering knowledge; memory is
 an index to evidence, not a replacement for repository documentation. Never put
