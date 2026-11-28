@@ -53,14 +53,33 @@ options, 120 minutes, 24 house-games per arm against 216 control house-games:
 | city-lessons (both) | Launchers 24/24, Palaces 21.3 placed | Launchers 24/24, Palaces 5.5 placed |
 | CityLauncherArmy alone (`266584f5a`) | 24/24, fielded 71% | 24/24, fielded 74% |
 
-**Scores** (placement score, paired against control, 95% interval):
+**Scores** (placement score, paired against control, 95% interval). Each cell gives the house-games where every
+switched-on behaviour passed its in-game assertion (Stefan, 2026-11-28: "we need assertions during the game to
+ensure the ai is actually doing the bahaviour we ask for"; city-lessons-report.py, applied to these runs after
+the fact: Launchers >= 50% of vehicles built with no Ornithopter, a low-value Palace whose lots rose 10+ standing,
+a front Palace standing after 5 minutes, a drill turret that engaged):
 
-| Arm | Metropolis | rs192 4P | All games |
-|---|---|---|---|
-| LowValuePalaces | +0.059 [-0.331, +0.441] level | -0.069 [-0.429, +0.297] level | -0.005 level |
-| FrontPalaces | +0.030 [-0.331, +0.394] level | not tested | -0.002 level |
-| city-lessons | -0.163 [-0.544, +0.252] level | -0.104 [-0.468, +0.229] level | -0.134 level |
-| CityLauncherArmy (`266584f5a`) | **-0.397 [-0.689, -0.113] loses** | -0.067 [-0.475, +0.340] level | - |
+| Arm | Metropolis | rs192 4P |
+|---|---|---|
+| LowValuePalaces | 24/24 passed; +0.059 [-0.331, +0.441] level | 24/24; -0.069 [-0.429, +0.297] level |
+| FrontPalaces | 24/24; +0.030 [-0.331, +0.394] level | 9/24, **NOT TESTED** |
+| city-lessons | 24/24; -0.163 [-0.544, +0.252] level | 0/24, **NOT TESTED** (was reported level) |
+| CityLauncherArmy (`266584f5a`) | 24/24; **-0.397 [-0.689, -0.113] loses** | 0/24, **NOT TESTED** (was reported level) |
+| Combined: CityLauncherArmy + both Palace switches + TurretDrill (`453036b0f`) | 22/24 (drill 24, front Palace 24, Launcher 23, low-value Palace 23); +0.053 [-0.336, +0.440] level | 0/24, **NOT TESTED** (Launcher 0/24, front Palace 5/24) |
+| CityLauncherArmy + TurretDrill (`453036b0f`) | 23/24; -0.034 [-0.304, +0.248] level | - |
+
+The rs192 Launcher rows were not tested: in every house-game the Starport's bargains bought Ornithopters (50 in
+4 games, 20261128T110127-cla-orni); fixed in `2baea1b53` (no Ornithopter bargain while CityLauncherArmy is on).
+The combined rs192 arm is re-run at `f30b3554a`.
+
+**Combined run** (Stefan, 2026-11-28, "Yes, test together"): the turret switch is TurretDrill alone, the one
+`turret_drill_save` asserts 8/8 against his save. At minute 72 on Metropolis the combined arm placed 643 drill
+orders, 518 placed, 498 engaged, 97% of drill turrets touching (his 94%), 384 Rocket Turrets standing (house 0 in
+his save 358, control 278), 12 front Palaces (his 19), 62% Launchers fielded from minute 50 (his 83%), 957
+Launchers lost per game. The switches interfere: low-value Palaces by minute 72 fell from 17.5 (alone) to 3.5;
+of 165 expired plans 86 waited on another Palace pending (the front Palace plan holds the slot) and 110 were
+pre-empted. With the drill in front, CityLauncherArmy no longer loses on Metropolis (-0.397 alone, -0.034 with
+the drill), but no interval is above 0.
 
 **Decision.** All three stay OFF. No interval is above 0, so no Fortress or /weak check was needed.
 CityLauncherArmy loses on Metropolis on its own. It fields his share and loses his number of Launchers
