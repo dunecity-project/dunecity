@@ -47,7 +47,7 @@ if not WINDOWS:
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import copy_revisions, discard_profile_assets, headless_mod_reader, prune_runs, remove_tree, shared_headless_mods  # noqa: E402
+from probe_profile import copy_revisions, discard_profile_assets, headless_mod_reader, native_performance_lease, prune_runs, remove_tree, shared_headless_mods  # noqa: E402
 
 
 def run_strategy_processes(command, runs, workers, timeout, *, pass_fds=()):
@@ -1183,9 +1183,11 @@ elif env.get('DUNECITY_SIM_MEASURE'):
                     sample_seconds=float(env.get('DUNECITY_SIM_SAMPLE_SECONDS', '0')), pass_fds=cache_fds)
 else:
     try:
-        with (out/'run.log').open('w') as log:
+        # DUNECITY_MINI_PERF_LOCK guards native execution, never probe compilation.
+        with native_performance_lease() as performance_fds, (out/'run.log').open('w') as log:
             subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
-                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout,pass_fds=cache_fds)
+                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout,
+                           pass_fds=(*cache_fds, *performance_fds))
     except subprocess.CalledProcessError:
         # Put the probe's own reason where CTest captures it: the run directory stays on the worker.
         failed = [line for line in (out/'run.log').read_text(errors='replace').splitlines()

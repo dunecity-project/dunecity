@@ -17,6 +17,9 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'performance'))
+from probe_profile import native_performance_lease
+
 from probe_fixture import file_hash, prepare_fixture
 from probe_process import ProbeProcesses
 import pointer_artifact as pointer
@@ -674,6 +677,55 @@ class PointerArtifactTests(unittest.TestCase):
             self.assertEqual(diagnostic['reasonCode'], 'source-head-mismatch')
             self.assertEqual(diagnostic['sourceCommit'], expected['commit'])
             self.assertEqual(diagnostic['expectedSourceCommit'], '0'*40)
+
+
+class MiniPerformanceLeaseTests(unittest.TestCase):
+    def test_unconfigured_platform_needs_no_descriptor(self):
+        with patch.dict(os.environ):
+            os.environ.pop('DUNECITY_MINI_PERF_LOCK', None)
+            with native_performance_lease() as descriptors:
+                self.assertEqual(descriptors, ())
+
+    def test_resource_path_must_be_absolute(self):
+        with patch.dict(os.environ, DUNECITY_MINI_PERF_LOCK='relative.lock'):
+            with self.assertRaisesRegex(ValueError, 'absolute'):
+                with native_performance_lease():
+                    self.fail('relative path admitted')
+
+    @unittest.skipUnless(os.name == 'posix', 'Mini resource admission is POSIX')
+    def test_native_measurement_excludes_a_local_shared_copy(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'resource.lock'
+            with patch.dict(os.environ, DUNECITY_MINI_PERF_LOCK=str(path)):
+                with native_performance_lease() as descriptors, path.open('a+b') as other:
+                    self.assertEqual(len(descriptors), 1)
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(other, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                with path.open('a+b') as other:
+                    fcntl.flock(other, fcntl.LOCK_SH | fcntl.LOCK_NB)
+
+    @unittest.skipUnless(os.name == 'posix', 'Mini resource admission is POSIX')
+    def test_native_child_retains_admission_after_controller_context_closes(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'resource.lock'
+            with patch.dict(os.environ, DUNECITY_MINI_PERF_LOCK=str(path)):
+                with native_performance_lease() as descriptors:
+                    child = subprocess.Popen(
+                        [sys.executable, '-c', 'import sys; print("ready",flush=True); sys.stdin.readline()'],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, pass_fds=descriptors)
+                    self.addCleanup(child.kill)
+                    self.assertEqual(child.stdout.readline(), 'ready\n')
+                try:
+                    with path.open('a+b') as other:
+                        with self.assertRaises(BlockingIOError):
+                            fcntl.flock(other, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                finally:
+                    child.communicate('\n', timeout=3)
+                self.assertEqual(child.returncode, 0)
+                with path.open('a+b') as other:
+                    fcntl.flock(other, fcntl.LOCK_SH | fcntl.LOCK_NB)
 
 
 if __name__ == '__main__':

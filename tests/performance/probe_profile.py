@@ -40,6 +40,26 @@ _failed_lock = threading.Lock()
 HASH = re.compile(rb'[0-9a-f]{64}')
 
 
+@contextmanager
+def native_performance_lease():
+    """Mini-only measurement admission; acquire before the native runtime timeout."""
+    path = os.environ.get('DUNECITY_MINI_PERF_LOCK')
+    if not path:
+        yield ()
+        return
+    if not Path(path).is_absolute():
+        raise ValueError('DUNECITY_MINI_PERF_LOCK must name the installed absolute resource path')
+    import fcntl
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield (descriptor,)
+    finally:
+        # No explicit LOCK_UN: an inherited native fd keeps the lease after a
+        # parent dies, until that owned child has actually exited.
+        os.close(descriptor)
+
+
 def remove_tree(path):
     """Remove a private probe tree, including read-only Windows snapshots."""
     def retry_readonly(function, filename, error):

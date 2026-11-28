@@ -44,7 +44,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'tests/performance'))
-from probe_profile import remove_tree, require_free_space, scratch_dir  # noqa: E402
+from probe_profile import native_performance_lease, remove_tree, require_free_space, scratch_dir  # noqa: E402
 
 DATA = root / 'tests/performance/data'
 SCENARIOS = {
@@ -293,10 +293,11 @@ def run_menu_launch(args, scratch):
         env['SDL_RENDER_DRIVER'] = 'software'
     if args.path_workers:
         env['DUNECITY_PATH_WORKERS'] = str(args.path_workers)
-    started = time.time()
-    with (out / 'run.log').open('w') as log:
+    # DUNECITY_MINI_PERF_LOCK is injected only for the Mini perf_regression unit.
+    with native_performance_lease() as performance_fds, (out / 'run.log').open('w') as log:
+        started = time.time()
         subprocess.run([str(binary), '--window', '--showlog'], cwd=out, env=env, stdout=log, stderr=subprocess.STDOUT,
-                       check=True, timeout=args.menu_launch + 600)
+                       check=True, timeout=args.menu_launch + 600, pass_fds=performance_fds)
     text = (out / 'run.log').read_text(errors='replace')
     found = next((json.loads(line.split('MENU_LAUNCH_RESULT: ', 1)[1]) for line in text.splitlines()
                   if 'MENU_LAUNCH_RESULT: ' in line), None)
