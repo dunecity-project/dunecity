@@ -555,8 +555,11 @@ bool UnitBase::drawEnhancedUnitSprite(int x, int y, int idleDirection,
 
     const auto renderMode = pGFXManager->getEnhancedUnitRenderMode(
         getItemID(), getOwner()->getHouseID(), state, renderDirection);
+    const bool preferAlternate = (getObjectID() & 1u) != 0;
     if(renderMode == GFXManager::EnhancedRenderMode::Layered) {
-        return false;
+        return pGFXManager->drawEnhancedSplitUnit(getItemID(), getOwner()->getHouseID(),
+                                                  currentZoomlevel, state, renderDirection,
+                                                  elapsedMs, x, y, preferAlternate);
     }
 
     if(renderMode == GFXManager::EnhancedRenderMode::Random) {
@@ -571,7 +574,9 @@ bool UnitBase::drawEnhancedUnitSprite(int x, int y, int idleDirection,
             enhancedRenderInteractionUsesFull = (hash & 1u) != 0;
         }
         if(!enhancedRenderInteractionUsesFull) {
-            return false;
+            return pGFXManager->drawEnhancedSplitUnit(getItemID(), getOwner()->getHouseID(),
+                                                      currentZoomlevel, state, renderDirection,
+                                                      elapsedMs, x, y, preferAlternate);
         }
     } else {
         enhancedRenderInteractionKey = -1;

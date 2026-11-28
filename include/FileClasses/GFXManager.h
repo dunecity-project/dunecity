@@ -733,6 +733,10 @@ public:
     bool             drawEnhancedUnit(int itemID, int house, unsigned int z,
                                       EnhancedUnitState state, int direction,
                                       Uint32 elapsedMs, int x, int y);
+    bool             drawEnhancedSplitUnit(int itemID, int house, unsigned int z,
+                                           EnhancedUnitState state, int direction,
+                                           Uint32 elapsedMs, int x, int y,
+                                           bool preferAlternate = false);
     Uint32           recordEnhancedInfantryFall(int itemID, int house,
                                                  int direction, Uint32 nowMs);
     bool             drawEnhancedInfantryFall(Uint32 token, int house,
@@ -857,6 +861,8 @@ private:
         int frameCount = 1;
         int frameMs = 100;
         std::vector<Uint32> durationsMs;
+        std::vector<int> motionXMilliPx;
+        std::vector<int> motionYMilliPx;
         int anchorX = -1;
         int anchorY = -1;
         bool loop = true;
@@ -877,6 +883,10 @@ private:
         int baseHeight = 0;
         double scale = 1.0;
         std::map<int, EnhancedUnitAnimation> animations;
+        std::map<int, EnhancedUnitAnimation> hullLayers;
+        std::map<int, EnhancedUnitAnimation> turretLayers;
+        std::map<int, EnhancedUnitAnimation> alternateHullLayers;
+        std::map<int, EnhancedUnitAnimation> alternateTurretLayers;
     };
 
     struct EnhancedAtlasChunk {

@@ -1,3 +1,4 @@
+#include <charconv>
 #include <mod/Workshop.h>
 /*
  *  This file is part of Dune Legacy.
@@ -7779,50 +7780,89 @@ void GFXManager::loadEnhancedUnitManifests() {
                 continue;
             }
 
+            const bool splitSupported = definition.itemID == Unit_Devastator
+                && manifest.getIntValue("Split", "Schema", 0) == 1;
+            const auto readAnimation = [&](auto& entries, EnhancedUnitState state, int direction,
+                                           const std::string& section, bool isSplitLayer) {
+            const std::string atlasName = manifest.getStringValue(section, "Atlas", "");
+            if(atlasName.empty()) {
+                return;
+            }
+
+            const std::filesystem::path atlasPath =
+                std::filesystem::weakly_canonical(entry.path() / atlasName);
+            if(!isPathInside(atlasPath, isSplitLayer ? entry.path() : unitsRoot)
+               || !std::filesystem::is_regular_file(atlasPath)) {
+                SDL_Log("GFXManager: Enhanced atlas '%s' is missing or outside its mod",
+                        atlasPath.string().c_str());
+                return;
+            }
+
+            EnhancedUnitAnimation unitAnimation;
+            unitAnimation.atlasPath = atlasPath.string();
+            unitAnimation.columns = std::max(1, manifest.getIntValue(section, "Columns", 1));
+            unitAnimation.rows = std::max(1, manifest.getIntValue(section, "Rows", 1));
+            unitAnimation.frameCount = std::max(1, manifest.getIntValue(section, "Frames", 1));
+            unitAnimation.frameMs = std::max(1, manifest.getIntValue(section, "FrameMs", 100));
+            unitAnimation.durationsMs = parseEnhancedFrameDurations(
+                manifest.getStringValue(section, "DurationsMs", ""), unitAnimation.frameCount);
+            unitAnimation.anchorX = manifest.getIntValue(section, "AnchorX", -1);
+            unitAnimation.anchorY = manifest.getIntValue(section, "AnchorY", -1);
+            unitAnimation.loop = manifest.getBoolValue(
+                section, "Loop",
+                state != EnhancedUnitState::Combat
+                && state != EnhancedUnitState::CombatReturn
+                && state != EnhancedUnitState::DamageExploded
+                && state != EnhancedUnitState::DamageDissipation);
+
+            if(unitAnimation.columns > 64 || unitAnimation.rows > 64
+               || unitAnimation.frameCount > unitAnimation.columns * unitAnimation.rows) {
+                SDL_Log("GFXManager: Enhanced atlas '%s' declares %d frames in a %dx%d grid",
+                        atlasPath.string().c_str(), unitAnimation.frameCount,
+                        unitAnimation.columns, unitAnimation.rows);
+                return;
+            }
+
+                if(isSplitLayer && section.rfind("Hull.", 0) == 0) {
+                    const auto readMotion = [&](const char* key, std::vector<int>& result) {
+                        const auto csv = manifest.getStringValue(section, key, "");
+                        if(csv.empty()) return true;
+                        for(size_t first = 0; first <= csv.size();) {
+                            const auto comma = csv.find(',', first);
+                            const auto end = comma == std::string::npos ? csv.size() : comma;
+                            int offset = 0;
+                            const auto parsed = std::from_chars(csv.data() + first, csv.data() + end, offset);
+                            if(parsed.ec != std::errc{} || parsed.ptr != csv.data() + end
+                               || offset < -32000 || offset > 32000) return false;
+                            result.push_back(offset);
+                            if(comma == std::string::npos) break;
+                            first = comma + 1;
+                        }
+                        return result.size() == static_cast<size_t>(unitAnimation.frameCount);
+                    };
+                    if(!readMotion("MotionXMilliPx", unitAnimation.motionXMilliPx)
+                       || !readMotion("MotionYMilliPx", unitAnimation.motionYMilliPx)
+                       || unitAnimation.motionXMilliPx.size() != unitAnimation.motionYMilliPx.size()) return;
+                }
+                entries.emplace(enhancedAnimationKey(state, direction), std::move(unitAnimation));
+            };
             for(int stateIndex = 0; stateIndex < static_cast<int>(kEnhancedStateNames.size()); ++stateIndex) {
                 const auto state = static_cast<EnhancedUnitState>(stateIndex);
                 for(int direction = 0; direction < kEnhancedDirectionCount; ++direction) {
                     const std::string section = std::string(kEnhancedStateNames[stateIndex])
                                                 + "." + kEnhancedDirectionNames[direction];
-                    const std::string atlasName = manifest.getStringValue(section, "Atlas", "");
-                    if(atlasName.empty()) {
+                    readAnimation(definition.animations, state, direction, section, false);
+                    if(!splitSupported || (state != EnhancedUnitState::Idle
+                                           && state != EnhancedUnitState::Movement)) {
                         continue;
                     }
-
-                    const std::filesystem::path atlasPath =
-                        std::filesystem::weakly_canonical(entry.path() / atlasName);
-                    if(!isPathInside(atlasPath, unitsRoot)
-                       || !std::filesystem::is_regular_file(atlasPath)) {
-                        SDL_Log("GFXManager: Enhanced atlas '%s' is missing or outside its mod",
-                                atlasPath.string().c_str());
-                        continue;
+                    readAnimation(definition.hullLayers, state, direction, "Hull." + section, true);
+                    readAnimation(definition.turretLayers, state, direction, "Turret." + section, true);
+                    if(state == EnhancedUnitState::Movement) {
+                        const auto alt = std::string("MovementAlternate.") + kEnhancedDirectionNames[direction];
+                        readAnimation(definition.alternateHullLayers, state, direction, "Hull." + alt, true);
+                        readAnimation(definition.alternateTurretLayers, state, direction, "Turret." + alt, true);
                     }
-
-                    EnhancedUnitAnimation unitAnimation;
-                    unitAnimation.atlasPath = atlasPath.string();
-                    unitAnimation.columns = std::max(1, manifest.getIntValue(section, "Columns", 1));
-                    unitAnimation.rows = std::max(1, manifest.getIntValue(section, "Rows", 1));
-                    unitAnimation.frameCount = std::max(1, manifest.getIntValue(section, "Frames", 1));
-                    unitAnimation.frameMs = std::max(1, manifest.getIntValue(section, "FrameMs", 100));
-                    unitAnimation.durationsMs = parseEnhancedFrameDurations(
-                        manifest.getStringValue(section, "DurationsMs", ""), unitAnimation.frameCount);
-                    unitAnimation.anchorX = manifest.getIntValue(section, "AnchorX", -1);
-                    unitAnimation.anchorY = manifest.getIntValue(section, "AnchorY", -1);
-                    unitAnimation.loop = manifest.getBoolValue(
-                        section, "Loop",
-                        state != EnhancedUnitState::Combat
-                        && state != EnhancedUnitState::CombatReturn
-                        && state != EnhancedUnitState::DamageExploded
-                        && state != EnhancedUnitState::DamageDissipation);
-
-                    if(unitAnimation.frameCount > unitAnimation.columns * unitAnimation.rows) {
-                        SDL_Log("GFXManager: Enhanced atlas '%s' declares %d frames in a %dx%d grid",
-                                atlasPath.string().c_str(), unitAnimation.frameCount,
-                                unitAnimation.columns, unitAnimation.rows);
-                        continue;
-                    }
-
-                    definition.animations.emplace(enhancedAnimationKey(state, direction), std::move(unitAnimation));
                 }
             }
 
@@ -8220,17 +8260,12 @@ void GFXManager::loadEnhancedRenderModes() {
             for(int stateIndex = 0; stateIndex < static_cast<int>(kEnhancedStateNames.size()); ++stateIndex) {
                 const auto state = static_cast<EnhancedUnitState>(stateIndex);
                 for(int direction = 0; direction < kEnhancedDirectionCount; ++direction) {
-                    const std::string value = config.getStringValue(
-                        section,
-                        enhancedRenderModeConfigKey(definition.itemID, definition.houseID,
-                                                    state, direction),
-                        "full");
-                    const auto mode = parseEnhancedRenderMode(value);
-                    if(mode != EnhancedRenderMode::FullAnimation) {
+                    const auto name = enhancedRenderModeConfigKey(
+                        definition.itemID, definition.houseID, state, direction);
+                    if(config.hasKey(section, name)) {
                         enhancedUnitRenderModes.emplace(
-                            enhancedRenderModeKey(definition.itemID, definition.houseID,
-                                                  state, direction),
-                            mode);
+                            enhancedRenderModeKey(definition.itemID, definition.houseID, state, direction),
+                            parseEnhancedRenderMode(config.getStringValue(section, name, "full")));
                     }
                 }
             }
@@ -8302,6 +8337,15 @@ GFXManager::EnhancedRenderMode GFXManager::getEnhancedUnitRenderMode(
             return it->second;
         }
     }
+    const int animationKey = enhancedAnimationKey(state, direction);
+    for(const int requestedHouse : {house, -1}) {
+        for(const auto& definition : enhancedUnitDefinitions) {
+            if(definition.itemID == itemID && definition.houseID == requestedHouse
+               && definition.hullLayers.count(animationKey) && definition.turretLayers.count(animationKey)) {
+                return EnhancedRenderMode::Layered;
+            }
+        }
+    }
     return EnhancedRenderMode::FullAnimation;
 }
 
@@ -8317,11 +8361,7 @@ bool GFXManager::setEnhancedUnitRenderMode(int itemID, int house,
 
     loadEnhancedRenderModes();
     const int key = enhancedRenderModeKey(itemID, house, state, direction);
-    if(mode == EnhancedRenderMode::FullAnimation) {
-        enhancedUnitRenderModes.erase(key);
-    } else {
-        enhancedUnitRenderModes[key] = mode;
-    }
+    enhancedUnitRenderModes[key] = mode;
 
     try {
         const auto activeMod = ModManager::instance().getActiveModName();
@@ -8335,12 +8375,7 @@ bool GFXManager::setEnhancedUnitRenderMode(int itemID, int house,
         INIFile& config = *configFile;
         const std::string configKey = enhancedRenderModeConfigKey(
             itemID, house, state, direction);
-        if(mode == EnhancedRenderMode::FullAnimation) {
-            config.removeKey(section, configKey);
-        } else {
-            config.setStringValue(section, configKey,
-                                  enhancedRenderModeName(mode), false);
-        }
+        config.setStringValue(section, configKey, enhancedRenderModeName(mode), false);
         const auto temporary = std::filesystem::path(path + ".workshop-render.tmp");
         if(!config.saveChangesTo(temporary.string())) {
             SDL_Log("GFXManager: Could not save Dune2R EditoR preferences to %s",
@@ -8743,6 +8778,85 @@ bool GFXManager::drawDuneCityBuilding(int itemID, int house, int frame,
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderCopy(renderer, texture, &source, &destination);
     return true;
+}
+
+bool GFXManager::drawEnhancedSplitUnit(int itemID, int house, unsigned int z,
+                                          EnhancedUnitState state, int direction,
+                                          Uint32 elapsedMs, int x, int y, bool preferAlternate) {
+    const Uint8 blend = getDune2RVisualBlend();
+    if(blend == 0 || z >= NUM_ZOOMLEVEL || direction < 0 || direction >= kEnhancedDirectionCount
+       || (state != EnhancedUnitState::Idle && state != EnhancedUnitState::Movement)) {
+        return false;
+    }
+    loadEnhancedUnitManifests();
+    const int key = enhancedAnimationKey(state, direction);
+    const auto prepare = [](EnhancedUnitAnimation& layer, SDL_Rect& source, Uint32 frame) {
+        if(!layer.texture) {
+            if(layer.loadAttempted) return false;
+            layer.loadAttempted = true;
+            auto input = sdl2::RWops_ptr{SDL_RWFromFile(layer.atlasPath.c_str(), "rb")};
+            auto surface = input ? LoadPNG_RW(input.get()) : nullptr;
+            if(!surface || surface->w > 4096 || surface->h > 4096
+               || surface->w % layer.columns != 0 || surface->h % layer.rows != 0) {
+                return false;
+            }
+            layer.texture = convertSurfaceToTexture(surface.get());
+            if(!layer.texture) return false;
+        }
+        auto* texture = layer.texture.get();
+        const int width = getWidth(texture) / layer.columns;
+        const int height = getHeight(texture) / layer.rows;
+        source = {int(frame % layer.columns) * width, int(frame / layer.columns) * height, width, height};
+        return width > 0 && height > 0;
+    };
+    for(const int requestedHouse : {house, -1}) {
+        for(auto& def : enhancedUnitDefinitions) {
+            if(def.itemID != itemID || def.houseID != requestedHouse) continue;
+            for(int resolveAttempt = 0; resolveAttempt < (preferAlternate ? 2 : 1); ++resolveAttempt) {
+                const bool alt = preferAlternate && resolveAttempt == 0;
+                auto& hs = alt ? def.alternateHullLayers : def.hullLayers;
+                auto& ts = alt ? def.alternateTurretLayers : def.turretLayers;
+                auto hull = hs.find(key);
+                auto turret = ts.find(key);
+                if(hull == hs.end() || turret == ts.end()) continue;
+                auto& h = hull->second;
+                auto& t = turret->second;
+                // A vibrating turret uses the *rendered* hull frame, including
+                // alternate/fallback selection, never an independent clock.
+                if(t.frameCount != 1 && (t.frameCount != h.frameCount || t.durationsMs != h.durationsMs
+                                          || t.frameMs != h.frameMs || t.loop != h.loop)) continue;
+                const Uint32 frame = enhancedAnimationFrame(
+                    elapsedMs, h.frameCount, h.frameMs, h.loop, h.durationsMs);
+                SDL_Rect hullSource{}, turretSource{};
+                if(!prepare(h, hullSource, frame)
+                   || !prepare(t, turretSource, t.frameCount == 1 ? 0 : frame)
+                   || hullSource.w != turretSource.w || hullSource.h != turretSource.h
+                   || h.anchorX != t.anchorX || h.anchorY != t.anchorY
+                   || h.anchorX < 0 || h.anchorY < 0
+                   || h.anchorX >= hullSource.w || h.anchorY >= hullSource.h) continue;
+                const SDL_Rect dest = calcEnhancedUnitDrawingRect(
+                    {def.baseWidth, def.baseHeight}, z, def.scale,
+                    {hullSource.w, hullSource.h}, {h.anchorX, h.anchorY}, {x, y});
+                const auto draw = [&](SDL_Texture* texture, const SDL_Rect& source,
+                                      const SDL_FRect& placement) {
+                    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+                    SDL_SetTextureAlphaMod(texture, blend);
+                    SDL_RenderCopyF(renderer, texture, &source, &placement);
+                    SDL_SetTextureAlphaMod(texture, SDL_ALPHA_OPAQUE);
+                };
+                const SDL_FRect hullDest{float(dest.x), float(dest.y), float(dest.w), float(dest.h)};
+                auto turretDest = hullDest;
+                if(!h.motionXMilliPx.empty()) {
+                    turretDest.x += h.motionXMilliPx.at(frame) * (hullDest.w / (1000.f * hullSource.w));
+                    turretDest.y += h.motionYMilliPx.at(frame) * (hullDest.h / (1000.f * hullSource.h));
+                }
+                draw(h.texture.get(), hullSource, hullDest);
+                draw(t.texture.get(), turretSource, turretDest);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool GFXManager::drawEnhancedUnit(int itemID, int house, unsigned int z,

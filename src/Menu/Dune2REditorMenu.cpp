@@ -98,10 +98,15 @@ public:
             const Uint32 duration = pGFXManager->getEnhancedUnitAnimationDuration(
                 itemID, previewHouse, state, direction);
             const Uint32 elapsed = duration > 0 ? SDL_GetTicks() % duration : SDL_GetTicks();
-            pGFXManager->drawEnhancedUnit(itemID, previewHouse, 2, state, direction,
-                                          elapsed,
-                                          panel.x + panel.w / 2,
-                                          panel.y + panel.h / 2 + 10);
+            const int x = panel.x + panel.w / 2;
+            const int y = panel.y + panel.h / 2 + 10;
+            const auto mode = pGFXManager->getEnhancedUnitRenderMode(itemID, previewHouse, state, direction);
+            const bool alternate = duration > 0 && ((SDL_GetTicks() / duration) & 1u);
+            if(mode != GFXManager::EnhancedRenderMode::Layered
+               || !pGFXManager->drawEnhancedSplitUnit(itemID, previewHouse, 2, state, direction,
+                                                      elapsed, x, y, alternate)) {
+                pGFXManager->drawEnhancedUnit(itemID, previewHouse, 2, state, direction, elapsed, x, y);
+            }
 
             SDL_RenderSetClipRect(renderer, hadClip == SDL_TRUE ? &oldClip : nullptr);
         }
