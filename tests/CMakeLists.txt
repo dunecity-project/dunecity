@@ -1305,6 +1305,13 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/performance/run-active-tile-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/active-tile-probe)
         set_tests_properties(active_tile_probe PROPERTIES TIMEOUT 600 PROCESSORS 2)
+        # Exact stepped eight-house workload for cross-platform relative profiling.
+        # The Mac perf_regression registration remains the authoritative budget gate.
+        dunecity_add_test(headless nightly NAME eight_house_perf COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/performance/game-perf.py --scenario eight-house --minutes 2
+            --path-workers 1 --repeat 3 --print-results --label eight_house_perf
+            --build-dir ${CMAKE_BINARY_DIR})
+        set_tests_properties(eight_house_perf PROPERTIES TIMEOUT 600 PROCESSORS 2)
         dunecity_add_test(headless nightly NAME tile_track_bounds_probe COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-tile-track-bounds-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --phases current

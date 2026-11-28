@@ -101,6 +101,16 @@ bool garrisonSoldier(const UnitBase* unit) {
 
 int tenths(FixPoint distance) { return (distance * 10).lround(); }
 
+// The axis-aligned bound cannot reject anything within the exact block-distance radius.
+// Most visible enemies are on the other side of the map, not near this particular zone.
+bool withinZoneRadius(const ZoneStructure* zone, const Coord& at, int radius) {
+    const Coord origin = zone->getLocation();
+    const Coord size = zone->getStructureSize();
+    if (at.x < origin.x - radius || at.y < origin.y - radius
+        || at.x >= origin.x + size.x + radius || at.y >= origin.y + size.y + radius) return false;
+    return blockDistance(at, zone->getClosestPoint(at)) <= radius;
+}
+
 } // namespace
 
 void QuantBot::updateZoneGarrisons() {
@@ -206,23 +216,35 @@ void QuantBot::updateZoneGarrisons() {
     std::map<Uint32, int> threat;
     std::map<Uint32, ZoneStructure*> zones;
     if (wantsGarrisonTactic(force.zoneGarrison) || wantsGarrisonTactic(force.zoneGarrisonReinforce)) {
-        std::vector<Uint32> seen;
-        for (const UnitBase* enemy : enemies) {
-            const Coord at = enemy->getLocation();
-            const int points = enemy->isInfantry() && enemy->canCaptureStructures() ? 3 : 1;
-            seen.clear();
-            for (int y = at.y - kThreatRadius; y <= at.y + kThreatRadius; ++y) {
-                for (int x = at.x - kThreatRadius; x <= at.x + kThreatRadius; ++x) {
-                    ZoneStructure* zone = zoneOnTile(map, x, y);
-                    if (zone == nullptr || zone->getOwner() != house) continue;
-                    const Uint32 id = zone->getObjectID();
-                    if (std::find(seen.begin(), seen.end(), id) != seen.end()) continue;
-                    seen.push_back(id);
-                    if (blockDistance(at, zone->getClosestPoint(at)) > kThreatRadius) continue;
-                    threat[id] += points;
-                    zones[id] = zone;
+        // Count each enemy once per mapped own zone, rather than searching 225 tiles around every
+        // visible enemy and deduplicating each zone's four tiles. Integer sums and ID ranking agree.
+        for (const StructureBase* structure : getStructureList()) {
+            if (structure->getOwner() != house) continue;
+            auto* zone = dynamic_cast<ZoneStructure*>(const_cast<StructureBase*>(structure));
+            if (zone == nullptr) continue;
+            const Coord origin = zone->getLocation(), size = zone->getStructureSize();
+            int points = 0;
+            for (const UnitBase* enemy : enemies) {
+                const Coord at = enemy->getLocation();
+                if (!withinZoneRadius(zone, at, kThreatRadius)) continue;
+                // Retain the old tile-query visibility even for a partially registered footprint.
+                // An unplaced zone contributes nothing; a normal zone matches on the first tile.
+                bool mapped = false;
+                for (int y = std::max(origin.y, at.y - kThreatRadius);
+                     y < std::min(origin.y + size.y, at.y + kThreatRadius + 1) && !mapped; ++y) {
+                    for (int x = std::max(origin.x, at.x - kThreatRadius);
+                         x < std::min(origin.x + size.x, at.x + kThreatRadius + 1); ++x) {
+                        if (map.tileExists(x, y) && map.getTile(x, y)->getGroundObject() == zone) {
+                            mapped = true;
+                            break;
+                        }
+                    }
                 }
+                if (mapped) points += enemy->isInfantry() && enemy->canCaptureStructures() ? 3 : 1;
             }
+            if (points == 0) continue;
+            threat[zone->getObjectID()] = points;
+            zones[zone->getObjectID()] = zone;
         }
     }
     std::vector<std::pair<int, Uint32>> ranked;
@@ -426,11 +448,11 @@ void QuantBot::updateZoneGarrisons() {
             bool guarded = false;
             for (const UnitBase* enemy : enemies) {
                 const Coord at = enemy->getLocation();
-                if (blockDistance(at, zone->getClosestPoint(at)) <= kRaidGuardRadius) { guarded = true; break; }
+                if (withinZoneRadius(zone, at, kRaidGuardRadius)) { guarded = true; break; }
             }
             for (const Coord& turret : enemyTurrets) {
                 if (guarded) break;
-                guarded = blockDistance(turret, zone->getClosestPoint(turret)) <= kRaidTurretRadius;
+                guarded = withinZoneRadius(zone, turret, kRaidTurretRadius);
             }
             if (!guarded) unguarded.push_back(zone);
         }

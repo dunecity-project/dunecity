@@ -406,3 +406,23 @@ perf_regression: 8-house `cpu_p99` budget 3.0 -> 1.6 and `frame_cpu_p99` 9.0 -> 
 20261024T111917-ctest-718d52; main loop 4.04, p50/p95/p99 20/31/36 ms), so the cpu_p99 budget
 fails 1.0.852 on both; this branch measured 1.1-1.5 / 3.3-4.7 on the mini. The main-loop budget
 (8.0) is unchanged.
+
+### Garrison scan cost (2026-11-28)
+
+The retained Mini gate at `5b94707c8` measured eight-house CPU p99 **1.611** against the unchanged
+**1.600** budget. The AWS bisect of `21ef5e7b0`, `29b4e741d` and `5b94707c8` used the identical
+7,500-cycle save continuation, one path worker and three repeats. Every arm ended with 794 units
+(797 peak); the strict-squad change preserved every checkpoint digest relative to `29b4e741d`.
+It did not increase this save's unit count. Median normalized AWS p99 was 2.330 / 2.244 / 2.273;
+these relative measurements are not the Mac gate.
+
+A temporary phase profile (`20261128T181831-perf-garrison-phases-acf7df`) attributed 1,155 of
+2,253 ms in 1,200 garrison passes to 225-tile threat sweeps around each visible enemy, and another
+550 ms to raid guard scans. Threat counting now walks mapped own zones and the same enemy list
+once per zone, preserving integer totals and ID ranking. Conservative rectangular rejection skips
+distant raid/threat candidates before the unchanged exact block-distance test. Front selection,
+capture dispatch ordering, levy production and human-shared release protection are unchanged.
+
+`eight_house_perf` is the headless, cross-platform relative-comparison workload; `--print-results`
+retains its full timing scopes, unit counts and checkpoint digests in the CTest log. It does not
+replace or relax `perf_regression`: the latter remains the authoritative Mini gate.

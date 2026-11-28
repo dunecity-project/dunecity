@@ -480,6 +480,7 @@ def main():
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--label', default='run')
     parser.add_argument('--results', type=Path)
+    parser.add_argument('--print-results', action='store_true', help='Print complete JSON measurements to the test log')
     parser.add_argument('--csv', help='Per-cycle CSV output path')
     parser.add_argument('--motion-csv', help='Unit motion trace: positions and movement state of every unit that moved, '
                         'per cycle (stepped) or per rendered frame (--mainloop/--rendered); game-perf.inc MotionTrace')
@@ -541,6 +542,8 @@ def main():
         for run in runs:
             result = run()
             line = json.dumps(result)
+            if args.print_results:
+                print('GAME_PERF_JSON: ' + line, flush=True)
             if args.results:
                 with args.results.open('a') as handle:
                     handle.write(line + '\n')
