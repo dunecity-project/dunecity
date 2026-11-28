@@ -101,6 +101,8 @@ def summary(lines):
         pace_violations=sum(f.get('event') == 'unit_order' and f.get('met') != '1' for f in first),
         turret_orders=sum(f.get('event') == 'turret_order' for f in first),
         turret_placed=sum(f.get('event') == 'turret_placed' for f in first),
+        turret_violations=sum(f.get('event') == 'turret_order' and f.get('met') != '1' for f in first),
+        early_turrets=sum(int(o['item']) == 12 and cyc(o) < 3 * CYCLES_PER_MINUTE for o in orders),
         yards_lost10=int(at10[-1].get('yards_lost', 0)) if at10 else 0,
         passes=sum(f.get('event') == 'pass' for f in first),
         spice_rich=sum(f.get('event') == 'spice_rich' for f in first),
@@ -119,6 +121,8 @@ def main():
     parser.add_argument('--build-dir', required=True)
     parser.add_argument('--results', required=True)
     parser.add_argument('--variant', choices=VARIANTS, default='A')
+    parser.add_argument('--implementation-only', action='store_true',
+                        help='Report growth/spend comparisons as outcomes; gate activation and curve correctness')
     args = parser.parse_args()
     Path(args.results).mkdir(parents=True, exist_ok=True)
     others = [('atreides', 'default'), ('ordos', 'default'), ('mercenary', 'default')]
@@ -153,13 +157,26 @@ def main():
     if turrets:
         checks += [('ON scheduled turret orders > 0', on['turret_orders'], on['turret_orders'] > 0),
                    ('ON scheduled defence actually stands', on['turret_placed'], on['turret_placed'] > 0)]
+        if args.implementation_only:
+            checks += [('ON admitted turret orders follow the curve', on['turret_violations'], on['turret_violations'] == 0),
+                       ('ON no turret orders before minute three', on['early_turrets'], on['early_turrets'] == 0)]
     print(f"Variant {args.variant}; economy_first_zone fallback orders: {on['zone_orders']} (not asserted); "
           f"unit spend 0-2: {on['units2']} vs OFF {off['units2']}")
     failed = 0
     print('| check | measured | result |\n|---|---|---|')
+    growth_misses = 0
     for name, value, ok in checks:
-        failed += not ok
-        print(f"| {name} | {value} | {'PASS' if ok else 'FAIL'} |")
+        outcome = args.implementation_only and name.startswith((
+            'ON MCVs ordered by minute', 'ON yards by minute', 'ON zones placed by minute',
+            'ON units bought in minutes'))
+        if outcome:
+            growth_misses += not ok
+            print(f"| OUTCOME: {name} | {value} | {'met' if ok else 'not met; recommendation disqualified'} |")
+        else:
+            failed += not ok
+            print(f"| {name} | {value} | {'PASS' if ok else 'FAIL'} |")
+    if args.implementation_only:
+        print(f'ECONOMY_FIRST_OUTCOMES: misses={growth_misses} recommendation_eligible={int(growth_misses==0)}')
     # Recorded, not asserted (see the header): what stood at minute 10 after the fighting.
     standing_ok = on['zones10'] >= off['zones10'] + MIN_ZONE_LEAD
     print(f"| KNOWN SHORTFALL: ON zones standing net of losses by minute 10 >= OFF + {MIN_ZONE_LEAD} | "
