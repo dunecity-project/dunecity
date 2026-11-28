@@ -1502,6 +1502,14 @@ cache answers, then bounds all-yard idling and storage-cap plateaus over six gam
 Normal disk saves rebuild these planning timers; only observer runtime checkpoints carry them.
 The first continuation-only attempt passed with and without the fix and was discarded.
 
+The matched fixture disables new Road and R/C/I zone orders in both arms while preserving every
+existing road, city lot and its real population growth. Road repairs and priority zoning bypass
+Palace arbitration; their incidental batches otherwise mask its deadlock. Overdue eligibility must
+be observed after real AI passes; the idle/cap bounds and exact required legacy yard-starvation
+diagnostic are unchanged.
+Idling is timed on every simulation tick, not rounded-down minute samples: a completion late in a
+minute must not erase the following partial minute of a real over-two-minute all-yard stall.
+
 The permanent driver now runs matched on/off styles in the same shared build. The guarded arm must
 pass. The legacy arm must fail specifically with the yard-starvation diagnostic and report
 `site_guards=0`; a precondition, compiler, crash or other failure cannot count as the negative control.

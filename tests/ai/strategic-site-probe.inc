@@ -33,6 +33,13 @@ void runStrategicSiteProbe(Game& game) {
             "Siting fixture could not switch the city plane rules off");
     }
 
+    // Road repair and priority zoning bypass Palace arbitration, so their incidental batches
+    // can mask the legacy deadlock. Both arms retain every existing road and city lot, and
+    // their real city growth, but this bounded construction-siting fixture orders neither.
+    const Uint32 unrelated[] = {Structure_Road, Structure_ZoneResidential,
+        Structure_ZoneCommercial, Structure_ZoneIndustrial};
+    for (Uint32 item : unrelated)
+        game.objectData.data[item][house->getHouseID()].enabled=false;
     std::vector<BuilderBase*> yards;
     for (auto* structure:structureList)
         if (structure->getOwner()==house && structure->getItemID()==Structure_ConstructionYard)
@@ -44,8 +51,13 @@ void runStrategicSiteProbe(Game& game) {
         yard->upgrading=false;
         yard->updateBuildList();
         available|=yard->isAvailableToBuild(Structure_Palace);
+        for (Uint32 item : unrelated)
+            require(!yard->isAvailableToBuild(item),
+                "Siting fixture did not exclude unrelated road-repair and zoning batches");
     }
     require(available,"Siting fixture cannot build a Palace for reasons other than siting");
+    SDL_Log("STRATEGIC_SITE_FIXTURE: road_buildable=0 zone_buildable=0 power=%d/%d",
+        house->getProducedPower(),house->getPowerRequirement());
     bot->builderPlaceLocations.clear();
     bot->reservedStructures.clear();
     // A disk load rebuilds placement plans, so the historical map can regain a Palace site
@@ -87,29 +99,33 @@ void runStrategicSiteProbe(Game& game) {
     const int before=built();
     const Uint32 minute=MILLI2CYCLES(60000);
     int cappedRun=0, longestCapped=0, idleRun=0, longestIdle=0;
-    int previous=built();
+    Uint32 idleSince=start, longestIdleCycles=0;
     bool sawOverdue=false;
     for (Uint32 cycle=0;cycle<6*minute;++cycle) {
         game.updateGameState();
-        sawOverdue|=bot->palaceEligibleSinceCycle!=std::numeric_limits<Uint32>::max()
+        // Observe eligibility after real AI passes, not just the timer injected before tick one.
+        sawOverdue|=cycle>=minute && bot->palaceEligibleSinceCycle!=std::numeric_limits<Uint32>::max()
             && game.getGameCycleCount()-bot->palaceEligibleSinceCycle>=Uint32(MILLI2CYCLES(45000));
-        if ((cycle+1)%minute) continue;
-        const int completed=built();
         bool busy=false;
         for (const Uint32 id:yardIds)
             if (const auto* yard=dynamic_cast<const BuilderBase*>(game.getObjectManager().getObject(id)))
                 busy|=yard->getProductionQueueSize()>0 || yard->isUpgrading();
-        idleRun=!busy && completed==previous ? idleRun+1 : 0;
-        longestIdle=std::max(longestIdle,idleRun);
+        const Uint32 now=game.getGameCycleCount();
+        if (busy) idleSince=now;
+        else longestIdleCycles=std::max(longestIdleCycles,now-idleSince);
+        if ((cycle+1)%minute) continue;
+        const int completed=built();
+        idleRun=busy ? 0 : int((now-idleSince)/minute);
         const bool capped=house->getCapacity()>0
             && int64_t(house->getCredits())*100>=int64_t(house->getCapacity())*99;
         cappedRun=capped ? cappedRun+1 : 0;
         longestCapped=std::max(longestCapped,cappedRun);
-        SDL_Log("STRATEGIC_SITE_SAMPLE: minute=%u credits=%d capacity=%d completed=%d busy=%d capped_run=%d idle_run=%d",
+        SDL_Log("STRATEGIC_SITE_SAMPLE: minute=%u credits=%d capacity=%d completed=%d busy=%d capped_run=%d idle_run=%d idle_seconds=%u",
             (game.getGameCycleCount()-start)/minute,house->getCredits(),house->getCapacity(),
-            completed-before,int(busy),cappedRun,idleRun);
-        previous=completed;
+            completed-before,int(busy),cappedRun,idleRun,(now-idleSince)/MILLI2CYCLES(1000));
     }
+    // Round only the final witness up: 2 minutes plus one tick already violates the bound.
+    longestIdle=int((longestIdleCycles+minute-1)/minute);
     require(sawOverdue,"Siting probe never exercised the overdue Palace rule");
     require(built()>before,"Unsiteable Palace starved every other completed structure");
     require(longestIdle<=2,"Unsiteable Palace kept every Construction Yard idle for over two minutes");
