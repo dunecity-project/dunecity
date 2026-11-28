@@ -1,7 +1,7 @@
 """Mini qualification with its test games on AWS: split, submission, merge and receipt.
 
-Fixtures only: no queue, CTest run or game. The real queue's JUnit writer is tested in
-dunecity-runner (lib/test_ctest_report.py); these cases use its exact shape.
+Fixtures and metadata-only CTest reads: no queue or game runs. The real queue's
+JUnit writer is tested in dunecity-runner; these cases use its exact shape.
 """
 import importlib.util
 import json
@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
+import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -112,6 +113,70 @@ class SplitTests(unittest.TestCase):
         self.assertEqual(sorted(GAMES), json.loads(state_path.read_text())['aws'])
 
 
+class CiPartitionTests(unittest.TestCase):
+    def case(self, name, labels, **props):
+        test = plan({name: props})['tests'][0]
+        test['properties'][0]['value'] = labels
+        return test
+
+    def test_each_game_shape_and_a_new_probe_cannot_creep_into_bounded_ci(self):
+        for name, props in {**GAMES, 'brand_new_probe': dict(PROCESSORS=2)}.items():
+            with self.subTest(name=name):
+                test = self.case(name, ['headless', 'nightly', 'integration'], **props)
+                with self.assertRaisesRegex(ValueError, re.escape(name)):
+                    aws.check_ci_partition([test])
+
+    def test_mac_specific_native_gui_perf_and_infrastructure_checks_stay(self):
+        tests = [
+            self.case('native_unit', ['headless', 'nightly', 'integration']),
+            self.case('mac_native', ['headless', 'nightly', 'integration', 'macos'], PROCESSORS=2),
+            self.case('native_gui', ['gui', 'nightly', 'integration'], RUN_SERIAL=True),
+            self.case('calibrated_perf', ['headless', 'nightly', 'integration', 'perf'], RUN_SERIAL=True),
+            self.case('admission_contract', ['headless', 'nightly', 'integration', 'infrastructure'],
+                      PROCESSORS=2),
+            self.case('lifecycle_contract', ['headless', 'nightly', 'integration', 'infrastructure'],
+                      RUN_SERIAL=True),
+        ]
+        aws.check_ci_partition(tests)
+
+    def test_partition_check_does_not_modify_or_remove_any_required_aws_case(self):
+        document = plan({**GAMES, **QUICK})
+        before = json.dumps(document, sort_keys=True)
+        aws.check_ci_partition(document['tests'])
+        self.assertEqual(json.dumps(document, sort_keys=True), before)
+        self.assertEqual({test['name'] for test in document['tests']
+                          if aws.plays_a_game(aws.properties(test))}, set(GAMES))
+
+    def test_cli_checks_real_ctest_metadata_without_running_the_game(self):
+        from contextlib import redirect_stdout
+        import io
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for labels, rejected in (
+                    ('headless;nightly;integration', True),
+                    ('headless;nightly', False),
+                    ('headless;nightly;integration;infrastructure', False)):
+                with self.subTest(labels=labels):
+                    (root / 'CTestTestfile.cmake').write_text(
+                        f'add_test(brand_new_probe "{sys.executable}" "-c" "raise SystemExit(99)")\n'
+                        f'set_tests_properties(brand_new_probe PROPERTIES LABELS "{labels}" PROCESSORS 2)\n')
+                    with redirect_stdout(io.StringIO()):
+                        if rejected:
+                            with self.assertRaisesRegex(ValueError, 'brand_new_probe'):
+                                aws.main(['check-ci-plan', '--build', directory])
+                        else:
+                            self.assertEqual(aws.main(['check-ci-plan', '--build', directory]), 0)
+
+    def test_existing_commands_still_require_their_state_receipt(self):
+        from contextlib import redirect_stderr
+        import io
+        for command in ('split', 'submit', 'finish', 'cancel'):
+            with self.subTest(command=command), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    aws.main([command])
+                self.assertEqual(raised.exception.code, 2)
+
+
 class SubmitAndFinishTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -129,7 +194,7 @@ class SubmitAndFinishTests(unittest.TestCase):
         self.assertEqual(JOB, state['job'])
         command = self.calls[0]
         self.assertEqual(['dunecity-queue', 'ctest', '--cwd', '/work/dunecity', '--rev', SHA,
-                          '--machines', 'aws', 'aws-mel2'], command[:9])
+                          '--machines', 'aws', 'aws-mel2', 'aws-mel4'], command[:10])
         self.assertEqual(aws.regex(sorted(GAMES)), command[command.index('-R') + 1])
         self.assertEqual('github:77:1:qualify', command[command.index('--owner') + 1])
         self.assertEqual(('nightly', 'network'), (command[command.index('-L') + 1], command[command.index('-LE') + 1]))

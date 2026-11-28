@@ -283,11 +283,14 @@ Its source must be the latest trusted integration push with the identical contro
 recipe. Publication still requires every green platform/test CI job **and** the
 complete exact-SHA AWS/native qualification receipt; neither substitutes for the
 other. A completed notification does not launch another broad run.
-Bounded integration no longer repeats the five long game cases
-`original_campaign_ai`, `shipped_mod_update`, both `repair_capacity_*` and
-`quantbot_repair_return_check`. They remain mandatory in the complete AWS nightly
-plan, with unchanged commands and assertions. Other headless integration checks
-run in parallel within the declared worker budget.
+General gameplay already in the AWS plan is nightly-only, not repeated in bounded
+Mac integration. Commands and assertions remain mandatory in that exact-source
+qualification, submitted once to `aws`, `aws-mel2` and `aws-mel4`. Mac-specific
+native, GUI and calibrated performance checks remain local, as do positively
+labelled `infrastructure` admission/lifecycle contracts. The Mac
+`qualification_registry_contract` checks the actual configured CTest registry
+using the qualifier's gameplay predicate and rejects new duplicated gameplay
+in the integration tier. Other bounded checks run in parallel.
 
 For an explicit older green integration candidate, first check whether its
 qualification is already running, then:

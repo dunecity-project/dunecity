@@ -12,6 +12,7 @@ Mac run has no retries, and qualification must not be easier on AWS.
     submit  --state FILE                           start the AWS job (inside the Mini gate)
     finish  --build build --state FILE             wait outside the gate, merge, check
     cancel  --state FILE                           stop the AWS job after a failed Mac lane
+    check-ci-plan --build build                  reject bounded-CI gameplay already covered by AWS
 """
 import argparse
 import json
@@ -28,7 +29,7 @@ PLAN = 'macos-headless-plan.json'
 RESULTS = 'macos-headless-results.xml'
 MAC_RESULTS = 'macos-headless-mac-results.xml'
 AWS_RESULTS = 'aws-headless-results.xml'
-MACHINES = ('aws', 'aws-mel2')
+MACHINES = ('aws', 'aws-mel2', 'aws-mel4')
 NAME = re.compile(r'[A-Za-z0-9_.\-]+\Z')
 SHA = re.compile(r'[0-9a-f]{40}\Z')
 # Qualification is short and gates staging; it goes ahead of research games.
@@ -44,6 +45,22 @@ def plays_a_game(props):
     serial = props.get('RUN_SERIAL') in (True, 'TRUE', 'ON', '1')
     return (serial or int(props.get('PROCESSORS', 1)) >= 2
             or bool(props.get('FIXTURES_REQUIRED')) or bool(props.get('FIXTURES_SETUP')))
+
+
+def check_ci_partition(tests):
+    """General AWS gameplay belongs to nightly, not the bounded native CI gate."""
+    duplicated = []
+    for test in tests:
+        props = properties(test)
+        labels = set(props.get('LABELS', []))
+        aws_game = ({'headless', 'nightly'}.issubset(labels)
+                    and not labels.intersection({'gui', 'network'}) and plays_a_game(props))
+        local_check = labels.intersection({'macos', 'perf', 'infrastructure'})
+        if aws_game and 'integration' in labels and not local_check:
+            duplicated.append(test['name'])
+    if duplicated:
+        raise ValueError('General gameplay already in AWS qualification must be nightly-only: '
+                         + ', '.join(sorted(duplicated)))
 
 
 def regex(names):
@@ -155,12 +172,22 @@ def finish(build, state, timeout, run=subprocess.run, clock=time.monotonic):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=('split', 'submit', 'finish', 'cancel'))
-    parser.add_argument('--state', type=Path, required=True)
+    parser.add_argument('command', choices=('split', 'submit', 'finish', 'cancel', 'check-ci-plan'))
+    parser.add_argument('--state', type=Path)
     parser.add_argument('--build', type=Path, default=Path('build'))
     parser.add_argument('--sha')
     parser.add_argument('--timeout-minutes', type=int, default=40)
     args = parser.parse_args(argv)
+    if args.command == 'check-ci-plan':
+        registry = subprocess.run(
+            ['ctest', '--test-dir', str(args.build), '--show-only=json-v1',
+             '-L', 'headless', '-L', 'nightly', '-LE', 'network'],
+            capture_output=True, text=True, check=True, timeout=30)
+        check_ci_partition(json.loads(registry.stdout)['tests'])
+        print('Bounded CI registry contains no duplicated general AWS gameplay.')
+        return 0
+    if args.state is None:
+        parser.error('--state is required for ' + args.command)
     if args.command == 'split':
         state = split(args.build, args.sha or '')
         save(args.state, state)
