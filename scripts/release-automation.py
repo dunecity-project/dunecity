@@ -933,8 +933,8 @@ def select_qualification(args):
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
     if os.environ['GITHUB_EVENT_NAME'] == 'workflow_run':
         source = event['workflow_run']
-        if (source['head_branch'] != STAGING or source['event'] != 'push'
-                or source['conclusion'] != 'success' or source['head_repository']['full_name'] != repository()):
+        if (event.get('action') != 'requested' or source['head_branch'] != STAGING or source['event'] != 'push'
+                or source.get('conclusion') is not None or source['head_repository']['full_name'] != repository()):
             emit(dict(run=False, sha=''))
             return
         sha = full_sha(source['head_sha'])
@@ -946,7 +946,7 @@ def select_qualification(args):
         if os.environ['GITHUB_REF'] not in ('refs/heads/main', 'refs/heads/' + STAGING):
             raise ValueError('Qualification must be dispatched from trusted main/integration')
         sha = full_sha(event['inputs']['sha'])
-    qualification_for(sha, read=qualification_api)  # Verify every required platform/test job, not just a green badge.
+        qualification_for(sha, read=qualification_api)  # Explicit pins still require every green CI job.
     prefix = f'repos/{repository()}/contents/{QUALIFY_WORKFLOW}?ref='
     if qualification_api(prefix + sha)['sha'] != qualification_api(prefix + full_sha(os.environ['GITHUB_SHA']))['sha']:
         raise ValueError('Candidate and control qualification recipes differ; integrate the workflow first')

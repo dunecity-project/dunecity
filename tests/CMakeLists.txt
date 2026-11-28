@@ -95,7 +95,7 @@ endif()
 find_package(Catch2 3 REQUIRED)
 
 if(NOT EMSCRIPTEN AND NOT ANDROID AND Python3_Interpreter_FOUND AND CMAKE_GENERATOR STREQUAL "Ninja")
-    dunecity_add_test(headless integration NAME original_campaign_ai
+    dunecity_add_test(headless nightly NAME original_campaign_ai
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py
         --original-campaign-probe --repeatable --headless-assets --enemy-ai campaign
         --house harkonnen --level 9 --mod vanilla --minutes 1
@@ -749,7 +749,7 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         # QuantBot-only change, a profile left on the automatic snapshot of an older shipped
         # Dune City plays the current Soldier price and QuantBot settings in new games, and the
         # old build's save still loads its pinned revision.
-        dunecity_add_test(headless integration NAME shipped_mod_update COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME shipped_mod_update COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/mods/run-shipped-mod-update-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/shipped-mod-update-probe)
         set_tests_properties(shipped_mod_update PROPERTIES TIMEOUT 600 PROCESSORS 2)
@@ -764,7 +764,7 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
         set_tests_properties(observed_startup_unplaceable_unit PROPERTIES TIMEOUT 240 PROCESSORS 2)
         # Demand-backed capacity, pending work, access failures and save/observer clocks.
         foreach(repair_mod IN ITEMS vanilla dunecity)
-            dunecity_add_test(headless integration NAME repair_capacity_${repair_mod}
+            dunecity_add_test(headless nightly NAME repair_capacity_${repair_mod}
                 COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/ai/run-campaign-balance.py --repair-capacity-probe --repeatable --headless-assets
                 --mod ${repair_mod} --level 9 --partner-difficulty hard --minutes 1
@@ -1256,7 +1256,7 @@ if((APPLE OR DUNECITY_LINUX_NATIVE) AND CMAKE_GENERATOR STREQUAL "Ninja")
             ${CMAKE_SOURCE_DIR}/tests/units/run-repair-return-probe.py
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/repair-return-probe)
         set_tests_properties(repair_return_probe PROPERTIES TIMEOUT 1800 PROCESSORS 2)
-        dunecity_add_test(headless integration NAME quantbot_repair_return_check COMMAND ${Python3_EXECUTABLE}
+        dunecity_add_test(headless nightly NAME quantbot_repair_return_check COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/units/run-repair-return-probe.py
             --cases ai_unsafe_on ai_unsafe_off ai_safe_on ai_drove_unsafe ai_walk_unsafe human_unsafe
             --build-dir ${CMAKE_BINARY_DIR} --output-dir ${CMAKE_BINARY_DIR}/quantbot-repair-return-check)

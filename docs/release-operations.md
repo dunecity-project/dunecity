@@ -229,14 +229,20 @@ must remain explicit; do not invent a new tag merely to prove automation.
   between different source SHAs; unchanged inputs and existing drafts are reused,
   never rebuilt. Development stays `DUNECITY_RELEASE_BUILD=OFF`, prerelease and
   never Latest. Routine Mac packages use hosted ARM64, not Mini.
+  Integration CI retains the exact Mac app ZIP plus a source/version/digest
+  deferral marker; the public staging reuse job creates and verifies its normal
+  DMG from that ZIP, without compiling, signing or recreating the ZIP. Thus DMG
+  generation does not block CI-ready. A missing DMG without a valid deferral
+  marker is an error, never permission to rebuild.
 - Browser staging commits only tiny `deploy/staging-browser.json` metadata to
   the website repository; verified immutable archives download into temporary
   storage. Never commit WASM/data snapshots into its Git history. `/play-staging`
   isolates dev/SHA identity, caches, saves and signaling from stable `/play`.
-- Headless-nightly qualification runs **before production selection**, after green
-  integration CI, in `qualify-release.yml`, preferring the Mini with hosted fallback. It runs once per frozen
-  source, independently of packaging. Automatic requests coalesce to the newest
-  pending integration commit; an explicit candidate is never cancelled by pushes.
+- Headless-nightly qualification runs **before production selection**, alongside
+  integration CI from the staging build's `requested` event in `qualify-release.yml`,
+  preferring the Mini with hosted fallback. It runs once per frozen source,
+  independently of packaging. Automatic requests coalesce to the newest pending
+  integration commit; an explicit green-CI candidate is never cancelled by pushes.
   Daily Mac nightly owns GUI-only coverage; Linux nightly remains separate platform
   coverage. Production consumes qualification evidence and does not rerun that suite.
   Mini retains bounded native integration, calibrated GUI/performance/skin and
@@ -271,9 +277,20 @@ new candidate; never move a published tag or relabel old test evidence. This fir
 implementation reuses exact source SHAs only. Documentation can ship separately
 without changing the frozen game candidate; cross-SHA equivalence is not automated.
 
-Green integration CI starts **Qualify release candidate** automatically after this
-workflow is deployed on the default `main` branch. For an explicit older green integration
-candidate, first check whether its qualification is already running, then:
+The staging build's **requested** event starts **Qualify release candidate** once,
+in parallel with platform CI, after this workflow is deployed on default `main`.
+Its source must be the latest trusted integration push with the identical control
+recipe. Publication still requires every green platform/test CI job **and** the
+complete exact-SHA AWS/native qualification receipt; neither substitutes for the
+other. A completed notification does not launch another broad run.
+Bounded integration no longer repeats the five long game cases
+`original_campaign_ai`, `shipped_mod_update`, both `repair_capacity_*` and
+`quantbot_repair_return_check`. They remain mandatory in the complete AWS nightly
+plan, with unchanged commands and assertions. Other headless integration checks
+run in parallel within the declared worker budget.
+
+For an explicit older green integration candidate, first check whether its
+qualification is already running, then:
 
 ```sh
 gh workflow run qualify-release.yml --repo dunecity-project/dunecity --ref main -f sha="$FULL_SHA"
@@ -810,8 +827,13 @@ No game objects/behaviour are instrumented in the candidate.
 
 Set `CCACHE_DIR` outside the candidate checkout **before** either the normal Mac
 package producer or hosted release-headless qualifier restores its compiler
-cache. The action's supported environment override now selects
-`$RUNNER_TEMP/dunecity-ccache`. Do not add an ignore rule, delete unexpected source
+cache. Hosted builds use `$RUNNER_TEMP/dunecity-ccache`; Mini qualification uses
+the persistent `$HOME/.cache/dunecity-qualification/ccache`, bootstrapped once
+from the compiler action in restore-only mode and retained locally thereafter:
+even the bootstrap run does not upload a Mini compiler cache. Both have a 2 GB budget:
+the observed 500 MB cache was full with 41 cleanups. The lane sets
+`CCACHE_BASEDIR` to its actual checkout, including private candidate trees.
+Do not add an ignore rule, delete unexpected source
 or relax the source guard to accommodate cached compiler outputs. In failed
 producer 43361782831, checkout/selection/build-inputs all named
 `8291a8142993a43100466f6c5d035e1955faae07`, but the cache action restored its cache

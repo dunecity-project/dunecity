@@ -5,6 +5,7 @@ dunecity-runner (lib/test_ctest_report.py); these cases use its exact shape.
 """
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -256,6 +257,49 @@ class WorkflowTests(unittest.TestCase):
         self.assertLess(step.index('agent-workspace run'), loop_end)
         self.assertGreater(step.index('qualification-aws.py finish'), loop_end)
         self.assertIn('qualification-aws.py cancel', step)
+
+    def test_automatic_qualification_overlaps_platform_ci(self):
+        workflow = (ROOT / '.github/workflows/qualify-release.yml').read_text()
+        self.assertIn('types: [requested]', workflow)
+        self.assertNotIn('types: [completed]', workflow)
+
+    def test_warm_mini_cache_does_not_roundtrip_through_github(self):
+        import textwrap
+        workflow = (ROOT / '.github/workflows/qualify-release.yml').read_text()
+        block = workflow.split('id: compiler-cache\n', 1)[1].split('      - uses:', 1)[0]
+        shell = textwrap.dedent(block.split('run: |\n', 1)[1])
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            output, environment = home / 'output', home / 'environment'
+            env = dict(os.environ, HOME=str(home), RUNNER_ENVIRONMENT='self-hosted',
+                       RUNNER_TEMP=str(home / 'ephemeral'), GITHUB_ENV=str(environment),
+                       GITHUB_OUTPUT=str(output))
+            subprocess.run(['bash', '-eu', '-c', shell], env=env, check=True)
+            self.assertIn('warm=false', output.read_text())
+            cache = home / '.cache/dunecity-qualification/ccache'
+            self.assertIn('CCACHE_DIR=' + str(cache), environment.read_text())
+            (cache / '.persistent-ready').touch()
+            output.write_text('')
+            subprocess.run(['bash', '-eu', '-c', shell], env=env, check=True)
+            self.assertIn('warm=true', output.read_text())
+        self.assertIn("if: runner.environment != 'self-hosted' || steps.compiler-cache.outputs.warm != 'true'", workflow)
+        self.assertIn('max-size: 2G', workflow)
+        self.assertIn("save: ${{ runner.environment != 'self-hosted' }}", workflow)
+
+    def test_long_game_tier_cut_preserves_complete_nightly_coverage(self):
+        source = (ROOT / 'tests/CMakeLists.txt').read_text()
+        self.assertIn('set(labels ${capability} nightly ${tiers} ${CASE_LABELS})', source)
+        names = ('original_campaign_ai', 'shipped_mod_update', 'quantbot_repair_return_check',
+                 'repair_capacity_${repair_mod}')
+        registrations = 0
+        for line in source.splitlines():
+            if 'dunecity_add_test(' in line and any('NAME ' + name in line for name in names):
+                registrations += 1
+                self.assertIn('dunecity_add_test(headless nightly', line)
+        self.assertGreater(registrations, 0)
+        lane = (ROOT / 'scripts/macos-ci-lane.sh').read_text()
+        self.assertIn('--parallel "$CMAKE_BUILD_PARALLEL_LEVEL" -L integration -LE gui', lane)
+        self.assertIn('export CCACHE_BASEDIR="$GITHUB_WORKSPACE"', lane)
 
 
 if __name__ == '__main__':
