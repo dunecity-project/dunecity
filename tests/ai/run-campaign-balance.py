@@ -1175,9 +1175,18 @@ elif env.get('DUNECITY_SIM_MEASURE'):
                     output=Path(env['DUNECITY_SIM_MEASURE']),
                     sample_seconds=float(env.get('DUNECITY_SIM_SAMPLE_SECONDS', '0')), pass_fds=cache_fds)
 else:
-    with (out/'run.log').open('w') as log:
-        subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
-                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout,pass_fds=cache_fds)
+    try:
+        with (out/'run.log').open('w') as log:
+            subprocess.run([str(binary),'--window','--showlog','--non-interactive'],cwd=out,env=env,
+                           stdout=log,stderr=subprocess.STDOUT,check=True,timeout=args.wall_timeout,pass_fds=cache_fds)
+    except subprocess.CalledProcessError:
+        # Put the probe's own reason where CTest captures it: the run directory stays on the worker.
+        failed = [line for line in (out/'run.log').read_text(errors='replace').splitlines()
+                  if '_FAIL' in line or 'FAIL:' in line or 'Assertion' in line]
+        if not failed:
+            failed = (out/'run.log').read_text(errors='replace').splitlines()[-15:]
+        print('PROBE FAILURE (from run.log):', *failed[-20:], sep='\n', file=sys.stderr)
+        raise
 if cache_reader is not None:
     cache_reader.close()
 run_lines = (out/'run.log').read_text(errors='replace').splitlines()

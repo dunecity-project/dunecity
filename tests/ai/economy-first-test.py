@@ -28,6 +28,7 @@ one spice_rich line and no pass line (Stefan scoped it to low / no spice maps). 
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -51,6 +52,9 @@ def fields(line, marker):
 
 def play(args, name, sides, minutes, extra):
     out = Path(args.results) / name
+    # A run directory left by an earlier run made run-campaign-balance.py refuse to start, and the old run.log was
+    # read as this run's (a 3.1 s pass at 1b7130261 with the numbers of 6c2363a6a).
+    shutil.rmtree(out, ignore_errors=True)
     command = [sys.executable, str(root / 'tests/ai/run-campaign-balance.py'), '--build-dir', args.build_dir,
                '--output-dir', str(out), '--house', sides[0][0],
                '--match-sides', ','.join(f'{h}:{l}' for h, l in sides), '--local-spectator',
@@ -60,6 +64,8 @@ def play(args, name, sides, minutes, extra):
     env = dict(os.environ, DUNECITY_TEST_ECONOMY_LOG='1')
     result = subprocess.run(command, cwd=root, capture_output=True, text=True, env=env)
     log = out / 'run.log'
+    if result.returncode != 0:
+        sys.exit(f'{name}: the game run failed (exit {result.returncode})\n{result.stderr[-3000:]}')
     if not log.exists():
         sys.exit(f'{name}: no run.log (exit {result.returncode})\n{result.stderr[-2000:]}')
     return log.read_text(errors='replace').splitlines()
