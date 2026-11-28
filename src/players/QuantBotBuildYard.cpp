@@ -395,6 +395,16 @@ bool QuantBot::buildCustomYard(BuildPass& pass, BuilderTurn& turn, YardTurn& yar
         chooseYardRedevelopment(pass, turn, yardTurn);
         releaseUnfundedChoice();
     }
+    // EconomyFirst (default on, low / no spice city maps): an idle yard zones in Stefan's mix whatever the demand
+    // valves say, while zones are under his share of the yard's orders (QuantBot::economyFirstZone). It comes after
+    // every defence chooser above (air defence, essentials, core defence, turret clusters, Airport and front
+    // turrets, air-raid defence) and the economy projects: placed first, it took the yard before any of them
+    // (turret_front_probe at 54a8a1189).
+    if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && !yardTurn.civicClaimsYard
+        && pass.economyFirstHold > 0 && turn.pBuilder->getProductionQueueSize() == 0) {
+        const Uint32 zone = economyFirstZone(pass);
+        if (zone != NONE_ID) { yardTurn.itemID = zone; yardTurn.structureRule = "economy_first_zone"; }
+    }
     // Duel plans spend the opening grant differently, after real power/air
     // emergencies but before optional city growth, imports and repair support.
     const int duelPlan = duelOpeningPlan();
@@ -775,14 +785,6 @@ void QuantBot::startYardSelection(BuildPass& pass, BuilderTurn& turn, YardTurn& 
         && !yardTurn.civicClaimsYard && !productionLaneDue) {
         yardTurn.itemID=affordableCityZone(pass, turn.pBuilder,pass.money);
         if (yardTurn.itemID!=NONE_ID) yardTurn.structureRule="dedicated_city_growth";
-    }
-
-    // EconomyFirst (default off): an idle yard zones in Stefan's mix whatever the demand valves say, while zones
-    // are under his share of the yard's orders (QuantBot::economyFirstZone).
-    if (yardTurn.itemID==NONE_ID && !yardTurn.skipRemainingStructureLogic && !yardTurn.civicClaimsYard
-        && pass.economyFirstHold > 0 && turn.pBuilder->getProductionQueueSize() == 0) {
-        const Uint32 zone = economyFirstZone(pass);
-        if (zone != NONE_ID) { yardTurn.itemID = zone; yardTurn.structureRule = "economy_first_zone"; }
     }
 
     // Skip build order if something is already queued
