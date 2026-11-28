@@ -146,6 +146,11 @@ Fixture newGame(bool front, bool advance, bool creep, bool retire, bool drill = 
     f.config->force.turretCreep = creep;
     f.config->force.rearTurretRetire = retire;
     f.config->force.turretDrill = drill;
+    // EconomyFirst (default on since 2026-11-28) is pinned off: this fixture is a city game with no harvesting
+    // economy and a 5,000-credit top-up, i.e. a no-spice poverty start, so the switch would build yards and zones
+    // toward the cases' units (reinforce-far's Quads, 20 tiles from every own building, stopped being far at
+    // 54a8a1189) and hold the bot's cash. The probe tests the turret rules alone; economy_first tests that switch.
+    f.config->force.economyFirst = false;
     f.bot->configOverride = f.config;
     require(f.game->getGameInitSettings().getGameOptions().turretsFireOnBuildings == fireOnBuildings,
             "The game did not keep its Turrets Can Fire On Buildings rule");
